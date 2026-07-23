@@ -1,0 +1,11 @@
+# Everbreeze SitePix
+
+> Capture, organize, and share construction job site photos with AI-powered analysis. Built for contractors and field teams.
+
+Everbreeze SitePix lets construction crews snap, tag, and share photos straight from the field. Behind-the-scenes AI drafts site logs from your photos, transcribes walkthrough audio into structured reports, and enriches captions — all delivered as client-ready PDFs.
+
+## Pages
+
+- [Home](/): Product overview, features, and how SitePix works.
+- [Pricing](/pricing): Free, Pro, Team, and Enterprise plans with feature comparison and FAQ.
+- [Privacy Policy](/privacy-policy): How we collect, use, store, and protect your data.

@@ -1,0 +1,35 @@
+{
+  "name": "everbreeze-sitepix",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @sitepix/web --host",
+    "build": "npm run build -w @sitepix/web",
+    "build:dev": "npm run build:dev -w @sitepix/web",
+    "preview": "npm run preview -w @sitepix/web",
+    "deploy": "npm run deploy -w @sitepix/web",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test:ssr:share": "node scripts/ssr-share-test.mjs",
+    "test:ssr": "npm run build && node scripts/ssr-share-test.mjs",
+    "typecheck:api": "npm run typecheck -w @sitepix/api",
+    "mobile": "npm --prefix apps/mobile start"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "eslint": "^9.32.0",
+    "eslint-config-prettier": "^10.1.1",
+    "eslint-plugin-prettier": "^5.2.6",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^15.15.0",
+    "prettier": "^3.7.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.56.1"
+  }
+}

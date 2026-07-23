@@ -1,0 +1,41 @@
+{
+  "name": "@sitepix/api",
+  "version": "0.0.0",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./http": {
+      "types": "./src/http.ts",
+      "default": "./src/http.ts"
+    }
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@react-email/render": "^2.0.6",
+    "dotenv": "^16.4.7",
+    "@sitepix/db": "*",
+    "@sitepix/email-templates": "*",
+    "@sitepix/shared": "*",
+    "@supabase/supabase-js": "^2.108.1",
+    "hono": "^4.6.14",
+    "pdf-lib": "^1.17.1",
+    "react": "^19.2.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "@types/react": "^19.2.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,1604 @@
+import { z } from "zod";
+import { chatEndpoint, transcriptionEndpoint } from "../../lib/ai-provider";
+import { getSupabaseAdmin } from "../../lib/supabase";
+import type { AuthedContext } from "../../lib/user-context";
+
+
+const MODEL = "google/gemini-2.5-flash";
+const TRANSCRIPTION_MODEL = "openai/gpt-4o-mini-transcribe";
+
+const generateSchema = z.object({
+  walkthroughId: z.string().uuid(),
+});
+
+const createSessionSchema = z.object({
+  projectId: z.string().uuid(),
+  title: z.string().min(1).max(160),
+});
+
+const listProjectSchema = z.object({
+  projectId: z.string().uuid(),
+});
+
+const saveWalkthroughPhotoSchema = z.object({
+  projectId: z.string().uuid(),
+  walkthroughId: z.string().uuid(),
+  storagePath: z.string().min(1).max(500),
+  sizeBytes: z.number().int().nonnegative(),
+  caption: z.string().min(1).max(255),
+  offsetSeconds: z.number().int().nonnegative().default(0),
+  position: z.number().int().nonnegative().default(0),
+  takenAt: z.string().min(1),
+  latitude: z.number().nullable().optional(),
+  longitude: z.number().nullable().optional(),
+});
+
+const ensurePhotoLinksSchema = z.object({
+  walkthroughId: z.string().uuid(),
+  photos: z.array(z.object({
+    photoId: z.string().uuid(),
+    offsetSeconds: z.number().int().nonnegative().default(0),
+    position: z.number().int().nonnegative().default(0),
+  })).max(200),
+});
+
+const finishSessionSchema = z.object({
+  walkthroughId: z.string().uuid(),
+  durationSeconds: z.number().int().positive(),
+  liveTranscript: z.string().max(100_000).optional(),
+});
+
+const videoPathSchema = z.object({
+  walkthroughId: z.string().uuid(),
+  videoPath: z.string().min(1).max(500),
+  videoMimeType: z.string().min(1).max(100),
+});
+
+const statusSchema = z.object({
+  walkthroughId: z.string().uuid(),
+  status: z.enum(["recording", "generating", "ready", "failed"]),
+});
+
+function fmtDuration(s: number) {
+  const m = Math.floor(Math.max(0, s) / 60);
+  const r = Math.max(0, s) % 60;
+  return `${m}:${r.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Break a raw transcript (a single wall-of-text string) into readable
+ * paragraphs of ~3 sentences. Keeps the speaker's wording verbatim but stops
+ * the fallback report from rendering as one giant blob of text.
+ */
+function paragraphizeTranscript(transcript: string, sentencesPerParagraph = 3) {
+  const cleaned = (transcript ?? "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  const sentences = cleaned
+    .split(/(?<=[.!?])\s+(?=[A-Z0-9"'“‘(])/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (sentences.length <= 1) return cleaned;
+  const paragraphs: string[] = [];
+  for (let i = 0; i < sentences.length; i += sentencesPerParagraph) {
+    paragraphs.push(sentences.slice(i, i + sentencesPerParagraph).join(" "));
+  }
+  return paragraphs.join("\n\n");
+}
+
+function buildFallbackWalkthroughMarkdown(args: {
+  title: string | null;
+  transcript: string | null;
+  durationSeconds: number;
+  links: Array<{ photo_id: string; offset_seconds: number | null; spoken_note: string | null; position: number | null }>;
+}) {
+  const title = (args.title ?? "Walkthrough Note").trim() || "Walkthrough Note";
+  const transcript = paragraphizeTranscript(args.transcript ?? "");
+  const lines: string[] = [`# ${title}`];
+
+  if (transcript) {
+    lines.push("", "## Summary", "", transcript);
+  }
+
+  if (args.links.length) {
+    lines.push("", "## Photos");
+    for (const [idx, link] of args.links.entries()) {
+      const n = idx + 1;
+      const ts = fmtDuration(link.offset_seconds ?? 0);
+      lines.push("", `### Photo ${n} · ${ts}`, "", `![Photo ${n}](photo:${link.photo_id})`);
+      if (link.spoken_note?.trim()) lines.push("", `*"${link.spoken_note.trim().replace(/"/g, '\\"')}"*`);
+    }
+  }
+
+  if (!transcript && !args.links.length) {
+    lines.push("", "## Notes", "", "Recording saved. No transcript or walkthrough photos were captured.");
+  }
+
+  lines.push("", `_Duration: ${fmtDuration(args.durationSeconds)}._`);
+  return lines.join("\n").trim();
+}
+
+async function readWalkthroughLinks(supabaseAdmin: any, walkthroughId: string) {
+  const { data: links, error } = await supabaseAdmin
+    .from("walkthrough_photos" as any)
+    .select("photo_id, offset_seconds, spoken_note, position")
+    .eq("walkthrough_id", walkthroughId)
+    .order("position", { ascending: true });
+  if (error) {
+    console.error("[walkthrough] server link read failed", error, { walkthroughId });
+    return [] as Array<{ photo_id: string; offset_seconds: number | null; spoken_note: string | null; position: number | null }>;
+  }
+  return ((links as any[]) ?? []) as Array<{ photo_id: string; offset_seconds: number | null; spoken_note: string | null; position: number | null }>;
+}
+
+function extractWalkthroughIdFromPath(path: string | null | undefined) {
+  const match = (path ?? "").match(/\/walkthroughs\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|\.|$)/i);
+  return match?.[1] ?? null;
+}
+
+async function recoverOrphanWalkthroughPhotosForProject(supabaseAdmin: any, args: { projectId: string; userId: string }) {
+  console.log("[walkthrough] server orphan recovery requested", args);
+  const { data: candidates, error: candidateErr } = await supabaseAdmin
+    .from("photos")
+    .select("id, created_at, taken_at, caption, storage_path")
+    .eq("project_id", args.projectId)
+    .eq("uploaded_by", args.userId)
+    .or("phase.eq.walkthrough,caption.like.walkthrough-%,storage_path.like.%/walkthroughs/%")
+    .order("created_at", { ascending: true })
+    .limit(250);
+
+  if (candidateErr) {
+    console.error("[walkthrough] server orphan recovery scan failed", candidateErr, args);
+    return { recoveredWalkthroughs: 0, recoveredPhotos: 0 };
+  }
+
+  const candidateRows = ((candidates as any[]) ?? []) as Array<{
+    id: string;
+    created_at: string;
+    taken_at: string | null;
+    caption: string | null;
+    storage_path: string | null;
+  }>;
+  if (!candidateRows.length) return { recoveredWalkthroughs: 0, recoveredPhotos: 0 };
+
+  const candidateIds = candidateRows.map((p) => p.id);
+  const { data: existingLinks, error: existingErr } = await supabaseAdmin
+    .from("walkthrough_photos" as any)
+    .select("photo_id")
+    .in("photo_id", candidateIds);
+  if (existingErr) {
+    console.error("[walkthrough] server orphan recovery existing-link scan failed", existingErr, args);
+    return { recoveredWalkthroughs: 0, recoveredPhotos: 0 };
+  }
+
+  const linkedIds = new Set(((existingLinks as any[]) ?? []).map((l) => l.photo_id));
+  const orphans = candidateRows.filter((p) => !linkedIds.has(p.id));
+  if (!orphans.length) return { recoveredWalkthroughs: 0, recoveredPhotos: 0 };
+
+  const groups: Array<{ forcedId: string | null; photos: typeof orphans }> = [];
+  for (const photo of orphans) {
+    const forcedId = extractWalkthroughIdFromPath(photo.storage_path);
+    const createdMs = new Date(photo.created_at).getTime();
+    const last = groups[groups.length - 1];
+    const lastPhoto = last?.photos[last.photos.length - 1];
+    const lastMs = lastPhoto ? new Date(lastPhoto.created_at).getTime() : 0;
+    const sameForcedId = !!forcedId && last?.forcedId === forcedId;
+    const sameTimedSession = !forcedId && !last?.forcedId && lastPhoto && Number.isFinite(createdMs) && Number.isFinite(lastMs) && createdMs - lastMs <= 10 * 60 * 1000;
+    if (last && (sameForcedId || sameTimedSession)) {
+      last.photos.push(photo);
+    } else {
+      groups.push({ forcedId, photos: [photo] });
+    }
+  }
+
+  let recoveredWalkthroughs = 0;
+  let recoveredPhotos = 0;
+  for (const group of groups) {
+    const first = group.photos[0];
+    const last = group.photos[group.photos.length - 1];
+    const startedAt = first.taken_at ?? first.created_at;
+    const endedAt = last.taken_at ?? last.created_at;
+    const startMs = new Date(startedAt).getTime();
+    const endMs = new Date(endedAt).getTime();
+    const durationSeconds = Math.max(1, Math.round(((Number.isFinite(endMs) ? endMs : Date.now()) - (Number.isFinite(startMs) ? startMs : Date.now())) / 1000));
+    let walkthroughId = group.forcedId;
+    const title = `Recovered Walkthrough — ${new Date(startedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+
+    if (walkthroughId) {
+      const { data: existing } = await supabaseAdmin
+        .from("walkthroughs" as any)
+        .select("id")
+        .eq("id", walkthroughId)
+        .maybeSingle();
+      if (!existing) {
+        const { error: insertForcedErr } = await supabaseAdmin
+          .from("walkthroughs" as any)
+          .insert({
+            id: walkthroughId,
+            project_id: args.projectId,
+            created_by: args.userId,
+            title,
+            status: "ready",
+            started_at: startedAt,
+            ended_at: endedAt,
+            duration_seconds: durationSeconds,
+          } as any);
+        if (insertForcedErr) {
+          console.error("[walkthrough] server orphan recovery forced-row insert failed", insertForcedErr, { ...args, walkthroughId });
+          walkthroughId = null;
+        }
+      }
+    }
+
+    if (!walkthroughId) {
+      const { data: created, error: createErr } = await supabaseAdmin
+        .from("walkthroughs" as any)
+        .insert({
+          project_id: args.projectId,
+          created_by: args.userId,
+          title,
+          status: "ready",
+          started_at: startedAt,
+          ended_at: endedAt,
+          duration_seconds: durationSeconds,
+        } as any)
+        .select("id")
+        .single();
+      if (createErr || !created) {
+        console.error("[walkthrough] server orphan recovery row insert failed", createErr, args);
+        continue;
+      }
+      walkthroughId = (created as any).id as string;
+    }
+
+    const linkRows = group.photos.map((photo, position) => ({
+      walkthrough_id: walkthroughId,
+      photo_id: photo.id,
+      created_by: args.userId,
+      offset_seconds: Math.max(0, Math.round((new Date(photo.taken_at ?? photo.created_at).getTime() - (Number.isFinite(startMs) ? startMs : new Date(photo.created_at).getTime())) / 1000)),
+      spoken_note: null,
+      position,
+    }));
+    const { error: linkErr } = await supabaseAdmin
+      .from("walkthrough_photos" as any)
+      .upsert(linkRows as any, { onConflict: "walkthrough_id,photo_id", ignoreDuplicates: true });
+    if (linkErr) {
+      console.error("[walkthrough] server orphan recovery link failed", linkErr, { ...args, walkthroughId, count: linkRows.length });
+      continue;
+    }
+
+    await supabaseAdmin
+      .from("photos")
+      .update({ phase: "walkthrough" } as any)
+      .in("id", group.photos.map((p) => p.id));
+
+    const fallbackMarkdown = buildFallbackWalkthroughMarkdown({
+      title,
+      transcript: null,
+      durationSeconds,
+      links: linkRows.map((row) => ({
+        photo_id: row.photo_id,
+        offset_seconds: row.offset_seconds,
+        spoken_note: null,
+        position: row.position,
+      })),
+    });
+    await supabaseAdmin
+      .from("walkthroughs" as any)
+      .update({ status: "ready", summary_markdown: fallbackMarkdown, duration_seconds: durationSeconds, ended_at: endedAt } as any)
+      .eq("id", walkthroughId);
+
+    recoveredWalkthroughs += 1;
+    recoveredPhotos += group.photos.length;
+    console.log("[walkthrough] server orphan recovery linked photos", { ...args, walkthroughId, count: group.photos.length });
+  }
+
+  if (recoveredPhotos > 0) {
+    console.log("[walkthrough] server orphan recovery complete", { ...args, recoveredWalkthroughs, recoveredPhotos });
+  }
+  return { recoveredWalkthroughs, recoveredPhotos };
+}
+
+
+
+
+
+
+
+
+
+
+
+
+// ---------------------------------------------------------------------------
+// Automatic Walkthrough → Project Report
+//
+// After transcription + summary_markdown are ready, turn the raw transcript
+// and captured photos into a full structured entry in `project_reports` +
+// `project_report_sections` so the user immediately has a polished, PDF-ready
+// report inside the Documents / Reports section for that project.
+// ---------------------------------------------------------------------------
+
+const createReportFromWalkSchema = z.object({
+  walkthroughId: z.string().uuid(),
+});
+
+function escapeHtml(str: string) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function textToHtmlParagraphs(text: string) {
+  const t = (text ?? "").trim();
+  if (!t) return "";
+  return t
+    .split(/\n{2,}/)
+    .map((p) => `<p>${escapeHtml(p.trim()).replace(/\n/g, "<br/>")}</p>`)
+    .join("");
+}
+
+interface AiReportSection { title: string; body: string; photo_indices: number[] }
+interface AiReportShape {
+  title: string;
+  subtitle: string;
+  introduction: string;
+  sections: AiReportSection[];
+  conclusion: string;
+}
+
+function buildFallbackAiReport(args: {
+  walkTitle: string;
+  projectName: string | null;
+  transcript: string;
+  photoCount: number;
+}): AiReportShape {
+  const dateStr = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  const title = args.walkTitle?.trim() || `${args.projectName ?? "Site"} Walkthrough Report — ${dateStr}`;
+  const subtitle = args.projectName ? `${args.projectName} — Field walkthrough summary` : "Field walkthrough summary";
+  const intro = args.transcript.trim()
+    ? `<p>This report summarizes a recorded site walkthrough${args.projectName ? ` at ${escapeHtml(args.projectName)}` : ""}. It includes the technician's spoken narration organized into readable notes, along with ${args.photoCount} photo(s) captured during the walk.</p>`
+    : `<p>This report summarizes a recorded site walkthrough${args.projectName ? ` at ${escapeHtml(args.projectName)}` : ""}. ${args.photoCount} photo(s) were captured during the walk.</p>`;
+  const notesHtml = textToHtmlParagraphs(paragraphizeTranscript(args.transcript || ""));
+  const sections: AiReportSection[] = [];
+  if (notesHtml) sections.push({ title: "Field Notes", body: notesHtml, photo_indices: [] });
+  const conclusion = `<p>End of walkthrough. Refer to the attached photos for visual context.</p>`;
+  return { title, subtitle, introduction: intro, sections, conclusion };
+}
+
+export async function createWalkthroughSessionService(ctx: AuthedContext, data: any) {
+    const { supabase, userId } = ctx;
+    console.log("[walkthrough] server create session requested", { projectId: data.projectId, userId });
+
+    const { data: project, error: projectErr } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", data.projectId)
+      .maybeSingle();
+    if (projectErr || !project) {
+      console.error("[walkthrough] server project access check failed", projectErr, { projectId: data.projectId, userId });
+      throw new Error("Project not found or access denied");
+    }
+
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: row, error } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .insert({
+        project_id: data.projectId,
+        created_by: userId,
+        title: data.title,
+        status: "recording",
+      } as any)
+      .select("id, created_at")
+      .single();
+    if (error || !row) {
+      console.error("[walkthrough] server create session failed", error, { projectId: data.projectId, userId });
+      throw new Error(error?.message ?? "Could not create walkthrough");
+    }
+
+    console.log("[walkthrough] server session created", { walkthroughId: (row as any).id, projectId: data.projectId, userId });
+    return { id: (row as any).id as string, createdAt: (row as any).created_at as string };
+  }
+
+export async function saveWalkthroughPhotoService(ctx: AuthedContext, data: any) {
+    const { userId } = ctx;
+    const supabaseAdmin = getSupabaseAdmin();
+    console.log("[walkthrough] server save photo requested", {
+      walkthroughId: data.walkthroughId,
+      projectId: data.projectId,
+      userId,
+      position: data.position,
+      offsetSeconds: data.offsetSeconds,
+      bytes: data.sizeBytes,
+    });
+
+    const { data: walk, error: walkErr } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .select("id, project_id, created_by")
+      .eq("id", data.walkthroughId)
+      .maybeSingle();
+    if (walkErr || !walk || (walk as any).project_id !== data.projectId || (walk as any).created_by !== userId) {
+      console.error("[walkthrough] server save photo unauthorized", walkErr, {
+        walkthroughId: data.walkthroughId,
+        projectId: data.projectId,
+        userId,
+      });
+      throw new Error("Walkthrough not found or access denied");
+    }
+
+    const { data: photo, error: photoErr } = await supabaseAdmin
+      .from("photos")
+      .insert({
+        project_id: data.projectId,
+        uploaded_by: userId,
+        storage_path: data.storagePath,
+        size_bytes: data.sizeBytes,
+        caption: data.caption,
+        phase: "walkthrough",
+        tags: [],
+        taken_at: data.takenAt,
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
+      } as any)
+      .select("id")
+      .single();
+    if (photoErr || !photo) {
+      console.error("[walkthrough] server photo row failed", photoErr, { walkthroughId: data.walkthroughId, storagePath: data.storagePath });
+      throw new Error(photoErr?.message ?? "Could not save walkthrough photo");
+    }
+
+    const photoId = (photo as any).id as string;
+    const { error: linkErr } = await supabaseAdmin
+      .from("walkthrough_photos" as any)
+      .insert({
+        walkthrough_id: data.walkthroughId,
+        photo_id: photoId,
+        created_by: userId,
+        offset_seconds: data.offsetSeconds,
+        spoken_note: null,
+        position: data.position,
+      } as any);
+    if (linkErr) {
+      console.error("[walkthrough] server photo link failed", linkErr, { walkthroughId: data.walkthroughId, photoId });
+      await supabaseAdmin.from("photos").update({ phase: "walkthrough" } as any).eq("id", photoId);
+      // Keep the photo row and return it. Finish/list recovery will attach it
+      // to walkthrough_photos, and phase=walkthrough keeps it out of gallery.
+      return { photoId, linkPending: true };
+    }
+
+    console.log("[walkthrough] server photo linked", { walkthroughId: data.walkthroughId, photoId, position: data.position });
+    return { photoId };
+  }
+
+export async function finishWalkthroughSessionService(ctx: AuthedContext, data: any) {
+    const { userId } = ctx;
+    const supabaseAdmin = getSupabaseAdmin();
+    console.log("[walkthrough] server finish requested", {
+      walkthroughId: data.walkthroughId,
+      userId,
+      durationSeconds: data.durationSeconds,
+      transcriptChars: (data.liveTranscript ?? "").trim().length,
+    });
+
+    console.log("[walkthrough] Creating DB record", { walkthroughId: data.walkthroughId, userId, mode: "finish-update" });
+
+    const { data: walk, error: walkErr } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .select("id, project_id, created_by, started_at, title, summary_markdown")
+      .eq("id", data.walkthroughId)
+      .maybeSingle();
+    if (walkErr || !walk || (walk as any).created_by !== userId) {
+      console.error("[walkthrough] server finish unauthorized", walkErr, { walkthroughId: data.walkthroughId, userId });
+      throw new Error("Walkthrough not found or access denied");
+    }
+
+    const endedAt = new Date();
+    const endedAtIso = endedAt.toISOString();
+    const transcript = (data.liveTranscript ?? "").trim();
+
+    console.log("[walkthrough] Linking photos", { walkthroughId: data.walkthroughId, userId, mode: "recover-orphans" });
+    try {
+      const existingLinks = await readWalkthroughLinks(supabaseAdmin, data.walkthroughId);
+      const existingPhotoIds = new Set(existingLinks.map((l) => l.photo_id));
+      const estimatedStart = new Date(endedAt.getTime() - Math.max(1, data.durationSeconds) * 1000);
+      const dbStartedAt = (walk as any).started_at ? new Date((walk as any).started_at) : estimatedStart;
+      const startedAt = Number.isFinite(dbStartedAt.getTime()) ? dbStartedAt : estimatedStart;
+      const recoveryStartMs = Math.min(startedAt.getTime(), estimatedStart.getTime()) - 5 * 60 * 1000;
+      const lowerBound = new Date(recoveryStartMs).toISOString();
+      const { data: candidates, error: candidateErr } = await supabaseAdmin
+        .from("photos")
+        .select("id, created_at")
+        .eq("project_id", (walk as any).project_id)
+        .eq("uploaded_by", userId)
+        .or("phase.eq.walkthrough,caption.like.walkthrough-%,storage_path.like.%/walkthroughs/%")
+        .gte("created_at", lowerBound)
+        .lte("created_at", endedAtIso)
+        .order("created_at", { ascending: true });
+      if (candidateErr) {
+        console.error("[walkthrough] server orphan photo scan failed", candidateErr, { walkthroughId: data.walkthroughId, userId });
+      } else {
+        const candidateRows = ((candidates as any[]) ?? []).filter((p) => !existingPhotoIds.has(p.id));
+        if (candidateRows.length) {
+          const candidateIds = candidateRows.map((p) => p.id);
+          const { data: alreadyLinked } = await supabaseAdmin
+            .from("walkthrough_photos" as any)
+            .select("photo_id")
+            .in("photo_id", candidateIds);
+          const linkedElsewhere = new Set(((alreadyLinked as any[]) ?? []).map((l) => l.photo_id));
+          const rows = candidateRows
+            .filter((p: any) => !linkedElsewhere.has(p.id))
+            .map((p: any, i: number) => ({
+              walkthrough_id: data.walkthroughId,
+              photo_id: p.id,
+              created_by: userId,
+              offset_seconds: Math.max(0, Math.round((new Date(p.created_at).getTime() - startedAt.getTime()) / 1000)),
+              spoken_note: null,
+              position: existingLinks.length + i,
+            }));
+          if (rows.length) {
+            const { error: linkErr } = await supabaseAdmin
+              .from("walkthrough_photos" as any)
+              .upsert(rows as any, { onConflict: "walkthrough_id,photo_id", ignoreDuplicates: true });
+            if (linkErr) console.error("[walkthrough] server orphan photo link failed", linkErr, { walkthroughId: data.walkthroughId, count: rows.length });
+            else {
+              await supabaseAdmin
+                .from("photos")
+                .update({ phase: "walkthrough" } as any)
+                .in("id", rows.map((r: { photo_id: string }) => r.photo_id));
+              console.log("[walkthrough] server orphan photos linked", { walkthroughId: data.walkthroughId, count: rows.length });
+            }
+          }
+        }
+      }
+    } catch (recoverErr) {
+      console.error("[walkthrough] server orphan photo recovery threw", recoverErr, { walkthroughId: data.walkthroughId, userId });
+    }
+
+    let linksForFallback = await readWalkthroughLinks(supabaseAdmin, data.walkthroughId);
+    if (transcript && linksForFallback.some((l) => !l.spoken_note?.trim())) {
+      linksForFallback = linksForFallback.map((link, index) => {
+        if (link.spoken_note?.trim()) return link;
+        return {
+          ...link,
+          spoken_note: estimateSpokenNote(
+            transcript,
+            link.offset_seconds ?? 0,
+            linksForFallback[index + 1]?.offset_seconds ?? null,
+            data.durationSeconds,
+          ) || compactSpokenNote(transcript),
+        };
+      });
+      await Promise.all(
+        linksForFallback
+          .filter((link) => link.spoken_note?.trim())
+          .map((link) =>
+            supabaseAdmin
+              .from("walkthrough_photos" as any)
+              .update({ spoken_note: link.spoken_note })
+              .eq("walkthrough_id", data.walkthroughId)
+              .eq("photo_id", link.photo_id),
+          ),
+      );
+      console.log("[walkthrough] server live transcript linked to photo notes", { walkthroughId: data.walkthroughId, userId, photos: linksForFallback.length });
+    }
+    const fallbackMarkdown = buildFallbackWalkthroughMarkdown({
+      title: (walk as any).title,
+      transcript,
+      durationSeconds: data.durationSeconds,
+      links: linksForFallback,
+    });
+
+    const { error } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .update({
+        duration_seconds: data.durationSeconds,
+        ended_at: endedAtIso,
+        status: "ready",
+        transcript: transcript || null,
+        summary_markdown: (walk as any).summary_markdown ?? fallbackMarkdown,
+      } as any)
+      .eq("id", data.walkthroughId);
+    if (error) {
+      console.error("[walkthrough] server finish update failed", error, { walkthroughId: data.walkthroughId, userId });
+      throw new Error(error.message);
+    }
+
+    console.log("[walkthrough] server finish saved", { walkthroughId: data.walkthroughId, userId, linkedPhotos: linksForFallback.length });
+    return { ok: true };
+  }
+
+export async function ensureWalkthroughPhotoLinksService(ctx: AuthedContext, data: any) {
+    const { userId } = ctx;
+    const supabaseAdmin = getSupabaseAdmin();
+    console.log("[walkthrough] Linking photos", { walkthroughId: data.walkthroughId, requested: data.photos.length, userId });
+
+    const { data: walk, error: walkErr } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .select("id, project_id, created_by")
+      .eq("id", data.walkthroughId)
+      .maybeSingle();
+    if (walkErr || !walk || (walk as any).created_by !== userId) {
+      console.error("[walkthrough] server ensure links unauthorized", walkErr, { walkthroughId: data.walkthroughId, userId });
+      throw new Error("Walkthrough not found or access denied");
+    }
+
+    if (!data.photos.length) return { linkedCount: 0 };
+
+    const photoIds = Array.from(new Set(data.photos.map((p: { photoId: string }) => p.photoId))) as string[];
+    const { data: validPhotos, error: photoErr } = await supabaseAdmin
+      .from("photos")
+      .select("id")
+      .eq("project_id", (walk as any).project_id)
+      .eq("uploaded_by", userId)
+      .in("id", photoIds);
+    if (photoErr) throw new Error(photoErr.message);
+
+    const validIds = new Set(((validPhotos as any[]) ?? []).map((p) => p.id));
+      const rows = data.photos
+      .filter((p: { photoId: string }) => validIds.has(p.photoId))
+      .map((p: { photoId: string; offsetSeconds: number; position?: number }, i: number) => ({
+        walkthrough_id: data.walkthroughId,
+        photo_id: p.photoId,
+        created_by: userId,
+        offset_seconds: p.offsetSeconds,
+        spoken_note: null,
+        position: p.position ?? i,
+      }));
+
+    if (validIds.size) {
+      await supabaseAdmin
+        .from("photos")
+        .update({ phase: "walkthrough" } as any)
+        .in("id", Array.from(validIds));
+    }
+
+    if (!rows.length) return { linkedCount: 0 };
+    const { error: linkErr } = await supabaseAdmin
+      .from("walkthrough_photos" as any)
+      .upsert(rows as any, { onConflict: "walkthrough_id,photo_id", ignoreDuplicates: true });
+    if (linkErr) {
+      console.error("[walkthrough] server ensure links failed", linkErr, { walkthroughId: data.walkthroughId, userId });
+      throw new Error(linkErr.message);
+    }
+
+    console.log("[walkthrough] server ensured photo links", { walkthroughId: data.walkthroughId, linkedCount: rows.length, userId });
+    return { linkedCount: rows.length };
+  }
+
+export async function updateWalkthroughVideoPathService(ctx: AuthedContext, data: any) {
+    const { userId } = ctx;
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: walk } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .select("id, created_by")
+      .eq("id", data.walkthroughId)
+      .maybeSingle();
+    if (!walk || (walk as any).created_by !== userId) throw new Error("Walkthrough not found or access denied");
+    const { error } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .update({ video_path: data.videoPath, video_mime_type: data.videoMimeType } as any)
+      .eq("id", data.walkthroughId);
+    if (error) throw new Error(error.message);
+    console.log("[walkthrough] server video path saved", { walkthroughId: data.walkthroughId, userId });
+    return { ok: true };
+  }
+
+export async function setWalkthroughStatusService(ctx: AuthedContext, data: any) {
+    const { userId } = ctx;
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: walk } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .select("id, created_by")
+      .eq("id", data.walkthroughId)
+      .maybeSingle();
+    if (!walk || (walk as any).created_by !== userId) throw new Error("Walkthrough not found or access denied");
+    const { error } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .update({ status: data.status } as any)
+      .eq("id", data.walkthroughId);
+    if (error) throw new Error(error.message);
+    console.log("[walkthrough] server status saved", { walkthroughId: data.walkthroughId, status: data.status, userId });
+    return { ok: true };
+  }
+
+export async function listProjectWalkthroughsService(ctx: AuthedContext, data: { projectId: string }) {
+    const { supabase, userId } = ctx;
+    const supabaseAdmin = getSupabaseAdmin();
+    console.log("[walkthrough] server list requested", { projectId: data.projectId, userId });
+
+    // Use the user's RLS-scoped client only for the access check, then read the
+    // walkthrough tables with the admin client. This keeps project permissions
+    // intact while avoiding walkthrough-specific RLS gaps from hiding freshly
+    // saved cards on Android/web.
+    const { data: project, error: projectErr } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", data.projectId)
+      .maybeSingle();
+    if (projectErr || !project) {
+      console.error("[walkthrough] server list project access failed", projectErr, { projectId: data.projectId, userId });
+      throw new Error("Project not found or access denied");
+    }
+
+    try {
+      await recoverOrphanWalkthroughPhotosForProject(supabaseAdmin, { projectId: data.projectId, userId });
+    } catch (recoverErr) {
+      console.error("[walkthrough] server list orphan recovery threw", recoverErr, { projectId: data.projectId, userId });
+    }
+
+    const { data: wt, error: wtErr } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .select("id, title, created_at, duration_seconds, status, summary_markdown, share_token, video_path, video_mime_type")
+      .eq("project_id", data.projectId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (wtErr) {
+      console.error("[walkthrough] server list walkthroughs failed", wtErr, { projectId: data.projectId, userId });
+      throw new Error(wtErr.message);
+    }
+
+    const wtList = ((wt as any[]) ?? []) as Array<any>;
+    if (!wtList.length) {
+      console.log("[walkthrough] server list complete", { projectId: data.projectId, userId, count: 0 });
+      return [] as Array<any>;
+    }
+
+    const ids = wtList.map((w) => w.id);
+    const { data: wp, error: wpErr } = await supabaseAdmin
+      .from("walkthrough_photos" as any)
+      .select("walkthrough_id, photo_id, position, offset_seconds")
+      .in("walkthrough_id", ids)
+      .order("position", { ascending: true });
+    if (wpErr) console.error("[walkthrough] server list photo links failed", wpErr, { projectId: data.projectId, userId });
+
+    const firstByWt = new Map<string, string>();
+    const countByWt = new Map<string, number>();
+    for (const row of ((wp as any[]) ?? [])) {
+      if (!firstByWt.has(row.walkthrough_id)) firstByWt.set(row.walkthrough_id, row.photo_id);
+      countByWt.set(row.walkthrough_id, (countByWt.get(row.walkthrough_id) ?? 0) + 1);
+    }
+
+    const photoIds = Array.from(new Set(Array.from(firstByWt.values())));
+    const phMap = new Map<string, { storage_path: string; image_url: string | null }>();
+    const signedPhotoMap: Record<string, string> = {};
+    if (photoIds.length) {
+      const { data: phs, error: phErr } = await supabaseAdmin
+        .from("photos")
+        .select("id, storage_path, image_url")
+        .in("id", photoIds);
+      if (phErr) console.error("[walkthrough] server list thumbnail photos failed", phErr, { projectId: data.projectId, userId });
+      for (const p of ((phs as any[]) ?? [])) phMap.set(p.id, p);
+      const toSign = Array.from(phMap.values()).filter((p) => !p.image_url).map((p) => p.storage_path);
+      if (toSign.length) {
+        const { data: urls, error: signErr } = await supabaseAdmin.storage.from("site-photos").createSignedUrls(toSign, 60 * 60);
+        if (signErr) console.error("[walkthrough] server list thumbnail signing failed", signErr, { projectId: data.projectId, userId });
+        urls?.forEach((u, i) => { if (u.signedUrl) signedPhotoMap[toSign[i]] = u.signedUrl; });
+      }
+    }
+
+    const videoPaths = wtList.map((w) => w.video_path).filter(Boolean) as string[];
+    const signedVideoMap: Record<string, string> = {};
+    if (videoPaths.length) {
+      const { data: urls, error: signErr } = await supabaseAdmin.storage.from("site-videos").createSignedUrls(videoPaths, 60 * 60);
+      if (signErr) console.error("[walkthrough] server list video signing failed", signErr, { projectId: data.projectId, userId });
+      urls?.forEach((u, i) => { if (u.signedUrl) signedVideoMap[videoPaths[i]] = u.signedUrl; });
+    }
+
+    const result = wtList.map((w) => {
+      const pid = firstByWt.get(w.id);
+      const ph = pid ? phMap.get(pid) : undefined;
+      return {
+        ...w,
+        thumb_url: ph ? (ph.image_url ?? signedPhotoMap[ph.storage_path] ?? null) : null,
+        photo_count: countByWt.get(w.id) ?? 0,
+        video_signed_url: w.video_path ? signedVideoMap[w.video_path] ?? null : null,
+      };
+    });
+
+    console.log("[walkthrough] server list complete", { projectId: data.projectId, userId, count: result.length });
+    return result;
+}
+
+function compactSpokenNote(transcript: string, maxWords = 120) {
+  const words = transcript.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  if (!words.length) return null;
+  const snippet = words.slice(0, maxWords).join(" ").trim();
+  return words.length > maxWords ? `${snippet}…` : snippet;
+}
+
+/**
+ * Map spoken words to a specific photo. Without word-level timestamps we
+ * slice the transcript proportionally by time (with a small look-back so
+ * narration that *precedes* the shutter is included). If timing info is
+ * missing we split evenly across `total` photos so each photo still gets
+ * its own distinct span — never the whole transcript.
+ */
+function estimateSpokenNote(
+  transcript: string,
+  startSeconds: number,
+  endSeconds: number | null,
+  durationSeconds: number,
+  index: number = 0,
+  total: number = 1,
+) {
+  const words = transcript.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  if (!words.length) return null;
+
+  const totalCount = Math.max(1, total);
+  const duration = Number.isFinite(durationSeconds) && durationSeconds > 0
+    ? durationSeconds
+    : (endSeconds && endSeconds > startSeconds ? endSeconds : 0);
+
+  let startRatio: number;
+  let endRatio: number;
+  if (duration > 0 && Number.isFinite(startSeconds)) {
+    const perPhoto = duration / totalCount;
+    const windowStart = Math.max(0, startSeconds - Math.min(8, perPhoto / 2));
+    const windowEnd = Math.min(
+      duration,
+      endSeconds && endSeconds > startSeconds ? endSeconds : startSeconds + Math.max(10, perPhoto),
+    );
+    startRatio = Math.min(0.95, Math.max(0, windowStart / duration));
+    endRatio = Math.min(1, Math.max(startRatio + 0.02, windowEnd / duration));
+  } else {
+    const share = 1 / totalCount;
+    startRatio = Math.min(0.95, index * share);
+    endRatio = Math.min(1, (index + 1) * share);
+  }
+
+  const start = Math.min(words.length - 1, Math.floor(words.length * startRatio));
+  const end = Math.min(words.length, Math.max(start + 6, Math.ceil(words.length * endRatio)));
+  const slice = words.slice(start, end).join(" ").trim();
+  return slice || null;
+}
+
+const transcribeSchema = z.object({
+  walkthroughId: z.string().uuid(),
+  audioBase64: z.string().min(1),
+  mimeType: z.string().min(1).max(100),
+});
+
+function extensionForAudioMime(mimeType: string) {
+  const mime = mimeType.split(";")[0]?.toLowerCase() ?? "";
+  if (mime.includes("mp4") || mime.includes("m4a")) return "mp4";
+  if (mime.includes("mpeg") || mime.includes("mp3")) return "mp3";
+  if (mime.includes("wav")) return "wav";
+  if (mime.includes("ogg")) return "ogg";
+  if (mime.includes("webm")) return "webm";
+  return "webm";
+}
+
+/**
+ * Transcribe the completed walkthrough recording through Gemini STT,
+ * then persist both the full transcript and estimated narration context
+ * beside each captured photo.
+ */
+export async function transcribeWalkthroughService(
+  ctx: AuthedContext,
+  data: { walkthroughId: string; audioBase64: string; mimeType: string },
+) {
+    const { userId } = ctx;
+    const stt = transcriptionEndpoint(TRANSCRIPTION_MODEL);
+
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: walk, error: wErr } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .select("id, created_by, title, transcript, duration_seconds, summary_markdown")
+      .eq("id", data.walkthroughId)
+      .single();
+    if (wErr || !walk) throw new Error("Walkthrough not found");
+    if ((walk as any).created_by !== userId) throw new Error("Not authorized");
+
+    console.log("[walkthrough] server transcription requested", {
+      walkthroughId: data.walkthroughId,
+      userId,
+      mimeType: data.mimeType,
+      base64Chars: data.audioBase64.length,
+    });
+
+    const bytes = Buffer.from(data.audioBase64, "base64");
+    if (bytes.byteLength < 2048) throw new Error("Recording was empty");
+
+    const form = new FormData();
+    const fileName = `walkthrough-${data.walkthroughId}.${extensionForAudioMime(data.mimeType)}`;
+    form.append("model", stt.model);
+    form.append("file", new Blob([bytes], { type: data.mimeType }), fileName);
+
+    const res = await fetch(stt.url, {
+      method: "POST",
+      headers: stt.headers,
+      body: form,
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`Transcription failed: ${res.status} ${txt.slice(0, 200)}`);
+    }
+
+    const json = (await res.json()) as { text?: string };
+    const transcript = (json.text ?? "").replace(/\s+/g, " ").trim();
+    const finalTranscript = transcript || ((walk as any).transcript ?? "").trim();
+
+    if (finalTranscript) {
+      const { data: links, error: linkErr } = await supabaseAdmin
+        .from("walkthrough_photos" as any)
+        .select("photo_id, offset_seconds, position, spoken_note")
+        .eq("walkthrough_id", data.walkthroughId)
+        .order("position", { ascending: true });
+      if (linkErr) throw new Error(linkErr.message);
+
+      const rows = ((links as any[]) ?? []);
+      const rowsWithNotes = rows.map((row, i) => {
+        const existing = row.spoken_note?.trim();
+        const note = existing || estimateSpokenNote(
+          finalTranscript,
+          row.offset_seconds ?? 0,
+          rows[i + 1]?.offset_seconds ?? null,
+          (walk as any).duration_seconds ?? 0,
+          i,
+          rows.length,
+        );
+        return { ...row, spoken_note: note };
+      });
+      await Promise.all(rowsWithNotes.map((row) => {
+        if (!row.spoken_note?.trim()) return Promise.resolve(null);
+        return supabaseAdmin
+          .from("walkthrough_photos" as any)
+          .update({ spoken_note: row.spoken_note })
+          .eq("walkthrough_id", data.walkthroughId)
+          .eq("photo_id", row.photo_id);
+      }));
+      const transcriptFallbackMarkdown = buildFallbackWalkthroughMarkdown({
+        title: (walk as any).title,
+        transcript: finalTranscript,
+        durationSeconds: (walk as any).duration_seconds ?? 0,
+        links: rowsWithNotes,
+      });
+      await supabaseAdmin
+        .from("walkthroughs" as any)
+        .update({
+          transcript: finalTranscript,
+          summary_markdown: transcriptFallbackMarkdown,
+          status: "ready",
+        } as any)
+        .eq("id", data.walkthroughId);
+      console.log("[walkthrough] server transcription saved photo narration", { walkthroughId: data.walkthroughId, userId, photos: rowsWithNotes.length, transcriptChars: finalTranscript.length });
+    } else if (transcript) {
+      await supabaseAdmin
+        .from("walkthroughs" as any)
+        .update({ transcript })
+        .eq("id", data.walkthroughId);
+    }
+
+    return { transcript: finalTranscript };
+}
+
+/**
+ * Take the raw spoken transcript + the list of photos captured during the walk,
+ * and produce a clean, client-ready Markdown report. Photos are referenced
+ * inline as `![Photo N](photo:<photo_id>)` so the renderer can hydrate them.
+ */
+export async function generateWalkthroughReportService(ctx: AuthedContext, data: any) {
+    const { userId } = ctx;
+    const supabaseAdmin = getSupabaseAdmin();
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    console.log("[walkthrough] Generating report", { walkthroughId: data.walkthroughId, userId });
+    console.log("[walkthrough] server report generation requested", { walkthroughId: data.walkthroughId, userId });
+    const { data: walk, error: wErr } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .select("id, project_id, title, transcript, duration_seconds, started_at, created_by, share_token")
+      .eq("id", data.walkthroughId)
+      .single();
+    if (wErr || !walk) throw new Error("Walkthrough not found");
+    if ((walk as any).created_by !== userId) throw new Error("Not authorized");
+
+      const { data: links } = await supabaseAdmin
+      .from("walkthrough_photos" as any)
+      .select("photo_id, offset_seconds, spoken_note, position")
+      .eq("walkthrough_id", data.walkthroughId)
+      .order("position", { ascending: true });
+    let linkRows = (links as any[] | null) ?? [];
+
+    const { data: projectRow } = await supabaseAdmin
+      .from("projects")
+      .select("name, location, street, city, state")
+      .eq("id", (walk as any).project_id)
+      .maybeSingle();
+
+    let photosMeta: Array<{ id: string; caption: string | null; taken_at: string | null }> = [];
+    if (linkRows.length) {
+      const ids = linkRows.map((l) => l.photo_id);
+      const { data: phRows } = await supabaseAdmin
+        .from("photos")
+        .select("id, caption, taken_at")
+        .in("id", ids);
+      photosMeta = (phRows as any[]) ?? [];
+    }
+    const photoById = new Map(photosMeta.map((p) => [p.id, p]));
+
+    const fmt = (s: number) => {
+      const m = Math.floor(s / 60);
+      const r = s % 60;
+      return `${m}:${r.toString().padStart(2, "0")}`;
+    };
+
+    const rawTranscript = ((walk as any).transcript ?? "").trim();
+    const durationSeconds = (walk as any).duration_seconds ?? 0;
+    if (rawTranscript && linkRows.some((l) => !l.spoken_note?.trim())) {
+      linkRows = linkRows.map((l, i) => {
+        if (l.spoken_note?.trim()) return l;
+        return {
+          ...l,
+          spoken_note: estimateSpokenNote(
+            rawTranscript,
+            l.offset_seconds ?? 0,
+            linkRows[i + 1]?.offset_seconds ?? null,
+            durationSeconds,
+            i,
+            linkRows.length,
+          ),
+        };
+      });
+      await Promise.all(
+        linkRows
+          .filter((l) => l.spoken_note?.trim())
+          .map((l) =>
+            supabaseAdmin
+              .from("walkthrough_photos" as any)
+              .update({ spoken_note: l.spoken_note })
+              .eq("walkthrough_id", data.walkthroughId)
+              .eq("photo_id", l.photo_id),
+          ),
+      );
+    }
+
+    const photoLines = linkRows.map((l, i) => {
+      const meta = photoById.get(l.photo_id);
+      const note = l.spoken_note ? `  spoken near this photo: "${l.spoken_note.trim()}"` : "";
+      return `- Photo ${i + 1} (id=${l.photo_id}) captured at ${fmt(l.offset_seconds ?? 0)}${note}${
+        meta?.caption ? ` — caption: ${meta.caption}` : ""
+      }`;
+    }).join("\n");
+
+    const projectLine = projectRow
+      ? `Project: ${(projectRow as any).name}${
+          (projectRow as any).location || (projectRow as any).street
+            ? ` — ${(projectRow as any).location ?? [(projectRow as any).street, (projectRow as any).city, (projectRow as any).state].filter(Boolean).join(", ")}`
+            : ""
+        }`
+      : "";
+
+    const hasSpeech = rawTranscript.length > 0;
+
+    const userPrompt = `${projectLine}
+
+You are formatting the field notes a technician spoke while walking the site.
+Your job is ONLY to organize and lightly tidy what the technician actually said
+into a clean, neutral, professional Markdown report. You are a transcriber and
+typesetter, not an analyst.
+
+STRICT RULES:
+- Use ONLY information present in the transcript and the spoken notes attached
+  to each photo. Do not add any other content.
+- Do NOT add interpretations, opinions, "technical observations", severity
+  ratings, recommendations, next steps, risk callouts, or any advice that the
+  speaker did not explicitly say.
+- Do NOT analyze, judge, or describe the photos themselves — you cannot see
+  them. Only use the spoken notes tied to each photo.
+- Do NOT invent measurements, brand names, model numbers, defects, locations,
+  dates, or any other facts.
+- Fix obvious filler words, false starts, and grammar. Keep the speaker's
+  meaning and wording. Do not paraphrase aggressively.
+- Use neutral, professional language. No marketing tone, no emojis.
+- If the transcript is empty or doesn't cover something, simply omit that part
+  rather than guessing.
+
+Required structure:
+# ${(walk as any).title ?? "Walkthrough Note"}
+
+## Summary
+One short, neutral sentence that restates (not interprets) what the technician
+covered. If there is not enough material for a sentence, omit this section.
+
+## Notes
+Organize what the technician actually said into short bullet points. Group
+bullets by area, room, or system ONLY when the speaker grouped them that way
+(using ### subheadings for those groups). Otherwise just one flat bullet list.
+Each bullet should closely reflect the speaker's own words.
+
+PHOTO RULES:
+- ${linkRows.length} photo(s) were captured during this walkthrough.
+- Reference photos inline using exactly this syntax (do not invent ids):
+  ![Photo N](photo:<photo_id>)
+- Place each photo right after the bullet that matches the spoken note tied
+  to it. Use each photo at most once.
+- If a photo has a spoken note, put it under the photo as plain italic text
+  using the speaker's words verbatim or a tight quote: *"…"*.
+- If a photo has no spoken note, still include it inline at the matching
+  timestamp but with no caption.
+
+Available photos:
+${photoLines || "(none)"}
+
+Raw spoken transcript:
+"""
+${hasSpeech ? rawTranscript : "(no speech captured)"}
+"""
+
+Walk duration: ${fmt((walk as any).duration_seconds ?? 0)}.
+
+${hasSpeech
+  ? "Write the final Markdown report only. No preamble, no closing remarks, no AI commentary."
+  : `The technician did not speak (or audio failed). Write a minimal report with the title and a "## Photos" section that lists every available photo inline using the ![Photo N](photo:<id>) syntax with no captions. Do NOT invent any findings.`}`;
+
+    let markdown = "";
+    if (apiKey) {
+      try {
+        const ep = chatEndpoint(MODEL);
+        const res = await fetch(ep.url, {
+          method: "POST",
+          headers: ep.headers,
+          body: JSON.stringify({
+            model: ep.model,
+            messages: [
+              { role: "system", content: "You are a neutral transcriber/typesetter for field notes. You only reorganize what the technician said into clean Markdown. You never add analysis, opinions, recommendations, severities, or any content the speaker did not explicitly say." },
+              { role: "user", content: userPrompt },
+            ],
+          }),
+        });
+
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(`AI error ${res.status}: ${txt.slice(0, 200)}`);
+        }
+        const json = await res.json();
+        markdown = json.choices?.[0]?.message?.content ?? "";
+      } catch (aiErr) {
+        console.warn("[walkthrough] AI report generation failed; using deterministic fallback", aiErr, { walkthroughId: data.walkthroughId, userId });
+      }
+    } else {
+      console.warn("[walkthrough] GEMINI_API_KEY missing; using deterministic fallback", { walkthroughId: data.walkthroughId, userId });
+    }
+
+    if (!markdown.trim()) {
+      markdown = buildFallbackWalkthroughMarkdown({
+        title: (walk as any).title,
+        transcript: rawTranscript,
+        durationSeconds,
+        links: linkRows,
+      });
+    }
+
+    // Deterministic safety net: guarantee every captured photo appears in the
+    // final report. The LLM sometimes omits photo references or invents ids;
+    // we detect which real photo ids it actually used and append any missing
+    // ones in a clean gallery section with timestamp + spoken note.
+    const usedIds = new Set<string>();
+    const photoRefRe = /!\[[^\]]*\]\(photo:([^)\s]+)\)/g;
+    let m: RegExpExecArray | null;
+    while ((m = photoRefRe.exec(markdown)) !== null) {
+      if (photoById.has(m[1])) usedIds.add(m[1]);
+    }
+    // Strip any invented photo refs that don't match real ids.
+    markdown = markdown.replace(photoRefRe, (full, id) =>
+      photoById.has(id) ? full : "",
+    );
+
+    const missing = linkRows.filter((l) => !usedIds.has(l.photo_id));
+    if (missing.length) {
+      const gallery = missing
+        .map((l, i) => {
+          const idx = linkRows.findIndex((x) => x.photo_id === l.photo_id) + 1;
+          const ts = fmt(l.offset_seconds ?? 0);
+          const note = l.spoken_note?.trim();
+          return `### Photo ${idx} · ${ts}\n\n![Photo ${idx}](photo:${l.photo_id})\n${
+            note ? `\n*"${note.replace(/"/g, '\\"')}"*\n` : ""
+          }`;
+        })
+        .join("\n");
+      const header = usedIds.size > 0 ? "\n\n## Additional Photos\n\n" : "\n\n## Photos\n\n";
+      markdown = `${markdown.trim()}${header}${gallery}`;
+    }
+
+    // Auto-issue a share token on first successful report so the public link
+    // works immediately. Toggle still controls visibility client-side via the
+    // share switch; the token is rotated when the user disables it.
+    const existingToken = (walk as any).share_token ?? null;
+    const ensuredToken = existingToken ?? crypto.randomUUID();
+
+    await supabaseAdmin
+      .from("walkthroughs" as any)
+      .update({
+        summary_markdown: markdown,
+        status: "ready",
+        share_token: ensuredToken,
+      })
+      .eq("id", data.walkthroughId);
+
+    console.log(`[walkthrough] Success - ID: ${data.walkthroughId}`);
+    console.log("[walkthrough] server report generation saved", { walkthroughId: data.walkthroughId, userId });
+    return { markdown };
+}
+
+const tokenSchema = z.object({
+  walkthroughId: z.string().uuid(),
+  enable: z.boolean(),
+});
+
+export async function setWalkthroughShareService(
+  ctx: AuthedContext,
+  data: { walkthroughId: string; enable: boolean },
+) {
+    const { supabase, userId } = ctx;
+    const { data: walk } = await supabase
+      .from("walkthroughs" as any)
+      .select("id, created_by, share_token")
+      .eq("id", data.walkthroughId)
+      .maybeSingle();
+    if (!walk || (walk as any).created_by !== userId) throw new Error("Not authorized");
+    const token = data.enable
+      ? ((walk as any).share_token ?? crypto.randomUUID())
+      : null;
+    await supabase
+      .from("walkthroughs" as any)
+      .update({ share_token: token })
+      .eq("id", data.walkthroughId);
+    return { token };
+}
+
+const publicSchema = z.object({ token: z.string().uuid() });
+
+/**
+ * Read a published walkthrough by share token. No auth — uses the admin client
+ * because anonymous visitors are the target audience and RLS would block them.
+ */
+export async function getPublicWalkthroughService(data: { token: string }) {
+    const supabaseAdmin = getSupabaseAdmin();
+
+    const { data: walk } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .select("id, title, summary_markdown, transcript, duration_seconds, started_at, project_id, status")
+      .eq("share_token", data.token)
+      .maybeSingle();
+    if (!walk) {
+      return {
+        walkthrough: null,
+        project: null,
+        photoUrls: {} as Record<string, string>,
+        photoSteps: [] as Array<{
+          photo_id: string;
+          offset_seconds: number;
+          spoken_note: string | null;
+          position: number;
+          caption: string | null;
+          taken_at: string | null;
+          image_url: string;
+        }>,
+      };
+    }
+
+    const { data: project } = await supabaseAdmin
+      .from("projects")
+      .select("name, location, street, city, state")
+      .eq("id", (walk as any).project_id)
+      .maybeSingle();
+
+    const { data: links } = await supabaseAdmin
+      .from("walkthrough_photos" as any)
+      .select("photo_id, offset_seconds, spoken_note, position")
+      .eq("walkthrough_id", (walk as any).id)
+      .order("position", { ascending: true });
+    const linkRows = ((links as any[]) ?? []);
+    const photoIds = Array.from(new Set(linkRows.map((l) => l.photo_id).filter(Boolean)));
+
+    const photoUrls: Record<string, string> = {};
+    const photoMeta = new Map<string, { caption: string | null; taken_at: string | null; image_url: string }>();
+    if (photoIds.length) {
+      const { data: phRows } = await supabaseAdmin
+        .from("photos")
+        .select("id, storage_path, image_url, caption, taken_at")
+        .in("id", photoIds);
+      const rows = (phRows as any[]) ?? [];
+      const toSign = rows.filter((r) => !r.image_url && r.storage_path).map((r) => r.storage_path);
+      const signedMap = new Map<string, string>();
+      if (toSign.length) {
+        const { data: signed } = await supabaseAdmin.storage
+          .from("site-photos")
+          .createSignedUrls(toSign, 60 * 60 * 24 * 7);
+        (signed ?? []).forEach((s, i) => {
+          if (s.signedUrl) signedMap.set(toSign[i], s.signedUrl);
+        });
+      }
+      for (const r of rows) {
+        const imageUrl = r.image_url ?? signedMap.get(r.storage_path) ?? "";
+        photoUrls[r.id] = imageUrl;
+        photoMeta.set(r.id, {
+          caption: r.caption ?? null,
+          taken_at: r.taken_at ?? null,
+          image_url: imageUrl,
+        });
+      }
+    }
+
+    const publicWalk = {
+      id: (walk as any).id,
+      title: (walk as any).title,
+      summary_markdown: (walk as any).summary_markdown,
+      duration_seconds: (walk as any).duration_seconds,
+      started_at: (walk as any).started_at,
+      project_id: (walk as any).project_id,
+      status: (walk as any).status,
+    };
+
+    const rawTranscript = ((walk as any).transcript ?? "").trim();
+    const durationSeconds = (walk as any).duration_seconds ?? 0;
+    const photoSteps = linkRows.map((l, i) => {
+      const meta = photoMeta.get(l.photo_id);
+      const note = l.spoken_note?.trim() || estimateSpokenNote(
+        rawTranscript,
+        l.offset_seconds ?? 0,
+        linkRows[i + 1]?.offset_seconds ?? null,
+        durationSeconds,
+        i,
+        linkRows.length,
+      );
+      return {
+        photo_id: l.photo_id,
+        offset_seconds: l.offset_seconds ?? 0,
+        spoken_note: note,
+        position: l.position ?? 0,
+        caption: meta?.caption ?? null,
+        taken_at: meta?.taken_at ?? null,
+        image_url: meta?.image_url ?? "",
+      };
+    });
+
+    return {
+      walkthrough: publicWalk,
+      project,
+      photoUrls,
+      photoSteps,
+    };
+  }
+
+export async function createReportFromWalkthroughService(ctx: AuthedContext, data: any) {
+    const { userId } = ctx;
+    const supabaseAdmin = getSupabaseAdmin();
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    const { data: walk, error: wErr } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .select("id, project_id, created_by, title, transcript, duration_seconds, started_at")
+      .eq("id", data.walkthroughId)
+      .single();
+    if (wErr || !walk) throw new Error("Walkthrough not found");
+    if ((walk as any).created_by !== userId) throw new Error("Not authorized");
+
+    const projectId = (walk as any).project_id as string;
+    const walkTitle = (walk as any).title as string | null;
+    const transcript = ((walk as any).transcript ?? "").toString().trim();
+
+    const { data: projectRow } = await supabaseAdmin
+      .from("projects")
+      .select("name")
+      .eq("id", projectId)
+      .maybeSingle();
+    const projectName = ((projectRow as any)?.name ?? null) as string | null;
+
+    // Idempotency: if a report already exists for this walkthrough (marker in
+    // summary), return it instead of creating a duplicate.
+    const marker = `wid:${(walk as any).id}`;
+    const { data: existing } = await (supabaseAdmin as any)
+      .from("project_reports")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("created_by", userId)
+      .ilike("summary", `%${marker}%`)
+      .maybeSingle();
+    if (existing?.id) {
+      return { reportId: existing.id as string, alreadyExisted: true };
+    }
+
+    const { data: links } = await supabaseAdmin
+      .from("walkthrough_photos" as any)
+      .select("photo_id, offset_seconds, spoken_note, position")
+      .eq("walkthrough_id", (walk as any).id)
+      .order("position", { ascending: true });
+    const linkRows = ((links as any[]) ?? []).filter((l) => l.photo_id);
+
+    let photoCaptions = new Map<string, string | null>();
+    if (linkRows.length) {
+      const ids = linkRows.map((l) => l.photo_id);
+      const { data: phRows } = await supabaseAdmin
+        .from("photos")
+        .select("id, caption")
+        .in("id", ids);
+      for (const r of (phRows as any[]) ?? []) photoCaptions.set(r.id, r.caption ?? null);
+    }
+
+    const photoList = linkRows.map((l, i) => ({
+      index: i,
+      photo_id: l.photo_id as string,
+      offset: l.offset_seconds ?? 0,
+      spoken_note: (l.spoken_note ?? "").toString().trim(),
+      caption: photoCaptions.get(l.photo_id) ?? null,
+    }));
+
+    // ---- AI structuring ----
+    let ai: AiReportShape | null = null;
+    if (apiKey) {
+      const photoLines = photoList.map((p) =>
+        `- Photo index ${p.index} — captured at ${fmtDuration(p.offset)}${p.spoken_note ? ` — spoken: "${p.spoken_note.replace(/"/g, '\\"')}"` : ""}${p.caption ? ` — existing caption: ${p.caption}` : ""}`
+      ).join("\n");
+
+      const userPrompt = `You are turning a recorded site walkthrough into a polished, client-ready project report.
+
+Project: ${projectName ?? "(unspecified)"}
+Walkthrough title: ${walkTitle ?? "Untitled walkthrough"}
+Duration: ${fmtDuration((walk as any).duration_seconds ?? 0)}
+Photos captured: ${photoList.length}
+
+STRICT RULES:
+- Base ALL content on the technician's spoken transcript and the spoken notes tied to each photo. Do not invent facts, measurements, brands, or defects.
+- Tone: neutral, factual, SUMMARY-focused — like a clean site log/recap, not an engineering diagnosis. Do NOT use language like "critical", "code violation", "safety hazard", "severity: high", or strong diagnostic opinions unless the speaker explicitly used those words. Do NOT invent risks, recommendations, or next steps.
+- Prefer short bullet points (<ul><li>) and tight sections over long paragraphs. Use clear section headings that reflect what the speaker actually covered.
+- Output MUST be valid JSON matching the schema below — no markdown fences, no commentary.
+- Body fields must be safe HTML using only these tags: <p>, <br/>, <strong>, <em>, <ul>, <ol>, <li>, <h3>. No inline styles, no other tags.
+- Distribute photos across sections using their integer index (0..${Math.max(0, photoList.length - 1)}) in "photo_indices". Each photo index may appear in at most one section. Photos not assigned to any section will be appended automatically at the end.
+
+Return JSON:
+{
+  "title": "short, descriptive report title based on project and date",
+  "subtitle": "one-sentence subtitle",
+  "introduction": "<p>1-2 short paragraphs introducing what was walked and why</p>",
+  "sections": [
+    { "title": "Section heading", "body": "<p>...</p><ul><li>...</li></ul>", "photo_indices": [0,1] }
+  ],
+  "conclusion": "<p>Short closing summary of what was observed. Do NOT invent recommendations the speaker didn't make.</p>"
+}
+
+Available photos:
+${photoLines || "(none)"}
+
+Raw spoken transcript:
+"""
+${transcript || "(no speech captured)"}
+"""
+
+If the transcript is empty, still produce a valid report with an introduction that says the walk was recorded without narration, a single section titled "Captured Photos" with an empty body and photo_indices listing all photos in order, and a brief conclusion.`;
+
+      try {
+        const ep = chatEndpoint(MODEL);
+        const res = await fetch(ep.url, {
+          method: "POST",
+          headers: ep.headers,
+          body: JSON.stringify({
+            model: ep.model,
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: "You output only valid JSON that matches the requested schema. You never add commentary outside the JSON. You base every sentence on the provided transcript and spoken notes and never invent facts." },
+              { role: "user", content: userPrompt },
+            ],
+          }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const raw = json.choices?.[0]?.message?.content ?? "";
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object" && Array.isArray(parsed.sections)) {
+            ai = {
+              title: String(parsed.title ?? "").trim() || `${projectName ?? "Site"} Walkthrough Report`,
+              subtitle: String(parsed.subtitle ?? "").trim(),
+              introduction: String(parsed.introduction ?? "").trim(),
+              sections: parsed.sections.map((s: any) => ({
+                title: String(s?.title ?? "").trim() || "Section",
+                body: String(s?.body ?? "").trim(),
+                photo_indices: Array.isArray(s?.photo_indices)
+                  ? s.photo_indices.filter((n: any) => Number.isInteger(n) && n >= 0 && n < photoList.length)
+                  : [],
+              })),
+              conclusion: String(parsed.conclusion ?? "").trim(),
+            };
+          }
+        } else {
+          const txt = await res.text().catch(() => "");
+          console.warn("[walkthrough→report] AI structuring failed", res.status, txt.slice(0, 200));
+        }
+      } catch (e) {
+        console.warn("[walkthrough→report] AI structuring threw", e);
+      }
+    }
+
+    if (!ai) {
+      ai = buildFallbackAiReport({
+        walkTitle: walkTitle ?? "",
+        projectName,
+        transcript,
+        photoCount: photoList.length,
+      });
+    }
+
+    // Distribute photos into sections; append any leftovers into a final gallery.
+    const usedIdx = new Set<number>();
+    const sectionsForDb: Array<{ title: string; body: string; photos: Array<{ photo_id: string; caption: string }> }> = [];
+
+    // Introduction section
+    if (ai.introduction?.trim()) {
+      sectionsForDb.push({ title: "Introduction", body: ai.introduction, photos: [] });
+    }
+
+    for (const s of ai.sections) {
+      const photoObjs = s.photo_indices
+        .filter((i) => !usedIdx.has(i))
+        .map((i) => {
+          usedIdx.add(i);
+          const p = photoList[i];
+          return { photo_id: p.photo_id, caption: p.spoken_note || p.caption || "" };
+        });
+      sectionsForDb.push({ title: s.title, body: s.body, photos: photoObjs });
+    }
+
+    const leftover = photoList.filter((p) => !usedIdx.has(p.index));
+    if (leftover.length) {
+      sectionsForDb.push({
+        title: sectionsForDb.some((s) => s.photos.length) ? "Additional Photos" : "Photos",
+        body: "",
+        photos: leftover.map((p) => ({ photo_id: p.photo_id, caption: p.spoken_note || p.caption || "" })),
+      });
+    }
+
+    if (ai.conclusion?.trim()) {
+      sectionsForDb.push({ title: "Conclusion", body: ai.conclusion, photos: [] });
+    }
+
+    // Cover photos: first up to 3 captured photos, if any
+    const coverPhotoIds = photoList.slice(0, 3).map((p) => p.photo_id);
+
+    // Summary field carries the subtitle for cover rendering + hidden marker
+    // for idempotency lookups on re-run.
+    const summary = `${ai.subtitle || ""}\n\n<!-- ${marker} -->`.trim();
+
+    const { data: inserted, error: insErr } = await (supabaseAdmin as any)
+      .from("project_reports")
+      .insert({
+        project_id: projectId,
+        created_by: userId,
+        title: ai.title,
+        summary,
+        photo_ids: photoList.map((p) => p.photo_id),
+        include_project_info: true,
+        allow_download: true,
+        photos_per_page: 2,
+        cover_enabled: true,
+        cover_show_project_name: true,
+        cover_show_address: true,
+        cover_show_date: true,
+        cover_show_author: true,
+        cover_photo_ids: coverPhotoIds,
+      })
+      .select("id")
+      .single();
+    if (insErr || !inserted) throw new Error(insErr?.message ?? "Failed to create report");
+    const reportId = (inserted as any).id as string;
+
+    if (sectionsForDb.length) {
+      const rows = sectionsForDb.map((s, i) => ({
+        report_id: reportId,
+        position: i,
+        title: s.title,
+        body: s.body,
+        photos: s.photos,
+      }));
+      const { error: secErr } = await (supabaseAdmin as any)
+        .from("project_report_sections")
+        .insert(rows);
+      if (secErr) {
+        console.warn("[walkthrough→report] section insert failed", secErr);
+      }
+    }
+
+    console.log("[walkthrough→report] created", { walkthroughId: data.walkthroughId, reportId, sections: sectionsForDb.length, photos: photoList.length });
+    return { reportId, alreadyExisted: false };
+  }

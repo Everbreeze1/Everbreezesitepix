@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Everbreeze SitePix",
+    "slug": "everbreeze-sitepix",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "sitepix",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow SitePix to access your photos for field uploads.",
+          "cameraPermission": "Allow SitePix to take job-site photos."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "tsconfigPaths": true
+    },
+    "extra": {
+      "apiBaseUrl": "",
+      "eas": {
+        "projectId": "replace-me"
+      }
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.everbreeze.sitepix"
+    },
+    "android": {
+      "package": "com.everbreeze.sitepix"
+    }
+  }
+}
