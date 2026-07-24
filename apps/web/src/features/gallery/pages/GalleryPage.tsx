@@ -125,6 +125,7 @@ export function GalleryPage() {
   const { user } = useAuth();
   const {
     isActive,
+    isPro,
     tier,
     aiAnalysesRemaining,
     aiAnalysesLimit,
@@ -1695,7 +1696,7 @@ export function GalleryPage() {
         onClose={() => setCameraOpen(false)}
         onCapture={onCameraCapture}
         canAnalyze={isActive && aiAnalysesRemaining > 0}
-        canMeasure={isActive}
+        canMeasure={isPro}
       />
 
       {activePhoto && signed[activePhoto.id] && (
@@ -1704,7 +1705,7 @@ export function GalleryPage() {
           imageUrl={signed[activePhoto.id]}
           onClose={() => setAnnotating(false)}
           onSave={saveAnnotatedPhoto}
-          canMeasure={isActive}
+          canMeasure={isPro}
         />
       )}
     </div>

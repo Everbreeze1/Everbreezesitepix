@@ -118,6 +118,14 @@ import {
 } from "@/features/photos/components/PhotoBulkActionBar";
 import { ProjectTrash } from "@/features/projects/components/ProjectTrash";
 
+const TIER_LABEL: Record<string, string> = {
+  starter: "Starter plan",
+  pro: "Pro plan",
+  team: "Team plan",
+};
+const VIDEO_MAX_SECONDS: Record<string, number> = { starter: 300, pro: 600, team: 1200 };
+const WALKTHROUGH_MAX_SECONDS: Record<string, number> = { pro: 600, team: 1200 };
+
 export type ProjectDetailSearch = {
   camera?: 1;
   walkthrough?: 1;
@@ -134,12 +142,15 @@ export function ProjectDetailPage() {
   const { user } = useAuth();
   const {
     isActive,
+    isPro,
+    isTeam,
     tier,
     canUseWalkthroughs,
     refresh: refreshSubscription,
     bumpAiAnalysesUsed,
   } = useSubscription();
   const [walkthroughUpgradeOpen, setWalkthroughUpgradeOpen] = useState(false);
+  const [workflowsUpgradeOpen, setWorkflowsUpgradeOpen] = useState(false);
   const { profile } = useProfile();
   const [project, setProject] = useState<Project | null>(null);
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -2239,6 +2250,10 @@ export function ProjectDetailPage() {
                 setPanel(null);
                 return;
               }
+              if (tab.key === "workflows" && !isTeam) {
+                setWorkflowsUpgradeOpen(true);
+                return;
+              }
               setPanel((cur) => (cur === tab.key ? null : (tab.key as any)));
             };
             return (
@@ -2899,15 +2914,15 @@ export function ProjectDetailPage() {
         onCreateTag={createPhotoTag}
         onOpenWalkthrough={() => setWalkthroughOpen(true)}
         onOpenVideo={() => setVideoOpen(true)}
-        canMeasure={isActive}
+        canMeasure={isPro}
       />
 
       <VideoRecorder
         open={videoOpen}
         onClose={() => setVideoOpen(false)}
         canRecord={isActive}
-        tierLabel={tier === "team" ? "Team plan" : "Starter plan"}
-        maxSeconds={tier === "team" ? 600 : 300}
+        tierLabel={TIER_LABEL[tier] ?? TIER_LABEL.starter}
+        maxSeconds={VIDEO_MAX_SECONDS[tier] ?? VIDEO_MAX_SECONDS.starter}
         onSave={onVideoSave}
       />
 
@@ -2915,8 +2930,8 @@ export function ProjectDetailPage() {
         open={walkthroughOpen}
         onClose={() => void onWalkthroughClose()}
         canRecord={canUseWalkthroughs}
-        tierLabel={tier === "team" ? "Team plan" : "Starter plan"}
-        maxSeconds={600}
+        tierLabel={TIER_LABEL[tier] ?? TIER_LABEL.starter}
+        maxSeconds={WALKTHROUGH_MAX_SECONDS[tier] ?? WALKTHROUGH_MAX_SECONDS.pro}
         watermark={watermarkCtx(project)}
         onCapturePhoto={onWalkthroughCapture}
         onFinish={onWalkthroughFinish}
@@ -2937,6 +2952,14 @@ export function ProjectDetailPage() {
         onOpenChange={setWalkthroughUpgradeOpen}
         feature="Walkthrough Notes"
         description="Capture photos with narration and get an AI-generated report. Available on the Team plan and during your 14-day trial."
+      />
+
+      <UpgradeDialog
+        open={workflowsUpgradeOpen}
+        onOpenChange={setWorkflowsUpgradeOpen}
+        feature="Workflows"
+        description="Multi-phase workflows with checklists, photos, and sign-offs per phase are available on the Team plan."
+        recommendedPlan="team"
       />
 
       <VideoPlayerDialog
@@ -3131,7 +3154,7 @@ export function ProjectDetailPage() {
               open={true}
               imageUrl={url}
               onClose={() => setAnnotatePhotoId(null)}
-              canMeasure={isActive}
+              canMeasure={isPro}
               onSave={async (blob) => {
                 if (!user || !project) return;
                 try {

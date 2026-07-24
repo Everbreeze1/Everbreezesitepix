@@ -43,8 +43,10 @@ import {
 import { supabase } from "@/integrations/sitepix/client";
 import { sitepixApi } from "@/lib/sitepix-api";
 import { useAuth } from "@/hooks/use-auth";
+import { useSubscription } from "@/hooks/use-subscription";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
+import { UpgradeDialog } from "@/components/UpgradeDialog";
 
 export interface ReportPhotoRef {
   id: string;
@@ -75,6 +77,7 @@ interface Props {
 
 export function ProjectReports({ projectId, projectName, projectPhotos }: Props) {
   const { user } = useAuth();
+  const { isTeam } = useSubscription();
   const navigate = useNavigate();
   const [reports, setReports] = useState<ProjectReport[]>([]);
   const [completedChecklists, setCompletedChecklists] = useState<
@@ -83,6 +86,7 @@ export function ProjectReports({ projectId, projectName, projectPhotos }: Props)
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"reports" | "checklists" | "sitelogs">("reports");
   const [applyOpen, setApplyOpen] = useState(false);
+  const [blueprintUpgradeOpen, setBlueprintUpgradeOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
@@ -241,7 +245,11 @@ export function ProjectReports({ projectId, projectName, projectPhotos }: Props)
               <Sparkles className="h-3.5 w-3.5" /> Site Logs
             </TabsTrigger>
           </TabsList>
-          <Button size="sm" variant="outline" onClick={() => setApplyOpen(true)}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => (isTeam ? setApplyOpen(true) : setBlueprintUpgradeOpen(true))}
+          >
             <Sparkles className="mr-1 h-3.5 w-3.5" /> Apply template
           </Button>
         </div>
@@ -619,6 +627,14 @@ export function ProjectReports({ projectId, projectName, projectPhotos }: Props)
         onApplied={() => {
           void load();
         }}
+      />
+
+      <UpgradeDialog
+        open={blueprintUpgradeOpen}
+        onOpenChange={setBlueprintUpgradeOpen}
+        feature="Project Blueprints"
+        description="Apply a saved bundle of labels, checklists, documents, reports, and workflows to a project in one step. Available on the Team plan."
+        recommendedPlan="team"
       />
     </div>
   );

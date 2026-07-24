@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useSubscription } from "@/hooks/use-subscription";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { toast } from "sonner";
@@ -40,6 +41,7 @@ function parseComponents(comps: any[]): AddrParts {
 
 export function NewProjectPage() {
   const { user } = useAuth();
+  const { isTeam } = useSubscription();
   const navigate = useNavigate();
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -64,8 +66,10 @@ export function NewProjectPage() {
   >([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("__none");
 
-  // Load project templates the user can apply
+  // Load project templates the user can apply (Team plan only — Project
+  // Blueprints are a Team-tier differentiator).
   useEffect(() => {
+    if (!isTeam) return;
     let cancelled = false;
     (async () => {
       const { data } = await supabase
@@ -85,7 +89,7 @@ export function NewProjectPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isTeam]);
 
   // Load Maps JS
   useEffect(() => {
