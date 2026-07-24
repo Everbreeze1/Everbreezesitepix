@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "node",
+  "steps": {
+    "install": {
+      "caches": []
+    },
+    "build": {
+      "commands": ["true"]
+    }
+  },
+  "deploy": {
+    "startCommand": "npm run start -w @sitepix/api"
+  }
+}

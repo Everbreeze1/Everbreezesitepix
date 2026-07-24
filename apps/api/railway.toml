@@ -1,0 +1,17 @@
+# Config-as-code path for this service: /apps/api/railway.toml
+#
+# Required service Variables (Variables tab):
+#   RAILPACK_CONFIG_FILE=apps/api/railpack.json
+#   RAILPACK_INSTALL_CMD=npm install
+# Delete RAILPACK_INSTALL_CMD=npm ci if present — npm ci causes EBUSY with Vite caches.
+
+[build]
+builder = "RAILPACK"
+buildCommand = "true"
+watchPatterns = ["/apps/api/**", "/packages/**", "/package.json", "/package-lock.json"]
+
+[deploy]
+startCommand = "npm run start -w @sitepix/api"
+healthcheckPath = "/v1/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
