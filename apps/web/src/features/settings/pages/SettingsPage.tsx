@@ -37,8 +37,8 @@ import { useProfile } from "@/hooks/use-profile";
 import { useTheme } from "@/hooks/use-theme";
 import { useSubscription } from "@/hooks/use-subscription";
 import { supabase } from "@/integrations/sitepix/client";
-import { useQuery } from "@tanstack/react-query";
-import { getMyTeam } from "@/features/settings/api";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { getMyTeam, createBillingPortalSession } from "@/features/settings/api";
 import { useStorageUsage, formatBytes } from "@/hooks/use-storage-usage";
 import { cn } from "@/lib/utils";
 
@@ -278,6 +278,7 @@ export function SettingsPage() {
                 aiLimit={aiAnalysesLimit}
                 aiRemaining={aiAnalysesRemaining}
                 teamData={teamData}
+                isOwner={myTeamRole === "owner"}
               />
             )}
             {active === "team" && <TeamSection isTeam={isTeam} teamData={teamData} />}
@@ -1157,6 +1158,7 @@ function BillingSection({
   aiLimit,
   aiRemaining,
   teamData,
+  isOwner,
 }: {
   planName: string;
   tier: string;
@@ -1166,10 +1168,21 @@ function BillingSection({
   aiLimit: number;
   aiRemaining: number;
   teamData: any;
+  isOwner: boolean;
 }) {
   const { bytesUsed, bytesLimit } = useStorageUsage();
   const seatsUsed = (teamData?.members?.length ?? 1) + (teamData?.invites?.length ?? 0);
-  const seatsLimit = isTeam ? 50 : (teamData?.memberLimit ?? 2);
+  const seatsLimit = teamData?.memberLimit ?? 2;
+  const openPortal = useMutation({
+    mutationFn: () =>
+      createBillingPortalSession({
+        data: { origin: typeof window !== "undefined" ? window.location.origin : "" },
+      }),
+    onSuccess: (res) => {
+      window.location.href = res.url;
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Failed to open billing portal"),
+  });
 
   const heroCopy = isTeam
     ? {
@@ -1202,12 +1215,19 @@ function BillingSection({
               {heroCopy.desc}
             </p>
           </div>
-          <Button
-            asChild
-            className="shrink-0 rounded-lg bg-sidebar-foreground font-manrope font-bold text-sidebar hover:bg-sidebar-foreground/90"
-          >
-            <Link to="/pricing">{isTeam ? "Manage plan" : "Upgrade"}</Link>
-          </Button>
+          {isOwner ? (
+            <Button
+              disabled={openPortal.isPending}
+              onClick={() => openPortal.mutate()}
+              className="shrink-0 rounded-lg bg-sidebar-foreground font-manrope font-bold text-sidebar hover:bg-sidebar-foreground/90"
+            >
+              {openPortal.isPending ? "Opening…" : "Manage plan"}
+            </Button>
+          ) : (
+            <span className="shrink-0 font-manrope text-xs text-sidebar-foreground/50">
+              Only the team owner can manage billing.
+            </span>
+          )}
         </div>
       </div>
 

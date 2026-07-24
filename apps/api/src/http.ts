@@ -16,4 +16,6 @@ export { handleArchiveOldPhotos } from "./domains/hooks/archive-old-photos";
 export { handleReportPdf } from "./domains/reports/public-pdf";
 export { handleWalkthroughPdf } from "./domains/walkthroughs/public-pdf";
 
+export { handleStripeWebhook } from "./domains/billing/webhook";
+
 export { handleRpc } from "./domains/rpc/handle";

@@ -43,6 +43,8 @@ import { compressImageFile } from "@/features/photos/components/CameraCapture";
 
 type ItemKind = "check" | "photo" | "note";
 
+const CARD_VARIANTS = ["dark", "blue", "light"] as const;
+
 interface Template {
   id: string;
   name: string;

@@ -7,8 +7,6 @@ export const getMyTeam = rpcOp<undefined, unknown>("getMyTeam");
 
 export const createTeam = rpcOp<{ name: string }, unknown>("createTeam");
 
-export const setTeamPlan = rpcOp<{ plan: "starter" | "pro" | "team" }, unknown>("setTeamPlan");
-
 export const inviteMember = rpcOp<
   {
     email: string;

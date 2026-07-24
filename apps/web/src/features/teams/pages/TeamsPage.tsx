@@ -13,7 +13,7 @@ import {
   LogOut,
   Sparkles,
   Lock,
-  Zap,
+  CreditCard,
   Search,
   RefreshCcw,
   UserPlus,
@@ -22,13 +22,6 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,18 +47,14 @@ import {
   removeMember,
   updateMemberRole,
   leaveTeam,
-  setTeamPlan,
   resendInvite,
+  createBillingPortalSession,
 } from "@/features/teams/api";
-import { useSubscription } from "@/hooks/use-subscription";
-import { useAuth } from "@/hooks/use-auth";
 import { relativeTime } from "@sitepix/shared";
 
 const AVATAR_PALETTE = ["#059669", "#7C3AED", "#D97706", "#DB2777", "#0EA5E9", "#65A30D"];
 const avatarColor = (role: string, index: number) =>
   role === "owner" ? "#101929" : AVATAR_PALETTE[index % AVATAR_PALETTE.length];
-
-const PLAN_SWITCHER_ALLOWED_EMAILS = new Set(["ajmalllo@icloud.com"]);
 
 type TeamPlan = "starter" | "pro" | "team";
 const PLAN_LABEL: Record<TeamPlan, string> = { starter: "Starter", pro: "Pro", team: "Team" };
@@ -96,7 +85,6 @@ function initials(name?: string | null, email?: string | null) {
 export function TeamsPage() {
   const fetchTeam = getMyTeam;
   const qc = useQueryClient();
-  const { isTeam } = useSubscription();
   const { data, isLoading } = useQuery({
     queryKey: ["my-team"],
     queryFn: async () => (await fetchTeam()) as any,
@@ -134,22 +122,15 @@ export function TeamsPage() {
     );
   }
 
-  // Test/Team-tier users always have project sharing + full seat cap,
-  // regardless of the team row's stored `plan` column. This keeps QA
-  // accounts from seeing the Starter upgrade banner.
-  const effectivePlan: TeamPlan = isTeam ? "team" : ((data.plan as TeamPlan) ?? "starter");
-  const effectiveLimit = isTeam ? 50 : (data.memberLimit ?? 2);
-  const effectiveSharing = isTeam ? true : !!data.sharingEnabled;
-
   return (
     <TeamDashboard
       team={data.team}
       members={data.members}
       invites={data.invites}
       myRole={data.myRole ?? "member"}
-      plan={effectivePlan}
-      memberLimit={effectiveLimit}
-      sharingEnabled={effectiveSharing}
+      plan={(data.plan as TeamPlan) ?? "starter"}
+      memberLimit={data.memberLimit ?? 2}
+      sharingEnabled={!!data.sharingEnabled}
       onChange={invalidate}
     />
   );
@@ -341,8 +322,6 @@ function TeamDashboard({
 }) {
   const canManage = myRole === "owner" || myRole === "admin";
   const isOwner = myRole === "owner";
-  const { user } = useAuth();
-  const canSwitchPlan = !!user?.email && PLAN_SWITCHER_ALLOWED_EMAILS.has(user.email.toLowerCase());
   const seatsUsed = members.length + invites.length;
   const seatsLeft = Math.max(0, memberLimit - seatsUsed);
   const atCap = seatsLeft === 0;
@@ -363,7 +342,7 @@ function TeamDashboard({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {isOwner && canSwitchPlan && <PlanSwitcher currentPlan={plan} onChanged={onChange} />}
+          {isOwner && <ManageBillingButton />}
           {!isOwner && <LeaveTeamButton onLeft={onChange} />}
           {canManage && !atCap && (
             <Button
@@ -450,33 +429,23 @@ function TeamDashboard({
 }
 
 // ----------------------------------------------------------------
-function PlanSwitcher({
-  currentPlan,
-  onChanged,
-}: {
-  currentPlan: TeamPlan;
-  onChanged: () => void;
-}) {
-  const setPlan = setTeamPlan;
+function ManageBillingButton() {
+  const openPortal = createBillingPortalSession;
   const m = useMutation({
-    mutationFn: (plan: TeamPlan) => setPlan({ data: { plan } }),
-    onSuccess: () => {
-      toast.success("Plan updated");
-      onChanged();
+    mutationFn: () =>
+      openPortal({
+        data: { origin: typeof window !== "undefined" ? window.location.origin : "" },
+      }),
+    onSuccess: (res) => {
+      window.location.href = res.url;
     },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to update plan"),
+    onError: (e: any) => toast.error(e?.message ?? "Failed to open billing portal"),
   });
   return (
-    <Select value={currentPlan} onValueChange={(v) => m.mutate(v as TeamPlan)}>
-      <SelectTrigger className="h-9 w-[150px]">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="starter">Starter (2 seats)</SelectItem>
-        <SelectItem value="pro">Pro (shared)</SelectItem>
-        <SelectItem value="team">Team (shared)</SelectItem>
-      </SelectContent>
-    </Select>
+    <Button variant="outline" disabled={m.isPending} onClick={() => m.mutate()}>
+      <CreditCard className="mr-2 h-4 w-4" />
+      {m.isPending ? "Opening…" : "Manage billing"}
+    </Button>
   );
 }
 

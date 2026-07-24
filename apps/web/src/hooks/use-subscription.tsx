@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { getMyTeam } from "@/lib/teams.functions";
 
 export interface SubscriptionRow {
   id: string;
@@ -9,27 +11,31 @@ export interface SubscriptionRow {
   cancel_at_period_end: boolean;
 }
 
-// Payments have been removed from this build. No one has an active
-// subscription, so every gated feature stays locked. The hook keeps the
-// same shape so existing call sites (UpgradeDialog triggers, watermark
-// guards, etc.) continue to work without changes.
+export type BillingTier = "starter" | "pro" | "team";
+
 export const PLAN_LIMITS = {
   starter: { storageBytes: 50 * 1024 ** 3 }, // 50 GB
+  pro: { storageBytes: 100 * 1024 ** 3 }, // 100 GB
   team: { storageBytes: 200 * 1024 ** 3 }, // 200 GB
 } as const;
 
-// Owner/admin emails that always get full access, independent of billing.
-// Case-insensitive; whitespace-trimmed. Add additional owner addresses here.
-const OWNER_EMAILS = new Set<string>(["ajmalllo@icloud.com"]);
-
-function normalizeEmail(email: string | null | undefined): string {
-  return (email ?? "").trim().toLowerCase();
+interface MyTeamResult {
+  team: { id: string } | null;
+  plan?: BillingTier;
+  isActive?: boolean;
+  isInternal?: boolean;
+  subscriptionStatus?: string;
 }
 
 export function useSubscription() {
   const { user, loading: authLoading } = useAuth();
   const [aiAnalysesUsed, setAiAnalysesUsed] = useState(0);
-  const [isDbAdmin, setIsDbAdmin] = useState(false);
+
+  const { data: teamData, isLoading: teamLoading } = useQuery({
+    queryKey: ["my-team"],
+    queryFn: async () => (await getMyTeam()) as MyTeamResult,
+    enabled: !authLoading && !!user,
+  });
 
   const fetchUsage = useCallback(async () => {
     if (!user) return;
@@ -48,27 +54,6 @@ export function useSubscription() {
     if (authLoading) return;
     void fetchUsage();
   }, [authLoading, fetchUsage]);
-
-  // Check admin role from user_roles table — owner/admin always gets full access.
-  useEffect(() => {
-    if (!user) {
-      setIsDbAdmin(false);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "admin")
-        .maybeSingle();
-      if (!cancelled) setIsDbAdmin(!!data);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -91,33 +76,34 @@ export function useSubscription() {
     };
   }, [user, fetchUsage]);
 
-  const tier = "starter" as "starter" | "team";
-  const limits = PLAN_LIMITS.starter;
-
-  // Owner/admin bypass — grants full access to all gated features (walkthroughs,
-  // auto-reports, watermark, team, etc.) regardless of billing tier.
-  const emailNorm = normalizeEmail(user?.email);
-  const isOwner = !!emailNorm && OWNER_EMAILS.has(emailNorm);
-  const isTestAccount = isOwner || isDbAdmin;
+  const loading = authLoading || teamLoading;
+  const isActive = !!teamData?.isActive;
+  const isInternal = !!teamData?.isInternal;
+  const tier: BillingTier = teamData?.plan ?? "starter";
+  const isTeam = isActive && tier === "team";
+  const isPro = isActive && (tier === "pro" || tier === "team");
+  const isStarter = isActive && tier === "starter";
+  const limits = PLAN_LIMITS[tier];
 
   return {
     subscription: null as SubscriptionRow | null,
-    loading: authLoading,
-    isActive: isTestAccount,
+    loading,
+    isActive,
+    isInternal,
     isTrialing: false,
     trialDaysRemaining: 0,
     trialEndsAt: null as Date | null,
-    planName: isTestAccount ? "Team (Test)" : "Inactive",
-    tier: isTestAccount ? ("team" as const) : tier,
-    isStarter: !isTestAccount,
-    isPro: isTestAccount,
-    isTeam: isTestAccount,
-    canUseAiChat: true,
-    canAttachPhotoInChat: isTestAccount,
-    canUseTeamFeatures: isTestAccount,
-    canUseWatermark: isTestAccount,
-    canUseWalkthroughs: isTestAccount,
-    limits: isTestAccount ? PLAN_LIMITS.team : limits,
+    planName: isActive ? `${tier[0].toUpperCase()}${tier.slice(1)}` : "Inactive",
+    tier,
+    isStarter,
+    isPro,
+    isTeam,
+    canUseAiChat: isActive,
+    canAttachPhotoInChat: isPro,
+    canUseTeamFeatures: isPro,
+    canUseWatermark: isPro,
+    canUseWalkthroughs: isPro,
+    limits,
     aiAnalysesUsed,
     aiAnalysesRemaining: Infinity,
     aiAnalysesLimit: Infinity,

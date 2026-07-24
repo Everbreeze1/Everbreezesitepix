@@ -1,3 +1,5 @@
+import type { Project, Photo } from "../types";
+
 const escHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 

@@ -10,7 +10,6 @@ export {
   removeMember,
   updateMemberRole,
   leaveTeam,
-  setTeamPlan,
   resendInvite,
   getTeamActivity,
   getProjectContributors,
@@ -23,3 +22,5 @@ export type {
   TeamActivityItem,
   TeamMemberContribution,
 } from "@/lib/teams.functions";
+export { createCheckoutSession, createBillingPortalSession } from "@/lib/billing.functions";
+export type { BillingPlan } from "@/lib/billing.functions";

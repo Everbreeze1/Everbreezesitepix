@@ -71,9 +71,14 @@ import {
   removeMemberService,
   resendInviteService,
   revokeInviteService,
-  setTeamPlanService,
   updateMemberRoleService,
 } from "../teams/service";
+import {
+  createBillingPortalSessionInputSchema,
+  createBillingPortalSessionService,
+  createCheckoutSessionInputSchema,
+  createCheckoutSessionService,
+} from "../billing/service";
 import {
   addProjectToGroupService,
   createProjectGroupService,
@@ -277,9 +282,14 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     (d) => z.object({ name: z.string().trim().min(1).max(80) }).parse(d),
     createTeamService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
-  setTeamPlan: authed(
-    (d) => z.object({ plan: z.enum(["starter", "pro", "team"]) }).parse(d),
-    setTeamPlanService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  createCheckoutSession: authed(
+    (d) => createCheckoutSessionInputSchema.parse(d),
+    createCheckoutSessionService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  createBillingPortalSession: authed(
+    (d) => createBillingPortalSessionInputSchema.parse(d),
+    createBillingPortalSessionService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   inviteMember: authed(
     (d) =>

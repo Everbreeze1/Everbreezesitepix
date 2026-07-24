@@ -10,20 +10,8 @@ const PLAN_MEMBER_CAP: Record<TeamPlan, number> = {
   team: 50,
 };
 
-const TEAM_TEST_ACCOUNT_EMAILS = new Set(["ajmalllo@icloud.com"]);
-
-function normalizedEmail(value: unknown) {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
-
-function effectivePlanForEmail(storedPlan: TeamPlan, email: string): TeamPlan {
-  return TEAM_TEST_ACCOUNT_EMAILS.has(email) ? "team" : storedPlan;
-}
-
-function effectiveMemberLimit(team: any, effectivePlan: TeamPlan): number {
-  return effectivePlan !== ((team?.plan as TeamPlan | undefined) ?? "starter")
-    ? PLAN_MEMBER_CAP[effectivePlan]
-    : (team?.member_limit ?? PLAN_MEMBER_CAP[effectivePlan]);
+function effectiveMemberLimit(team: any): number {
+  return team?.member_limit ?? PLAN_MEMBER_CAP[(team?.plan as TeamPlan) ?? "starter"];
 }
 
 // ============================================================
@@ -35,15 +23,9 @@ function effectiveMemberLimit(team: any, effectivePlan: TeamPlan): number {
 // ============================================================
 
 // ============================================================
-// Admin-only: change the team's plan. Until billing is wired back up,
-// plan changes are restricted to an internal allowlist of test accounts;
-// regular owners cannot self-upgrade to a paid plan from the UI/RPC.
-// ============================================================
-const PLAN_CHANGE_ALLOWED_EMAILS = new Set(["ajmalllo@icloud.com"]);
-
-
-// ============================================================
 // Invite a teammate by email — enforces plan cap, emails them.
+// Plan itself is now Stripe-driven (see domains/billing) — never
+// user-settable directly.
 // ============================================================
 
 function generateToken() {
@@ -176,7 +158,7 @@ export interface ProjectContributor {
 }
 
 export async function getMyTeamService(ctx: AuthedContext) {
-    const { supabase, userId, claims } = ctx;
+    const { supabase, userId } = ctx;
 
     const { data: membership } = await supabase
       .from("team_members" as any)
@@ -222,9 +204,9 @@ export async function getMyTeamService(ctx: AuthedContext) {
     }));
 
     const team = (teamRes.data ?? null) as any;
-    const storedPlan: TeamPlan = (team?.plan as TeamPlan) ?? "starter";
-    const plan = effectivePlanForEmail(storedPlan, normalizedEmail((claims as any)?.email));
-    const memberLimit = effectiveMemberLimit(team, plan);
+    const plan: TeamPlan = (team?.plan as TeamPlan) ?? "starter";
+    const isInternal = !!team?.is_internal;
+    const memberLimit = effectiveMemberLimit(team);
 
     return {
       team,
@@ -233,7 +215,10 @@ export async function getMyTeamService(ctx: AuthedContext) {
       myRole: (membership as any).role as string,
       plan,
       memberLimit,
-      sharingEnabled: plan !== "starter",
+      subscriptionStatus: (team?.subscription_status as string) ?? "inactive",
+      isInternal,
+      isActive: isInternal || team?.subscription_status === "active",
+      sharingEnabled: isInternal || plan !== "starter",
     };
   }
 
@@ -263,32 +248,8 @@ export async function createTeamService(ctx: AuthedContext, data: any) {
     return { team };
   }
 
-export async function setTeamPlanService(ctx: AuthedContext, data: any) {
-    const { userId, claims } = ctx;
-    const callerEmail = (((claims as any)?.email as string | undefined) ?? "").toLowerCase();
-    if (!callerEmail || !PLAN_CHANGE_ALLOWED_EMAILS.has(callerEmail)) {
-      throw new Error("Plan changes are handled by billing. Contact support to change your plan.");
-    }
-    const supabaseAdmin = getSupabaseAdmin();
-
-    const { data: membership } = await supabaseAdmin
-      .from("team_members" as any)
-      .select("team_id, role")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (!membership) throw new Error("No team");
-    if ((membership as any).role !== "owner") throw new Error("Only the owner can change the plan.");
-
-    const { error } = await supabaseAdmin
-      .from("teams" as any)
-      .update({ plan: data.plan })
-      .eq("id", (membership as any).team_id);
-    if (error) throw new Error(error.message);
-    return { ok: true };
-  }
-
 export async function inviteMemberService(ctx: AuthedContext, data: any) {
-    const { userId, claims } = ctx;
+    const { userId } = ctx;
     const supabaseAdmin = getSupabaseAdmin();
 
     // Caller must be owner/admin
@@ -342,9 +303,8 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
       return { invite: dup, emailSent: emailRes.sent, resent: true };
     }
 
-    const storedPlan = ((team as any).plan as TeamPlan) ?? "starter";
-    const plan = effectivePlanForEmail(storedPlan, normalizedEmail((claims as any)?.email));
-    const cap = effectiveMemberLimit(team, plan);
+    const plan = ((team as any).plan as TeamPlan) ?? "starter";
+    const cap = effectiveMemberLimit(team);
 
     // Count current members + pending invites against the cap
     const [{ count: memberCount }, { count: inviteCount }] = await Promise.all([
@@ -541,18 +501,7 @@ export async function acceptInviteService(ctx: AuthedContext, data: any) {
       .select("plan, member_limit, owner_id")
       .eq("id", teamId)
       .single();
-    let ownerEmail = "";
-    if ((team as any)?.owner_id) {
-      const { data: ownerProfile } = await supabaseAdmin
-        .from("profiles" as any)
-        .select("email")
-        .eq("id", (team as any).owner_id)
-        .maybeSingle();
-      ownerEmail = normalizedEmail((ownerProfile as any)?.email);
-    }
-    const storedPlan = ((team as any)?.plan as TeamPlan) ?? "starter";
-    const plan = effectivePlanForEmail(storedPlan, ownerEmail);
-    const cap = effectiveMemberLimit(team, plan);
+    const cap = effectiveMemberLimit(team);
     const { count: memberCount } = await supabaseAdmin
       .from("team_members" as any)
       .select("id", { count: "exact", head: true })
@@ -597,18 +546,7 @@ export async function acceptInviteSignupService(data: any) {
       .select("plan, member_limit, owner_id")
       .eq("id", teamId)
       .single();
-    let ownerEmail = "";
-    if ((team as any)?.owner_id) {
-      const { data: ownerProfile } = await supabaseAdmin
-        .from("profiles" as any)
-        .select("email")
-        .eq("id", (team as any).owner_id)
-        .maybeSingle();
-      ownerEmail = normalizedEmail((ownerProfile as any)?.email);
-    }
-    const storedPlan = ((team as any)?.plan as TeamPlan) ?? "starter";
-    const plan = effectivePlanForEmail(storedPlan, ownerEmail);
-    const cap = effectiveMemberLimit(team, plan);
+    const cap = effectiveMemberLimit(team);
     const { count: memberCount } = await supabaseAdmin
       .from("team_members" as any)
       .select("id", { count: "exact", head: true })

@@ -1,11 +1,13 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AppHeader } from "@/components/AppHeader";
 import { MobileTabBar } from "@/components/MobileTabBar";
 import { FloatingCameraButton } from "@/components/FloatingCameraButton";
 import { useAuth } from "@/hooks/use-auth";
+import { useSubscription } from "@/hooks/use-subscription";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { PageLoader } from "@/components/PageLoader";
 
@@ -13,16 +15,51 @@ export const Route = createFileRoute("/_app")({
   component: AppLayout,
 });
 
+/** Just back from Stripe Checkout — give the webhook a few seconds to land
+ * before bouncing the user to /pricing. */
+function useJustCheckedOut() {
+  const [justCheckedOut] = useState(
+    () => typeof window !== "undefined" && window.location.search.includes("checkout=success"),
+  );
+  return justCheckedOut;
+}
+
 function AppLayout() {
   const { user, loading } = useAuth();
+  const { isActive, loading: subLoading } = useSubscription();
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  const justCheckedOut = useJustCheckedOut();
+  const [checkoutAttempts, setCheckoutAttempts] = useState(0);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/login", replace: true });
   }, [loading, user, navigate]);
 
+  useEffect(() => {
+    if (loading || !user || subLoading || isActive) return;
+    if (!justCheckedOut || checkoutAttempts >= 6) {
+      navigate({ to: "/pricing", replace: true });
+      return;
+    }
+    const t = setTimeout(() => {
+      qc.invalidateQueries({ queryKey: ["my-team"] });
+      setCheckoutAttempts((n) => n + 1);
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [loading, user, subLoading, isActive, justCheckedOut, checkoutAttempts, qc, navigate]);
+
   if (loading || !user) {
     return <PageLoader fullScreen />;
+  }
+
+  if (!subLoading && !isActive) {
+    return (
+      <PageLoader
+        fullScreen
+        label={justCheckedOut && checkoutAttempts < 6 ? "Activating your subscription" : "Redirecting"}
+      />
+    );
   }
 
   return (

@@ -96,7 +96,6 @@ export {
 export {
   getMyTeamService,
   createTeamService,
-  setTeamPlanService,
   inviteMemberService,
   revokeInviteService,
   removeMemberService,
@@ -115,6 +114,11 @@ export type {
   TeamActivityItem,
   ProjectContributor,
 } from "./domains/teams/service";
+
+export {
+  createCheckoutSessionService,
+  createBillingPortalSessionService,
+} from "./domains/billing/service";
 
 export {
   listProjectGroupsService,

@@ -16,6 +16,7 @@ import {
   handleArchiveOldPhotos,
   handleReportPdf,
   handleWalkthroughPdf,
+  handleStripeWebhook,
 } from "./http";
 
 const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
@@ -43,6 +44,7 @@ app.post("/v1/auth/send-email", (c) => handleAuthSendEmail(c.req.raw));
 app.post("/v1/email/field-report", (c) => handleFieldReportEmail(c.req.raw));
 app.post("/v1/hooks/purge-trash", (c) => handlePurgeTrash(c.req.raw));
 app.post("/v1/hooks/archive-old-photos", (c) => handleArchiveOldPhotos(c.req.raw));
+app.post("/v1/billing/webhook", (c) => handleStripeWebhook(c.req.raw));
 app.get("/v1/reports/:token/pdf", (c) => handleReportPdf(c.req.param("token")));
 app.get("/v1/walkthroughs/:token/pdf", (c) => handleWalkthroughPdf(c.req.param("token")));
 
