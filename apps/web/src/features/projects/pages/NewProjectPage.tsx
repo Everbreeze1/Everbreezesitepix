@@ -14,6 +14,7 @@ import {
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
+import { applyProjectBlueprint } from "@/lib/blueprint.functions";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { toast } from "sonner";
@@ -209,13 +210,14 @@ export function NewProjectPage() {
   };
 
   const applyTemplate = async (projectId: string, templateId: string) => {
-    const { applyProjectBlueprint } = await import("@/lib/apply-blueprint");
-    await applyProjectBlueprint(templateId, {
-      projectId,
-      projectName: form.name.trim() || form.street.trim() || "Untitled project",
-      projectAddress:
-        [form.street, form.city, form.state, form.zip].filter(Boolean).join(", ") || null,
-      userId: user!.id,
+    await applyProjectBlueprint({
+      data: {
+        blueprintId: templateId,
+        projectId,
+        projectName: form.name.trim() || form.street.trim() || "Untitled project",
+        projectAddress:
+          [form.street, form.city, form.state, form.zip].filter(Boolean).join(", ") || null,
+      },
     });
   };
 

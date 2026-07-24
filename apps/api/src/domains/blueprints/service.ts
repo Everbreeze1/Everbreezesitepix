@@ -1,19 +1,15 @@
-// Client-side helper to apply a project blueprint (project_template) to a project.
-// Seeds checklists, documents, reports, label sets, and workflows.
-//
-// Kept in client code (not a server fn) so it uses the user's RLS-scoped
-// supabase session — mirrors the existing pattern in _app.projects.new.tsx.
+import { z } from "zod";
+import { getSupabaseAdmin } from "../../lib/supabase";
+import type { ServiceContext } from "../../lib/user-context";
 
-import { supabase } from "@/integrations/sitepix/client";
-
-interface ProjectContext {
-  projectId: string;
-  projectName: string;
-  projectAddress?: string | null;
-  userId: string;
-  preparedBy?: string;
-  companyName?: string;
-}
+export const applyProjectBlueprintInputSchema = z.object({
+  blueprintId: z.string().uuid(),
+  projectId: z.string().uuid(),
+  projectName: z.string(),
+  projectAddress: z.string().nullable().optional(),
+  preparedBy: z.string().optional(),
+  companyName: z.string().optional(),
+});
 
 function fill(html: string, values: Record<string, string>): string {
   return html.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (m, k) => {
@@ -22,10 +18,46 @@ function fill(html: string, values: Record<string, string>): string {
   });
 }
 
-export async function applyProjectBlueprint(
-  blueprintId: string,
-  ctx: ProjectContext,
-): Promise<{ counts: Record<string, number> }> {
+async function requireOwnProject(ctx: ServiceContext, projectId: string) {
+  const { data: project } = await (ctx.supabase as any)
+    .from("projects")
+    .select("id, created_by")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (!project || project.created_by !== ctx.userId) {
+    throw new Error("Project not found");
+  }
+}
+
+async function requireTeamPlan(ctx: ServiceContext) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: membership } = await supabaseAdmin
+    .from("team_members" as any)
+    .select("team_id")
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+  if (!membership) throw new Error("Project Blueprints require the Team plan.");
+
+  const { data: team } = await supabaseAdmin
+    .from("teams" as any)
+    .select("plan, is_internal")
+    .eq("id", (membership as any).team_id)
+    .maybeSingle();
+  const plan = (team as any)?.plan;
+  const isInternal = !!(team as any)?.is_internal;
+  if (plan !== "team" && !isInternal) {
+    throw new Error("Project Blueprints require the Team plan.");
+  }
+}
+
+export async function applyProjectBlueprintService(
+  ctx: ServiceContext,
+  data: z.infer<typeof applyProjectBlueprintInputSchema>,
+) {
+  await requireOwnProject(ctx, data.projectId);
+  await requireTeamPlan(ctx);
+
+  const supabaseAdmin = getSupabaseAdmin();
   const counts: Record<string, number> = {
     checklists: 0,
     documents: 0,
@@ -35,32 +67,32 @@ export async function applyProjectBlueprint(
   };
 
   // Blueprint labels → merge onto project
-  const { data: tpl } = await supabase
+  const { data: tpl } = await supabaseAdmin
     .from("project_templates" as any)
     .select("labels")
-    .eq("id", blueprintId)
+    .eq("id", data.blueprintId)
     .single();
   const tplLabels: string[] = ((tpl as any)?.labels as string[] | null) ?? [];
   if (tplLabels.length) {
-    const { data: pr } = await supabase
+    const { data: pr } = await supabaseAdmin
       .from("projects")
       .select("labels")
-      .eq("id", ctx.projectId)
+      .eq("id", data.projectId)
       .single();
     const merged = Array.from(
       new Set([...(((pr as any)?.labels as string[] | null) ?? []), ...tplLabels]),
     );
-    await supabase
+    await supabaseAdmin
       .from("projects")
       .update({ labels: merged } as any)
-      .eq("id", ctx.projectId);
+      .eq("id", data.projectId);
   }
 
   // Legacy checklist attachments
-  const { data: attached } = await supabase
+  const { data: attached } = await supabaseAdmin
     .from("project_template_checklists" as any)
     .select("checklist_template_id, position")
-    .eq("project_template_id", blueprintId)
+    .eq("project_template_id", data.blueprintId)
     .order("position", { ascending: true });
   const legacyChecklists = ((attached as any[]) ?? []).map((a) => ({
     kind: "checklist" as const,
@@ -68,10 +100,10 @@ export async function applyProjectBlueprint(
   }));
 
   // Generic multi-kind items
-  const { data: items } = await supabase
+  const { data: items } = await supabaseAdmin
     .from("project_template_items" as any)
     .select("kind, ref_id, position")
-    .eq("project_template_id", blueprintId)
+    .eq("project_template_id", data.blueprintId)
     .order("position", { ascending: true });
   const allItems = [
     ...legacyChecklists,
@@ -82,30 +114,30 @@ export async function applyProjectBlueprint(
   ];
 
   const values: Record<string, string> = {
-    project_name: ctx.projectName,
-    project_address: ctx.projectAddress ?? "",
+    project_name: data.projectName,
+    project_address: data.projectAddress ?? "",
     date: new Date().toLocaleDateString(undefined, {
       year: "numeric",
       month: "long",
       day: "numeric",
     }),
-    prepared_by: ctx.preparedBy ?? "",
-    company_name: ctx.companyName ?? "",
+    prepared_by: data.preparedBy ?? "",
+    company_name: data.companyName ?? "",
   };
 
   for (const it of allItems) {
     try {
       if (it.kind === "checklist") {
-        const { data: t } = await supabase
+        const { data: t } = await supabaseAdmin
           .from("checklist_templates" as any)
           .select("name")
           .eq("id", it.ref_id)
           .single();
         if (!t) continue;
-        const { data: created } = await supabase
+        const { data: created } = await supabaseAdmin
           .from("project_checklists" as any)
           .insert({
-            project_id: ctx.projectId,
+            project_id: data.projectId,
             template_id: it.ref_id,
             name: (t as any).name,
             created_by: ctx.userId,
@@ -113,7 +145,7 @@ export async function applyProjectBlueprint(
           .select("id")
           .single();
         if (!created) continue;
-        const { data: tItems } = await supabase
+        const { data: tItems } = await supabaseAdmin
           .from("checklist_template_items" as any)
           .select("position, label, required, item_type, description")
           .eq("template_id", it.ref_id)
@@ -126,25 +158,25 @@ export async function applyProjectBlueprint(
           item_type: x.item_type ?? "checkbox",
           description: x.description ?? null,
         }));
-        if (rows.length) await supabase.from("project_checklist_items" as any).insert(rows);
+        if (rows.length) await supabaseAdmin.from("project_checklist_items" as any).insert(rows);
         counts.checklists++;
       } else if (it.kind === "document") {
-        const { data: d } = await supabase
+        const { data: d } = await supabaseAdmin
           .from("document_templates" as any)
           .select("name, body")
           .eq("id", it.ref_id)
           .single();
         if (!d) continue;
         const html = fill(((d as any).body?.html as string) ?? "", values);
-        await (supabase as any).from("project_site_logs").insert({
-          project_id: ctx.projectId,
+        await (supabaseAdmin as any).from("project_site_logs").insert({
+          project_id: data.projectId,
           title: `${(d as any).name} — ${new Date().toLocaleDateString()}`,
           photo_ids: [],
           notes: { __doc_html__: html, __doc_source_template__: (d as any).name },
         });
         counts.documents++;
       } else if (it.kind === "report") {
-        const { data: r } = await supabase
+        const { data: r } = await supabaseAdmin
           .from("report_templates" as any)
           .select("name, subtitle, sections")
           .eq("id", it.ref_id)
@@ -154,8 +186,8 @@ export async function applyProjectBlueprint(
         const body = sections
           .map((s: any) => `<h2>${s.heading ?? ""}</h2>${fill(s.body ?? "", values)}`)
           .join("\n");
-        await supabase.from("project_reports" as any).insert({
-          project_id: ctx.projectId,
+        await supabaseAdmin.from("project_reports" as any).insert({
+          project_id: data.projectId,
           title: (r as any).name,
           subtitle: (r as any).subtitle ?? null,
           body: { html: body },
@@ -163,43 +195,43 @@ export async function applyProjectBlueprint(
         } as any);
         counts.reports++;
       } else if (it.kind === "label_set") {
-        const { data: lsItems } = await supabase
+        const { data: lsItems } = await supabaseAdmin
           .from("label_set_items" as any)
           .select("name, color, position")
           .eq("label_set_id", it.ref_id)
           .order("position", { ascending: true });
         const names = ((lsItems as any[]) ?? []).map((x: any) => x.name);
         if (names.length) {
-          const { data: pr } = await supabase
+          const { data: pr } = await supabaseAdmin
             .from("projects")
             .select("labels")
-            .eq("id", ctx.projectId)
+            .eq("id", data.projectId)
             .single();
           const merged = Array.from(
             new Set([...(((pr as any)?.labels as string[] | null) ?? []), ...names]),
           );
-          await supabase
+          await supabaseAdmin
             .from("projects")
             .update({ labels: merged } as any)
-            .eq("id", ctx.projectId);
+            .eq("id", data.projectId);
         }
         counts.label_sets++;
       } else if (it.kind === "workflow") {
-        const { data: wt } = await supabase
+        const { data: wt } = await supabaseAdmin
           .from("workflow_templates" as any)
           .select("name")
           .eq("id", it.ref_id)
           .single();
         if (!wt) continue;
-        const { data: phases } = await supabase
+        const { data: phases } = await supabaseAdmin
           .from("workflow_template_phases" as any)
           .select("id, name, position")
           .eq("template_id", it.ref_id)
           .order("position", { ascending: true });
-        const { data: created } = await supabase
+        const { data: created } = await supabaseAdmin
           .from("project_workflows" as any)
           .insert({
-            project_id: ctx.projectId,
+            project_id: data.projectId,
             template_id: it.ref_id,
             name: (wt as any).name,
             created_by: ctx.userId,
@@ -208,13 +240,13 @@ export async function applyProjectBlueprint(
           .single();
         if (!created) continue;
         for (const p of (phases as any[]) ?? []) {
-          const { data: newPhase } = await supabase
+          const { data: newPhase } = await supabaseAdmin
             .from("project_workflow_phases" as any)
             .insert({ workflow_id: (created as any).id, name: p.name, position: p.position } as any)
             .select("id")
             .single();
           if (!newPhase) continue;
-          const { data: pItems } = await supabase
+          const { data: pItems } = await supabaseAdmin
             .from("workflow_template_items" as any)
             .select("label, position, required")
             .eq("phase_id", p.id)
@@ -225,7 +257,7 @@ export async function applyProjectBlueprint(
             position: x.position,
             required: !!x.required,
           }));
-          if (rows.length) await supabase.from("project_workflow_items" as any).insert(rows);
+          if (rows.length) await supabaseAdmin.from("project_workflow_items" as any).insert(rows);
         }
         counts.workflows++;
       }

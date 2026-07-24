@@ -80,6 +80,10 @@ import {
   createCheckoutSessionService,
 } from "../billing/service";
 import {
+  applyProjectBlueprintInputSchema,
+  applyProjectBlueprintService,
+} from "../blueprints/service";
+import {
   addProjectToGroupService,
   createProjectGroupService,
   deleteProjectGroupService,
@@ -290,6 +294,10 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   createBillingPortalSession: authed(
     (d) => createBillingPortalSessionInputSchema.parse(d),
     createBillingPortalSessionService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  applyProjectBlueprint: authed(
+    (d) => applyProjectBlueprintInputSchema.parse(d),
+    applyProjectBlueprintService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   inviteMember: authed(
     (d) =>
