@@ -273,7 +273,7 @@ export function ProjectsPage() {
           .not("storage_path", "like", "%/walkthroughs/%")
           .order("created_at", { ascending: false }),
         (supabase as any).from("project_reports").select("project_id").in("project_id", ids),
-        (supabase as any).from("checklists").select("project_id").in("project_id", ids),
+        (supabase as any).from("project_checklists").select("project_id").in("project_id", ids),
         supabase
           .from("photos")
           .select("id, project_id, caption, storage_path, image_url, created_at")
