@@ -4,14 +4,35 @@ import type { AuthedContext } from "../../lib/user-context";
 
 const VISION_MODEL = "google/gemini-2.5-pro";
 const CHAT_MODEL = "google/gemini-2.5-pro";
-const AUTO_REPORT_OWNER_EMAILS = new Set(["ajmalllo@icloud.com"]);
 
 function aiKeyConfigured() {
   return !!process.env.GEMINI_API_KEY;
 }
 
-function normalizeEmail(value: unknown) {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
+/** Real team billing (teams.plan / subscription_status / is_internal) —
+ * replaces the old per-user `subscriptions` table, which was never wired to
+ * Stripe and doesn't exist on the live database. */
+async function getCallerTeamPlan(
+  supabase: AuthedContext["supabase"],
+  userId: string,
+): Promise<{ isActive: boolean; isPro: boolean }> {
+  const { data: membership } = await supabase
+    .from("team_members" as any)
+    .select("team_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!membership) return { isActive: false, isPro: false };
+
+  const { data: team } = await supabase
+    .from("teams" as any)
+    .select("plan, subscription_status, is_internal")
+    .eq("id", (membership as any).team_id)
+    .maybeSingle();
+  const isInternal = !!(team as any)?.is_internal;
+  const isActive = isInternal || (team as any)?.subscription_status === "active";
+  const plan = (team as any)?.plan as string | undefined;
+  const isPro = isActive && (plan === "pro" || plan === "team");
+  return { isActive, isPro };
 }
 
 const analysisTool = {
@@ -61,24 +82,9 @@ export async function analyzePhotoService(ctx: AuthedContext, data: { photoId: s
     .single();
   if (photoErr || !photo) throw new Error("Photo not found");
 
-  const { data: sub } = await supabase
-    .from("subscriptions")
-    .select("status, current_period_end, price_id")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const isActive =
-    sub &&
-    (
-      (["active", "trialing", "past_due"].includes(sub.status) &&
-        (!sub.current_period_end || new Date(sub.current_period_end).getTime() > Date.now())) ||
-      (sub.status === "canceled" && !!sub.current_period_end && new Date(sub.current_period_end).getTime() > Date.now())
-    );
+  const { isActive } = await getCallerTeamPlan(supabase, userId);
   if (!isActive) {
-    throw new Error(
-      "AI photo analysis requires a paid plan. Start your 14-day free trial or upgrade to Starter or Team — both include unlimited AI scans.",
-    );
+    throw new Error("AI photo analysis requires an active plan. Subscribe to unlock it.");
   }
 
   const { data: signed, error: signErr } = await supabase.storage
@@ -176,18 +182,8 @@ export async function chatWithAssistantService(
   if (!aiKeyConfigured()) throw new Error("AI is not configured");
 
   if (data.photoId) {
-    const { data: sub } = await supabase
-      .from("subscriptions")
-      .select("status, current_period_end")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const subActive =
-      sub &&
-      ["active", "trialing", "past_due"].includes(sub.status) &&
-      (!sub.current_period_end || new Date(sub.current_period_end).getTime() > Date.now());
-    if (!subActive) {
+    const { isPro } = await getCallerTeamPlan(supabase, userId);
+    if (!isPro) {
       throw new Error(
         "Attaching photos to the AI is a Pro feature. Upgrade to Pro for vision-powered chat.",
       );
@@ -288,38 +284,22 @@ export async function chatWithAssistantService(
   return { conversationId: convId, reply };
 }
 
-async function requireActiveSub(supabase: AuthedContext["supabase"], userId: string, email?: unknown) {
-  const emailNorm = normalizeEmail(email);
-  if (emailNorm && AUTO_REPORT_OWNER_EMAILS.has(emailNorm)) return;
-
+async function requireActiveSub(supabase: AuthedContext["supabase"], userId: string) {
   const { data: isAdmin } = await supabase
     .rpc("has_role" as never, { _user_id: userId, _role: "admin" } as never);
   if (isAdmin) return;
 
-  const { data: sub } = await supabase
-    .from("subscriptions")
-    .select("status, current_period_end")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const active =
-    sub &&
-    (
-      (["active", "trialing", "past_due"].includes(sub.status) &&
-        (!sub.current_period_end || new Date(sub.current_period_end).getTime() > Date.now())) ||
-      (sub.status === "canceled" && !!sub.current_period_end && new Date(sub.current_period_end).getTime() > Date.now())
-    );
-  if (!active) throw new Error("Auto-reports require a paid plan. Upgrade to Pro or Team.");
+  const { isActive } = await getCallerTeamPlan(supabase, userId);
+  if (!isActive) throw new Error("Auto-reports require a paid plan. Upgrade to Pro or Team.");
 }
 
 export async function summarizePhotosReportService(
   ctx: AuthedContext,
   data: { photoIds: string[]; title?: string },
 ) {
-  const { supabase, userId, claims } = ctx;
+  const { supabase, userId } = ctx;
   if (!aiKeyConfigured()) throw new Error("AI is not configured");
-  await requireActiveSub(supabase, userId, claims?.email);
+  await requireActiveSub(supabase, userId);
 
   const { data: photos } = await supabase
     .from("photos")
@@ -330,7 +310,7 @@ export async function summarizePhotosReportService(
   const projectIds = Array.from(new Set((photos as any[]).map((p: any) => p.project_id).filter(Boolean))) as string[];
   const { data: projects } = await supabase
     .from("projects")
-    .select("id, name, address")
+    .select("id, name, street, city, state")
     .in("id", projectIds.length ? projectIds : ["00000000-0000-0000-0000-000000000000"]);
   const projectById = new Map(((projects as any[]) ?? []).map((p: any) => [p.id, p]));
 
@@ -347,7 +327,13 @@ export async function summarizePhotosReportService(
     const cap = cleanCaption(p.caption);
     return [
       `Photo ${i + 1}${cap ? ` — ${cap}` : ""}`,
-      proj ? `Project: ${proj.name}${proj.address ? ` (${proj.address})` : ""}` : null,
+      proj
+        ? `Project: ${proj.name}${
+            [proj.street, proj.city, proj.state].filter(Boolean).length
+              ? ` (${[proj.street, proj.city, proj.state].filter(Boolean).join(", ")})`
+              : ""
+          }`
+        : null,
       p.taken_at ? `Taken: ${new Date(p.taken_at).toLocaleString()}` : null,
       a?.report_text ? `Findings: ${a.report_text}` : null,
       a?.defects?.length ? `Defects: ${JSON.stringify(a.defects)}` : null,
@@ -380,9 +366,9 @@ export async function summarizePhotosReportService(
 }
 
 export async function describeSiteLogPhotosService(ctx: AuthedContext, data: { photoIds: string[] }) {
-  const { supabase, userId, claims } = ctx;
+  const { supabase, userId } = ctx;
   if (!aiKeyConfigured()) throw new Error("AI is not configured");
-  await requireActiveSub(supabase, userId, claims?.email);
+  await requireActiveSub(supabase, userId);
 
   const { data: photos } = await supabase
     .from("photos")
@@ -455,9 +441,9 @@ export async function summarizeWalkthroughsReportService(
   ctx: AuthedContext,
   data: { walkthroughIds: string[]; title?: string },
 ) {
-  const { supabase, userId, claims } = ctx;
+  const { supabase, userId } = ctx;
   if (!aiKeyConfigured()) throw new Error("AI is not configured");
-  await requireActiveSub(supabase, userId, claims?.email);
+  await requireActiveSub(supabase, userId);
 
   const { data: walks } = await supabase
     .from("walkthroughs" as never)

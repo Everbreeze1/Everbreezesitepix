@@ -291,7 +291,7 @@ function LoginPage() {
           <p className="font-manrope mt-7 text-center text-sm text-muted-foreground">
             New to SitePix?{" "}
             <Link to="/signup" className="font-bold text-primary hover:underline">
-              Start free
+              Sign up
             </Link>
           </p>
           <p className="font-manrope mt-4 text-center text-xs leading-5 text-muted-foreground">

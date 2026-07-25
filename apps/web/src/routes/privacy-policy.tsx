@@ -111,7 +111,6 @@ function PrivacyPolicyPage() {
               <li>Generate AI-powered analysis, site logs, and reports</li>
               <li>Send transactional emails, notifications, and support communications</li>
               <li>Analyze usage trends to improve features and performance</li>
-              <li>Analyze usage trends to improve features and performance</li>
               <li>Detect and prevent fraud, abuse, and security incidents</li>
             </ul>
           </section>

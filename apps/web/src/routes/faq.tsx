@@ -53,7 +53,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "Do I need a credit card to start?",
-    a: "No. Start your 2-week free trial with just an email — explore projects, checklists and photo capture with nothing to cancel later.",
+    a: "Yes — every SitePix plan, including Starter, is a paid subscription starting at $24/mo, so you'll add payment details when you sign up. You can cancel anytime from Settings.",
   },
   {
     q: "Can I share photos with clients securely?",

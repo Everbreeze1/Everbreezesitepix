@@ -1,5 +1,4 @@
 import { Link } from "@tanstack/react-router";
-import { Instagram, Youtube, Linkedin } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 
 const footerColumns = [
@@ -14,28 +13,15 @@ const footerColumns = [
   {
     title: "Learn",
     links: [
-      { label: "Resources", href: "#" },
-      { label: "Help center", href: "#" },
       { label: "FAQ", to: "/faq" },
-      { label: "Security", href: "#" },
+      { label: "Privacy policy", to: "/privacy-policy" },
     ],
   },
   {
     title: "Company",
-    links: [
-      { label: "Our story", href: "#" },
-      { label: "Customers", href: "#" },
-      { label: "Careers", href: "#" },
-      { label: "Contact", href: "#" },
-    ],
+    links: [{ label: "Contact", href: "mailto:hello@sitepix.com" }],
   },
 ] as const;
-
-const socialLinks = [
-  { label: "Instagram", href: "#", icon: Instagram },
-  { label: "YouTube", href: "#", icon: Youtube },
-  { label: "LinkedIn", href: "#", icon: Linkedin },
-];
 
 export function SiteFooter() {
   return (
@@ -91,22 +77,10 @@ export function SiteFooter() {
           ))}
         </div>
 
-        <div className="mt-16 flex flex-col items-center gap-4 border-t border-sidebar-border pt-7 sm:flex-row sm:justify-between">
+        <div className="mt-16 border-t border-sidebar-border pt-7">
           <p className="font-manrope text-xs text-sidebar-foreground/45">
             © {new Date().getFullYear()} Everbreeze SitePix. Built for the field.
           </p>
-          <div className="flex items-center gap-4">
-            {socialLinks.map((s) => (
-              <a
-                key={s.label}
-                href={s.href}
-                aria-label={s.label}
-                className="text-sidebar-foreground/55 hover:text-sidebar-foreground"
-              >
-                <s.icon className="h-5 w-5" />
-              </a>
-            ))}
-          </div>
         </div>
       </div>
     </footer>

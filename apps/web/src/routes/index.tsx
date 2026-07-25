@@ -228,7 +228,7 @@ function Landing() {
               className="font-manrope w-full rounded-lg bg-sidebar-foreground px-6 py-3.5 text-sm font-bold text-sidebar shadow-elegant hover:bg-sidebar-foreground/90 sm:w-auto"
             >
               <Link to="/signup">
-                Get started free <ArrowRight className="ml-1 h-4 w-4" />
+                Get started <ArrowRight className="ml-1 h-4 w-4" />
               </Link>
             </Button>
             <Button
@@ -244,11 +244,11 @@ function Landing() {
           <div className="font-manrope mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-bold text-sidebar-foreground/80">
             <div className="flex items-center gap-2">
               <Check className="h-4 w-4 text-sidebar-ring" />
-              2-week free trial
+              Plans from $24/mo
             </div>
             <div className="flex items-center gap-2">
               <Check className="h-4 w-4 text-sidebar-ring" />
-              No credit card
+              Set up in minutes
             </div>
             <div className="flex items-center gap-2">
               <Check className="h-4 w-4 text-sidebar-ring" />
@@ -369,12 +369,12 @@ function Landing() {
                     {item.desc}
                   </p>
                 </div>
-                <a
-                  href="#"
+                <Link
+                  to="/features"
                   className="font-manrope mt-5 inline-flex items-center gap-1 text-xs font-extrabold text-sidebar-ring"
                 >
                   Explore feature <ArrowUpRight className="h-3.5 w-3.5" />
-                </a>
+                </Link>
               </div>
             ))}
           </div>

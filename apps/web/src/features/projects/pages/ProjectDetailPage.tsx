@@ -2951,7 +2951,7 @@ export function ProjectDetailPage() {
         open={walkthroughUpgradeOpen}
         onOpenChange={setWalkthroughUpgradeOpen}
         feature="Walkthrough Notes"
-        description="Capture photos with narration and get an AI-generated report. Available on the Team plan and during your 14-day trial."
+        description="Capture photos with narration and get an AI-generated report. Available on the Pro and Team plans."
       />
 
       <UpgradeDialog

@@ -1,6 +1,6 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Camera, FileText, ArrowRight } from "lucide-react";
+import { Camera, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
@@ -51,6 +51,7 @@ function projectLocation(p: ProjectRow): string | null {
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { profile } = useProfile();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
@@ -328,7 +329,12 @@ export function DashboardPage() {
             </p>
           </div>
           <Button
-            onClick={() => setCaptureOpen(true)}
+            disabled={loading}
+            onClick={() =>
+              projects.length === 0
+                ? navigate({ to: "/projects/new" })
+                : setCaptureOpen(true)
+            }
             className="font-manrope w-fit rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90"
           >
             <Camera className="h-4 w-4" /> Capture update

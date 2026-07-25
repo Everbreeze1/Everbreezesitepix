@@ -133,7 +133,7 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
                 size="sm"
                 className="font-manrope rounded-full bg-primary px-5 font-bold text-primary-foreground shadow-none hover:bg-primary/90"
               >
-                <Link to="/signup">Start free</Link>
+                <Link to="/signup">Sign up</Link>
               </Button>
             </>
           )}

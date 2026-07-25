@@ -950,22 +950,6 @@ export function GalleryPage() {
         </div>
       </div>
 
-      {!isActive && (
-        <Card className="mt-4 flex flex-col gap-3 border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="rounded-md bg-primary/10 p-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold">Your trial has ended</p>
-              <p className="text-xs text-muted-foreground">
-                Subscribe to keep AI photo analysis, exports and all premium features.
-              </p>
-            </div>
-          </div>
-        </Card>
-      )}
-
       {projects.length === 0 && (
         <Card className="mt-6 flex flex-col items-center p-10 text-center border-dashed">
           <Camera className="h-10 w-10 text-muted-foreground" />

@@ -24,8 +24,8 @@ export function MarketingCta() {
                 Bring every job into focus.
               </h2>
               <p className="font-manrope mt-5 max-w-[576px] text-base font-medium leading-7 text-white/85">
-                Start capturing a better record today. Your first two weeks are on us, with no
-                credit card required.
+                Start capturing a better record today. Plans start at $24/mo — pick the one that
+                fits your crew and cancel anytime.
               </p>
             </div>
             <div className="flex w-[179px] shrink-0 flex-col items-start">
@@ -33,14 +33,14 @@ export function MarketingCta() {
                 to="/signup"
                 className="font-manrope inline-flex h-12 w-full items-center justify-center gap-2 rounded-3xl bg-sidebar px-6 text-sm font-bold leading-5 text-sidebar-foreground hover:bg-sidebar/90"
               >
-                Start free today
+                Get started
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <ul className="mt-5 w-full">
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 shrink-0 text-white/90" strokeWidth={1.33} />
                   <span className="font-manrope text-xs font-bold leading-4 text-white/90">
-                    2-week free trial
+                    Plans from $24/mo
                   </span>
                 </li>
                 <li className="mt-2 flex items-center gap-2">

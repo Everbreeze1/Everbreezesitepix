@@ -19,13 +19,13 @@ export const Route = createFileRoute("/signup")({
       {
         name: "description",
         content:
-          "Start your free 14-day Everbreeze SitePix trial. Capture, organize, and share construction job site photos with AI photo analysis. No credit card required.",
+          "Create your Everbreeze SitePix account. Capture, organize, and share construction job site photos with AI photo analysis. Plans start at $24/mo.",
       },
       { property: "og:title", content: "Create account — Everbreeze SitePix" },
       {
         property: "og:description",
         content:
-          "Start your free 14-day Everbreeze SitePix trial. Capture, organize, and share construction job site photos with AI photo analysis. No credit card required.",
+          "Create your Everbreeze SitePix account. Capture, organize, and share construction job site photos with AI photo analysis. Plans start at $24/mo.",
       },
       { property: "og:url", content: "https://everbreezesitepix.com/signup" },
     ],
@@ -41,6 +41,7 @@ function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [confirmEmailSent, setConfirmEmailSent] = useState(false);
 
   useEffect(() => {
     if (user) navigate({ to: "/dashboard", replace: true });
@@ -49,7 +50,7 @@ function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -59,6 +60,13 @@ function SignupPage() {
     });
     setLoading(false);
     if (error) return toast.error(error.message);
+    if (!data.session) {
+      // Email confirmation is required — no session yet, so the auth-state
+      // redirect below never fires. Tell the user what to actually do next.
+      setConfirmEmailSent(true);
+      toast.success("Check your email to confirm your account.");
+      return;
+    }
     toast.success("Account created! Redirecting…");
   };
 
@@ -131,7 +139,7 @@ function SignupPage() {
           </div>
 
           <p className="font-manrope text-xs font-extrabold uppercase leading-4 tracking-[1.92px] text-primary">
-            Start your trial
+            Create your account
           </p>
           <h2 className="font-display mt-3 text-[48px] font-black uppercase leading-[0.92] tracking-[-1.68px] text-foreground">
             Bring your job sites into focus.

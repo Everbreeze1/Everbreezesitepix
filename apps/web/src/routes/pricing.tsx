@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Crown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AppHeader } from "@/components/AppHeader";
+import { SiteHeader } from "@/components/SiteHeader";
+import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/hooks/use-auth";
 import { getMyTeam, createTeam, createCheckoutSession } from "@/features/teams/api";
 import type { BillingPlan } from "@/features/teams/api";
 
@@ -76,11 +79,81 @@ const PLANS: {
   },
 ];
 
+function PricingPage() {
+  const { user, loading: authLoading } = useAuth();
+
+  if (authLoading) return null;
+  if (!user) return <PublicPricingPage />;
+  return <AuthedPricingPage />;
+}
+
+/** Reached by anonymous visitors from the homepage/nav/footer — must render
+ * without any authenticated-app assumptions (no AppSidebar/AppHeader, no
+ * authed RPC calls). CTAs route to signup; checkout only happens once the
+ * visitor has an account and a team. */
+function PublicPricingPage() {
+  return (
+    <div className="min-h-screen bg-background">
+      <SiteHeader />
+      <main className="mx-auto max-w-5xl px-4 py-14 sm:px-6">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+          <Crown className="h-6 w-6 text-primary" strokeWidth={2} />
+        </span>
+        <h1 className="font-display mt-6 text-4xl font-bold tracking-tight text-foreground">
+          Choose your plan
+        </h1>
+        <p className="mt-3 max-w-xl font-manrope text-sm text-muted-foreground">
+          Every plan is billed monthly, no free trial. Sign up, then pick a plan to get started —
+          you can change or cancel anytime from Settings.
+        </p>
+
+        <div className="mt-10 grid gap-6 md:grid-cols-3">
+          {PLANS.map((plan) => (
+            <div
+              key={plan.id}
+              className="flex flex-col rounded-[28px] border border-border bg-card p-7"
+            >
+              <p className="font-manrope text-xs font-extrabold uppercase tracking-[1.5px] text-primary">
+                {plan.name}
+              </p>
+              <p className="font-display mt-3 text-4xl font-bold tracking-tight text-foreground">
+                {plan.price}
+                <span className="ml-1 text-base font-medium text-muted-foreground">/mo</span>
+              </p>
+              <p className="mt-2 font-manrope text-sm text-muted-foreground">{plan.tagline}</p>
+
+              <ul className="mt-6 flex-1 space-y-2.5">
+                {plan.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2 font-manrope text-sm text-foreground/80">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+
+              <Button
+                asChild
+                className="mt-7 h-11 rounded-lg font-manrope text-sm font-bold"
+              >
+                <Link to="/signup">Sign up for {plan.name}</Link>
+              </Button>
+            </div>
+          ))}
+        </div>
+      </main>
+      <SiteFooter />
+    </div>
+  );
+}
+
 interface MyTeamResult {
   team: { id: string; name: string } | null;
 }
 
-function PricingPage() {
+/** Reached by signed-in users — from Settings/Teams "Manage plan", or from
+ * the hard-paywall redirect in routes/_app.tsx for a team with no active
+ * subscription yet. */
+function AuthedPricingPage() {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["my-team"],
