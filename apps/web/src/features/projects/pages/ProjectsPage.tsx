@@ -56,7 +56,6 @@ import {
   CreateGroupDialog,
   type ProjectPickerRow,
 } from "@/features/projects/components/CreateGroupDialog";
-import { CreateProjectDialog } from "@/features/projects/components/CreateProjectDialog";
 
 const DEFAULT_LABELS: Array<{ name: string; color: string }> = [
   { name: "Lead", color: "#3b82f6" },
@@ -178,7 +177,6 @@ export function ProjectsPage() {
     }>
   >([]);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
-  const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
   const seedDefaultLabelsIfNeeded = async () => {
     if (!user) return;
@@ -721,10 +719,12 @@ export function ProjectsPage() {
                   </Link>
                 </Button>
                 <Button
+                  asChild
                   className="h-[42px] bg-sidebar-ring px-5 shadow-lg shadow-sidebar-ring/20 hover:bg-sidebar-ring/90 text-sidebar-foreground"
-                  onClick={() => setCreateProjectOpen(true)}
                 >
-                  <Plus className="mr-2 h-4 w-4" /> Create project
+                  <Link to="/projects/new">
+                    <Plus className="mr-2 h-4 w-4" /> Create project
+                  </Link>
                 </Button>
               </div>
             </div>
@@ -1306,8 +1306,6 @@ export function ProjectsPage() {
               setTab("groups");
             }}
           />
-
-          <CreateProjectDialog open={createProjectOpen} onOpenChange={setCreateProjectOpen} />
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 /**
  * Shared React Query key builders. Keeping these in one place means a
- * mutation in one file (e.g. CreateProjectDialog) can invalidate exactly
+ * mutation in one file (e.g. NewProjectPage) can invalidate exactly
  * what another page's useQuery reads, without both sides having to agree
  * on a hand-typed array and risk drifting apart.
  *
