@@ -13,6 +13,14 @@ import { useAuth } from "@/hooks/use-auth";
 import loginImg from "@/assets/collaboration-image.png";
 
 export const Route = createFileRoute("/login")({
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
+    redirect:
+      typeof search.redirect === "string" &&
+      search.redirect.startsWith("/") &&
+      !search.redirect.startsWith("//")
+        ? search.redirect
+        : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Sign in — Everbreeze SitePix" },
@@ -46,6 +54,7 @@ const inputClass =
 function LoginPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { redirect } = Route.useSearch();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -53,8 +62,8 @@ function LoginPage() {
   const [resending, setResending] = useState(false);
 
   useEffect(() => {
-    if (user) navigate({ to: "/dashboard", replace: true });
-  }, [user, navigate]);
+    if (user) navigate({ to: (redirect || "/dashboard") as "/dashboard", replace: true });
+  }, [user, navigate, redirect]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,7 +107,7 @@ function LoginPage() {
   const handleOAuth = async (provider: "google" | "apple") => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${window.location.origin}/dashboard` },
+      options: { redirectTo: `${window.location.origin}${redirect || "/dashboard"}` },
     });
     if (error) toast.error(error.message ?? `${provider} sign-in failed`);
   };
