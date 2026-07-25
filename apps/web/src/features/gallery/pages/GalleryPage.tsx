@@ -59,6 +59,7 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
+import { PageHeader } from "@/components/PageHeader";
 import { CameraCapture, compressImageFile } from "@/features/photos/components/CameraCapture";
 import { TagPhotoDialog } from "@/features/photos/components/TagPhotoDialog";
 import { applyWatermarkToFile, type BeforeAfterTag, type WatermarkContext } from "@/lib/watermark";
@@ -899,12 +900,11 @@ export function GalleryPage() {
         title="Analyzing with AI…"
         description="Reading text, detecting defects, drafting findings"
       />
-      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-display text-[32px] font-bold leading-none tracking-[-1.1px] text-foreground sm:text-[38.4px] sm:tracking-[-1.344px]">
-              Photo gallery
-            </h1>
+      <PageHeader
+        eyebrow="Media library"
+        title={
+          <span className="flex items-center gap-2">
+            Photo gallery
             <span
               className={`inline-flex items-center rounded-lg px-2.5 py-0.5 font-manrope text-[10px] font-semibold shadow-sm ${
                 isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
@@ -912,43 +912,43 @@ export function GalleryPage() {
             >
               {isActive ? (tier === "team" ? "Team" : "Pro") : "Free"}
             </span>
-          </div>
-          <p className="mt-1 font-manrope text-sm text-muted-foreground sm:text-base">
-            Capture, upload, and analyze site photos.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            ref={fileInput}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => onUpload(e.target.files)}
-          />
-          <Button
-            onClick={() => setCameraOpen(true)}
-            disabled={uploading || projects.length === 0}
-            className="h-11 flex-1 rounded-lg bg-primary px-5 font-manrope text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 sm:flex-none"
-          >
-            <Camera className="mr-2 h-4 w-4" />
-            Take photo
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => fileInput.current?.click()}
-            disabled={uploading || projects.length === 0}
-            className="h-11 flex-1 rounded-lg border-border bg-card px-4 font-manrope text-sm font-medium text-foreground shadow-sm hover:bg-card/80 sm:flex-none"
-          >
-            {uploading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Upload className="mr-2 h-4 w-4" />
-            )}
-            {uploading ? "Uploading…" : "Upload"}
-          </Button>
-        </div>
-      </div>
+          </span>
+        }
+        description="Capture, upload, and analyze site photos."
+        actions={
+          <>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => onUpload(e.target.files)}
+            />
+            <Button
+              onClick={() => setCameraOpen(true)}
+              disabled={uploading || projects.length === 0}
+              className="h-11 flex-1 rounded-lg bg-primary px-5 font-manrope text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 sm:flex-none"
+            >
+              <Camera className="mr-2 h-4 w-4" />
+              Take photo
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => fileInput.current?.click()}
+              disabled={uploading || projects.length === 0}
+              className="h-11 flex-1 rounded-lg border-border bg-card px-4 font-manrope text-sm font-medium text-foreground shadow-sm hover:bg-card/80 sm:flex-none"
+            >
+              {uploading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="mr-2 h-4 w-4" />
+              )}
+              {uploading ? "Uploading…" : "Upload"}
+            </Button>
+          </>
+        }
+      />
 
       {projects.length === 0 && (
         <Card className="mt-6 flex flex-col items-center p-10 text-center border-dashed">

@@ -79,7 +79,10 @@ export function useSubscription() {
   const loading = authLoading || teamLoading;
   const isActive = !!teamData?.isActive;
   const isInternal = !!teamData?.isInternal;
-  const tier: BillingTier = teamData?.plan ?? "starter";
+  // Internal/complimentary teams get full Team-tier access regardless of the
+  // raw plan column — mirrors the old owner/test-account allowlists this flag
+  // replaced, which granted unconditional full access, not just a paywall bypass.
+  const tier: BillingTier = isInternal ? "team" : (teamData?.plan ?? "starter");
   const isTeam = isActive && tier === "team";
   const isPro = isActive && (tier === "pro" || tier === "team");
   const isStarter = isActive && tier === "starter";

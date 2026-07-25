@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { PageHeader } from "@/components/PageHeader";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   User as UserIcon,
@@ -178,31 +179,26 @@ export function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-[1192px] px-6 py-10 md:px-10">
-      {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-5">
-        <div className="max-w-xl">
-          <p className={fieldLabelClass}>Workspace settings</p>
-          <h1 className="font-display mt-3 text-[32px] font-bold leading-9 tracking-[-1.1px] text-foreground sm:text-[38.4px] sm:tracking-[-1.344px]">
-            Your account, in focus.
-          </h1>
-          <p className="mt-3 font-manrope text-sm leading-6 text-muted-foreground">
-            Manage your profile, company workspace, access, and account preferences from one place.
-          </p>
-        </div>
-        <div className="flex items-center gap-3 rounded-2xl border border-border bg-card/70 px-4 py-3 shadow-sm">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground font-manrope text-xs font-extrabold text-background">
-            {initial}
-          </span>
-          <div className="min-w-0">
-            <div className="truncate font-manrope text-sm font-extrabold text-foreground">
-              {displayName}
-            </div>
-            <div className="truncate font-manrope text-[11px] font-bold text-muted-foreground">
-              {roleTitleFor(myTeamRole)}
+      <PageHeader
+        eyebrow="Workspace settings"
+        title="Your account, in focus."
+        description="Manage your profile, company workspace, access, and account preferences from one place."
+        actions={
+          <div className="flex items-center gap-3 rounded-2xl border border-border bg-card/70 px-4 py-3 shadow-sm">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground font-manrope text-xs font-extrabold text-background">
+              {initial}
+            </span>
+            <div className="min-w-0">
+              <div className="truncate font-manrope text-sm font-extrabold text-foreground">
+                {displayName}
+              </div>
+              <div className="truncate font-manrope text-[11px] font-bold text-muted-foreground">
+                {roleTitleFor(myTeamRole)}
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[260px_1fr]">
         {/* Sidebar (desktop) */}

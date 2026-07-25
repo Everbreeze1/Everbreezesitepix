@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useSubscription } from "@/hooks/use-subscription";
 import { useQuery } from "@tanstack/react-query";
 import { getMyTeam } from "@/features/settings/api";
 import { toast } from "sonner";
@@ -125,10 +126,10 @@ export function TemplatesPage() {
     staleTime: 60_000,
   });
 
-  const plan: "starter" | "pro" | "team" = (teamData?.plan as any) ?? "starter";
+  const { isPro } = useSubscription();
   const myRole: string | null = teamData?.myRole ?? null;
   const canManage = !myRole || myRole === "owner" || myRole === "admin";
-  const gated = plan === "starter";
+  const gated = !isPro;
 
   const [tab, setTab] = useState("projects");
   const [tplItems, setTplItems] = useState<TemplateItem[]>([]);
@@ -495,6 +496,7 @@ export function TemplatesPage() {
     return (
       <div className="container mx-auto max-w-3xl px-4 pb-24 pt-6">
         <PageHeader
+          eyebrow="Workspace tools"
           title="Templates"
           description="Build reusable project blueprints with checklists, reports, and documents."
         />
@@ -515,6 +517,7 @@ export function TemplatesPage() {
   return (
     <div className="container mx-auto max-w-7xl px-4 pb-24 pt-4 md:pt-6">
       <PageHeader
+        eyebrow="Workspace tools"
         title="Templates"
         description="Reusable blueprints you can apply to any new project."
       />

@@ -22,6 +22,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/PageHeader";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -329,32 +330,26 @@ function TeamDashboard({
 
   return (
     <div className="mx-auto max-w-[1192px] px-6 py-10 md:px-10">
-      <div className="flex flex-wrap items-end justify-between gap-5">
-        <div>
-          <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
-            Stay aligned
-          </p>
-          <h1 className="font-display mt-3 truncate text-[32px] font-bold leading-9 tracking-[-1.1px] text-foreground sm:text-[38.4px] sm:tracking-[-1.344px]">
-            {team.name || "Teams"}
-          </h1>
-          <p className="mt-3 max-w-md font-manrope text-sm text-muted-foreground">
-            Manage the people who capture, review, and share your project record.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {isOwner && <ManageBillingButton />}
-          {!isOwner && <LeaveTeamButton onLeft={onChange} />}
-          {canManage && !atCap && (
-            <Button
-              onClick={() => setInviteOpen(true)}
-              className="h-10 rounded-lg bg-primary px-5 font-manrope text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90"
-            >
-              <UserPlus className="mr-2 h-4 w-4" />
-              Invite teammate
-            </Button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Stay aligned"
+        title={team.name || "Teams"}
+        description="Manage the people who capture, review, and share your project record."
+        actions={
+          <>
+            {isOwner && <ManageBillingButton />}
+            {!isOwner && <LeaveTeamButton onLeft={onChange} />}
+            {canManage && !atCap && (
+              <Button
+                onClick={() => setInviteOpen(true)}
+                className="h-10 rounded-lg bg-primary px-5 font-manrope text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90"
+              >
+                <UserPlus className="mr-2 h-4 w-4" />
+                Invite teammate
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {!sharingEnabled && (
         <div className="mt-6 flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">

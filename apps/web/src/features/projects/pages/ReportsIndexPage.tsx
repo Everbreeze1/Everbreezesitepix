@@ -29,6 +29,7 @@ import { sitepixApi } from "@/lib/sitepix-api";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/PageHeader";
 
 interface ReportRow {
   id: string;
@@ -167,19 +168,18 @@ export function ReportsIndexPage() {
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-6 md:py-10">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight md:text-3xl">
-            <FileText className="h-6 w-6 text-primary" /> Reports
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">All reports across your projects.</p>
-        </div>
-        <Button asChild variant="outline">
-          <Link to="/projects">
-            <ArrowRight className="mr-1 h-4 w-4" /> Open a project to create a report
-          </Link>
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Documentation"
+        title="Reports"
+        description="All reports across your projects."
+        actions={
+          <Button asChild variant="outline">
+            <Link to="/projects">
+              <ArrowRight className="mr-1 h-4 w-4" /> Open a project to create a report
+            </Link>
+          </Button>
+        }
+      />
 
       <div className="mb-4">
         <Input

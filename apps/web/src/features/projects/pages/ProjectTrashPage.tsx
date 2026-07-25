@@ -1,9 +1,10 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Loader2, MapPin, RefreshCw, Trash2, Images } from "lucide-react";
+import { AlertTriangle, Loader2, MapPin, RefreshCw, Trash2, Images } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/PageHeader";
 import {
   listTrashedProjects,
   restoreProject,
@@ -23,7 +24,6 @@ interface TrashedProject {
 }
 
 export function ProjectTrashPage() {
-  const navigate = useNavigate();
   const [items, setItems] = useState<TrashedProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -82,26 +82,14 @@ export function ProjectTrashPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-3 pb-16 pt-4 sm:px-4">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/projects" })}>
-          <ArrowLeft className="mr-1.5 h-4 w-4" />
-          Dashboard
-        </Button>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            <Trash2 className="h-6 w-6 text-muted-foreground" />
-            Project Trash
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {loading
-              ? "Loading…"
-              : `${items.length} project${items.length === 1 ? "" : "s"} in trash`}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        backTo="/projects"
+        backLabel="Projects"
+        title="Project Trash"
+        description={
+          loading ? "Loading…" : `${items.length} project${items.length === 1 ? "" : "s"} in trash`
+        }
+      />
 
       <div className="mt-4 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />

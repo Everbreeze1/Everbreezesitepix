@@ -1,7 +1,5 @@
-import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft,
   Plus,
   Trash2,
   Loader2,
@@ -389,17 +387,6 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
 
   return (
     <div className={containerCls}>
-      {!embedded && (
-        <div className="mb-4 flex items-center gap-2">
-          <Button variant="ghost" size="sm" asChild className="h-8 -ml-2">
-            <Link to="/settings">
-              <ArrowLeft className="mr-1 h-4 w-4" />
-              Settings
-            </Link>
-          </Button>
-        </div>
-      )}
-
       {(() => {
         const actions = (
           <div className="flex flex-wrap items-center gap-2">
@@ -491,6 +478,9 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
           <div className="flex justify-end">{actions}</div>
         ) : (
           <PageHeader
+            backTo="/settings"
+            backLabel="Settings"
+            eyebrow="Workspace tools"
             title="Checklist templates"
             description="Build reusable inspection and service checklists with rich item types."
             actions={actions}

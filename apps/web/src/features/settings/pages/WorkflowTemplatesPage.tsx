@@ -462,7 +462,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
             }}
           >
             <ArrowLeft className="mr-1 h-4 w-4" />
-            Back
+            Settings
           </Button>
         </div>
       )}
@@ -471,6 +471,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
         <div className="flex justify-end">{actions}</div>
       ) : (
         <PageHeader
+          eyebrow="Workspace tools"
           title="Workflow templates"
           description="Structured phases (Pre-Job, Install, Inspection, Handover…) with checklist items, photo prompts, notes, and sign-off."
           actions={actions}

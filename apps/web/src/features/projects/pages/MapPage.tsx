@@ -8,6 +8,7 @@ import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import { geocodeAddress } from "@/lib/geocode.functions";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/PageHeader";
 import { PageLoader } from "@/components/PageLoader";
 
 type StatusFilter = "active" | "all" | "on_hold" | "completed";
@@ -393,44 +394,41 @@ export function MapPage() {
 
   return (
     <div className="min-h-full bg-background p-6 sm:p-10">
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="font-manrope flex items-center gap-2 text-xs font-extrabold uppercase tracking-[1.8px] text-primary">
-            <MapPin className="h-3.5 w-3.5" /> Field overview
-          </div>
-          <h1 className="font-display mt-3 text-4xl font-bold leading-none tracking-[-1.344px] text-foreground">
-            Project map
-          </h1>
-          <p className="font-manrope mt-2 text-sm text-muted-foreground">
+      <PageHeader
+        eyebrow="Field overview"
+        title="Project map"
+        description={
+          <>
             Every project with an address, plotted at a glance.
             {geocoding > 0 ? ` Locating ${geocoding}…` : ""}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-1 rounded-xl border-[0.8px] border-border bg-card/65 p-1 shadow-sm">
-          {(
-            [
-              ["active", "Active", counts.active],
-              ["on_hold", "On hold", counts.on_hold],
-              ["completed", "Completed", counts.completed],
-              ["all", "All", counts.all],
-            ] as const
-          ).map(([key, label, count]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setFilter(key)}
-              className={`font-manrope flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
-                filter === key
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {label} <span className="text-xs">{count}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+          </>
+        }
+        actions={
+          <div className="flex items-center gap-1 rounded-xl border-[0.8px] border-border bg-card/65 p-1 shadow-sm">
+            {(
+              [
+                ["active", "Active", counts.active],
+                ["on_hold", "On hold", counts.on_hold],
+                ["completed", "Completed", counts.completed],
+                ["all", "All", counts.all],
+              ] as const
+            ).map(([key, label, count]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                className={`font-manrope flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
+                  filter === key
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label} <span className="text-xs">{count}</span>
+              </button>
+            ))}
+          </div>
+        }
+      />
 
       {projects.length === 0 ? (
         <div className="mt-8 rounded-3xl border-[0.8px] border-border bg-card/80 p-8">
