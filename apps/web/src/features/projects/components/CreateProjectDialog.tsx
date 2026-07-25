@@ -2,10 +2,12 @@ import { useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { AddressAutocomplete, type ParsedAddress } from "@/components/AddressAutocomplete";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
+import { qk } from "@/lib/query-keys";
 
 interface Props {
   open: boolean;
@@ -18,6 +20,7 @@ const fieldInputClass =
 export function CreateProjectDialog({ open, onOpenChange }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [addrParts, setAddrParts] = useState<ParsedAddress | null>(null);
@@ -60,6 +63,9 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
     }
     toast.success("Project created");
     const projectId = (data as any).id as string;
+    void qc.invalidateQueries({ queryKey: qk.projectsList(user.id) });
+    void qc.invalidateQueries({ queryKey: qk.dashboard(user.id) });
+    void qc.invalidateQueries({ queryKey: qk.mapProjects(user.id) });
     handleOpenChange(false);
     navigate({ to: "/projects/$projectId", params: { projectId } });
   };

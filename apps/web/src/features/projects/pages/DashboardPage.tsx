@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Camera, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -7,6 +8,7 @@ import { useProfile } from "@/hooks/use-profile";
 import { supabase } from "@/integrations/sitepix/client";
 import { CaptureUpdateDialog } from "@/components/CaptureUpdateDialog";
 import type { ProjectPickerRow } from "@/features/projects/components/CreateGroupDialog";
+import { qk } from "@/lib/query-keys";
 
 interface ProjectRow {
   id: string;
@@ -60,7 +62,6 @@ export function DashboardPage() {
   const [docHealthPct, setDocHealthPct] = useState<number | null>(null);
   const [weekCounts, setWeekCounts] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [captureOpen, setCaptureOpen] = useState(false);
 
   const firstName =
@@ -84,14 +85,38 @@ export function DashboardPage() {
     [],
   );
 
-  useEffect(() => {
-    if (!user) return;
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  const query = useQuery({
+    queryKey: qk.dashboard(user?.id ?? ""),
+    queryFn: load,
+    enabled: !!user,
+    staleTime: 60_000,
+  });
 
-  async function load() {
-    setLoading(true);
+  // Local useState mirrors query.data so a cache-hit remount (queryFn
+  // skipped, data served straight from cache) still repopulates the page —
+  // a plain useState reset on mount would otherwise leave everything empty
+  // until the next refetch.
+  useEffect(() => {
+    if (query.data) {
+      setProjects(query.data.projects);
+      setActiveCards(query.data.activeCards);
+      setNewRecordsCount(query.data.newRecordsCount);
+      setDocHealthPct(query.data.docHealthPct);
+      setWeekCounts(query.data.weekCounts);
+      setActivity(query.data.activity);
+    }
+  }, [query.data]);
+
+  const loading = query.isPending;
+
+  async function load(): Promise<{
+    projects: ProjectRow[];
+    activeCards: ActiveProjectCard[];
+    newRecordsCount: number;
+    docHealthPct: number | null;
+    weekCounts: number[];
+    activity: ActivityItem[];
+  }> {
     const { data: projectList } = await (supabase as any)
       .from("projects")
       .select("id, name, city, state, street, location, status, updated_at")
@@ -99,7 +124,6 @@ export function DashboardPage() {
       .order("updated_at", { ascending: false });
 
     const all = (projectList as ProjectRow[]) ?? [];
-    setProjects(all);
     const activeProjects = all.filter((p) => p.status === "active");
     const topActive = activeProjects.slice(0, 2);
 
@@ -142,9 +166,6 @@ export function DashboardPage() {
         .limit(5),
     ]);
 
-    setActiveCards(cardsResult);
-    setNewRecordsCount(newRecordsResult.count ?? 0);
-
     const buckets = [0, 0, 0, 0, 0, 0, 0];
     ((weekPhotosResult.data as Array<{ created_at: string }>) ?? []).forEach((row) => {
       const days = Math.floor(
@@ -153,19 +174,31 @@ export function DashboardPage() {
       const idx = 6 - days;
       if (idx >= 0 && idx < 7) buckets[idx] += 1;
     });
-    setWeekCounts(buckets);
 
-    if (activeProjects.length) {
-      const documentedIds = new Set(
-        ((healthResult.data as Array<{ project_id: string }>) ?? []).map((r) => r.project_id),
-      );
-      setDocHealthPct(Math.round((documentedIds.size / activeProjects.length) * 100));
-    } else {
-      setDocHealthPct(null);
-    }
+    const docHealthPct = activeProjects.length
+      ? Math.round(
+          (new Set(
+            ((healthResult.data as Array<{ project_id: string }>) ?? []).map((r) => r.project_id),
+          ).size /
+            activeProjects.length) *
+            100,
+        )
+      : null;
 
-    await loadActivity(all, recentPhotosResult.data ?? [], recentReportsResult.data ?? []);
-    setLoading(false);
+    const activity = await loadActivity(
+      all,
+      recentPhotosResult.data ?? [],
+      recentReportsResult.data ?? [],
+    );
+
+    return {
+      projects: all,
+      activeCards: cardsResult,
+      newRecordsCount: newRecordsResult.count ?? 0,
+      docHealthPct,
+      weekCounts: buckets,
+      activity,
+    };
   }
 
   async function loadActiveCards(topActive: ProjectRow[]): Promise<ActiveProjectCard[]> {
@@ -230,7 +263,7 @@ export function DashboardPage() {
       created_at: string;
       title: string | null;
     }>,
-  ) {
+  ): Promise<ActivityItem[]> {
     const projNameById = new Map(allProjects.map((p) => [p.id, p.name]));
 
     const photoGroups: Record<
@@ -294,7 +327,7 @@ export function DashboardPage() {
       };
     });
 
-    setActivity([...photoItems, ...reportItems].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 3));
+    return [...photoItems, ...reportItems].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 3);
   }
 
   const projectPickerRows: ProjectPickerRow[] = useMemo(

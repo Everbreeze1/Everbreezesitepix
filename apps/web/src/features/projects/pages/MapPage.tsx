@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { MapPin, Layers, Maximize2 } from "lucide-react";
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { supabase } from "@/integrations/sitepix/client";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { PageLoader } from "@/components/PageLoader";
+import { qk } from "@/lib/query-keys";
 
 type StatusFilter = "active" | "all" | "on_hold" | "completed";
 
@@ -113,7 +115,6 @@ export function MapPage() {
   const geocode = geocodeAddress;
   const [projects, setProjects] = useState<ProjectPin[]>([]);
   const [stats, setStats] = useState<Record<string, ProjectStats>>({});
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<StatusFilter>("active");
   const [selected, setSelected] = useState<ProjectPin | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -131,75 +132,83 @@ export function MapPage() {
     statsRef.current = stats;
   }, [stats]);
 
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      const { data } = await supabase
-        .from("projects")
-        .select("id, name, status, street, city, state, zip, latitude, longitude");
-      if (cancelled) return;
-      const all = ((data as ProjectPin[]) ?? []).filter(hasAddress);
-      setProjects(all);
-      setLoading(false);
+  const load = useCallback(async () => {
+    const { data } = await supabase
+      .from("projects")
+      .select("id, name, status, street, city, state, zip, latitude, longitude");
+    const all = ((data as ProjectPin[]) ?? []).filter(hasAddress);
 
-      // Load per-project stats (photo count, latest activity, first thumbnail)
-      void (async () => {
-        const { data: photoRows } = await supabase
-          .from("photos")
-          .select("project_id, image_url, created_at, archived")
-          .eq("archived", false)
-          .order("created_at", { ascending: false });
-        if (cancelled || !photoRows) return;
-        const agg: Record<string, ProjectStats> = {};
-        for (const row of photoRows as Array<{
-          project_id: string;
-          image_url: string | null;
-          created_at: string;
-        }>) {
-          const cur = agg[row.project_id] ?? { photoCount: 0, lastActivity: null, thumbUrl: null };
-          cur.photoCount += 1;
-          if (!cur.lastActivity || row.created_at > cur.lastActivity)
-            cur.lastActivity = row.created_at;
-          if (!cur.thumbUrl && row.image_url) cur.thumbUrl = row.image_url;
-          agg[row.project_id] = cur;
-        }
-        if (!cancelled) setStats(agg);
-      })();
+    // Load per-project stats (photo count, latest activity, first thumbnail)
+    const { data: photoRows } = await supabase
+      .from("photos")
+      .select("project_id, image_url, created_at, archived")
+      .eq("archived", false)
+      .order("created_at", { ascending: false });
+    const agg: Record<string, ProjectStats> = {};
+    for (const row of (photoRows ?? []) as Array<{
+      project_id: string;
+      image_url: string | null;
+      created_at: string;
+    }>) {
+      const cur = agg[row.project_id] ?? { photoCount: 0, lastActivity: null, thumbUrl: null };
+      cur.photoCount += 1;
+      if (!cur.lastActivity || row.created_at > cur.lastActivity) cur.lastActivity = row.created_at;
+      if (!cur.thumbUrl && row.image_url) cur.thumbUrl = row.image_url;
+      agg[row.project_id] = cur;
+    }
 
-      const missing = all.filter((p) => p.latitude == null || p.longitude == null);
-      if (missing.length === 0) return;
+    const missing = all.filter((p) => p.latitude == null || p.longitude == null);
+    let resolved = all;
+    if (missing.length > 0) {
       setGeocoding(missing.length);
       // Geocode + persist each missing project independently and in parallel —
       // these are separate rows with no shared state, so there's no need to
       // pay one round-trip's latency at a time.
-      await Promise.all(
+      const geocoded = await Promise.all(
         missing.map(async (p) => {
           try {
             const addr = formatAddress(p);
-            if (!addr) return;
+            if (!addr) return p;
             const { latitude, longitude } = await geocode({ data: { address: addr } });
             if (latitude != null && longitude != null) {
               await supabase.from("projects").update({ latitude, longitude }).eq("id", p.id);
-              if (!cancelled) {
-                setProjects((prev) =>
-                  prev.map((x) => (x.id === p.id ? { ...x, latitude, longitude } : x)),
-                );
-              }
+              return { ...p, latitude, longitude };
             }
+            return p;
           } catch (e) {
             console.warn("Geocode failed for project", p.id, e);
+            return p;
           } finally {
-            if (!cancelled) setGeocoding((n) => Math.max(0, n - 1));
+            setGeocoding((n) => Math.max(0, n - 1));
           }
         }),
       );
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, geocode]);
+      resolved = all.map((p) => geocoded.find((g) => g.id === p.id) ?? p);
+    }
+
+    return { projects: resolved, stats: agg };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geocode]);
+
+  const query = useQuery({
+    queryKey: qk.mapProjects(user?.id ?? ""),
+    queryFn: load,
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+
+  // Local useState mirrors query.data so a cache-hit remount (queryFn skipped,
+  // data served straight from cache) still repopulates the map/list — a plain
+  // useState reset on mount would otherwise leave these empty until the next
+  // refetch.
+  useEffect(() => {
+    if (query.data) {
+      setProjects(query.data.projects);
+      setStats(query.data.stats);
+    }
+  }, [query.data]);
+
+  const loading = query.isPending;
 
   const visible = useMemo(
     () => (filter === "all" ? projects : projects.filter((p) => p.status === filter)),

@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { PageLoader } from "@/components/PageLoader";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_app")({
   component: AppLayout,
@@ -26,7 +27,7 @@ function useJustCheckedOut() {
 
 function AppLayout() {
   const { user, loading } = useAuth();
-  const { isActive, loading: subLoading } = useSubscription();
+  const { isActive, loading: subLoading, hasError: subErrored, retry: retrySub } = useSubscription();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const justCheckedOut = useJustCheckedOut();
@@ -37,7 +38,10 @@ function AppLayout() {
   }, [loading, user, navigate]);
 
   useEffect(() => {
-    if (loading || !user || subLoading || isActive) return;
+    // A genuine failure to check the subscription is not the same as
+    // "not subscribed" — don't bounce a real paying customer to /pricing
+    // over a network blip. Show a retry state instead (below).
+    if (loading || !user || subLoading || isActive || subErrored) return;
     if (!justCheckedOut || checkoutAttempts >= 6) {
       navigate({ to: "/pricing", replace: true });
       return;
@@ -47,10 +51,22 @@ function AppLayout() {
       setCheckoutAttempts((n) => n + 1);
     }, 2000);
     return () => clearTimeout(t);
-  }, [loading, user, subLoading, isActive, justCheckedOut, checkoutAttempts, qc, navigate]);
+  }, [loading, user, subLoading, isActive, subErrored, justCheckedOut, checkoutAttempts, qc, navigate]);
 
   if (loading || !user) {
     return <PageLoader fullScreen />;
+  }
+
+  if (subErrored) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background px-4 text-center">
+        <p className="text-sm font-medium text-foreground">Couldn't verify your subscription.</p>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          This is usually a temporary connection problem — try again.
+        </p>
+        <Button onClick={retrySub}>Retry</Button>
+      </div>
+    );
   }
 
   if (!subLoading && !isActive) {

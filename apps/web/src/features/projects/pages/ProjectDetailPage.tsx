@@ -1,5 +1,7 @@
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/query-keys";
 import {
   ArrowLeft,
   MapPin,
@@ -140,6 +142,18 @@ export function ProjectDetailPage() {
   const { projectId } = useParams({ from: "/_app/projects/$projectId" });
   const navigate = useNavigate();
   const { user } = useAuth();
+  const qc = useQueryClient();
+  // Gallery/Dashboard/Map cache photos-derived data; this page's own photo
+  // mutations (upload, annotate-save, move-to-trash) happen outside their
+  // useQuery hooks, so invalidate those caches here or they'd go stale until
+  // their own staleTime window expires.
+  const invalidatePhotoCaches = () => {
+    if (!user) return;
+    void qc.invalidateQueries({ queryKey: qk.galleryPhotos(user.id) });
+    void qc.invalidateQueries({ queryKey: qk.galleryTotalPhotos(user.id) });
+    void qc.invalidateQueries({ queryKey: qk.dashboard(user.id) });
+    void qc.invalidateQueries({ queryKey: qk.mapProjects(user.id) });
+  };
   const {
     isActive,
     isPro,
@@ -764,6 +778,7 @@ export function ProjectDetailPage() {
       return;
     }
     toast.success("Photo moved to Trash");
+    invalidatePhotoCaches();
   };
 
   const toggleTagFilter = (t: string) =>
@@ -883,6 +898,7 @@ export function ProjectDetailPage() {
       for (const file of incoming) await uploadOne(file, tag, extraTags);
       toast.success(incoming.length > 1 ? `${incoming.length} photos added` : "Photo added");
       await load();
+      invalidatePhotoCaches();
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
@@ -965,6 +981,7 @@ export function ProjectDetailPage() {
         }
       }
       await load();
+      invalidatePhotoCaches();
     } finally {
       setUploading(false);
     }
@@ -3193,6 +3210,7 @@ export function ProjectDetailPage() {
                   toast.success("Annotated photo saved");
                   setAnnotatePhotoId(null);
                   await load();
+                  invalidatePhotoCaches();
                 } catch (e: any) {
                   toast.error(e?.message ?? "Failed to save annotated photo");
                 }

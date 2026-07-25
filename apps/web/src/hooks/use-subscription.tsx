@@ -31,7 +31,12 @@ export function useSubscription() {
   const { user, loading: authLoading } = useAuth();
   const [aiAnalysesUsed, setAiAnalysesUsed] = useState(0);
 
-  const { data: teamData, isLoading: teamLoading } = useQuery({
+  const {
+    data: teamData,
+    isPending: teamPending,
+    isError: teamErrored,
+    refetch: refetchTeam,
+  } = useQuery({
     queryKey: ["my-team"],
     queryFn: async () => (await getMyTeam()) as MyTeamResult,
     enabled: !authLoading && !!user,
@@ -76,7 +81,15 @@ export function useSubscription() {
     };
   }, [user, fetchUsage]);
 
-  const loading = authLoading || teamLoading;
+  // isPending (not isLoading) is what actually stays true for the entire
+  // window from "query disabled" through "fetch in flight" — isLoading is
+  // derived as isPending && isFetching in React Query v5, so it can read
+  // false with data still undefined during the single render-frame gap
+  // right as the query transitions from disabled to enabled. Trusting that
+  // gap here was causing _app.tsx's paywall gate to redirect active
+  // subscribers to /pricing on a false negative right after login.
+  const loading = authLoading || (!!user && teamPending);
+  const hasError = !authLoading && !!user && teamErrored;
   const isActive = !!teamData?.isActive;
   const isInternal = !!teamData?.isInternal;
   // Internal/complimentary teams get full Team-tier access regardless of the
@@ -91,6 +104,8 @@ export function useSubscription() {
   return {
     subscription: null as SubscriptionRow | null,
     loading,
+    hasError,
+    retry: () => void refetchTeam(),
     isActive,
     isInternal,
     isTrialing: false,

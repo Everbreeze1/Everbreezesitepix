@@ -1,5 +1,6 @@
 import { useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, LocateFixed, Loader2, MapPin, LayoutTemplate } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ import { applyProjectBlueprint } from "@/lib/blueprint.functions";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { toast } from "sonner";
+import { qk } from "@/lib/query-keys";
 
 interface AddrParts {
   street: string;
@@ -44,6 +46,7 @@ export function NewProjectPage() {
   const { user } = useAuth();
   const { isTeam } = useSubscription();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
@@ -256,6 +259,9 @@ export function NewProjectPage() {
     }
     setSaving(false);
     toast.success("Project created");
+    void qc.invalidateQueries({ queryKey: qk.projectsList(user.id) });
+    void qc.invalidateQueries({ queryKey: qk.dashboard(user.id) });
+    void qc.invalidateQueries({ queryKey: qk.mapProjects(user.id) });
     navigate({ to: "/projects/$projectId", params: { projectId } });
   };
 

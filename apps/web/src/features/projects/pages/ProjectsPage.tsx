@@ -1,5 +1,7 @@
 import { Link, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/query-keys";
 import {
   Camera,
   FolderKanban,
@@ -141,7 +143,6 @@ export function ProjectsPage() {
   >([]);
   const [projectTagMap, setProjectTagMap] = useState<Record<string, TagRow[]>>({});
   const [allTags, setAllTags] = useState<TagRow[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // Tab + search state
   const [tab, setTab] = useState<TabKey>("all");
@@ -176,7 +177,6 @@ export function ProjectsPage() {
       updated_at: string;
     }>
   >([]);
-  const [groupsLoading, setGroupsLoading] = useState(false);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
@@ -199,9 +199,41 @@ export function ProjectsPage() {
     await loadLabels(true);
   };
 
-  const load = async () => {
-    if (!user) return;
-    setLoading(true);
+  interface ProjectsSnapshot {
+    projects: ProjectRow[];
+    projectTagMap: Record<string, TagRow[]>;
+    allTags: TagRow[];
+    coverUrls: Record<string, string>;
+    sampleUrls: Record<string, string[]>;
+    photoCounts: Record<string, number>;
+    reportCounts: Record<string, number>;
+    checklistCounts: Record<string, number>;
+    recentMembers: Record<string, Array<{ id: string; name: string | null; avatar: string | null }>>;
+    recentPhotos: Array<{
+      id: string;
+      project_id: string;
+      project_name: string;
+      caption: string | null;
+      url: string;
+      created_at: string;
+    }>;
+  }
+
+  const load = async (): Promise<ProjectsSnapshot> => {
+    if (!user) {
+      return {
+        projects: [],
+        projectTagMap: {},
+        allTags: [],
+        coverUrls: {},
+        sampleUrls: {},
+        photoCounts: {},
+        reportCounts: {},
+        checklistCounts: {},
+        recentMembers: {},
+        recentPhotos: [],
+      };
+    }
     void seedDefaultLabelsIfNeeded();
     const [
       { data: projectList, error: projectError },
@@ -227,9 +259,7 @@ export function ProjectsPage() {
       },
     );
 
-    setAllProjects(projects);
-    setProjectTagMap(ptMap);
-    setAllTags((tagsList as TagRow[]) ?? []);
+    const allTagsList = (tagsList as TagRow[]) ?? [];
 
     if (projects.length) {
       const ids = projects.map((p) => p.id);
@@ -276,7 +306,6 @@ export function ProjectsPage() {
           if (!ups.includes(row.uploaded_by) && ups.length < 4) ups.push(row.uploaded_by);
         }
       });
-      setPhotoCounts(counts);
 
       const pathsToSign: string[] = [];
       const signOwner: Array<{ pid: string; idx: number }> = [];
@@ -299,13 +328,11 @@ export function ProjectsPage() {
       ((rep as Array<{ project_id: string }>) ?? []).forEach((r) => {
         rc[r.project_id] = (rc[r.project_id] ?? 0) + 1;
       });
-      setReportCounts(rc);
 
       const cc: Record<string, number> = {};
       ((cl as Array<{ project_id: string }>) ?? []).forEach((r) => {
         cc[r.project_id] = (cc[r.project_id] ?? 0) + 1;
       });
-      setChecklistCounts(cc);
 
       const uploaderIds = Array.from(new Set(Object.values(uploadersByProject).flat()));
 
@@ -343,8 +370,6 @@ export function ProjectsPage() {
         samples[pid][idx] = s.signedUrl;
         if (idx === 0) cover[pid] = s.signedUrl;
       });
-      setCoverUrls(cover);
-      setSampleUrls(samples);
 
       const profileMap: Record<string, { id: string; name: string | null; avatar: string | null }> =
         {};
@@ -363,57 +388,112 @@ export function ProjectsPage() {
           (uid) => profileMap[uid] ?? { id: uid, name: null, avatar: null },
         );
       });
-      setRecentMembers(membersByProject);
 
       const signedMap: Record<string, string> = {};
       signedRecent.data?.forEach((s, i) => {
         if (s.signedUrl) signedMap[needSign[i]] = s.signedUrl;
       });
-      setRecentPhotos(
-        rpList.map((r) => ({
-          id: r.id,
-          project_id: r.project_id,
-          project_name: projNameById.get(r.project_id) ?? "Project",
-          caption: r.caption,
-          url: r.image_url ?? signedMap[r.storage_path] ?? "",
-          created_at: r.created_at,
-        })),
-      );
-    } else {
-      setCoverUrls({});
-      setSampleUrls({});
-      setPhotoCounts({});
-      setReportCounts({});
-      setChecklistCounts({});
-      setRecentMembers({});
-      setRecentPhotos([]);
+      const recentPhotosList = rpList.map((r) => ({
+        id: r.id,
+        project_id: r.project_id,
+        project_name: projNameById.get(r.project_id) ?? "Project",
+        caption: r.caption,
+        url: r.image_url ?? signedMap[r.storage_path] ?? "",
+        created_at: r.created_at,
+      }));
+
+      return {
+        projects,
+        projectTagMap: ptMap,
+        allTags: allTagsList,
+        coverUrls: cover,
+        sampleUrls: samples,
+        photoCounts: counts,
+        reportCounts: rc,
+        checklistCounts: cc,
+        recentMembers: membersByProject,
+        recentPhotos: recentPhotosList,
+      };
     }
 
-    setLoading(false);
+    return {
+      projects,
+      projectTagMap: ptMap,
+      allTags: allTagsList,
+      coverUrls: {},
+      sampleUrls: {},
+      photoCounts: {},
+      reportCounts: {},
+      checklistCounts: {},
+      recentMembers: {},
+      recentPhotos: [],
+    };
   };
 
   const loadGroups = async () => {
-    setGroupsLoading(true);
     try {
       const res = (await fetchGroups()) as any;
-      setGroups(res.groups ?? []);
+      return (res.groups ?? []) as Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        project_count: number;
+        thumbnails: string[];
+        updated_at: string;
+      }>;
     } catch (e: any) {
       toast.error(e?.message ?? "Could not load groups");
-    } finally {
-      setGroupsLoading(false);
+      return [];
     }
   };
 
+  const qc = useQueryClient();
+  // These two useQuery calls are purely a scheduling gate — "do I actually
+  // need to run load()/loadGroups() again, or is cached-and-fresh good
+  // enough". A useEffect synced on each query's data (below) mirrors it into
+  // local useState so a cache-hit remount (queryFn skipped) still
+  // repopulates the page instead of rendering the useState initial (empty)
+  // values.
+  const projectsQuery = useQuery({
+    queryKey: qk.projectsList(user?.id ?? ""),
+    queryFn: load,
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  const groupsQuery = useQuery({
+    queryKey: qk.projectGroups(user?.id ?? ""),
+    queryFn: loadGroups,
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+
   useEffect(() => {
-    void load();
-    void loadGroups();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+    if (!projectsQuery.data) return;
+    setAllProjects(projectsQuery.data.projects);
+    setProjectTagMap(projectsQuery.data.projectTagMap);
+    setAllTags(projectsQuery.data.allTags);
+    setCoverUrls(projectsQuery.data.coverUrls);
+    setSampleUrls(projectsQuery.data.sampleUrls);
+    setPhotoCounts(projectsQuery.data.photoCounts);
+    setReportCounts(projectsQuery.data.reportCounts);
+    setChecklistCounts(projectsQuery.data.checklistCounts);
+    setRecentMembers(projectsQuery.data.recentMembers);
+    setRecentPhotos(projectsQuery.data.recentPhotos);
+  }, [projectsQuery.data]);
+
+  useEffect(() => {
+    if (groupsQuery.data) setGroups(groupsQuery.data);
+  }, [groupsQuery.data]);
+
+  const loading = projectsQuery.isPending;
+  const groupsLoading = groupsQuery.isPending;
 
   const { pull, refreshing, indicatorStyle, progress } = usePullToRefresh({
     onRefresh: async () => {
-      await load();
-      await loadGroups();
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: qk.projectsList(user?.id ?? "") }),
+        qc.invalidateQueries({ queryKey: qk.projectGroups(user?.id ?? "") }),
+      ]);
     },
   });
 
@@ -1222,7 +1302,7 @@ export function ProjectsPage() {
             onOpenChange={setCreateGroupOpen}
             projects={projectPickerRows}
             onCreated={() => {
-              void loadGroups();
+              void qc.invalidateQueries({ queryKey: qk.projectGroups(user?.id ?? "") });
               setTab("groups");
             }}
           />

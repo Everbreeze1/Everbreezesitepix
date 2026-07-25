@@ -1,5 +1,7 @@
 import { useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/query-keys";
 import {
   Upload,
   Sparkles,
@@ -124,6 +126,7 @@ function timeAgo(iso: string): string {
 
 export function GalleryPage() {
   const { user } = useAuth();
+  const qc = useQueryClient();
   const {
     isActive,
     isPro,
@@ -152,7 +155,6 @@ export function GalleryPage() {
   const [tagSearch, setTagSearch] = useState<string>("");
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [signed, setSigned] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState<string | null>(null);
   const [analyzeStep, setAnalyzeStep] = useState(0);
@@ -219,7 +221,11 @@ export function GalleryPage() {
 
   const { pull, refreshing, indicatorStyle, progress } = usePullToRefresh({
     onRefresh: async () => {
-      await Promise.all([loadProjects(), loadPhotos(), loadTotalPhotos()]);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: qk.galleryProjects(user?.id ?? "") }),
+        qc.invalidateQueries({ queryKey: qk.galleryPhotos(user?.id ?? "") }),
+        qc.invalidateQueries({ queryKey: qk.galleryTotalPhotos(user?.id ?? "") }),
+      ]);
     },
   });
 
@@ -265,7 +271,10 @@ export function GalleryPage() {
         return;
       }
       toast.success("Photo saved");
-      await Promise.all([loadPhotos(), loadTotalPhotos()]);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: qk.galleryPhotos(user?.id ?? "") }),
+        qc.invalidateQueries({ queryKey: qk.galleryTotalPhotos(user?.id ?? "") }),
+      ]);
       setCameraOpen(false);
       if (opts.analyze) {
         await openPhoto(inserted as Photo);
@@ -276,27 +285,26 @@ export function GalleryPage() {
     }
   };
 
-  const loadProjects = async () => {
+  const loadProjects = async (): Promise<Project[]> => {
     const { data } = await supabase
       .from("projects")
       .select("id, name, street, city, state, zip")
       .order("created_at", { ascending: false });
-    setProjects((data as Project[]) ?? []);
+    return (data as Project[]) ?? [];
   };
 
-  const loadTotalPhotos = async () => {
-    if (!user) return;
+  const loadTotalPhotos = async (): Promise<number> => {
+    if (!user) return 0;
     const { count } = await supabase
       .from("photos")
       .select("id", { count: "exact", head: true })
       .eq("uploaded_by", user.id)
       .or("phase.is.null,phase.neq.walkthrough")
       .not("storage_path", "like", "%/walkthroughs/%");
-    setTotalPhotos(count ?? 0);
+    return count ?? 0;
   };
 
-  const loadPhotos = async () => {
-    setLoading(true);
+  const loadPhotos = async (): Promise<{ photos: Photo[]; signed: Record<string, string> }> => {
     let q = supabase
       .from("photos")
       .select("*")
@@ -315,7 +323,6 @@ export function GalleryPage() {
     const ps = ((data as Photo[]) ?? []).filter(
       (p) => p.phase !== "walkthrough" && !p.storage_path.includes("/walkthroughs/"),
     );
-    setPhotos(ps);
     // Sign URLs in one batched request instead of one call per photo.
     const map: Record<string, string> = {};
     if (ps.length) {
@@ -327,17 +334,51 @@ export function GalleryPage() {
         if (s.signedUrl) map[ps[i].id] = s.signedUrl;
       });
     }
-    setSigned(map);
-    setLoading(false);
+    return { photos: ps, signed: map };
   };
 
+  // Each useQuery below is purely a scheduling gate — "do I actually need to
+  // run load*() again, or is cached-and-fresh good enough". A useEffect
+  // synced on each query's data (below) mirrors it into local useState so a
+  // cache-hit remount (queryFn skipped) still repopulates the page instead
+  // of rendering the useState initial (empty) values.
+  const projectsQuery = useQuery({
+    queryKey: qk.galleryProjects(user?.id ?? ""),
+    queryFn: loadProjects,
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  const totalPhotosQuery = useQuery({
+    queryKey: qk.galleryTotalPhotos(user?.id ?? ""),
+    queryFn: loadTotalPhotos,
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  const photosQuery = useQuery({
+    // Filters are part of the key, so switching filters naturally fetches
+    // fresh (different key) while re-visiting a previously-seen filter
+    // combo within staleTime serves from cache.
+    queryKey: qk.galleryPhotos(user?.id ?? "", { projectFilter, dateFrom, dateTo }),
+    queryFn: loadPhotos,
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+
   useEffect(() => {
-    void loadProjects();
-    void loadTotalPhotos();
-  }, [user?.id]);
+    if (projectsQuery.data) setProjects(projectsQuery.data);
+  }, [projectsQuery.data]);
   useEffect(() => {
-    void loadPhotos(); /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [projectFilter.join(","), dateFrom, dateTo]);
+    if (totalPhotosQuery.data !== undefined) setTotalPhotos(totalPhotosQuery.data);
+  }, [totalPhotosQuery.data]);
+  useEffect(() => {
+    if (photosQuery.data) {
+      setPhotos(photosQuery.data.photos);
+      setSigned(photosQuery.data.signed);
+    }
+  }, [photosQuery.data]);
+
+  const loading = photosQuery.isPending;
+
   useEffect(() => {
     if (search.project) setProjectFilter([search.project]);
   }, [search.project]);
@@ -450,7 +491,10 @@ export function GalleryPage() {
         if (insErr) toast.error(insErr.message);
       }
       toast.success("Photos uploaded");
-      await Promise.all([loadPhotos(), loadTotalPhotos()]);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: qk.galleryPhotos(user?.id ?? "") }),
+        qc.invalidateQueries({ queryKey: qk.galleryTotalPhotos(user?.id ?? "") }),
+      ]);
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
@@ -862,7 +906,10 @@ export function GalleryPage() {
       if (insErr) throw insErr;
       toast.success("Annotated photo saved");
       setAnnotating(false);
-      await Promise.all([loadPhotos(), loadTotalPhotos()]);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: qk.galleryPhotos(user?.id ?? "") }),
+        qc.invalidateQueries({ queryKey: qk.galleryTotalPhotos(user?.id ?? "") }),
+      ]);
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to save annotated photo");
     }
