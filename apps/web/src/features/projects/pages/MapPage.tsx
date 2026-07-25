@@ -171,29 +171,30 @@ export function MapPage() {
       const missing = all.filter((p) => p.latitude == null || p.longitude == null);
       if (missing.length === 0) return;
       setGeocoding(missing.length);
-      for (const p of missing) {
-        if (cancelled) return;
-        try {
-          const addr = formatAddress(p);
-          if (!addr) {
-            setGeocoding((n) => n - 1);
-            continue;
-          }
-          const { latitude, longitude } = await geocode({ data: { address: addr } });
-          if (latitude != null && longitude != null) {
-            await supabase.from("projects").update({ latitude, longitude }).eq("id", p.id);
-            if (!cancelled) {
-              setProjects((prev) =>
-                prev.map((x) => (x.id === p.id ? { ...x, latitude, longitude } : x)),
-              );
+      // Geocode + persist each missing project independently and in parallel —
+      // these are separate rows with no shared state, so there's no need to
+      // pay one round-trip's latency at a time.
+      await Promise.all(
+        missing.map(async (p) => {
+          try {
+            const addr = formatAddress(p);
+            if (!addr) return;
+            const { latitude, longitude } = await geocode({ data: { address: addr } });
+            if (latitude != null && longitude != null) {
+              await supabase.from("projects").update({ latitude, longitude }).eq("id", p.id);
+              if (!cancelled) {
+                setProjects((prev) =>
+                  prev.map((x) => (x.id === p.id ? { ...x, latitude, longitude } : x)),
+                );
+              }
             }
+          } catch (e) {
+            console.warn("Geocode failed for project", p.id, e);
+          } finally {
+            if (!cancelled) setGeocoding((n) => Math.max(0, n - 1));
           }
-        } catch (e) {
-          console.warn("Geocode failed for project", p.id, e);
-        } finally {
-          if (!cancelled) setGeocoding((n) => Math.max(0, n - 1));
-        }
-      }
+        }),
+      );
     })();
     return () => {
       cancelled = true;

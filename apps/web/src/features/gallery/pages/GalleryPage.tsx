@@ -316,16 +316,17 @@ export function GalleryPage() {
       (p) => p.phase !== "walkthrough" && !p.storage_path.includes("/walkthroughs/"),
     );
     setPhotos(ps);
-    // Sign URLs in batch
+    // Sign URLs in one batched request instead of one call per photo.
     const map: Record<string, string> = {};
-    await Promise.all(
-      ps.map(async (p) => {
-        const { data: s } = await supabase.storage
-          .from("site-photos")
-          .createSignedUrl(p.storage_path, 3600);
-        if (s) map[p.id] = s.signedUrl;
-      }),
-    );
+    if (ps.length) {
+      const paths = ps.map((p) => p.storage_path);
+      const { data: signedUrls } = await supabase.storage
+        .from("site-photos")
+        .createSignedUrls(paths, 3600);
+      signedUrls?.forEach((s, i) => {
+        if (s.signedUrl) map[ps[i].id] = s.signedUrl;
+      });
+    }
     setSigned(map);
     setLoading(false);
   };

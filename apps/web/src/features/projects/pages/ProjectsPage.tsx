@@ -234,13 +234,26 @@ export function ProjectsPage() {
     if (projects.length) {
       const ids = projects.map((p) => p.id);
 
-      const { data: ph } = await supabase
-        .from("photos")
-        .select("project_id, storage_path, image_url, uploaded_by, created_at")
-        .in("project_id", ids)
-        .or("phase.is.null,phase.neq.walkthrough")
-        .not("storage_path", "like", "%/walkthroughs/%")
-        .order("created_at", { ascending: false });
+      // These four queries are independent of each other — run them as one
+      // round-trip instead of four sequential ones.
+      const [{ data: ph }, { data: rep }, { data: cl }, { data: rp }] = await Promise.all([
+        supabase
+          .from("photos")
+          .select("project_id, storage_path, image_url, uploaded_by, created_at")
+          .in("project_id", ids)
+          .or("phase.is.null,phase.neq.walkthrough")
+          .not("storage_path", "like", "%/walkthroughs/%")
+          .order("created_at", { ascending: false }),
+        (supabase as any).from("project_reports").select("project_id").in("project_id", ids),
+        (supabase as any).from("checklists").select("project_id").in("project_id", ids),
+        supabase
+          .from("photos")
+          .select("id, project_id, caption, storage_path, image_url, created_at")
+          .or("phase.is.null,phase.neq.walkthrough")
+          .not("storage_path", "like", "%/walkthroughs/%")
+          .order("created_at", { ascending: false })
+          .limit(12),
+      ]);
       const samplesByProject: Record<
         string,
         Array<{ storage_path: string; image_url: string | null }>
@@ -281,34 +294,13 @@ export function ProjectsPage() {
           }
         });
       });
-      if (pathsToSign.length) {
-        const { data: signed } = await supabase.storage
-          .from("site-photos")
-          .createSignedUrls(pathsToSign, 60 * 60);
-        signed?.forEach((s, i) => {
-          if (!s.signedUrl) return;
-          const { pid, idx } = signOwner[i];
-          samples[pid][idx] = s.signedUrl;
-          if (idx === 0) cover[pid] = s.signedUrl;
-        });
-      }
-      setCoverUrls(cover);
-      setSampleUrls(samples);
 
-      const { data: rep } = await (supabase as any)
-        .from("project_reports")
-        .select("project_id")
-        .in("project_id", ids);
       const rc: Record<string, number> = {};
       ((rep as Array<{ project_id: string }>) ?? []).forEach((r) => {
         rc[r.project_id] = (rc[r.project_id] ?? 0) + 1;
       });
       setReportCounts(rc);
 
-      const { data: cl } = await (supabase as any)
-        .from("checklists")
-        .select("project_id")
-        .in("project_id", ids);
       const cc: Record<string, number> = {};
       ((cl as Array<{ project_id: string }>) ?? []).forEach((r) => {
         cc[r.project_id] = (cc[r.project_id] ?? 0) + 1;
@@ -316,38 +308,7 @@ export function ProjectsPage() {
       setChecklistCounts(cc);
 
       const uploaderIds = Array.from(new Set(Object.values(uploadersByProject).flat()));
-      const profileMap: Record<string, { id: string; name: string | null; avatar: string | null }> =
-        {};
-      if (uploaderIds.length) {
-        const { data: profs } = await (supabase as any)
-          .from("profiles")
-          .select("id, full_name, avatar_url")
-          .in("id", uploaderIds);
-        (
-          (profs as Array<{ id: string; full_name: string | null; avatar_url: string | null }>) ??
-          []
-        ).forEach((p) => {
-          profileMap[p.id] = { id: p.id, name: p.full_name, avatar: p.avatar_url };
-        });
-      }
-      const membersByProject: Record<
-        string,
-        Array<{ id: string; name: string | null; avatar: string | null }>
-      > = {};
-      Object.entries(uploadersByProject).forEach(([pid, uids]) => {
-        membersByProject[pid] = uids.map(
-          (uid) => profileMap[uid] ?? { id: uid, name: null, avatar: null },
-        );
-      });
-      setRecentMembers(membersByProject);
 
-      const { data: rp } = await supabase
-        .from("photos")
-        .select("id, project_id, caption, storage_path, image_url, created_at")
-        .or("phase.is.null,phase.neq.walkthrough")
-        .not("storage_path", "like", "%/walkthroughs/%")
-        .order("created_at", { ascending: false })
-        .limit(12);
       const rpList = (
         (rp as Array<{
           id: string;
@@ -360,15 +321,54 @@ export function ProjectsPage() {
       ).filter((r) => !r.storage_path.includes("/walkthroughs/"));
       const projNameById = new Map(projects.map((p) => [p.id, p.name]));
       const needSign = rpList.filter((r) => !r.image_url).map((r) => r.storage_path);
+
+      // These three depend on different results from the wave above, but not
+      // on each other — sign cover/sample paths, look up uploader profiles,
+      // and sign recent-photo paths all in one round-trip instead of three.
+      const [signedCovers, profs, signedRecent] = await Promise.all([
+        pathsToSign.length
+          ? supabase.storage.from("site-photos").createSignedUrls(pathsToSign, 60 * 60)
+          : Promise.resolve({ data: null }),
+        uploaderIds.length
+          ? (supabase as any).from("profiles").select("id, full_name, avatar_url").in("id", uploaderIds)
+          : Promise.resolve({ data: null }),
+        needSign.length
+          ? supabase.storage.from("site-photos").createSignedUrls(needSign, 60 * 60)
+          : Promise.resolve({ data: null }),
+      ]);
+
+      signedCovers.data?.forEach((s, i) => {
+        if (!s.signedUrl) return;
+        const { pid, idx } = signOwner[i];
+        samples[pid][idx] = s.signedUrl;
+        if (idx === 0) cover[pid] = s.signedUrl;
+      });
+      setCoverUrls(cover);
+      setSampleUrls(samples);
+
+      const profileMap: Record<string, { id: string; name: string | null; avatar: string | null }> =
+        {};
+      (
+        (profs.data as Array<{ id: string; full_name: string | null; avatar_url: string | null }>) ??
+        []
+      ).forEach((p) => {
+        profileMap[p.id] = { id: p.id, name: p.full_name, avatar: p.avatar_url };
+      });
+      const membersByProject: Record<
+        string,
+        Array<{ id: string; name: string | null; avatar: string | null }>
+      > = {};
+      Object.entries(uploadersByProject).forEach(([pid, uids]) => {
+        membersByProject[pid] = uids.map(
+          (uid) => profileMap[uid] ?? { id: uid, name: null, avatar: null },
+        );
+      });
+      setRecentMembers(membersByProject);
+
       const signedMap: Record<string, string> = {};
-      if (needSign.length) {
-        const { data: signed } = await supabase.storage
-          .from("site-photos")
-          .createSignedUrls(needSign, 60 * 60);
-        signed?.forEach((s, i) => {
-          if (s.signedUrl) signedMap[needSign[i]] = s.signedUrl;
-        });
-      }
+      signedRecent.data?.forEach((s, i) => {
+        if (s.signedUrl) signedMap[needSign[i]] = s.signedUrl;
+      });
       setRecentPhotos(
         rpList.map((r) => ({
           id: r.id,

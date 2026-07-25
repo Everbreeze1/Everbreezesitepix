@@ -432,127 +432,142 @@ export function ProjectDetailPage() {
     );
     setPhotos(photoList);
 
-    if (photoList.length > 0) {
-      const photoIds = photoList.map((x) => x.id);
-      const { data: ar } = await supabase
-        .from("ai_analyses")
-        .select("id, photo_id, report_text, defects, created_at")
-        .in("photo_id", photoIds)
-        .eq("status", "completed")
-        .order("created_at", { ascending: false })
-        .limit(5);
-      setReports((ar as Report[]) ?? []);
-
-      const toSign = photoList.filter((x) => !x.image_url).map((x) => x.storage_path);
-      if (toSign.length) {
-        const { data: urls } = await supabase.storage
-          .from("site-photos")
-          .createSignedUrls(toSign, 60 * 60);
-        if (urls) {
-          const map: Record<string, string> = {};
-          urls.forEach((u, i) => {
-            if (u.signedUrl) map[toSign[i]] = u.signedUrl;
-          });
-          setSigned(map);
+    // The rest of this load is several independent tracks (AI analyses for
+    // this project's photos, walkthroughs, videos, secondary feature counts,
+    // trash count) — none depend on each other, so run them concurrently
+    // instead of paying one round-trip's latency at a time. Each track keeps
+    // its own existing error handling; allSettled means one track failing
+    // can't wipe out data the others already fetched successfully.
+    await Promise.allSettled([
+      (async () => {
+        if (photoList.length === 0) {
+          setReports([]);
+          return;
         }
-      }
-    } else {
-      setReports([]);
-    }
-    if (user) {
-      try {
-        const serverWalkthroughs = await fetchWalkthroughs({ data: { projectId } });
-        setWalkthroughs(((serverWalkthroughs as any[]) ?? []) as any);
-      } catch (wtErr: any) {
-        console.error("[walkthrough] load failed", wtErr, { projectId });
+        const photoIds = photoList.map((x) => x.id);
+        const { data: ar } = await supabase
+          .from("ai_analyses")
+          .select("id, photo_id, report_text, defects, created_at")
+          .in("photo_id", photoIds)
+          .eq("status", "completed")
+          .order("created_at", { ascending: false })
+          .limit(5);
+        setReports((ar as Report[]) ?? []);
+
+        const toSign = photoList.filter((x) => !x.image_url).map((x) => x.storage_path);
+        if (toSign.length) {
+          const { data: urls } = await supabase.storage
+            .from("site-photos")
+            .createSignedUrls(toSign, 60 * 60);
+          if (urls) {
+            const map: Record<string, string> = {};
+            urls.forEach((u, i) => {
+              if (u.signedUrl) map[toSign[i]] = u.signedUrl;
+            });
+            setSigned(map);
+          }
+        }
+      })(),
+      (async () => {
+        if (!user) {
+          setWalkthroughs([]);
+          return;
+        }
         try {
-          console.log("[walkthrough] trying direct walkthrough list fallback", { projectId });
-          const directWalkthroughs = await loadWalkthroughsDirect();
-          setWalkthroughs(directWalkthroughs as any);
-        } catch (directWtErr: any) {
-          console.error("[walkthrough] direct list fallback failed", directWtErr, { projectId });
-          toast.error(
-            `Walkthroughs could not load: ${directWtErr?.message ?? wtErr?.message ?? "unknown error"}`,
-          );
+          const serverWalkthroughs = await fetchWalkthroughs({ data: { projectId } });
+          setWalkthroughs(((serverWalkthroughs as any[]) ?? []) as any);
+        } catch (wtErr: any) {
+          console.error("[walkthrough] load failed", wtErr, { projectId });
+          try {
+            console.log("[walkthrough] trying direct walkthrough list fallback", { projectId });
+            const directWalkthroughs = await loadWalkthroughsDirect();
+            setWalkthroughs(directWalkthroughs as any);
+          } catch (directWtErr: any) {
+            console.error("[walkthrough] direct list fallback failed", directWtErr, { projectId });
+            toast.error(
+              `Walkthroughs could not load: ${directWtErr?.message ?? wtErr?.message ?? "unknown error"}`,
+            );
+          }
         }
-      }
-    } else {
-      setWalkthroughs([]);
-    }
-
-    // Load saved videos for this project
-    const { data: vids } = await supabase
-      .from("videos")
-      .select("id, storage_path, created_at, duration_seconds, caption, mime_type, size_bytes")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false })
-      .limit(10);
-    const vidList = (vids as any[]) ?? [];
-    const signedVidMap: Record<string, string> = {};
-    if (vidList.length) {
-      const paths = vidList.map((v) => v.storage_path);
-      const { data: urls } = await supabase.storage
-        .from("site-videos")
-        .createSignedUrls(paths, 60 * 60);
-      if (urls)
-        urls.forEach((u, i) => {
-          if (u.signedUrl) signedVidMap[paths[i]] = u.signedUrl;
-        });
-    }
-    setVideos(vidList.map((v) => ({ ...v, signed_url: signedVidMap[v.storage_path] ?? null })));
-
-    // Load counts for secondary feature cards (best-effort; ignore errors)
-    try {
-      const [tasksAll, tasksOpen, chk, rep, docs, wf] = await Promise.all([
-        supabase
-          .from("tasks" as any)
-          .select("id", { count: "exact", head: true })
-          .eq("project_id", projectId),
-        supabase
-          .from("tasks" as any)
-          .select("id", { count: "exact", head: true })
+      })(),
+      (async () => {
+        // Load saved videos for this project
+        const { data: vids } = await supabase
+          .from("videos")
+          .select("id, storage_path, created_at, duration_seconds, caption, mime_type, size_bytes")
           .eq("project_id", projectId)
-          .neq("status", "done"),
-        supabase
-          .from("project_checklists" as any)
-          .select("id", { count: "exact", head: true })
-          .eq("project_id", projectId),
-        supabase
-          .from("project_reports" as any)
-          .select("id", { count: "exact", head: true })
-          .eq("project_id", projectId),
-        supabase
-          .from("project_documents" as any)
-          .select("id", { count: "exact", head: true })
-          .eq("project_id", projectId),
-        supabase
-          .from("project_workflows" as any)
-          .select("id", { count: "exact", head: true })
-          .eq("project_id", projectId),
-      ]);
-      setCounts({
-        tasksTotal: tasksAll.count ?? 0,
-        tasksOpen: tasksOpen.count ?? 0,
-        checklists: chk.count ?? 0,
-        reports: rep.count ?? 0,
-        documents: docs.count ?? 0,
-        workflows: wf.count ?? 0,
-      });
-    } catch {
-      /* non-fatal */
-    }
-
-    // Trash count for tab badge
-    try {
-      const { count: trashN } = await (supabase as any)
-        .from("photos")
-        .select("id", { count: "exact", head: true })
-        .eq("project_id", projectId)
-        .not("deleted_at", "is", null);
-      setTrashCount(trashN ?? 0);
-    } catch {
-      /* non-fatal */
-    }
+          .order("created_at", { ascending: false })
+          .limit(10);
+        const vidList = (vids as any[]) ?? [];
+        const signedVidMap: Record<string, string> = {};
+        if (vidList.length) {
+          const paths = vidList.map((v) => v.storage_path);
+          const { data: urls } = await supabase.storage
+            .from("site-videos")
+            .createSignedUrls(paths, 60 * 60);
+          if (urls)
+            urls.forEach((u, i) => {
+              if (u.signedUrl) signedVidMap[paths[i]] = u.signedUrl;
+            });
+        }
+        setVideos(vidList.map((v) => ({ ...v, signed_url: signedVidMap[v.storage_path] ?? null })));
+      })(),
+      (async () => {
+        // Load counts for secondary feature cards (best-effort; ignore errors)
+        try {
+          const [tasksAll, tasksOpen, chk, rep, docs, wf] = await Promise.all([
+            supabase
+              .from("tasks" as any)
+              .select("id", { count: "exact", head: true })
+              .eq("project_id", projectId),
+            supabase
+              .from("tasks" as any)
+              .select("id", { count: "exact", head: true })
+              .eq("project_id", projectId)
+              .neq("status", "done"),
+            supabase
+              .from("project_checklists" as any)
+              .select("id", { count: "exact", head: true })
+              .eq("project_id", projectId),
+            supabase
+              .from("project_reports" as any)
+              .select("id", { count: "exact", head: true })
+              .eq("project_id", projectId),
+            supabase
+              .from("project_documents" as any)
+              .select("id", { count: "exact", head: true })
+              .eq("project_id", projectId),
+            supabase
+              .from("project_workflows" as any)
+              .select("id", { count: "exact", head: true })
+              .eq("project_id", projectId),
+          ]);
+          setCounts({
+            tasksTotal: tasksAll.count ?? 0,
+            tasksOpen: tasksOpen.count ?? 0,
+            checklists: chk.count ?? 0,
+            reports: rep.count ?? 0,
+            documents: docs.count ?? 0,
+            workflows: wf.count ?? 0,
+          });
+        } catch {
+          /* non-fatal */
+        }
+      })(),
+      (async () => {
+        // Trash count for tab badge
+        try {
+          const { count: trashN } = await (supabase as any)
+            .from("photos")
+            .select("id", { count: "exact", head: true })
+            .eq("project_id", projectId)
+            .not("deleted_at", "is", null);
+          setTrashCount(trashN ?? 0);
+        } catch {
+          /* non-fatal */
+        }
+      })(),
+    ]);
 
     if (!options?.silent) setLoading(false);
   };
