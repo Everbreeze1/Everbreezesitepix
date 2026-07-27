@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type Stripe from "stripe";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { getStripe, planToPriceId, type BillingPlan } from "../../lib/stripe";
 import type { ServiceContext } from "../../lib/user-context";
@@ -74,7 +75,12 @@ export async function createCheckoutSessionService(
     subscription_data: {
       metadata: { team_id: team.id, plan: data.plan },
     },
-  });
+    // Our products don't have a Stripe tax_code assigned, which Managed
+    // Payments (on by default for this account) requires. Disable it for
+    // this session rather than guessing a tax category — this SDK version
+    // (17.x) predates the managed_payments param, hence the cast.
+    managed_payments: { enabled: false },
+  } as Stripe.Checkout.SessionCreateParams & { managed_payments: { enabled: boolean } });
 
   if (!session.url) throw new Error("Failed to create checkout session");
   return { url: session.url };
