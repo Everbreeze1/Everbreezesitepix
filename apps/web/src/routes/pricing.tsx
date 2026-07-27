@@ -150,6 +150,8 @@ function PublicPricingPage() {
 
 interface MyTeamResult {
   team: { id: string; name: string } | null;
+  plan: BillingPlan;
+  isActive: boolean;
 }
 
 /** Reached by signed-in users — from Settings/Teams "Manage plan", or from
@@ -189,7 +191,12 @@ function AuthedPricingPage() {
                 ) : (
                   <div className="mt-10 grid gap-6 md:grid-cols-3">
                     {PLANS.map((plan) => (
-                      <PlanCard key={plan.id} plan={plan} disabled={isLoading || !data?.team} />
+                      <PlanCard
+                        key={plan.id}
+                        plan={plan}
+                        disabled={isLoading || !data?.team}
+                        isCurrent={!!data?.isActive && data.plan === plan.id}
+                      />
                     ))}
                   </div>
                 )}
@@ -246,9 +253,11 @@ function CreateTeamPrompt({ onCreated }: { onCreated: () => void }) {
 function PlanCard({
   plan,
   disabled,
+  isCurrent,
 }: {
   plan: (typeof PLANS)[number];
   disabled: boolean;
+  isCurrent: boolean;
 }) {
   const m = useMutation({
     mutationFn: () =>
@@ -262,10 +271,21 @@ function PlanCard({
   });
 
   return (
-    <div className="flex flex-col rounded-[28px] border border-sidebar-border bg-sidebar p-7 text-sidebar-foreground">
-      <p className="font-manrope text-xs font-extrabold uppercase tracking-[1.5px] text-sidebar-ring">
-        {plan.name}
-      </p>
+    <div
+      className={`flex flex-col rounded-[28px] border p-7 text-sidebar-foreground ${
+        isCurrent ? "border-sidebar-ring bg-sidebar" : "border-sidebar-border bg-sidebar"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-manrope text-xs font-extrabold uppercase tracking-[1.5px] text-sidebar-ring">
+          {plan.name}
+        </p>
+        {isCurrent && (
+          <span className="rounded-full bg-sidebar-ring/15 px-2.5 py-1 font-manrope text-[10px] font-extrabold uppercase tracking-wider text-sidebar-ring">
+            Current plan
+          </span>
+        )}
+      </div>
       <p className="font-display mt-3 text-4xl font-bold tracking-tight text-sidebar-foreground">
         {plan.price}
         <span className="ml-1 text-base font-medium text-sidebar-foreground/50">/mo</span>
@@ -282,11 +302,17 @@ function PlanCard({
       </ul>
 
       <Button
-        disabled={disabled || m.isPending}
+        disabled={isCurrent || disabled || m.isPending}
         onClick={() => m.mutate()}
-        className="mt-7 h-11 rounded-lg bg-sidebar-ring font-manrope text-sm font-bold text-sidebar-foreground hover:bg-sidebar-ring/90"
+        className="mt-7 h-11 rounded-lg bg-sidebar-ring font-manrope text-sm font-bold text-sidebar-foreground hover:bg-sidebar-ring/90 disabled:opacity-60"
       >
-        {m.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : `Subscribe to ${plan.name}`}
+        {isCurrent ? (
+          "Current plan"
+        ) : m.isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          `Subscribe to ${plan.name}`
+        )}
       </Button>
     </div>
   );
