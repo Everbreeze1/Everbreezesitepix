@@ -10,6 +10,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { toast } from "sonner";
 import { formatBytes } from "@/hooks/use-storage-usage";
 import { relativeTime } from "@sitepix/shared";
@@ -47,6 +48,7 @@ function fileTypeLabel(mime: string | null, fileName: string) {
 
 export function ProjectDocuments({ projectId, projectName, projectPhotos, onChanged }: Props) {
   const { user } = useAuth();
+  const confirm = useConfirm();
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -118,7 +120,13 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
   }
 
   async function deleteDocument(doc: ProjectDocument) {
-    if (!window.confirm(`Delete "${doc.file_name}"? This can't be undone.`)) return;
+    if (
+      !(await confirm({
+        description: `Delete "${doc.file_name}"? This can't be undone.`,
+        variant: "destructive",
+      }))
+    )
+      return;
     const prev = documents;
     setDocuments((ds) => ds.filter((d) => d.id !== doc.id));
     const { error } = await (supabase as any).from("project_documents").delete().eq("id", doc.id);

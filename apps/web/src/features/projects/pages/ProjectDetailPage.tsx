@@ -94,6 +94,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { useProfile } from "@/hooks/use-profile";
+import { useConfirm } from "@/hooks/use-confirm";
 import { analyzePhoto, extractPhotoText } from "@/lib/ai.functions";
 import {
   createReportFromWalkthrough,
@@ -168,6 +169,7 @@ export function ProjectDetailPage() {
   const [walkthroughUpgradeOpen, setWalkthroughUpgradeOpen] = useState(false);
   const [workflowsUpgradeOpen, setWorkflowsUpgradeOpen] = useState(false);
   const { profile } = useProfile();
+  const confirm = useConfirm();
   const [project, setProject] = useState<Project | null>(null);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
@@ -766,9 +768,11 @@ export function ProjectDetailPage() {
 
   const deletePhoto = async (photo: Photo) => {
     if (
-      !window.confirm(
-        "Move this photo to Trash?\n\nIt will be permanently deleted after 60 days. You can restore it from the Trash tab any time before then.",
-      )
+      !(await confirm({
+        description:
+          "Move this photo to Trash?\n\nIt will be permanently deleted after 60 days. You can restore it from the Trash tab any time before then.",
+        variant: "destructive",
+      }))
     )
       return;
     const prev = photos;

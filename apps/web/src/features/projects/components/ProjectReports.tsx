@@ -43,6 +43,7 @@ import {
 import { supabase } from "@/integrations/sitepix/client";
 import { sitepixApi } from "@/lib/sitepix-api";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 
@@ -76,6 +77,7 @@ interface Props {
 export function ProjectReports({ projectId, projectName, projectPhotos }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [reports, setReports] = useState<ProjectReport[]>([]);
   const [completedChecklists, setCompletedChecklists] = useState<
     Array<{ id: string; name: string; completed_at: string; snapshot: any }>
@@ -181,7 +183,7 @@ export function ProjectReports({ projectId, projectName, projectPhotos }: Props)
   }
 
   async function handleDelete(r: ProjectReport) {
-    if (!confirm(`Delete report "${r.title}"?`)) return;
+    if (!(await confirm({ description: `Delete report "${r.title}"?`, variant: "destructive" }))) return;
     const { error } = await (supabase as any).from("project_reports").delete().eq("id", r.id);
     if (error) {
       toast.error("Couldn't delete", { description: error.message });

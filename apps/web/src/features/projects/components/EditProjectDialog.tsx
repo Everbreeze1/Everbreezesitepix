@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { supabase } from "@/integrations/sitepix/client";
+import { useConfirm } from "@/hooks/use-confirm";
 import { softDeleteProject } from "@/lib/trash.functions";
 import { toast } from "sonner";
 import { MapPin, Trash2 } from "lucide-react";
@@ -61,6 +62,7 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
   const [saving, setSaving] = useState(false);
   const [trashing, setTrashing] = useState(false);
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const trash = softDeleteProject;
 
   const save = async () => {
@@ -90,9 +92,11 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
 
   const moveToTrash = async () => {
     if (
-      !window.confirm(
-        "Move this entire project to Trash?\n\nAll photos, reports, tasks, and checklists will be hidden. The project will be permanently deleted after 60 days. You can restore it from the Trash any time before then.",
-      )
+      !(await confirm({
+        description:
+          "Move this entire project to Trash?\n\nAll photos, reports, tasks, and checklists will be hidden. The project will be permanently deleted after 60 days. You can restore it from the Trash any time before then.",
+        variant: "destructive",
+      }))
     )
       return;
     setTrashing(true);

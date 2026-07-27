@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -168,6 +169,7 @@ interface Props {
 
 export function ReportTemplatesManager({ teamId, canManage }: Props) {
   const { user } = useAuth();
+  const confirm = useConfirm();
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<ReportTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -292,7 +294,13 @@ export function ReportTemplatesManager({ teamId, canManage }: Props) {
   };
 
   const remove = async (r: ReportTemplate) => {
-    if (!confirm(`Delete report template "${r.name}"?`)) return;
+    if (
+      !(await confirm({
+        description: `Delete report template "${r.name}"?`,
+        variant: "destructive",
+      }))
+    )
+      return;
     const { error } = await supabase
       .from("report_templates" as any)
       .delete()

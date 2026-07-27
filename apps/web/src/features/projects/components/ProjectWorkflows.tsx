@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import { compressImageFile } from "@/features/photos/components/CameraCapture";
@@ -85,6 +86,7 @@ interface Item {
 
 export function ProjectWorkflows({ projectId }: { projectId: string }) {
   const { user } = useAuth();
+  const confirm = useConfirm();
   const [loading, setLoading] = useState(true);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -276,7 +278,7 @@ export function ProjectWorkflows({ projectId }: { projectId: string }) {
   };
 
   const deleteWorkflow = async (w: Workflow) => {
-    if (!confirm(`Remove workflow “${w.name}” from this project?`)) return;
+    if (!(await confirm({ description: `Remove workflow “${w.name}” from this project?`, variant: "destructive" }))) return;
     const { error } = await supabase
       .from("project_workflows" as any)
       .delete()
@@ -589,6 +591,7 @@ function PhaseRunner({
   onChange: () => Promise<void> | void;
 }) {
   const { user } = useAuth();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(true);
   const [notes, setNotes] = useState(phase.notes ?? "");
   const notesTimer = useRef<NodeJS.Timeout | null>(null);
@@ -706,7 +709,7 @@ function PhaseRunner({
   };
 
   const revokeSignoff = async () => {
-    if (!confirm("Clear the sign-off for this phase?")) return;
+    if (!(await confirm({ description: "Clear the sign-off for this phase?", variant: "destructive" }))) return;
     await supabase
       .from("project_workflow_phases" as any)
       .update({ signoff_name: null, signed_off_by: null, signed_off_at: null })

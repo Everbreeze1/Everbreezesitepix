@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 
@@ -98,6 +99,7 @@ function checklistStatus(cl: Checklist, done: number) {
 
 export function ProjectChecklists({ projectId }: { projectId: string }) {
   const { user } = useAuth();
+  const confirm = useConfirm();
   const [loading, setLoading] = useState(true);
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [items, setItems] = useState<ChecklistItem[]>([]);
@@ -470,7 +472,7 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
   };
 
   const deleteChecklist = async (id: string) => {
-    if (!confirm("Delete this checklist and all its items?")) return;
+    if (!(await confirm({ description: "Delete this checklist and all its items?", variant: "destructive" }))) return;
     const prev = checklists;
     setChecklists((xs) => xs.filter((x) => x.id !== id));
     const { error } = await supabase

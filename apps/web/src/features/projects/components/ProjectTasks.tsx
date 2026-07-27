@@ -38,6 +38,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { getMyTeam } from "@/lib/teams.functions";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
@@ -127,6 +128,7 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
   ref,
 ) {
   const { user } = useAuth();
+  const confirm = useConfirm();
   const fetchTeam = getMyTeam;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,8 +138,6 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
   const [filter, setFilter] = useState<"all" | Status>("all");
   const [view, setView] = useState<"list" | "board">("list");
   const [members, setMembers] = useState<TeamMemberLite[]>([]);
-  const [quickTitle, setQuickTitle] = useState("");
-  const [quickAdding, setQuickAdding] = useState(false);
 
   useImperativeHandle(ref, () => ({
     createWithPhoto: (photoId: string) => {
@@ -242,7 +242,7 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
   };
 
   const removeTask = async (t: Task) => {
-    if (!confirm("Delete this task?")) return;
+    if (!(await confirm({ description: "Delete this task?", variant: "destructive" }))) return;
     setTasks((arr) => arr.filter((x) => x.id !== t.id));
     const { error } = await supabase
       .from("tasks" as any)
@@ -252,27 +252,6 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
       toast.error(error.message);
       void load();
     }
-  };
-
-  const quickAdd = async () => {
-    const title = quickTitle.trim();
-    if (!title || !user) return;
-    setQuickAdding(true);
-    const { error } = await supabase.from("tasks" as any).insert({
-      project_id: projectId,
-      created_by: user.id,
-      title,
-      status: "open",
-      priority: "normal",
-      photo_ids: [],
-    });
-    setQuickAdding(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    setQuickTitle("");
-    void load();
   };
 
   const renderAssignee = (t: Task) => {
@@ -529,32 +508,6 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
             Add task
           </Button>
         </div>
-      </div>
-
-      {/* Quick add */}
-      <div className="mt-6 flex items-center gap-2 rounded-2xl border-[0.8px] border-border bg-card/70 p-2">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-          <CheckSquare className="h-4 w-4 text-primary" />
-        </span>
-        <input
-          value={quickTitle}
-          onChange={(e) => setQuickTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              void quickAdd();
-            }
-          }}
-          placeholder="Add a project task…"
-          className="font-manrope h-10 min-w-0 flex-1 bg-transparent px-2 text-sm font-medium text-foreground placeholder:text-muted-foreground focus:outline-none"
-        />
-        <Button
-          onClick={() => void quickAdd()}
-          disabled={quickAdding || !quickTitle.trim()}
-          className="h-10 shrink-0 rounded-xl bg-primary px-4 font-manrope text-xs font-extrabold text-primary-foreground hover:bg-primary/90"
-        >
-          {quickAdding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
-        </Button>
       </div>
 
       <div className="mt-5">

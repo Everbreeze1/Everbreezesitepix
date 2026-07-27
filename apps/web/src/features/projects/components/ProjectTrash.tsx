@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { AlertTriangle, RefreshCw, Trash2, Loader2, ImageOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useConfirm } from "@/hooks/use-confirm";
 import {
   listTrashedPhotos,
   restorePhotos,
@@ -30,6 +31,7 @@ export function ProjectTrash({ projectId, onChanged }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const confirm = useConfirm();
 
   const listFn = listTrashedPhotos;
   const restoreFn = restorePhotos;
@@ -80,9 +82,10 @@ export function ProjectTrash({ projectId, onChanged }: Props) {
   const doPurge = async (ids: string[]) => {
     if (!ids.length) return;
     if (
-      !window.confirm(
-        `Permanently delete ${ids.length} photo${ids.length === 1 ? "" : "s"}? This cannot be undone.`,
-      )
+      !(await confirm({
+        description: `Permanently delete ${ids.length} photo${ids.length === 1 ? "" : "s"}? This cannot be undone.`,
+        variant: "destructive",
+      }))
     )
       return;
     setBusy(true);

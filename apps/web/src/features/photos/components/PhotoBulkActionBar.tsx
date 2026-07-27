@@ -40,6 +40,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/sitepix/client";
 import { sharePhotoNative } from "@/lib/native-share";
 import { ensureGlobalTag } from "@/hooks/use-tag-colors";
+import { useConfirm } from "@/hooks/use-confirm";
 import { sanitizeCaption } from "@sitepix/shared";
 
 export interface BulkPhoto {
@@ -109,6 +110,7 @@ export function PhotoBulkActionBar(props: Props) {
     onRefresh,
   } = props;
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const count = selectedIds.length;
   const selectedPhotos = useMemo(
     () => selectedIds.map((id) => photosById.get(id)).filter(Boolean) as BulkPhoto[],
@@ -182,7 +184,13 @@ export function PhotoBulkActionBar(props: Props) {
 
   const doTrash = () =>
     withBusy("trash", async () => {
-      if (!window.confirm(`Move ${count} photo${count > 1 ? "s" : ""} to Trash?`)) return;
+      if (
+        !(await confirm({
+          description: `Move ${count} photo${count > 1 ? "s" : ""} to Trash?`,
+          variant: "destructive",
+        }))
+      )
+        return;
       const { error } = await (supabase as any)
         .from("photos")
         .update({ deleted_at: new Date().toISOString() })

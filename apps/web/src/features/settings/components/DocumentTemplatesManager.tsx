@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -597,6 +598,7 @@ const PlaceholderChips = Extension.create<{ getValue: (token: string) => string 
 // ---------------------------------------------------------------------------
 export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   const { user } = useAuth();
+  const confirm = useConfirm();
   const [items, setItems] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
@@ -743,7 +745,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   }
 
   async function remove(t: DocumentTemplate) {
-    if (!confirm(`Delete "${t.name}"? This can't be undone.`)) return;
+    if (!(await confirm({ description: `Delete "${t.name}"? This can't be undone.`, variant: "destructive" }))) return;
     const { error } = await supabase
       .from("document_templates" as any)
       .delete()

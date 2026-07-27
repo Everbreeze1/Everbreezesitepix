@@ -34,6 +34,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/sitepix/client";
+import { useConfirm } from "@/hooks/use-confirm";
 import { summarizePhotosReport, describeSiteLogPhotos } from "@/lib/ai.functions";
 import { generateSiteLogPdf } from "@/lib/site-log-pdf.functions";
 import { cleanCaption } from "@sitepix/shared";
@@ -72,6 +73,7 @@ interface Props {
 }
 
 export function ProjectSiteLogs({ projectId, projectName }: Props) {
+  const confirm = useConfirm();
   const [logs, setLogs] = useState<SiteLogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -103,7 +105,7 @@ export function ProjectSiteLogs({ projectId, projectName }: Props) {
   };
 
   const handleDelete = async (log: SiteLogRow) => {
-    if (!confirm(`Delete site log "${log.title}"?`)) return;
+    if (!(await confirm({ description: `Delete site log "${log.title}"?`, variant: "destructive" }))) return;
     const { error } = await (supabase as any).from("project_site_logs").delete().eq("id", log.id);
     if (error) {
       toast.error("Couldn't delete", { description: error.message });

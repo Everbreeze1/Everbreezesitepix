@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
@@ -79,6 +80,7 @@ const kindMeta: Record<ItemKind, { icon: typeof CheckSquare; label: string }> = 
 
 export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { user } = useAuth();
+  const confirm = useConfirm();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -166,8 +168,12 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
     [items, pendingItems],
   );
 
-  const trySelect = (id: string | null) => {
-    if (pendingCount > 0 && !confirm("Discard unsaved changes?")) return;
+  const trySelect = async (id: string | null) => {
+    if (
+      pendingCount > 0 &&
+      !(await confirm({ description: "Discard unsaved changes?", variant: "destructive" }))
+    )
+      return;
     setPendingTemplate({});
     setPendingPhases({});
     setPendingItems({});
@@ -317,7 +323,13 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
   };
 
   const deleteTemplate = async (t: Template) => {
-    if (!confirm(`Delete workflow “${t.name}”? This cannot be undone.`)) return;
+    if (
+      !(await confirm({
+        description: `Delete workflow “${t.name}”? This cannot be undone.`,
+        variant: "destructive",
+      }))
+    )
+      return;
     const { error } = await supabase
       .from("workflow_templates" as any)
       .delete()
@@ -354,7 +366,13 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
   };
 
   const deletePhase = async (id: string) => {
-    if (!confirm("Delete this phase and all its items?")) return;
+    if (
+      !(await confirm({
+        description: "Delete this phase and all its items?",
+        variant: "destructive",
+      }))
+    )
+      return;
     const prev = phases;
     setPhases((xs) => xs.filter((x) => x.id !== id));
     setItems((xs) => xs.filter((x) => x.phase_id !== id));
@@ -455,8 +473,12 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
             variant="ghost"
             size="sm"
             className="h-8 -ml-2"
-            onClick={() => {
-              if (pendingCount > 0 && !confirm("Discard unsaved changes?")) return;
+            onClick={async () => {
+              if (
+                pendingCount > 0 &&
+                !(await confirm({ description: "Discard unsaved changes?", variant: "destructive" }))
+              )
+                return;
               if (window.history.length > 1) router.history.back();
               else void router.navigate({ to: "/settings" });
             }}

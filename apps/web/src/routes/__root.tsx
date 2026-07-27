@@ -12,6 +12,7 @@ import { type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ThemeProvider } from "@/hooks/use-theme";
+import { ConfirmDialogProvider } from "@/hooks/use-confirm";
 import { Toaster } from "@/components/ui/sonner";
 import { InstallPrompt } from "@/components/InstallPrompt";
 
@@ -152,9 +153,11 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
-          <Outlet />
-          <Toaster />
-          <InstallPrompt />
+          <ConfirmDialogProvider>
+            <Outlet />
+            <Toaster />
+            <InstallPrompt />
+          </ConfirmDialogProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

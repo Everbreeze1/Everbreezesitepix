@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +80,7 @@ interface Props {
 
 export function LabelSetsManager({ teamId, canManage }: Props) {
   const { user } = useAuth();
+  const confirm = useConfirm();
   const [loading, setLoading] = useState(true);
   const [sets, setSets] = useState<LabelSet[]>([]);
   const [itemsBySet, setItemsBySet] = useState<Record<string, LabelSetItem[]>>({});
@@ -221,7 +223,7 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
 
   const deleteSet = async () => {
     if (!selected) return;
-    if (!confirm(`Delete "${selected.name}"? This cannot be undone.`)) return;
+    if (!(await confirm({ description: `Delete "${selected.name}"? This cannot be undone.`, variant: "destructive" }))) return;
     const { error } = await supabase
       .from("label_sets" as any)
       .delete()

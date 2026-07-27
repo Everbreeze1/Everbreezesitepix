@@ -55,6 +55,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
@@ -152,6 +153,7 @@ const STARTER_TEMPLATES: {
 
 export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { user } = useAuth();
+  const confirm = useConfirm();
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [items, setItems] = useState<TemplateItem[]>([]);
@@ -291,7 +293,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
   };
 
   const deleteTemplate = async (t: Template) => {
-    if (!confirm(`Delete template “${t.name}”? This cannot be undone.`)) return;
+    if (!(await confirm({ description: `Delete template "${t.name}"? This cannot be undone.`, variant: "destructive" }))) return;
     const { error } = await supabase
       .from("checklist_templates" as any)
       .delete()

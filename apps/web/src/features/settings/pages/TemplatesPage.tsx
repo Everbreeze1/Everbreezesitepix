@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { ChecklistTemplatesPage } from "@/features/settings/pages/ChecklistTemplatesPage";
 import { WorkflowTemplatesPage } from "@/features/settings/pages/WorkflowTemplatesPage";
+import { useConfirm } from "@/hooks/use-confirm";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -117,6 +118,7 @@ function timeAgo(iso: string) {
 
 export function TemplatesPage() {
   const { user } = useAuth();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const fetchTeam = getMyTeam;
   const { data: teamData, isLoading: teamLoading } = useQuery({
@@ -414,7 +416,7 @@ export function TemplatesPage() {
   };
 
   const deleteTemplate = async (t: ProjectTemplate) => {
-    if (!confirm(`Delete template "${t.name}"? This cannot be undone.`)) return;
+    if (!(await confirm({ description: `Delete template "${t.name}"? This cannot be undone.`, variant: "destructive" }))) return;
     const { error } = await supabase
       .from("project_templates" as any)
       .delete()

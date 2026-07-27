@@ -23,6 +23,7 @@ import {
 } from "@/hooks/use-label-catalog";
 import { ColorPicker } from "@/components/ColorPicker";
 import { EmptyState } from "@/components/EmptyState";
+import { useConfirm } from "@/hooks/use-confirm";
 
 interface Props {
   teamId: string | null;
@@ -36,6 +37,7 @@ interface Props {
 
 export function LabelsManager({ teamId, userId, canManage, templateUsage, projectUsage }: Props) {
   const { rows } = useLabelCatalog();
+  const confirm = useConfirm();
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(fallbackLabelColor("new"));
@@ -95,9 +97,10 @@ export function LabelsManager({ teamId, userId, canManage, templateUsage, projec
 
   const remove = async (l: LabelRow) => {
     if (
-      !confirm(
-        `Delete label "${l.name}"? It will be removed from templates and projects that use it.`,
-      )
+      !(await confirm({
+        description: `Delete label "${l.name}"? It will be removed from templates and projects that use it.`,
+        variant: "destructive",
+      }))
     )
       return;
     const ok = await deleteLabel(l.id);

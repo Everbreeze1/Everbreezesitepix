@@ -45,6 +45,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { listProjectGroups, addProjectToGroup } from "@/lib/project-groups.functions";
 import { softDeleteProject } from "@/lib/trash.functions";
 import { combineProjects } from "@/lib/project-actions.functions";
@@ -103,6 +104,7 @@ export function ProjectActionsMenu({
 }: ProjectActionsMenuProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [combineOpen, setCombineOpen] = useState(false);
@@ -231,9 +233,10 @@ export function ProjectActionsMenu({
     const target = otherProjects.find((p) => p.id === combineTarget);
     if (!target) return;
     if (
-      !window.confirm(
-        `Combine “${project.name}” into “${target.name}”?\n\nAll photos, videos, tasks, documents, checklists, workflows, and walkthroughs will be moved to the target project. This project will be removed. This cannot be undone.`,
-      )
+      !(await confirm({
+        description: `Combine “${project.name}” into “${target.name}”?\n\nAll photos, videos, tasks, documents, checklists, workflows, and walkthroughs will be moved to the target project. This project will be removed. This cannot be undone.`,
+        variant: "destructive",
+      }))
     )
       return;
     setBusy(true);

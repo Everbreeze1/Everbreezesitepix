@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2, MapPin, RefreshCw, Trash2, Images } from "lucid
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/PageHeader";
+import { useConfirm } from "@/hooks/use-confirm";
 import {
   listTrashedProjects,
   restoreProject,
@@ -24,6 +25,7 @@ interface TrashedProject {
 }
 
 export function ProjectTrashPage() {
+  const confirm = useConfirm();
   const [items, setItems] = useState<TrashedProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -63,9 +65,10 @@ export function ProjectTrashPage() {
 
   const doPurge = async (p: TrashedProject) => {
     if (
-      !window.confirm(
-        `Permanently delete "${p.name}" and all its ${p.photo_count} photo${p.photo_count === 1 ? "" : "s"}, reports, tasks, and checklists?\n\nThis cannot be undone.`,
-      )
+      !(await confirm({
+        description: `Permanently delete "${p.name}" and all its ${p.photo_count} photo${p.photo_count === 1 ? "" : "s"}, reports, tasks, and checklists?\n\nThis cannot be undone.`,
+        variant: "destructive",
+      }))
     )
       return;
     setBusyId(p.id);

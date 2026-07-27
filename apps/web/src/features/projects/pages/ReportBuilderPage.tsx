@@ -36,6 +36,7 @@ import { supabase } from "@/integrations/sitepix/client";
 import { sitepixApi } from "@/lib/sitepix-api";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
+import { useConfirm } from "@/hooks/use-confirm";
 import { toast } from "sonner";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { ReportDocument, type ReportDocModel } from "@/components/ReportDocument";
@@ -102,6 +103,7 @@ export function ReportBuilderPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { profile } = useProfile();
+  const confirm = useConfirm();
   void user;
 
   const [report, setReport] = useState<ReportRow | null>(null);
@@ -214,7 +216,7 @@ export function ReportBuilderPage() {
     setSections((rs) => [...rs, data as SectionRow]);
   }
   async function deleteSection(id: string) {
-    if (!confirm("Delete this section?")) return;
+    if (!(await confirm({ description: "Delete this section?", variant: "destructive" }))) return;
     const prev = sections;
     setSections((rs) => rs.filter((s) => s.id !== id));
     const { error } = await (supabase as any).from("project_report_sections").delete().eq("id", id);

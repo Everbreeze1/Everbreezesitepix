@@ -31,6 +31,7 @@ import {
 import { supabase } from "@/integrations/sitepix/client";
 import { sitepixApi } from "@/lib/sitepix-api";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import {
   generateWalkthroughReport,
   setWalkthroughShare,
@@ -65,6 +66,7 @@ export function WalkthroughDetailPage() {
   const { walkthroughId } = useParams({ from: "/_app/walkthroughs/$walkthroughId" });
   const navigate = useNavigate();
   const { user } = useAuth();
+  const confirm = useConfirm();
   const [walk, setWalk] = useState<Walkthrough | null>(null);
   const [projectName, setProjectName] = useState<string>("");
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
@@ -299,7 +301,13 @@ export function WalkthroughDetailPage() {
 
   const onDelete = async () => {
     if (!walk) return;
-    if (!confirm("Delete this walkthrough? This cannot be undone.")) return;
+    if (
+      !(await confirm({
+        description: "Delete this walkthrough? This cannot be undone.",
+        variant: "destructive",
+      }))
+    )
+      return;
     const { error } = await supabase
       .from("walkthroughs" as any)
       .delete()

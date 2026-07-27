@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { rememberTagColor } from "@/hooks/use-tag-colors";
+import { TagPill } from "@/features/photos/components/TagPill";
 import { toast } from "sonner";
 
 interface GlobalTag {
@@ -38,22 +39,6 @@ const PRESET_COLORS = [
 ];
 
 const normalize = (raw: string) => raw.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 32);
-
-function highlightMatch(name: string, query: string) {
-  if (!query) return <span>{name}</span>;
-  const q = query.toLowerCase();
-  const idx = name.toLowerCase().indexOf(q);
-  if (idx === -1) return <span>{name}</span>;
-  return (
-    <span>
-      {name.slice(0, idx)}
-      <mark className="rounded bg-primary/20 px-0.5 font-semibold text-primary">
-        {name.slice(idx, idx + q.length)}
-      </mark>
-      {name.slice(idx + q.length)}
-    </span>
-  );
-}
 
 /**
  * Searchable, multi-select tag dropdown used on photo thumbnails AND inside
@@ -241,22 +226,12 @@ export function PhotoTagPopoverBody({ photoTags, onToggle, onCreate }: Props) {
                 data-index={i}
                 onClick={() => void handleToggle(row.tag.name)}
                 onMouseEnter={() => setActiveIndex(i)}
-                className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs transition ${
+                className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left transition ${
                   i === activeIndex ? "bg-accent" : "hover:bg-accent"
                 }`}
               >
-                <span
-                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                    has ? "border-primary bg-primary text-primary-foreground" : "border-input"
-                  }`}
-                >
-                  {has && <Check className="h-3 w-3" />}
-                </span>
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ background: row.tag.color }}
-                />
-                <span className="truncate">{highlightMatch(row.tag.name, query)}</span>
+                <TagPill name={row.tag.name} size="sm" />
+                <Check className={`h-3.5 w-3.5 shrink-0 text-primary ${has ? "" : "opacity-0"}`} />
               </button>
             );
           })}
