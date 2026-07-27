@@ -1,6 +1,7 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Camera } from "lucide-react";
 import { useLastProjectId } from "@/hooks/use-last-project";
+import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,6 +13,7 @@ export function FloatingCameraButton() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const lastProjectId = useLastProjectId();
+  const { guard } = useSubscriptionGate();
 
   // Hide on routes where a camera FAB would be noisy or duplicated. Also hide
   // on individual project detail pages because the page already renders its own
@@ -36,19 +38,20 @@ export function FloatingCameraButton() {
   // Visually stronger when there's an active project to shoot into.
   const onActiveProjectPage = !!lastProjectId && pathname === `/projects/${lastProjectId}`;
 
-  const handleClick = () => {
-    if (lastProjectId) {
-      navigate({
-        to: "/projects/$projectId",
-        params: { projectId: lastProjectId },
-        search: { camera: 1 } as any,
-      });
-    } else {
-      // No active project yet — send to the new-project flow; user can shoot
-      // immediately after creating it.
-      navigate({ to: "/projects/new" });
-    }
-  };
+  const handleClick = () =>
+    guard(() => {
+      if (lastProjectId) {
+        navigate({
+          to: "/projects/$projectId",
+          params: { projectId: lastProjectId },
+          search: { camera: 1 } as any,
+        });
+      } else {
+        // No active project yet — send to the new-project flow; user can shoot
+        // immediately after creating it.
+        navigate({ to: "/projects/new" });
+      }
+    }, "Subscribe to capture new photos.");
 
   return (
     <button

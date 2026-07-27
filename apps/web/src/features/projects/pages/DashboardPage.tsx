@@ -5,6 +5,7 @@ import { Camera, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
+import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { supabase } from "@/integrations/sitepix/client";
 import { CaptureUpdateDialog } from "@/components/CaptureUpdateDialog";
 import type { ProjectPickerRow } from "@/features/projects/components/CreateGroupDialog";
@@ -56,6 +57,7 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { profile } = useProfile();
+  const { guard } = useSubscriptionGate();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [activeCards, setActiveCards] = useState<ActiveProjectCard[]>([]);
   const [newRecordsCount, setNewRecordsCount] = useState(0);
@@ -364,9 +366,13 @@ export function DashboardPage() {
           <Button
             disabled={loading}
             onClick={() =>
-              projects.length === 0
-                ? navigate({ to: "/projects/new" })
-                : setCaptureOpen(true)
+              guard(
+                () =>
+                  projects.length === 0
+                    ? navigate({ to: "/projects/new" })
+                    : setCaptureOpen(true),
+                "Subscribe to capture new field updates.",
+              )
             }
             className="font-manrope w-fit rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90"
           >

@@ -15,6 +15,7 @@ import {
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
+import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { applyProjectBlueprint } from "@/lib/blueprint.functions";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
@@ -45,6 +46,7 @@ function parseComponents(comps: any[]): AddrParts {
 export function NewProjectPage() {
   const { user } = useAuth();
   const { isTeam } = useSubscription();
+  const { guard } = useSubscriptionGate();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const mapDivRef = useRef<HTMLDivElement | null>(null);
@@ -224,7 +226,9 @@ export function NewProjectPage() {
     });
   };
 
-  const create = async () => {
+  const create = () => guard(() => void doCreate(), "Subscribe to create new projects.");
+
+  const doCreate = async () => {
     if (!user) return;
     const name = form.name.trim() || form.street.trim() || "Untitled project";
     setSaving(true);

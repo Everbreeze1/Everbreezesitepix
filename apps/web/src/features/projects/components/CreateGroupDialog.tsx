@@ -15,6 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { createProjectGroup } from "@/lib/project-groups.functions";
+import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 
 export interface ProjectPickerRow {
   id: string;
@@ -36,6 +37,7 @@ export function CreateGroupDialog({ open, onOpenChange, projects, onCreated }: P
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
   const create = createProjectGroup;
+  const { guard } = useSubscriptionGate();
 
   useEffect(() => {
     if (open) {
@@ -60,7 +62,9 @@ export function CreateGroupDialog({ open, onOpenChange, projects, onCreated }: P
       return n;
     });
 
-  const submit = async () => {
+  const submit = () => guard(() => void doSubmit(), "Subscribe to create project groups.");
+
+  const doSubmit = async () => {
     const n = name.trim();
     if (!n) return;
     setSaving(true);

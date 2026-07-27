@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
+import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 
 function getInitials(name?: string | null, email?: string | null) {
   const trimmed = name?.trim();
@@ -31,6 +32,7 @@ export function AppHeader() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { profile } = useProfile();
+  const { guard } = useSubscriptionGate();
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -112,12 +114,15 @@ export function AppHeader() {
         </DropdownMenu>
 
         <Button
-          asChild
+          onClick={() =>
+            guard(
+              () => navigate({ to: "/projects/new" }),
+              "Subscribe to create new projects.",
+            )
+          }
           className="font-manrope hidden rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-primary/90 sm:inline-flex"
         >
-          <Link to="/projects/new">
-            <Plus className="h-4 w-4" /> New project
-          </Link>
+          <Plus className="h-4 w-4" /> New project
         </Button>
       </div>
     </header>

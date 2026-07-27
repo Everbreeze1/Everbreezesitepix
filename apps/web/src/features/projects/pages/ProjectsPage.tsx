@@ -1,4 +1,4 @@
-import { Link, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query-keys";
@@ -45,6 +45,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
+import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { supabase } from "@/integrations/sitepix/client";
 import { MobileAppBanner } from "@/components/MobileAppBanner";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
@@ -120,6 +121,8 @@ function timeAgo(iso: string): string {
 
 export function ProjectsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const { guard } = useSubscriptionGate();
   const routeSearch = useSearch({ strict: false }) as { q?: string };
   const [allProjects, setAllProjects] = useState<ProjectRow[]>([]);
   const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
@@ -719,12 +722,15 @@ export function ProjectsPage() {
                   </Link>
                 </Button>
                 <Button
-                  asChild
+                  onClick={() =>
+                    guard(
+                      () => navigate({ to: "/projects/new" }),
+                      "Subscribe to create new projects.",
+                    )
+                  }
                   className="h-[42px] bg-sidebar-ring px-5 shadow-lg shadow-sidebar-ring/20 hover:bg-sidebar-ring/90 text-sidebar-foreground"
                 >
-                  <Link to="/projects/new">
-                    <Plus className="mr-2 h-4 w-4" /> Create project
-                  </Link>
+                  <Plus className="mr-2 h-4 w-4" /> Create project
                 </Button>
               </div>
             </div>

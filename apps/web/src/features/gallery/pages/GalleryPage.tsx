@@ -58,6 +58,7 @@ import { supabase } from "@/integrations/sitepix/client";
 import { sitepixApi } from "@/lib/sitepix-api";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
+import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
@@ -136,6 +137,7 @@ export function GalleryPage() {
     refresh: refreshSubscription,
     bumpAiAnalysesUsed,
   } = useSubscription();
+  const { guard } = useSubscriptionGate();
   const { profile } = useProfile();
   const search = useSearch({ from: "/_app/gallery" as const });
   const watermarkOn =
@@ -200,6 +202,10 @@ export function GalleryPage() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
   const analyze = analyzePhoto;
+
+  const openCamera = () => guard(() => setCameraOpen(true), "Subscribe to capture new photos.");
+  const openUpload = () =>
+    guard(() => fileInput.current?.click(), "Subscribe to upload new photos.");
 
   const uploadProjectId = projectFilter.length === 1 ? projectFilter[0] : projects[0]?.id;
   const activeProject =
@@ -889,6 +895,11 @@ export function GalleryPage() {
 
   const saveAnnotatedPhoto = async (blob: Blob) => {
     if (!activePhoto || !user) return;
+    if (!isActive) {
+      setAnnotating(false);
+      guard(() => {}, "Subscribe to save annotated photos.");
+      return;
+    }
     try {
       const path = `${user.id}/${activePhoto.project_id}/${crypto.randomUUID()}.jpg`;
       const { error: upErr } = await supabase.storage
@@ -974,7 +985,7 @@ export function GalleryPage() {
               onChange={(e) => onUpload(e.target.files)}
             />
             <Button
-              onClick={() => setCameraOpen(true)}
+              onClick={openCamera}
               disabled={uploading || projects.length === 0}
               className="h-11 flex-1 rounded-lg bg-primary px-5 font-manrope text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 sm:flex-none"
             >
@@ -983,7 +994,7 @@ export function GalleryPage() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => fileInput.current?.click()}
+              onClick={openUpload}
               disabled={uploading || projects.length === 0}
               className="h-11 flex-1 rounded-lg border-border bg-card px-4 font-manrope text-sm font-medium text-foreground shadow-sm hover:bg-card/80 sm:flex-none"
             >
@@ -1241,13 +1252,13 @@ export function GalleryPage() {
               </p>
               {photos.length === 0 && (
                 <div className="mt-4 flex gap-2">
-                  <Button onClick={() => setCameraOpen(true)} disabled={uploading}>
+                  <Button onClick={openCamera} disabled={uploading}>
                     <Camera className="mr-2 h-4 w-4" />
                     Take photo
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => fileInput.current?.click()}
+                    onClick={openUpload}
                     disabled={uploading}
                   >
                     <Upload className="mr-2 h-4 w-4" />
@@ -1318,11 +1329,11 @@ export function GalleryPage() {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" side="top" className="mb-2 w-56">
-            <DropdownMenuItem onClick={() => setCameraOpen(true)}>
+            <DropdownMenuItem onClick={openCamera}>
               <Camera className="mr-2 h-4 w-4" />
               Take photo with camera
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => fileInput.current?.click()}>
+            <DropdownMenuItem onClick={openUpload}>
               <Upload className="mr-2 h-4 w-4" />
               Upload from gallery
             </DropdownMenuItem>

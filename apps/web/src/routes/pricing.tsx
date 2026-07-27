@@ -151,7 +151,7 @@ interface MyTeamResult {
 }
 
 /** Reached by signed-in users — from Settings/Teams "Manage plan", or from
- * the hard-paywall redirect in routes/_app.tsx for a team with no active
+ * the upgrade banner/gate dialog shown app-wide for a team with no active
  * subscription yet. */
 function AuthedPricingPage() {
   const qc = useQueryClient();

@@ -92,6 +92,7 @@ import {
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
+import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { useProfile } from "@/hooks/use-profile";
 import { analyzePhoto, extractPhotoText } from "@/lib/ai.functions";
 import {
@@ -163,6 +164,7 @@ export function ProjectDetailPage() {
     refresh: refreshSubscription,
     bumpAiAnalysesUsed,
   } = useSubscription();
+  const { guard } = useSubscriptionGate();
   const [walkthroughUpgradeOpen, setWalkthroughUpgradeOpen] = useState(false);
   const [workflowsUpgradeOpen, setWorkflowsUpgradeOpen] = useState(false);
   const { profile } = useProfile();
@@ -222,6 +224,9 @@ export function ProjectDetailPage() {
   const [trashCount, setTrashCount] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const tasksRef = useRef<ProjectTasksHandle>(null);
+  const openCamera = () => guard(() => setCameraOpen(true), "Subscribe to capture new photos.");
+  const openUpload = () =>
+    guard(() => fileInput.current?.click(), "Subscribe to upload new photos.");
   const analyze = analyzePhoto;
   const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
   const [sideTab, setSideTab] = useState<"description" | "tasks" | "comments">("comments");
@@ -2569,7 +2574,7 @@ export function ProjectDetailPage() {
               <Button
                 size="sm"
                 className="h-8 rounded-lg bg-primary px-4 text-xs font-bold hover:bg-primary/90"
-                onClick={() => setCameraOpen(true)}
+                onClick={openCamera}
               >
                 <Camera className="mr-1.5 h-3.5 w-3.5" />
                 Capture update
@@ -2657,7 +2662,7 @@ export function ProjectDetailPage() {
                 Snap a photo on-site or upload from your device.
               </p>
               <div className="mt-4 flex gap-2">
-                <Button onClick={() => setCameraOpen(true)} disabled={uploading} className="h-10">
+                <Button onClick={openCamera} disabled={uploading} className="h-10">
                   {uploading ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
@@ -2667,7 +2672,7 @@ export function ProjectDetailPage() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => fileInput.current?.click()}
+                  onClick={openUpload}
                   disabled={uploading}
                   className="h-10"
                 >
@@ -2906,11 +2911,11 @@ export function ProjectDetailPage() {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" side="top" className="mb-2 w-64">
-          <DropdownMenuItem onClick={() => setCameraOpen(true)}>
+          <DropdownMenuItem onClick={openCamera}>
             <Camera className="mr-2 h-4 w-4" />
             Take photo with camera
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => fileInput.current?.click()}>
+          <DropdownMenuItem onClick={openUpload}>
             <Upload className="mr-2 h-4 w-4" />
             Upload from gallery
           </DropdownMenuItem>
