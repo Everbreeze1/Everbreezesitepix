@@ -11,6 +11,8 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
+import { SubscriptionGateProvider } from "@/hooks/use-subscription-gate";
+import { UpgradeGateDialog } from "@/components/UpgradeGateDialog";
 import { getMyTeam, createTeam, createCheckoutSession } from "@/features/teams/api";
 import type { BillingPlan } from "@/features/teams/api";
 
@@ -161,38 +163,43 @@ function AuthedPricingPage() {
   });
 
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-background">
-        <AppSidebar />
-        <div className="flex-1 flex flex-col min-w-0 bg-background">
-          <AppHeader />
-          <main className="flex-1 min-w-0 p-6 md:p-10">
-            <div className="mx-auto max-w-5xl">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sidebar-ring/15">
-                <Crown className="h-6 w-6 text-sidebar-ring" strokeWidth={2} />
-              </span>
-              <h1 className="font-display mt-6 text-4xl font-bold tracking-tight text-foreground">
-                Choose your plan
-              </h1>
-              <p className="mt-3 max-w-xl font-manrope text-sm text-muted-foreground">
-                Every plan is billed monthly. Change or cancel anytime from Settings once you're
-                subscribed.
-              </p>
+    <SubscriptionGateProvider>
+      <SidebarProvider>
+        <div className="min-h-screen flex w-full bg-background">
+          <AppSidebar />
+          <div className="flex-1 flex flex-col min-w-0 bg-background">
+            <AppHeader />
+            <main className="flex-1 min-w-0 p-6 md:p-10">
+              <div className="mx-auto max-w-5xl">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sidebar-ring/15">
+                  <Crown className="h-6 w-6 text-sidebar-ring" strokeWidth={2} />
+                </span>
+                <h1 className="font-display mt-6 text-4xl font-bold tracking-tight text-foreground">
+                  Choose your plan
+                </h1>
+                <p className="mt-3 max-w-xl font-manrope text-sm text-muted-foreground">
+                  Every plan is billed monthly. Change or cancel anytime from Settings once you're
+                  subscribed.
+                </p>
 
-              {!isLoading && !data?.team ? (
-                <CreateTeamPrompt onCreated={() => qc.invalidateQueries({ queryKey: ["my-team"] })} />
-              ) : (
-                <div className="mt-10 grid gap-6 md:grid-cols-3">
-                  {PLANS.map((plan) => (
-                    <PlanCard key={plan.id} plan={plan} disabled={isLoading || !data?.team} />
-                  ))}
-                </div>
-              )}
-            </div>
-          </main>
+                {!isLoading && !data?.team ? (
+                  <CreateTeamPrompt
+                    onCreated={() => qc.invalidateQueries({ queryKey: ["my-team"] })}
+                  />
+                ) : (
+                  <div className="mt-10 grid gap-6 md:grid-cols-3">
+                    {PLANS.map((plan) => (
+                      <PlanCard key={plan.id} plan={plan} disabled={isLoading || !data?.team} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </main>
+          </div>
         </div>
-      </div>
-    </SidebarProvider>
+        <UpgradeGateDialog />
+      </SidebarProvider>
+    </SubscriptionGateProvider>
   );
 }
 
