@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import type { DragEvent } from "react";
 import { FileText, Upload, MoreHorizontal, Download, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,7 +50,6 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [dragging, setDragging] = useState(false);
   const [legacyOpen, setLegacyOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -134,12 +132,6 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
     onChanged?.();
   }
 
-  const onDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragging(false);
-    if (e.dataTransfer.files?.length) void uploadFiles(e.dataTransfer.files);
-  };
-
   return (
     <div>
       <input
@@ -194,40 +186,6 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
-
-      {/* Dropzone */}
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-        className={`mt-5 flex flex-col items-start justify-between gap-5 rounded-3xl border border-dashed p-6 transition sm:flex-row sm:items-center ${
-          dragging ? "border-primary bg-primary/5" : "border-border bg-card/45"
-        }`}
-      >
-        <div className="flex items-center gap-4">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-sidebar">
-            <Upload className="h-5 w-5 text-sidebar-ring" />
-          </span>
-          <div>
-            <p className="text-sm font-extrabold text-foreground">
-              Drop files into this project record
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Plans, permits, delivery tickets, and client-ready files
-            </p>
-          </div>
-        </div>
-        <Button
-          onClick={() => fileInput.current?.click()}
-          disabled={uploading}
-          className="h-8 shrink-0 rounded-lg bg-sidebar px-4 text-xs font-bold text-sidebar-foreground hover:bg-sidebar/90"
-        >
-          Choose files
-        </Button>
       </div>
 
       {/* Document list */}
