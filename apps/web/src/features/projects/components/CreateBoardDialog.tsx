@@ -12,9 +12,14 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { createProjectBoard, type ProjectBoard } from "@/lib/project-boards.functions";
+import {
+  createProjectBoard,
+  updateProjectBoard,
+  deleteProjectBoard,
+  type ProjectBoard,
+} from "@/lib/project-boards.functions";
 
 interface TagRow {
   id: string;
@@ -26,20 +31,34 @@ interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   allTags: TagRow[];
+  /** Pass an existing board to edit it ("Manage Board") instead of creating a new one. */
+  board?: ProjectBoard | null;
   onCreated?: (board: ProjectBoard) => void;
+  onUpdated?: (board: ProjectBoard) => void;
+  onDeleted?: (id: string) => void;
 }
 
-export function CreateBoardDialog({ open, onOpenChange, allTags, onCreated }: Props) {
+export function CreateBoardDialog({
+  open,
+  onOpenChange,
+  allTags,
+  board,
+  onCreated,
+  onUpdated,
+  onDeleted,
+}: Props) {
+  const isEdit = !!board;
   const [name, setName] = useState("");
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setName("");
-      setSelectedTags(new Set());
+      setName(board?.name ?? "");
+      setSelectedTags(new Set(board?.tag_ids ?? []));
     }
-  }, [open]);
+  }, [open, board]);
 
   const toggle = (id: string) =>
     setSelectedTags((s) => {
@@ -54,16 +73,39 @@ export function CreateBoardDialog({ open, onOpenChange, allTags, onCreated }: Pr
     if (!n || selectedTags.size === 0) return;
     setSaving(true);
     try {
-      const board = await createProjectBoard({
-        data: { name: n, tagIds: Array.from(selectedTags) },
-      });
-      toast.success(`Board "${board.name}" created`);
-      onCreated?.(board);
+      if (isEdit && board) {
+        const updated = await updateProjectBoard({
+          data: { id: board.id, name: n, tagIds: Array.from(selectedTags) },
+        });
+        toast.success("Board updated");
+        onUpdated?.(updated);
+      } else {
+        const created = await createProjectBoard({
+          data: { name: n, tagIds: Array.from(selectedTags) },
+        });
+        toast.success(`Board "${created.name}" created`);
+        onCreated?.(created);
+      }
       onOpenChange(false);
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not create board");
+      toast.error(e?.message ?? "Could not save board");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!board) return;
+    setDeleting(true);
+    try {
+      await deleteProjectBoard({ data: { id: board.id } });
+      toast.success("Board deleted");
+      onDeleted?.(board.id);
+      onOpenChange(false);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not delete board");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -71,7 +113,7 @@ export function CreateBoardDialog({ open, onOpenChange, allTags, onCreated }: Pr
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>New Tag Board</DialogTitle>
+          <DialogTitle>{isEdit ? "Manage Board" : "New Tag Board"}</DialogTitle>
           <DialogDescription>
             Any project with one of these tags will automatically show up here — shared with your
             whole team, and always up to date.
@@ -115,14 +157,29 @@ export function CreateBoardDialog({ open, onOpenChange, allTags, onCreated }: Pr
             </ScrollArea>
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={submit} disabled={saving || !name.trim() || selectedTags.size === 0}>
-            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Create Board
-          </Button>
+        <DialogFooter className={isEdit ? "sm:justify-between" : undefined}>
+          {isEdit ? (
+            <Button
+              variant="ghost"
+              onClick={remove}
+              disabled={saving || deleting}
+              className="text-destructive hover:text-destructive"
+            >
+              {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Delete board
+            </Button>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving || deleting}>
+              Cancel
+            </Button>
+            <Button onClick={submit} disabled={saving || deleting || !name.trim() || selectedTags.size === 0}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isEdit ? "Save changes" : "Create Board"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

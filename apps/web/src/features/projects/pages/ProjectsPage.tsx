@@ -60,6 +60,7 @@ import {
   type ProjectPickerRow,
 } from "@/features/projects/components/CreateGroupDialog";
 import { CreateBoardDialog } from "@/features/projects/components/CreateBoardDialog";
+import { TagBoardDetailView } from "@/features/projects/components/TagBoardDetailView";
 
 const DEFAULT_LABELS: Array<{ name: string; color: string }> = [
   { name: "Lead", color: "#3b82f6" },
@@ -189,6 +190,7 @@ export function ProjectsPage() {
   const fetchBoards = listProjectBoards;
   const [boards, setBoards] = useState<ProjectBoard[]>([]);
   const [createBoardOpen, setCreateBoardOpen] = useState(false);
+  const [manageBoardOpen, setManageBoardOpen] = useState(false);
   const [activeBoard, setActiveBoard] = useState<ProjectBoard | null>(null);
 
   const seedDefaultLabelsIfNeeded = async () => {
@@ -684,7 +686,9 @@ export function ProjectsPage() {
     tab === "groups"
       ? "Groups"
       : tab === "boards"
-        ? "Boards"
+        ? activeBoard
+          ? activeBoard.name
+          : "Boards"
         : tab === "starred"
           ? "Starred"
           : tab === "archived"
@@ -693,11 +697,13 @@ export function ProjectsPage() {
               ? "Active projects"
               : tab === "completed"
                 ? "Completed projects"
-                : activeBoard
-                  ? `Board: ${activeBoard.name}`
-                  : "All projects";
+                : "All projects";
   const bodyShownCount =
-    tab === "groups" ? groups.length : tab === "boards" ? boards.length : filteredProjects.length;
+    tab === "groups"
+      ? groups.length
+      : tab === "boards"
+        ? boards.length
+        : filteredProjects.length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -1314,23 +1320,6 @@ export function ProjectsPage() {
               </span>
             </div>
 
-            {activeBoard && tab !== "boards" && tab !== "groups" && (
-              <div className="mt-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary">
-                <Layers className="h-3.5 w-3.5" />
-                Viewing board "{activeBoard.name}"
-                <button
-                  type="button"
-                  className="ml-auto text-muted-foreground hover:text-foreground"
-                  onClick={() => {
-                    setActiveBoard(null);
-                    setSelectedTagIds([]);
-                  }}
-                >
-                  Clear <XIcon className="ml-1 inline h-3 w-3" />
-                </button>
-              </div>
-            )}
-
             <div className="mt-5">
               {tab === "groups" ? (
                 <GroupsGrid
@@ -1340,27 +1329,41 @@ export function ProjectsPage() {
                   onCreate={() => setCreateGroupOpen(true)}
                 />
               ) : tab === "boards" ? (
-                <BoardsGrid
-                  boards={boards}
-                  loading={boardsLoading}
-                  query={query}
-                  allTags={allTags}
-                  onCreate={() => setCreateBoardOpen(true)}
-                  onDelete={async (id) => {
-                    try {
-                      await deleteProjectBoard({ data: { id } });
-                      setBoards((prev) => prev.filter((b) => b.id !== id));
-                      toast.success("Board deleted");
-                    } catch (e: any) {
-                      toast.error(e?.message ?? "Could not delete board");
-                    }
-                  }}
-                  onOpen={(board) => {
-                    setActiveBoard(board);
-                    setSelectedTagIds(board.tag_ids);
-                    setTab("all");
-                  }}
-                />
+                activeBoard ? (
+                  <TagBoardDetailView
+                    board={activeBoard}
+                    allTags={allTags}
+                    allProjects={allProjects}
+                    projectTagMap={projectTagMap}
+                    onBack={() => setActiveBoard(null)}
+                    onManage={() => setManageBoardOpen(true)}
+                    onTagAssigned={(projectId, tag) => {
+                      setProjectTagMap((prev) => {
+                        const existing = prev[projectId] ?? [];
+                        if (existing.some((t) => t.id === tag.id)) return prev;
+                        return { ...prev, [projectId]: [...existing, tag] };
+                      });
+                    }}
+                  />
+                ) : (
+                  <BoardsGrid
+                    boards={boards}
+                    loading={boardsLoading}
+                    query={query}
+                    allTags={allTags}
+                    onCreate={() => setCreateBoardOpen(true)}
+                    onDelete={async (id) => {
+                      try {
+                        await deleteProjectBoard({ data: { id } });
+                        setBoards((prev) => prev.filter((b) => b.id !== id));
+                        toast.success("Board deleted");
+                      } catch (e: any) {
+                        toast.error(e?.message ?? "Could not delete board");
+                      }
+                    }}
+                    onOpen={(board) => setActiveBoard(board)}
+                  />
+                )
               ) : (
                 <ProjectsList
                   projects={filteredProjects}
@@ -1379,6 +1382,23 @@ export function ProjectsPage() {
               )}
             </div>
           </div>
+
+          {activeBoard && (
+            <CreateBoardDialog
+              open={manageBoardOpen}
+              onOpenChange={setManageBoardOpen}
+              allTags={allTags}
+              board={activeBoard}
+              onUpdated={(updated) => {
+                setBoards((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+                setActiveBoard(updated);
+              }}
+              onDeleted={(id) => {
+                setBoards((prev) => prev.filter((b) => b.id !== id));
+                setActiveBoard(null);
+              }}
+            />
+          )}
 
           <CreateBoardDialog
             open={createBoardOpen}
