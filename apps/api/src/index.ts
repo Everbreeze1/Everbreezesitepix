@@ -144,3 +144,14 @@ export {
   getPublicWalkthroughService,
   createReportFromWalkthroughService,
 } from "./domains/walkthroughs/service";
+
+export {
+  listNotificationsService,
+  getUnreadNotificationCountService,
+  markNotificationReadService,
+  markAllNotificationsReadService,
+  insertNotification,
+  listNotificationsInputSchema,
+  markNotificationReadInputSchema,
+} from "./domains/notifications/service";
+export type { Notification } from "./domains/notifications/service";

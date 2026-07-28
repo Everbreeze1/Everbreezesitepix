@@ -12,6 +12,7 @@ import {
   deletePhotoComment,
   type PhotoComment,
 } from "@/lib/photo-comments.functions";
+import { formatRelativeTime } from "@/lib/format-time";
 
 export interface CommentContributor {
   userId: string;
@@ -47,20 +48,6 @@ function initials(name: string): string {
       .map((w) => w[0]?.toUpperCase() ?? "")
       .join("") || "?"
   );
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const diff = Date.now() - d.getTime();
-  if (diff < 60_000) return "just now";
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 function renderBodyWithMentions(body: string): React.ReactNode {
@@ -282,7 +269,7 @@ export function PhotoCommentsPanel({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-1.5 text-[11px]">
                     <span className="font-medium text-white/90">{mine ? "You" : name}</span>
-                    <span className="text-white/40">{formatTime(c.createdAt)}</span>
+                    <span className="text-white/40">{formatRelativeTime(c.createdAt)}</span>
                   </div>
                   <div className="mt-0.5 whitespace-pre-wrap break-words rounded-md bg-white/10 px-2 py-1.5 text-sm text-white/95">
                     {renderBodyWithMentions(c.body)}

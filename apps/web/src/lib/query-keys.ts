@@ -22,4 +22,6 @@ export const qk = {
   galleryProjects: (userId: string) => ["gallery", "projects", userId] as const,
   galleryTotalPhotos: (userId: string) => ["gallery", "total-photos", userId] as const,
   mapProjects: (userId: string) => ["map", "projects", userId] as const,
+  notificationsUnread: (userId: string) => ["notifications", "unread", userId] as const,
+  notificationsList: (userId: string) => ["notifications", "list", userId] as const,
 };

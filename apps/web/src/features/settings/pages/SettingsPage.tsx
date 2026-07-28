@@ -185,9 +185,17 @@ export function SettingsPage() {
         description="Manage your profile, company workspace, access, and account preferences from one place."
         actions={
           <div className="flex items-center gap-3 rounded-2xl border border-border bg-card/70 px-4 py-3 shadow-sm">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground font-manrope text-xs font-extrabold text-background">
-              {initial}
-            </span>
+            {profile?.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt=""
+                className="h-9 w-9 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground font-manrope text-xs font-extrabold text-background">
+                {initial}
+              </span>
+            )}
             <div className="min-w-0">
               <div className="truncate font-manrope text-sm font-extrabold text-foreground">
                 {displayName}

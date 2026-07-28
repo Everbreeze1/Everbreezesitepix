@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ServiceContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";
+import { insertNotification } from "../notifications/service";
 
 export interface PhotoComment {
   id: string;
@@ -157,7 +158,30 @@ export async function createPhotoCommentService(
     created_at: string;
   };
   const profiles = await enrichAuthors([typed]);
-  return { comment: shape(typed, profiles.get(typed.author_id)) };
+  const author = profiles.get(typed.author_id);
+  const authorName = author?.full_name ?? author?.email ?? "Someone";
+
+  const mentioned = (typed.mentions ?? []).filter((id) => id !== ctx.userId);
+  if (mentioned.length > 0) {
+    const admin = getSupabaseAdmin();
+    await Promise.all(
+      mentioned.map((userId) =>
+        insertNotification(admin, {
+          recipientId: userId,
+          actorId: ctx.userId,
+          type: "photo_comment_mention",
+          title: `${authorName} mentioned you`,
+          body: typed.body,
+          linkPath: `/projects/${typed.project_id}`,
+          projectId: typed.project_id,
+          entityType: "photo_comment",
+          entityId: typed.id,
+        }),
+      ),
+    );
+  }
+
+  return { comment: shape(typed, author) };
 }
 
 export async function deletePhotoCommentService(

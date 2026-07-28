@@ -106,6 +106,14 @@ import {
   transcribeWalkthroughService,
   updateWalkthroughVideoPathService,
 } from "../walkthroughs/service";
+import {
+  getUnreadNotificationCountService,
+  listNotificationsInputSchema,
+  listNotificationsService,
+  markAllNotificationsReadService,
+  markNotificationReadInputSchema,
+  markNotificationReadService,
+} from "../notifications/service";
 
 export type RpcEntry = {
   public?: boolean;
@@ -549,6 +557,26 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     (d) => z.object({ walkthroughId: z.string().uuid() }).parse(d),
     createReportFromWalkthroughService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
+  listNotifications: authed(
+    (d) => listNotificationsInputSchema.parse(d),
+    listNotificationsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  getUnreadNotificationCount: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return getUnreadNotificationCountService(ctx);
+    },
+  },
+  markNotificationRead: authed(
+    (d) => markNotificationReadInputSchema.parse(d),
+    markNotificationReadService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  markAllNotificationsRead: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return markAllNotificationsReadService(ctx);
+    },
+  },
 };
 
 export const PUBLIC_RPC_OPS = new Set(

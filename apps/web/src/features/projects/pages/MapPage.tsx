@@ -220,7 +220,10 @@ export function MapPage() {
     [visible],
   );
 
-  // Init map once container is mounted
+  // Init map once container is mounted. Depends on projects.length too, not
+  // just loading: query.isPending flips false a render before the local
+  // `projects` state (copied from query.data in a separate effect) updates,
+  // so the map div may not exist in the DOM yet the first time this runs.
   useEffect(() => {
     if (loading) return;
     if (!mapRef.current || mapInstance.current) return;
@@ -283,7 +286,7 @@ export function MapPage() {
         setMapReady(true);
       })
       .catch((e) => setMapError(e.message ?? "Failed to load map"));
-  }, [loading]);
+  }, [loading, projects.length]);
 
   const fitToAll = useCallback(() => {
     if (!mapInstance.current || !window.google?.maps || mappable.length === 0) return;

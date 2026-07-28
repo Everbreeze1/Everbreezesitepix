@@ -155,6 +155,10 @@ export function GalleryPage() {
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [tagSearch, setTagSearch] = useState<string>("");
+  // Company-wide tag library (not just tags already applied to loaded
+  // photos) so the filter picker matches the project label picker, which
+  // also lists the full catalog rather than only currently-used values.
+  const [globalTags, setGlobalTags] = useState<string[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [signed, setSigned] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState(false);
@@ -389,6 +393,21 @@ export function GalleryPage() {
     if (search.project) setProjectFilter([search.project]);
   }, [search.project]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await (supabase as any)
+        .from("tags")
+        .select("name")
+        .order("name", { ascending: true });
+      if (cancelled) return;
+      setGlobalTags(((data as Array<{ name: string }>) ?? []).map((t) => t.name));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Client-side tag filter (any-of)
   const visiblePhotos =
     tagFilter.length === 0
@@ -403,7 +422,7 @@ export function GalleryPage() {
     ensureContribs(activeLightboxPhoto.project_id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLightboxPhoto?.project_id]);
-  const allTags = Array.from(new Set(photos.flatMap((p) => p.tags ?? []))).sort();
+  const allTags = globalTags;
   const filteredTagOptions = tagSearch
     ? allTags.filter((t) => t.toLowerCase().includes(tagSearch.toLowerCase()))
     : allTags;
@@ -1193,14 +1212,12 @@ export function GalleryPage() {
                               s.includes(t) ? s.filter((x) => x !== t) : [...s, t],
                             )
                           }
-                          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition ${active ? "bg-primary/10 text-foreground" : "hover:bg-muted"}`}
+                          className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left transition ${active ? "bg-primary/10" : "hover:bg-muted"}`}
                         >
-                          <span
-                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${active ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}
-                          >
-                            {active && <CheckCircle2 className="h-3 w-3" />}
-                          </span>
-                          <span className="truncate">#{t}</span>
+                          <TagPill name={t} size="sm" />
+                          <CheckCircle2
+                            className={`h-3.5 w-3.5 shrink-0 text-primary ${active ? "" : "opacity-0"}`}
+                          />
                         </button>
                       );
                     })

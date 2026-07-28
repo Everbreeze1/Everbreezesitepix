@@ -172,9 +172,17 @@ export function AppSidebar() {
             to="/settings"
             className={`flex items-center gap-3 rounded-xl px-3 hover:bg-sidebar-accent transition-colors ${isMobile ? "h-16" : "h-16"}`}
           >
-            <span className="flex items-center justify-center h-8 w-8 rounded-full bg-sidebar-foreground/15 text-[10px] font-extrabold text-sidebar-foreground/65 shrink-0">
-              {initials}
-            </span>
+            {profile?.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt=""
+                className="h-8 w-8 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <span className="flex items-center justify-center h-8 w-8 rounded-full bg-sidebar-foreground/15 text-[10px] font-extrabold text-sidebar-foreground/65 shrink-0">
+                {initials}
+              </span>
+            )}
             {!collapsed && (
               <>
                 <span className="flex flex-col min-w-0 flex-1">

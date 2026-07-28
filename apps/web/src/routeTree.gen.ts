@@ -25,6 +25,7 @@ import { Route as AppTemplatesRouteImport } from './routes/_app.templates'
 import { Route as AppTeamsRouteImport } from './routes/_app.teams'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppReportIssueRouteImport } from './routes/_app.report-issue'
+import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
 import { Route as AppMapRouteImport } from './routes/_app.map'
 import { Route as AppHelpRouteImport } from './routes/_app.help'
 import { Route as AppGalleryRouteImport } from './routes/_app.gallery'
@@ -121,6 +122,11 @@ const AppReportsRoute = AppReportsRouteImport.update({
 const AppReportIssueRoute = AppReportIssueRouteImport.update({
   id: '/report-issue',
   path: '/report-issue',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppNotificationsRoute = AppNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
   getParentRoute: () => AppRoute,
 } as any)
 const AppMapRoute = AppMapRouteImport.update({
@@ -232,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/gallery': typeof AppGalleryRoute
   '/help': typeof AppHelpRoute
   '/map': typeof AppMapRoute
+  '/notifications': typeof AppNotificationsRoute
   '/report-issue': typeof AppReportIssueRoute
   '/reports': typeof AppReportsRoute
   '/teams': typeof AppTeamsRoute
@@ -267,6 +274,7 @@ export interface FileRoutesByTo {
   '/gallery': typeof AppGalleryRoute
   '/help': typeof AppHelpRoute
   '/map': typeof AppMapRoute
+  '/notifications': typeof AppNotificationsRoute
   '/report-issue': typeof AppReportIssueRoute
   '/reports': typeof AppReportsRoute
   '/teams': typeof AppTeamsRoute
@@ -304,6 +312,7 @@ export interface FileRoutesById {
   '/_app/gallery': typeof AppGalleryRoute
   '/_app/help': typeof AppHelpRoute
   '/_app/map': typeof AppMapRoute
+  '/_app/notifications': typeof AppNotificationsRoute
   '/_app/report-issue': typeof AppReportIssueRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/teams': typeof AppTeamsRoute
@@ -341,6 +350,7 @@ export interface FileRouteTypes {
     | '/gallery'
     | '/help'
     | '/map'
+    | '/notifications'
     | '/report-issue'
     | '/reports'
     | '/teams'
@@ -376,6 +386,7 @@ export interface FileRouteTypes {
     | '/gallery'
     | '/help'
     | '/map'
+    | '/notifications'
     | '/report-issue'
     | '/reports'
     | '/teams'
@@ -412,6 +423,7 @@ export interface FileRouteTypes {
     | '/_app/gallery'
     | '/_app/help'
     | '/_app/map'
+    | '/_app/notifications'
     | '/_app/report-issue'
     | '/_app/reports'
     | '/_app/teams'
@@ -564,6 +576,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReportIssueRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/notifications': {
+      id: '/_app/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/map': {
       id: '/_app/map'
       path: '/map'
@@ -699,6 +718,7 @@ interface AppRouteChildren {
   AppGalleryRoute: typeof AppGalleryRoute
   AppHelpRoute: typeof AppHelpRoute
   AppMapRoute: typeof AppMapRoute
+  AppNotificationsRoute: typeof AppNotificationsRoute
   AppReportIssueRoute: typeof AppReportIssueRoute
   AppReportsRoute: typeof AppReportsRoute
   AppTeamsRoute: typeof AppTeamsRoute
@@ -721,6 +741,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppGalleryRoute: AppGalleryRoute,
   AppHelpRoute: AppHelpRoute,
   AppMapRoute: AppMapRoute,
+  AppNotificationsRoute: AppNotificationsRoute,
   AppReportIssueRoute: AppReportIssueRoute,
   AppReportsRoute: AppReportsRoute,
   AppTeamsRoute: AppTeamsRoute,

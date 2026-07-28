@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
+import { insertNotification } from "../notifications/service";
 
 
 type TeamPlan = "starter" | "pro" | "team";
@@ -522,6 +523,16 @@ export async function acceptInviteService(ctx: AuthedContext, data: any) {
       .update({ accepted_at: new Date().toISOString(), accepted_by: userId })
       .eq("id", (invite as any).id);
 
+    await insertNotification(supabaseAdmin, {
+      recipientId: (invite as any).invited_by,
+      actorId: userId,
+      type: "team_invite_accepted",
+      title: `${userEmail ?? "A new teammate"} joined your team`,
+      linkPath: "/teams",
+      entityType: "team_invite",
+      entityId: (invite as any).id,
+    });
+
     return { ok: true, teamId };
   }
 
@@ -615,6 +626,16 @@ export async function acceptInviteSignupService(data: any) {
         role: (invite as any).role,
       });
       if (insErr) throw new Error(insErr.message);
+
+      await insertNotification(supabaseAdmin, {
+        recipientId: (invite as any).invited_by,
+        actorId: userId,
+        type: "team_invite_accepted",
+        title: `${data.fullName ?? inviteEmail} joined your team`,
+        linkPath: "/teams",
+        entityType: "team_invite",
+        entityId: (invite as any).id,
+      });
     }
 
     await supabaseAdmin
