@@ -114,6 +114,38 @@ import {
   markNotificationReadInputSchema,
   markNotificationReadService,
 } from "../notifications/service";
+import { checkIsPlatformAdminService, getAdminMetricsService } from "../admin/service";
+import {
+  listReviewLinksService,
+  setReviewLinksInputSchema,
+  setReviewLinksService,
+} from "../teams/review-links";
+import {
+  createProjectBoardInputSchema,
+  createProjectBoardService,
+  deleteProjectBoardInputSchema,
+  deleteProjectBoardService,
+  listProjectBoardsService,
+  updateProjectBoardInputSchema,
+  updateProjectBoardService,
+} from "../projects/boards";
+import {
+  createShowcaseInputSchema,
+  createShowcaseService,
+  deleteShowcaseInputSchema,
+  deleteShowcaseService,
+  getPublicShowcaseService,
+  getShowcaseInputSchema,
+  getShowcaseService,
+  listShowcasesService,
+  publicShowcaseInputSchema,
+  setShowcaseItemsInputSchema,
+  setShowcaseItemsService,
+  setShowcaseShareInputSchema,
+  setShowcaseShareService,
+  updateShowcaseInputSchema,
+  updateShowcaseService,
+} from "../showcases/service";
 
 export type RpcEntry = {
   public?: boolean;
@@ -577,6 +609,80 @@ export const rpcRegistry: Record<string, RpcEntry> = {
       return markAllNotificationsReadService(ctx);
     },
   },
+  checkIsPlatformAdmin: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return checkIsPlatformAdminService(ctx);
+    },
+  },
+  getAdminMetrics: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return getAdminMetricsService(ctx);
+    },
+  },
+  listReviewLinks: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return listReviewLinksService(ctx);
+    },
+  },
+  setReviewLinks: authed(
+    (d) => setReviewLinksInputSchema.parse(d),
+    setReviewLinksService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  listProjectBoards: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return listProjectBoardsService(ctx);
+    },
+  },
+  createProjectBoard: authed(
+    (d) => createProjectBoardInputSchema.parse(d),
+    createProjectBoardService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  updateProjectBoard: authed(
+    (d) => updateProjectBoardInputSchema.parse(d),
+    updateProjectBoardService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  deleteProjectBoard: authed(
+    (d) => deleteProjectBoardInputSchema.parse(d),
+    deleteProjectBoardService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  listShowcases: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return listShowcasesService(ctx);
+    },
+  },
+  getShowcase: authed(
+    (d) => getShowcaseInputSchema.parse(d),
+    getShowcaseService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  createShowcase: authed(
+    (d) => createShowcaseInputSchema.parse(d),
+    createShowcaseService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  updateShowcase: authed(
+    (d) => updateShowcaseInputSchema.parse(d),
+    updateShowcaseService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  deleteShowcase: authed(
+    (d) => deleteShowcaseInputSchema.parse(d),
+    deleteShowcaseService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  setShowcaseItems: authed(
+    (d) => setShowcaseItemsInputSchema.parse(d),
+    setShowcaseItemsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  setShowcaseShare: authed(
+    (d) => setShowcaseShareInputSchema.parse(d),
+    setShowcaseShareService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  getPublicShowcase: pub(
+    (d) => publicShowcaseInputSchema.parse(d),
+    getPublicShowcaseService as (data: never) => Promise<unknown>,
+  ),
 };
 
 export const PUBLIC_RPC_OPS = new Set(

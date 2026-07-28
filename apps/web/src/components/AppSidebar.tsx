@@ -11,6 +11,7 @@ import {
   LayoutTemplate,
   HelpCircle,
   ChevronRight,
+  Layers,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import {
@@ -41,6 +42,7 @@ const baseItems = [
 const teamItem = { title: "Teams", url: "/teams", icon: Users } as const;
 const collabItem = { title: "Collaborators", url: "/collaborators", icon: Users } as const;
 const templatesItem = { title: "Templates", url: "/templates", icon: LayoutTemplate } as const;
+const showcasesItem = { title: "Showcases", url: "/showcases", icon: Layers } as const;
 const pricingItem = { title: "Upgrade", url: "/pricing", icon: Crown } as const;
 const helpItem = { title: "Help Center", url: "/help", icon: HelpCircle } as const;
 const reportIssueItem = { title: "Report issue", url: "/report-issue", icon: LifeBuoy } as const;
@@ -81,9 +83,15 @@ export function AppSidebar() {
   // (they can apply templates); only owners/admins can create/edit (enforced on the page).
   const plan: string = (teamData?.plan as string | undefined) ?? "starter";
   const showTemplates = plan === "pro" || plan === "team";
+  // Showcases: Team plan only (or the internal/complimentary override) — this
+  // is stricter than showTemplates above, which also accepts inactive teams
+  // by not checking isActive; Showcases is worth gating precisely since it's
+  // the first real Team-tier-exclusive nav item.
+  const showShowcases = !!teamData?.isInternal || (!!teamData?.isActive && plan === "team");
   const navItems = [
     ...baseItems,
     ...(showTemplates ? [templatesItem] : []),
+    ...(showShowcases ? [showcasesItem] : []),
     ...(showOwnerNav ? [teamItem] : [collabItem]),
   ];
   const toolItems = [...(showOwnerNav ? [pricingItem] : []), helpItem, reportIssueItem];

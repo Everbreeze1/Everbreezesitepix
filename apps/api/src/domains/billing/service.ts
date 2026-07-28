@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type Stripe from "stripe";
 import { getSupabaseAdmin } from "../../lib/supabase";
-import { getStripe, planToPriceId, type BillingPlan } from "../../lib/stripe";
+import { getStripe, planToPriceId, type BillingPlan, type BillingInterval } from "../../lib/stripe";
 import type { ServiceContext } from "../../lib/user-context";
 
 const PLAN_VALUES = ["starter", "pro", "team"] as const;
@@ -9,6 +9,8 @@ const PLAN_VALUES = ["starter", "pro", "team"] as const;
 export const createCheckoutSessionInputSchema = z.object({
   plan: z.enum(PLAN_VALUES),
   origin: z.string().url(),
+  interval: z.enum(["monthly", "annual"]).default("monthly"),
+  seats: z.number().int().min(1).max(500).default(1),
 });
 
 export const createBillingPortalSessionInputSchema = z.object({
@@ -65,15 +67,16 @@ export async function createCheckoutSessionService(
   const customerId = await ensureStripeCustomer(team, email);
 
   const stripe = getStripe();
+  const priceId = planToPriceId(data.plan as BillingPlan, data.interval as BillingInterval);
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
-    line_items: [{ price: planToPriceId(data.plan as BillingPlan), quantity: 1 }],
+    line_items: [{ price: priceId, quantity: data.seats }],
     success_url: `${data.origin}/settings?checkout=success`,
     cancel_url: `${data.origin}/pricing`,
-    metadata: { team_id: team.id, plan: data.plan },
+    metadata: { team_id: team.id, plan: data.plan, interval: data.interval, seats: String(data.seats) },
     subscription_data: {
-      metadata: { team_id: team.id, plan: data.plan },
+      metadata: { team_id: team.id, plan: data.plan, interval: data.interval, seats: String(data.seats) },
     },
     // Our products don't have a Stripe tax_code assigned, which Managed
     // Payments (on by default for this account) requires. Disable it for

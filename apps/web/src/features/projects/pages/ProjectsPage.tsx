@@ -27,6 +27,7 @@ import {
   Calendar as CalendarIcon,
   Bookmark,
   Trash2,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,11 +53,13 @@ import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
 import { listProjectGroups } from "@/features/projects/api";
+import { listProjectBoards, deleteProjectBoard, type ProjectBoard } from "@/features/projects/api";
 import { GroupCard } from "@/features/projects/components/GroupCard";
 import {
   CreateGroupDialog,
   type ProjectPickerRow,
 } from "@/features/projects/components/CreateGroupDialog";
+import { CreateBoardDialog } from "@/features/projects/components/CreateBoardDialog";
 
 const DEFAULT_LABELS: Array<{ name: string; color: string }> = [
   { name: "Lead", color: "#3b82f6" },
@@ -86,7 +89,7 @@ interface ProjectRow {
   completed_at?: string | null;
 }
 
-type TabKey = "all" | "active" | "completed" | "groups" | "starred" | "archived";
+type TabKey = "all" | "active" | "completed" | "groups" | "boards" | "starred" | "archived";
 
 interface TagRow {
   id: string;
@@ -180,6 +183,13 @@ export function ProjectsPage() {
     }>
   >([]);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
+
+  // Tag Boards — team-shared, auto-updating (any project matching the
+  // board's tag_ids), distinct from the manual per-user Groups above.
+  const fetchBoards = listProjectBoards;
+  const [boards, setBoards] = useState<ProjectBoard[]>([]);
+  const [createBoardOpen, setCreateBoardOpen] = useState(false);
+  const [activeBoard, setActiveBoard] = useState<ProjectBoard | null>(null);
 
   const seedDefaultLabelsIfNeeded = async () => {
     if (!user) return;
@@ -448,6 +458,16 @@ export function ProjectsPage() {
     }
   };
 
+  const loadBoards = async () => {
+    try {
+      const res = await fetchBoards();
+      return res.boards;
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not load boards");
+      return [];
+    }
+  };
+
   const qc = useQueryClient();
   // These two useQuery calls are purely a scheduling gate — "do I actually
   // need to run load()/loadGroups() again, or is cached-and-fresh good
@@ -464,6 +484,12 @@ export function ProjectsPage() {
   const groupsQuery = useQuery({
     queryKey: qk.projectGroups(user?.id ?? ""),
     queryFn: loadGroups,
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  const boardsQuery = useQuery({
+    queryKey: qk.projectBoards(user?.id ?? ""),
+    queryFn: loadBoards,
     enabled: !!user,
     staleTime: 60_000,
   });
@@ -486,8 +512,13 @@ export function ProjectsPage() {
     if (groupsQuery.data) setGroups(groupsQuery.data);
   }, [groupsQuery.data]);
 
+  useEffect(() => {
+    if (boardsQuery.data) setBoards(boardsQuery.data);
+  }, [boardsQuery.data]);
+
   const loading = projectsQuery.isPending;
   const groupsLoading = groupsQuery.isPending;
+  const boardsLoading = boardsQuery.isPending;
 
   const { pull, refreshing, indicatorStyle, progress } = usePullToRefresh({
     onRefresh: async () => {
@@ -633,6 +664,7 @@ export function ProjectsPage() {
     { key: "active", label: "Active", count: activeStatusCount },
     { key: "completed", label: "Completed", count: completedCount },
     { key: "groups", label: "Groups", count: groups.length, icon: FolderPlus },
+    { key: "boards", label: "Boards", count: boards.length, icon: Layers },
     { key: "starred", label: "Starred", count: starredCount, icon: Star },
     { key: "archived", label: "Archived", count: archivedCount, icon: Archive },
   ];
@@ -651,16 +683,21 @@ export function ProjectsPage() {
   const bodyLabel =
     tab === "groups"
       ? "Groups"
-      : tab === "starred"
-        ? "Starred"
-        : tab === "archived"
-          ? "Archived"
-          : tab === "active"
-            ? "Active projects"
-            : tab === "completed"
-              ? "Completed projects"
-              : "All projects";
-  const bodyShownCount = tab === "groups" ? groups.length : filteredProjects.length;
+      : tab === "boards"
+        ? "Boards"
+        : tab === "starred"
+          ? "Starred"
+          : tab === "archived"
+            ? "Archived"
+            : tab === "active"
+              ? "Active projects"
+              : tab === "completed"
+                ? "Completed projects"
+                : activeBoard
+                  ? `Board: ${activeBoard.name}`
+                  : "All projects";
+  const bodyShownCount =
+    tab === "groups" ? groups.length : tab === "boards" ? boards.length : filteredProjects.length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -1261,7 +1298,7 @@ export function ProjectsPage() {
             </div>
           )}
 
-          {/* All projects / Groups */}
+          {/* All projects / Groups / Boards */}
           <div className="mt-9">
             <div className="flex items-end justify-between gap-2">
               <div>
@@ -1276,6 +1313,24 @@ export function ProjectsPage() {
                 {bodyShownCount} shown
               </span>
             </div>
+
+            {activeBoard && tab !== "boards" && tab !== "groups" && (
+              <div className="mt-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary">
+                <Layers className="h-3.5 w-3.5" />
+                Viewing board "{activeBoard.name}"
+                <button
+                  type="button"
+                  className="ml-auto text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setActiveBoard(null);
+                    setSelectedTagIds([]);
+                  }}
+                >
+                  Clear <XIcon className="ml-1 inline h-3 w-3" />
+                </button>
+              </div>
+            )}
+
             <div className="mt-5">
               {tab === "groups" ? (
                 <GroupsGrid
@@ -1283,6 +1338,28 @@ export function ProjectsPage() {
                   loading={groupsLoading}
                   query={query}
                   onCreate={() => setCreateGroupOpen(true)}
+                />
+              ) : tab === "boards" ? (
+                <BoardsGrid
+                  boards={boards}
+                  loading={boardsLoading}
+                  query={query}
+                  allTags={allTags}
+                  onCreate={() => setCreateBoardOpen(true)}
+                  onDelete={async (id) => {
+                    try {
+                      await deleteProjectBoard({ data: { id } });
+                      setBoards((prev) => prev.filter((b) => b.id !== id));
+                      toast.success("Board deleted");
+                    } catch (e: any) {
+                      toast.error(e?.message ?? "Could not delete board");
+                    }
+                  }}
+                  onOpen={(board) => {
+                    setActiveBoard(board);
+                    setSelectedTagIds(board.tag_ids);
+                    setTab("all");
+                  }}
                 />
               ) : (
                 <ProjectsList
@@ -1302,6 +1379,16 @@ export function ProjectsPage() {
               )}
             </div>
           </div>
+
+          <CreateBoardDialog
+            open={createBoardOpen}
+            onOpenChange={setCreateBoardOpen}
+            allTags={allTags}
+            onCreated={(board) => {
+              setBoards((prev) => [board, ...prev]);
+              void qc.invalidateQueries({ queryKey: qk.projectBoards(user?.id ?? "") });
+            }}
+          />
 
           <CreateGroupDialog
             open={createGroupOpen}
@@ -1380,6 +1467,97 @@ function GroupsGrid({
           projectCount={g.project_count}
           thumbnails={g.thumbnails}
         />
+      ))}
+    </div>
+  );
+}
+
+function BoardsGrid({
+  boards,
+  loading,
+  query,
+  allTags,
+  onCreate,
+  onOpen,
+  onDelete,
+}: {
+  boards: ProjectBoard[];
+  loading: boolean;
+  query: string;
+  allTags: TagRow[];
+  onCreate: () => void;
+  onOpen: (board: ProjectBoard) => void;
+  onDelete: (id: string) => void;
+}) {
+  const tagById = useMemo(() => new Map(allTags.map((t) => [t.id, t])), [allTags]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return boards;
+    return boards.filter((b) => b.name.toLowerCase().includes(q));
+  }, [boards, query]);
+
+  if (loading) {
+    return null;
+  }
+
+  if (filtered.length === 0) {
+    return (
+      <EmptyState
+        icon={Layers}
+        title={query.trim() ? "No boards match your search" : "No Tag Boards yet"}
+        description={
+          query.trim()
+            ? "Try a different search term."
+            : 'Boards auto-collect every project with a chosen tag (e.g. "Kitchen Remodels") — shared with your whole team, always current.'
+        }
+        action={
+          !query.trim() ? (
+            <Button onClick={onCreate}>
+              <Layers className="mr-2 h-4 w-4" /> New Board
+            </Button>
+          ) : undefined
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {filtered.map((b) => (
+        <div
+          key={b.id}
+          className="group relative cursor-pointer rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary/40"
+          onClick={() => onOpen(b)}
+        >
+          <button
+            type="button"
+            className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground opacity-0 hover:bg-accent hover:text-destructive group-hover:opacity-100"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(b.id);
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+          <Layers className="h-6 w-6 text-primary" />
+          <p className="mt-3 truncate text-sm font-extrabold text-foreground">{b.name}</p>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {b.tag_ids.slice(0, 4).map((tid) => {
+              const t = tagById.get(tid);
+              if (!t) return null;
+              return (
+                <span
+                  key={tid}
+                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: t.color }} />
+                  {t.name}
+                </span>
+              );
+            })}
+          </div>
+        </div>
       ))}
     </div>
   );

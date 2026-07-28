@@ -24,6 +24,9 @@ import {
   HelpCircle,
   Crown,
   Check,
+  Star,
+  Plus,
+  Trash2,
   ArrowRight,
   ChevronRight,
 } from "lucide-react";
@@ -40,6 +43,7 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { supabase } from "@/integrations/sitepix/client";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { getMyTeam, createBillingPortalSession } from "@/features/settings/api";
+import { listReviewLinks, setReviewLinks, type ReviewLink } from "@/lib/review-links.functions";
 import { useStorageUsage, formatBytes } from "@/hooks/use-storage-usage";
 import { cn } from "@/lib/utils";
 
@@ -50,7 +54,8 @@ type SectionId =
   | "security"
   | "company"
   | "billing"
-  | "team";
+  | "team"
+  | "reviews";
 
 const inputClass =
   "h-[48px] rounded-[14px] border-border bg-card/[0.92] font-manrope text-sm text-foreground shadow-[0_5px_12px_-12px_rgba(16,25,41,0.35)] placeholder:text-muted-foreground focus-visible:ring-ring/30";
@@ -106,6 +111,13 @@ const SECTIONS: {
     icon: Users,
     group: "Your Company",
     hint: "Invite and manage access",
+  },
+  {
+    id: "reviews",
+    label: "Review Links",
+    icon: Star,
+    group: "Your Company",
+    hint: "Get customers to leave reviews",
   },
 ];
 
@@ -286,6 +298,7 @@ export function SettingsPage() {
               />
             )}
             {active === "team" && <TeamSection isTeam={isTeam} teamData={teamData} />}
+            {active === "reviews" && <ReviewLinksSection isTeam={isTeam} />}
 
             {/* Mobile sign out */}
             <Button
@@ -1392,6 +1405,138 @@ function SupportTile({
         </div>
       </Card>
     </a>
+  );
+}
+
+const REVIEW_PLATFORM_LABELS: Record<ReviewLink["platform"], string> = {
+  google: "Google Business Profile",
+  nicejob: "NiceJob",
+  custom: "Custom link",
+};
+
+function ReviewLinksSection({ isTeam }: { isTeam: boolean }) {
+  const [links, setLinks] = useState<
+    Array<{ platform: ReviewLink["platform"]; url: string; label: string }>
+  >([]);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isTeam) return;
+    listReviewLinks().then((res) => {
+      setLinks(res.links.map((l) => ({ platform: l.platform, url: l.url, label: l.label ?? "" })));
+      setLoaded(true);
+    });
+  }, [isTeam]);
+
+  if (!isTeam) {
+    return (
+      <div className="rounded-2xl border border-border bg-card/70 p-8 text-center">
+        <Star className="mx-auto h-10 w-10 text-muted-foreground/60" />
+        <p className="mt-3 font-manrope text-sm text-muted-foreground">
+          Upgrade to Team to let customers leave you reviews from a shared report.
+        </p>
+        <Button
+          asChild
+          className="mt-4 rounded-lg bg-primary font-manrope font-bold text-primary-foreground hover:bg-primary/90"
+        >
+          <Link to="/pricing">See Team plan</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  if (!loaded) {
+    return <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />;
+  }
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const cleaned = links
+        .filter((l) => l.url.trim())
+        .map((l) => ({ platform: l.platform, url: l.url.trim(), label: l.label.trim() || null }));
+      await setReviewLinks({ data: { links: cleaned } });
+      toast.success("Review links saved");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to save review links");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="font-manrope text-sm text-muted-foreground">
+        Add links to your Google Business Profile, NiceJob, or any other review site. They'll show
+        up as a "How did we do?" prompt on every shared report and Site Log.
+      </p>
+
+      {links.map((l, i) => (
+        <div key={i} className="flex flex-col gap-2 rounded-xl border border-border p-4 sm:flex-row sm:items-center">
+          <select
+            value={l.platform}
+            onChange={(e) =>
+              setLinks((prev) =>
+                prev.map((x, xi) => (xi === i ? { ...x, platform: e.target.value as ReviewLink["platform"] } : x)),
+              )
+            }
+            className={cn(inputClass, "sm:w-56")}
+          >
+            {(Object.keys(REVIEW_PLATFORM_LABELS) as ReviewLink["platform"][]).map((p) => (
+              <option key={p} value={p}>
+                {REVIEW_PLATFORM_LABELS[p]}
+              </option>
+            ))}
+          </select>
+          {l.platform === "custom" && (
+            <Input
+              value={l.label}
+              onChange={(e) =>
+                setLinks((prev) => prev.map((x, xi) => (xi === i ? { ...x, label: e.target.value } : x)))
+              }
+              placeholder="Label (e.g. Yelp)"
+              className={cn(inputClass, "sm:w-40")}
+            />
+          )}
+          <Input
+            value={l.url}
+            onChange={(e) =>
+              setLinks((prev) => prev.map((x, xi) => (xi === i ? { ...x, url: e.target.value } : x)))
+            }
+            placeholder="https://..."
+            className={inputClass}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 text-muted-foreground hover:text-destructive"
+            onClick={() => setLinks((prev) => prev.filter((_, xi) => xi !== i))}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ))}
+
+      <Button
+        variant="outline"
+        className="rounded-lg border-border font-manrope font-bold"
+        onClick={() => setLinks((prev) => [...prev, { platform: "google", url: "", label: "" }])}
+      >
+        <Plus className="mr-1.5 h-4 w-4" /> Add link
+      </Button>
+
+      <div className="pt-2">
+        <Button
+          onClick={save}
+          disabled={saving}
+          className="rounded-lg bg-primary font-manrope font-bold text-primary-foreground hover:bg-primary/90"
+        >
+          {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+          Save review links
+        </Button>
+      </div>
+    </div>
   );
 }
 

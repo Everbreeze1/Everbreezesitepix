@@ -23,6 +23,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as AppTemplatesRouteImport } from './routes/_app.templates'
 import { Route as AppTeamsRouteImport } from './routes/_app.teams'
+import { Route as AppShowcasesRouteImport } from './routes/_app.showcases'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppReportIssueRouteImport } from './routes/_app.report-issue'
 import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
@@ -31,12 +32,15 @@ import { Route as AppHelpRouteImport } from './routes/_app.help'
 import { Route as AppGalleryRouteImport } from './routes/_app.gallery'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppCollaboratorsRouteImport } from './routes/_app.collaborators'
+import { Route as AppAdminRouteImport } from './routes/_app.admin'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app.settings.index'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app.projects.index'
 import { Route as ShareWalkthroughsTokenRouteImport } from './routes/share.walkthroughs.$token'
+import { Route as ShareShowcasesTokenRouteImport } from './routes/share.showcases.$token'
 import { Route as ShareReportsTokenRouteImport } from './routes/share.reports.$token'
 import { Route as SharePhotosTokenRouteImport } from './routes/share.photos.$token'
 import { Route as AppWalkthroughsWalkthroughIdRouteImport } from './routes/_app.walkthroughs.$walkthroughId'
+import { Route as AppShowcasesShowcaseIdRouteImport } from './routes/_app.showcases.$showcaseId'
 import { Route as AppSettingsWorkflowsRouteImport } from './routes/_app.settings.workflows'
 import { Route as AppSettingsChecklistsRouteImport } from './routes/_app.settings.checklists'
 import { Route as AppProjectsTrashRouteImport } from './routes/_app.projects.trash'
@@ -114,6 +118,11 @@ const AppTeamsRoute = AppTeamsRouteImport.update({
   path: '/teams',
   getParentRoute: () => AppRoute,
 } as any)
+const AppShowcasesRoute = AppShowcasesRouteImport.update({
+  id: '/showcases',
+  path: '/showcases',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -154,6 +163,11 @@ const AppCollaboratorsRoute = AppCollaboratorsRouteImport.update({
   path: '/collaborators',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdminRoute = AppAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
   id: '/settings/',
   path: '/settings/',
@@ -167,6 +181,11 @@ const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
 const ShareWalkthroughsTokenRoute = ShareWalkthroughsTokenRouteImport.update({
   id: '/share/walkthroughs/$token',
   path: '/share/walkthroughs/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareShowcasesTokenRoute = ShareShowcasesTokenRouteImport.update({
+  id: '/share/showcases/$token',
+  path: '/share/showcases/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ShareReportsTokenRoute = ShareReportsTokenRouteImport.update({
@@ -185,6 +204,11 @@ const AppWalkthroughsWalkthroughIdRoute =
     path: '/walkthroughs/$walkthroughId',
     getParentRoute: () => AppRoute,
   } as any)
+const AppShowcasesShowcaseIdRoute = AppShowcasesShowcaseIdRouteImport.update({
+  id: '/$showcaseId',
+  path: '/$showcaseId',
+  getParentRoute: () => AppShowcasesRoute,
+} as any)
 const AppSettingsWorkflowsRoute = AppSettingsWorkflowsRouteImport.update({
   id: '/settings/workflows',
   path: '/settings/workflows',
@@ -233,6 +257,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/admin': typeof AppAdminRoute
   '/collaborators': typeof AppCollaboratorsRoute
   '/dashboard': typeof AppDashboardRoute
   '/gallery': typeof AppGalleryRoute
@@ -241,6 +266,7 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof AppNotificationsRoute
   '/report-issue': typeof AppReportIssueRoute
   '/reports': typeof AppReportsRoute
+  '/showcases': typeof AppShowcasesRouteWithChildren
   '/teams': typeof AppTeamsRoute
   '/templates': typeof AppTemplatesRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -250,9 +276,11 @@ export interface FileRoutesByFullPath {
   '/projects/trash': typeof AppProjectsTrashRoute
   '/settings/checklists': typeof AppSettingsChecklistsRoute
   '/settings/workflows': typeof AppSettingsWorkflowsRoute
+  '/showcases/$showcaseId': typeof AppShowcasesShowcaseIdRoute
   '/walkthroughs/$walkthroughId': typeof AppWalkthroughsWalkthroughIdRoute
   '/share/photos/$token': typeof SharePhotosTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
+  '/share/showcases/$token': typeof ShareShowcasesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
   '/projects/': typeof AppProjectsIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
@@ -269,6 +297,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/admin': typeof AppAdminRoute
   '/collaborators': typeof AppCollaboratorsRoute
   '/dashboard': typeof AppDashboardRoute
   '/gallery': typeof AppGalleryRoute
@@ -277,6 +306,7 @@ export interface FileRoutesByTo {
   '/notifications': typeof AppNotificationsRoute
   '/report-issue': typeof AppReportIssueRoute
   '/reports': typeof AppReportsRoute
+  '/showcases': typeof AppShowcasesRouteWithChildren
   '/teams': typeof AppTeamsRoute
   '/templates': typeof AppTemplatesRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -286,9 +316,11 @@ export interface FileRoutesByTo {
   '/projects/trash': typeof AppProjectsTrashRoute
   '/settings/checklists': typeof AppSettingsChecklistsRoute
   '/settings/workflows': typeof AppSettingsWorkflowsRoute
+  '/showcases/$showcaseId': typeof AppShowcasesShowcaseIdRoute
   '/walkthroughs/$walkthroughId': typeof AppWalkthroughsWalkthroughIdRoute
   '/share/photos/$token': typeof SharePhotosTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
+  '/share/showcases/$token': typeof ShareShowcasesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
   '/projects': typeof AppProjectsIndexRoute
   '/settings': typeof AppSettingsIndexRoute
@@ -307,6 +339,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/_app/admin': typeof AppAdminRoute
   '/_app/collaborators': typeof AppCollaboratorsRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/gallery': typeof AppGalleryRoute
@@ -315,6 +348,7 @@ export interface FileRoutesById {
   '/_app/notifications': typeof AppNotificationsRoute
   '/_app/report-issue': typeof AppReportIssueRoute
   '/_app/reports': typeof AppReportsRoute
+  '/_app/showcases': typeof AppShowcasesRouteWithChildren
   '/_app/teams': typeof AppTeamsRoute
   '/_app/templates': typeof AppTemplatesRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -324,9 +358,11 @@ export interface FileRoutesById {
   '/_app/projects/trash': typeof AppProjectsTrashRoute
   '/_app/settings/checklists': typeof AppSettingsChecklistsRoute
   '/_app/settings/workflows': typeof AppSettingsWorkflowsRoute
+  '/_app/showcases/$showcaseId': typeof AppShowcasesShowcaseIdRoute
   '/_app/walkthroughs/$walkthroughId': typeof AppWalkthroughsWalkthroughIdRoute
   '/share/photos/$token': typeof SharePhotosTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
+  '/share/showcases/$token': typeof ShareShowcasesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
@@ -345,6 +381,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/sitemap.xml'
+    | '/admin'
     | '/collaborators'
     | '/dashboard'
     | '/gallery'
@@ -353,6 +390,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/report-issue'
     | '/reports'
+    | '/showcases'
     | '/teams'
     | '/templates'
     | '/invite/$token'
@@ -362,9 +400,11 @@ export interface FileRouteTypes {
     | '/projects/trash'
     | '/settings/checklists'
     | '/settings/workflows'
+    | '/showcases/$showcaseId'
     | '/walkthroughs/$walkthroughId'
     | '/share/photos/$token'
     | '/share/reports/$token'
+    | '/share/showcases/$token'
     | '/share/walkthroughs/$token'
     | '/projects/'
     | '/settings/'
@@ -381,6 +421,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/sitemap.xml'
+    | '/admin'
     | '/collaborators'
     | '/dashboard'
     | '/gallery'
@@ -389,6 +430,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/report-issue'
     | '/reports'
+    | '/showcases'
     | '/teams'
     | '/templates'
     | '/invite/$token'
@@ -398,9 +440,11 @@ export interface FileRouteTypes {
     | '/projects/trash'
     | '/settings/checklists'
     | '/settings/workflows'
+    | '/showcases/$showcaseId'
     | '/walkthroughs/$walkthroughId'
     | '/share/photos/$token'
     | '/share/reports/$token'
+    | '/share/showcases/$token'
     | '/share/walkthroughs/$token'
     | '/projects'
     | '/settings'
@@ -418,6 +462,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/sitemap.xml'
+    | '/_app/admin'
     | '/_app/collaborators'
     | '/_app/dashboard'
     | '/_app/gallery'
@@ -426,6 +471,7 @@ export interface FileRouteTypes {
     | '/_app/notifications'
     | '/_app/report-issue'
     | '/_app/reports'
+    | '/_app/showcases'
     | '/_app/teams'
     | '/_app/templates'
     | '/invite/$token'
@@ -435,9 +481,11 @@ export interface FileRouteTypes {
     | '/_app/projects/trash'
     | '/_app/settings/checklists'
     | '/_app/settings/workflows'
+    | '/_app/showcases/$showcaseId'
     | '/_app/walkthroughs/$walkthroughId'
     | '/share/photos/$token'
     | '/share/reports/$token'
+    | '/share/showcases/$token'
     | '/share/walkthroughs/$token'
     | '/_app/projects/'
     | '/_app/settings/'
@@ -459,6 +507,7 @@ export interface RootRouteChildren {
   InviteTokenRoute: typeof InviteTokenRoute
   SharePhotosTokenRoute: typeof SharePhotosTokenRoute
   ShareReportsTokenRoute: typeof ShareReportsTokenRoute
+  ShareShowcasesTokenRoute: typeof ShareShowcasesTokenRoute
   ShareWalkthroughsTokenRoute: typeof ShareWalkthroughsTokenRoute
 }
 
@@ -562,6 +611,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTeamsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/showcases': {
+      id: '/_app/showcases'
+      path: '/showcases'
+      fullPath: '/showcases'
+      preLoaderRoute: typeof AppShowcasesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/reports': {
       id: '/_app/reports'
       path: '/reports'
@@ -618,6 +674,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCollaboratorsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/admin': {
+      id: '/_app/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AppAdminRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/settings/': {
       id: '/_app/settings/'
       path: '/settings'
@@ -637,6 +700,13 @@ declare module '@tanstack/react-router' {
       path: '/share/walkthroughs/$token'
       fullPath: '/share/walkthroughs/$token'
       preLoaderRoute: typeof ShareWalkthroughsTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/showcases/$token': {
+      id: '/share/showcases/$token'
+      path: '/share/showcases/$token'
+      fullPath: '/share/showcases/$token'
+      preLoaderRoute: typeof ShareShowcasesTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/share/reports/$token': {
@@ -659,6 +729,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/walkthroughs/$walkthroughId'
       preLoaderRoute: typeof AppWalkthroughsWalkthroughIdRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/showcases/$showcaseId': {
+      id: '/_app/showcases/$showcaseId'
+      path: '/$showcaseId'
+      fullPath: '/showcases/$showcaseId'
+      preLoaderRoute: typeof AppShowcasesShowcaseIdRouteImport
+      parentRoute: typeof AppShowcasesRoute
     }
     '/_app/settings/workflows': {
       id: '/_app/settings/workflows'
@@ -712,7 +789,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppShowcasesRouteChildren {
+  AppShowcasesShowcaseIdRoute: typeof AppShowcasesShowcaseIdRoute
+}
+
+const AppShowcasesRouteChildren: AppShowcasesRouteChildren = {
+  AppShowcasesShowcaseIdRoute: AppShowcasesShowcaseIdRoute,
+}
+
+const AppShowcasesRouteWithChildren = AppShowcasesRoute._addFileChildren(
+  AppShowcasesRouteChildren,
+)
+
 interface AppRouteChildren {
+  AppAdminRoute: typeof AppAdminRoute
   AppCollaboratorsRoute: typeof AppCollaboratorsRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppGalleryRoute: typeof AppGalleryRoute
@@ -721,6 +811,7 @@ interface AppRouteChildren {
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppReportIssueRoute: typeof AppReportIssueRoute
   AppReportsRoute: typeof AppReportsRoute
+  AppShowcasesRoute: typeof AppShowcasesRouteWithChildren
   AppTeamsRoute: typeof AppTeamsRoute
   AppTemplatesRoute: typeof AppTemplatesRoute
   AppGroupsGroupIdRoute: typeof AppGroupsGroupIdRoute
@@ -736,6 +827,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAdminRoute: AppAdminRoute,
   AppCollaboratorsRoute: AppCollaboratorsRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppGalleryRoute: AppGalleryRoute,
@@ -744,6 +836,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppNotificationsRoute: AppNotificationsRoute,
   AppReportIssueRoute: AppReportIssueRoute,
   AppReportsRoute: AppReportsRoute,
+  AppShowcasesRoute: AppShowcasesRouteWithChildren,
   AppTeamsRoute: AppTeamsRoute,
   AppTemplatesRoute: AppTemplatesRoute,
   AppGroupsGroupIdRoute: AppGroupsGroupIdRoute,
@@ -776,6 +869,7 @@ const rootRouteChildren: RootRouteChildren = {
   InviteTokenRoute: InviteTokenRoute,
   SharePhotosTokenRoute: SharePhotosTokenRoute,
   ShareReportsTokenRoute: ShareReportsTokenRoute,
+  ShareShowcasesTokenRoute: ShareShowcasesTokenRoute,
   ShareWalkthroughsTokenRoute: ShareWalkthroughsTokenRoute,
 }
 export const routeTree = rootRouteImport

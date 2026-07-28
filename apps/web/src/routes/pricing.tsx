@@ -29,17 +29,20 @@ export const Route = createFileRoute("/pricing")({
   }),
 });
 
+// Placeholder pricing — real numbers TBD, change anytime in this file and in
+// Stripe (STRIPE_PRICE_<PLAN>[_MONTHLY|_ANNUAL] env vars on apps/api).
+// Annual = 20% off monthly, computed below, not a separately-set number.
 const PLANS: {
   id: BillingPlan;
   name: string;
-  price: string;
+  priceMonthly: number;
   tagline: string;
   features: string[];
 }[] = [
   {
     id: "starter",
     name: "Starter",
-    price: "$24",
+    priceMonthly: 24,
     tagline: "The simple solo tech tool.",
     features: [
       "Photo & video capture",
@@ -53,7 +56,7 @@ const PLANS: {
   {
     id: "pro",
     name: "Pro",
-    price: "$119",
+    priceMonthly: 119,
     tagline: "The serious field tool — our main tier.",
     features: [
       "Everything in Starter",
@@ -68,7 +71,7 @@ const PLANS: {
   {
     id: "team",
     name: "Team",
-    price: "$179",
+    priceMonthly: 179,
     tagline: "Multi-user companies — efficiency at scale.",
     features: [
       "Everything in Pro",
@@ -80,6 +83,71 @@ const PLANS: {
     ],
   },
 ];
+
+const ANNUAL_DISCOUNT = 0.2;
+
+function perSeatPrice(priceMonthly: number, interval: "monthly" | "annual"): number {
+  return interval === "annual" ? Math.round(priceMonthly * (1 - ANNUAL_DISCOUNT)) : priceMonthly;
+}
+
+function IntervalToggle({
+  interval,
+  onChange,
+}: {
+  interval: "monthly" | "annual";
+  onChange: (v: "monthly" | "annual") => void;
+}) {
+  return (
+    <div className="mt-6 inline-flex items-center gap-1 rounded-full border border-border bg-card p-1">
+      {(["monthly", "annual"] as const).map((v) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onChange(v)}
+          className={`rounded-full px-4 py-1.5 font-manrope text-sm font-bold transition-colors ${
+            interval === v
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {v === "monthly" ? "Monthly" : "Annual"}
+          {v === "annual" && (
+            <span className="ml-1.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-extrabold text-emerald-600">
+              Save {ANNUAL_DISCOUNT * 100}%
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SeatStepper({ seats, onChange }: { seats: number; onChange: (n: number) => void }) {
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(1, seats - 1))}
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-sidebar-border text-sidebar-foreground hover:bg-sidebar-foreground/10"
+      >
+        −
+      </button>
+      <span className="min-w-[3ch] text-center font-manrope text-sm font-bold text-sidebar-foreground">
+        {seats}
+      </span>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(500, seats + 1))}
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-sidebar-border text-sidebar-foreground hover:bg-sidebar-foreground/10"
+      >
+        +
+      </button>
+      <span className="font-manrope text-xs text-sidebar-foreground/55">
+        seat{seats === 1 ? "" : "s"}
+      </span>
+    </div>
+  );
+}
 
 function PricingPage() {
   const { user, loading: authLoading } = useAuth();
@@ -94,6 +162,7 @@ function PricingPage() {
  * authed RPC calls). CTAs route to signup; checkout only happens once the
  * visitor has an account and a team. */
 function PublicPricingPage() {
+  const [interval, setInterval] = useState<"monthly" | "annual">("monthly");
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
@@ -105,9 +174,10 @@ function PublicPricingPage() {
           Choose your plan
         </h1>
         <p className="mt-3 max-w-xl font-manrope text-sm text-muted-foreground">
-          Every plan is billed monthly, no free trial. Sign up, then pick a plan to get started —
-          you can change or cancel anytime from Settings.
+          Priced per seat. Sign up, then pick a plan to get started — you can change or cancel
+          anytime from Settings.
         </p>
+        <IntervalToggle interval={interval} onChange={setInterval} />
 
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           {PLANS.map((plan) => (
@@ -119,9 +189,14 @@ function PublicPricingPage() {
                 {plan.name}
               </p>
               <p className="font-display mt-3 text-4xl font-bold tracking-tight text-foreground">
-                {plan.price}
-                <span className="ml-1 text-base font-medium text-muted-foreground">/mo</span>
+                ${perSeatPrice(plan.priceMonthly, interval)}
+                <span className="ml-1 text-base font-medium text-muted-foreground">/seat/mo</span>
               </p>
+              {interval === "annual" && (
+                <p className="mt-0.5 font-manrope text-xs text-muted-foreground">
+                  billed annually
+                </p>
+              )}
               <p className="mt-2 font-manrope text-sm text-muted-foreground">{plan.tagline}</p>
 
               <ul className="mt-6 flex-1 space-y-2.5">
@@ -159,6 +234,7 @@ interface MyTeamResult {
  * subscription yet. */
 function AuthedPricingPage() {
   const qc = useQueryClient();
+  const [interval, setInterval] = useState<"monthly" | "annual">("monthly");
   const { data, isLoading } = useQuery({
     queryKey: ["my-team"],
     queryFn: async () => (await getMyTeam()) as MyTeamResult,
@@ -180,9 +256,9 @@ function AuthedPricingPage() {
                   Choose your plan
                 </h1>
                 <p className="mt-3 max-w-xl font-manrope text-sm text-muted-foreground">
-                  Every plan is billed monthly. Change or cancel anytime from Settings once you're
-                  subscribed.
+                  Priced per seat. Change or cancel anytime from Settings once you're subscribed.
                 </p>
+                <IntervalToggle interval={interval} onChange={setInterval} />
 
                 {!isLoading && !data?.team ? (
                   <CreateTeamPrompt
@@ -194,6 +270,7 @@ function AuthedPricingPage() {
                       <PlanCard
                         key={plan.id}
                         plan={plan}
+                        interval={interval}
                         disabled={isLoading || !data?.team}
                         isCurrent={!!data?.isActive && data.plan === plan.id}
                       />
@@ -252,17 +329,21 @@ function CreateTeamPrompt({ onCreated }: { onCreated: () => void }) {
 
 function PlanCard({
   plan,
+  interval,
   disabled,
   isCurrent,
 }: {
   plan: (typeof PLANS)[number];
+  interval: "monthly" | "annual";
   disabled: boolean;
   isCurrent: boolean;
 }) {
+  const [seats, setSeats] = useState(1);
+  const seatPrice = perSeatPrice(plan.priceMonthly, interval);
   const m = useMutation({
     mutationFn: () =>
       createCheckoutSession({
-        data: { plan: plan.id, origin: window.location.origin },
+        data: { plan: plan.id, origin: window.location.origin, interval, seats },
       }),
     onSuccess: (res) => {
       window.location.href = res.url;
@@ -287,10 +368,17 @@ function PlanCard({
         )}
       </div>
       <p className="font-display mt-3 text-4xl font-bold tracking-tight text-sidebar-foreground">
-        {plan.price}
-        <span className="ml-1 text-base font-medium text-sidebar-foreground/50">/mo</span>
+        ${seatPrice}
+        <span className="ml-1 text-base font-medium text-sidebar-foreground/50">/seat/mo</span>
       </p>
       <p className="mt-2 font-manrope text-sm text-sidebar-foreground/65">{plan.tagline}</p>
+
+      <div className="mt-4">
+        <SeatStepper seats={seats} onChange={setSeats} />
+        <p className="mt-2 font-manrope text-xs text-sidebar-foreground/55">
+          ${seatPrice * seats}/mo total for {seats} seat{seats === 1 ? "" : "s"}
+        </p>
+      </div>
 
       <ul className="mt-6 flex-1 space-y-2.5">
         {plan.features.map((f) => (

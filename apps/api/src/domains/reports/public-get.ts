@@ -60,6 +60,7 @@ export interface PublicProjectReport {
   author: { name: string | null } | null;
   sections: PublicReportSection[];
   photos: PublicReportPhoto[];
+  reviewLinks: Array<{ platform: string; url: string; label: string | null }>;
 }
 
 export async function getPublicProjectReportService(
@@ -75,6 +76,7 @@ export async function getPublicProjectReportService(
     author: null,
     sections: [],
     photos: [],
+    reviewLinks: [],
   });
 
   const { data: report } = await (supabaseAdmin as any)
@@ -87,23 +89,40 @@ export async function getPublicProjectReportService(
   if (!report) return empty("not_found");
   if (report.revoked_at) return empty("revoked");
 
-  const [{ data: project }, { data: profile }, { data: sectionRows }] = await Promise.all([
-    supabaseAdmin
-      .from("projects")
-      .select("name, description, street, city, state, zip, status")
-      .eq("id", report.project_id)
-      .maybeSingle(),
-    supabaseAdmin
-      .from("profiles")
-      .select("full_name, company, company_logo_url, company_phone, company_address")
-      .eq("id", report.created_by)
-      .maybeSingle(),
-    (supabaseAdmin as any)
-      .from("project_report_sections")
-      .select("id, position, title, body, photos")
-      .eq("report_id", report.id)
-      .order("position", { ascending: true }),
-  ]);
+  const [{ data: project }, { data: profile }, { data: sectionRows }, { data: teamMembership }] =
+    await Promise.all([
+      supabaseAdmin
+        .from("projects")
+        .select("name, description, street, city, state, zip, status")
+        .eq("id", report.project_id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("profiles")
+        .select("full_name, company, company_logo_url, company_phone, company_address")
+        .eq("id", report.created_by)
+        .maybeSingle(),
+      (supabaseAdmin as any)
+        .from("project_report_sections")
+        .select("id, position, title, body, photos")
+        .eq("report_id", report.id)
+        .order("position", { ascending: true }),
+      (supabaseAdmin as any)
+        .from("team_members")
+        .select("team_id, team:teams(id, plan, is_internal)")
+        .eq("user_id", report.created_by)
+        .maybeSingle(),
+    ]);
+
+  let reviewLinks: PublicProjectReport["reviewLinks"] = [];
+  const team = (teamMembership as any)?.team as { id: string; plan: string; is_internal: boolean } | undefined;
+  if (team && (team.plan === "team" || team.is_internal)) {
+    const { data: linkRows } = await (supabaseAdmin as any)
+      .from("team_review_links")
+      .select("platform, url, label")
+      .eq("team_id", team.id)
+      .order("position", { ascending: true });
+    reviewLinks = (linkRows as typeof reviewLinks) ?? [];
+  }
 
   const sectionList: Array<{
     id: string;
@@ -248,5 +267,6 @@ export async function getPublicProjectReportService(
     author: profile ? { name: profile.full_name ?? null } : null,
     sections,
     photos,
+    reviewLinks,
   };
 }

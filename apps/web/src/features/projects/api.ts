@@ -9,6 +9,13 @@ export {
   setGroupProjects,
 } from "@/lib/project-groups.functions";
 export {
+  listProjectBoards,
+  createProjectBoard,
+  updateProjectBoard,
+  deleteProjectBoard,
+  type ProjectBoard,
+} from "@/lib/project-boards.functions";
+export {
   softDeleteProject,
   listTrashedPhotos,
   restorePhotos,

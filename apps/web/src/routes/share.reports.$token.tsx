@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Loader2, Download, Lock, Printer } from "lucide-react";
+import { Loader2, Download, Lock, Printer, Star } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getPublicProjectReport, type PublicProjectReport } from "@/lib/project-reports.functions";
@@ -80,6 +80,7 @@ function PublicReportPage() {
             author: null,
             sections: [],
             photos: [],
+            reviewLinks: [],
           });
         }
       } finally {
@@ -131,6 +132,25 @@ function PublicReportPage() {
           </Button>
         </div>
         <ReportDocument doc={doc} />
+
+        {data.reviewLinks.length > 0 && (
+          <Card className="mt-6 flex flex-col items-center gap-3 p-8 text-center print:hidden">
+            <Star className="h-8 w-8 fill-primary text-primary" />
+            <h2 className="text-lg font-semibold">How did we do?</h2>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              If you're happy with the work, a quick review helps us out a lot.
+            </p>
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              {data.reviewLinks.map((link, i) => (
+                <Button key={i} asChild size="sm">
+                  <a href={link.url} target="_blank" rel="noreferrer">
+                    Leave a review{link.label ? ` — ${link.label}` : ""}
+                  </a>
+                </Button>
+              ))}
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );

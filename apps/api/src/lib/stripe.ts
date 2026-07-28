@@ -23,6 +23,7 @@ export function getStripe(): Stripe {
 }
 
 export type BillingPlan = "starter" | "pro" | "team";
+export type BillingInterval = "monthly" | "annual";
 
 function requirePriceEnv(name: string): string {
   const value = process.env[name];
@@ -30,22 +31,36 @@ function requirePriceEnv(name: string): string {
   return value;
 }
 
-/** Monthly price IDs only — annual + per-seat pricing are a fast-follow. */
-export function planToPriceId(plan: BillingPlan): string {
-  switch (plan) {
-    case "starter":
-      return requirePriceEnv("STRIPE_PRICE_STARTER");
-    case "pro":
-      return requirePriceEnv("STRIPE_PRICE_PRO");
-    case "team":
-      return requirePriceEnv("STRIPE_PRICE_TEAM");
-  }
+/**
+ * Per-seat price IDs (checkout sets `quantity` = seat count, so these must be
+ * configured as per-unit Stripe Prices, not flat fees, for the seat stepper
+ * on the pricing page to actually charge correctly).
+ *
+ * `_MONTHLY` env vars are optional and fall back to the original unsuffixed
+ * `STRIPE_PRICE_<PLAN>` vars, so existing monthly checkout configured before
+ * annual billing shipped keeps working unchanged. `_ANNUAL` vars are new and
+ * required only when a customer actually picks annual billing — until real
+ * annual Price objects are created in Stripe and these are set, annual
+ * checkout will fail with a clear "Missing STRIPE_PRICE_<PLAN>_ANNUAL" error
+ * rather than silently charging the wrong amount.
+ */
+export function planToPriceId(plan: BillingPlan, interval: BillingInterval = "monthly"): string {
+  const key = plan.toUpperCase();
+  if (interval === "annual") return requirePriceEnv(`STRIPE_PRICE_${key}_ANNUAL`);
+  return process.env[`STRIPE_PRICE_${key}_MONTHLY`] ?? requirePriceEnv(`STRIPE_PRICE_${key}`);
 }
 
 export function priceIdToPlan(priceId: string | null | undefined): BillingPlan | null {
   if (!priceId) return null;
-  if (priceId === process.env.STRIPE_PRICE_STARTER) return "starter";
-  if (priceId === process.env.STRIPE_PRICE_PRO) return "pro";
-  if (priceId === process.env.STRIPE_PRICE_TEAM) return "team";
+  for (const plan of ["starter", "pro", "team"] as const) {
+    const key = plan.toUpperCase();
+    if (
+      priceId === process.env[`STRIPE_PRICE_${key}`] ||
+      priceId === process.env[`STRIPE_PRICE_${key}_MONTHLY`] ||
+      priceId === process.env[`STRIPE_PRICE_${key}_ANNUAL`]
+    ) {
+      return plan;
+    }
+  }
   return null;
 }
