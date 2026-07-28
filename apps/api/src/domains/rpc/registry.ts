@@ -151,6 +151,45 @@ import {
   updateProjectBoardService,
 } from "../projects/boards";
 import {
+  createDocumentFolderInputSchema,
+  createDocumentFolderService,
+  createProjectPageInputSchema,
+  createProjectPageService,
+  deleteDocumentFolderInputSchema,
+  deleteDocumentFolderService,
+  deleteProjectPageInputSchema,
+  deleteProjectPageService,
+  getProjectPageInputSchema,
+  getProjectPageService,
+  getPublicProjectPageService,
+  listProjectDocumentTreeInputSchema,
+  listProjectDocumentTreeService,
+  moveDocumentInputSchema,
+  moveDocumentService,
+  publicProjectPageInputSchema,
+  renameDocumentFolderInputSchema,
+  renameDocumentFolderService,
+  setProjectPageShareInputSchema,
+  setProjectPageShareService,
+  updateProjectPageInputSchema,
+  updateProjectPageService,
+} from "../projects/pages";
+import {
+  generatePagePdfInputSchema,
+  generatePagePdfService,
+  getPublicProjectPagePdfService,
+  publicPagePdfInputSchema,
+} from "../projects/page-pdf";
+import {
+  createTextSnippetInputSchema,
+  createTextSnippetService,
+  deleteTextSnippetInputSchema,
+  deleteTextSnippetService,
+  listTextSnippetsService,
+  updateTextSnippetInputSchema,
+  updateTextSnippetService,
+} from "../projects/text-snippets";
+import {
   createShowcaseInputSchema,
   createShowcaseService,
   deleteShowcaseInputSchema,
@@ -737,6 +776,77 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   getPublicShowcase: pub(
     (d) => publicShowcaseInputSchema.parse(d),
     getPublicShowcaseService as (data: never) => Promise<unknown>,
+  ),
+  listProjectDocumentTree: authed(
+    (d) => listProjectDocumentTreeInputSchema.parse(d),
+    listProjectDocumentTreeService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  createDocumentFolder: authed(
+    (d) => createDocumentFolderInputSchema.parse(d),
+    createDocumentFolderService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  renameDocumentFolder: authed(
+    (d) => renameDocumentFolderInputSchema.parse(d),
+    renameDocumentFolderService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  deleteDocumentFolder: authed(
+    (d) => deleteDocumentFolderInputSchema.parse(d),
+    deleteDocumentFolderService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  moveDocument: authed(
+    (d) => moveDocumentInputSchema.parse(d),
+    moveDocumentService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  createProjectPage: authed(
+    (d) => createProjectPageInputSchema.parse(d),
+    createProjectPageService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  getProjectPage: authed(
+    (d) => getProjectPageInputSchema.parse(d),
+    getProjectPageService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  updateProjectPage: authed(
+    (d) => updateProjectPageInputSchema.parse(d),
+    updateProjectPageService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  deleteProjectPage: authed(
+    (d) => deleteProjectPageInputSchema.parse(d),
+    deleteProjectPageService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  setProjectPageShare: authed(
+    (d) => setProjectPageShareInputSchema.parse(d),
+    setProjectPageShareService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  getPublicProjectPage: pub(
+    (d) => publicProjectPageInputSchema.parse(d),
+    getPublicProjectPageService as (data: never) => Promise<unknown>,
+  ),
+  generatePagePdf: authed(
+    (d) => generatePagePdfInputSchema.parse(d),
+    generatePagePdfService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  getPublicProjectPagePdf: pub(
+    (d) => publicPagePdfInputSchema.parse(d),
+    getPublicProjectPagePdfService as (data: never) => Promise<unknown>,
+  ),
+  listTextSnippets: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return listTextSnippetsService(ctx);
+    },
+  },
+  createTextSnippet: authed(
+    (d) => createTextSnippetInputSchema.parse(d),
+    createTextSnippetService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  updateTextSnippet: authed(
+    (d) => updateTextSnippetInputSchema.parse(d),
+    updateTextSnippetService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  deleteTextSnippet: authed(
+    (d) => deleteTextSnippetInputSchema.parse(d),
+    deleteTextSnippetService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
 };
 
