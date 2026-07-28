@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { requirePlatformAdmin } from "../../lib/admin-context";
 import { insertNotification } from "../notifications/service";
+import { logAdminAction } from "./audit";
 import type { AuthedContext } from "../../lib/user-context";
 
 export interface AdminNotificationRow {
@@ -114,6 +115,14 @@ export async function sendAdminNotificationService(
       }),
     ),
   );
+
+  await logAdminAction(admin, {
+    actorId: ctx.userId,
+    action: "send_admin_notification",
+    targetType: "notification_broadcast",
+    targetId: data.target.type === "user" ? data.target.userId : data.target.type === "team" ? data.target.teamId : null,
+    metadata: { target: data.target, title: data.title, sentTo: recipientIds.length },
+  });
 
   return { sentTo: recipientIds.length };
 }

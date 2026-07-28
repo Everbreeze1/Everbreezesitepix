@@ -128,6 +128,15 @@ import {
   sendAdminNotificationService,
 } from "../admin/notifications";
 import {
+  getPlatformTeamDetailInputSchema,
+  getPlatformTeamDetailService,
+  listPlatformTeamsInputSchema,
+  listPlatformTeamsService,
+  syncTeamBillingInputSchema,
+  syncTeamBillingService,
+} from "../admin/teams";
+import { listAdminAuditLogInputSchema, listAdminAuditLogService } from "../admin/audit";
+import {
   listReviewLinksService,
   setReviewLinksInputSchema,
   setReviewLinksService,
@@ -649,6 +658,23 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     (d) => sendAdminNotificationInputSchema.parse(d),
     sendAdminNotificationService as (ctx: ServiceContext, data: never) => Promise<unknown>,
     { idempotent: true },
+  ),
+  listPlatformTeams: authed(
+    (d) => listPlatformTeamsInputSchema.parse(d),
+    listPlatformTeamsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  getPlatformTeamDetail: authed(
+    (d) => getPlatformTeamDetailInputSchema.parse(d),
+    getPlatformTeamDetailService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  syncTeamBilling: authed(
+    (d) => syncTeamBillingInputSchema.parse(d),
+    syncTeamBillingService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  listAdminAuditLog: authed(
+    (d) => listAdminAuditLogInputSchema.parse(d),
+    listAdminAuditLogService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   listReviewLinks: {
     handle: async (ctx) => {

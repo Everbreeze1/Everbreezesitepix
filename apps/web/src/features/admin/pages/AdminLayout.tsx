@@ -1,6 +1,6 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, ShieldAlert, LayoutDashboard, Users, Bell } from "lucide-react";
+import { Loader2, ShieldAlert, LayoutDashboard, Users, Bell, Building2, ScrollText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { checkIsPlatformAdmin } from "@/lib/admin.functions";
 
@@ -8,7 +8,9 @@ import { checkIsPlatformAdmin } from "@/lib/admin.functions";
 const ADMIN_NAV = [
   { label: "Overview", to: "/admin", icon: LayoutDashboard },
   { label: "Users", to: "/admin/users", icon: Users },
+  { label: "Teams", to: "/admin/teams", icon: Building2 },
   { label: "Notifications", to: "/admin/notifications", icon: Bell },
+  { label: "Audit log", to: "/admin/audit-log", icon: ScrollText },
 ] as const;
 
 export function AdminLayout() {

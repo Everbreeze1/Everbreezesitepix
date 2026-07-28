@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { requirePlatformAdmin } from "../../lib/admin-context";
+import { logAdminAction } from "./audit";
 import type { AuthedContext } from "../../lib/user-context";
 
 export interface PlatformUser {
@@ -97,5 +98,13 @@ export async function setPlatformAdminService(
     const { error } = await (admin as any).from("platform_admins").delete().eq("user_id", data.userId);
     if (error) throw new Error(error.message);
   }
+
+  await logAdminAction(admin, {
+    actorId: ctx.userId,
+    action: data.isAdmin ? "grant_platform_admin" : "revoke_platform_admin",
+    targetType: "user",
+    targetId: data.userId,
+  });
+
   return { ok: true };
 }
