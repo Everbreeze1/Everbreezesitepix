@@ -6,7 +6,12 @@ export interface Notification {
   id: string;
   recipientId: string;
   actorId: string | null;
-  type: "task_assigned" | "checklist_assigned" | "photo_comment_mention" | "team_invite_accepted";
+  type:
+    | "task_assigned"
+    | "checklist_assigned"
+    | "photo_comment_mention"
+    | "team_invite_accepted"
+    | "admin_announcement";
   title: string;
   body: string | null;
   linkPath: string | null;

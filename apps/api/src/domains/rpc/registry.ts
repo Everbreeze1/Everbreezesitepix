@@ -116,6 +116,18 @@ import {
 } from "../notifications/service";
 import { checkIsPlatformAdminService, getAdminMetricsService } from "../admin/service";
 import {
+  listPlatformUsersInputSchema,
+  listPlatformUsersService,
+  setPlatformAdminInputSchema,
+  setPlatformAdminService,
+} from "../admin/users";
+import {
+  listAllNotificationsInputSchema,
+  listAllNotificationsService,
+  sendAdminNotificationInputSchema,
+  sendAdminNotificationService,
+} from "../admin/notifications";
+import {
   listReviewLinksService,
   setReviewLinksInputSchema,
   setReviewLinksService,
@@ -621,6 +633,23 @@ export const rpcRegistry: Record<string, RpcEntry> = {
       return getAdminMetricsService(ctx);
     },
   },
+  listPlatformUsers: authed(
+    (d) => listPlatformUsersInputSchema.parse(d),
+    listPlatformUsersService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  setPlatformAdmin: authed(
+    (d) => setPlatformAdminInputSchema.parse(d),
+    setPlatformAdminService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  listAllNotifications: authed(
+    (d) => listAllNotificationsInputSchema.parse(d),
+    listAllNotificationsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  sendAdminNotification: authed(
+    (d) => sendAdminNotificationInputSchema.parse(d),
+    sendAdminNotificationService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
   listReviewLinks: {
     handle: async (ctx) => {
       if (!ctx) throw new AuthError("Unauthorized");

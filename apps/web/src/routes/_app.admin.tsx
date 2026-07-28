@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AdminPage } from "@/features/admin/pages/AdminPage";
+import { AdminLayout } from "@/features/admin/pages/AdminLayout";
 
 export const Route = createFileRoute("/_app/admin")({
   head: () => ({ meta: [{ title: "Admin — SitePix" }] }),
-  component: AdminPage,
+  component: AdminLayout,
 });

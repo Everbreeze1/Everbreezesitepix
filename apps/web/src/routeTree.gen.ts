@@ -35,6 +35,7 @@ import { Route as AppCollaboratorsRouteImport } from './routes/_app.collaborator
 import { Route as AppAdminRouteImport } from './routes/_app.admin'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app.settings.index'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app.projects.index'
+import { Route as AppAdminIndexRouteImport } from './routes/_app.admin.index'
 import { Route as ShareWalkthroughsTokenRouteImport } from './routes/share.walkthroughs.$token'
 import { Route as ShareShowcasesTokenRouteImport } from './routes/share.showcases.$token'
 import { Route as ShareReportsTokenRouteImport } from './routes/share.reports.$token'
@@ -47,6 +48,8 @@ import { Route as AppProjectsTrashRouteImport } from './routes/_app.projects.tra
 import { Route as AppProjectsNewRouteImport } from './routes/_app.projects.new'
 import { Route as AppProjectsProjectIdRouteImport } from './routes/_app.projects.$projectId'
 import { Route as AppGroupsGroupIdRouteImport } from './routes/_app.groups.$groupId'
+import { Route as AppAdminUsersRouteImport } from './routes/_app.admin.users'
+import { Route as AppAdminNotificationsRouteImport } from './routes/_app.admin.notifications'
 import { Route as AppProjectsProjectIdReportsReportIdRouteImport } from './routes/_app.projects.$projectId_.reports.$reportId'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -178,6 +181,11 @@ const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
   path: '/projects/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppAdminRoute,
+} as any)
 const ShareWalkthroughsTokenRoute = ShareWalkthroughsTokenRouteImport.update({
   id: '/share/walkthroughs/$token',
   path: '/share/walkthroughs/$token',
@@ -239,6 +247,16 @@ const AppGroupsGroupIdRoute = AppGroupsGroupIdRouteImport.update({
   path: '/groups/$groupId',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminNotificationsRoute = AppAdminNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppAdminRoute,
+} as any)
 const AppProjectsProjectIdReportsReportIdRoute =
   AppProjectsProjectIdReportsReportIdRouteImport.update({
     id: '/projects/$projectId_/reports/$reportId',
@@ -257,7 +275,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/admin': typeof AppAdminRoute
+  '/admin': typeof AppAdminRouteWithChildren
   '/collaborators': typeof AppCollaboratorsRoute
   '/dashboard': typeof AppDashboardRoute
   '/gallery': typeof AppGalleryRoute
@@ -270,6 +288,8 @@ export interface FileRoutesByFullPath {
   '/teams': typeof AppTeamsRoute
   '/templates': typeof AppTemplatesRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/admin/notifications': typeof AppAdminNotificationsRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/groups/$groupId': typeof AppGroupsGroupIdRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/projects/new': typeof AppProjectsNewRoute
@@ -282,6 +302,7 @@ export interface FileRoutesByFullPath {
   '/share/reports/$token': typeof ShareReportsTokenRoute
   '/share/showcases/$token': typeof ShareShowcasesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
+  '/admin/': typeof AppAdminIndexRoute
   '/projects/': typeof AppProjectsIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
   '/projects/$projectId/reports/$reportId': typeof AppProjectsProjectIdReportsReportIdRoute
@@ -297,7 +318,6 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/admin': typeof AppAdminRoute
   '/collaborators': typeof AppCollaboratorsRoute
   '/dashboard': typeof AppDashboardRoute
   '/gallery': typeof AppGalleryRoute
@@ -310,6 +330,8 @@ export interface FileRoutesByTo {
   '/teams': typeof AppTeamsRoute
   '/templates': typeof AppTemplatesRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/admin/notifications': typeof AppAdminNotificationsRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/groups/$groupId': typeof AppGroupsGroupIdRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/projects/new': typeof AppProjectsNewRoute
@@ -322,6 +344,7 @@ export interface FileRoutesByTo {
   '/share/reports/$token': typeof ShareReportsTokenRoute
   '/share/showcases/$token': typeof ShareShowcasesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
+  '/admin': typeof AppAdminIndexRoute
   '/projects': typeof AppProjectsIndexRoute
   '/settings': typeof AppSettingsIndexRoute
   '/projects/$projectId/reports/$reportId': typeof AppProjectsProjectIdReportsReportIdRoute
@@ -339,7 +362,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/_app/admin': typeof AppAdminRoute
+  '/_app/admin': typeof AppAdminRouteWithChildren
   '/_app/collaborators': typeof AppCollaboratorsRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/gallery': typeof AppGalleryRoute
@@ -352,6 +375,8 @@ export interface FileRoutesById {
   '/_app/teams': typeof AppTeamsRoute
   '/_app/templates': typeof AppTemplatesRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/_app/admin/notifications': typeof AppAdminNotificationsRoute
+  '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/groups/$groupId': typeof AppGroupsGroupIdRoute
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/_app/projects/new': typeof AppProjectsNewRoute
@@ -364,6 +389,7 @@ export interface FileRoutesById {
   '/share/reports/$token': typeof ShareReportsTokenRoute
   '/share/showcases/$token': typeof ShareShowcasesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
+  '/_app/admin/': typeof AppAdminIndexRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
   '/_app/projects/$projectId_/reports/$reportId': typeof AppProjectsProjectIdReportsReportIdRoute
@@ -394,6 +420,8 @@ export interface FileRouteTypes {
     | '/teams'
     | '/templates'
     | '/invite/$token'
+    | '/admin/notifications'
+    | '/admin/users'
     | '/groups/$groupId'
     | '/projects/$projectId'
     | '/projects/new'
@@ -406,6 +434,7 @@ export interface FileRouteTypes {
     | '/share/reports/$token'
     | '/share/showcases/$token'
     | '/share/walkthroughs/$token'
+    | '/admin/'
     | '/projects/'
     | '/settings/'
     | '/projects/$projectId/reports/$reportId'
@@ -421,7 +450,6 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/sitemap.xml'
-    | '/admin'
     | '/collaborators'
     | '/dashboard'
     | '/gallery'
@@ -434,6 +462,8 @@ export interface FileRouteTypes {
     | '/teams'
     | '/templates'
     | '/invite/$token'
+    | '/admin/notifications'
+    | '/admin/users'
     | '/groups/$groupId'
     | '/projects/$projectId'
     | '/projects/new'
@@ -446,6 +476,7 @@ export interface FileRouteTypes {
     | '/share/reports/$token'
     | '/share/showcases/$token'
     | '/share/walkthroughs/$token'
+    | '/admin'
     | '/projects'
     | '/settings'
     | '/projects/$projectId/reports/$reportId'
@@ -475,6 +506,8 @@ export interface FileRouteTypes {
     | '/_app/teams'
     | '/_app/templates'
     | '/invite/$token'
+    | '/_app/admin/notifications'
+    | '/_app/admin/users'
     | '/_app/groups/$groupId'
     | '/_app/projects/$projectId'
     | '/_app/projects/new'
@@ -487,6 +520,7 @@ export interface FileRouteTypes {
     | '/share/reports/$token'
     | '/share/showcases/$token'
     | '/share/walkthroughs/$token'
+    | '/_app/admin/'
     | '/_app/projects/'
     | '/_app/settings/'
     | '/_app/projects/$projectId_/reports/$reportId'
@@ -695,6 +729,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProjectsIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/admin/': {
+      id: '/_app/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AppAdminIndexRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
     '/share/walkthroughs/$token': {
       id: '/share/walkthroughs/$token'
       path: '/share/walkthroughs/$token'
@@ -779,6 +820,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppGroupsGroupIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/admin/users': {
+      id: '/_app/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AppAdminUsersRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/notifications': {
+      id: '/_app/admin/notifications'
+      path: '/notifications'
+      fullPath: '/admin/notifications'
+      preLoaderRoute: typeof AppAdminNotificationsRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
     '/_app/projects/$projectId_/reports/$reportId': {
       id: '/_app/projects/$projectId_/reports/$reportId'
       path: '/projects/$projectId/reports/$reportId'
@@ -788,6 +843,22 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AppAdminRouteChildren {
+  AppAdminNotificationsRoute: typeof AppAdminNotificationsRoute
+  AppAdminUsersRoute: typeof AppAdminUsersRoute
+  AppAdminIndexRoute: typeof AppAdminIndexRoute
+}
+
+const AppAdminRouteChildren: AppAdminRouteChildren = {
+  AppAdminNotificationsRoute: AppAdminNotificationsRoute,
+  AppAdminUsersRoute: AppAdminUsersRoute,
+  AppAdminIndexRoute: AppAdminIndexRoute,
+}
+
+const AppAdminRouteWithChildren = AppAdminRoute._addFileChildren(
+  AppAdminRouteChildren,
+)
 
 interface AppShowcasesRouteChildren {
   AppShowcasesShowcaseIdRoute: typeof AppShowcasesShowcaseIdRoute
@@ -802,7 +873,7 @@ const AppShowcasesRouteWithChildren = AppShowcasesRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
-  AppAdminRoute: typeof AppAdminRoute
+  AppAdminRoute: typeof AppAdminRouteWithChildren
   AppCollaboratorsRoute: typeof AppCollaboratorsRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppGalleryRoute: typeof AppGalleryRoute
@@ -827,7 +898,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppAdminRoute: AppAdminRoute,
+  AppAdminRoute: AppAdminRouteWithChildren,
   AppCollaboratorsRoute: AppCollaboratorsRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppGalleryRoute: AppGalleryRoute,
