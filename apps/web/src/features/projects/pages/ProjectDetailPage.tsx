@@ -536,7 +536,7 @@ export function ProjectDetailPage() {
       (async () => {
         // Load counts for secondary feature cards (best-effort; ignore errors)
         try {
-          const [tasksAll, tasksOpen, chk, rep, docs, wf] = await Promise.all([
+          const [tasksAll, tasksOpen, chk, rep, docs, pages, wf] = await Promise.all([
             supabase
               .from("tasks" as any)
               .select("id", { count: "exact", head: true })
@@ -559,6 +559,10 @@ export function ProjectDetailPage() {
               .select("id", { count: "exact", head: true })
               .eq("project_id", projectId),
             supabase
+              .from("project_pages" as any)
+              .select("id", { count: "exact", head: true })
+              .eq("project_id", projectId),
+            supabase
               .from("project_workflows" as any)
               .select("id", { count: "exact", head: true })
               .eq("project_id", projectId),
@@ -568,7 +572,7 @@ export function ProjectDetailPage() {
             tasksOpen: tasksOpen.count ?? 0,
             checklists: chk.count ?? 0,
             reports: rep.count ?? 0,
-            documents: docs.count ?? 0,
+            documents: (docs.count ?? 0) + (pages.count ?? 0),
             workflows: wf.count ?? 0,
           });
         } catch {

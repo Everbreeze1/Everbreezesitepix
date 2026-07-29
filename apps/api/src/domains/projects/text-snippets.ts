@@ -1,22 +1,24 @@
 import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 
-async function requireTeamId(ctx: AuthedContext): Promise<string> {
+/**
+ * Snippets are team-shared when the user has a team, personal otherwise —
+ * they must never hard-fail for solo users. Visibility is enforced by RLS
+ * ("mine OR my team's"), so reads don't filter by team here.
+ */
+async function resolveTeamId(ctx: AuthedContext): Promise<string | null> {
   const { data } = await (ctx.supabase as any)
     .from("team_members")
     .select("team_id")
     .eq("user_id", ctx.userId)
     .maybeSingle();
-  if (!data) throw new Error("Create a team first.");
-  return data.team_id as string;
+  return (data?.team_id as string | undefined) ?? null;
 }
 
 export async function listTextSnippetsService(ctx: AuthedContext) {
-  const teamId = await requireTeamId(ctx);
   const { data, error } = await (ctx.supabase as any)
     .from("text_snippets")
     .select("id, title, content_html, created_at")
-    .eq("team_id", teamId)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return { snippets: (data as any[]) ?? [] };
@@ -30,7 +32,7 @@ export async function createTextSnippetService(
   ctx: AuthedContext,
   data: z.infer<typeof createTextSnippetInputSchema>,
 ) {
-  const teamId = await requireTeamId(ctx);
+  const teamId = await resolveTeamId(ctx);
   const { data: row, error } = await (ctx.supabase as any)
     .from("text_snippets")
     .insert({ team_id: teamId, created_by: ctx.userId, title: data.title, content_html: data.contentHtml })

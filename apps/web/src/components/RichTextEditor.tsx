@@ -2,7 +2,7 @@ import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Bold, Italic, List, ListOrdered, Heading1, Heading2, Heading3 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -15,6 +15,10 @@ interface Props {
   compact?: boolean;
   // For single-line use (section titles): disable Enter creating new paragraphs visually
   singleLine?: boolean;
+  // Keep the toolbar hidden until the field is focused — for editors embedded
+  // inside a page's visual surface (e.g. a document header/footer), where a
+  // permanently visible toolbar is distracting.
+  toolbarOnFocus?: boolean;
 }
 
 export function RichTextEditor({
@@ -25,7 +29,9 @@ export function RichTextEditor({
   className,
   compact = false,
   singleLine = false,
+  toolbarOnFocus = false,
 }: Props) {
+  const [focused, setFocused] = useState(false);
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -54,6 +60,8 @@ export function RichTextEditor({
       const html = editor.getHTML();
       onChange(html === "<p></p>" ? "" : html);
     },
+    onFocus: () => setFocused(true),
+    onBlur: () => setFocused(false),
   });
 
   // Sync external value changes (e.g. initial load)
@@ -65,10 +73,12 @@ export function RichTextEditor({
     editor.commands.setContent(next, { emitUpdate: false });
   }, [value, editor]);
 
+  const showToolbar = !toolbarOnFocus || focused;
+
   return (
     <div className={cn("rounded-md border border-input bg-background", className)}>
-      <Toolbar editor={editor} compact={compact} singleLine={singleLine} />
-      <div className="px-3 py-2">
+      {showToolbar && <Toolbar editor={editor} compact={compact} singleLine={singleLine} />}
+      <div className={cn(toolbarOnFocus ? "px-1 py-0.5" : "px-3 py-2")}>
         <EditorContent editor={editor} />
       </div>
     </div>

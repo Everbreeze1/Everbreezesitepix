@@ -627,7 +627,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
 
             {!currentFolder &&
               folders.map((f) => (
-                <div key={f.id} className="flex items-center justify-between gap-4 border-b border-border p-4">
+                <div key={f.id} className="flex items-center justify-between gap-4 border-b border-border p-4 transition-colors hover:bg-muted/60">
                   <button
                     type="button"
                     onClick={() => setCurrentFolderId(f.id)}
@@ -654,7 +654,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
               ))}
 
             {visiblePages.map((p) => (
-              <div key={p.id} className="group flex items-center justify-between gap-4 border-b border-border p-4 last:border-b-0">
+              <div key={p.id} className="group flex items-center justify-between gap-4 border-b border-border p-4 transition-colors last:border-b-0 hover:bg-muted/60">
                 <button
                   type="button"
                   onClick={() =>
@@ -672,7 +672,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                     </p>
                   </div>
                 </button>
-                <span className="hidden w-28 shrink-0 text-xs text-muted-foreground transition-colors group-hover:text-primary sm:inline">Page</span>
+                <span className="hidden w-28 shrink-0 text-xs text-muted-foreground transition-colors group-hover:text-foreground sm:inline">Page</span>
                 <span className="hidden w-36 shrink-0 text-xs text-muted-foreground sm:inline">
                   {relativeTime(p.updatedAt)}
                 </span>
@@ -730,7 +730,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
             ))}
 
             {visibleFiles.map((doc) => (
-              <div key={doc.id} className="group flex items-center justify-between gap-4 border-b border-border p-4 last:border-b-0">
+              <div key={doc.id} className="group flex items-center justify-between gap-4 border-b border-border p-4 transition-colors last:border-b-0 hover:bg-muted/60">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10">
                     <FileText className="h-5 w-5 text-primary" />
@@ -743,7 +743,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                     </p>
                   </div>
                 </div>
-                <span className="hidden w-28 shrink-0 text-xs text-muted-foreground transition-colors group-hover:text-primary sm:inline">
+                <span className="hidden w-28 shrink-0 text-xs text-muted-foreground transition-colors group-hover:text-foreground sm:inline">
                   {fileTypeLabel(doc.mime_type, doc.file_name)}
                 </span>
                 <span className="hidden w-36 shrink-0 text-xs text-muted-foreground sm:inline">

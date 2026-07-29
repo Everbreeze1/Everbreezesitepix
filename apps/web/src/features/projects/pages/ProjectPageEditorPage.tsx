@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useEditor, EditorContent, type Editor } from "@tiptap/react";
+import { useEditor, EditorContent, getHTMLFromFragment, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
@@ -36,6 +36,9 @@ import {
   Copy,
   Globe,
   Plus,
+  X,
+  Trash2,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,7 +63,12 @@ import {
   setProjectPageShare,
   generatePagePdf,
 } from "@/lib/project-pages.functions";
-import { listTextSnippets, createTextSnippet, type TextSnippet } from "@/lib/text-snippets.functions";
+import {
+  listTextSnippets,
+  createTextSnippet,
+  deleteTextSnippet,
+  type TextSnippet,
+} from "@/lib/text-snippets.functions";
 import { ProjectImage } from "@/lib/tiptap-project-image";
 import { downloadBase64File } from "@/lib/download-file";
 
@@ -68,6 +76,16 @@ interface ProjectPhoto {
   id: string;
   url: string;
   caption: string | null;
+}
+
+/** Plain-text preview of a snippet's HTML, for the list row and search matching. */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function ProjectPageEditorPage() {
@@ -91,6 +109,8 @@ export function ProjectPageEditorPage() {
   const [shareUpdating, setShareUpdating] = useState(false);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
   const [snippets, setSnippets] = useState<TextSnippet[]>([]);
+  const [snippetsLoading, setSnippetsLoading] = useState(false);
+  const [snippetSearch, setSnippetSearch] = useState("");
   const [exporting, setExporting] = useState(false);
   const [, forceToolbarUpdate] = useState(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -248,31 +268,59 @@ export function ProjectPageEditorPage() {
     setImagePickerOpen(false);
   }
 
-  async function openSnippets() {
-    setSnippetsOpen(true);
+  async function loadSnippets() {
+    setSnippetsLoading(true);
     try {
       const res = await listTextSnippets();
       setSnippets(res.snippets);
-    } catch {
-      /* non-fatal */
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not load snippets");
+    } finally {
+      setSnippetsLoading(false);
     }
   }
+
+  function openSnippets() {
+    setSnippetsOpen(true);
+    setSnippetSearch("");
+    void loadSnippets();
+  }
+
+  const filteredSnippets = useMemo(() => {
+    const q = snippetSearch.trim().toLowerCase();
+    if (!q) return snippets;
+    return snippets.filter(
+      (s) => s.title.toLowerCase().includes(q) || stripHtml(s.content_html).toLowerCase().includes(q),
+    );
+  }, [snippets, snippetSearch]);
 
   async function saveSelectionAsSnippet() {
     if (!editor) return;
     const { from, to } = editor.state.selection;
     if (from === to) {
-      toast.error("Select some text first");
+      toast.error("Select some text in the document first");
       return;
     }
-    const html = editor.getHTML();
+    // Only the selected range — `editor.getHTML()` would capture the whole document.
+    const html = getHTMLFromFragment(editor.state.doc.slice(from, to).content, editor.schema);
     const title = await prompt({ title: "Save snippet", label: "Snippet name" });
     if (!title) return;
     try {
       await createTextSnippet({ data: { title, contentHtml: html } });
       toast.success("Snippet saved");
+      await loadSnippets();
     } catch (e: any) {
       toast.error(e?.message ?? "Could not save snippet");
+    }
+  }
+
+  async function handleDeleteSnippet(snippetId: string) {
+    try {
+      await deleteTextSnippet({ data: { snippetId } });
+      setSnippets((prev) => prev.filter((s) => s.id !== snippetId));
+      toast.success("Snippet deleted");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not delete snippet");
     }
   }
 
@@ -336,55 +384,31 @@ export function ProjectPageEditorPage() {
 
       <div className="mx-auto max-w-[850px] px-4 py-8 sm:px-0">
         <div className="rounded-sm border border-border bg-card p-10 shadow-sm sm:p-14">
-          {showHeader ? (
-            <div className="mb-4 flex items-start gap-2 border-b border-dashed border-border pb-3">
-              <div className="flex-1">
-                <RichTextEditor
-                  value={headerHtml}
-                  onChange={setHeaderHtml}
-                  placeholder="Header — appears on every page"
-                  compact
-                  singleLine
-                  className="border-none bg-transparent"
-                />
-              </div>
-              <FieldTokenMenu onInsert={(token) => setHeaderHtml((prev) => appendToken(prev, token))} />
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowHeader(true)}
-              className="mb-4 flex w-full items-center gap-2 border-b border-dashed border-border pb-3 text-xs font-bold text-muted-foreground hover:text-foreground"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add header
-            </button>
-          )}
+          <RunningBlock
+            kind="header"
+            enabled={showHeader}
+            value={headerHtml}
+            onChange={setHeaderHtml}
+            onEnable={() => setShowHeader(true)}
+            onRemove={() => {
+              setShowHeader(false);
+              setHeaderHtml("");
+            }}
+          />
 
           <EditorContent editor={editor} />
 
-          {showFooter ? (
-            <div className="mt-6 flex items-start gap-2 border-t border-dashed border-border pt-3">
-              <div className="flex-1">
-                <RichTextEditor
-                  value={footerHtml}
-                  onChange={setFooterHtml}
-                  placeholder="Footer — appears on every page"
-                  compact
-                  singleLine
-                  className="border-none bg-transparent"
-                />
-              </div>
-              <FieldTokenMenu onInsert={(token) => setFooterHtml((prev) => appendToken(prev, token))} />
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowFooter(true)}
-              className="mt-6 flex w-full items-center gap-2 border-t border-dashed border-border pt-3 text-xs font-bold text-muted-foreground hover:text-foreground"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add footer
-            </button>
-          )}
+          <RunningBlock
+            kind="footer"
+            enabled={showFooter}
+            value={footerHtml}
+            onChange={setFooterHtml}
+            onEnable={() => setShowFooter(true)}
+            onRemove={() => {
+              setShowFooter(false);
+              setFooterHtml("");
+            }}
+          />
         </div>
       </div>
 
@@ -468,26 +492,64 @@ export function ProjectPageEditorPage() {
             </DialogHeader>
             <div className="flex-1 overflow-y-auto p-4">
               <Button size="sm" variant="outline" className="mb-3 w-full" onClick={saveSelectionAsSnippet}>
-                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Save current selection as a new snippet
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Save selected text as a new snippet
               </Button>
-              {snippets.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">No snippets yet.</p>
+
+              {snippets.length > 0 && (
+                <div className="relative mb-3">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={snippetSearch}
+                    onChange={(e) => setSnippetSearch(e.target.value)}
+                    placeholder="Find a snippet…"
+                    className="h-9 pl-8"
+                  />
+                </div>
+              )}
+
+              {snippetsLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredSnippets.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  {snippets.length === 0
+                    ? "No snippets yet. Select text in the document, then save it here to reuse later."
+                    : "No snippets match your search."}
+                </p>
               ) : (
                 <div className="space-y-2">
-                  {snippets.map((s) => (
-                    <div key={s.id} className="flex items-center justify-between rounded-lg border border-border p-3">
-                      <div className="min-w-0">
+                  {filteredSnippets.map((s) => (
+                    <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg border border-border p-3">
+                      <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-bold text-foreground">{s.title}</p>
+                        <p
+                          className="truncate text-xs text-muted-foreground"
+                          title={stripHtml(s.content_html)}
+                        >
+                          {stripHtml(s.content_html)}
+                        </p>
                       </div>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          editor?.chain().focus().insertContent(s.content_html).run();
-                          setSnippetsOpen(false);
-                        }}
-                      >
-                        Use
-                      </Button>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            editor?.chain().focus().insertContent(s.content_html).run();
+                            setSnippetsOpen(false);
+                          }}
+                        >
+                          Use
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleDeleteSnippet(s.id)}
+                          aria-label="Delete snippet"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -511,6 +573,83 @@ const FIELD_TOKENS = [
 function appendToken(current: string, token: string): string {
   if (/<\/p>\s*$/.test(current)) return current.replace(/<\/p>\s*$/, ` ${token}</p>`);
   return `<p>${token}</p>`;
+}
+
+/**
+ * A running header or footer. When absent it renders as an invisible hover strip
+ * that reveals a "+ Add header/footer" button — so a document with neither stays
+ * visually clean, matching how Word/Docs treat these regions.
+ */
+function RunningBlock({
+  kind,
+  enabled,
+  value,
+  onChange,
+  onEnable,
+  onRemove,
+}: {
+  kind: "header" | "footer";
+  enabled: boolean;
+  value: string;
+  onChange: (html: string) => void;
+  onEnable: () => void;
+  onRemove: () => void;
+}) {
+  const isHeader = kind === "header";
+  const label = isHeader ? "header" : "footer";
+
+  if (!enabled) {
+    return (
+      <div
+        className={cn(
+          "group/add flex h-8 items-center justify-center",
+          isHeader ? "mb-2" : "mt-2",
+        )}
+      >
+        <button
+          type="button"
+          onClick={onEnable}
+          className="flex items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 py-1 text-[11px] font-bold text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/add:opacity-100"
+        >
+          <Plus className="h-3 w-3" /> Add {label}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "group/hf relative",
+        isHeader ? "mb-4 border-b border-dashed border-border pb-3" : "mt-6 border-t border-dashed border-border pt-3",
+      )}
+    >
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <RichTextEditor
+            value={value}
+            onChange={onChange}
+            placeholder={`${isHeader ? "Header" : "Footer"} — appears on every page`}
+            compact
+            singleLine
+            toolbarOnFocus
+            minHeight={24}
+            className="border-none bg-transparent"
+          />
+        </div>
+        <FieldTokenMenu onInsert={(token) => onChange(appendToken(value, token))} />
+        <button
+          type="button"
+          onClick={onRemove}
+          title={`Remove ${label}`}
+          aria-label={`Remove ${label}`}
+          className="mt-1 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-destructive focus-visible:opacity-100 group-hover/hf:opacity-100"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function FieldTokenMenu({ onInsert }: { onInsert: (token: string) => void }) {
@@ -565,6 +704,7 @@ function Toolbar({
       "rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground",
       active && "bg-muted text-foreground",
     );
+  const inTable = editor.isActive("table");
 
   return (
     <div className="flex flex-wrap items-center gap-0.5 border-t border-border px-4 py-1.5 sm:px-6">
@@ -729,49 +869,55 @@ function Toolbar({
       <button type="button" className={btnCls()} onClick={onAddImage} aria-label="Add image">
         <ImagePlus className="h-4 w-4" />
       </button>
-      <button
-        type="button"
-        className={btnCls()}
-        onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-        aria-label="Add table"
-      >
-        <TableIcon className="h-4 w-4" />
-      </button>
-      {editor.isActive("table") && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-bold">
-              Table tools
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={() => editor.chain().focus().addRowBefore().run()}>
-              Insert row above
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => editor.chain().focus().addRowAfter().run()}>
-              Insert row below
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => editor.chain().focus().addColumnBefore().run()}>
-              Insert column left
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => editor.chain().focus().addColumnAfter().run()}>
-              Insert column right
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => editor.chain().focus().deleteRow().run()}>Delete row</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => editor.chain().focus().deleteColumn().run()}>
-              Delete column
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => editor.chain().focus().deleteTable().run()}
-              className="text-destructive focus:text-destructive"
-            >
-              Delete table
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+      {/* One always-present table control — row/column actions enable once the cursor is inside a table, so the toolbar never shifts. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className={btnCls(inTable)} aria-label="Table">
+            <TableIcon className="h-4 w-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem
+            onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+          >
+            <Plus className="mr-2 h-4 w-4" /> Insert 3×3 table
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={!inTable} onClick={() => editor.chain().focus().addRowBefore().run()}>
+            Insert row above
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!inTable} onClick={() => editor.chain().focus().addRowAfter().run()}>
+            Insert row below
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!inTable} onClick={() => editor.chain().focus().addColumnBefore().run()}>
+            Insert column left
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!inTable} onClick={() => editor.chain().focus().addColumnAfter().run()}>
+            Insert column right
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={!inTable} onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
+            Toggle header row
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!inTable} onClick={() => editor.chain().focus().mergeOrSplit().run()}>
+            Merge / split cells
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={!inTable} onClick={() => editor.chain().focus().deleteRow().run()}>
+            Delete row
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!inTable} onClick={() => editor.chain().focus().deleteColumn().run()}>
+            Delete column
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!inTable}
+            onClick={() => editor.chain().focus().deleteTable().run()}
+            className="text-destructive focus:text-destructive"
+          >
+            Delete table
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <button type="button" className={btnCls()} onClick={onOpenSnippets} aria-label="Text snippets">
         <Sparkles className="h-4 w-4" />
       </button>
