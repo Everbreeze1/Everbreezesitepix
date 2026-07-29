@@ -183,6 +183,19 @@ import {
   publicPagePdfInputSchema,
 } from "../projects/page-pdf";
 import {
+  generateProjectPageInputSchema,
+  generateProjectPageService,
+} from "../projects/page-generate";
+import {
+  createPageFromTemplateInputSchema,
+  createPageFromTemplateService,
+  getDocumentTemplateInputSchema,
+  getDocumentTemplateService,
+  listDocumentTemplatesService,
+  savePageAsTemplateInputSchema,
+  savePageAsTemplateService,
+} from "../projects/page-templates";
+import {
   createTextSnippetInputSchema,
   createTextSnippetService,
   deleteTextSnippetInputSchema,
@@ -818,6 +831,29 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   duplicateProjectPage: authed(
     (d) => duplicateProjectPageInputSchema.parse(d),
     duplicateProjectPageService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  generateProjectPage: authed(
+    (d) => generateProjectPageInputSchema.parse(d),
+    generateProjectPageService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  listDocumentTemplates: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return listDocumentTemplatesService(ctx);
+    },
+  },
+  getDocumentTemplate: authed(
+    (d) => getDocumentTemplateInputSchema.parse(d),
+    getDocumentTemplateService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  createPageFromTemplate: authed(
+    (d) => createPageFromTemplateInputSchema.parse(d),
+    createPageFromTemplateService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  savePageAsTemplate: authed(
+    (d) => savePageAsTemplateInputSchema.parse(d),
+    savePageAsTemplateService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   setProjectPageShare: authed(
     (d) => setProjectPageShareInputSchema.parse(d),

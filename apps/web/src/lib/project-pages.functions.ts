@@ -90,6 +90,45 @@ export const duplicateProjectPage = rpcOp<
   { page: { id: string; title: string; updated_at: string } }
 >("duplicateProjectPage");
 
+export const generateProjectPage = rpcOp<
+  {
+    projectId: string;
+    folderId?: string | null;
+    template: "daily_log" | "summary" | "report";
+    photoIds: string[];
+    title?: string;
+  },
+  { page: { id: string; title: string; updated_at: string }; aiFailed: string | null }
+>("generateProjectPage", { idempotent: true });
+
+export interface DocumentTemplateSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  isExample: boolean;
+  fields: string[];
+  updatedAt: string;
+}
+
+export const listDocumentTemplates = rpcOp<undefined, { templates: DocumentTemplateSummary[] }>(
+  "listDocumentTemplates",
+);
+
+export const getDocumentTemplate = rpcOp<
+  { templateId: string },
+  { id: string; name: string; html: string; fields: string[] }
+>("getDocumentTemplate");
+
+export const createPageFromTemplate = rpcOp<
+  { projectId: string; templateId: string; folderId?: string | null; resolveTokens?: boolean },
+  { page: { id: string; title: string; updated_at: string } }
+>("createPageFromTemplate");
+
+export const savePageAsTemplate = rpcOp<
+  { pageId: string; name: string },
+  { template: { id: string; name: string } }
+>("savePageAsTemplate");
+
 export const setProjectPageShare = rpcOp<
   { pageId: string; enable: boolean },
   { shareToken: string }

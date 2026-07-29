@@ -39,6 +39,8 @@ import {
   X,
   Trash2,
   Search,
+  MoreHorizontal,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +64,7 @@ import {
   updateProjectPage,
   setProjectPageShare,
   generatePagePdf,
+  savePageAsTemplate,
 } from "@/lib/project-pages.functions";
 import {
   listTextSnippets,
@@ -250,6 +253,21 @@ export function ProjectPageEditorPage() {
     toast.success("Link copied to clipboard");
   }
 
+  async function handleSaveAsTemplate() {
+    const name = await prompt({
+      title: "Save as template",
+      label: "Template name",
+      defaultValue: title,
+    });
+    if (!name) return;
+    try {
+      await savePageAsTemplate({ data: { pageId, name } });
+      toast.success(`Saved "${name}" to your templates`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not save template");
+    }
+  }
+
   async function handleExport() {
     setExporting(true);
     try {
@@ -370,6 +388,18 @@ export function ProjectPageEditorPage() {
               <Share2 className="mr-1.5 h-3.5 w-3.5" />
               {revoked ? "Share" : "Shared"}
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="More actions">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleSaveAsTemplate}>
+                  <Layers className="mr-2 h-4 w-4" /> Save as a New Template
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 

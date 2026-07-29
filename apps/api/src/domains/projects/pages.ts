@@ -182,7 +182,12 @@ export async function listProjectDocumentTreeService(
 // renaming the project or company later updates every page automatically).
 // ============================================================
 
-export async function resolveHeaderFooterTokens(
+/**
+ * Resolves `{{token}}` merge fields against live project/company data.
+ * Unknown tokens are deliberately left verbatim so the author can see what
+ * still needs filling in (matching how document templates preview them).
+ */
+export async function resolvePageTokens(
   html: string | null,
   projectId: string,
   createdBy: string,
@@ -191,16 +196,34 @@ export async function resolveHeaderFooterTokens(
   const admin = getSupabaseAdmin();
   const [{ data: project }, { data: profile }] = await Promise.all([
     (admin as any).from("projects").select("name, street, city, state").eq("id", projectId).maybeSingle(),
-    (admin as any).from("profiles").select("company").eq("id", createdBy).maybeSingle(),
+    (admin as any)
+      .from("profiles")
+      .select("full_name, company, company_address, company_phone")
+      .eq("id", createdBy)
+      .maybeSingle(),
   ]);
   const address = project ? [project.street, project.city, project.state].filter(Boolean).join(", ") : "";
   const today = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-  return html
-    .replace(/\{\{\s*company\s*\}\}/g, profile?.company ?? "")
-    .replace(/\{\{\s*project_name\s*\}\}/g, project?.name ?? "")
-    .replace(/\{\{\s*project_address\s*\}\}/g, address)
-    .replace(/\{\{\s*date\s*\}\}/g, today);
+
+  const values: Record<string, string | null | undefined> = {
+    company: profile?.company,
+    company_name: profile?.company,
+    company_address: profile?.company_address,
+    company_phone: profile?.company_phone,
+    project_name: project?.name,
+    project_address: address,
+    prepared_by: profile?.full_name,
+    date: today,
+  };
+
+  return html.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (match, rawKey: string) => {
+    const value = values[rawKey.toLowerCase()];
+    return value ? value : match;
+  });
 }
+
+/** @deprecated Use {@link resolvePageTokens} — kept as the original call-site name. */
+export const resolveHeaderFooterTokens = resolvePageTokens;
 
 // ============================================================
 // Pages
