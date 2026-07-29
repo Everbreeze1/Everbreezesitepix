@@ -53,7 +53,7 @@ import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
 import { listProjectGroups } from "@/features/projects/api";
-import { listProjectBoards, deleteProjectBoard, type ProjectBoard } from "@/features/projects/api";
+import { listProjectBoards, type ProjectBoard } from "@/features/projects/api";
 import { GroupCard } from "@/features/projects/components/GroupCard";
 import {
   CreateGroupDialog,
@@ -61,6 +61,7 @@ import {
 } from "@/features/projects/components/CreateGroupDialog";
 import { CreateBoardDialog } from "@/features/projects/components/CreateBoardDialog";
 import { TagBoardDetailView } from "@/features/projects/components/TagBoardDetailView";
+import { BoardSettingsSheet } from "@/features/projects/components/BoardSettingsSheet";
 
 const DEFAULT_LABELS: Array<{ name: string; color: string }> = [
   { name: "Lead", color: "#3b82f6" },
@@ -517,6 +518,19 @@ export function ProjectsPage() {
   useEffect(() => {
     if (boardsQuery.data) setBoards(boardsQuery.data);
   }, [boardsQuery.data]);
+
+  // Boards are tabs now, so one is always selected — keep the pointer valid as
+  // boards are created/renamed/deleted.
+  useEffect(() => {
+    if (boards.length === 0) {
+      setActiveBoard(null);
+      return;
+    }
+    setActiveBoard((current) => {
+      if (!current) return boards[0];
+      return boards.find((b) => b.id === current.id) ?? boards[0];
+    });
+  }, [boards]);
 
   const loading = projectsQuery.isPending;
   const groupsLoading = groupsQuery.isPending;
@@ -1329,41 +1343,75 @@ export function ProjectsPage() {
                   onCreate={() => setCreateGroupOpen(true)}
                 />
               ) : tab === "boards" ? (
-                activeBoard ? (
-                  <TagBoardDetailView
-                    board={activeBoard}
-                    allTags={allTags}
-                    allProjects={allProjects}
-                    projectTagMap={projectTagMap}
-                    onBack={() => setActiveBoard(null)}
-                    onManage={() => setManageBoardOpen(true)}
-                    onTagAssigned={(projectId, tag) => {
-                      setProjectTagMap((prev) => {
-                        const existing = prev[projectId] ?? [];
-                        if (existing.some((t) => t.id === tag.id)) return prev;
-                        return { ...prev, [projectId]: [...existing, tag] };
-                      });
-                    }}
-                  />
-                ) : (
-                  <BoardsGrid
-                    boards={boards}
-                    loading={boardsLoading}
-                    query={query}
-                    allTags={allTags}
-                    onCreate={() => setCreateBoardOpen(true)}
-                    onDelete={async (id) => {
-                      try {
-                        await deleteProjectBoard({ data: { id } });
-                        setBoards((prev) => prev.filter((b) => b.id !== id));
-                        toast.success("Board deleted");
-                      } catch (e: any) {
-                        toast.error(e?.message ?? "Could not delete board");
+                <div>
+                  {/* Board tabs — each board is directly selectable, no drill-in/back step. */}
+                  <div className="mb-5 flex items-center gap-1 overflow-x-auto border-b border-border">
+                    {boards.map((b) => {
+                      const isActive = activeBoard?.id === b.id;
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => setActiveBoard(b)}
+                          className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-bold transition-colors ${
+                            isActive
+                              ? "border-foreground text-foreground"
+                              : "border-transparent text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {b.name}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setCreateBoardOpen(true)}
+                      aria-label="Create board"
+                      className="-mb-px shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {boardsLoading ? null : activeBoard ? (
+                    <TagBoardDetailView
+                      board={activeBoard}
+                      allTags={allTags}
+                      allProjects={allProjects}
+                      projectTagMap={projectTagMap}
+                      onManage={() => setManageBoardOpen(true)}
+                      onTagAssigned={(projectId, tag) => {
+                        setProjectTagMap((prev) => {
+                          const existing = prev[projectId] ?? [];
+                          if (existing.some((t) => t.id === tag.id)) return prev;
+                          return { ...prev, [projectId]: [...existing, tag] };
+                        });
+                      }}
+                      onTagMoved={(projectId, fromTagId, toTag) => {
+                        setProjectTagMap((prev) => {
+                          const without = (prev[projectId] ?? []).filter((t) => t.id !== fromTagId);
+                          return {
+                            ...prev,
+                            [projectId]: without.some((t) => t.id === toTag.id)
+                              ? without
+                              : [...without, toTag],
+                          };
+                        });
+                      }}
+                    />
+                  ) : (
+                    <EmptyState
+                      icon={Layers}
+                      title="No boards yet"
+                      description='Boards group projects into columns by tag (e.g. "Lead", "Active", "Complete") — shared with your team and always up to date. Drag a card between columns to re-tag it.'
+                      action={
+                        <Button onClick={() => setCreateBoardOpen(true)}>
+                          <Layers className="mr-2 h-4 w-4" /> New Board
+                        </Button>
                       }
-                    }}
-                    onOpen={(board) => setActiveBoard(board)}
-                  />
-                )
+                    />
+                  )}
+                </div>
               ) : (
                 <ProjectsList
                   projects={filteredProjects}
@@ -1384,7 +1432,7 @@ export function ProjectsPage() {
           </div>
 
           {activeBoard && (
-            <CreateBoardDialog
+            <BoardSettingsSheet
               open={manageBoardOpen}
               onOpenChange={setManageBoardOpen}
               allTags={allTags}
@@ -1487,97 +1535,6 @@ function GroupsGrid({
           projectCount={g.project_count}
           thumbnails={g.thumbnails}
         />
-      ))}
-    </div>
-  );
-}
-
-function BoardsGrid({
-  boards,
-  loading,
-  query,
-  allTags,
-  onCreate,
-  onOpen,
-  onDelete,
-}: {
-  boards: ProjectBoard[];
-  loading: boolean;
-  query: string;
-  allTags: TagRow[];
-  onCreate: () => void;
-  onOpen: (board: ProjectBoard) => void;
-  onDelete: (id: string) => void;
-}) {
-  const tagById = useMemo(() => new Map(allTags.map((t) => [t.id, t])), [allTags]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return boards;
-    return boards.filter((b) => b.name.toLowerCase().includes(q));
-  }, [boards, query]);
-
-  if (loading) {
-    return null;
-  }
-
-  if (filtered.length === 0) {
-    return (
-      <EmptyState
-        icon={Layers}
-        title={query.trim() ? "No boards match your search" : "No Tag Boards yet"}
-        description={
-          query.trim()
-            ? "Try a different search term."
-            : 'Boards auto-collect every project with a chosen tag (e.g. "Kitchen Remodels") — shared with your whole team, always current.'
-        }
-        action={
-          !query.trim() ? (
-            <Button onClick={onCreate}>
-              <Layers className="mr-2 h-4 w-4" /> New Board
-            </Button>
-          ) : undefined
-        }
-      />
-    );
-  }
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {filtered.map((b) => (
-        <div
-          key={b.id}
-          className="group relative cursor-pointer rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary/40"
-          onClick={() => onOpen(b)}
-        >
-          <button
-            type="button"
-            className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground opacity-0 hover:bg-accent hover:text-destructive group-hover:opacity-100"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(b.id);
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-          <Layers className="h-6 w-6 text-primary" />
-          <p className="mt-3 truncate text-sm font-extrabold text-foreground">{b.name}</p>
-          <div className="mt-2 flex flex-wrap gap-1">
-            {b.tag_ids.slice(0, 4).map((tid) => {
-              const t = tagById.get(tid);
-              if (!t) return null;
-              return (
-                <span
-                  key={tid}
-                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: t.color }} />
-                  {t.name}
-                </span>
-              );
-            })}
-          </div>
-        </div>
       ))}
     </div>
   );
