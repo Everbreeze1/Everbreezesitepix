@@ -956,7 +956,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
       >
         <DialogContent
           className="max-w-none w-screen h-screen p-0 gap-0 rounded-none border-0 sm:rounded-none [&>button]:hidden"
-          style={{ background: "hsl(var(--muted))" }}
+          style={{ background: "var(--muted)" }}
         >
           <DialogHeader className="sr-only">
             <DialogTitle>Document template editor</DialogTitle>
