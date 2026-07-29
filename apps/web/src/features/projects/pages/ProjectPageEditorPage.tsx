@@ -32,16 +32,19 @@ import {
   Undo2,
   Redo2,
   Sparkles,
+  Copy,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/sitepix/client";
@@ -88,6 +91,8 @@ export function ProjectPageEditorPage() {
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState<ProjectPhoto[]>([]);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareUpdating, setShareUpdating] = useState(false);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
   const [snippets, setSnippets] = useState<TextSnippet[]>([]);
   const [exporting, setExporting] = useState(false);
@@ -189,21 +194,24 @@ export function ProjectPageEditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedTitle, debouncedHtml, loading]);
 
-  async function handleShare() {
+  async function handleToggleShare(enable: boolean) {
+    setShareUpdating(true);
     try {
-      const res = await setProjectPageShare({ data: { pageId, enable: revoked } });
+      const res = await setProjectPageShare({ data: { pageId, enable } });
       setShareToken(res.shareToken);
-      setRevoked(!revoked);
-      if (revoked) {
-        const url = `${window.location.origin}/share/pages/${res.shareToken}`;
-        await navigator.clipboard.writeText(url);
-        toast.success("Share link copied to clipboard");
-      } else {
-        toast.success("Share link disabled");
-      }
+      setRevoked(!enable);
     } catch (e: any) {
       toast.error(e?.message ?? "Could not update sharing");
+    } finally {
+      setShareUpdating(false);
     }
+  }
+
+  async function copyShareLink() {
+    if (!shareToken) return;
+    const url = `${window.location.origin}/share/pages/${shareToken}`;
+    await navigator.clipboard.writeText(url);
+    toast.success("Link copied to clipboard");
   }
 
   async function handleExport() {
@@ -294,7 +302,7 @@ export function ProjectPageEditorPage() {
               {exporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileDown className="mr-1.5 h-3.5 w-3.5" />}
               Export PDF
             </Button>
-            <Button size="sm" variant={revoked ? "outline" : "default"} onClick={handleShare}>
+            <Button size="sm" variant={revoked ? "outline" : "default"} onClick={() => setShareOpen(true)}>
               <Share2 className="mr-1.5 h-3.5 w-3.5" />
               {revoked ? "Share" : "Shared"}
             </Button>
@@ -335,6 +343,50 @@ export function ProjectPageEditorPage() {
               )}
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share "{title}"</DialogTitle>
+            <DialogDescription>
+              Anyone with the link can view a read-only copy of this document.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center justify-between rounded-lg border border-border p-3">
+            <div className="flex items-center gap-2.5">
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-bold text-foreground">
+                  {revoked ? "Link sharing off" : "Anyone with the link"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {revoked ? "Only you can see this document" : "Viewers can read and download a PDF"}
+                </p>
+              </div>
+            </div>
+            {shareUpdating ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <Switch checked={!revoked} onCheckedChange={handleToggleShare} />
+            )}
+          </div>
+
+          {!revoked && shareToken && (
+            <div className="flex items-center gap-2">
+              <Input
+                readOnly
+                value={`${window.location.origin}/share/pages/${shareToken}`}
+                className="h-9 text-xs"
+                onFocus={(e) => e.currentTarget.select()}
+              />
+              <Button size="sm" onClick={copyShareLink}>
+                <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
