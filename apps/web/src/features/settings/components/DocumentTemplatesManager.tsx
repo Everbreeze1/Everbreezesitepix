@@ -722,8 +722,10 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     const { data, error } = await supabase
       .from("document_templates" as any)
       .insert({
+        // Never inherit a null team_id from an example — the copy must belong
+        // to the caller's team so it is editable.
         name: `${t.name} (copy)`,
-        team_id: t.team_id,
+        team_id: teamId ?? null,
         created_by: user?.id,
         body: t.body,
         fields: t.fields,
@@ -809,6 +811,9 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
             const body = parseBody(t.body);
             const preset = STYLE_PRESETS.find((p) => p.key === body.style) ?? STYLE_PRESETS[0];
             const Icon = preset.icon;
+            // Built-in examples (no team, no owner) are read-only for everyone —
+            // RLS rejects writes to them, so only Duplicate is offered.
+            const isExample = t.team_id === null;
             return (
               <Card key={t.id} className="flex flex-col gap-3 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -824,11 +829,15 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                       </div>
                     </div>
                   </div>
-                  {t.archived && (
+                  {isExample ? (
+                    <Badge variant="outline" className="shrink-0 text-[10px]">
+                      Example
+                    </Badge>
+                  ) : t.archived ? (
                     <Badge variant="secondary" className="text-[10px]">
                       Archived
                     </Badge>
-                  )}
+                  ) : null}
                 </div>
                 <div className="rounded border bg-muted/30 p-2 text-[11px] text-muted-foreground line-clamp-3">
                   {body.html
@@ -837,7 +846,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                     .slice(0, 180) || "Empty document"}
                 </div>
                 <div className="mt-auto flex flex-wrap gap-1">
-                  {canManage && (
+                  {canManage && !isExample && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -853,11 +862,16 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                     </Button>
                   )}
                   {canManage && (
-                    <Button size="sm" variant="ghost" onClick={() => duplicate(t)}>
-                      <Copy className="mr-1 h-3.5 w-3.5" /> Duplicate
+                    <Button
+                      size="sm"
+                      variant={isExample ? "outline" : "ghost"}
+                      onClick={() => duplicate(t)}
+                    >
+                      <Copy className="mr-1 h-3.5 w-3.5" />
+                      {isExample ? "Duplicate to edit" : "Duplicate"}
                     </Button>
                   )}
-                  {canManage && (
+                  {canManage && !isExample && (
                     <Button size="sm" variant="ghost" onClick={() => toggleArchive(t)}>
                       {t.archived ? (
                         <>
@@ -870,7 +884,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                       )}
                     </Button>
                   )}
-                  {canManage && (
+                  {canManage && !isExample && (
                     <Button
                       size="sm"
                       variant="ghost"

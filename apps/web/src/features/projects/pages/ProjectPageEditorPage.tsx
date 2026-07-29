@@ -72,7 +72,7 @@ import {
   deleteTextSnippet,
   type TextSnippet,
 } from "@/lib/text-snippets.functions";
-import { ProjectImage } from "@/lib/tiptap-project-image";
+import { ProjectImage, isPhotoSlot } from "@/lib/tiptap-project-image";
 import { downloadBase64File } from "@/lib/download-file";
 
 interface ProjectPhoto {
@@ -108,6 +108,8 @@ export function ProjectPageEditorPage() {
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState<ProjectPhoto[]>([]);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
+  /** Doc position of the template photo slot being filled, if the picker was opened by clicking one. */
+  const slotPosRef = useRef<number | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareUpdating, setShareUpdating] = useState(false);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
@@ -141,6 +143,16 @@ export function ProjectPageEditorPage() {
     ],
     content: "",
     editorProps: {
+      // Clicking an unfilled template photo slot opens the picker and swaps
+      // the real photo in at that exact position.
+      handleClickOn: (_view, _pos, node, nodePos) => {
+        if (node.type.name === "image" && isPhotoSlot(node.attrs)) {
+          slotPosRef.current = nodePos;
+          setImagePickerOpen(true);
+          return true;
+        }
+        return false;
+      },
       attributes: {
         class:
           "tiptap prose prose-sm max-w-none focus:outline-none min-h-[60vh] prose-headings:font-bold prose-p:my-2 prose-ul:my-2 prose-ol:my-2",
@@ -282,7 +294,16 @@ export function ProjectPageEditorPage() {
   }
 
   function insertImage(photo: ProjectPhoto) {
-    editor?.chain().focus().setImage({ src: photo.url, alt: photo.caption ?? "", "data-photo-id": photo.id } as any).run();
+    const attrs = { src: photo.url, alt: photo.caption ?? "", "data-photo-id": photo.id } as any;
+    const slotPos = slotPosRef.current;
+    slotPosRef.current = null;
+    if (slotPos !== null) {
+      // setImage() inserts over the current selection, so selecting the slot
+      // node first makes this a replace rather than an insert.
+      editor?.chain().focus().setNodeSelection(slotPos).setImage(attrs).run();
+    } else {
+      editor?.chain().focus().setImage(attrs).run();
+    }
     setImagePickerOpen(false);
   }
 
@@ -442,11 +463,19 @@ export function ProjectPageEditorPage() {
         </div>
       </div>
 
-      <Dialog open={imagePickerOpen} onOpenChange={setImagePickerOpen}>
+      <Dialog
+        open={imagePickerOpen}
+        onOpenChange={(v) => {
+          if (!v) slotPosRef.current = null;
+          setImagePickerOpen(v);
+        }}
+      >
         <DialogContent className="max-h-[80vh] max-w-2xl overflow-hidden p-0">
           <div className="flex max-h-[80vh] flex-col">
             <DialogHeader className="border-b px-6 pb-4 pt-5">
-              <DialogTitle>Insert a project photo</DialogTitle>
+              <DialogTitle>
+                {slotPosRef.current !== null ? "Fill this photo slot" : "Insert a project photo"}
+              </DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-y-auto p-4">
               {photos.length === 0 ? (

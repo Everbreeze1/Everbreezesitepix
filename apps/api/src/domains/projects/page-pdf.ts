@@ -312,6 +312,64 @@ function collectInlineWords(node: HtmlNode, inherited: Style): Word[] {
   return out;
 }
 
+/**
+ * Images are inline nodes, so a paragraph may hold several of them — a photo
+ * strip. Render them side by side across the content width, mirroring the
+ * editor. Slots that failed to embed (unfilled SVG placeholders, which pdf-lib
+ * cannot read) are dropped, so they never reach a delivered document.
+ */
+async function renderImageRow(layout: Layout, imgs: ElementNode[]) {
+  const embedded: PDFImage[] = [];
+  for (const el of imgs) {
+    if (!el.attrs.src) continue;
+    const img = await tryEmbedImage(layout.pdf, el.attrs.src);
+    if (img) embedded.push(img);
+  }
+  if (!embedded.length) return;
+
+  if (embedded.length === 1) {
+    const img = embedded[0];
+    const ratio = img.height / img.width;
+    let w = CONTENT_W * 0.7;
+    let h = w * ratio;
+    if (h > 320) {
+      h = 320;
+      w = h / ratio;
+    }
+    layout.ensureSpace(h + 12);
+    layout.page.drawImage(img, { x: MARGIN, y: layout.y - h, width: w, height: h });
+    layout.y -= h + 12;
+    return;
+  }
+
+  const gap = 8;
+  const cellW = (CONTENT_W - gap * (embedded.length - 1)) / embedded.length;
+  const rowH = Math.min(
+    Math.max(...embedded.map((i) => cellW * (i.height / i.width))),
+    260,
+  );
+  layout.ensureSpace(rowH + 12);
+  const top = layout.y;
+  let x = MARGIN;
+  for (const img of embedded) {
+    const ratio = img.height / img.width;
+    let w = cellW;
+    let h = w * ratio;
+    if (h > rowH) {
+      h = rowH;
+      w = h / ratio;
+    }
+    layout.page.drawImage(img, {
+      x: x + (cellW - w) / 2,
+      y: top - rowH + (rowH - h) / 2,
+      width: w,
+      height: h,
+    });
+    x += cellW + gap;
+  }
+  layout.y = top - rowH - 12;
+}
+
 async function renderTable(layout: Layout, table: ElementNode) {
   const rows: ElementNode[] = [];
   const walk = (n: HtmlNode) => {
@@ -397,7 +455,18 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
       return;
     }
     case "p": {
-      layout.drawParagraph(collectInlineWords(node, empty), { x: MARGIN, width: CONTENT_W, size: 11 });
+      const imgs = node.children.filter(
+        (c): c is ElementNode => c.type === "element" && c.tag === "img",
+      );
+      const words = node.children
+        .filter((c) => !(c.type === "element" && c.tag === "img"))
+        .flatMap((c) => collectInlineWords(c, empty));
+      // An image-only paragraph must not also emit a blank line, but a truly
+      // empty <p></p> still needs to render as vertical space.
+      if (words.length || !imgs.length) {
+        layout.drawParagraph(words, { x: MARGIN, width: CONTENT_W, size: 11 });
+      }
+      if (imgs.length) await renderImageRow(layout, imgs);
       return;
     }
     case "ul":
@@ -413,23 +482,7 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
       return;
     }
     case "img": {
-      const url = node.attrs.src;
-      if (url) {
-        const img = await tryEmbedImage(layout.pdf, url);
-        if (img) {
-          const maxW = CONTENT_W * 0.7;
-          const ratio = img.height / img.width;
-          let w = maxW;
-          let h = w * ratio;
-          if (h > 320) {
-            h = 320;
-            w = h / ratio;
-          }
-          layout.ensureSpace(h + 12);
-          layout.page.drawImage(img, { x: MARGIN, y: layout.y - h, width: w, height: h });
-          layout.y -= h + 12;
-        }
-      }
+      await renderImageRow(layout, [node]);
       return;
     }
     case "table": {

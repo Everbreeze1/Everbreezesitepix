@@ -5,6 +5,18 @@ import type { AuthedContext } from "../../lib/user-context";
 
 const IMG_TAG_RE = /<img\b[^>]*\bdata-photo-id="([0-9a-fA-F-]{36})"[^>]*>/g;
 
+/** Unfilled template photo slots — an inline SVG data URI and never a real photo. */
+const PHOTO_SLOT_RE = /<img\b[^>]*src="data:image\/svg\+xml[^"]*"[^>]*>/gi;
+
+/**
+ * Drops unfilled photo slots. They are authoring affordances ("click to add"),
+ * not deliverable content, so anything a client sees — a shared link or an
+ * exported PDF — must never show them.
+ */
+export function stripPhotoSlots(html: string): string {
+  return html.replace(PHOTO_SLOT_RE, "");
+}
+
 /** Rewrites every `<img data-photo-id="...">` tag's `src` to a fresh signed URL — never persist signed URLs, they expire. */
 export async function resolvePageImages(html: string, supabase: SupabaseClient<any>): Promise<string> {
   const ids = Array.from(new Set(Array.from(html.matchAll(IMG_TAG_RE), (m) => m[1])));
@@ -410,12 +422,12 @@ export async function getPublicProjectPageService(
 
   const supa = admin as unknown as SupabaseClient<any>;
   const [contentHtml, headerHtml, footerHtml] = await Promise.all([
-    resolvePageImages(row.content_html, supa),
+    resolvePageImages(row.content_html, supa).then(stripPhotoSlots),
     resolveHeaderFooterTokens(row.header_html, row.project_id, row.created_by).then((h) =>
-      h ? resolvePageImages(h, supa) : h,
+      h ? resolvePageImages(h, supa).then(stripPhotoSlots) : h,
     ),
     resolveHeaderFooterTokens(row.footer_html, row.project_id, row.created_by).then((h) =>
-      h ? resolvePageImages(h, supa) : h,
+      h ? resolvePageImages(h, supa).then(stripPhotoSlots) : h,
     ),
   ]);
   return {

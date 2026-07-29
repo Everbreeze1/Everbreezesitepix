@@ -34,16 +34,24 @@ export async function listDocumentTemplatesService(
     .order("updated_at", { ascending: false });
   if (error) throw new Error(error.message);
 
-  return {
-    templates: ((data as any[]) ?? []).map((t) => ({
-      id: t.id,
-      name: t.name,
-      description: parseBody(t.body).description,
-      isExample: t.team_id === null,
-      fields: (t.fields as string[]) ?? [],
-      updatedAt: t.updated_at,
-    })),
-  };
+  const templates: DocumentTemplateSummary[] = ((data as any[]) ?? []).map((t) => ({
+    id: t.id,
+    name: t.name,
+    description: parseBody(t.body).description,
+    isExample: t.team_id === null,
+    fields: (t.fields as string[]) ?? [],
+    updatedAt: t.updated_at,
+  }));
+
+  // The team's own templates first (most recently touched at the top), then
+  // the built-in examples, which read best in their numbered order by name.
+  templates.sort((a, b) => {
+    if (a.isExample !== b.isExample) return a.isExample ? 1 : -1;
+    if (a.isExample) return a.name.localeCompare(b.name);
+    return b.updatedAt.localeCompare(a.updatedAt);
+  });
+
+  return { templates };
 }
 
 export const getDocumentTemplateInputSchema = z.object({ templateId: z.string().uuid() });

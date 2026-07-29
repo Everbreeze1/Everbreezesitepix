@@ -68,6 +68,15 @@ export function ChoosePageTemplateDialog({
     });
   }, [templates, filter, search]);
 
+  /** Grouped so "Your Company" always reads above the built-in examples. */
+  const sections = useMemo<Array<[string, DocumentTemplateSummary[]]>>(() => {
+    const groups: Array<[string, DocumentTemplateSummary[]]> = [
+      ["Your Company", visible.filter((t) => !t.isExample)],
+      ["Example Templates", visible.filter((t) => t.isExample)],
+    ];
+    return groups.filter(([, items]) => items.length > 0);
+  }, [visible]);
+
   async function openPreview(id: string) {
     setPreviewLoading(true);
     try {
@@ -159,27 +168,38 @@ export function ChoosePageTemplateDialog({
                     : "No templates match."}
                 </p>
               ) : (
-                <div className="space-y-1.5">
-                  {visible.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => openPreview(t.id)}
-                      className="flex w-full items-center gap-3 rounded-lg border border-border p-3 text-left hover:border-primary/40 hover:bg-accent/40"
-                    >
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10">
-                        <FileText className="h-4 w-4 text-primary" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-bold text-foreground">
-                          {t.name}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {t.isExample ? "Example Templates" : "Your Company"}
-                          {t.fields.length > 0 && ` · ${t.fields.length} merge field${t.fields.length === 1 ? "" : "s"}`}
-                        </span>
-                      </span>
-                    </button>
+                <div className="space-y-5">
+                  {sections.map(([heading, items]) => (
+                    <div key={heading}>
+                      <p className="mb-2 rounded bg-muted px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                        {heading}
+                      </p>
+                      <div className="space-y-1.5">
+                        {items.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => openPreview(t.id)}
+                            className="flex w-full items-center gap-3 rounded-lg border border-border p-3 text-left hover:border-primary/40 hover:bg-accent/40"
+                          >
+                            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10">
+                              <FileText className="h-4 w-4 text-primary" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-bold text-foreground">
+                                {t.name}
+                              </span>
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {t.description ??
+                                  (t.fields.length > 0
+                                    ? `${t.fields.length} merge field${t.fields.length === 1 ? "" : "s"}`
+                                    : "No merge fields")}
+                              </span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
