@@ -1,17 +1,22 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Plus, Settings2, ChevronRight, GripVertical } from "lucide-react";
+import { Plus, Settings2 } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
+  KeyboardSensor,
   useSensor,
   useSensors,
   useDraggable,
   useDroppable,
-  closestCorners,
+  pointerWithin,
+  defaultDropAnimationSideEffects,
+  type Announcements,
   type DragEndEvent,
   type DragStartEvent,
+  type DropAnimation,
 } from "@dnd-kit/core";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -51,9 +56,16 @@ function chipTextColor(hex: string): string {
   if (!m) return "#fff";
   const n = parseInt(m[1], 16);
   const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  // Relative luminance (sRGB approximation) — light chips need dark text.
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111827" : "#ffffff";
 }
+
+const CARD_SEP = "::";
+const cardId = (tagId: string, projectId: string) => `${tagId}${CARD_SEP}${projectId}`;
+
+/** Cards settle into place instead of teleporting, and the source card fades back in on cancel. */
+const dropAnimation: DropAnimation = {
+  sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: "0.35" } } }),
+};
 
 export function TagBoardDetailView({
   board,
@@ -74,10 +86,22 @@ export function TagBoardDetailView({
 }) {
   const { user } = useAuth();
   const [addingToTag, setAddingToTag] = useState<TagRow | null>(null);
-  const [draggingProject, setDraggingProject] = useState<ProjectRow | null>(null);
+  const [active, setActive] = useState<{ project: ProjectRow; fromTagId: string } | null>(null);
+  // A real drag ends with a click event on the card; swallow that one click so
+  // dropping a card doesn't also navigate into the project.
+  const suppressClick = useRef(false);
 
-  // A small drag threshold keeps card clicks (navigate to project) working normally.
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  // MouseSensor + TouchSensor rather than PointerSensor: PointerSensor also
+  // claims touch events, which would double-handle taps on mobile and force
+  // `touch-action: none` on cards (killing page scroll). Split sensors let each
+  // input use the right activation rule.
+  const sensors = useSensors(
+    // Mouse: a short movement threshold means plain clicks still open the project.
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    // Touch: press-and-hold to lift, so a normal swipe still scrolls the page.
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
+    useSensor(KeyboardSensor),
+  );
 
   const columns = useMemo(
     () =>
@@ -99,16 +123,38 @@ export function TagBoardDetailView({
       )
     : new Set<string>();
 
+  const announcements: Announcements = {
+    onDragStart: ({ active: a }) => `Picked up ${a.data.current?.projectName}.`,
+    onDragOver: ({ over }) =>
+      over ? `Over ${allTags.find((t) => t.id === over.id)?.name ?? "column"}.` : "No column.",
+    onDragEnd: ({ over }) =>
+      over
+        ? `Moved to ${allTags.find((t) => t.id === over.id)?.name ?? "column"}.`
+        : "Move cancelled.",
+    onDragCancel: () => "Move cancelled.",
+  };
+
   function handleDragStart(e: DragStartEvent) {
-    const p = allProjects.find((x) => x.id === e.active.data.current?.projectId);
-    setDraggingProject(p ?? null);
+    const projectId = e.active.data.current?.projectId as string | undefined;
+    const fromTagId = e.active.data.current?.fromTagId as string | undefined;
+    const project = allProjects.find((p) => p.id === projectId);
+    if (project && fromTagId) setActive({ project, fromTagId });
+    suppressClick.current = true;
+  }
+
+  function endDrag() {
+    setActive(null);
+    // Released after the trailing click has been dispatched.
+    window.setTimeout(() => {
+      suppressClick.current = false;
+    }, 0);
   }
 
   async function handleDragEnd(e: DragEndEvent) {
-    setDraggingProject(null);
     const projectId = e.active.data.current?.projectId as string | undefined;
     const fromTagId = e.active.data.current?.fromTagId as string | undefined;
     const toTagId = e.over?.id ? String(e.over.id) : undefined;
+    endDrag();
     if (!projectId || !fromTagId || !toTagId || fromTagId === toTagId) return;
 
     const toTag = allTags.find((t) => t.id === toTagId);
@@ -133,7 +179,6 @@ export function TagBoardDetailView({
       if (delErr) throw delErr;
     } catch (err: any) {
       toast.error(err?.message ?? "Could not move project");
-      // Put it back where it came from.
       const fromTag = allTags.find((t) => t.id === fromTagId);
       if (fromTag) onTagMoved(projectId, toTagId, fromTag);
     }
@@ -160,30 +205,35 @@ export function TagBoardDetailView({
       ) : (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={pointerWithin}
+          accessibility={{ announcements }}
+          // Pulls the horizontal column strip along when dragging near its edges,
+          // so off-screen columns are reachable.
+          autoScroll={{ threshold: { x: 0.2, y: 0.15 } }}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
-          onDragCancel={() => setDraggingProject(null)}
+          onDragCancel={endDrag}
         >
-          <div className="mt-5 flex gap-4 overflow-x-auto pb-4">
+          <div className="mt-5 flex snap-x gap-4 overflow-x-auto pb-4">
             {columns.map(({ tag, projects }) => (
               <BoardColumn
                 key={tag.id}
                 tag={tag}
                 projects={projects}
                 onAdd={() => setAddingToTag(tag)}
-                isDragging={!!draggingProject}
+                active={active}
+                suppressClick={suppressClick}
               />
             ))}
           </div>
 
-          <DragOverlay dropAnimation={null}>
-            {draggingProject ? (
-              <div className="w-[264px] rotate-2 rounded-lg border border-primary/50 bg-card p-3 shadow-lg">
-                <p className="truncate text-sm font-bold text-foreground">{draggingProject.name}</p>
-                {projectAddress(draggingProject) && (
+          <DragOverlay dropAnimation={dropAnimation}>
+            {active ? (
+              <div className="w-[264px] rotate-2 cursor-grabbing rounded-lg border border-primary/60 bg-card p-3 shadow-2xl ring-2 ring-primary/20">
+                <p className="truncate text-sm font-bold text-foreground">{active.project.name}</p>
+                {projectAddress(active.project) && (
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {projectAddress(draggingProject)}
+                    {projectAddress(active.project)}
                   </p>
                 )}
               </div>
@@ -212,17 +262,22 @@ function BoardColumn({
   tag,
   projects,
   onAdd,
-  isDragging,
+  active,
+  suppressClick,
 }: {
   tag: TagRow;
   projects: ProjectRow[];
   onAdd: () => void;
-  isDragging: boolean;
+  active: { project: ProjectRow; fromTagId: string } | null;
+  suppressClick: React.MutableRefObject<boolean>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: tag.id });
+  const isSource = active?.fromTagId === tag.id;
+  // Only a move into a *different* column is meaningful.
+  const willAccept = !!active && !isSource;
 
   return (
-    <div className="flex w-[280px] shrink-0 flex-col">
+    <div className="flex w-[280px] shrink-0 snap-start flex-col">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <span
@@ -246,62 +301,85 @@ function BoardColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          "mt-3 min-h-[160px] flex-1 space-y-2 rounded-xl border-2 border-dashed p-2 transition-colors",
-          isOver ? "border-primary/60 bg-primary/5" : "border-transparent bg-muted/40",
-          isDragging && !isOver && "border-border/60",
+          "mt-3 min-h-[220px] flex-1 space-y-2 rounded-xl border-2 border-dashed p-2 transition-colors duration-150",
+          isOver && willAccept
+            ? "border-primary bg-primary/10"
+            : willAccept
+              ? "border-border bg-muted/60"
+              : "border-transparent bg-muted/40",
         )}
       >
-        {projects.length === 0 ? (
+        {projects.length === 0 && !(isOver && willAccept) ? (
           <p className="p-4 text-center text-xs text-muted-foreground">
-            {isDragging ? "Drop here to move" : "Projects with this tag will appear here."}
+            {willAccept ? "Drop here to move" : "Projects with this tag will appear here."}
           </p>
         ) : (
-          projects.map((p) => <BoardCard key={p.id} project={p} tagId={tag.id} />)
+          projects.map((p) => (
+            <BoardCard key={p.id} project={p} tagId={tag.id} suppressClick={suppressClick} />
+          ))
+        )}
+
+        {/* Shows exactly where the card will land. */}
+        {isOver && willAccept && (
+          <div className="rounded-lg border-2 border-dashed border-primary/70 bg-primary/5 p-3">
+            <p className="truncate text-sm font-bold text-primary">{active!.project.name}</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-primary/70">Release to move here</p>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-function BoardCard({ project, tagId }: { project: ProjectRow; tagId: string }) {
+function BoardCard({
+  project,
+  tagId,
+  suppressClick,
+}: {
+  project: ProjectRow;
+  tagId: string;
+  suppressClick: React.MutableRefObject<boolean>;
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `${tagId}:${project.id}`,
-    data: { projectId: project.id, fromTagId: tagId },
+    id: cardId(tagId, project.id),
+    data: { projectId: project.id, fromTagId: tagId, projectName: project.name },
   });
   const addr = projectAddress(project);
 
   return (
+    // The whole card is the drag target — no hunting for a small handle, and it
+    // works identically under touch. `attributes` also makes it keyboard-draggable.
     <div
       ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      aria-label={`${project.name}. Press space to move between columns.`}
       className={cn(
-        "group relative rounded-lg border border-border bg-card transition-opacity hover:border-primary/40",
-        isDragging && "opacity-40",
+        // No `touch-action: none` here — TouchSensor's press-and-hold delay does
+        // the disambiguation, so a plain swipe over a card still scrolls.
+        "group relative rounded-lg border border-border bg-card shadow-sm transition-shadow",
+        "cursor-grab hover:border-primary/40 hover:shadow-md active:cursor-grabbing",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        isDragging && "opacity-35",
       )}
     >
-      {/* Drag handle is separate from the link so clicking the card still opens the project. */}
-      <button
-        type="button"
-        {...listeners}
-        {...attributes}
-        aria-label={`Move ${project.name}`}
-        className="absolute right-1 top-1 cursor-grab rounded p-1 text-muted-foreground opacity-0 hover:bg-accent group-hover:opacity-100 active:cursor-grabbing"
-      >
-        <GripVertical className="h-3.5 w-3.5" />
-      </button>
-
       <Link
         to="/projects/$projectId"
         params={{ projectId: project.id }}
         search={{} as any}
+        draggable={false}
+        onClick={(e) => {
+          if (suppressClick.current) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
         className="block p-3"
       >
         <p className="text-[10px] text-muted-foreground">
           {formatDistanceToNow(new Date(project.updated_at), { addSuffix: true })}
         </p>
-        <p className="mt-1 flex items-center justify-between gap-1 truncate pr-5 text-sm font-bold text-foreground">
-          {project.name}
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100" />
-        </p>
+        <p className="mt-1 truncate text-sm font-bold text-foreground">{project.name}</p>
         {addr && <p className="mt-0.5 truncate text-xs text-muted-foreground">{addr}</p>}
       </Link>
     </div>
