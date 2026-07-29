@@ -8,6 +8,7 @@ import {
   getPublicProjectPagePdf,
   type PublicProjectPage,
 } from "@/lib/project-pages.functions";
+import { downloadBase64File } from "@/lib/download-file";
 
 export const Route = createFileRoute("/share/pages/$token")({
   head: () => ({
@@ -19,21 +20,6 @@ export const Route = createFileRoute("/share/pages/$token")({
   }),
   component: PublicPagePage,
 });
-
-function downloadBase64Pdf(pdfBase64: string, filename: string) {
-  const bin = atob(pdfBase64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const blob = new Blob([bytes], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-}
 
 function PublicPagePage() {
   const { token } = Route.useParams();
@@ -62,7 +48,7 @@ function PublicPagePage() {
     setDownloading(true);
     try {
       const res = await getPublicProjectPagePdf({ data: { token } });
-      downloadBase64Pdf(res.pdfBase64, res.filename);
+      downloadBase64File(res.pdfBase64, res.filename);
     } finally {
       setDownloading(false);
     }

@@ -159,6 +159,8 @@ import {
   deleteDocumentFolderService,
   deleteProjectPageInputSchema,
   deleteProjectPageService,
+  duplicateProjectPageInputSchema,
+  duplicateProjectPageService,
   getProjectPageInputSchema,
   getProjectPageService,
   getPublicProjectPageService,
@@ -812,6 +814,10 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   deleteProjectPage: authed(
     (d) => deleteProjectPageInputSchema.parse(d),
     deleteProjectPageService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  duplicateProjectPage: authed(
+    (d) => duplicateProjectPageInputSchema.parse(d),
+    duplicateProjectPageService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   setProjectPageShare: authed(
     (d) => setProjectPageShareInputSchema.parse(d),

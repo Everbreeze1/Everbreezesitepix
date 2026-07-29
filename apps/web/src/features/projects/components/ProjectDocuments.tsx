@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   FileText,
@@ -11,11 +11,19 @@ import {
   FolderPlus,
   FilePlus2,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   ClipboardList,
   Sparkles,
   Move,
+  Pencil,
+  Copy,
+  Share2,
+  FileDown,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -34,14 +42,21 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { toast } from "sonner";
 import { formatBytes } from "@/hooks/use-storage-usage";
 import { relativeTime } from "@sitepix/shared";
+import { downloadBase64File } from "@/lib/download-file";
 import { ProjectReports, type ReportPhotoRef } from "@/features/projects/components/ProjectReports";
 import {
   listProjectDocumentTree,
   createDocumentFolder,
   deleteDocumentFolder,
   createProjectPage,
+  updateProjectPage,
+  deleteProjectPage,
+  duplicateProjectPage,
+  setProjectPageShare,
+  generatePagePdf,
   moveDocument,
   type DocumentTree,
+  type DocumentTreeFolder,
 } from "@/lib/project-pages.functions";
 
 interface ProjectDocument {
@@ -63,6 +78,9 @@ interface Props {
   onChanged?: () => void;
 }
 
+type TypeFilter = "all" | "pages" | "files";
+type SortKey = "name" | "type" | "updated";
+
 function fileTypeLabel(mime: string | null, fileName: string) {
   const lower = fileName.toLowerCase();
   if (mime?.includes("pdf") || lower.endsWith(".pdf")) return "PDF document";
@@ -73,6 +91,37 @@ function fileTypeLabel(mime: string | null, fileName: string) {
     return "Spreadsheet";
   const ext = fileName.includes(".") ? fileName.split(".").pop() : null;
   return ext ? `${ext.toUpperCase()} file` : "File";
+}
+
+function MoveToFolderSubmenu({
+  folders,
+  currentFolderId,
+  onMove,
+}: {
+  folders: DocumentTreeFolder[];
+  currentFolderId: string | null;
+  onMove: (folderId: string | null) => void;
+}) {
+  if (folders.length === 0) return null;
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <Move className="mr-2 h-4 w-4" /> Move to…
+      </DropdownMenuSubTrigger>
+      <DropdownMenuPortal>
+        <DropdownMenuSubContent>
+          {currentFolderId && <DropdownMenuItem onClick={() => onMove(null)}>Top level</DropdownMenuItem>}
+          {folders
+            .filter((f) => f.id !== currentFolderId)
+            .map((f) => (
+              <DropdownMenuItem key={f.id} onClick={() => onMove(f.id)}>
+                {f.name}
+              </DropdownMenuItem>
+            ))}
+        </DropdownMenuSubContent>
+      </DropdownMenuPortal>
+    </DropdownMenuSub>
+  );
 }
 
 export function ProjectDocuments({ projectId, projectName, projectPhotos, onChanged }: Props) {
@@ -86,6 +135,11 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
   const [creating, setCreating] = useState(false);
   const [legacyOpen, setLegacyOpen] = useState(false);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("updated");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [exportingId, setExportingId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   async function load() {
@@ -162,6 +216,21 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   }
 
+  async function renameDocument(doc: ProjectDocument) {
+    const name = window.prompt("Rename document", doc.file_name);
+    if (!name?.trim() || name.trim() === doc.file_name) return;
+    const { error } = await (supabase as any)
+      .from("project_documents")
+      .update({ file_name: name.trim() })
+      .eq("id", doc.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Document renamed");
+    await load();
+  }
+
   async function deleteDocument(doc: ProjectDocument) {
     if (
       !(await confirm({
@@ -236,11 +305,127 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
     }
   }
 
+  async function handleRenamePage(pageId: string, currentTitle: string) {
+    const title = window.prompt("Rename page", currentTitle);
+    if (!title?.trim() || title.trim() === currentTitle) return;
+    try {
+      await updateProjectPage({ data: { pageId, title: title.trim() } });
+      toast.success("Page renamed");
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not rename page");
+    }
+  }
+
+  async function handleDuplicatePage(pageId: string) {
+    try {
+      const res = await duplicateProjectPage({ data: { pageId } });
+      toast.success(`Duplicated as "${res.page.title}"`);
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not duplicate page");
+    }
+  }
+
+  async function handleQuickSharePage(pageId: string) {
+    try {
+      const res = await setProjectPageShare({ data: { pageId, enable: true } });
+      const url = `${window.location.origin}/share/pages/${res.shareToken}`;
+      await navigator.clipboard.writeText(url);
+      toast.success("Share link copied to clipboard");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not share page");
+    }
+  }
+
+  async function handleExportPagePdf(pageId: string) {
+    setExportingId(pageId);
+    try {
+      const res = await generatePagePdf({ data: { pageId } });
+      downloadBase64File(res.pdfBase64, res.filename);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not export PDF");
+    } finally {
+      setExportingId(null);
+    }
+  }
+
+  async function handleDeletePage(pageId: string, title: string) {
+    if (
+      !(await confirm({ description: `Delete "${title}"? This can't be undone.`, variant: "destructive" }))
+    )
+      return;
+    try {
+      await deleteProjectPage({ data: { pageId } });
+      toast.success("Page deleted");
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not delete page");
+    }
+  }
+
   const folders = (tree?.folders ?? []).filter(() => currentFolderId === null); // folders are flat, shown only at top level
-  const pagesInView = (tree?.pages ?? []).filter((p) => p.folderId === currentFolderId);
-  const filesInView = documents.filter((d) => d.folder_id === currentFolderId);
+  const q = search.trim().toLowerCase();
+
+  const pagesInView = useMemo(() => {
+    let list = (tree?.pages ?? []).filter((p) => p.folderId === currentFolderId);
+    if (q) list = list.filter((p) => p.title.toLowerCase().includes(q));
+    return list;
+  }, [tree, currentFolderId, q]);
+
+  const filesInView = useMemo(() => {
+    let list = documents.filter((d) => d.folder_id === currentFolderId);
+    if (q) list = list.filter((d) => d.file_name.toLowerCase().includes(q));
+    return list;
+  }, [documents, currentFolderId, q]);
+
+  const sortedPages = useMemo(() => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...pagesInView].sort((a, b) => {
+      if (sortKey === "name") return a.title.localeCompare(b.title) * dir;
+      if (sortKey === "updated") return (a.updatedAt < b.updatedAt ? -1 : 1) * dir;
+      return 0; // "type" — pages and files are sorted as separate lists, nothing to compare within one
+    });
+  }, [pagesInView, sortKey, sortDir]);
+
+  const sortedFiles = useMemo(() => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...filesInView].sort((a, b) => {
+      if (sortKey === "name") return a.file_name.localeCompare(b.file_name) * dir;
+      if (sortKey === "updated") return (a.created_at < b.created_at ? -1 : 1) * dir;
+      if (sortKey === "type") return fileTypeLabel(a.mime_type, a.file_name).localeCompare(fileTypeLabel(b.mime_type, b.file_name)) * dir;
+      return 0;
+    });
+  }, [filesInView, sortKey, sortDir]);
+
+  const showPages = typeFilter !== "files";
+  const showFiles = typeFilter !== "pages";
+  const visiblePages = showPages ? sortedPages : [];
+  const visibleFiles = showFiles ? sortedFiles : [];
   const currentFolder = tree?.folders.find((f) => f.id === currentFolderId) ?? null;
-  const isEmpty = folders.length === 0 && pagesInView.length === 0 && filesInView.length === 0;
+  const isEmpty = folders.length === 0 && visiblePages.length === 0 && visibleFiles.length === 0;
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  function SortHeader({ label, sortKeyValue }: { label: string; sortKeyValue: SortKey }) {
+    const active = sortKey === sortKeyValue;
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSort(sortKeyValue)}
+        className={`flex items-center gap-1 text-xs font-bold uppercase tracking-wide ${active ? "text-foreground" : "text-muted-foreground"}`}
+      >
+        {label}
+        {active && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+      </button>
+    );
+  }
 
   return (
     <div>
@@ -339,8 +524,37 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
         </button>
       )}
 
+      {/* Search + type filter */}
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative max-w-sm flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Find a document…"
+            className="h-9 pl-8"
+          />
+        </div>
+        <div className="flex gap-1.5">
+          {(["all", "pages", "files"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setTypeFilter(f)}
+              className={`rounded-full px-3 py-1.5 text-xs font-bold capitalize ${
+                typeFilter === f
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-accent"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Tree */}
-      <div className="mt-5 overflow-hidden rounded-3xl border border-border bg-card/65">
+      <div className="mt-4 overflow-hidden rounded-3xl border border-border bg-card/65">
         {loading ? (
           <div className="flex items-center justify-center py-14 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -352,21 +566,31 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
             </span>
             <p className="text-sm font-bold text-foreground">Nothing here yet</p>
             <p className="max-w-sm text-xs text-muted-foreground">
-              Create a page, add a folder, or upload plans, permits, and reports.
+              {q ? "No documents match your search." : "Create a page, add a folder, or upload plans, permits, and reports."}
             </p>
           </div>
         ) : (
           <>
+            <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-2.5">
+              <div className="flex-1">
+                <SortHeader label="Name" sortKeyValue="name" />
+              </div>
+              <div className="w-28 shrink-0">
+                <SortHeader label="Type" sortKeyValue="type" />
+              </div>
+              <div className="w-36 shrink-0">
+                <SortHeader label="Last updated" sortKeyValue="updated" />
+              </div>
+              <div className="w-8 shrink-0" />
+            </div>
+
             {!currentFolder &&
-              folders.map((f, i) => (
-                <div
-                  key={f.id}
-                  className={`flex items-center justify-between gap-4 p-4 ${i < folders.length - 1 || pagesInView.length || filesInView.length ? "border-b border-border" : ""}`}
-                >
+              folders.map((f) => (
+                <div key={f.id} className="flex items-center justify-between gap-4 border-b border-border p-4">
                   <button
                     type="button"
                     onClick={() => setCurrentFolderId(f.id)}
-                    className="flex min-w-0 items-center gap-3 text-left"
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
                   >
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted">
                       <Folder className="h-5 w-5 text-muted-foreground" />
@@ -388,55 +612,104 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                 </div>
               ))}
 
-            {pagesInView.map((p, i) => (
-              <div
-                key={p.id}
-                className={`flex items-center justify-between gap-4 p-4 ${i < pagesInView.length - 1 || filesInView.length ? "border-b border-border" : ""}`}
-              >
+            {visiblePages.map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-4 border-b border-border p-4 last:border-b-0">
                 <button
                   type="button"
                   onClick={() =>
                     navigate({ to: "/projects/$projectId/pages/$pageId", params: { projectId, pageId: p.id } })
                   }
-                  className="flex min-w-0 items-center gap-3 text-left"
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 >
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10">
                     <FileText className="h-5 w-5 text-primary" />
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-extrabold text-foreground">{p.title}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground sm:hidden">
                       Page · Updated {relativeTime(p.updatedAt)}
                     </p>
                   </div>
                 </button>
-                <MoveMenu
-                  folders={tree?.folders ?? []}
-                  currentFolderId={p.folderId}
-                  onMove={(folderId) => handleMove("page", p.id, folderId)}
-                />
+                <span className="hidden w-28 shrink-0 text-xs text-muted-foreground sm:inline">Page</span>
+                <span className="hidden w-36 shrink-0 text-xs text-muted-foreground sm:inline">
+                  {relativeTime(p.updatedAt)}
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 shrink-0 text-muted-foreground"
+                      aria-label="Page actions"
+                      disabled={exportingId === p.id}
+                    >
+                      {exportingId === p.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <MoreHorizontal className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() =>
+                        navigate({ to: "/projects/$projectId/pages/$pageId", params: { projectId, pageId: p.id } })
+                      }
+                    >
+                      <FileText className="mr-2 h-4 w-4" /> Open
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExportPagePdf(p.id)}>
+                      <FileDown className="mr-2 h-4 w-4" /> Export to PDF
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleQuickSharePage(p.id)}>
+                      <Share2 className="mr-2 h-4 w-4" /> Share
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleRenamePage(p.id, p.title)}>
+                      <Pencil className="mr-2 h-4 w-4" /> Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDuplicatePage(p.id)}>
+                      <Copy className="mr-2 h-4 w-4" /> Duplicate
+                    </DropdownMenuItem>
+                    <MoveToFolderSubmenu
+                      folders={tree?.folders ?? []}
+                      currentFolderId={p.folderId}
+                      onMove={(folderId) => handleMove("page", p.id, folderId)}
+                    />
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => handleDeletePage(p.id, p.title)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             ))}
 
-            {filesInView.map((doc, i) => (
-              <div
-                key={doc.id}
-                className={`flex items-center justify-between gap-4 p-4 ${i < filesInView.length - 1 ? "border-b border-border" : ""}`}
-              >
-                <div className="flex min-w-0 items-center gap-3">
+            {visibleFiles.map((doc) => (
+              <div key={doc.id} className="flex items-center justify-between gap-4 border-b border-border p-4 last:border-b-0">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10">
                     <FileText className="h-5 w-5 text-primary" />
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-extrabold text-foreground">{doc.file_name}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground sm:hidden">
                       {fileTypeLabel(doc.mime_type, doc.file_name)} · Created{" "}
                       {relativeTime(doc.created_at)}
                     </p>
                   </div>
                 </div>
+                <span className="hidden w-28 shrink-0 text-xs text-muted-foreground sm:inline">
+                  {fileTypeLabel(doc.mime_type, doc.file_name)}
+                </span>
+                <span className="hidden w-36 shrink-0 text-xs text-muted-foreground sm:inline">
+                  {relativeTime(doc.created_at)}
+                </span>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-full bg-muted px-3 py-1.5 text-[10px] font-extrabold text-muted-foreground">
+                  <span className="hidden rounded-full bg-muted px-3 py-1.5 text-[10px] font-extrabold text-muted-foreground sm:inline-block">
                     {formatBytes(doc.size_bytes)}
                   </span>
                   <DropdownMenu>
@@ -454,29 +727,14 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                       <DropdownMenuItem onClick={() => void downloadDocument(doc)}>
                         <Download className="mr-2 h-4 w-4" /> Download
                       </DropdownMenuItem>
-                      {tree && tree.folders.length > 0 && (
-                        <DropdownMenuSub>
-                          <DropdownMenuSubTrigger>
-                            <Move className="mr-2 h-4 w-4" /> Move to…
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuPortal>
-                            <DropdownMenuSubContent>
-                              {doc.folder_id && (
-                                <DropdownMenuItem onClick={() => handleMove("file", doc.id, null)}>
-                                  Top level
-                                </DropdownMenuItem>
-                              )}
-                              {tree.folders
-                                .filter((f) => f.id !== doc.folder_id)
-                                .map((f) => (
-                                  <DropdownMenuItem key={f.id} onClick={() => handleMove("file", doc.id, f.id)}>
-                                    {f.name}
-                                  </DropdownMenuItem>
-                                ))}
-                            </DropdownMenuSubContent>
-                          </DropdownMenuPortal>
-                        </DropdownMenuSub>
-                      )}
+                      <DropdownMenuItem onClick={() => void renameDocument(doc)}>
+                        <Pencil className="mr-2 h-4 w-4" /> Rename
+                      </DropdownMenuItem>
+                      <MoveToFolderSubmenu
+                        folders={tree?.folders ?? []}
+                        currentFolderId={doc.folder_id}
+                        onMove={(folderId) => handleMove("file", doc.id, folderId)}
+                      />
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         onClick={() => void deleteDocument(doc)}
@@ -506,36 +764,5 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function MoveMenu({
-  folders,
-  currentFolderId,
-  onMove,
-}: {
-  folders: { id: string; name: string }[];
-  currentFolderId: string | null;
-  onMove: (folderId: string | null) => void;
-}) {
-  if (folders.length === 0) return <div className="w-8" />;
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" aria-label="Move">
-          <Move className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {currentFolderId && <DropdownMenuItem onClick={() => onMove(null)}>Top level</DropdownMenuItem>}
-        {folders
-          .filter((f) => f.id !== currentFolderId)
-          .map((f) => (
-            <DropdownMenuItem key={f.id} onClick={() => onMove(f.id)}>
-              {f.name}
-            </DropdownMenuItem>
-          ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

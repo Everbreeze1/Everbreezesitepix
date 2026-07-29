@@ -85,6 +85,11 @@ export const updateProjectPage = rpcOp<
 
 export const deleteProjectPage = rpcOp<{ pageId: string }, { ok: true }>("deleteProjectPage");
 
+export const duplicateProjectPage = rpcOp<
+  { pageId: string },
+  { page: { id: string; title: string; updated_at: string } }
+>("duplicateProjectPage");
+
 export const setProjectPageShare = rpcOp<
   { pageId: string; enable: boolean },
   { shareToken: string }

@@ -285,6 +285,35 @@ export async function deleteProjectPageService(
   return { ok: true };
 }
 
+export const duplicateProjectPageInputSchema = z.object({ pageId: z.string().uuid() });
+export async function duplicateProjectPageService(
+  ctx: AuthedContext,
+  data: z.infer<typeof duplicateProjectPageInputSchema>,
+) {
+  const { data: source, error: fetchError } = await (ctx.supabase as any)
+    .from("project_pages")
+    .select("project_id, folder_id, title, content_html, header_html, footer_html")
+    .eq("id", data.pageId)
+    .single();
+  if (fetchError || !source) throw new Error("Page not found");
+
+  const { data: row, error } = await (ctx.supabase as any)
+    .from("project_pages")
+    .insert({
+      project_id: source.project_id,
+      folder_id: source.folder_id,
+      created_by: ctx.userId,
+      title: `Copy of ${source.title}`,
+      content_html: source.content_html,
+      header_html: source.header_html,
+      footer_html: source.footer_html,
+    })
+    .select("id, title, updated_at")
+    .single();
+  if (error) throw new Error(error.message);
+  return { page: row };
+}
+
 export const setProjectPageShareInputSchema = z.object({ pageId: z.string().uuid(), enable: z.boolean() });
 export async function setProjectPageShareService(
   ctx: AuthedContext,

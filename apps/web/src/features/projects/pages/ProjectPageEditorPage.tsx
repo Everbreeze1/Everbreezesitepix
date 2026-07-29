@@ -59,26 +59,12 @@ import {
 } from "@/lib/project-pages.functions";
 import { listTextSnippets, createTextSnippet, type TextSnippet } from "@/lib/text-snippets.functions";
 import { ProjectImage } from "@/lib/tiptap-project-image";
+import { downloadBase64File } from "@/lib/download-file";
 
 interface ProjectPhoto {
   id: string;
   url: string;
   caption: string | null;
-}
-
-function downloadBase64Pdf(pdfBase64: string, filename: string) {
-  const bin = atob(pdfBase64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const blob = new Blob([bytes], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 export function ProjectPageEditorPage() {
@@ -240,7 +226,7 @@ export function ProjectPageEditorPage() {
     setExporting(true);
     try {
       const res = await generatePagePdf({ data: { pageId } });
-      downloadBase64Pdf(res.pdfBase64, res.filename);
+      downloadBase64File(res.pdfBase64, res.filename);
       toast.success("Exported to PDF");
     } catch (e: any) {
       toast.error(e?.message ?? "Could not export PDF");
