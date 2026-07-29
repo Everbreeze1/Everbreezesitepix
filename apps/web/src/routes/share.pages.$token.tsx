@@ -109,11 +109,23 @@ function PublicPagePage() {
           </Button>
         </div>
         <div className="rounded-sm border border-border bg-card p-10 shadow-sm sm:p-14 print:border-none print:shadow-none">
+          {data.page.headerHtml && (
+            <div
+              className="tiptap prose prose-sm mb-4 max-w-none border-b border-dashed border-border pb-3 text-muted-foreground"
+              dangerouslySetInnerHTML={{ __html: data.page.headerHtml }}
+            />
+          )}
           <h1 className="font-display mb-6 text-3xl font-bold text-foreground">{data.page.title}</h1>
           <div
             className="tiptap prose prose-sm max-w-none"
             dangerouslySetInnerHTML={{ __html: data.page.contentHtml }}
           />
+          {data.page.footerHtml && (
+            <div
+              className="tiptap prose prose-sm mt-6 max-w-none border-t border-dashed border-border pt-3 text-muted-foreground"
+              dangerouslySetInnerHTML={{ __html: data.page.footerHtml }}
+            />
+          )}
         </div>
       </div>
     </div>

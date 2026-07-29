@@ -33,6 +33,8 @@ export interface ProjectPage {
   folder_id: string | null;
   title: string;
   content_html: string;
+  header_html: string | null;
+  footer_html: string | null;
   share_token: string;
   revoked_at: string | null;
   updated_at: string;
@@ -71,7 +73,13 @@ export const createProjectPage = rpcOp<
 export const getProjectPage = rpcOp<{ pageId: string }, { page: ProjectPage }>("getProjectPage");
 
 export const updateProjectPage = rpcOp<
-  { pageId: string; title?: string; contentHtml?: string },
+  {
+    pageId: string;
+    title?: string;
+    contentHtml?: string;
+    headerHtml?: string | null;
+    footerHtml?: string | null;
+  },
   { ok: true }
 >("updateProjectPage");
 
@@ -84,7 +92,13 @@ export const setProjectPageShare = rpcOp<
 
 export interface PublicProjectPage {
   status: "ok" | "not_found" | "revoked";
-  page: { title: string; contentHtml: string; updatedAt: string } | null;
+  page: {
+    title: string;
+    contentHtml: string;
+    headerHtml: string | null;
+    footerHtml: string | null;
+    updatedAt: string;
+  } | null;
 }
 export const getPublicProjectPage = rpcOp<{ token: string }, PublicProjectPage>(
   "getPublicProjectPage",

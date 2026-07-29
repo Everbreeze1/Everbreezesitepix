@@ -236,18 +236,28 @@ export const getProjectPageInputSchema = z.object({ pageId: z.string().uuid() })
 export async function getProjectPageService(ctx: AuthedContext, data: z.infer<typeof getProjectPageInputSchema>) {
   const { data: row, error } = await (ctx.supabase as any)
     .from("project_pages")
-    .select("id, project_id, folder_id, title, content_html, share_token, revoked_at, updated_at")
+    .select(
+      "id, project_id, folder_id, title, content_html, header_html, footer_html, share_token, revoked_at, updated_at",
+    )
     .eq("id", data.pageId)
     .single();
   if (error || !row) throw new Error("Page not found");
-  const contentHtml = await resolvePageImages(row.content_html, ctx.supabase);
-  return { page: { ...row, content_html: contentHtml } };
+  const [contentHtml, headerHtml, footerHtml] = await Promise.all([
+    resolvePageImages(row.content_html, ctx.supabase),
+    row.header_html ? resolvePageImages(row.header_html, ctx.supabase) : Promise.resolve(row.header_html),
+    row.footer_html ? resolvePageImages(row.footer_html, ctx.supabase) : Promise.resolve(row.footer_html),
+  ]);
+  return {
+    page: { ...row, content_html: contentHtml, header_html: headerHtml, footer_html: footerHtml },
+  };
 }
 
 export const updateProjectPageInputSchema = z.object({
   pageId: z.string().uuid(),
   title: z.string().trim().min(1).max(200).optional(),
   contentHtml: z.string().max(2_000_000).optional(),
+  headerHtml: z.string().max(50_000).nullable().optional(),
+  footerHtml: z.string().max(50_000).nullable().optional(),
 });
 export async function updateProjectPageService(
   ctx: AuthedContext,
@@ -256,6 +266,8 @@ export async function updateProjectPageService(
   const patch: Record<string, unknown> = {};
   if (data.title !== undefined) patch.title = data.title;
   if (data.contentHtml !== undefined) patch.content_html = data.contentHtml;
+  if (data.headerHtml !== undefined) patch.header_html = data.headerHtml;
+  if (data.footerHtml !== undefined) patch.footer_html = data.footerHtml;
   if (Object.keys(patch).length === 0) return { ok: true };
 
   const { error } = await (ctx.supabase as any).from("project_pages").update(patch).eq("id", data.pageId);
@@ -295,16 +307,33 @@ export async function setProjectPageShareService(
 export const publicProjectPageInputSchema = z.object({ token: z.string().uuid() });
 export async function getPublicProjectPageService(
   data: z.infer<typeof publicProjectPageInputSchema>,
-): Promise<{ status: "ok" | "not_found" | "revoked"; page: { title: string; contentHtml: string; updatedAt: string } | null }> {
+): Promise<{
+  status: "ok" | "not_found" | "revoked";
+  page: {
+    title: string;
+    contentHtml: string;
+    headerHtml: string | null;
+    footerHtml: string | null;
+    updatedAt: string;
+  } | null;
+}> {
   const admin = getSupabaseAdmin();
   const { data: row } = await (admin as any)
     .from("project_pages")
-    .select("title, content_html, revoked_at, updated_at")
+    .select("title, content_html, header_html, footer_html, revoked_at, updated_at")
     .eq("share_token", data.token)
     .maybeSingle();
   if (!row) return { status: "not_found", page: null };
   if (row.revoked_at) return { status: "revoked", page: null };
 
-  const contentHtml = await resolvePageImages(row.content_html, admin as unknown as SupabaseClient<any>);
-  return { status: "ok", page: { title: row.title, contentHtml, updatedAt: row.updated_at } };
+  const supa = admin as unknown as SupabaseClient<any>;
+  const [contentHtml, headerHtml, footerHtml] = await Promise.all([
+    resolvePageImages(row.content_html, supa),
+    row.header_html ? resolvePageImages(row.header_html, supa) : Promise.resolve<string | null>(row.header_html),
+    row.footer_html ? resolvePageImages(row.footer_html, supa) : Promise.resolve<string | null>(row.footer_html),
+  ]);
+  return {
+    status: "ok",
+    page: { title: row.title, contentHtml, headerHtml, footerHtml, updatedAt: row.updated_at },
+  };
 }

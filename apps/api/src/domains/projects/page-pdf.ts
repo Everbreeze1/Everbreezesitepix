@@ -81,11 +81,15 @@ function parseHtml(html: string): HtmlNode[] {
 // PDF rendering
 // ============================================================
 
+type FontFamilyKey = "helvetica" | "times" | "courier";
+
 interface Style {
   bold: boolean;
   italic: boolean;
   underline: boolean;
   color: ReturnType<typeof rgb> | null;
+  fontFamily: FontFamilyKey | null;
+  fontSize: number | null;
 }
 interface Word {
   text: string;
@@ -146,34 +150,81 @@ async function tryEmbedImage(pdf: PDFDocument, url: string): Promise<PDFImage | 
   }
 }
 
+const HEADER_RESERVE = 26;
+const FOOTER_RESERVE = 22;
+
+type FontSet = { regular: PDFFont; bold: PDFFont; italic: PDFFont; boldItalic: PDFFont };
+
 class Layout {
   pdf: PDFDocument;
-  fonts: { regular: PDFFont; bold: PDFFont; italic: PDFFont; boldItalic: PDFFont };
+  fonts: FontSet;
+  fontFamilies: Record<FontFamilyKey, FontSet>;
   page!: PDFPage;
   y = 0;
+  headerWords: Word[];
+  footerWords: Word[];
 
-  constructor(pdf: PDFDocument, fonts: Layout["fonts"]) {
+  constructor(
+    pdf: PDFDocument,
+    fontFamilies: Record<FontFamilyKey, FontSet>,
+    headerWords: Word[] = [],
+    footerWords: Word[] = [],
+  ) {
     this.pdf = pdf;
-    this.fonts = fonts;
+    this.fontFamilies = fontFamilies;
+    this.fonts = fontFamilies.helvetica;
+    this.headerWords = headerWords;
+    this.footerWords = footerWords;
+  }
+
+  get bottomBoundary(): number {
+    return MARGIN + (this.footerWords.length ? FOOTER_RESERVE : 0);
+  }
+
+  private drawRunningLine(words: Word[], y: number) {
+    if (!words.length) return;
+    let x = MARGIN;
+    const size = 9;
+    for (const w of words) {
+      const font = this.fontFor(w.style);
+      const txt = sanitizeForWinAnsi(w.text);
+      this.page.drawText(txt, { x, y, size, font, color: w.style.color ?? MUTED });
+      x += font.widthOfTextAtSize(txt, size) + this.fonts.regular.widthOfTextAtSize(" ", size);
+    }
   }
 
   newPage() {
     this.page = this.pdf.addPage([PAGE_W, PAGE_H]);
-    this.y = PAGE_H - MARGIN;
+    if (this.headerWords.length) {
+      this.drawRunningLine(this.headerWords, PAGE_H - 34);
+      this.page.drawLine({
+        start: { x: MARGIN, y: PAGE_H - MARGIN + 2 },
+        end: { x: PAGE_W - MARGIN, y: PAGE_H - MARGIN + 2 },
+        thickness: 0.5,
+        color: BORDER,
+      });
+    }
+    if (this.footerWords.length) this.drawRunningLine(this.footerWords, MARGIN - 12);
+    this.y = PAGE_H - MARGIN - (this.headerWords.length ? HEADER_RESERVE : 0);
   }
 
   ensureSpace(h: number) {
-    if (this.y - h < MARGIN) this.newPage();
+    if (this.y - h < this.bottomBoundary) this.newPage();
   }
 
   fontFor(style: Style): PDFFont {
-    if (style.bold && style.italic) return this.fonts.boldItalic;
-    if (style.bold) return this.fonts.bold;
-    if (style.italic) return this.fonts.italic;
-    return this.fonts.regular;
+    const family = this.fontFamilies[style.fontFamily ?? "helvetica"];
+    if (style.bold && style.italic) return family.boldItalic;
+    if (style.bold) return family.bold;
+    if (style.italic) return family.italic;
+    return family.regular;
   }
 
-  /** Greedy word-wrap across mixed-style runs, drawing as it goes. Returns nothing; mutates y. */
+  sizeFor(word: Word, fallback: number): number {
+    return word.style.fontSize ?? fallback;
+  }
+
+  /** Greedy word-wrap across mixed-style runs (font family/size/color/bold/italic/underline all vary per word), drawing as it goes. Returns nothing; mutates y. */
   drawParagraph(words: Word[], opts: { x: number; width: number; size: number; align?: "left" }): void {
     if (!words.length) {
       this.y -= opts.size * 1.4;
@@ -186,34 +237,37 @@ class Layout {
 
     const flush = () => {
       if (!line.length) return;
-      this.ensureSpace(opts.size + lineGap);
+      const lineSize = Math.max(...line.map((w) => this.sizeFor(w, opts.size)));
+      this.ensureSpace(lineSize + lineGap);
       let x = opts.x;
       for (const w of line) {
+        const size = this.sizeFor(w, opts.size);
         const font = this.fontFor(w.style);
         const color = w.style.color ?? TEXT;
         const txt = sanitizeForWinAnsi(w.text);
-        this.page.drawText(txt, { x, y: this.y - opts.size, size: opts.size, font, color });
-        const width = font.widthOfTextAtSize(txt, opts.size);
+        this.page.drawText(txt, { x, y: this.y - lineSize, size, font, color });
+        const width = font.widthOfTextAtSize(txt, size);
         if (w.style.underline) {
           this.page.drawLine({
-            start: { x, y: this.y - opts.size - 1.5 },
-            end: { x: x + width, y: this.y - opts.size - 1.5 },
+            start: { x, y: this.y - lineSize - 1.5 },
+            end: { x: x + width, y: this.y - lineSize - 1.5 },
             thickness: 0.6,
             color,
           });
         }
-        x += width + spaceAt(opts.size);
+        x += width + spaceAt(size);
       }
-      this.y -= opts.size + lineGap;
+      this.y -= lineSize + lineGap;
       line = [];
       lineWidth = 0;
     };
 
     for (const w of words) {
+      const size = this.sizeFor(w, opts.size);
       const font = this.fontFor(w.style);
       const txt = sanitizeForWinAnsi(w.text);
-      const width = font.widthOfTextAtSize(txt, opts.size);
-      const withSpace = lineWidth + (line.length ? spaceAt(opts.size) : 0) + width;
+      const width = font.widthOfTextAtSize(txt, size);
+      const withSpace = lineWidth + (line.length ? spaceAt(size) : 0) + width;
       if (withSpace > opts.width && line.length) {
         flush();
         lineWidth = width;
@@ -237,14 +291,21 @@ function collectInlineWords(node: HtmlNode, inherited: Style): Word[] {
   if (node.tag === "em" || node.tag === "i") style.italic = true;
   if (node.tag === "u") style.underline = true;
   if (node.tag === "span" && node.attrs.style) {
-    const m = /color:\s*(#[0-9a-fA-F]{6}|rgb\([^)]+\))/.exec(node.attrs.style);
-    if (m) {
-      if (m[1].startsWith("#")) style.color = hexToRgb(m[1]);
+    const colorMatch = /color:\s*(#[0-9a-fA-F]{6}|rgb\([^)]+\))/.exec(node.attrs.style);
+    if (colorMatch) {
+      if (colorMatch[1].startsWith("#")) style.color = hexToRgb(colorMatch[1]);
       else {
-        const nums = m[1].match(/\d+/g)?.map(Number) ?? [];
+        const nums = colorMatch[1].match(/\d+/g)?.map(Number) ?? [];
         if (nums.length >= 3) style.color = rgb(nums[0] / 255, nums[1] / 255, nums[2] / 255);
       }
     }
+    const familyMatch = /font-family:\s*([^;]+)/.exec(node.attrs.style);
+    if (familyMatch) {
+      const fam = familyMatch[1].toLowerCase();
+      style.fontFamily = fam.includes("times") ? "times" : fam.includes("courier") ? "courier" : "helvetica";
+    }
+    const sizeMatch = /font-size:\s*(\d+(?:\.\d+)?)px/.exec(node.attrs.style);
+    if (sizeMatch) style.fontSize = Math.round(parseFloat(sizeMatch[1]));
   }
   const out: Word[] = [];
   for (const child of node.children) out.push(...collectInlineWords(child, style));
@@ -270,7 +331,7 @@ async function renderTable(layout: Layout, table: ElementNode) {
     layout.ensureSpace(24);
     const rowTop = layout.y;
     let maxLines = 1;
-    const cellWords = cells.map((cell) => collectInlineWords(cell, { bold: false, italic: false, underline: false, color: null }));
+    const cellWords = cells.map((cell) => collectInlineWords(cell, { bold: false, italic: false, underline: false, color: null, fontFamily: null, fontSize: null }));
     // Draw each cell's text, tracking the tallest cell to advance y by.
     for (let i = 0; i < cells.length; i++) {
       const x = MARGIN + i * colWidth;
@@ -322,7 +383,7 @@ async function renderTable(layout: Layout, table: ElementNode) {
 
 async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered = false, index = 1) {
   if (node.type === "text") return;
-  const empty: Style = { bold: false, italic: false, underline: false, color: null };
+  const empty: Style = { bold: false, italic: false, underline: false, color: null, fontFamily: null, fontSize: null };
 
   switch (node.tag) {
     case "h1":
@@ -386,7 +447,7 @@ async function renderListItem(layout: Layout, li: ElementNode, ordered: boolean,
   let checked: boolean | null = null;
   if (isTaskList) checked = li.attrs["data-checked"] === "true";
 
-  const empty: Style = { bold: false, italic: false, underline: false, color: null };
+  const empty: Style = { bold: false, italic: false, underline: false, color: null, fontFamily: null, fontSize: null };
   const words = collectInlineWords(li, empty);
 
   layout.ensureSpace(16);
@@ -409,7 +470,21 @@ async function renderListItem(layout: Layout, li: ElementNode, ordered: boolean,
   if (layout.y === before) layout.y -= 14;
 }
 
-async function renderPagePdf(title: string, resolvedContentHtml: string): Promise<{ pdfBase64: string; filename: string }> {
+/** Header/footer are rendered as a single running line per page — flattens all inline text across the fragment. */
+function wordsFromHtml(html: string | null | undefined): Word[] {
+  if (!html) return [];
+  const empty: Style = { bold: false, italic: false, underline: false, color: null, fontFamily: null, fontSize: null };
+  const words: Word[] = [];
+  for (const node of parseHtml(html)) words.push(...collectInlineWords(node, empty));
+  return words;
+}
+
+async function renderPagePdf(
+  title: string,
+  resolvedContentHtml: string,
+  resolvedHeaderHtml: string | null,
+  resolvedFooterHtml: string | null,
+): Promise<{ pdfBase64: string; filename: string }> {
   const nodes = parseHtml(resolvedContentHtml);
 
   const pdf = await PDFDocument.create();
@@ -417,14 +492,29 @@ async function renderPagePdf(title: string, resolvedContentHtml: string): Promis
   pdf.setProducer("SitePix");
   pdf.setCreator("SitePix");
 
-  const fonts = {
-    regular: await pdf.embedFont(StandardFonts.Helvetica),
-    bold: await pdf.embedFont(StandardFonts.HelveticaBold),
-    italic: await pdf.embedFont(StandardFonts.HelveticaOblique),
-    boldItalic: await pdf.embedFont(StandardFonts.HelveticaBoldOblique),
+  const fontFamilies: Record<FontFamilyKey, FontSet> = {
+    helvetica: {
+      regular: await pdf.embedFont(StandardFonts.Helvetica),
+      bold: await pdf.embedFont(StandardFonts.HelveticaBold),
+      italic: await pdf.embedFont(StandardFonts.HelveticaOblique),
+      boldItalic: await pdf.embedFont(StandardFonts.HelveticaBoldOblique),
+    },
+    times: {
+      regular: await pdf.embedFont(StandardFonts.TimesRoman),
+      bold: await pdf.embedFont(StandardFonts.TimesRomanBold),
+      italic: await pdf.embedFont(StandardFonts.TimesRomanItalic),
+      boldItalic: await pdf.embedFont(StandardFonts.TimesRomanBoldItalic),
+    },
+    courier: {
+      regular: await pdf.embedFont(StandardFonts.Courier),
+      bold: await pdf.embedFont(StandardFonts.CourierBold),
+      italic: await pdf.embedFont(StandardFonts.CourierOblique),
+      boldItalic: await pdf.embedFont(StandardFonts.CourierBoldOblique),
+    },
   };
+  const fonts = fontFamilies.helvetica;
 
-  const layout = new Layout(pdf, fonts);
+  const layout = new Layout(pdf, fontFamilies, wordsFromHtml(resolvedHeaderHtml), wordsFromHtml(resolvedFooterHtml));
   layout.newPage();
   layout.page.drawText(sanitizeForWinAnsi(title), {
     x: MARGIN, y: layout.y - 26, size: 24, font: fonts.bold, color: TEXT,
@@ -434,6 +524,14 @@ async function renderPagePdf(title: string, resolvedContentHtml: string): Promis
   layout.y -= 20;
 
   for (const node of nodes) await renderNode(layout, node);
+
+  // Page numbers need the final page count, so this runs after all content is laid out.
+  const pages = pdf.getPages();
+  pages.forEach((p, i) => {
+    const label = `Page ${i + 1} of ${pages.length}`;
+    const w = fonts.regular.widthOfTextAtSize(label, 8);
+    p.drawText(label, { x: PAGE_W - MARGIN - w, y: MARGIN - 12, size: 8, font: fonts.regular, color: MUTED });
+  });
 
   const bytes = await pdf.save();
   const safe = title.replace(/[^\w-]+/g, "_").slice(0, 60) || "page";
@@ -448,13 +546,17 @@ export async function generatePagePdfService(
 ): Promise<{ pdfBase64: string; filename: string }> {
   const { data: row, error } = await (ctx.supabase as any)
     .from("project_pages")
-    .select("title, content_html")
+    .select("title, content_html, header_html, footer_html")
     .eq("id", data.pageId)
     .single();
   if (error || !row) throw new Error("Page not found");
 
-  const contentHtml = await resolvePageImages(row.content_html, ctx.supabase);
-  return renderPagePdf(row.title, contentHtml);
+  const [contentHtml, headerHtml, footerHtml] = await Promise.all([
+    resolvePageImages(row.content_html, ctx.supabase),
+    row.header_html ? resolvePageImages(row.header_html, ctx.supabase) : Promise.resolve<string | null>(row.header_html),
+    row.footer_html ? resolvePageImages(row.footer_html, ctx.supabase) : Promise.resolve<string | null>(row.footer_html),
+  ]);
+  return renderPagePdf(row.title, contentHtml, headerHtml, footerHtml);
 }
 
 export const publicPagePdfInputSchema = z.object({ token: z.string().uuid() });
@@ -465,11 +567,16 @@ export async function getPublicProjectPagePdfService(
   const admin = getSupabaseAdmin();
   const { data: row, error } = await (admin as any)
     .from("project_pages")
-    .select("title, content_html, revoked_at")
+    .select("title, content_html, header_html, footer_html, revoked_at")
     .eq("share_token", data.token)
     .maybeSingle();
   if (error || !row || row.revoked_at) throw new Error("Page not available");
 
-  const contentHtml = await resolvePageImages(row.content_html, admin as any);
-  return renderPagePdf(row.title, contentHtml);
+  const supa = admin as any;
+  const [contentHtml, headerHtml, footerHtml] = await Promise.all([
+    resolvePageImages(row.content_html, supa),
+    row.header_html ? resolvePageImages(row.header_html, supa) : Promise.resolve<string | null>(row.header_html),
+    row.footer_html ? resolvePageImages(row.footer_html, supa) : Promise.resolve<string | null>(row.footer_html),
+  ]);
+  return renderPagePdf(row.title, contentHtml, headerHtml, footerHtml);
 }

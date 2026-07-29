@@ -4,7 +4,7 @@ import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
-import { TextStyle } from "@tiptap/extension-text-style";
+import { TextStyle, FontFamily, FontSize } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
@@ -34,10 +34,12 @@ import {
   Sparkles,
   Copy,
   Globe,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -85,6 +87,10 @@ export function ProjectPageEditorPage() {
 
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("Untitled");
+  const [headerHtml, setHeaderHtml] = useState("");
+  const [footerHtml, setFooterHtml] = useState("");
+  const [showHeader, setShowHeader] = useState(false);
+  const [showFooter, setShowFooter] = useState(false);
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [revoked, setRevoked] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
@@ -104,6 +110,8 @@ export function ProjectPageEditorPage() {
       Placeholder.configure({ placeholder: "Start writing…" }),
       Underline,
       TextStyle,
+      FontFamily,
+      FontSize,
       Color,
       TaskList,
       TaskItem.configure({ nested: false }),
@@ -130,6 +138,10 @@ export function ProjectPageEditorPage() {
         const res = await getProjectPage({ data: { pageId } });
         if (cancelled) return;
         setTitle(res.page.title);
+        setHeaderHtml(res.page.header_html ?? "");
+        setFooterHtml(res.page.footer_html ?? "");
+        setShowHeader(!!res.page.header_html);
+        setShowFooter(!!res.page.footer_html);
         setShareToken(res.page.share_token);
         setRevoked(!!res.page.revoked_at);
         setUpdatedAt(res.page.updated_at);
@@ -172,6 +184,8 @@ export function ProjectPageEditorPage() {
   const html = editor?.getHTML() ?? "";
   const debouncedTitle = useDebouncedValue(title, 800);
   const debouncedHtml = useDebouncedValue(html, 1200);
+  const debouncedHeaderHtml = useDebouncedValue(headerHtml, 1200);
+  const debouncedFooterHtml = useDebouncedValue(footerHtml, 1200);
   const firstRun = useRef(true);
 
   useEffect(() => {
@@ -183,7 +197,15 @@ export function ProjectPageEditorPage() {
     (async () => {
       setSaving(true);
       try {
-        await updateProjectPage({ data: { pageId, title: debouncedTitle, contentHtml: debouncedHtml } });
+        await updateProjectPage({
+          data: {
+            pageId,
+            title: debouncedTitle,
+            contentHtml: debouncedHtml,
+            headerHtml: showHeader ? debouncedHeaderHtml : null,
+            footerHtml: showFooter ? debouncedFooterHtml : null,
+          },
+        });
         setUpdatedAt(new Date().toISOString());
       } catch (e: any) {
         toast.error(e?.message ?? "Could not save");
@@ -192,7 +214,7 @@ export function ProjectPageEditorPage() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedTitle, debouncedHtml, loading]);
+  }, [debouncedTitle, debouncedHtml, debouncedHeaderHtml, debouncedFooterHtml, showHeader, showFooter, loading]);
 
   async function handleToggleShare(enable: boolean) {
     setShareUpdating(true);
@@ -314,7 +336,49 @@ export function ProjectPageEditorPage() {
 
       <div className="mx-auto max-w-[850px] px-4 py-8 sm:px-0">
         <div className="rounded-sm border border-border bg-card p-10 shadow-sm sm:p-14">
+          {showHeader ? (
+            <div className="mb-4 border-b border-dashed border-border pb-3">
+              <RichTextEditor
+                value={headerHtml}
+                onChange={setHeaderHtml}
+                placeholder="Header — appears on every page"
+                compact
+                singleLine
+                className="border-none bg-transparent"
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowHeader(true)}
+              className="mb-4 flex w-full items-center gap-2 border-b border-dashed border-border pb-3 text-xs font-bold text-muted-foreground hover:text-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add header
+            </button>
+          )}
+
           <EditorContent editor={editor} />
+
+          {showFooter ? (
+            <div className="mt-6 border-t border-dashed border-border pt-3">
+              <RichTextEditor
+                value={footerHtml}
+                onChange={setFooterHtml}
+                placeholder="Footer — appears on every page"
+                compact
+                singleLine
+                className="border-none bg-transparent"
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowFooter(true)}
+              className="mt-6 flex w-full items-center gap-2 border-t border-dashed border-border pt-3 text-xs font-bold text-muted-foreground hover:text-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add footer
+            </button>
+          )}
         </div>
       </div>
 
@@ -432,6 +496,17 @@ export function ProjectPageEditorPage() {
 
 const COLORS = ["#0f172a", "#dc2626", "#d97706", "#16a34a", "#2563eb", "#7c3aed"];
 
+const FONT_FAMILIES = [
+  { label: "Default", value: "" },
+  { label: "Helvetica", value: "Helvetica, Arial, sans-serif" },
+  { label: "Times New Roman", value: "'Times New Roman', Times, serif" },
+  { label: "Georgia", value: "Georgia, serif" },
+  { label: "Courier New", value: "'Courier New', Courier, monospace" },
+  { label: "Verdana", value: "Verdana, sans-serif" },
+];
+
+const FONT_SIZES = [10, 11, 12, 14, 16, 18, 24, 32];
+
 function Toolbar({
   editor,
   onAddImage,
@@ -474,6 +549,47 @@ function Toolbar({
           <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
             <Pilcrow className="mr-2 h-4 w-4" /> Paragraph
           </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <span className="mx-1.5 h-4 w-px bg-border" />
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-bold">
+            {(editor.getAttributes("textStyle").fontFamily as string | undefined)?.replace(/,.*/, "") ?? "Font"}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {FONT_FAMILIES.map((f) => (
+            <DropdownMenuItem
+              key={f.label}
+              style={{ fontFamily: f.value }}
+              onClick={() =>
+                f.value
+                  ? editor.chain().focus().setFontFamily(f.value).run()
+                  : editor.chain().focus().unsetFontFamily().run()
+              }
+            >
+              {f.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-bold">
+            {(editor.getAttributes("textStyle").fontSize as string | undefined)?.replace("px", "") ?? "Size"}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {FONT_SIZES.map((size) => (
+            <DropdownMenuItem key={size} onClick={() => editor.chain().focus().setFontSize(`${size}px`).run()}>
+              {size}px
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuItem onClick={() => editor.chain().focus().unsetFontSize().run()}>Default</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
