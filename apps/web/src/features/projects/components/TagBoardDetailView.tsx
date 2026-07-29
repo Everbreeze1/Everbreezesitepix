@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "@tanstack/react-router";
 import { Plus, Settings2 } from "lucide-react";
 import {
@@ -227,18 +228,29 @@ export function TagBoardDetailView({
             ))}
           </div>
 
-          <DragOverlay dropAnimation={dropAnimation}>
-            {active ? (
-              <div className="w-[264px] rotate-2 cursor-grabbing rounded-lg border border-primary/60 bg-card p-3 shadow-2xl ring-2 ring-primary/20">
-                <p className="truncate text-sm font-bold text-foreground">{active.project.name}</p>
-                {projectAddress(active.project) && (
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {projectAddress(active.project)}
-                  </p>
-                )}
-              </div>
-            ) : null}
-          </DragOverlay>
+          {/*
+            Portalled to <body>: DragOverlay is `position: fixed`, and this page
+            is wrapped in a pull-to-refresh `transform` container. A transformed
+            ancestor becomes the containing block for fixed descendants, which
+            offsets the overlay from the cursor. Escaping to body restores
+            viewport-relative positioning.
+          */}
+          {typeof document !== "undefined" &&
+            createPortal(
+              <DragOverlay dropAnimation={dropAnimation}>
+                {active ? (
+                  <div className="w-[264px] rotate-2 cursor-grabbing rounded-lg border border-primary/60 bg-card p-3 shadow-2xl ring-2 ring-primary/20">
+                    <p className="truncate text-sm font-bold text-foreground">{active.project.name}</p>
+                    {projectAddress(active.project) && (
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {projectAddress(active.project)}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+              </DragOverlay>,
+              document.body,
+            )}
         </DndContext>
       )}
 
