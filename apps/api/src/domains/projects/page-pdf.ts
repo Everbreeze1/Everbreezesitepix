@@ -2,7 +2,7 @@ import { z } from "zod";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import type { AuthedContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";
-import { resolvePageImages } from "./pages";
+import { resolvePageImages, resolveHeaderFooterTokens } from "./pages";
 
 // ============================================================
 // Minimal HTML parser — scoped to the constrained, well-formed subset of
@@ -546,15 +546,19 @@ export async function generatePagePdfService(
 ): Promise<{ pdfBase64: string; filename: string }> {
   const { data: row, error } = await (ctx.supabase as any)
     .from("project_pages")
-    .select("title, content_html, header_html, footer_html")
+    .select("project_id, created_by, title, content_html, header_html, footer_html")
     .eq("id", data.pageId)
     .single();
   if (error || !row) throw new Error("Page not found");
 
   const [contentHtml, headerHtml, footerHtml] = await Promise.all([
     resolvePageImages(row.content_html, ctx.supabase),
-    row.header_html ? resolvePageImages(row.header_html, ctx.supabase) : Promise.resolve<string | null>(row.header_html),
-    row.footer_html ? resolvePageImages(row.footer_html, ctx.supabase) : Promise.resolve<string | null>(row.footer_html),
+    resolveHeaderFooterTokens(row.header_html, row.project_id, row.created_by).then((h) =>
+      h ? resolvePageImages(h, ctx.supabase) : h,
+    ),
+    resolveHeaderFooterTokens(row.footer_html, row.project_id, row.created_by).then((h) =>
+      h ? resolvePageImages(h, ctx.supabase) : h,
+    ),
   ]);
   return renderPagePdf(row.title, contentHtml, headerHtml, footerHtml);
 }
@@ -567,7 +571,7 @@ export async function getPublicProjectPagePdfService(
   const admin = getSupabaseAdmin();
   const { data: row, error } = await (admin as any)
     .from("project_pages")
-    .select("title, content_html, header_html, footer_html, revoked_at")
+    .select("project_id, created_by, title, content_html, header_html, footer_html, revoked_at")
     .eq("share_token", data.token)
     .maybeSingle();
   if (error || !row || row.revoked_at) throw new Error("Page not available");
@@ -575,8 +579,12 @@ export async function getPublicProjectPagePdfService(
   const supa = admin as any;
   const [contentHtml, headerHtml, footerHtml] = await Promise.all([
     resolvePageImages(row.content_html, supa),
-    row.header_html ? resolvePageImages(row.header_html, supa) : Promise.resolve<string | null>(row.header_html),
-    row.footer_html ? resolvePageImages(row.footer_html, supa) : Promise.resolve<string | null>(row.footer_html),
+    resolveHeaderFooterTokens(row.header_html, row.project_id, row.created_by).then((h) =>
+      h ? resolvePageImages(h, supa) : h,
+    ),
+    resolveHeaderFooterTokens(row.footer_html, row.project_id, row.created_by).then((h) =>
+      h ? resolvePageImages(h, supa) : h,
+    ),
   ]);
   return renderPagePdf(row.title, contentHtml, headerHtml, footerHtml);
 }

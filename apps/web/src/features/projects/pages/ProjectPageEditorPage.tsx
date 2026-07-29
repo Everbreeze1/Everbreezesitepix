@@ -6,6 +6,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
 import { TextStyle, FontFamily, FontSize } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
+import { Highlight } from "@tiptap/extension-highlight";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import LinkExtension from "@tiptap/extension-link";
@@ -45,12 +46,14 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/sitepix/client";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { usePrompt } from "@/hooks/use-prompt";
 import {
   getProjectPage,
   updateProjectPage,
@@ -70,6 +73,7 @@ interface ProjectPhoto {
 export function ProjectPageEditorPage() {
   const { projectId, pageId } = useParams({ from: "/_app/projects/$projectId_/pages/$pageId" });
   const navigate = useNavigate();
+  const prompt = usePrompt();
 
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("Untitled");
@@ -88,9 +92,12 @@ export function ProjectPageEditorPage() {
   const [snippetsOpen, setSnippetsOpen] = useState(false);
   const [snippets, setSnippets] = useState<TextSnippet[]>([]);
   const [exporting, setExporting] = useState(false);
+  const [, forceToolbarUpdate] = useState(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
+    onSelectionUpdate: () => forceToolbarUpdate((n) => n + 1),
+    onTransaction: () => forceToolbarUpdate((n) => n + 1),
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
       Placeholder.configure({ placeholder: "Start writing…" }),
@@ -99,6 +106,7 @@ export function ProjectPageEditorPage() {
       FontFamily,
       FontSize,
       Color,
+      Highlight.configure({ multicolor: true }),
       TaskList,
       TaskItem.configure({ nested: false }),
       LinkExtension.configure({ openOnClick: false }),
@@ -258,7 +266,7 @@ export function ProjectPageEditorPage() {
       return;
     }
     const html = editor.getHTML();
-    const title = window.prompt("Snippet name?");
+    const title = await prompt({ title: "Save snippet", label: "Snippet name" });
     if (!title) return;
     try {
       await createTextSnippet({ data: { title, contentHtml: html } });
@@ -317,21 +325,30 @@ export function ProjectPageEditorPage() {
           </div>
         </div>
 
-        <Toolbar editor={editor} onAddImage={() => setImagePickerOpen(true)} onOpenSnippets={openSnippets} />
+        <Toolbar
+          editor={editor}
+          onAddImage={() => setImagePickerOpen(true)}
+          onOpenSnippets={openSnippets}
+          onAddHeader={() => setShowHeader(true)}
+          onAddFooter={() => setShowFooter(true)}
+        />
       </div>
 
       <div className="mx-auto max-w-[850px] px-4 py-8 sm:px-0">
         <div className="rounded-sm border border-border bg-card p-10 shadow-sm sm:p-14">
           {showHeader ? (
-            <div className="mb-4 border-b border-dashed border-border pb-3">
-              <RichTextEditor
-                value={headerHtml}
-                onChange={setHeaderHtml}
-                placeholder="Header — appears on every page"
-                compact
-                singleLine
-                className="border-none bg-transparent"
-              />
+            <div className="mb-4 flex items-start gap-2 border-b border-dashed border-border pb-3">
+              <div className="flex-1">
+                <RichTextEditor
+                  value={headerHtml}
+                  onChange={setHeaderHtml}
+                  placeholder="Header — appears on every page"
+                  compact
+                  singleLine
+                  className="border-none bg-transparent"
+                />
+              </div>
+              <FieldTokenMenu onInsert={(token) => setHeaderHtml((prev) => appendToken(prev, token))} />
             </div>
           ) : (
             <button
@@ -346,15 +363,18 @@ export function ProjectPageEditorPage() {
           <EditorContent editor={editor} />
 
           {showFooter ? (
-            <div className="mt-6 border-t border-dashed border-border pt-3">
-              <RichTextEditor
-                value={footerHtml}
-                onChange={setFooterHtml}
-                placeholder="Footer — appears on every page"
-                compact
-                singleLine
-                className="border-none bg-transparent"
-              />
+            <div className="mt-6 flex items-start gap-2 border-t border-dashed border-border pt-3">
+              <div className="flex-1">
+                <RichTextEditor
+                  value={footerHtml}
+                  onChange={setFooterHtml}
+                  placeholder="Footer — appears on every page"
+                  compact
+                  singleLine
+                  className="border-none bg-transparent"
+                />
+              </div>
+              <FieldTokenMenu onInsert={(token) => setFooterHtml((prev) => appendToken(prev, token))} />
             </div>
           ) : (
             <button
@@ -480,7 +500,40 @@ export function ProjectPageEditorPage() {
   );
 }
 
+const FIELD_TOKENS = [
+  { label: "Company name", token: "{{company}}" },
+  { label: "Project name", token: "{{project_name}}" },
+  { label: "Project address", token: "{{project_address}}" },
+  { label: "Today's date", token: "{{date}}" },
+];
+
+/** Appends a field token into a header/footer's single `<p>` — resolved server-side on every read, so renaming the project/company later updates it automatically. */
+function appendToken(current: string, token: string): string {
+  if (/<\/p>\s*$/.test(current)) return current.replace(/<\/p>\s*$/, ` ${token}</p>`);
+  return `<p>${token}</p>`;
+}
+
+function FieldTokenMenu({ onInsert }: { onInsert: (token: string) => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-7 shrink-0 gap-1 px-2 text-xs font-bold text-muted-foreground">
+          Insert field
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {FIELD_TOKENS.map((f) => (
+          <DropdownMenuItem key={f.token} onClick={() => onInsert(f.token)}>
+            {f.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 const COLORS = ["#0f172a", "#dc2626", "#d97706", "#16a34a", "#2563eb", "#7c3aed"];
+const HIGHLIGHT_COLORS = ["#fef08a", "#bfdbfe", "#bbf7d0", "#fbcfe8", "#fed7aa"];
 
 const FONT_FAMILIES = [
   { label: "Default", value: "" },
@@ -497,11 +550,16 @@ function Toolbar({
   editor,
   onAddImage,
   onOpenSnippets,
+  onAddHeader,
+  onAddFooter,
 }: {
   editor: Editor;
   onAddImage: () => void;
   onOpenSnippets: () => void;
+  onAddHeader: () => void;
+  onAddFooter: () => void;
 }) {
+  const prompt = usePrompt();
   const btnCls = (active?: boolean) =>
     cn(
       "rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -597,16 +655,49 @@ function Toolbar({
             <Palette className="h-4 w-4" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="flex gap-1 p-2">
-          {COLORS.map((c) => (
+        <DropdownMenuContent align="start" className="w-auto p-3">
+          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Text color</p>
+          <div className="flex gap-1.5">
             <button
-              key={c}
               type="button"
-              className="h-5 w-5 rounded-full border border-border"
-              style={{ backgroundColor: c }}
-              onClick={() => editor.chain().focus().setColor(c).run()}
-            />
-          ))}
+              className="grid h-6 w-6 place-items-center rounded-full border border-border text-[10px] font-bold"
+              onClick={() => editor.chain().focus().unsetColor().run()}
+              aria-label="Default text color"
+            >
+              A
+            </button>
+            {COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className="h-6 w-6 rounded-full border border-border"
+                style={{ backgroundColor: c }}
+                onClick={() => editor.chain().focus().setColor(c).run()}
+              />
+            ))}
+          </div>
+          <p className="mb-1.5 mt-3 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+            Highlight color
+          </p>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              className="grid h-6 w-6 place-items-center rounded-full border border-border text-muted-foreground"
+              onClick={() => editor.chain().focus().unsetHighlight().run()}
+              aria-label="Remove highlight"
+            >
+              ×
+            </button>
+            {HIGHLIGHT_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className="h-6 w-6 rounded-full border border-border"
+                style={{ backgroundColor: c }}
+                onClick={() => editor.chain().focus().toggleHighlight({ color: c }).run()}
+              />
+            ))}
+          </div>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -627,8 +718,8 @@ function Toolbar({
       <button
         type="button"
         className={btnCls(editor.isActive("link"))}
-        onClick={() => {
-          const url = window.prompt("Link URL");
+        onClick={async () => {
+          const url = await prompt({ title: "Add link", label: "URL", placeholder: "https://" });
           if (url) editor.chain().focus().setLink({ href: url }).run();
         }}
         aria-label="Link"
@@ -646,9 +737,68 @@ function Toolbar({
       >
         <TableIcon className="h-4 w-4" />
       </button>
+      {editor.isActive("table") && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-bold">
+              Table tools
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => editor.chain().focus().addRowBefore().run()}>
+              Insert row above
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => editor.chain().focus().addRowAfter().run()}>
+              Insert row below
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => editor.chain().focus().addColumnBefore().run()}>
+              Insert column left
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => editor.chain().focus().addColumnAfter().run()}>
+              Insert column right
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => editor.chain().focus().deleteRow().run()}>Delete row</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => editor.chain().focus().deleteColumn().run()}>
+              Delete column
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => editor.chain().focus().deleteTable().run()}
+              className="text-destructive focus:text-destructive"
+            >
+              Delete table
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       <button type="button" className={btnCls()} onClick={onOpenSnippets} aria-label="Text snippets">
         <Sparkles className="h-4 w-4" />
       </button>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className={btnCls()} aria-label="Insert">
+            <Plus className="h-4 w-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem
+            onClick={() =>
+              editor
+                .chain()
+                .focus()
+                .insertContent('<h2>Notes</h2><p></p>')
+                .run()
+            }
+          >
+            <Pilcrow className="mr-2 h-4 w-4" /> Notes section
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={onAddHeader}>Add header</DropdownMenuItem>
+          <DropdownMenuItem onClick={onAddFooter}>Add footer</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <span className="mx-1.5 h-4 w-px bg-border" />
 

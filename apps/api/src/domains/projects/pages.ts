@@ -177,6 +177,32 @@ export async function listProjectDocumentTreeService(
 }
 
 // ============================================================
+// Field tokens — {{company}}, {{project_name}}, {{project_address}}, {{date}}
+// in header/footer, resolved at read time (never persisted resolved, so
+// renaming the project or company later updates every page automatically).
+// ============================================================
+
+export async function resolveHeaderFooterTokens(
+  html: string | null,
+  projectId: string,
+  createdBy: string,
+): Promise<string | null> {
+  if (!html || !html.includes("{{")) return html;
+  const admin = getSupabaseAdmin();
+  const [{ data: project }, { data: profile }] = await Promise.all([
+    (admin as any).from("projects").select("name, street, city, state").eq("id", projectId).maybeSingle(),
+    (admin as any).from("profiles").select("company").eq("id", createdBy).maybeSingle(),
+  ]);
+  const address = project ? [project.street, project.city, project.state].filter(Boolean).join(", ") : "";
+  const today = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  return html
+    .replace(/\{\{\s*company\s*\}\}/g, profile?.company ?? "")
+    .replace(/\{\{\s*project_name\s*\}\}/g, project?.name ?? "")
+    .replace(/\{\{\s*project_address\s*\}\}/g, address)
+    .replace(/\{\{\s*date\s*\}\}/g, today);
+}
+
+// ============================================================
 // Pages
 // ============================================================
 
@@ -237,15 +263,19 @@ export async function getProjectPageService(ctx: AuthedContext, data: z.infer<ty
   const { data: row, error } = await (ctx.supabase as any)
     .from("project_pages")
     .select(
-      "id, project_id, folder_id, title, content_html, header_html, footer_html, share_token, revoked_at, updated_at",
+      "id, project_id, folder_id, created_by, title, content_html, header_html, footer_html, share_token, revoked_at, updated_at",
     )
     .eq("id", data.pageId)
     .single();
   if (error || !row) throw new Error("Page not found");
   const [contentHtml, headerHtml, footerHtml] = await Promise.all([
     resolvePageImages(row.content_html, ctx.supabase),
-    row.header_html ? resolvePageImages(row.header_html, ctx.supabase) : Promise.resolve(row.header_html),
-    row.footer_html ? resolvePageImages(row.footer_html, ctx.supabase) : Promise.resolve(row.footer_html),
+    resolveHeaderFooterTokens(row.header_html, row.project_id, row.created_by).then((h) =>
+      h ? resolvePageImages(h, ctx.supabase) : h,
+    ),
+    resolveHeaderFooterTokens(row.footer_html, row.project_id, row.created_by).then((h) =>
+      h ? resolvePageImages(h, ctx.supabase) : h,
+    ),
   ]);
   return {
     page: { ...row, content_html: contentHtml, header_html: headerHtml, footer_html: footerHtml },
@@ -349,7 +379,7 @@ export async function getPublicProjectPageService(
   const admin = getSupabaseAdmin();
   const { data: row } = await (admin as any)
     .from("project_pages")
-    .select("title, content_html, header_html, footer_html, revoked_at, updated_at")
+    .select("project_id, created_by, title, content_html, header_html, footer_html, revoked_at, updated_at")
     .eq("share_token", data.token)
     .maybeSingle();
   if (!row) return { status: "not_found", page: null };
@@ -358,8 +388,12 @@ export async function getPublicProjectPageService(
   const supa = admin as unknown as SupabaseClient<any>;
   const [contentHtml, headerHtml, footerHtml] = await Promise.all([
     resolvePageImages(row.content_html, supa),
-    row.header_html ? resolvePageImages(row.header_html, supa) : Promise.resolve<string | null>(row.header_html),
-    row.footer_html ? resolvePageImages(row.footer_html, supa) : Promise.resolve<string | null>(row.footer_html),
+    resolveHeaderFooterTokens(row.header_html, row.project_id, row.created_by).then((h) =>
+      h ? resolvePageImages(h, supa) : h,
+    ),
+    resolveHeaderFooterTokens(row.footer_html, row.project_id, row.created_by).then((h) =>
+      h ? resolvePageImages(h, supa) : h,
+    ),
   ]);
   return {
     status: "ok",

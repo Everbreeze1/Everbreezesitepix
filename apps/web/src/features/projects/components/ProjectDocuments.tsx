@@ -21,9 +21,11 @@ import {
   Share2,
   FileDown,
   Search,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -35,10 +37,17 @@ import {
   DropdownMenuSubContent,
   DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
+import { usePrompt } from "@/hooks/use-prompt";
 import { toast } from "sonner";
 import { formatBytes } from "@/hooks/use-storage-usage";
 import { relativeTime } from "@sitepix/shared";
@@ -52,6 +61,7 @@ import {
   updateProjectPage,
   deleteProjectPage,
   duplicateProjectPage,
+  getProjectPage,
   setProjectPageShare,
   generatePagePdf,
   moveDocument,
@@ -128,6 +138,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
   const { user } = useAuth();
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const prompt = usePrompt();
   const [tree, setTree] = useState<DocumentTree | null>(null);
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -140,6 +151,11 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
   const [sortKey, setSortKey] = useState<SortKey>("updated");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [exportingId, setExportingId] = useState<string | null>(null);
+  const [sharePage, setSharePage] = useState<{ id: string; title: string } | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareUpdating, setShareUpdating] = useState(false);
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [shareRevoked, setShareRevoked] = useState(true);
   const fileInput = useRef<HTMLInputElement>(null);
 
   async function load() {
@@ -217,7 +233,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
   }
 
   async function renameDocument(doc: ProjectDocument) {
-    const name = window.prompt("Rename document", doc.file_name);
+    const name = await prompt({ title: "Rename document", defaultValue: doc.file_name });
     if (!name?.trim() || name.trim() === doc.file_name) return;
     const { error } = await (supabase as any)
       .from("project_documents")
@@ -253,7 +269,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
   }
 
   async function handleCreateFolder() {
-    const name = window.prompt("Folder name?");
+    const name = await prompt({ title: "New folder", label: "Folder name" });
     if (!name?.trim()) return;
     try {
       await createDocumentFolder({ data: { projectId, name: name.trim() } });
@@ -306,7 +322,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
   }
 
   async function handleRenamePage(pageId: string, currentTitle: string) {
-    const title = window.prompt("Rename page", currentTitle);
+    const title = await prompt({ title: "Rename page", defaultValue: currentTitle });
     if (!title?.trim() || title.trim() === currentTitle) return;
     try {
       await updateProjectPage({ data: { pageId, title: title.trim() } });
@@ -327,15 +343,40 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
     }
   }
 
-  async function handleQuickSharePage(pageId: string) {
+  async function openSharePage(page: { id: string; title: string }) {
+    setSharePage(page);
+    setShareLoading(true);
     try {
-      const res = await setProjectPageShare({ data: { pageId, enable: true } });
-      const url = `${window.location.origin}/share/pages/${res.shareToken}`;
-      await navigator.clipboard.writeText(url);
-      toast.success("Share link copied to clipboard");
+      const res = await getProjectPage({ data: { pageId: page.id } });
+      setShareToken(res.page.share_token);
+      setShareRevoked(!!res.page.revoked_at);
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not share page");
+      toast.error(e?.message ?? "Could not load sharing status");
+      setSharePage(null);
+    } finally {
+      setShareLoading(false);
     }
+  }
+
+  async function handleToggleShare(enable: boolean) {
+    if (!sharePage) return;
+    setShareUpdating(true);
+    try {
+      const res = await setProjectPageShare({ data: { pageId: sharePage.id, enable } });
+      setShareToken(res.shareToken);
+      setShareRevoked(!enable);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not update sharing");
+    } finally {
+      setShareUpdating(false);
+    }
+  }
+
+  async function copyShareLink() {
+    if (!shareToken) return;
+    const url = `${window.location.origin}/share/pages/${shareToken}`;
+    await navigator.clipboard.writeText(url);
+    toast.success("Link copied to clipboard");
   }
 
   async function handleExportPagePdf(pageId: string) {
@@ -613,7 +654,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
               ))}
 
             {visiblePages.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-4 border-b border-border p-4 last:border-b-0">
+              <div key={p.id} className="group flex items-center justify-between gap-4 border-b border-border p-4 last:border-b-0">
                 <button
                   type="button"
                   onClick={() =>
@@ -631,7 +672,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                     </p>
                   </div>
                 </button>
-                <span className="hidden w-28 shrink-0 text-xs text-muted-foreground sm:inline">Page</span>
+                <span className="hidden w-28 shrink-0 text-xs text-muted-foreground transition-colors group-hover:text-primary sm:inline">Page</span>
                 <span className="hidden w-36 shrink-0 text-xs text-muted-foreground sm:inline">
                   {relativeTime(p.updatedAt)}
                 </span>
@@ -662,7 +703,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                     <DropdownMenuItem onClick={() => handleExportPagePdf(p.id)}>
                       <FileDown className="mr-2 h-4 w-4" /> Export to PDF
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleQuickSharePage(p.id)}>
+                    <DropdownMenuItem onClick={() => openSharePage({ id: p.id, title: p.title })}>
                       <Share2 className="mr-2 h-4 w-4" /> Share
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleRenamePage(p.id, p.title)}>
@@ -689,7 +730,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
             ))}
 
             {visibleFiles.map((doc) => (
-              <div key={doc.id} className="flex items-center justify-between gap-4 border-b border-border p-4 last:border-b-0">
+              <div key={doc.id} className="group flex items-center justify-between gap-4 border-b border-border p-4 last:border-b-0">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10">
                     <FileText className="h-5 w-5 text-primary" />
@@ -702,7 +743,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                     </p>
                   </div>
                 </div>
-                <span className="hidden w-28 shrink-0 text-xs text-muted-foreground sm:inline">
+                <span className="hidden w-28 shrink-0 text-xs text-muted-foreground transition-colors group-hover:text-primary sm:inline">
                   {fileTypeLabel(doc.mime_type, doc.file_name)}
                 </span>
                 <span className="hidden w-36 shrink-0 text-xs text-muted-foreground sm:inline">
@@ -761,6 +802,58 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
             projectName={projectName}
             projectPhotos={projectPhotos}
           />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={sharePage !== null} onOpenChange={(open) => !open && setSharePage(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share "{sharePage?.title}"</DialogTitle>
+            <DialogDescription>
+              Anyone with the link can view a read-only copy of this document.
+            </DialogDescription>
+          </DialogHeader>
+
+          {shareLoading ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                <div className="flex items-center gap-2.5">
+                  <Globe className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-bold text-foreground">
+                      {shareRevoked ? "Link sharing off" : "Anyone with the link"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {shareRevoked ? "Only you can see this document" : "Viewers can read and download a PDF"}
+                    </p>
+                  </div>
+                </div>
+                {shareUpdating ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <Switch checked={!shareRevoked} onCheckedChange={handleToggleShare} />
+                )}
+              </div>
+
+              {!shareRevoked && shareToken && (
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={`${window.location.origin}/share/pages/${shareToken}`}
+                    className="h-9 text-xs"
+                    onFocus={(e) => e.currentTarget.select()}
+                  />
+                  <Button size="sm" onClick={copyShareLink}>
+                    <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

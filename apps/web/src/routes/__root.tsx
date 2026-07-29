@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { ConfirmDialogProvider } from "@/hooks/use-confirm";
+import { PromptDialogProvider } from "@/hooks/use-prompt";
 import { Toaster } from "@/components/ui/sonner";
 import { InstallPrompt } from "@/components/InstallPrompt";
 
@@ -154,9 +155,11 @@ function RootComponent() {
       <ThemeProvider>
         <AuthProvider>
           <ConfirmDialogProvider>
-            <Outlet />
-            <Toaster />
-            <InstallPrompt />
+            <PromptDialogProvider>
+              <Outlet />
+              <Toaster />
+              <InstallPrompt />
+            </PromptDialogProvider>
           </ConfirmDialogProvider>
         </AuthProvider>
       </ThemeProvider>
