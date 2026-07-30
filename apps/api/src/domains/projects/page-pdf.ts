@@ -225,7 +225,10 @@ class Layout {
   }
 
   /** Greedy word-wrap across mixed-style runs (font family/size/color/bold/italic/underline all vary per word), drawing as it goes. Returns nothing; mutates y. */
-  drawParagraph(words: Word[], opts: { x: number; width: number; size: number; align?: "left" }): void {
+  drawParagraph(
+    words: Word[],
+    opts: { x: number; width: number; size: number; align?: "left" | "center" | "right" },
+  ): void {
     if (!words.length) {
       this.y -= opts.size * 1.4;
       return;
@@ -234,12 +237,20 @@ class Layout {
     let line: Word[] = [];
     let lineWidth = 0;
     const spaceAt = (sz: number) => this.fonts.regular.widthOfTextAtSize(" ", sz);
+    const widthOf = (w: Word) => this.fontFor(w.style).widthOfTextAtSize(sanitizeForWinAnsi(w.text), this.sizeFor(w, opts.size));
 
     const flush = () => {
       if (!line.length) return;
       const lineSize = Math.max(...line.map((w) => this.sizeFor(w, opts.size)));
       this.ensureSpace(lineSize + lineGap);
       let x = opts.x;
+      if (opts.align === "center" || opts.align === "right") {
+        const textWidth =
+          line.reduce((sum, w) => sum + widthOf(w) + spaceAt(this.sizeFor(w, opts.size)), 0) -
+          spaceAt(this.sizeFor(line[line.length - 1], opts.size));
+        const slack = Math.max(0, opts.width - textWidth);
+        x = opts.x + (opts.align === "center" ? slack / 2 : slack);
+      }
       for (const w of line) {
         const size = this.sizeFor(w, opts.size);
         const font = this.fontFor(w.style);
@@ -318,7 +329,11 @@ function collectInlineWords(node: HtmlNode, inherited: Style): Word[] {
  * editor. Slots that failed to embed (unfilled SVG placeholders, which pdf-lib
  * cannot read) are dropped, so they never reach a delivered document.
  */
-async function renderImageRow(layout: Layout, imgs: ElementNode[]) {
+async function renderImageRow(
+  layout: Layout,
+  imgs: ElementNode[],
+  align: "left" | "center" | "right" = "left",
+) {
   const embedded: PDFImage[] = [];
   for (const el of imgs) {
     if (!el.attrs.src) continue;
@@ -337,7 +352,9 @@ async function renderImageRow(layout: Layout, imgs: ElementNode[]) {
       w = h / ratio;
     }
     layout.ensureSpace(h + 12);
-    layout.page.drawImage(img, { x: MARGIN, y: layout.y - h, width: w, height: h });
+    const slack = CONTENT_W - w;
+    const x = MARGIN + (align === "center" ? slack / 2 : align === "right" ? slack : 0);
+    layout.page.drawImage(img, { x, y: layout.y - h, width: w, height: h });
     layout.y -= h + 12;
     return;
   }
@@ -439,6 +456,12 @@ async function renderTable(layout: Layout, table: ElementNode) {
   layout.y -= 10;
 }
 
+/** Tiptap's TextAlign extension renders as `style="text-align: center"` etc. on the block node. */
+function readAlign(node: ElementNode): "left" | "center" | "right" {
+  const m = /text-align:\s*(left|center|right)/.exec(node.attrs.style ?? "");
+  return (m?.[1] as "left" | "center" | "right" | undefined) ?? "left";
+}
+
 async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered = false, index = 1) {
   if (node.type === "text") return;
   const empty: Style = { bold: false, italic: false, underline: false, color: null, fontFamily: null, fontSize: null };
@@ -450,7 +473,12 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
       const size = node.tag === "h1" ? 20 : node.tag === "h2" ? 16 : 13;
       layout.ensureSpace(size + 14);
       layout.y -= 6;
-      layout.drawParagraph(collectInlineWords(node, { ...empty, bold: true }), { x: MARGIN, width: CONTENT_W, size });
+      layout.drawParagraph(collectInlineWords(node, { ...empty, bold: true }), {
+        x: MARGIN,
+        width: CONTENT_W,
+        size,
+        align: readAlign(node),
+      });
       layout.y -= 4;
       return;
     }
@@ -464,9 +492,9 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
       // An image-only paragraph must not also emit a blank line, but a truly
       // empty <p></p> still needs to render as vertical space.
       if (words.length || !imgs.length) {
-        layout.drawParagraph(words, { x: MARGIN, width: CONTENT_W, size: 11 });
+        layout.drawParagraph(words, { x: MARGIN, width: CONTENT_W, size: 11, align: readAlign(node) });
       }
-      if (imgs.length) await renderImageRow(layout, imgs);
+      if (imgs.length) await renderImageRow(layout, imgs, readAlign(node));
       return;
     }
     case "ul":
@@ -483,6 +511,18 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
     }
     case "img": {
       await renderImageRow(layout, [node]);
+      return;
+    }
+    case "hr": {
+      layout.ensureSpace(20);
+      layout.y -= 10;
+      layout.page.drawLine({
+        start: { x: MARGIN, y: layout.y },
+        end: { x: MARGIN + CONTENT_W, y: layout.y },
+        thickness: 0.75,
+        color: BORDER,
+      });
+      layout.y -= 10;
       return;
     }
     case "table": {

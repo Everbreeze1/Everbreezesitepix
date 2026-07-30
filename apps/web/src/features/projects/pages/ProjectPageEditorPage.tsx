@@ -10,6 +10,7 @@ import { Highlight } from "@tiptap/extension-highlight";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import LinkExtension from "@tiptap/extension-link";
+import TextAlign from "@tiptap/extension-text-align";
 import { Table, TableRow, TableCell, TableHeader } from "@tiptap/extension-table";
 import {
   ArrowLeft,
@@ -41,6 +42,9 @@ import {
   Search,
   MoreHorizontal,
   Layers,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -135,6 +139,7 @@ export function ProjectPageEditorPage() {
       TaskList,
       TaskItem.configure({ nested: false }),
       LinkExtension.configure({ openOnClick: false }),
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
       ProjectImage,
       Table.configure({ resizable: false }),
       TableRow,
@@ -910,6 +915,18 @@ function Toolbar({
       </button>
       <button type="button" className={btnCls(editor.isActive("orderedList"))} onClick={() => editor.chain().focus().toggleOrderedList().run()} aria-label="Numbered list">
         <ListOrdered className="h-4 w-4" />
+      </button>
+
+      <span className="mx-1.5 h-4 w-px bg-border" />
+
+      <button type="button" className={btnCls(editor.isActive({ textAlign: "left" }))} onClick={() => editor.chain().focus().setTextAlign("left").run()} aria-label="Align left">
+        <AlignLeft className="h-4 w-4" />
+      </button>
+      <button type="button" className={btnCls(editor.isActive({ textAlign: "center" }))} onClick={() => editor.chain().focus().setTextAlign("center").run()} aria-label="Align center">
+        <AlignCenter className="h-4 w-4" />
+      </button>
+      <button type="button" className={btnCls(editor.isActive({ textAlign: "right" }))} onClick={() => editor.chain().focus().setTextAlign("right").run()} aria-label="Align right">
+        <AlignRight className="h-4 w-4" />
       </button>
 
       <span className="mx-1.5 h-4 w-px bg-border" />
