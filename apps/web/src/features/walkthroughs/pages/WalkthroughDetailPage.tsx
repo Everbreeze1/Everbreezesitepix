@@ -317,7 +317,11 @@ export function WalkthroughDetailPage() {
       return;
     }
     toast.success("Walkthrough deleted");
-    navigate({ to: "/projects/$projectId", params: { projectId: walk.project_id } });
+    navigate({
+      to: "/projects/$projectId",
+      params: { projectId: walk.project_id },
+      search: { panel: "walkthroughs" },
+    });
   };
 
   const renderedMarkdown = useMemo(() => cleanWalkthroughMarkdown(markdown), [markdown]);
@@ -401,7 +405,11 @@ export function WalkthroughDetailPage() {
   return (
     <div className="container mx-auto max-w-3xl px-4 pb-24 pt-6 md:py-10">
       <Button asChild variant="ghost" size="sm" className="-ml-2 mb-3 h-9">
-        <Link to="/projects/$projectId" params={{ projectId: walk.project_id }}>
+        <Link
+          to="/projects/$projectId"
+          params={{ projectId: walk.project_id }}
+          search={{ panel: "walkthroughs" }}
+        >
           <ArrowLeft className="mr-1.5 h-4 w-4" />
           Back to {projectName || "project"}
         </Link>

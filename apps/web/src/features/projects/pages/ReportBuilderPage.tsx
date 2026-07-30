@@ -145,7 +145,7 @@ export function ReportBuilderPage() {
       if (cancel) return;
       if (!rep.data) {
         toast.error("Report not found");
-        navigate({ to: "/projects/$projectId", params: { projectId } });
+        navigate({ to: "/projects/$projectId", params: { projectId }, search: { panel: "reports" } });
         return;
       }
       setReport(rep.data as ReportRow);
@@ -356,7 +356,7 @@ export function ReportBuilderPage() {
       {/* Top bar */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <Button asChild variant="ghost" size="sm">
-          <Link to="/projects/$projectId" params={{ projectId }}>
+          <Link to="/projects/$projectId" params={{ projectId }} search={{ panel: "reports" }}>
             <ArrowLeft className="mr-1 h-4 w-4" /> Back to project
           </Link>
         </Button>

@@ -45,6 +45,7 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
+  SeparatorHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +80,7 @@ import {
   type TextSnippet,
 } from "@/lib/text-snippets.functions";
 import { ProjectImage, isPhotoSlot } from "@/lib/tiptap-project-image";
+import { PageBreak } from "@/lib/tiptap-page-break";
 import { downloadBase64File } from "@/lib/download-file";
 
 interface ProjectPhoto {
@@ -155,6 +157,7 @@ export function ProjectPageEditorPage() {
       LinkExtension.configure({ openOnClick: false }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       ProjectImage,
+      PageBreak,
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,
@@ -437,7 +440,9 @@ export function ProjectPageEditorPage() {
               variant="ghost"
               size="icon"
               className="shrink-0"
-              onClick={() => navigate({ to: "/projects/$projectId", params: { projectId } })}
+              onClick={() =>
+                navigate({ to: "/projects/$projectId", params: { projectId }, search: { panel: "reports" } })
+              }
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
@@ -1090,6 +1095,17 @@ function Toolbar({
             }
           >
             <Pilcrow className="mr-2 h-4 w-4" /> Notes section
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() =>
+              editor
+                .chain()
+                .focus()
+                .insertContent({ type: "paragraph", attrs: { pageBreak: "true" } })
+                .run()
+            }
+          >
+            <SeparatorHorizontal className="mr-2 h-4 w-4" /> Page break
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={onAddHeader}>Add header</DropdownMenuItem>

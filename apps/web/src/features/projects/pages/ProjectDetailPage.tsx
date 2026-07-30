@@ -133,6 +133,7 @@ const WALKTHROUGH_MAX_SECONDS: Record<string, number> = { pro: 600, team: 1200 }
 export type ProjectDetailSearch = {
   camera?: 1;
   walkthrough?: 1;
+  panel?: "tasks" | "checklists" | "walkthroughs" | "reports" | "workflows" | "trash";
 };
 
 import type { Project, Photo, Report } from "../types";
@@ -143,6 +144,7 @@ import { PhotoCarousel } from "../components/PhotoCarousel";
 export function ProjectDetailPage() {
   const { projectId } = useParams({ from: "/_app/projects/$projectId" });
   const navigate = useNavigate();
+  const search = useSearch({ from: "/_app/projects/$projectId" });
   const { user } = useAuth();
   const qc = useQueryClient();
   // Gallery/Dashboard/Map cache photos-derived data; this page's own photo
@@ -280,9 +282,20 @@ export function ProjectDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [annotatePhotoId, setAnnotatePhotoId] = useState<string | null>(null);
-  const [panel, setPanel] = useState<
-    null | "tasks" | "checklists" | "walkthroughs" | "reports" | "workflows" | "trash"
-  >(null);
+  // Kept in the URL (?panel=) rather than plain component state, so returning
+  // from a sub-page (a document, a walkthrough, the report builder) via back
+  // navigation restores the tab the user was on instead of resetting to Photos.
+  type PanelKey = NonNullable<ProjectDetailSearch["panel"]>;
+  const panel: PanelKey | null = search.panel ?? null;
+  function setPanel(next: PanelKey | null | ((cur: PanelKey | null) => PanelKey | null)) {
+    const resolved = typeof next === "function" ? next(panel) : next;
+    navigate({
+      to: "/projects/$projectId",
+      params: { projectId },
+      search: (prev) => ({ ...prev, panel: resolved ?? undefined }),
+      replace: true,
+    });
+  }
   const [creatingReport, setCreatingReport] = useState(false);
 
   async function generateReport() {
@@ -616,14 +629,13 @@ export function ProjectDetailPage() {
 
   // Auto-open the camera when the FAB navigates here with ?camera=1, then
   // clear the flag so a back-nav doesn't re-trigger it.
-  const search = useSearch({ from: "/_app/projects/$projectId" });
   useEffect(() => {
     if (search.camera === 1) {
       setCameraOpen(true);
       navigate({
         to: "/projects/$projectId",
         params: { projectId },
-        search: { camera: undefined, walkthrough: undefined },
+        search: (prev) => ({ ...prev, camera: undefined }),
         replace: true,
       });
     }
@@ -639,7 +651,7 @@ export function ProjectDetailPage() {
       navigate({
         to: "/projects/$projectId",
         params: { projectId },
-        search: { camera: undefined, walkthrough: undefined },
+        search: (prev) => ({ ...prev, walkthrough: undefined }),
         replace: true,
       });
     }

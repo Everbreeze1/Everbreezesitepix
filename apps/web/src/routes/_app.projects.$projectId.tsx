@@ -9,6 +9,11 @@ export const Route = createFileRoute("/_app/projects/$projectId")({
   validateSearch: (search: Record<string, unknown>): ProjectDetailSearch => ({
     camera: search.camera === 1 || search.camera === "1" ? 1 : undefined,
     walkthrough: search.walkthrough === 1 || search.walkthrough === "1" ? 1 : undefined,
+    panel: (
+      ["tasks", "checklists", "walkthroughs", "reports", "workflows", "trash"] as const
+    ).includes(search.panel as any)
+      ? (search.panel as ProjectDetailSearch["panel"])
+      : undefined,
   }),
   component: ProjectDetailPage,
 });

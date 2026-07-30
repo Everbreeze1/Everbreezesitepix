@@ -282,6 +282,29 @@
 }
 .tiptap[contenteditable="true"] .tiptap-photo { cursor: pointer; }
 .tiptap[contenteditable="true"] .tiptap-photo:hover .tiptap-photo-overlay { opacity: 1; }
+/* Page-break marker (an empty paragraph carrying data-page-break — see
+   tiptap-page-break.ts): shown as a labelled dashed rule so it reads as a
+   deliberate break, not a stray blank line, and is easy to select/delete. */
+.tiptap p[data-page-break="true"] {
+  position: relative;
+  margin: 1.5rem 0;
+  height: 0;
+  border-top: 1px dashed var(--border);
+  text-align: center;
+}
+.tiptap p[data-page-break="true"]::before {
+  content: "Page break";
+  position: absolute;
+  top: -0.55em;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--background);
+  padding: 0 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
 /* Unfilled template photo slots: clicking one opens the project photo picker.
    Editable surfaces only — on a shared/read-only page there is nothing to click. */
 .tiptap[contenteditable="true"] img[src^="data:image/svg+xml"] { cursor: pointer; }
