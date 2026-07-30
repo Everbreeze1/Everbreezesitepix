@@ -96,10 +96,16 @@ const SidebarProvider = React.forwardRef<
     // Adds a keyboard shortcut to toggle the sidebar.
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
-          event.preventDefault();
-          toggleSidebar();
-        }
+        if (event.key !== SIDEBAR_KEYBOARD_SHORTCUT || !(event.metaKey || event.ctrlKey)) return;
+        // Ctrl/Cmd+B is also Bold in every text editor on the page (native
+        // inputs and Tiptap's contenteditable alike). Tiptap's keymap calls
+        // preventDefault() but not stopPropagation(), so without this guard
+        // the keystroke bolds the selection *and* toggles this sidebar at
+        // the same time — bold applies, and the nav visibly shifts under it.
+        const target = event.target as HTMLElement | null;
+        if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+        event.preventDefault();
+        toggleSidebar();
       };
 
       window.addEventListener("keydown", handleKeyDown);
