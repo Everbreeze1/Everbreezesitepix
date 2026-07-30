@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useBlocker, useNavigate, useParams } from "@tanstack/react-router";
 import { useEditor, EditorContent, getHTMLFromFragment, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -63,9 +63,11 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/sitepix/client";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePrompt } from "@/hooks/use-prompt";
+import { useConfirm } from "@/hooks/use-confirm";
 import {
   getProjectPage,
   updateProjectPage,
+  deleteProjectPage,
   setProjectPageShare,
   generatePagePdf,
   savePageAsTemplate,
@@ -99,6 +101,17 @@ export function ProjectPageEditorPage() {
   const { projectId, pageId } = useParams({ from: "/_app/projects/$projectId_/pages/$pageId" });
   const navigate = useNavigate();
   const prompt = usePrompt();
+  const confirm = useConfirm();
+  /** True if this page was just created and abandoned without ever being edited — deleted on exit instead of left as clutter in the Documents list. */
+  const freshRef = useRef(false);
+  /** True once the user has made any edit this session. */
+  const dirtyRef = useRef(false);
+  /** True while there are edits not yet confirmed saved to the server. */
+  const unsavedRef = useRef(false);
+  function markDirty() {
+    dirtyRef.current = true;
+    unsavedRef.current = true;
+  }
 
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("Untitled");
@@ -127,6 +140,7 @@ export function ProjectPageEditorPage() {
   const editor = useEditor({
     onSelectionUpdate: () => forceToolbarUpdate((n) => n + 1),
     onTransaction: () => forceToolbarUpdate((n) => n + 1),
+    onUpdate: () => markDirty(),
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
       Placeholder.configure({ placeholder: "Start writing…" }),
@@ -148,10 +162,11 @@ export function ProjectPageEditorPage() {
     ],
     content: "",
     editorProps: {
-      // Clicking an unfilled template photo slot opens the picker and swaps
-      // the real photo in at that exact position.
+      // Clicking an unfilled template photo slot OR an already-inserted project
+      // photo (hover reveals a "Change photo" overlay — see ProjectImage's
+      // NodeView) opens the picker and swaps in the chosen photo at that spot.
       handleClickOn: (_view, _pos, node, nodePos) => {
-        if (node.type.name === "image" && isPhotoSlot(node.attrs)) {
+        if (node.type.name === "image" && (isPhotoSlot(node.attrs) || node.attrs["data-photo-id"])) {
           slotPosRef.current = nodePos;
           setImagePickerOpen(true);
           return true;
@@ -171,6 +186,11 @@ export function ProjectPageEditorPage() {
       try {
         const res = await getProjectPage({ data: { pageId } });
         if (cancelled) return;
+        const freshKey = `sitepix:freshPage:${pageId}`;
+        if (sessionStorage.getItem(freshKey)) {
+          freshRef.current = true;
+          sessionStorage.removeItem(freshKey);
+        }
         setTitle(res.page.title);
         setHeaderHtml(res.page.header_html ?? "");
         setFooterHtml(res.page.footer_html ?? "");
@@ -179,7 +199,7 @@ export function ProjectPageEditorPage() {
         setShareToken(res.page.share_token);
         setRevoked(!!res.page.revoked_at);
         setUpdatedAt(res.page.updated_at);
-        editor?.commands.setContent(res.page.content_html || "");
+        editor?.commands.setContent(res.page.content_html || "", { emitUpdate: false });
       } catch (e: any) {
         toast.error(e?.message ?? "Could not load page");
       } finally {
@@ -241,6 +261,7 @@ export function ProjectPageEditorPage() {
           },
         });
         setUpdatedAt(new Date().toISOString());
+        unsavedRef.current = false;
       } catch (e: any) {
         toast.error(e?.message ?? "Could not save");
       } finally {
@@ -249,6 +270,31 @@ export function ProjectPageEditorPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedTitle, debouncedHtml, debouncedHeaderHtml, debouncedFooterHtml, showHeader, showFooter, loading]);
+
+  useBlocker({
+    shouldBlockFn: async () => {
+      if (freshRef.current && !dirtyRef.current) {
+        // Never-edited page created via "Create" — drop it instead of leaving an
+        // empty "Untitled" entry cluttering the Documents list.
+        try {
+          await deleteProjectPage({ data: { pageId } });
+        } catch {
+          /* best-effort cleanup */
+        }
+        return false;
+      }
+      if (!unsavedRef.current) return false;
+      const proceed = await confirm({
+        title: "Leave without saving?",
+        description: "You have unsaved changes. If you leave now, they won't be saved.",
+        confirmText: "Leave",
+        cancelText: "Stay",
+        variant: "destructive",
+      });
+      return !proceed;
+    },
+    enableBeforeUnload: () => unsavedRef.current,
+  });
 
   async function handleToggleShare(enable: boolean) {
     setShareUpdating(true);
@@ -398,7 +444,10 @@ export function ProjectPageEditorPage() {
             <Input
               ref={titleInputRef}
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setTitle(e.target.value);
+              }}
               className="h-8 max-w-xs border-none bg-transparent px-1 text-base font-extrabold shadow-none focus-visible:ring-1"
             />
           </div>
@@ -439,8 +488,14 @@ export function ProjectPageEditorPage() {
           editor={editor}
           onAddImage={() => setImagePickerOpen(true)}
           onOpenSnippets={openSnippets}
-          onAddHeader={() => setShowHeader(true)}
-          onAddFooter={() => setShowFooter(true)}
+          onAddHeader={() => {
+            markDirty();
+            setShowHeader(true);
+          }}
+          onAddFooter={() => {
+            markDirty();
+            setShowFooter(true);
+          }}
         />
       </div>
 
@@ -450,9 +505,16 @@ export function ProjectPageEditorPage() {
             kind="header"
             enabled={showHeader}
             value={headerHtml}
-            onChange={setHeaderHtml}
-            onEnable={() => setShowHeader(true)}
+            onChange={(v) => {
+              markDirty();
+              setHeaderHtml(v);
+            }}
+            onEnable={() => {
+              markDirty();
+              setShowHeader(true);
+            }}
             onRemove={() => {
+              markDirty();
               setShowHeader(false);
               setHeaderHtml("");
             }}
@@ -464,9 +526,16 @@ export function ProjectPageEditorPage() {
             kind="footer"
             enabled={showFooter}
             value={footerHtml}
-            onChange={setFooterHtml}
-            onEnable={() => setShowFooter(true)}
+            onChange={(v) => {
+              markDirty();
+              setFooterHtml(v);
+            }}
+            onEnable={() => {
+              markDirty();
+              setShowFooter(true);
+            }}
             onRemove={() => {
+              markDirty();
               setShowFooter(false);
               setFooterHtml("");
             }}

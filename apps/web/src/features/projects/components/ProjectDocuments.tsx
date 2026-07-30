@@ -313,6 +313,7 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
       const res = await createProjectPage({
         data: { projectId, folderId: currentFolderId, template },
       });
+      sessionStorage.setItem(`sitepix:freshPage:${res.page.id}`, "1");
       navigate({ to: "/projects/$projectId/pages/$pageId", params: { projectId, pageId: res.page.id } });
     } catch (e: any) {
       toast.error(e?.message ?? "Could not create page");

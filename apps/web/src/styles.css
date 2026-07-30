@@ -248,12 +248,40 @@
    ratio, so without object-fit the browser would stretch it to fill the box —
    crop to fill instead. */
 .tiptap img[width][height] { object-fit: cover; }
-.tiptap img.ProseMirror-selectednode { outline: 2px solid var(--primary); }
+.tiptap img.ProseMirror-selectednode,
+.tiptap .tiptap-photo.ProseMirror-selectednode { outline: 2px solid var(--primary); }
 /* Images are inline nodes, so several can share a paragraph as a photo strip.
    Tailwind's preflight forces `img { display: block }`, which stacks them
-   vertically instead — override back to inline-block so they flow left to right. */
-.tiptap p > img { display: inline-block; vertical-align: top; margin-right: 0.375rem; }
-.tiptap p > img:last-child { margin-right: 0; }
+   vertically instead — override back to inline-block so they flow left to right.
+   The live editor renders every image through ProjectImage's NodeView, which
+   wraps it in a `.tiptap-photo` span (needed for the hover overlay below) — so
+   this has to match both that wrapper (editor) and a bare `img` (the shared
+   page / preview dialog / PDF-adjacent surfaces, which render stored HTML
+   directly and never see the wrapper). */
+.tiptap p > img,
+.tiptap p > .tiptap-photo { display: inline-block; vertical-align: top; margin-right: 0.375rem; }
+.tiptap p > img:last-child,
+.tiptap p > .tiptap-photo:last-child { margin-right: 0; }
+/* Wrapper for a real inserted photo (see ProjectImage's addNodeView) — sized
+   to exactly match the <img> inside it since the overlay is positioned out
+   of flow and doesn't affect that. */
+.tiptap-photo { position: relative; }
+.tiptap-photo-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  background: color-mix(in oklab, black 55%, transparent);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.tiptap[contenteditable="true"] .tiptap-photo { cursor: pointer; }
+.tiptap[contenteditable="true"] .tiptap-photo:hover .tiptap-photo-overlay { opacity: 1; }
 /* Unfilled template photo slots: clicking one opens the project photo picker.
    Editable surfaces only — on a shared/read-only page there is nothing to click. */
 .tiptap[contenteditable="true"] img[src^="data:image/svg+xml"] { cursor: pointer; }
