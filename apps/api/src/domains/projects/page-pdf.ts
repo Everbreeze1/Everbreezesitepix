@@ -483,6 +483,20 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
       return;
     }
     case "p": {
+      // An empty paragraph carrying `style="height: Npx"` (Spacer extension,
+      // see apps/web/src/lib/tiptap-spacer.ts) is deliberate blank space —
+      // e.g. a title-page cover sized to occupy roughly a full page. Convert
+      // CSS px (96/in) to PDF points (72/in) and advance the cursor by that
+      // much instead of drawing a normal blank line.
+      if (!node.children.length) {
+        const heightMatch = /height:\s*(\d+(?:\.\d+)?)px/.exec(node.attrs.style ?? "");
+        if (heightMatch) {
+          const heightPt = parseFloat(heightMatch[1]) * 0.75;
+          layout.ensureSpace(heightPt);
+          layout.y -= heightPt;
+          return;
+        }
+      }
       const imgs = node.children.filter(
         (c): c is ElementNode => c.type === "element" && c.tag === "img",
       );

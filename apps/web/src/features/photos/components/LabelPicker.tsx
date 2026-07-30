@@ -23,11 +23,13 @@ import {
 
 type ChipSize = "xs" | "sm" | "md" | "lg";
 
+// Bumped one step to match TagPill — labels sit over photos and on dense cards,
+// where the old 11-13px sizes were reported as hard to read.
 const CHIP_SIZE_CLASSES: Record<ChipSize, string> = {
-  xs: "px-2 py-0.5 text-[11px] tracking-tight",
-  sm: "px-2.5 py-1 text-xs",
-  md: "px-3 py-1 text-[13px]",
-  lg: "px-3.5 py-1.5 text-sm",
+  xs: "px-2.5 py-1 text-xs tracking-tight",
+  sm: "px-3 py-1 text-[13px]",
+  md: "px-3 py-1.5 text-sm",
+  lg: "px-4 py-1.5 text-base",
 };
 
 export function LabelChip({

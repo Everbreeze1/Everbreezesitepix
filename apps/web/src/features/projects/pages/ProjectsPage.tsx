@@ -1,5 +1,5 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query-keys";
 import {
@@ -28,6 +28,7 @@ import {
   Bookmark,
   Trash2,
   Layers,
+  Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -466,7 +467,7 @@ export function ProjectsPage() {
       const res = await fetchBoards();
       return res.boards;
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not load boards");
+      toast.error(e?.message ?? "Could not load pipelines");
       return [];
     }
   };
@@ -675,14 +676,19 @@ export function ProjectsPage() {
   const starredCount = allProjects.filter((p) => p.starred && !p.archived).length;
   const archivedCount = allProjects.filter((p) => p.archived).length;
 
-  const tabs: Array<{ key: TabKey; label: string; count: number; icon?: any }> = [
+  // Two runs separated by a divider: status filters over the project list, then
+  // the saved collections. Mixing them in one undifferentiated strip of seven
+  // pills was the main reason this row read as cluttered.
+  const tabs: Array<{ key: TabKey; label: string; count: number; icon?: any; startsGroup?: boolean }> = [
     { key: "all", label: "All", count: activeCount },
     { key: "active", label: "Active", count: activeStatusCount },
     { key: "completed", label: "Completed", count: completedCount },
-    { key: "groups", label: "Groups", count: groups.length, icon: FolderPlus },
-    { key: "boards", label: "Boards", count: boards.length, icon: Layers },
     { key: "starred", label: "Starred", count: starredCount, icon: Star },
     { key: "archived", label: "Archived", count: archivedCount, icon: Archive },
+    { key: "groups", label: "Groups", count: groups.length, icon: FolderPlus, startsGroup: true },
+    // Key stays "boards" (route/state/table naming); only the label is
+    // user-facing, and "Pipeline" describes what the columns actually are.
+    { key: "boards", label: "Pipelines", count: boards.length, icon: Layers },
   ];
 
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -702,7 +708,7 @@ export function ProjectsPage() {
       : tab === "boards"
         ? activeBoard
           ? activeBoard.name
-          : "Boards"
+          : "Pipelines"
         : tab === "starred"
           ? "Starred"
           : tab === "archived"
@@ -1215,27 +1221,37 @@ export function ProjectsPage() {
                   const active = tab === t.key;
                   const Icon = t.icon;
                   return (
-                    <button
-                      key={t.key}
-                      type="button"
-                      onClick={() => setTab(t.key)}
-                      className={`inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-xs font-extrabold transition ${
-                        active
-                          ? "bg-foreground text-background shadow-lg"
-                          : "bg-muted text-muted-foreground hover:bg-accent"
-                      }`}
-                    >
-                      {Icon && <Icon className="h-3.5 w-3.5" />}
-                      {t.label} {t.count}
-                    </button>
+                    <Fragment key={t.key}>
+                      {t.startsGroup && <span className="mx-1 h-5 w-px shrink-0 bg-border" />}
+                      <button
+                        type="button"
+                        onClick={() => setTab(t.key)}
+                        className={`inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-xs font-extrabold transition ${
+                          active
+                            ? "bg-foreground text-background shadow-lg"
+                            : "bg-muted text-muted-foreground hover:bg-accent"
+                        }`}
+                      >
+                        {Icon && <Icon className="h-3.5 w-3.5" />}
+                        {t.label}
+                        <span className={active ? "text-background/60" : "text-muted-foreground/60"}>
+                          {t.count}
+                        </span>
+                      </button>
+                    </Fragment>
                   );
                 })}
               </div>
             </div>
           </div>
 
-          {/* Recent activity strip */}
-          {tab !== "groups" && !loading && recentPhotos.length > 0 && (
+          {/*
+            Recent activity strip. Hidden on the collection tabs (Groups,
+            Pipelines): those are workspaces the user came to work in, and a
+            tall photo rail above them pushes the actual content below the
+            fold before it can be read.
+          */}
+          {tab !== "groups" && tab !== "boards" && !loading && recentPhotos.length > 0 && (
             <div className="mt-9">
               <div className="mb-4 flex items-end justify-between gap-2">
                 <div className="min-w-0">
@@ -1302,12 +1318,17 @@ export function ProjectsPage() {
                           <ImageIcon className="h-6 w-6 opacity-50" />
                         </div>
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-sidebar/90 via-sidebar/10 to-transparent" />
+                      {/*
+                        Deeper, higher-reaching scrim than before: the label sits
+                        on arbitrary photography, and a light sky behind it was
+                        washing the caption out.
+                      */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-sidebar via-sidebar/60 to-transparent" />
                       <div className="absolute inset-x-0 bottom-0 p-4">
-                        <p className="truncate text-sm font-extrabold text-sidebar-foreground">
+                        <p className="truncate text-base font-extrabold leading-tight text-sidebar-foreground drop-shadow">
                           {p.project_name}
                         </p>
-                        <p className="mt-0.5 text-[11px] font-bold text-sidebar-foreground/60">
+                        <p className="mt-1 text-xs font-bold text-sidebar-foreground/80">
                           {timeAgo(p.created_at)}
                         </p>
                       </div>
@@ -1320,21 +1341,29 @@ export function ProjectsPage() {
 
           {/* All projects / Groups / Boards */}
           <div className="mt-9">
-            <div className="flex items-end justify-between gap-2">
-              <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted-foreground">
-                  Workspace library
-                </p>
-                <h2 className="mt-1 text-xl font-extrabold tracking-tight text-foreground">
-                  {bodyLabel}
-                </h2>
+            {/*
+              On the Boards tab the board strip below already names the active
+              board, so this header would repeat it — and repeat it a third time
+              inside the board view. Rendering it only for the other tabs keeps
+              one title per screen.
+            */}
+            {tab !== "boards" && (
+              <div className="flex items-end justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted-foreground">
+                    Workspace library
+                  </p>
+                  <h2 className="mt-1 text-xl font-extrabold tracking-tight text-foreground">
+                    {bodyLabel}
+                  </h2>
+                </div>
+                <span className="text-xs font-semibold text-muted-foreground">
+                  {bodyShownCount} shown
+                </span>
               </div>
-              <span className="text-xs font-semibold text-muted-foreground">
-                {bodyShownCount} shown
-              </span>
-            </div>
+            )}
 
-            <div className="mt-5">
+            <div className={tab === "boards" ? "" : "mt-5"}>
               {tab === "groups" ? (
                 <GroupsGrid
                   groups={groups}
@@ -1344,33 +1373,49 @@ export function ProjectsPage() {
                 />
               ) : tab === "boards" ? (
                 <div>
-                  {/* Board tabs — each board is directly selectable, no drill-in/back step. */}
-                  <div className="mb-5 flex items-center gap-1 overflow-x-auto border-b border-border">
-                    {boards.map((b) => {
-                      const isActive = activeBoard?.id === b.id;
-                      return (
-                        <button
-                          key={b.id}
-                          type="button"
-                          onClick={() => setActiveBoard(b)}
-                          className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-bold transition-colors ${
-                            isActive
-                              ? "border-foreground text-foreground"
-                              : "border-transparent text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          {b.name}
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => setCreateBoardOpen(true)}
-                      aria-label="Create board"
-                      className="-mb-px shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
+                  {/*
+                    Pipeline strip — each pipeline is directly selectable, no
+                    drill-in/back step. "Manage" sits on the same line rather
+                    than in a second header block below it.
+                  */}
+                  <div className="mb-5 flex items-center gap-1 border-b border-border">
+                    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      {boards.map((b) => {
+                        const isActive = activeBoard?.id === b.id;
+                        return (
+                          <button
+                            key={b.id}
+                            type="button"
+                            onClick={() => setActiveBoard(b)}
+                            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-bold transition-colors ${
+                              isActive
+                                ? "border-foreground text-foreground"
+                                : "border-transparent text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {b.name}
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => setCreateBoardOpen(true)}
+                        aria-label="Create pipeline"
+                        className="-mb-px shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {activeBoard && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mb-1 shrink-0 text-xs"
+                        onClick={() => setManageBoardOpen(true)}
+                      >
+                        <Settings2 className="mr-1.5 h-3.5 w-3.5" /> Manage
+                      </Button>
+                    )}
                   </div>
 
                   {boardsLoading ? null : activeBoard ? (
@@ -1379,6 +1424,9 @@ export function ProjectsPage() {
                       allTags={allTags}
                       allProjects={allProjects}
                       projectTagMap={projectTagMap}
+                      coverUrls={coverUrls}
+                      photoCounts={photoCounts}
+                      reportCounts={reportCounts}
                       onManage={() => setManageBoardOpen(true)}
                       onTagAssigned={(projectId, tag) => {
                         setProjectTagMap((prev) => {
@@ -1402,11 +1450,11 @@ export function ProjectsPage() {
                   ) : (
                     <EmptyState
                       icon={Layers}
-                      title="No boards yet"
-                      description='Boards group projects into columns by tag (e.g. "Lead", "Active", "Complete") — shared with your team and always up to date. Drag a card between columns to re-tag it.'
+                      title="No pipelines yet"
+                      description='A pipeline moves projects through stages by tag (e.g. "Lead", "Active", "Complete") — shared with your team and always up to date. Drag a card between stages to re-tag it.'
                       action={
                         <Button onClick={() => setCreateBoardOpen(true)}>
-                          <Layers className="mr-2 h-4 w-4" /> New Board
+                          <Layers className="mr-2 h-4 w-4" /> New Pipeline
                         </Button>
                       }
                     />

@@ -12,11 +12,21 @@ function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(f, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
+/**
+ * Picks whichever of black/white has the higher WCAG contrast ratio against the
+ * pill colour. The previous 0.6 perceived-brightness cutoff put white text on
+ * mid-tone tags (oranges, teals, mid greens) where black reads far better —
+ * a large part of why tags were reported as hard to read.
+ */
 function readableText(hex: string): string {
   const [r, g, b] = hexToRgb(hex);
-  // Perceived luminance
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum > 0.6 ? "#0b0b0b" : "#ffffff";
+  const channel = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const lum = 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  // Contrast vs white is 1.05/(L+0.05); vs black it's (L+0.05)/0.05.
+  return (lum + 0.05) / 0.05 > 1.05 / (lum + 0.05) ? "#0b0b0b" : "#ffffff";
 }
 
 function toTitleCase(s: string): string {
@@ -38,16 +48,18 @@ export function TagPill({ name, size = "md", onRemove, className }: PillProps) {
   const { colorOf } = useTagColors();
   const bg = colorOf(name);
   const fg = readableText(bg);
+  // One step larger across the board — these sit over photography as often as
+  // on cards, where the old 11px caption size was the main legibility problem.
   const sizing =
     size === "lg"
-      ? "px-3 py-1.5 text-sm gap-1.5"
+      ? "px-3.5 py-1.5 text-base gap-1.5"
       : size === "sm"
-        ? "px-2 py-0.5 text-[11px] gap-1"
-        : "px-2.5 py-1 text-xs gap-1.5";
-  const dotSize = size === "sm" ? "h-1.5 w-1.5" : "h-2 w-2";
+        ? "px-2.5 py-1 text-xs gap-1.5"
+        : "px-3 py-1 text-sm gap-1.5";
+  const dotSize = size === "sm" ? "h-2 w-2" : "h-2.5 w-2.5";
   return (
     <span
-      className={`inline-flex items-center rounded-full font-bold shadow-sm ring-1 ring-black/10 ${sizing} ${className ?? ""}`}
+      className={`inline-flex items-center rounded-full font-extrabold tracking-tight shadow ring-1 ring-black/20 ${sizing} ${className ?? ""}`}
       style={{ background: bg, color: fg }}
     >
       <span
@@ -93,7 +105,7 @@ export function TagPillRow({ tags, size, onRemove, max, className }: RowProps) {
         <TagPill key={t} name={t} size={size} onRemove={onRemove ? () => onRemove(t) : undefined} />
       ))}
       {extra > 0 && (
-        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-bold text-muted-foreground">
           +{extra}
         </span>
       )}

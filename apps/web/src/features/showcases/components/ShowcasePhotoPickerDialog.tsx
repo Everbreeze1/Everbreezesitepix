@@ -10,6 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, Search, Check } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/sitepix/client";
 
 interface PhotoRow {
@@ -45,24 +46,45 @@ export function ShowcasePhotoPickerDialog({ open, onClose, onPick }: Props) {
   const loadPhotos = async () => {
     setLoading(true);
     try {
-      const { data } = await supabase
+      // Project names are fetched separately rather than as a PostgREST embed
+      // (`project:projects(name)`) — the embed depends on a detectable FK and
+      // silently returns no rows when it can't be resolved, which left the
+      // picker permanently empty.
+      const { data, error } = await supabase
         .from("photos")
-        .select("id, project_id, storage_path, image_url, caption, project:projects(name)")
+        .select("id, project_id, storage_path, image_url, caption")
+        .is("deleted_at", null)
         .or("phase.is.null,phase.neq.walkthrough")
         .not("storage_path", "like", "%/walkthroughs/%")
         .order("created_at", { ascending: false })
         .limit(300);
-      const rows = ((data as any[]) ?? []).map((r) => ({
+      if (error) throw error;
+
+      const raw = (data as any[]) ?? [];
+
+      const projectIds = [...new Set(raw.map((r) => r.project_id).filter(Boolean))];
+      const names: Record<string, string> = {};
+      if (projectIds.length) {
+        const { data: projectRows } = await supabase
+          .from("projects")
+          .select("id, name")
+          .in("id", projectIds);
+        (projectRows as any[])?.forEach((p) => {
+          names[p.id] = p.name ?? "";
+        });
+      }
+
+      const rows = raw.map((r) => ({
         id: r.id,
         project_id: r.project_id,
-        project_name: r.project?.name ?? "",
+        project_name: names[r.project_id] ?? "",
         storage_path: r.storage_path,
         image_url: r.image_url,
         caption: r.caption,
       })) as PhotoRow[];
       setPhotos(rows);
 
-      const needSign = rows.filter((r) => !r.image_url);
+      const needSign = rows.filter((r) => !r.image_url && r.storage_path);
       if (needSign.length) {
         const { data: signedUrls } = await supabase.storage
           .from("site-photos")
@@ -76,6 +98,9 @@ export function ShowcasePhotoPickerDialog({ open, onClose, onPick }: Props) {
         });
         setSigned(map);
       }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not load photos");
+      setPhotos([]);
     } finally {
       setLoading(false);
     }
@@ -132,7 +157,11 @@ export function ShowcasePhotoPickerDialog({ open, onClose, onPick }: Props) {
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : filtered.length === 0 ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">No photos found.</div>
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                {photos.length === 0
+                  ? "No photos in your projects yet — upload some from a project first."
+                  : "No photos match your search."}
+              </div>
             ) : (
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
                 {filtered.map((p) => {
@@ -147,7 +176,7 @@ export function ShowcasePhotoPickerDialog({ open, onClose, onPick }: Props) {
                       }`}
                     >
                       <img src={urlFor(p)} alt="" className="h-full w-full object-cover" />
-                      <div className="absolute inset-x-0 bottom-0 truncate bg-black/50 px-1.5 py-0.5 text-[10px] text-white">
+                      <div className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-2 py-1 text-xs font-bold text-white">
                         {p.project_name}
                       </div>
                       {checked && (

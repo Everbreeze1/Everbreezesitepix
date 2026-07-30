@@ -2,6 +2,18 @@ import Image from "@tiptap/extension-image";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 /**
+ * A bare HTML width/height attribute value ("48%", "280") is a valid
+ * *attribute*, but as a CSS length "280" is invalid and gets silently
+ * dropped — it needs an explicit unit ("280px").
+ */
+function cssLength(v: unknown): string | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  return /^[\d.]+$/.test(s) ? `${s}px` : s;
+}
+
+/**
  * Image node that additionally persists `data-photo-id` so the backend can
  * re-resolve a fresh signed URL on every read — the `src` we set at insert
  * time is a signed URL that expires in an hour and must never be trusted
@@ -51,10 +63,34 @@ export const ProjectImage = Image.extend({
         else img.removeAttribute("src");
         if (n.attrs.alt) img.setAttribute("alt", n.attrs.alt as string);
         else img.removeAttribute("alt");
+
+        // A percentage width (e.g. a 2-up photo row template ships "48%" so
+        // the pair fills the paragraph's width) can only resolve against a
+        // containing block with a definite width. The wrapper span this
+        // NodeView adds is `display: inline-block` with no width of its own,
+        // so leaving the percentage on the <img> makes it resolve against
+        // nothing — the browser falls back to the photo's native pixel size,
+        // which is how a real upload was blowing up to its own huge intrinsic
+        // size while a neighboring empty slot (a small SVG) stayed put and
+        // wrapped to the next line. Put the real box size on the wrapper
+        // instead, and have the <img> just fill it.
+        const w = cssLength(n.attrs.width);
+        const h = cssLength(n.attrs.height);
         if (n.attrs.width != null) img.setAttribute("width", String(n.attrs.width));
         else img.removeAttribute("width");
         if (n.attrs.height != null) img.setAttribute("height", String(n.attrs.height));
         else img.removeAttribute("height");
+        wrapper.style.width = w ?? "";
+        wrapper.style.height = h ?? "";
+        if (w && h) {
+          img.style.width = "100%";
+          img.style.height = "100%";
+          img.style.objectFit = "cover";
+        } else {
+          img.style.width = "";
+          img.style.height = "";
+          img.style.objectFit = "";
+        }
 
         const photoId = n.attrs["data-photo-id"];
         if (photoId) img.setAttribute("data-photo-id", String(photoId));

@@ -74,7 +74,7 @@ export function AddProjectToTagDialog({ open, tag, projects, onClose, onAdded }:
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Add project to "{tag.name}"</DialogTitle>
-          <DialogDescription>Tags this project so it shows up in this column.</DialogDescription>
+          <DialogDescription>Tags this project so it shows up in this stage.</DialogDescription>
         </DialogHeader>
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />

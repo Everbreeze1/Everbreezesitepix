@@ -54,7 +54,7 @@ import { toast } from "sonner";
 import { formatBytes } from "@/hooks/use-storage-usage";
 import { relativeTime } from "@sitepix/shared";
 import { downloadBase64File } from "@/lib/download-file";
-import { ProjectReports, type ReportPhotoRef } from "@/features/projects/components/ProjectReports";
+import { type ReportPhotoRef } from "@/features/projects/components/ProjectReports";
 import {
   listProjectDocumentTree,
   createDocumentFolder,
@@ -150,7 +150,6 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [legacyOpen, setLegacyOpen] = useState(false);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -727,23 +726,6 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
             )}
             Add document
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="icon"
-                variant="outline"
-                className="h-8 w-8 shrink-0 rounded-lg border-border text-muted-foreground"
-                aria-label="More document tools"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setLegacyOpen(true)}>
-                Reports, checklists &amp; site logs
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
 
@@ -1057,19 +1039,6 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
           </>
         )}
       </div>
-
-      <Dialog open={legacyOpen} onOpenChange={setLegacyOpen}>
-        <DialogContent className="max-w-5xl p-6 sm:p-8">
-          <DialogHeader>
-            <DialogTitle>Reports, checklists &amp; site logs</DialogTitle>
-          </DialogHeader>
-          <ProjectReports
-            projectId={projectId}
-            projectName={projectName}
-            projectPhotos={projectPhotos}
-          />
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={sharePage !== null} onOpenChange={(open) => !open && setSharePage(null)}>
         <DialogContent className="max-w-md">

@@ -45,8 +45,9 @@ export function ShowcaseBuilderPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
+  /** `silent` refreshes in place after a mutation, without blanking the page behind a spinner. */
+  const load = async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const s = await getShowcase({ data: { id: showcaseId } });
       if (!s) {
@@ -62,7 +63,7 @@ export function ShowcaseBuilderPage() {
     } catch (e: any) {
       toast.error(e?.message ?? "Could not load showcase");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -80,7 +81,8 @@ export function ShowcaseBuilderPage() {
     }
   };
 
-  const savePhotos = async (next: ShowcaseItemDetail[]) => {
+  /** Returns false when the write failed, so callers don't report success. */
+  const savePhotos = async (next: ShowcaseItemDetail[]): Promise<boolean> => {
     setSaving(true);
     try {
       await setShowcaseItems({
@@ -90,8 +92,10 @@ export function ShowcaseBuilderPage() {
         },
       });
       setItems(next);
+      return true;
     } catch (e: any) {
       toast.error(e?.message ?? "Could not save photos");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -117,22 +121,29 @@ export function ShowcaseBuilderPage() {
     void savePhotos(items);
   };
 
-  const addPhotos = (picked: Array<{ id: string; image_url: string }>) => {
+  const addPhotos = async (picked: Array<{ id: string; image_url: string }>) => {
     const existing = new Set(items.map((it) => it.photo_id));
+    const fresh = picked.filter((p) => !existing.has(p.id));
+    setPickerOpen(false);
+    if (fresh.length === 0) {
+      toast.info("Those photos are already in this showcase");
+      return;
+    }
     const next = [
       ...items,
-      ...picked
-        .filter((p) => !existing.has(p.id))
-        .map((p, i) => ({
-          id: `new-${p.id}`,
-          photo_id: p.id,
-          caption: null,
-          position: items.length + i,
-          image_url: p.image_url,
-        })),
+      ...fresh.map((p, i) => ({
+        id: `new-${p.id}`,
+        photo_id: p.id,
+        caption: null,
+        position: items.length + i,
+        image_url: p.image_url,
+      })),
     ];
-    void savePhotos(next);
-    setPickerOpen(false);
+    const ok = await savePhotos(next);
+    // Re-read so the optimistic `new-*` rows are replaced by real item ids —
+    // and so a failed write rolls back to the server's state.
+    await load({ silent: true });
+    if (ok) toast.success(`Added ${fresh.length} photo${fresh.length === 1 ? "" : "s"}`);
   };
 
   const toggleShare = async () => {

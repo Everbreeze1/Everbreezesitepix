@@ -91,11 +91,11 @@ export function BoardSettingsSheet({
 
   async function handleSave() {
     if (!name.trim()) {
-      toast.error("Board name can't be empty");
+      toast.error("Pipeline name can't be empty");
       return;
     }
     if (tagIds.length === 0) {
-      toast.error("Add at least one column");
+      toast.error("Add at least one stage");
       return;
     }
     setSaving(true);
@@ -106,7 +106,7 @@ export function BoardSettingsSheet({
       onUpdated(updated);
       onOpenChange(false);
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not save board");
+      toast.error(e?.message ?? "Could not save pipeline");
     } finally {
       setSaving(false);
     }
@@ -115,7 +115,7 @@ export function BoardSettingsSheet({
   async function handleDelete() {
     if (
       !(await confirm({
-        description: `Delete "${board.name}"? The projects and tags stay — only the board is removed.`,
+        description: `Delete "${board.name}"? The projects and tags stay — only the pipeline is removed.`,
         variant: "destructive",
       }))
     )
@@ -124,9 +124,9 @@ export function BoardSettingsSheet({
       await deleteProjectBoard({ data: { id: board.id } });
       onDeleted(board.id);
       onOpenChange(false);
-      toast.success("Board deleted");
+      toast.success("Pipeline deleted");
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not delete board");
+      toast.error(e?.message ?? "Could not delete pipeline");
     }
   }
 
@@ -134,14 +134,14 @@ export function BoardSettingsSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
         <SheetHeader className="border-b px-6 pb-4 pt-6 text-left">
-          <SheetTitle>Board Settings</SheetTitle>
+          <SheetTitle>Pipeline Settings</SheetTitle>
           <SheetDescription>
-            Select which tags appear as columns and drag to reorder them.
+            Select which tags appear as stages and drag to reorder them.
           </SheetDescription>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          <Label htmlFor="board-name">Board Name</Label>
+          <Label htmlFor="board-name">Pipeline Name</Label>
           <Input
             id="board-name"
             value={name}
@@ -150,12 +150,12 @@ export function BoardSettingsSheet({
           />
 
           <p className="mb-2 mt-6 text-sm font-bold text-foreground">
-            Active Columns <span className="text-muted-foreground">({columns.length})</span>
+            Active Stages <span className="text-muted-foreground">({columns.length})</span>
           </p>
 
           {columns.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-              No columns yet — add a tag below.
+              No stages yet — add a tag below.
             </p>
           ) : (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleReorder}>
@@ -177,7 +177,7 @@ export function BoardSettingsSheet({
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="mt-3" disabled={available.length === 0}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
-                {available.length === 0 ? "All tags added" : "Add column"}
+                {available.length === 0 ? "All tags added" : "Add stage"}
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="max-h-72 w-64 overflow-y-auto p-1">

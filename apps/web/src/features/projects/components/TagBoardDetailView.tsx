@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "@tanstack/react-router";
-import { Plus, Settings2 } from "lucide-react";
+import { Plus, Settings2, MapPin, Clock, FileText, Image as ImageIcon } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -51,13 +51,27 @@ function projectAddress(p: ProjectRow): string | null {
   return parts.length ? parts.join(", ") : null;
 }
 
-/** Readable text colour for a coloured chip — tag colours span light yellows to dark navies. */
+/**
+ * Readable text colour for a coloured chip — tag colours span light yellows to
+ * dark navies. Picks whichever of black/white has the higher WCAG contrast
+ * ratio against the chip, rather than thresholding a perceived-brightness
+ * approximation: the old 0.6 cutoff put white text on mid-tone tags, where
+ * black is markedly more legible.
+ */
 function chipTextColor(hex: string): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return "#fff";
+  if (!m) return "#ffffff";
   const n = parseInt(m[1], 16);
-  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111827" : "#ffffff";
+  const channel = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const luminance =
+    0.2126 * channel((n >> 16) & 255) +
+    0.7152 * channel((n >> 8) & 255) +
+    0.0722 * channel(n & 255);
+  // Contrast vs white is 1.05/(L+0.05); vs black it's (L+0.05)/0.05.
+  return (luminance + 0.05) / 0.05 > 1.05 / (luminance + 0.05) ? "#111827" : "#ffffff";
 }
 
 const CARD_SEP = "::";
@@ -73,6 +87,9 @@ export function TagBoardDetailView({
   allTags,
   allProjects,
   projectTagMap,
+  coverUrls = {},
+  photoCounts = {},
+  reportCounts = {},
   onManage,
   onTagAssigned,
   onTagMoved,
@@ -81,6 +98,10 @@ export function TagBoardDetailView({
   allTags: TagRow[];
   allProjects: ProjectRow[];
   projectTagMap: Record<string, TagRow[]>;
+  /** At-a-glance card signals, already loaded by the projects page. */
+  coverUrls?: Record<string, string>;
+  photoCounts?: Record<string, number>;
+  reportCounts?: Record<string, number>;
   onManage: () => void;
   onTagAssigned: (projectId: string, tag: TagRow) => void;
   onTagMoved: (projectId: string, fromTagId: string, toTag: TagRow) => void;
@@ -127,10 +148,10 @@ export function TagBoardDetailView({
   const announcements: Announcements = {
     onDragStart: ({ active: a }) => `Picked up ${a.data.current?.projectName}.`,
     onDragOver: ({ over }) =>
-      over ? `Over ${allTags.find((t) => t.id === over.id)?.name ?? "column"}.` : "No column.",
+      over ? `Over ${allTags.find((t) => t.id === over.id)?.name ?? "stage"}.` : "No stage.",
     onDragEnd: ({ over }) =>
       over
-        ? `Moved to ${allTags.find((t) => t.id === over.id)?.name ?? "column"}.`
+        ? `Moved to ${allTags.find((t) => t.id === over.id)?.name ?? "stage"}.`
         : "Move cancelled.",
     onDragCancel: () => "Move cancelled.",
   };
@@ -187,22 +208,15 @@ export function TagBoardDetailView({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-baseline gap-2.5">
-          <h2 className="text-xl font-extrabold tracking-tight text-foreground">{board.name}</h2>
-          <span className="text-xs font-semibold text-muted-foreground">
-            {columns.length} column{columns.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        <Button variant="outline" size="sm" onClick={onManage}>
-          <Settings2 className="mr-1.5 h-4 w-4" /> Manage Board
-        </Button>
-      </div>
-
       {columns.length === 0 ? (
-        <p className="mt-8 text-center text-sm text-muted-foreground">
-          This board has no columns yet — use "Manage Board" to add some tags.
-        </p>
+        <div className="mt-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            This pipeline has no stages yet — add some tags to get started.
+          </p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={onManage}>
+            <Settings2 className="mr-1.5 h-4 w-4" /> Manage Pipeline
+          </Button>
+        </div>
       ) : (
         <DndContext
           sensors={sensors}
@@ -215,7 +229,7 @@ export function TagBoardDetailView({
           onDragEnd={handleDragEnd}
           onDragCancel={endDrag}
         >
-          <div className="mt-5 flex snap-x gap-4 overflow-x-auto pb-4">
+          <div className="flex snap-x gap-4 overflow-x-auto pb-4">
             {columns.map(({ tag, projects }) => (
               <BoardColumn
                 key={tag.id}
@@ -224,6 +238,9 @@ export function TagBoardDetailView({
                 onAdd={() => setAddingToTag(tag)}
                 active={active}
                 suppressClick={suppressClick}
+                coverUrls={coverUrls}
+                photoCounts={photoCounts}
+                reportCounts={reportCounts}
               />
             ))}
           </div>
@@ -276,12 +293,18 @@ function BoardColumn({
   onAdd,
   active,
   suppressClick,
+  coverUrls,
+  photoCounts,
+  reportCounts,
 }: {
   tag: TagRow;
   projects: ProjectRow[];
   onAdd: () => void;
   active: { project: ProjectRow; fromTagId: string } | null;
   suppressClick: React.MutableRefObject<boolean>;
+  coverUrls: Record<string, string>;
+  photoCounts: Record<string, number>;
+  reportCounts: Record<string, number>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: tag.id });
   const isSource = active?.fromTagId === tag.id;
@@ -293,12 +316,15 @@ function BoardColumn({
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <span
-            className="inline-flex max-w-[180px] items-center truncate rounded-full px-2.5 py-1 text-xs font-bold shadow-sm"
+            className="inline-flex max-w-[190px] items-center truncate rounded-full px-3.5 py-1.5 text-sm font-extrabold tracking-tight shadow-sm"
             style={{ background: tag.color, color: chipTextColor(tag.color) }}
+            title={tag.name}
           >
             {tag.name}
           </span>
-          <span className="shrink-0 text-xs font-bold text-muted-foreground">{projects.length}</span>
+          <span className="shrink-0 text-sm font-extrabold text-muted-foreground">
+            {projects.length}
+          </span>
         </div>
         <button
           type="button"
@@ -327,7 +353,15 @@ function BoardColumn({
           </p>
         ) : (
           projects.map((p) => (
-            <BoardCard key={p.id} project={p} tagId={tag.id} suppressClick={suppressClick} />
+            <BoardCard
+              key={p.id}
+              project={p}
+              tagId={tag.id}
+              suppressClick={suppressClick}
+              coverUrl={coverUrls[p.id]}
+              photoCount={photoCounts[p.id] ?? 0}
+              reportCount={reportCounts[p.id] ?? 0}
+            />
           ))
         )}
 
@@ -347,16 +381,27 @@ function BoardCard({
   project,
   tagId,
   suppressClick,
+  coverUrl,
+  photoCount,
+  reportCount,
 }: {
   project: ProjectRow;
   tagId: string;
   suppressClick: React.MutableRefObject<boolean>;
+  coverUrl?: string;
+  photoCount: number;
+  reportCount: number;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: cardId(tagId, project.id),
     data: { projectId: project.id, fromTagId: tagId, projectName: project.name },
   });
   const addr = projectAddress(project);
+  // Days since last touch drives a colour cue — a board should surface what's
+  // gone quiet without the reader having to parse every timestamp.
+  const daysStale = Math.floor(
+    (Date.now() - new Date(project.updated_at).getTime()) / 86_400_000,
+  );
 
   return (
     // The whole card is the drag target — no hunting for a small handle, and it
@@ -365,7 +410,7 @@ function BoardCard({
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      aria-label={`${project.name}. Press space to move between columns.`}
+      aria-label={`${project.name}. Press space to move between stages.`}
       className={cn(
         // No `touch-action: none` here — TouchSensor's press-and-hold delay does
         // the disambiguation, so a plain swipe over a card still scrolls.
@@ -386,13 +431,53 @@ function BoardCard({
             e.stopPropagation();
           }
         }}
-        className="block p-3"
+        className="block"
       >
-        <p className="text-[10px] text-muted-foreground">
-          {formatDistanceToNow(new Date(project.updated_at), { addSuffix: true })}
-        </p>
-        <p className="mt-1 truncate text-sm font-bold text-foreground">{project.name}</p>
-        {addr && <p className="mt-0.5 truncate text-xs text-muted-foreground">{addr}</p>}
+        {coverUrl && (
+          <img
+            src={coverUrl}
+            alt=""
+            loading="lazy"
+            draggable={false}
+            className="h-24 w-full rounded-t-lg object-cover"
+          />
+        )}
+        <div className="p-3">
+          <p className="truncate text-sm font-bold text-foreground">{project.name}</p>
+          {addr && (
+            <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
+              <MapPin className="h-3 w-3 shrink-0" />
+              <span className="truncate">{addr}</span>
+            </p>
+          )}
+
+          <div className="mt-2 flex items-center gap-3 text-[11px] font-semibold text-muted-foreground">
+            {photoCount > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <ImageIcon className="h-3 w-3" /> {photoCount}
+              </span>
+            )}
+            {reportCount > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <FileText className="h-3 w-3" /> {reportCount}
+              </span>
+            )}
+            <span
+              className={cn(
+                "ml-auto inline-flex items-center gap-1",
+                daysStale >= 30
+                  ? "text-destructive"
+                  : daysStale >= 14
+                    ? "text-amber-600 dark:text-amber-500"
+                    : "text-muted-foreground",
+              )}
+              title={`Last updated ${formatDistanceToNow(new Date(project.updated_at), { addSuffix: true })}`}
+            >
+              <Clock className="h-3 w-3" />
+              {formatDistanceToNow(new Date(project.updated_at))}
+            </span>
+          </div>
+        </div>
       </Link>
     </div>
   );

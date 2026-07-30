@@ -79,6 +79,7 @@ import {
   type TextSnippet,
 } from "@/lib/text-snippets.functions";
 import { ProjectImage, isPhotoSlot } from "@/lib/tiptap-project-image";
+import { Spacer } from "@/lib/tiptap-spacer";
 import { downloadBase64File } from "@/lib/download-file";
 
 interface ProjectPhoto {
@@ -155,6 +156,7 @@ export function ProjectPageEditorPage() {
       LinkExtension.configure({ openOnClick: false }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       ProjectImage,
+      Spacer,
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,
@@ -430,7 +432,10 @@ export function ProjectPageEditorPage() {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
+      {/* Sticks just below AppHeader (h-[82px], also sticky top-0) rather than at top-0 itself —
+          otherwise both stick to the same viewport position and AppHeader's higher z-index
+          paints over this toolbar as soon as the page scrolls. */}
+      <div className="sticky top-[82px] z-10 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Button

@@ -31,7 +31,7 @@ interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   allTags: TagRow[];
-  /** Pass an existing board to edit it ("Manage Board") instead of creating a new one. */
+  /** Pass an existing board to edit it ("Manage Pipeline") instead of creating a new one. */
   board?: ProjectBoard | null;
   onCreated?: (board: ProjectBoard) => void;
   onUpdated?: (board: ProjectBoard) => void;
@@ -77,18 +77,18 @@ export function CreateBoardDialog({
         const updated = await updateProjectBoard({
           data: { id: board.id, name: n, tagIds: Array.from(selectedTags) },
         });
-        toast.success("Board updated");
+        toast.success("Pipeline updated");
         onUpdated?.(updated);
       } else {
         const created = await createProjectBoard({
           data: { name: n, tagIds: Array.from(selectedTags) },
         });
-        toast.success(`Board "${created.name}" created`);
+        toast.success(`Pipeline "${created.name}" created`);
         onCreated?.(created);
       }
       onOpenChange(false);
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not save board");
+      toast.error(e?.message ?? "Could not save pipeline");
     } finally {
       setSaving(false);
     }
@@ -99,11 +99,11 @@ export function CreateBoardDialog({
     setDeleting(true);
     try {
       await deleteProjectBoard({ data: { id: board.id } });
-      toast.success("Board deleted");
+      toast.success("Pipeline deleted");
       onDeleted?.(board.id);
       onOpenChange(false);
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not delete board");
+      toast.error(e?.message ?? "Could not delete pipeline");
     } finally {
       setDeleting(false);
     }
@@ -113,10 +113,10 @@ export function CreateBoardDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Manage Board" : "New Tag Board"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Manage Pipeline" : "New Pipeline"}</DialogTitle>
           <DialogDescription>
-            Any project with one of these tags will automatically show up here — shared with your
-            whole team, and always up to date.
+            Each tag becomes a stage. Any project carrying one of these tags shows up in that stage
+            automatically — shared with your whole team, and always up to date.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -131,7 +131,7 @@ export function CreateBoardDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Tags ({selectedTags.size} selected)</Label>
+            <Label>Stages ({selectedTags.size} tags selected)</Label>
             <ScrollArea className="h-64 rounded-md border border-border">
               <div className="p-1">
                 {allTags.length === 0 ? (
@@ -166,7 +166,7 @@ export function CreateBoardDialog({
               className="text-destructive hover:text-destructive"
             >
               {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-              Delete board
+              Delete pipeline
             </Button>
           ) : (
             <span />
@@ -177,7 +177,7 @@ export function CreateBoardDialog({
             </Button>
             <Button onClick={submit} disabled={saving || deleting || !name.trim() || selectedTags.size === 0}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isEdit ? "Save changes" : "Create Board"}
+              {isEdit ? "Save changes" : "Create Pipeline"}
             </Button>
           </div>
         </DialogFooter>
