@@ -483,14 +483,6 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
       return;
     }
     case "p": {
-      // The page-break "node" is just a paragraph carrying data-page-break
-      // (see apps/web/src/lib/tiptap-page-break.ts) so it round-trips through
-      // Tiptap's schema with no risk of colliding with another node's parse
-      // rule. Force a real new PDF page instead of drawing it as content.
-      if (node.attrs["data-page-break"] === "true") {
-        layout.newPage();
-        return;
-      }
       const imgs = node.children.filter(
         (c): c is ElementNode => c.type === "element" && c.tag === "img",
       );

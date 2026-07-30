@@ -45,7 +45,6 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
-  SeparatorHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,7 +79,6 @@ import {
   type TextSnippet,
 } from "@/lib/text-snippets.functions";
 import { ProjectImage, isPhotoSlot } from "@/lib/tiptap-project-image";
-import { PageBreak } from "@/lib/tiptap-page-break";
 import { downloadBase64File } from "@/lib/download-file";
 
 interface ProjectPhoto {
@@ -157,7 +155,6 @@ export function ProjectPageEditorPage() {
       LinkExtension.configure({ openOnClick: false }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       ProjectImage,
-      PageBreak,
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,
@@ -635,18 +632,19 @@ export function ProjectPageEditorPage() {
               <DialogTitle>Text snippets</DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-y-auto p-4">
-              <Button size="sm" variant="outline" className="mb-3 w-full" onClick={saveSelectionAsSnippet}>
+              <Button size="sm" className="mb-3 w-full font-bold" onClick={saveSelectionAsSnippet}>
                 <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Save selected text as a new snippet
               </Button>
 
               {snippets.length > 0 && (
                 <div className="relative mb-3">
-                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     value={snippetSearch}
                     onChange={(e) => setSnippetSearch(e.target.value)}
                     placeholder="Find a snippet…"
-                    className="h-9 pl-8"
+                    className="h-10 pl-9 text-sm font-medium"
+                    autoFocus
                   />
                 </div>
               )}
@@ -664,11 +662,14 @@ export function ProjectPageEditorPage() {
               ) : (
                 <div className="space-y-2">
                   {filteredSnippets.map((s) => (
-                    <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg border border-border p-3">
+                    <div
+                      key={s.id}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-border p-3 transition-colors hover:border-primary/40 hover:bg-primary/5"
+                    >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold text-foreground">{s.title}</p>
+                        <p className="truncate text-base font-bold text-foreground">{s.title}</p>
                         <p
-                          className="truncate text-xs text-muted-foreground"
+                          className="truncate text-sm text-muted-foreground"
                           title={stripHtml(s.content_html)}
                         >
                           {stripHtml(s.content_html)}
@@ -677,6 +678,7 @@ export function ProjectPageEditorPage() {
                       <div className="flex shrink-0 items-center gap-1">
                         <Button
                           size="sm"
+                          className="font-bold"
                           onClick={() => {
                             editor?.chain().focus().insertContent(s.content_html).run();
                             setSnippetsOpen(false);
@@ -1074,9 +1076,15 @@ function Toolbar({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <button type="button" className={btnCls()} onClick={onOpenSnippets} aria-label="Text snippets">
-        <Sparkles className="h-4 w-4" />
-      </button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 gap-1 px-2 text-xs font-bold text-primary hover:bg-primary/10 hover:text-primary"
+        onClick={onOpenSnippets}
+        aria-label="Text snippets"
+      >
+        <Sparkles className="h-4 w-4" /> Snippets
+      </Button>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -1095,17 +1103,6 @@ function Toolbar({
             }
           >
             <Pilcrow className="mr-2 h-4 w-4" /> Notes section
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() =>
-              editor
-                .chain()
-                .focus()
-                .insertContent({ type: "paragraph", attrs: { pageBreak: "true" } })
-                .run()
-            }
-          >
-            <SeparatorHorizontal className="mr-2 h-4 w-4" /> Page break
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={onAddHeader}>Add header</DropdownMenuItem>

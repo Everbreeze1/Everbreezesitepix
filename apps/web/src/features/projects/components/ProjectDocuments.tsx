@@ -27,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -165,6 +166,9 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
   const [generating, setGenerating] = useState(false);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(new Set());
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
+  const [bulkExporting, setBulkExporting] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   async function load() {
@@ -193,6 +197,11 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, projectId]);
+
+  useEffect(() => {
+    setSelectedPageIds(new Set());
+    setSelectedFileIds(new Set());
+  }, [currentFolderId]);
 
   async function uploadFiles(files: FileList | File[]) {
     if (!user) return;
@@ -452,6 +461,91 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
     }
   }
 
+  function togglePageSelected(id: string) {
+    setSelectedPageIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleFileSelected(id: string) {
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedPageIds(new Set());
+    setSelectedFileIds(new Set());
+  }
+
+  async function handleBulkDelete() {
+    const count = selectedPageIds.size + selectedFileIds.size;
+    if (!count) return;
+    if (
+      !(await confirm({
+        description: `Delete ${count} item${count > 1 ? "s" : ""}? This can't be undone.`,
+        variant: "destructive",
+      }))
+    )
+      return;
+    const pageIds = Array.from(selectedPageIds);
+    const fileDocs = documents.filter((d) => selectedFileIds.has(d.id));
+    try {
+      await Promise.all([
+        ...pageIds.map((id) => deleteProjectPage({ data: { pageId: id } })),
+        ...fileDocs.map(async (doc) => {
+          await (supabase as any).from("project_documents").delete().eq("id", doc.id);
+          void supabase.storage.from("site-documents").remove([doc.storage_path]);
+        }),
+      ]);
+      toast.success(`${count} item${count > 1 ? "s" : ""} deleted`);
+      clearSelection();
+      await load();
+      onChanged?.();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not delete the selected items");
+    }
+  }
+
+  async function handleBulkMove(folderId: string | null) {
+    const pageIds = Array.from(selectedPageIds);
+    const fileIds = Array.from(selectedFileIds);
+    try {
+      await Promise.all([
+        ...pageIds.map((id) => moveDocument({ data: { kind: "page", id, folderId } })),
+        ...fileIds.map((id) => moveDocument({ data: { kind: "file", id, folderId } })),
+      ]);
+      toast.success("Moved");
+      clearSelection();
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not move the selected items");
+    }
+  }
+
+  async function handleBulkExportPdf() {
+    const ids = Array.from(selectedPageIds);
+    if (!ids.length) return;
+    setBulkExporting(true);
+    try {
+      for (const id of ids) {
+        const res = await generatePagePdf({ data: { pageId: id } });
+        downloadBase64File(res.pdfBase64, res.filename);
+      }
+      toast.success(`Exported ${ids.length} PDF${ids.length > 1 ? "s" : ""}`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not export the selected pages");
+    } finally {
+      setBulkExporting(false);
+    }
+  }
+
   const folders = (tree?.folders ?? []).filter(() => currentFolderId === null); // folders are flat, shown only at top level
   const q = search.trim().toLowerCase();
 
@@ -492,6 +586,24 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
   const visibleFiles = showFiles ? sortedFiles : [];
   const currentFolder = tree?.folders.find((f) => f.id === currentFolderId) ?? null;
   const isEmpty = folders.length === 0 && visiblePages.length === 0 && visibleFiles.length === 0;
+
+  const selectedCount = selectedPageIds.size + selectedFileIds.size;
+  const selectableCount = visiblePages.length + visibleFiles.length;
+  const allVisibleSelected =
+    selectableCount > 0 &&
+    visiblePages.every((p) => selectedPageIds.has(p.id)) &&
+    visibleFiles.every((f) => selectedFileIds.has(f.id));
+  const someVisibleSelected =
+    visiblePages.some((p) => selectedPageIds.has(p.id)) || visibleFiles.some((f) => selectedFileIds.has(f.id));
+
+  function toggleSelectAll() {
+    if (allVisibleSelected) {
+      clearSelection();
+    } else {
+      setSelectedPageIds(new Set(visiblePages.map((p) => p.id)));
+      setSelectedFileIds(new Set(visibleFiles.map((f) => f.id)));
+    }
+  }
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -693,16 +805,76 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
         ) : (
           <>
             <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-2.5">
-              <div className="flex-1">
-                <SortHeader label="Name" sortKeyValue="name" />
-              </div>
-              <div className="w-28 shrink-0">
-                <SortHeader label="Type" sortKeyValue="type" />
-              </div>
-              <div className="w-36 shrink-0">
-                <SortHeader label="Last updated" sortKeyValue="updated" />
-              </div>
-              <div className="w-8 shrink-0" />
+              {selectableCount > 0 && (
+                <Checkbox
+                  checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                  onCheckedChange={toggleSelectAll}
+                  aria-label="Select all"
+                  className="shrink-0"
+                />
+              )}
+              {selectedCount > 0 ? (
+                <>
+                  <span className="text-xs font-bold text-foreground">{selectedCount} selected</span>
+                  <div className="ml-auto flex items-center gap-2">
+                    {selectedFileIds.size === 0 && selectedPageIds.size > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleBulkExportPdf}
+                        disabled={bulkExporting}
+                        className="h-8 gap-1.5 text-xs font-bold"
+                      >
+                        {bulkExporting ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <FileDown className="h-3.5 w-3.5" />
+                        )}
+                        Export PDF
+                      </Button>
+                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs font-bold">
+                          <Move className="h-3.5 w-3.5" /> Move to…
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleBulkMove(null)}>Top level</DropdownMenuItem>
+                        {(tree?.folders ?? []).map((f) => (
+                          <DropdownMenuItem key={f.id} onClick={() => handleBulkMove(f.id)}>
+                            {f.name}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleBulkDelete}
+                      className="h-8 gap-1.5 text-xs font-bold text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Delete
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={clearSelection} className="h-8 text-xs font-bold">
+                      Clear
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex-1">
+                    <SortHeader label="Name" sortKeyValue="name" />
+                  </div>
+                  <div className="w-28 shrink-0">
+                    <SortHeader label="Type" sortKeyValue="type" />
+                  </div>
+                  <div className="w-36 shrink-0">
+                    <SortHeader label="Last updated" sortKeyValue="updated" />
+                  </div>
+                  <div className="w-8 shrink-0" />
+                </>
+              )}
             </div>
 
             {!currentFolder &&
@@ -735,23 +907,31 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
 
             {visiblePages.map((p) => (
               <div key={p.id} className="group flex items-center justify-between gap-4 border-b border-border p-4 transition-colors last:border-b-0 hover:bg-muted/60">
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate({ to: "/projects/$projectId/pages/$pageId", params: { projectId, pageId: p.id } })
-                  }
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                    <FileText className="h-5 w-5 text-primary" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-extrabold text-foreground">{p.title}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground sm:hidden">
-                      Page · Updated {relativeTime(p.updatedAt)}
-                    </p>
-                  </div>
-                </button>
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <Checkbox
+                    checked={selectedPageIds.has(p.id)}
+                    onCheckedChange={() => togglePageSelected(p.id)}
+                    aria-label={`Select ${p.title}`}
+                    className="shrink-0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate({ to: "/projects/$projectId/pages/$pageId", params: { projectId, pageId: p.id } })
+                    }
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  >
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                      <FileText className="h-5 w-5 text-primary" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-extrabold text-foreground">{p.title}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground sm:hidden">
+                        Page · Updated {relativeTime(p.updatedAt)}
+                      </p>
+                    </div>
+                  </button>
+                </div>
                 <span className="hidden w-28 shrink-0 text-xs text-muted-foreground transition-colors group-hover:text-foreground sm:inline">Page</span>
                 <span className="hidden w-36 shrink-0 text-xs text-muted-foreground sm:inline">
                   {relativeTime(p.updatedAt)}
@@ -812,6 +992,12 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
             {visibleFiles.map((doc) => (
               <div key={doc.id} className="group flex items-center justify-between gap-4 border-b border-border p-4 transition-colors last:border-b-0 hover:bg-muted/60">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <Checkbox
+                    checked={selectedFileIds.has(doc.id)}
+                    onCheckedChange={() => toggleFileSelected(doc.id)}
+                    aria-label={`Select ${doc.file_name}`}
+                    className="shrink-0"
+                  />
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10">
                     <FileText className="h-5 w-5 text-primary" />
                   </span>
