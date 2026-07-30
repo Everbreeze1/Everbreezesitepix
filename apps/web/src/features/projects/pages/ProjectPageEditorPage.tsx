@@ -45,6 +45,8 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
+  LayoutList,
+  Images,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +58,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuLabel,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
@@ -80,6 +86,8 @@ import {
   type TextSnippet,
 } from "@/lib/text-snippets.functions";
 import { ProjectImage, isPhotoSlot } from "@/lib/tiptap-project-image";
+import { sectionHtml, photoRowHtml } from "@/lib/tiptap-photo-slot";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Spacer } from "@/lib/tiptap-spacer";
 import { downloadBase64File } from "@/lib/download-file";
 
@@ -849,6 +857,14 @@ function keys(combo: string): string {
   return IS_MAC ? combo.replace("Mod", "⌘").replace("Shift", "⇧").replace("Alt", "⌥") : combo.replace("Mod", "Ctrl");
 }
 
+function ShortcutBadge({ shortcut }: { shortcut: string }) {
+  return (
+    <span className="rounded bg-primary-foreground/20 px-1.5 py-0.5 font-mono text-[10px] font-bold">
+      {keys(shortcut)}
+    </span>
+  );
+}
+
 /**
  * A toolbar control that says what it does on hover and, where one exists,
  * teaches its keyboard shortcut. Previously these were bare icons with only an
@@ -870,14 +886,44 @@ function ToolbarButton({
       </TooltipTrigger>
       <TooltipContent side="top" className="flex items-center gap-2 font-bold">
         {label}
-        {shortcut && (
-          <span className="rounded bg-primary-foreground/20 px-1.5 py-0.5 font-mono text-[10px] font-bold">
-            {keys(shortcut)}
-          </span>
-        )}
+        {shortcut && <ShortcutBadge shortcut={shortcut} />}
       </TooltipContent>
     </Tooltip>
   );
+}
+
+/**
+ * Same hover explanation as ToolbarButton, but for controls that already
+ * render their own element (a labelled Button, a dropdown trigger) instead of
+ * a bare icon — so it wraps rather than renders the trigger.
+ */
+function ToolbarHint({
+  label,
+  shortcut,
+  children,
+}: {
+  label: string;
+  shortcut?: string;
+  children: React.ReactElement;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="top" className="flex items-center gap-2 font-bold">
+        {label}
+        {shortcut && <ShortcutBadge shortcut={shortcut} />}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Continues the document's existing "Photo N" / "Section N" numbering. */
+function countNodes(editor: Editor, match: (node: ProseMirrorNode) => boolean): number {
+  let n = 0;
+  editor.state.doc.descendants((node) => {
+    if (match(node)) n += 1;
+  });
+  return n;
 }
 
 function Toolbar({
@@ -893,6 +939,24 @@ function Toolbar({
   onAddHeader: () => void;
   onAddFooter: () => void;
 }) {
+  // Numbering continues from what's already on the page, so a section added by
+  // hand lines up with the ones a pre-built template shipped.
+  const nextPhotoIndex = () => countNodes(editor, (n) => n.type.name === "image") + 1;
+  const nextSectionNumber = () =>
+    countNodes(editor, (n) => n.type.name === "heading" && n.attrs.level === 2) + 1;
+
+  const onInsertSection = (photos: 0 | 2 | 3 | 4) => {
+    editor
+      .chain()
+      .focus()
+      .insertContent(sectionHtml(nextSectionNumber(), photos, nextPhotoIndex()))
+      .run();
+  };
+
+  const onInsertPhotoRow = (count: 1 | 2 | 3 | 4) => {
+    editor.chain().focus().insertContent(photoRowHtml(count, nextPhotoIndex())).run();
+  };
+
   const prompt = usePrompt();
   // Darker resting colour and a heavier icon stroke: these were muted-grey 16px
   // glyphs that read as disabled. Active state now uses the accent so the
@@ -909,29 +973,35 @@ function Toolbar({
     <TooltipProvider delayDuration={300}>
     <div className="flex flex-wrap items-center gap-0.5 border-t border-border px-4 py-1.5 sm:px-6">
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-bold">
-            {editor.isActive("heading", { level: 1 })
-              ? "Heading 1"
-              : editor.isActive("heading", { level: 2 })
-                ? "Heading 2"
-                : editor.isActive("heading", { level: 3 })
-                  ? "Heading 3"
-                  : "Paragraph"}
-          </Button>
-        </DropdownMenuTrigger>
+        <ToolbarHint label="Text style">
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-bold">
+              {editor.isActive("heading", { level: 1 })
+                ? "Heading 1"
+                : editor.isActive("heading", { level: 2 })
+                  ? "Heading 2"
+                  : editor.isActive("heading", { level: 3 })
+                    ? "Heading 3"
+                    : "Paragraph"}
+            </Button>
+          </DropdownMenuTrigger>
+        </ToolbarHint>
         <DropdownMenuContent align="start">
           <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
             <Heading1 className="mr-2 h-4 w-4" /> Heading 1
+            <span className="ml-auto pl-4 font-mono text-[10px] text-muted-foreground">{keys("Mod+Alt+1")}</span>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
             <Heading2 className="mr-2 h-4 w-4" /> Heading 2
+            <span className="ml-auto pl-4 font-mono text-[10px] text-muted-foreground">{keys("Mod+Alt+2")}</span>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>
             <Heading3 className="mr-2 h-4 w-4" /> Heading 3
+            <span className="ml-auto pl-4 font-mono text-[10px] text-muted-foreground">{keys("Mod+Alt+3")}</span>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
             <Pilcrow className="mr-2 h-4 w-4" /> Paragraph
+            <span className="ml-auto pl-4 font-mono text-[10px] text-muted-foreground">{keys("Mod+Alt+0")}</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -939,11 +1009,13 @@ function Toolbar({
       <span className="mx-1.5 h-4 w-px bg-border" />
 
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-bold">
-            {(editor.getAttributes("textStyle").fontFamily as string | undefined)?.replace(/,.*/, "") ?? "Font"}
-          </Button>
-        </DropdownMenuTrigger>
+        <ToolbarHint label="Font family">
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-bold">
+              {(editor.getAttributes("textStyle").fontFamily as string | undefined)?.replace(/,.*/, "") ?? "Font"}
+            </Button>
+          </DropdownMenuTrigger>
+        </ToolbarHint>
         <DropdownMenuContent align="start">
           {FONT_FAMILIES.map((f) => (
             <DropdownMenuItem
@@ -962,11 +1034,13 @@ function Toolbar({
       </DropdownMenu>
 
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-bold">
-            {(editor.getAttributes("textStyle").fontSize as string | undefined)?.replace("px", "") ?? "Size"}
-          </Button>
-        </DropdownMenuTrigger>
+        <ToolbarHint label="Font size">
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-bold">
+              {(editor.getAttributes("textStyle").fontSize as string | undefined)?.replace("px", "") ?? "Size"}
+            </Button>
+          </DropdownMenuTrigger>
+        </ToolbarHint>
         <DropdownMenuContent align="start">
           {FONT_SIZES.map((size) => (
             <DropdownMenuItem key={size} onClick={() => editor.chain().focus().setFontSize(`${size}px`).run()}>
@@ -1129,30 +1203,74 @@ function Toolbar({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 gap-1 px-2 text-xs font-bold text-primary hover:bg-primary/10 hover:text-primary"
-        onClick={onOpenSnippets}
-        aria-label="Text snippets"
-      >
-        <Sparkles className="h-4 w-4" /> Snippets
-      </Button>
+      <ToolbarHint label="Insert a saved snippet">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs font-bold text-primary hover:bg-primary/10 hover:text-primary"
+          onClick={onOpenSnippets}
+          aria-label="Text snippets"
+        >
+          <Sparkles className="h-4 w-4" /> Snippets
+        </Button>
+      </ToolbarHint>
 
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          {/* Labelled like Snippets — this is the other shortcut hub, and as a
-              bare "+" nobody found what was inside it. */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs font-bold text-primary hover:bg-primary/10 hover:text-primary"
-            aria-label="Insert"
-          >
-            <Plus className="h-4 w-4" /> Insert
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
+        {/* Labelled like Snippets — this is the other shortcut hub, and as a
+            bare "+" nobody found what was inside it. */}
+        <ToolbarHint label="Insert a section, photo row, header or footer">
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs font-bold text-primary hover:bg-primary/10 hover:text-primary"
+              aria-label="Insert"
+            >
+              <Plus className="h-4 w-4" /> Insert
+            </Button>
+          </DropdownMenuTrigger>
+        </ToolbarHint>
+        <DropdownMenuContent align="start" className="w-60">
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Report section
+          </DropdownMenuLabel>
+          <DropdownMenuItem className="font-bold" onClick={() => onInsertSection(0)}>
+            <LayoutList className="mr-2 h-4 w-4" /> Section (text only)
+          </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="font-bold">
+              <Images className="mr-2 h-4 w-4" /> Section with photos
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {([2, 3, 4] as const).map((n) => (
+                <DropdownMenuItem key={n} className="font-bold" onClick={() => onInsertSection(n)}>
+                  {n} photos per page
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Photos
+          </DropdownMenuLabel>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="font-bold">
+              <ImagePlus className="mr-2 h-4 w-4" /> Photo slot row
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {([1, 2, 3, 4] as const).map((n) => (
+                <DropdownMenuItem key={n} className="font-bold" onClick={() => onInsertPhotoRow(n)}>
+                  {n} {n === 1 ? "photo" : "photos"}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuItem className="font-bold" onClick={onAddImage}>
+            <ImagePlus className="mr-2 h-4 w-4" /> Insert a photo now
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() =>
               editor
