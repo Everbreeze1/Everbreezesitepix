@@ -58,6 +58,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/sitepix/client";
@@ -143,7 +144,12 @@ export function ProjectPageEditorPage() {
     onTransaction: () => forceToolbarUpdate((n) => n + 1),
     onUpdate: () => markDirty(),
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      // Tiptap 3's StarterKit now bundles Link and Underline itself, which
+      // duplicated the standalone Underline/LinkExtension below (console warning:
+      // "Duplicate extension names found: ['link', 'underline']"). Disable
+      // StarterKit's copies so ours — which needs openOnClick: false — stay
+      // the single registered instance of each.
+      StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: false, underline: false }),
       Placeholder.configure({ placeholder: "Start writing…" }),
       Underline,
       TextStyle,
@@ -836,6 +842,44 @@ const FONT_FAMILIES = [
 
 const FONT_SIZES = [10, 11, 12, 14, 16, 18, 24, 32];
 
+const IS_MAC =
+  typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+/** "Mod" renders as ⌘ on Apple hardware and Ctrl everywhere else. */
+function keys(combo: string): string {
+  return IS_MAC ? combo.replace("Mod", "⌘").replace("Shift", "⇧").replace("Alt", "⌥") : combo.replace("Mod", "Ctrl");
+}
+
+/**
+ * A toolbar control that says what it does on hover and, where one exists,
+ * teaches its keyboard shortcut. Previously these were bare icons with only an
+ * aria-label, so the shortcuts were invisible unless you already knew them.
+ */
+function ToolbarButton({
+  label,
+  shortcut,
+  className,
+  children,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; shortcut?: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" aria-label={label} className={className} {...props}>
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="flex items-center gap-2 font-bold">
+        {label}
+        {shortcut && (
+          <span className="rounded bg-primary-foreground/20 px-1.5 py-0.5 font-mono text-[10px] font-bold">
+            {keys(shortcut)}
+          </span>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function Toolbar({
   editor,
   onAddImage,
@@ -850,14 +894,19 @@ function Toolbar({
   onAddFooter: () => void;
 }) {
   const prompt = usePrompt();
+  // Darker resting colour and a heavier icon stroke: these were muted-grey 16px
+  // glyphs that read as disabled. Active state now uses the accent so the
+  // current formatting is obvious at a glance.
   const btnCls = (active?: boolean) =>
     cn(
-      "rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground",
-      active && "bg-muted text-foreground",
+      "rounded-md p-2 text-foreground/75 transition-colors hover:bg-muted hover:text-foreground",
+      "[&_svg]:h-4 [&_svg]:w-4 [&_svg]:stroke-[2.25]",
+      active && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
     );
   const inTable = editor.isActive("table");
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div className="flex flex-wrap items-center gap-0.5 border-t border-border px-4 py-1.5 sm:px-6">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -930,21 +979,21 @@ function Toolbar({
 
       <span className="mx-1.5 h-4 w-px bg-border" />
 
-      <button type="button" className={btnCls(editor.isActive("bold"))} onClick={() => editor.chain().focus().toggleBold().run()} aria-label="Bold">
-        <Bold className="h-4 w-4" />
-      </button>
-      <button type="button" className={btnCls(editor.isActive("italic"))} onClick={() => editor.chain().focus().toggleItalic().run()} aria-label="Italic">
-        <Italic className="h-4 w-4" />
-      </button>
-      <button type="button" className={btnCls(editor.isActive("underline"))} onClick={() => editor.chain().focus().toggleUnderline().run()} aria-label="Underline">
-        <UnderlineIcon className="h-4 w-4" />
-      </button>
+      <ToolbarButton label="Bold" shortcut="Mod+B" className={btnCls(editor.isActive("bold"))} onClick={() => editor.chain().focus().toggleBold().run()}>
+        <Bold />
+      </ToolbarButton>
+      <ToolbarButton label="Italic" shortcut="Mod+I" className={btnCls(editor.isActive("italic"))} onClick={() => editor.chain().focus().toggleItalic().run()}>
+        <Italic />
+      </ToolbarButton>
+      <ToolbarButton label="Underline" shortcut="Mod+U" className={btnCls(editor.isActive("underline"))} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+        <UnderlineIcon />
+      </ToolbarButton>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" className={btnCls()} aria-label="Text color">
-            <Palette className="h-4 w-4" />
-          </button>
+          <ToolbarButton label="Text & highlight colour" className={btnCls()}>
+            <Palette />
+          </ToolbarButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-auto p-3">
           <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Text color</p>
@@ -994,50 +1043,49 @@ function Toolbar({
 
       <span className="mx-1.5 h-4 w-px bg-border" />
 
-      <button type="button" className={btnCls(editor.isActive("taskList"))} onClick={() => editor.chain().focus().toggleTaskList().run()} aria-label="Checklist">
-        <ListChecks className="h-4 w-4" />
-      </button>
-      <button type="button" className={btnCls(editor.isActive("bulletList"))} onClick={() => editor.chain().focus().toggleBulletList().run()} aria-label="Bulleted list">
-        <List className="h-4 w-4" />
-      </button>
-      <button type="button" className={btnCls(editor.isActive("orderedList"))} onClick={() => editor.chain().focus().toggleOrderedList().run()} aria-label="Numbered list">
-        <ListOrdered className="h-4 w-4" />
-      </button>
+      <ToolbarButton label="Checklist" shortcut="Mod+Shift+9" className={btnCls(editor.isActive("taskList"))} onClick={() => editor.chain().focus().toggleTaskList().run()}>
+        <ListChecks />
+      </ToolbarButton>
+      <ToolbarButton label="Bulleted list" shortcut="Mod+Shift+8" className={btnCls(editor.isActive("bulletList"))} onClick={() => editor.chain().focus().toggleBulletList().run()}>
+        <List />
+      </ToolbarButton>
+      <ToolbarButton label="Numbered list" shortcut="Mod+Shift+7" className={btnCls(editor.isActive("orderedList"))} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+        <ListOrdered />
+      </ToolbarButton>
 
       <span className="mx-1.5 h-4 w-px bg-border" />
 
-      <button type="button" className={btnCls(editor.isActive({ textAlign: "left" }))} onClick={() => editor.chain().focus().setTextAlign("left").run()} aria-label="Align left">
-        <AlignLeft className="h-4 w-4" />
-      </button>
-      <button type="button" className={btnCls(editor.isActive({ textAlign: "center" }))} onClick={() => editor.chain().focus().setTextAlign("center").run()} aria-label="Align center">
-        <AlignCenter className="h-4 w-4" />
-      </button>
-      <button type="button" className={btnCls(editor.isActive({ textAlign: "right" }))} onClick={() => editor.chain().focus().setTextAlign("right").run()} aria-label="Align right">
-        <AlignRight className="h-4 w-4" />
-      </button>
+      <ToolbarButton label="Align left" shortcut="Mod+Shift+L" className={btnCls(editor.isActive({ textAlign: "left" }))} onClick={() => editor.chain().focus().setTextAlign("left").run()}>
+        <AlignLeft />
+      </ToolbarButton>
+      <ToolbarButton label="Align center" shortcut="Mod+Shift+E" className={btnCls(editor.isActive({ textAlign: "center" }))} onClick={() => editor.chain().focus().setTextAlign("center").run()}>
+        <AlignCenter />
+      </ToolbarButton>
+      <ToolbarButton label="Align right" shortcut="Mod+Shift+R" className={btnCls(editor.isActive({ textAlign: "right" }))} onClick={() => editor.chain().focus().setTextAlign("right").run()}>
+        <AlignRight />
+      </ToolbarButton>
 
       <span className="mx-1.5 h-4 w-px bg-border" />
 
-      <button
-        type="button"
+      <ToolbarButton
+        label="Add link"
         className={btnCls(editor.isActive("link"))}
         onClick={async () => {
           const url = await prompt({ title: "Add link", label: "URL", placeholder: "https://" });
           if (url) editor.chain().focus().setLink({ href: url }).run();
         }}
-        aria-label="Link"
       >
-        <LinkIcon className="h-4 w-4" />
-      </button>
-      <button type="button" className={btnCls()} onClick={onAddImage} aria-label="Add image">
-        <ImagePlus className="h-4 w-4" />
-      </button>
+        <LinkIcon />
+      </ToolbarButton>
+      <ToolbarButton label="Add photo" className={btnCls()} onClick={onAddImage}>
+        <ImagePlus />
+      </ToolbarButton>
       {/* One always-present table control — row/column actions enable once the cursor is inside a table, so the toolbar never shifts. */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" className={btnCls(inTable)} aria-label="Table">
-            <TableIcon className="h-4 w-4" />
-          </button>
+          <ToolbarButton label="Table" className={btnCls(inTable)}>
+            <TableIcon />
+          </ToolbarButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           <DropdownMenuItem
@@ -1093,9 +1141,16 @@ function Toolbar({
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" className={btnCls()} aria-label="Insert">
-            <Plus className="h-4 w-4" />
-          </button>
+          {/* Labelled like Snippets — this is the other shortcut hub, and as a
+              bare "+" nobody found what was inside it. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs font-bold text-primary hover:bg-primary/10 hover:text-primary"
+            aria-label="Insert"
+          >
+            <Plus className="h-4 w-4" /> Insert
+          </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           <DropdownMenuItem
@@ -1107,22 +1162,27 @@ function Toolbar({
                 .run()
             }
           >
-            <Pilcrow className="mr-2 h-4 w-4" /> Notes section
+            <Pilcrow className="mr-2 h-4 w-4" /> <span className="font-bold">Notes section</span>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={onAddHeader}>Add header</DropdownMenuItem>
-          <DropdownMenuItem onClick={onAddFooter}>Add footer</DropdownMenuItem>
+          <DropdownMenuItem className="font-bold" onClick={onAddHeader}>
+            Add header
+          </DropdownMenuItem>
+          <DropdownMenuItem className="font-bold" onClick={onAddFooter}>
+            Add footer
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
       <span className="mx-1.5 h-4 w-px bg-border" />
 
-      <button type="button" className={btnCls()} onClick={() => editor.chain().focus().undo().run()} aria-label="Undo">
-        <Undo2 className="h-4 w-4" />
-      </button>
-      <button type="button" className={btnCls()} onClick={() => editor.chain().focus().redo().run()} aria-label="Redo">
-        <Redo2 className="h-4 w-4" />
-      </button>
+      <ToolbarButton label="Undo" shortcut="Mod+Z" className={btnCls()} onClick={() => editor.chain().focus().undo().run()}>
+        <Undo2 />
+      </ToolbarButton>
+      <ToolbarButton label="Redo" shortcut="Mod+Shift+Z" className={btnCls()} onClick={() => editor.chain().focus().redo().run()}>
+        <Redo2 />
+      </ToolbarButton>
     </div>
+    </TooltipProvider>
   );
 }
