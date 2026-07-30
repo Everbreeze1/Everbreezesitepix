@@ -45,6 +45,7 @@ import { ProjectChecklists } from "@/features/projects/components/ProjectCheckli
 import { ProjectWorkflows } from "@/features/projects/components/ProjectWorkflows";
 import { ProjectTasks, type ProjectTasksHandle } from "@/features/projects/components/ProjectTasks";
 import { ProjectDocuments } from "@/features/projects/components/ProjectDocuments";
+import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
 import { ProjectContributors } from "@/features/projects/components/ProjectContributors";
 import { PhotoTagPopoverBody } from "@/features/photos/components/PhotoTagPopoverBody";
 import { sharePhotoNative } from "@/lib/native-share";
@@ -2212,17 +2213,33 @@ export function ProjectDetailPage() {
 
             {/* Actions */}
             <div className="flex shrink-0 items-center gap-2">
+              {/*
+                Generating a summary/log/report is a primary project action, so
+                it lives here rather than only inside the Documents tab — that
+                tab is where finished work is stored, not where you go to make
+                it. Same menu component as Documents, so they can't drift.
+              */}
+              <GenerateDocumentMenu
+                projectId={projectId}
+                trigger={
+                  <Button className="h-10 rounded-lg bg-sidebar-foreground px-5 font-bold text-sidebar shadow-sm hover:bg-sidebar-foreground/90">
+                    <Sparkles className="mr-2 h-4 w-4 text-sidebar-ring" />
+                    Create document
+                  </Button>
+                }
+              />
               <Button
+                variant="outline"
                 onClick={() => void generateReport()}
                 disabled={creatingReport}
-                className="h-10 rounded-lg bg-sidebar-foreground px-5 font-bold text-sidebar shadow-sm hover:bg-sidebar-foreground/90"
+                className="h-10 rounded-lg border-sidebar-foreground/15 bg-sidebar-foreground/10 px-4 font-bold text-sidebar-foreground hover:bg-sidebar-foreground/20 hover:text-sidebar-foreground"
               >
                 {creatingReport ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <FileText className="mr-2 h-4 w-4 text-sidebar-ring" />
                 )}
-                Create report
+                Photo report
               </Button>
               <ProjectActionsMenu
                 project={project}

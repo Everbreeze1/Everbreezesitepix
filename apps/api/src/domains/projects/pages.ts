@@ -218,12 +218,10 @@ const PLACEHOLDER_LABELS: Record<string, string> = {
  * means the template itself is wrong (typo, or references a field we don't
  * support), which is worth surfacing differently than "just needs filling in".
  */
-export async function resolvePageTokens(
-  html: string | null,
+async function loadTokenValues(
   projectId: string,
   createdBy: string,
-): Promise<string | null> {
-  if (!html || !html.includes("{{")) return html;
+): Promise<Record<string, string | null | undefined>> {
   const admin = getSupabaseAdmin();
   const [{ data: project }, { data: profile }] = await Promise.all([
     (admin as any).from("projects").select("name, street, city, state").eq("id", projectId).maybeSingle(),
@@ -236,7 +234,7 @@ export async function resolvePageTokens(
   const address = project ? [project.street, project.city, project.state].filter(Boolean).join(", ") : "";
   const today = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 
-  const values: Record<string, string | null | undefined> = {
+  return {
     company: profile?.company,
     company_name: profile?.company,
     company_address: profile?.company_address,
@@ -246,6 +244,15 @@ export async function resolvePageTokens(
     prepared_by: profile?.full_name,
     date: today,
   };
+}
+
+export async function resolvePageTokens(
+  html: string | null,
+  projectId: string,
+  createdBy: string,
+): Promise<string | null> {
+  if (!html || !html.includes("{{")) return html;
+  const values = await loadTokenValues(projectId, createdBy);
 
   return html.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (match, rawKey: string) => {
     const key = rawKey.toLowerCase();
@@ -258,6 +265,78 @@ export async function resolvePageTokens(
 
 /** @deprecated Use {@link resolvePageTokens} — kept as the original call-site name. */
 export const resolveHeaderFooterTokens = resolvePageTokens;
+
+// ============================================================
+// Click-to-fill placeholders
+//
+// Templates express blanks two ways, and both used to reach the editor as raw
+// bracket text the user had to select and delete before typing:
+//   [Client Name]      — hand-filled, becomes an editable FillField box
+//   {{project_name}}   — merge field, becomes a read-only MergeToken pill
+//
+// The database always stores the canonical `{{token}}` form, so PDF/share
+// rendering and "renaming the project updates every page" keep working; the
+// pill is only how it's expressed to the editor, and is converted back on save.
+// ============================================================
+
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Rewrites literal `[Placeholder]` runs into editable fill-field spans.
+ *
+ * Applied to template HTML at the moment a page is created from it, so the
+ * seeded SQL templates gain click-to-type fields without rewriting every
+ * migration. Only text between tags is touched, never attribute values — so
+ * `alt="Photo slot 1"` and inline styles are left alone.
+ */
+export function bracketsToFillFields(html: string | null): string | null {
+  if (!html || !html.includes("[")) return html;
+  return html.replace(/>([^<]+)</g, (whole, text: string) => {
+    if (!text.includes("[")) return whole;
+    const replaced = text.replace(/\[([^[\]<>]{1,60})\]/g, (m, label: string) => {
+      const clean = label.trim();
+      if (!clean) return m;
+      return `<span data-fill-field data-label="${escapeAttr(clean)}"></span>`;
+    });
+    return `>${replaced}<`;
+  });
+}
+
+/**
+ * Expresses `{{token}}` as a token pill carrying its resolved value, for the
+ * editor. Unknown tokens are left verbatim so a template typo stays visible.
+ */
+export async function tokensToPills(
+  html: string | null,
+  projectId: string,
+  createdBy: string,
+): Promise<string | null> {
+  if (!html || !html.includes("{{")) return html;
+  const values = await loadTokenValues(projectId, createdBy);
+  return html.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (match, rawKey: string) => {
+    const key = rawKey.toLowerCase();
+    if (!(key in values)) return match;
+    const value = values[key];
+    const label = value || PLACEHOLDER_LABELS[key] || key;
+    const empty = value ? "" : ` data-empty="true"`;
+    return `<span data-token="${escapeAttr(key)}" data-label="${escapeAttr(label)}"${empty}>${escapeHtmlText(label)}</span>`;
+  });
+}
+
+/** Converts token pills back to `{{token}}` before persisting, keeping merges live. */
+export function pillsToTokens(html: string | null): string | null {
+  if (!html || !html.includes("data-token")) return html;
+  return html.replace(
+    /<span\b[^>]*\bdata-token="([a-z0-9_]+)"[^>]*>.*?<\/span>/gi,
+    (_m, token: string) => `{{${token}}}`,
+  );
+}
+
+function escapeHtmlText(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 // ============================================================
 // Pages
@@ -326,7 +405,11 @@ export async function getProjectPageService(ctx: AuthedContext, data: z.infer<ty
     .single();
   if (error || !row) throw new Error("Page not found");
   const [contentHtml, headerHtml, footerHtml] = await Promise.all([
-    resolvePageImages(row.content_html, ctx.supabase),
+    // Body merge fields become editable-document pills rather than raw
+    // `{{token}}` source; updateProjectPage converts them back on save.
+    tokensToPills(row.content_html, row.project_id, row.created_by).then((h) =>
+      resolvePageImages(h ?? row.content_html, ctx.supabase),
+    ),
     resolveHeaderFooterTokens(row.header_html, row.project_id, row.created_by).then((h) =>
       h ? resolvePageImages(h, ctx.supabase) : h,
     ),
@@ -352,7 +435,10 @@ export async function updateProjectPageService(
 ) {
   const patch: Record<string, unknown> = {};
   if (data.title !== undefined) patch.title = data.title;
-  if (data.contentHtml !== undefined) patch.content_html = data.contentHtml;
+  // Store the canonical `{{token}}` form, never the resolved pill — otherwise
+  // the first autosave would bake today's company name into the document and
+  // the merge field would stop tracking project/profile changes.
+  if (data.contentHtml !== undefined) patch.content_html = pillsToTokens(data.contentHtml);
   if (data.headerHtml !== undefined) patch.header_html = data.headerHtml;
   if (data.footerHtml !== undefined) patch.footer_html = data.footerHtml;
   if (Object.keys(patch).length === 0) return { ok: true };

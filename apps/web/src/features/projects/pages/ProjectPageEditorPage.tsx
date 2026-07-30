@@ -89,6 +89,7 @@ import { ProjectImage, isPhotoSlot } from "@/lib/tiptap-project-image";
 import { sectionHtml, photoRowHtml } from "@/lib/tiptap-photo-slot";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Spacer } from "@/lib/tiptap-spacer";
+import { FillField, MergeToken } from "@/lib/tiptap-fill-field";
 import { downloadBase64File } from "@/lib/download-file";
 
 interface ProjectPhoto {
@@ -171,6 +172,8 @@ export function ProjectPageEditorPage() {
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       ProjectImage,
       Spacer,
+      FillField,
+      MergeToken,
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,

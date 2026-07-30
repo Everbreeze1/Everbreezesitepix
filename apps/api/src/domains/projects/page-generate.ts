@@ -75,10 +75,77 @@ export function markdownToHtml(md: string): string {
 /**
  * Photos are persisted as `data-photo-id` only — `src` is re-signed on every
  * read (see resolvePageImages), because signed storage URLs expire.
+ *
+ * Laid out two per row at 48% width (matching the seeded "Pre-Built Report"
+ * templates and apps/web/src/lib/tiptap-photo-slot.ts) rather than one flat
+ * unstyled column, so AI-generated pages read as a clean photo grid instead
+ * of a stack of full-width images.
  */
-function photoGridHtml(photoIds: string[]): string {
-  if (!photoIds.length) return "";
-  return photoIds.map((id) => `<img data-photo-id="${id}" src="">`).join("");
+const PHOTOS_PER_ROW = 2;
+const PHOTO_ROW_WIDTH = "48%";
+const PHOTO_ROW_HEIGHT = 280;
+
+/** A selected photo plus the metadata already captured in the field. */
+export interface GeneratedPhoto {
+  id: string;
+  caption: string | null;
+}
+
+/**
+ * A caption line per photo, directly beneath its row.
+ *
+ * Seeded from the photo's own caption so field metadata carries into the
+ * document instead of being retyped; photos without one get a visible prompt
+ * so there is an obvious place to write a comment. Numbering matches the
+ * "Photo N" convention the seeded templates use.
+ */
+function captionLineHtml(photos: GeneratedPhoto[], startIndex: number): string {
+  return photos
+    .map((p, i) => {
+      const n = startIndex + i;
+      const text = p.caption?.trim()
+        ? escapeHtml(p.caption.trim())
+        : `<span style="color: rgb(156,163,175)">Add a comment</span>`;
+      return `<p><em><strong>Photo ${n}</strong> &ndash; ${text}</em></p>`;
+    })
+    .join("");
+}
+
+function photoRowHtml(photos: GeneratedPhoto[], startIndex: number): string {
+  if (!photos.length) return "";
+  const width = photos.length > 1 ? PHOTO_ROW_WIDTH : "70%";
+  const imgs = photos
+    .map((p) => `<img data-photo-id="${p.id}" src="" width="${width}" height="${PHOTO_ROW_HEIGHT}">`)
+    .join("");
+  return `<p>${imgs}</p>` + captionLineHtml(photos, startIndex);
+}
+
+/** Splits photos into PHOTOS_PER_ROW-wide rows. */
+function photoGridHtml(photos: GeneratedPhoto[]): string {
+  const rows: string[] = [];
+  for (let i = 0; i < photos.length; i += PHOTOS_PER_ROW) {
+    rows.push(photoRowHtml(photos.slice(i, i + PHOTOS_PER_ROW), i + 1));
+  }
+  return rows.join("");
+}
+
+/**
+ * Splits photos into numbered sections of PHOTOS_PER_ROW each — heading,
+ * italic summary line, and a body prompt — mirroring the structure of the
+ * seeded report templates (see supabase/migrations/*_document_template_00*.sql)
+ * so a "Report" quick-created here looks the same as a pre-built one.
+ */
+function sectionedReportHtml(photos: GeneratedPhoto[]): string {
+  const sections: string[] = [];
+  for (let i = 0; i < photos.length; i += PHOTOS_PER_ROW) {
+    const n = sections.length + 1;
+    sections.push(
+      `<h2>Section ${n}</h2><p><em>Section summary</em></p>` +
+        `<p>Click to add important info or findings.</p>` +
+        photoRowHtml(photos.slice(i, i + PHOTOS_PER_ROW), i + 1),
+    );
+  }
+  return sections.join("");
 }
 
 function escapeHtml(s: string): string {
@@ -133,12 +200,29 @@ export async function generateProjectPageService(
         : `Report - ${new Date().toLocaleDateString()}`;
   const title = data.title?.trim() || defaultTitle;
 
+  // Captions already recorded in the field become the document's comment
+  // lines. `.in()` returns rows in arbitrary order, so re-key by id and walk
+  // photoIds to preserve the order the user picked them in.
+  const { data: photoRows } = await (ctx.supabase as any)
+    .from("photos")
+    .select("id, caption")
+    .in("id", data.photoIds);
+  const captionById = new Map<string, string | null>(
+    ((photoRows as Array<{ id: string; caption: string | null }>) ?? []).map((r) => [
+      r.id,
+      r.caption,
+    ]),
+  );
+  const photos: GeneratedPhoto[] = data.photoIds.map((id) => ({
+    id,
+    caption: captionById.get(id) ?? null,
+  }));
+
   // AI is best-effort: a generation failure must not cost the user their page.
   let bodyHtml = "";
   let aiFailed: string | null = null;
   if (data.template === "report") {
-    bodyHtml =
-      `<h2>Section 1</h2><p><strong>Section Summary</strong></p><p></p>` + photoGridHtml(data.photoIds);
+    bodyHtml = sectionedReportHtml(photos);
   } else {
     try {
       const res = await summarizePhotosReportService(ctx, { photoIds: data.photoIds, title });
@@ -149,7 +233,7 @@ export async function generateProjectPageService(
       aiFailed = e?.message ?? "AI unavailable";
       bodyHtml = `<h2>Overview</h2><p></p>`;
     }
-    bodyHtml += photoGridHtml(data.photoIds);
+    bodyHtml += photoGridHtml(photos);
   }
 
   const header =

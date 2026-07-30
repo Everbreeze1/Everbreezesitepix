@@ -13,8 +13,6 @@ import {
   ChevronRight,
   ChevronUp,
   ChevronDown,
-  ClipboardList,
-  Sparkles,
   Move,
   Pencil,
   Copy,
@@ -22,7 +20,6 @@ import {
   FileDown,
   Search,
   Globe,
-  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,7 +56,6 @@ import {
   listProjectDocumentTree,
   createDocumentFolder,
   deleteDocumentFolder,
-  createProjectPage,
   updateProjectPage,
   deleteProjectPage,
   duplicateProjectPage,
@@ -67,13 +63,10 @@ import {
   setProjectPageShare,
   generatePagePdf,
   moveDocument,
-  generateProjectPage,
-  createPageFromTemplate,
   type DocumentTree,
   type DocumentTreeFolder,
 } from "@/lib/project-pages.functions";
-import { SelectPhotosForPageDialog } from "@/features/projects/components/SelectPhotosForPageDialog";
-import { ChoosePageTemplateDialog } from "@/features/projects/components/ChoosePageTemplateDialog";
+import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
 
 interface ProjectDocument {
   id: string;
@@ -161,10 +154,6 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
   const [shareUpdating, setShareUpdating] = useState(false);
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [shareRevoked, setShareRevoked] = useState(true);
-  const [aiTemplate, setAiTemplate] = useState<"daily_log" | "summary" | "report" | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
-  const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(new Set());
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
   const [bulkExporting, setBulkExporting] = useState(false);
@@ -312,58 +301,6 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
       await load();
     } catch (e: any) {
       toast.error(e?.message ?? "Could not delete folder");
-    }
-  }
-
-  async function handleCreatePage(template?: "daily_log" | "summary" | "blank") {
-    setCreating(true);
-    try {
-      const res = await createProjectPage({
-        data: { projectId, folderId: currentFolderId, template },
-      });
-      sessionStorage.setItem(`sitepix:freshPage:${res.page.id}`, "1");
-      navigate({ to: "/projects/$projectId/pages/$pageId", params: { projectId, pageId: res.page.id } });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Could not create page");
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  /** AI templates need photos first, so they open the picker instead of creating immediately. */
-  async function handleGenerate(photoIds: string[]) {
-    if (!aiTemplate) return;
-    setGenerating(true);
-    try {
-      const res = await generateProjectPage({
-        data: { projectId, folderId: currentFolderId, template: aiTemplate, photoIds },
-      });
-      if (res.aiFailed) {
-        toast.warning("Created without AI text", { description: res.aiFailed });
-      } else {
-        toast.success("Document generated");
-      }
-      setAiTemplate(null);
-      navigate({ to: "/projects/$projectId/pages/$pageId", params: { projectId, pageId: res.page.id } });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Could not generate document");
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  async function handleUseTemplate(templateId: string) {
-    setApplyingTemplate(true);
-    try {
-      const res = await createPageFromTemplate({
-        data: { projectId, templateId, folderId: currentFolderId },
-      });
-      setTemplatePickerOpen(false);
-      navigate({ to: "/projects/$projectId/pages/$pageId", params: { projectId, pageId: res.page.id } });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Could not apply template");
-    } finally {
-      setApplyingTemplate(false);
     }
   }
 
@@ -646,7 +583,9 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
             Project documents
           </h2>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
-            Keep every plan, permit, report, and delivery ticket in one place.
+            Storage for every plan, permit, report, and delivery ticket. Generated summaries and
+            logs are filed here too — create them from <span className="font-bold">Create document</span>{" "}
+            at the top of the project.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -658,8 +597,11 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
             <FolderPlus className="h-4 w-4" />
             New folder
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          <GenerateDocumentMenu
+            projectId={projectId}
+            folderId={currentFolderId}
+            onCreated={() => void load()}
+            trigger={
               <Button
                 disabled={creating}
                 className="h-8 gap-2 rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground hover:bg-primary/90"
@@ -667,52 +609,8 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                 {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus2 className="h-4 w-4" />}
                 Create
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem onClick={() => handleCreatePage("blank")}>
-                <FileText className="mr-2 h-4 w-4" />
-                <span>
-                  <span className="block font-bold">Blank page</span>
-                  <span className="block text-xs text-muted-foreground">Start from scratch</span>
-                </span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setAiTemplate("report")}>
-                <ClipboardList className="mr-2 h-4 w-4" />
-                <span>
-                  <span className="block font-bold">Report</span>
-                  <span className="block text-xs text-muted-foreground">
-                    Insert layout and add photos
-                  </span>
-                </span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setAiTemplate("daily_log")}>
-                <Sparkles className="mr-2 h-4 w-4" />
-                <span>
-                  <span className="block font-bold">Daily Log</span>
-                  <span className="block text-xs text-muted-foreground">
-                    AI overview of today with next steps
-                  </span>
-                </span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setAiTemplate("summary")}>
-                <Sparkles className="mr-2 h-4 w-4" />
-                <span>
-                  <span className="block font-bold">Summary</span>
-                  <span className="block text-xs text-muted-foreground">AI brief summary</span>
-                </span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setTemplatePickerOpen(true)}>
-                <Layers className="mr-2 h-4 w-4" />
-                <span>
-                  <span className="block font-bold">More Templates</span>
-                  <span className="block text-xs text-muted-foreground">
-                    Saved by your team or examples
-                  </span>
-                </span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            }
+          />
           <Button
             onClick={() => fileInput.current?.click()}
             disabled={uploading}
@@ -1092,23 +990,6 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
         </DialogContent>
       </Dialog>
 
-      <SelectPhotosForPageDialog
-        open={!!aiTemplate}
-        projectId={projectId}
-        templateLabel={
-          aiTemplate === "daily_log" ? "Daily Log" : aiTemplate === "summary" ? "Summary" : "Report"
-        }
-        generating={generating}
-        onCancel={() => setAiTemplate(null)}
-        onGenerate={handleGenerate}
-      />
-
-      <ChoosePageTemplateDialog
-        open={templatePickerOpen}
-        onOpenChange={setTemplatePickerOpen}
-        applying={applyingTemplate}
-        onUse={handleUseTemplate}
-      />
     </div>
   );
 }

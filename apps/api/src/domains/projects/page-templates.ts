@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
-import { resolvePageTokens } from "./pages";
+import { resolvePageTokens, bracketsToFillFields } from "./pages";
 
 export interface DocumentTemplateSummary {
   id: string;
@@ -89,9 +89,12 @@ export async function createPageFromTemplateService(
 ) {
   const template = await getDocumentTemplateService(ctx, { templateId: data.templateId });
 
-  const contentHtml = data.resolveTokens
+  const resolved = data.resolveTokens
     ? ((await resolvePageTokens(template.html, data.projectId, ctx.userId)) ?? template.html)
     : template.html;
+  // `[Client Name]` style blanks become click-to-type fields at this point, so
+  // the seeded SQL templates gain them without every migration being rewritten.
+  const contentHtml = bracketsToFillFields(resolved) ?? resolved;
 
   const { data: row, error } = await (ctx.supabase as any)
     .from("project_pages")

@@ -286,6 +286,73 @@
    Editable surfaces only — on a shared/read-only page there is nothing to click. */
 .tiptap[contenteditable="true"] img[src^="data:image/svg+xml"] { cursor: pointer; }
 .tiptap[contenteditable="true"] img[src^="data:image/svg+xml"]:hover { outline: 2px solid var(--primary); }
+/* ---- Fill-in fields and merge tokens -------------------------------------
+   A `[Client Name]` placeholder used to be literal text you had to select and
+   delete before typing. It is now a click-into box that shows its field name
+   as ghost text while empty (via the `data-label` attribute, so the hint is
+   never part of the document's actual text and can't be exported by accident). */
+.tiptap-field {
+  display: inline-block;
+  min-width: 5.5rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px dashed color-mix(in oklab, var(--primary) 45%, var(--border));
+  border-radius: 0.25rem;
+  background: color-mix(in oklab, var(--primary) 6%, transparent);
+  vertical-align: baseline;
+}
+/* Ghost hint, shown only while editing and only while the field is empty.
+   `content` comes from the attribute so the hint stays out of the text layer
+   entirely — it can never be exported to PDF or copied with the text. Scoped
+   to contenteditable so a client viewing a shared page is not shown internal
+   field names; there, an unfilled field renders as a plain ruled blank. */
+.tiptap[contenteditable="true"] .tiptap-field:empty::before {
+  content: attr(data-label);
+  color: var(--muted-foreground);
+  opacity: 0.75;
+  pointer-events: none;
+}
+.tiptap:not([contenteditable="true"]) .tiptap-field:empty {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  min-width: 7rem;
+}
+.tiptap[contenteditable="true"] .tiptap-field { cursor: text; }
+.tiptap[contenteditable="true"] .tiptap-field:hover {
+  border-color: var(--primary);
+  background: color-mix(in oklab, var(--primary) 11%, transparent);
+}
+.tiptap-field:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  border-style: solid;
+}
+/* A filled field stops advertising itself — it reads as ordinary prose. */
+.tiptap-field:not(:empty) {
+  border-color: transparent;
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+/* Merge fields resolve from project/company data, so they are read-only pills
+   rather than something to type into. */
+.tiptap-token {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.25rem;
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  color: color-mix(in oklab, var(--primary) 85%, var(--foreground));
+  font-weight: 600;
+}
+/* No data behind it yet — styled like an unfilled blank so it is obvious the
+   value comes from settings rather than from typing here. */
+.tiptap-token[data-empty="true"] {
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
 .tiptap a { color: var(--primary); text-decoration: underline; }
 .tiptap blockquote {
   border-left: 3px solid var(--border);
