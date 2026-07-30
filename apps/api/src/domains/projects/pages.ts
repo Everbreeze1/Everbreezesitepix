@@ -195,9 +195,28 @@ export async function listProjectDocumentTreeService(
 // ============================================================
 
 /**
- * Resolves `{{token}}` merge fields against live project/company data.
- * Unknown tokens are deliberately left verbatim so the author can see what
- * still needs filling in (matching how document templates preview them).
+ * Human-readable stand-in for a known token with no data behind it yet, e.g.
+ * `[Company name]`. Reads as a normal mail-merge placeholder (the convention
+ * Word/Docs use) rather than `{{company}}`, which looks like leaked template
+ * source to anyone previewing the document.
+ */
+const PLACEHOLDER_LABELS: Record<string, string> = {
+  company: "Company name",
+  company_name: "Company name",
+  company_address: "Company address",
+  company_phone: "Company phone",
+  project_name: "Project name",
+  project_address: "Project address",
+  prepared_by: "Prepared by",
+  date: "Date",
+};
+
+/**
+ * Resolves `{{token}}` merge fields against live project/company data. A
+ * *known* token with no data behind it renders as `[Field name]`. A token
+ * that isn't recognized at all is left verbatim as `{{token}}` — that case
+ * means the template itself is wrong (typo, or references a field we don't
+ * support), which is worth surfacing differently than "just needs filling in".
  */
 export async function resolvePageTokens(
   html: string | null,
@@ -229,8 +248,11 @@ export async function resolvePageTokens(
   };
 
   return html.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (match, rawKey: string) => {
-    const value = values[rawKey.toLowerCase()];
-    return value ? value : match;
+    const key = rawKey.toLowerCase();
+    if (!(key in values)) return match;
+    const value = values[key];
+    if (value) return value;
+    return `[${PLACEHOLDER_LABELS[key] ?? key}]`;
   });
 }
 
