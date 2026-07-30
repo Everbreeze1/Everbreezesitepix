@@ -238,12 +238,22 @@
 }
 
 .tiptap mark { border-radius: 0.15rem; padding: 0.05em 0.15em; }
-.tiptap img { max-width: 100%; height: auto; border-radius: 0.375rem; }
+.tiptap img { max-width: 100%; border-radius: 0.375rem; }
+/* Free-flowing content images (no explicit height attribute) stay responsive. */
+.tiptap img:not([height]) { height: auto; }
+/* Template photo slots ship explicit width/height attributes so the box is a
+   fixed size by design (see document_templates seed migrations). A real photo
+   swapped into that slot keeps the same width/height attrs (ProjectPageEditorPage's
+   insertImage carries them over) but almost never matches the slot's aspect
+   ratio, so without object-fit the browser would stretch it to fill the box —
+   crop to fill instead. */
+.tiptap img[width][height] { object-fit: cover; }
 .tiptap img.ProseMirror-selectednode { outline: 2px solid var(--primary); }
 /* Images are inline nodes, so several can share a paragraph as a photo strip.
    Tailwind's preflight forces `img { display: block }`, which stacks them
    vertically instead — override back to inline-block so they flow left to right. */
 .tiptap p > img { display: inline-block; vertical-align: top; margin-right: 0.375rem; }
+.tiptap p > img:last-child { margin-right: 0; }
 /* Unfilled template photo slots: clicking one opens the project photo picker.
    Editable surfaces only — on a shared/read-only page there is nothing to click. */
 .tiptap[contenteditable="true"] img[src^="data:image/svg+xml"] { cursor: pointer; }

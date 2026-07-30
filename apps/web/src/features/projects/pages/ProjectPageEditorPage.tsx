@@ -299,15 +299,21 @@ export function ProjectPageEditorPage() {
   }
 
   function insertImage(photo: ProjectPhoto) {
-    const attrs = { src: photo.url, alt: photo.caption ?? "", "data-photo-id": photo.id } as any;
+    const attrs: Record<string, unknown> = { src: photo.url, alt: photo.caption ?? "", "data-photo-id": photo.id };
     const slotPos = slotPosRef.current;
     slotPosRef.current = null;
-    if (slotPos !== null) {
+    if (slotPos !== null && editor) {
+      // Carry the slot's fixed width/height onto the replacement photo (styles.css
+      // then crops it to fit via object-fit) so the template's layout never
+      // reflows just because a real photo's aspect ratio differs from the slot's.
+      const slotNode = editor.state.doc.nodeAt(slotPos);
+      if (slotNode?.attrs.width) attrs.width = slotNode.attrs.width;
+      if (slotNode?.attrs.height) attrs.height = slotNode.attrs.height;
       // setImage() inserts over the current selection, so selecting the slot
       // node first makes this a replace rather than an insert.
-      editor?.chain().focus().setNodeSelection(slotPos).setImage(attrs).run();
+      editor.chain().focus().setNodeSelection(slotPos).setImage(attrs as any).run();
     } else {
-      editor?.chain().focus().setImage(attrs).run();
+      editor?.chain().focus().setImage(attrs as any).run();
     }
     setImagePickerOpen(false);
   }
