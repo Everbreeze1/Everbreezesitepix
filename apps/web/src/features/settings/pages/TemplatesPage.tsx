@@ -14,6 +14,8 @@ import {
   X,
   Search,
   Tag,
+  Tags,
+  Newspaper,
   Check,
   MoreHorizontal,
   Copy,
@@ -521,36 +523,44 @@ export function TemplatesPage() {
       <PageHeader
         eyebrow="Workspace tools"
         title="Templates"
-        description="Reusable blueprints you can apply to any new project."
+        description="Create and manage reusable templates across your company — project setups, documents, checklists, reports, and the labels that organize them."
       />
 
       <Tabs value={tab} onValueChange={setTab} className="mt-6">
-        <TabsList className="mb-6 flex h-auto flex-wrap gap-1 bg-muted/60 p-1">
-          <TabsTrigger value="projects" className="gap-1.5">
+        {/*
+          Left-aligned and scrollable rather than centred-and-wrapping: seven
+          tabs wrapped onto a second row and floated to the middle of a
+          full-width bar, which read as a layout accident. The divider splits
+          the two real groups — things you author, and the taxonomy that
+          organizes them.
+        */}
+        <TabsList className="mb-6 flex h-auto w-full justify-start gap-1 overflow-x-auto bg-muted/60 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <TabsTrigger value="projects" className="shrink-0 gap-1.5">
             <FolderOpen className="h-3.5 w-3.5" />
             Project blueprints
           </TabsTrigger>
-          <TabsTrigger value="documents" className="gap-1.5">
+          <TabsTrigger value="documents" className="shrink-0 gap-1.5">
             <FileText className="h-3.5 w-3.5" />
             Documents
           </TabsTrigger>
-          <TabsTrigger value="checklists" className="gap-1.5">
+          <TabsTrigger value="checklists" className="shrink-0 gap-1.5">
             <ClipboardList className="h-3.5 w-3.5" />
             Checklists
           </TabsTrigger>
-          <TabsTrigger value="reports" className="gap-1.5">
-            <FileText className="h-3.5 w-3.5" />
+          <TabsTrigger value="reports" className="shrink-0 gap-1.5">
+            <Newspaper className="h-3.5 w-3.5" />
             Reports
           </TabsTrigger>
-          <TabsTrigger value="workflows" className="gap-1.5">
+          <TabsTrigger value="workflows" className="shrink-0 gap-1.5">
             <WorkflowIcon className="h-3.5 w-3.5" />
             Workflows
           </TabsTrigger>
-          <TabsTrigger value="label-sets" className="gap-1.5">
-            <Tag className="h-3.5 w-3.5" />
+          <span className="mx-1 h-5 w-px shrink-0 self-center bg-border" aria-hidden />
+          <TabsTrigger value="label-sets" className="shrink-0 gap-1.5">
+            <Tags className="h-3.5 w-3.5" />
             Label sets
           </TabsTrigger>
-          <TabsTrigger value="labels" className="gap-1.5">
+          <TabsTrigger value="labels" className="shrink-0 gap-1.5">
             <Tag className="h-3.5 w-3.5" />
             Labels
           </TabsTrigger>

@@ -39,7 +39,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
 import { useTheme } from "@/hooks/use-theme";
-import { useSubscription } from "@/hooks/use-subscription";
+import { useSubscription, PRO_AUTO_REPORTS_PER_MONTH } from "@/hooks/use-subscription";
 import { supabase } from "@/integrations/sitepix/client";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { getMyTeam, createBillingPortalSession } from "@/features/settings/api";
@@ -169,9 +169,9 @@ export function SettingsPage() {
     isPro,
     isTeam,
     canUseWatermark,
-    aiAnalysesUsed,
-    aiAnalysesLimit,
-    aiAnalysesRemaining,
+    autoReportsUsed,
+    autoReportsLimit,
+    autoReportsRemaining,
   } = useSubscription();
 
   const fetchTeam = getMyTeam;
@@ -290,9 +290,9 @@ export function SettingsPage() {
                 tier={tier}
                 isPro={isPro}
                 isTeam={isTeam}
-                aiUsed={aiAnalysesUsed}
-                aiLimit={aiAnalysesLimit}
-                aiRemaining={aiAnalysesRemaining}
+                autoReportsUsed={autoReportsUsed}
+                autoReportsLimit={autoReportsLimit}
+                autoReportsRemaining={autoReportsRemaining}
                 teamData={teamData}
                 isOwner={myTeamRole === "owner"}
               />
@@ -1171,9 +1171,9 @@ function BillingSection({
   tier,
   isPro,
   isTeam,
-  aiUsed,
-  aiLimit,
-  aiRemaining,
+  autoReportsUsed,
+  autoReportsLimit,
+  autoReportsRemaining,
   teamData,
   isOwner,
 }: {
@@ -1181,13 +1181,12 @@ function BillingSection({
   tier: string;
   isPro: boolean;
   isTeam: boolean;
-  aiUsed: number;
-  aiLimit: number;
-  aiRemaining: number;
+  autoReportsUsed: number;
+  autoReportsLimit: number;
+  autoReportsRemaining: number;
   teamData: any;
   isOwner: boolean;
 }) {
-  const { bytesUsed, bytesLimit } = useStorageUsage();
   const seatsUsed = (teamData?.members?.length ?? 1) + (teamData?.invites?.length ?? 0);
   const seatsLimit = teamData?.memberLimit ?? 2;
   const openPortal = useMutation({
@@ -1204,16 +1203,16 @@ function BillingSection({
   const heroCopy = isTeam
     ? {
         title: "Built for the whole crew.",
-        desc: "Shared workspaces, watermarks, collaboration, walkthrough notes, and unlimited AI scans.",
+        desc: "Shared workspaces, watermarks, collaboration, walkthrough notes, and unlimited Auto Reports.",
       }
     : isPro
       ? {
           title: "Everything a pro job site needs.",
-          desc: "AI photo analysis, watermarks, and unlimited projects.",
+          desc: `AI photo analysis, watermarks, unlimited projects, and ${PRO_AUTO_REPORTS_PER_MONTH} Auto Reports a month.`,
         }
       : {
           title: "Upgrade when you're ready.",
-          desc: "Unlock AI photo analysis, watermarks, and team collaboration.",
+          desc: "Unlock Auto Reports, AI photo analysis, watermarks, and team collaboration.",
         };
 
   return (
@@ -1248,7 +1247,7 @@ function BillingSection({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-border bg-card/[0.55] p-5">
           <p className={fieldLabelClass}>Seats</p>
           <p className="mt-3 font-manrope text-lg font-extrabold text-foreground">
@@ -1256,21 +1255,21 @@ function BillingSection({
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card/[0.55] p-5">
-          <p className={fieldLabelClass}>Photo storage</p>
+          <p className={fieldLabelClass}>Auto Reports</p>
           <p className="mt-3 font-manrope text-lg font-extrabold text-foreground">
-            {formatBytes(bytesUsed)} / {formatBytes(bytesLimit)}
+            {autoReportsLimit === Infinity
+              ? "Unlimited"
+              : autoReportsLimit === 0
+                ? "Pro & Team only"
+                : `${autoReportsUsed} / ${autoReportsLimit}`}
           </p>
-        </div>
-        <div className="rounded-2xl border border-border bg-card/[0.55] p-5">
-          <p className={fieldLabelClass}>AI scans</p>
-          <p className="mt-3 font-manrope text-lg font-extrabold text-foreground">
-            {aiLimit === Infinity ? "Unlimited" : `${aiUsed} / ${aiLimit}`}
+          <p className="mt-1 font-manrope text-[11px] text-muted-foreground">
+            {autoReportsLimit === Infinity
+              ? "AI reports from your walkthroughs"
+              : autoReportsLimit === 0
+                ? "Upgrade to generate reports from walkthroughs"
+                : `${autoReportsRemaining} remaining this month`}
           </p>
-          {aiLimit !== Infinity && (
-            <p className="mt-1 font-manrope text-[11px] text-muted-foreground">
-              {aiRemaining} remaining
-            </p>
-          )}
         </div>
       </div>
     </>

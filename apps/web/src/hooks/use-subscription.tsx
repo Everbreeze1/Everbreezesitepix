@@ -19,6 +19,14 @@ export const PLAN_LIMITS = {
   team: { storageBytes: 200 * 1024 ** 3 }, // 200 GB
 } as const;
 
+/**
+ * Auto Reports included with Pro, per user per calendar month. Team is
+ * unlimited; Starter has no access. Keep in sync with
+ * PRO_AUTO_REPORTS_PER_MONTH in apps/api/src/domains/walkthroughs/auto-report-quota.ts,
+ * which is what actually enforces the cap.
+ */
+export const PRO_AUTO_REPORTS_PER_MONTH = 100;
+
 interface MyTeamResult {
   team: { id: string } | null;
   plan?: BillingTier;
@@ -30,6 +38,7 @@ interface MyTeamResult {
 export function useSubscription() {
   const { user, loading: authLoading } = useAuth();
   const [aiAnalysesUsed, setAiAnalysesUsed] = useState(0);
+  const [autoReportsUsed, setAutoReportsUsed] = useState(0);
 
   const {
     data: teamData,
@@ -47,12 +56,20 @@ export function useSubscription() {
     const start = new Date();
     start.setUTCDate(1);
     start.setUTCHours(0, 0, 0, 0);
-    const { count } = await supabase
-      .from("ai_analyses")
-      .select("id", { count: "exact", head: true })
-      .eq("created_by", user.id)
-      .gte("created_at", start.toISOString());
-    setAiAnalysesUsed(count ?? 0);
+    const [{ count: aiCount }, { count: autoReportCount }] = await Promise.all([
+      supabase
+        .from("ai_analyses")
+        .select("id", { count: "exact", head: true })
+        .eq("created_by", user.id)
+        .gte("created_at", start.toISOString()),
+      supabase
+        .from("auto_report_generations" as any)
+        .select("id", { count: "exact", head: true })
+        .eq("created_by", user.id)
+        .gte("created_at", start.toISOString()),
+    ]);
+    setAiAnalysesUsed(aiCount ?? 0);
+    setAutoReportsUsed(autoReportCount ?? 0);
   }, [user]);
 
   useEffect(() => {
@@ -71,6 +88,16 @@ export function useSubscription() {
           event: "INSERT",
           schema: "public",
           table: "ai_analyses",
+          filter: `created_by=eq.${user.id}`,
+        },
+        () => void fetchUsage(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "auto_report_generations",
           filter: `created_by=eq.${user.id}`,
         },
         () => void fetchUsage(),
@@ -100,6 +127,14 @@ export function useSubscription() {
   const isPro = isActive && (tier === "pro" || tier === "team");
   const isStarter = isActive && tier === "starter";
   const limits = PLAN_LIMITS[tier];
+
+  // Auto Reports (AI reports generated from a walkthrough's spoken transcript
+  // + captured photos) are Pro/Team only. Mirrors the server-side allowance in
+  // apps/api/src/domains/walkthroughs/auto-report-quota.ts — that module is the
+  // enforcing authority; this is only what the UI displays.
+  const autoReportsLimit = isTeam ? Infinity : isPro ? PRO_AUTO_REPORTS_PER_MONTH : 0;
+  const autoReportsRemaining =
+    autoReportsLimit === Infinity ? Infinity : Math.max(0, autoReportsLimit - autoReportsUsed);
 
   return {
     subscription: null as SubscriptionRow | null,
@@ -133,6 +168,12 @@ export function useSubscription() {
     aiAnalysesLimit: Infinity,
     aiUnlimited: true,
     bumpAiAnalysesUsed: () => setAiAnalysesUsed((n) => n + 1),
+    /** Auto Reports: AI reports generated from walkthrough transcript + photos. */
+    canUseAutoReports: isPro,
+    autoReportsUsed,
+    autoReportsLimit,
+    autoReportsRemaining,
+    bumpAutoReportsUsed: () => setAutoReportsUsed((n) => n + 1),
     refresh: () => fetchUsage(),
   };
 }

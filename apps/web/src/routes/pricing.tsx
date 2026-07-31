@@ -61,7 +61,7 @@ const PLANS: {
     features: [
       "Everything in Starter",
       "Company watermark",
-      "Walkthroughs + auto report",
+      "Walkthroughs + 100 Auto Reports/mo",
       "AI-assisted Site Logs",
       "Full checklists & templates",
       "Map view",
@@ -78,7 +78,7 @@ const PLANS: {
       "Workflows",
       "Project blueprints",
       "Advanced roles & permissions",
-      "Unlimited auto reports",
+      "Unlimited Auto Reports",
       "Highest storage",
     ],
   },

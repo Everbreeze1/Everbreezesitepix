@@ -1,5 +1,6 @@
 import { cleanCaption } from "@sitepix/shared";
 import { chatEndpoint } from "../../lib/ai-provider";
+import { getCallerTeamPlan } from "../../lib/team-plan";
 import type { AuthedContext } from "../../lib/user-context";
 
 const VISION_MODEL = "google/gemini-2.5-pro";
@@ -7,32 +8,6 @@ const CHAT_MODEL = "google/gemini-2.5-pro";
 
 function aiKeyConfigured() {
   return !!process.env.GEMINI_API_KEY;
-}
-
-/** Real team billing (teams.plan / subscription_status / is_internal) —
- * replaces the old per-user `subscriptions` table, which was never wired to
- * Stripe and doesn't exist on the live database. */
-async function getCallerTeamPlan(
-  supabase: AuthedContext["supabase"],
-  userId: string,
-): Promise<{ isActive: boolean; isPro: boolean }> {
-  const { data: membership } = await supabase
-    .from("team_members" as any)
-    .select("team_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (!membership) return { isActive: false, isPro: false };
-
-  const { data: team } = await supabase
-    .from("teams" as any)
-    .select("plan, subscription_status, is_internal")
-    .eq("id", (membership as any).team_id)
-    .maybeSingle();
-  const isInternal = !!(team as any)?.is_internal;
-  const isActive = isInternal || (team as any)?.subscription_status === "active";
-  const plan = (team as any)?.plan as string | undefined;
-  const isPro = isActive && (plan === "pro" || plan === "team");
-  return { isActive, isPro };
 }
 
 const analysisTool = {

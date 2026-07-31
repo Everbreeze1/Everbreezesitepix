@@ -2,6 +2,7 @@ import { z } from "zod";
 import { chatEndpoint, transcriptionEndpoint } from "../../lib/ai-provider";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
+import { assertAutoReportAllowed, recordAutoReportGeneration } from "./auto-report-quota";
 
 
 const MODEL = "google/gemini-2.5-flash";
@@ -994,6 +995,12 @@ export async function generateWalkthroughReportService(ctx: AuthedContext, data:
     if (wErr || !walk) throw new Error("Walkthrough not found");
     if ((walk as any).created_by !== userId) throw new Error("Not authorized");
 
+    // Auto Reports are Pro/Team only and metered per user per month (Pro 100,
+    // Team unlimited). Checked before any LLM work so an over-quota caller
+    // never burns a request, and after the ownership check so the error can't
+    // be used to probe for walkthroughs the caller doesn't own.
+    const quota = await assertAutoReportAllowed(ctx.supabase, userId);
+
       const { data: links } = await supabaseAdmin
       .from("walkthrough_photos" as any)
       .select("photo_id, offset_seconds, spoken_note, position")
@@ -1216,6 +1223,13 @@ ${hasSpeech
         share_token: ensuredToken,
       })
       .eq("id", data.walkthroughId);
+
+    // Meter only once the report is actually saved, so a failed run never
+    // costs the user quota. Note this counts deterministic-fallback reports
+    // too (AI unavailable / key missing): the user still received a generated
+    // report, and not charging for it would let a degraded provider hand out
+    // unlimited free generations.
+    await recordAutoReportGeneration(data.walkthroughId, userId, quota.tier);
 
     console.log(`[walkthrough] Success - ID: ${data.walkthroughId}`);
     console.log("[walkthrough] server report generation saved", { walkthroughId: data.walkthroughId, userId });
