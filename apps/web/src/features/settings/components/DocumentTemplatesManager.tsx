@@ -25,6 +25,19 @@ import { EmptyState } from "@/components/EmptyState";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
+import Underline from "@tiptap/extension-underline";
+import { TextStyle, FontFamily, FontSize } from "@tiptap/extension-text-style";
+import { Color } from "@tiptap/extension-color";
+import { Highlight } from "@tiptap/extension-highlight";
+import TaskList from "@tiptap/extension-task-list";
+import TaskItem from "@tiptap/extension-task-item";
+import LinkExtension from "@tiptap/extension-link";
+import TextAlign from "@tiptap/extension-text-align";
+import { Table, TableRow, TableCell, TableHeader } from "@tiptap/extension-table";
+import { ProjectImage } from "@/lib/tiptap-project-image";
+import { Spacer } from "@/lib/tiptap-spacer";
+import { FillField, MergeToken } from "@/lib/tiptap-fill-field";
+import { DocumentToolbar } from "@/features/projects/components/DocumentToolbar";
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
@@ -45,20 +58,9 @@ import {
   Newspaper,
   Footprints,
   ClipboardList,
-  Bold,
-  Italic,
-  Heading1,
-  Heading2,
-  Heading3,
-  List,
-  ListOrdered,
   Download,
   ChevronDown,
   ArrowLeft,
-  Quote,
-  Minus,
-  Undo2,
-  Redo2,
   LayoutTemplate,
   PanelRightOpen,
   PanelRightClose,
@@ -1117,12 +1119,37 @@ function DocumentEditorSurface({
   const quickFields = relevantPlaceholders;
 
   const tiptap = useEditor({
+    // Deliberately the same extension set as the project page editor. A
+    // template is authored here and rendered there, so anything missing from
+    // this list is something a user simply cannot put in their own template —
+    // which is why the seeded templates (tables, photo slots, task lists,
+    // alignment, colour) were previously impossible to reproduce by hand.
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         codeBlock: false,
+        link: false,
+        underline: false,
       }),
       Placeholder.configure({ placeholder: "Start writing your document…" }),
+      Underline,
+      TextStyle,
+      FontFamily,
+      FontSize,
+      Color,
+      Highlight.configure({ multicolor: true }),
+      TaskList,
+      TaskItem.configure({ nested: false }),
+      LinkExtension.configure({ openOnClick: false }),
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
+      ProjectImage,
+      Spacer,
+      FillField,
+      MergeToken,
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
       PlaceholderChips.configure({
         getValue: (token: string) => overridesRef.current[token],
       }),
@@ -1338,76 +1365,15 @@ function DocumentEditorSurface({
                     </div>
                   </div>
                 )}
-                {/* Formatting toolbar — sticky above the document */}
+                {/* Formatting toolbar — the same component the project page
+                    editor uses, so a template can contain everything a real
+                    document can. Project-only actions (insert a project photo,
+                    snippets, running header/footer) are omitted: a template has
+                    no project behind it and uses photo *slots* instead. */}
                 {tiptap && (
-                  <div className="sticky top-0 z-20 -mx-px flex flex-wrap items-center gap-1 rounded-t-lg border-b border-gray-200 bg-white/95 px-3 py-1.5 shadow-sm backdrop-blur">
-                    <ToolbarButton
-                      active={tiptap.isActive("bold")}
-                      onClick={() => tiptap.chain().focus().toggleBold().run()}
-                      icon={Bold}
-                      label="Bold"
-                    />
-                    <ToolbarButton
-                      active={tiptap.isActive("italic")}
-                      onClick={() => tiptap.chain().focus().toggleItalic().run()}
-                      icon={Italic}
-                      label="Italic"
-                    />
-                    <Divider />
-                    <ToolbarButton
-                      active={tiptap.isActive("heading", { level: 1 })}
-                      onClick={() => tiptap.chain().focus().toggleHeading({ level: 1 }).run()}
-                      icon={Heading1}
-                      label="Heading 1"
-                    />
-                    <ToolbarButton
-                      active={tiptap.isActive("heading", { level: 2 })}
-                      onClick={() => tiptap.chain().focus().toggleHeading({ level: 2 }).run()}
-                      icon={Heading2}
-                      label="Heading 2"
-                    />
-                    <ToolbarButton
-                      active={tiptap.isActive("heading", { level: 3 })}
-                      onClick={() => tiptap.chain().focus().toggleHeading({ level: 3 }).run()}
-                      icon={Heading3}
-                      label="Heading 3"
-                    />
-                    <Divider />
-                    <ToolbarButton
-                      active={tiptap.isActive("bulletList")}
-                      onClick={() => tiptap.chain().focus().toggleBulletList().run()}
-                      icon={List}
-                      label="Bullet list"
-                    />
-                    <ToolbarButton
-                      active={tiptap.isActive("orderedList")}
-                      onClick={() => tiptap.chain().focus().toggleOrderedList().run()}
-                      icon={ListOrdered}
-                      label="Numbered list"
-                    />
-                    <ToolbarButton
-                      active={tiptap.isActive("blockquote")}
-                      onClick={() => tiptap.chain().focus().toggleBlockquote().run()}
-                      icon={Quote}
-                      label="Quote"
-                    />
-                    <ToolbarButton
-                      onClick={() => tiptap.chain().focus().setHorizontalRule().run()}
-                      icon={Minus}
-                      label="Divider"
-                    />
-                    <Divider />
-                    <ToolbarButton
-                      onClick={() => tiptap.chain().focus().undo().run()}
-                      icon={Undo2}
-                      label="Undo"
-                    />
-                    <ToolbarButton
-                      onClick={() => tiptap.chain().focus().redo().run()}
-                      icon={Redo2}
-                      label="Redo"
-                    />
-                    <div className="ml-auto flex items-center gap-1">
+                  <div className="sticky top-0 z-20 -mx-px rounded-t-lg border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
+                    <DocumentToolbar editor={tiptap} />
+                    <div className="flex items-center gap-1 border-t border-gray-100 px-3 py-1.5">
                       <SectionMenu onInsert={insertSection} />
                       <PlaceholderMenu onInsert={insertPlaceholder} />
                     </div>
@@ -1511,36 +1477,6 @@ function DocumentEditorSurface({
       </div>
     </div>
   );
-}
-
-function ToolbarButton({
-  active,
-  onClick,
-  icon: Icon,
-  label,
-}: {
-  active?: boolean;
-  onClick: () => void;
-  icon: typeof Bold;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      className={`rounded p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground ${
-        active ? "bg-muted text-foreground" : ""
-      }`}
-    >
-      <Icon className="h-4 w-4" />
-    </button>
-  );
-}
-
-function Divider() {
-  return <span className="mx-1 h-5 w-px bg-border" />;
 }
 
 function PlaceholderMenu({ onInsert }: { onInsert: (token: string) => void }) {
