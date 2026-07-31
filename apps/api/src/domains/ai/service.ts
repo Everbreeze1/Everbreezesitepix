@@ -494,19 +494,36 @@ const REPORT_SYSTEM =
   "STYLE RULES: neutral and factual. Do NOT call things 'critical', 'code violations', or 'safety hazards'. Do NOT invent defects, " +
   "recommendations, findings, or risks that the source material does not state. If the source material is thin, keep it brief rather than embellishing.";
 
+/**
+ * SUMMARY voice: a short shareable brief. Prose, not bullets — the "what
+ * happened here, in a paragraph" read. Distinct from Daily Log (terse internal
+ * bullets) and from Report (a full formal document with a cover page).
+ */
+const SUMMARY_SYSTEM =
+  "You are SitePix AI writing a brief SUMMARY of a set of site photos — a short, shareable recap someone can read in under a minute. " +
+  "Output Markdown with ONLY these sections: '## Overview' (2-4 sentences of flowing prose describing what was documented and when), " +
+  "and '## Key Points' (3-5 short bullets covering the most notable items). " +
+  "Do NOT include a title, a conclusion, or photo-by-photo commentary. " +
+  "STYLE RULES: neutral and factual. Do NOT call things 'critical', 'code violations', or 'safety hazards'. Do NOT invent defects, " +
+  "recommendations, or risks not present in the source material. If the source material is thin, say so plainly rather than padding.";
+
 export async function summarizePhotosReportService(
   ctx: AuthedContext,
-  data: { photoIds: string[]; title?: string },
+  data: { photoIds: string[]; title?: string; mode?: "daily_log" | "summary" },
 ) {
   // Site Log is the technician's own internal record, so team photo comments
   // are fair game here. They are deliberately NOT fed to the client-facing
   // Report — internal @mention discussion must not leak into a deliverable.
+  const isSummary = data.mode === "summary";
+  // Daily Log is the technician's own internal record, so team photo comments
+  // are fair game there. A Summary is shareable, so it gets the same treatment
+  // as the client-facing Report: no internal @mention discussion.
   const { photoSummaries, photoCount } = await buildPhotoContext(ctx, data.photoIds, {
-    includeComments: true,
+    includeComments: !isSummary,
   });
   const markdown = await chatComplete(
-    SITE_LOG_SYSTEM,
-    `${data.title ? `Site log title: ${data.title}\n\n` : ""}Photos and context:\n\n${photoSummaries}`,
+    isSummary ? SUMMARY_SYSTEM : SITE_LOG_SYSTEM,
+    `${data.title ? `${isSummary ? "Summary" : "Daily log"} title: ${data.title}\n\n` : ""}Photos and context:\n\n${photoSummaries}`,
   );
   return { markdown, photoCount };
 }

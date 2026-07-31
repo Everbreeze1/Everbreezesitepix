@@ -165,6 +165,7 @@ export function ProjectDetailPage() {
     isTeam,
     tier,
     canUseWalkthroughs,
+    canUseManualPhotoReport,
     refresh: refreshSubscription,
     bumpAiAnalysesUsed,
   } = useSubscription();
@@ -2228,19 +2229,26 @@ export function ProjectDetailPage() {
                   </Button>
                 }
               />
-              <Button
-                variant="outline"
-                onClick={() => void generateReport()}
-                disabled={creatingReport}
-                className="h-10 rounded-lg border-sidebar-foreground/15 bg-sidebar-foreground/10 px-4 font-bold text-sidebar-foreground hover:bg-sidebar-foreground/20 hover:text-sidebar-foreground"
-              >
-                {creatingReport ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <FileText className="mr-2 h-4 w-4 text-sidebar-ring" />
-                )}
-                Photo report
-              </Button>
+              {/*
+                Starter-tier only. Pro/Team generate documents with AI via
+                "Create document", so the hand-built photo report is clutter
+                for them — see canUseManualPhotoReport in use-subscription.
+              */}
+              {canUseManualPhotoReport && (
+                <Button
+                  variant="outline"
+                  onClick={() => void generateReport()}
+                  disabled={creatingReport}
+                  className="h-10 rounded-lg border-sidebar-foreground/15 bg-sidebar-foreground/10 px-4 font-bold text-sidebar-foreground hover:bg-sidebar-foreground/20 hover:text-sidebar-foreground"
+                >
+                  {creatingReport ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="mr-2 h-4 w-4 text-sidebar-ring" />
+                  )}
+                  Create Report
+                </Button>
+              )}
               <ProjectActionsMenu
                 project={project}
                 photos={photos}

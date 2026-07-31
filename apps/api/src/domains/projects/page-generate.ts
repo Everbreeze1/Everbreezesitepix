@@ -280,7 +280,11 @@ export async function generateProjectPageService(
     // bullets, photos — deliberately not dressed up as a client deliverable.
     let bodyHtml = "";
     try {
-      const res = await summarizePhotosReportService(ctx, { photoIds: data.photoIds, title });
+      const res = await summarizePhotosReportService(ctx, {
+        photoIds: data.photoIds,
+        title,
+        mode: data.template === "summary" ? "summary" : "daily_log",
+      });
       // The prompt is told not to emit a title, but strip one defensively —
       // the page already has a title field.
       bodyHtml = markdownToHtml(res.markdown ?? "").replace(/^<h1>.*?<\/h1>/, "");

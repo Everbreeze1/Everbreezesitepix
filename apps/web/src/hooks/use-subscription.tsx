@@ -121,6 +121,12 @@ export function useSubscription() {
     canUseTeamFeatures: isPro,
     canUseWatermark: isPro,
     canUseWalkthroughs: isPro,
+    // The manual photo-report builder is a Starter-tier tool. Pro/Team generate
+    // documents with AI instead, so surfacing the manual builder to them is
+    // clutter. Expressed as `!isPro` rather than `isStarter` so the button only
+    // ever *disappears* for Pro/Team — an inactive or still-loading
+    // subscription keeps it rather than silently losing the feature.
+    canUseManualPhotoReport: !isPro,
     limits,
     aiAnalysesUsed,
     aiAnalysesRemaining: Infinity,
