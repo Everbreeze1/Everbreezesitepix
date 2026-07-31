@@ -410,15 +410,27 @@ export async function getProjectPageService(ctx: AuthedContext, data: z.infer<ty
     tokensToPills(row.content_html, row.project_id, row.created_by).then((h) =>
       resolvePageImages(h ?? row.content_html, ctx.supabase),
     ),
-    resolveHeaderFooterTokens(row.header_html, row.project_id, row.created_by).then((h) =>
+    // Header/footer get pills for the same reason, and to fix a real data
+    // loss: these used to resolve to plain text, which the editor's autosave
+    // then wrote straight back — baking today's company name in permanently
+    // and silently killing the merge field.
+    tokensToPills(row.header_html, row.project_id, row.created_by).then((h) =>
       h ? resolvePageImages(h, ctx.supabase) : h,
     ),
-    resolveHeaderFooterTokens(row.footer_html, row.project_id, row.created_by).then((h) =>
+    tokensToPills(row.footer_html, row.project_id, row.created_by).then((h) =>
       h ? resolvePageImages(h, ctx.supabase) : h,
     ),
   ]);
+  // Resolved values so "Insert field" can drop in a pill showing the real
+  // company/project name immediately, instead of raw `{{token}}` source.
+  const tokenValues = await loadTokenValues(row.project_id, row.created_by);
+  const tokens: Record<string, { label: string; empty: boolean }> = {};
+  for (const [key, value] of Object.entries(tokenValues)) {
+    tokens[key] = { label: value || PLACEHOLDER_LABELS[key] || key, empty: !value };
+  }
   return {
     page: { ...row, content_html: contentHtml, header_html: headerHtml, footer_html: footerHtml },
+    tokens,
   };
 }
 
@@ -439,8 +451,8 @@ export async function updateProjectPageService(
   // the first autosave would bake today's company name into the document and
   // the merge field would stop tracking project/profile changes.
   if (data.contentHtml !== undefined) patch.content_html = pillsToTokens(data.contentHtml);
-  if (data.headerHtml !== undefined) patch.header_html = data.headerHtml;
-  if (data.footerHtml !== undefined) patch.footer_html = data.footerHtml;
+  if (data.headerHtml !== undefined) patch.header_html = pillsToTokens(data.headerHtml);
+  if (data.footerHtml !== undefined) patch.footer_html = pillsToTokens(data.footerHtml);
   if (Object.keys(patch).length === 0) return { ok: true };
 
   const { error } = await (ctx.supabase as any).from("project_pages").update(patch).eq("id", data.pageId);

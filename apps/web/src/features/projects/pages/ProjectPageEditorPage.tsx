@@ -144,6 +144,8 @@ export function ProjectPageEditorPage() {
   const [snippets, setSnippets] = useState<TextSnippet[]>([]);
   const [snippetsLoading, setSnippetsLoading] = useState(false);
   const [snippetSearch, setSnippetSearch] = useState("");
+  /** Resolved merge-field values, so "Insert field" shows the real company/project name. */
+  const [tokenValues, setTokenValues] = useState<TokenValues>({});
   const [exporting, setExporting] = useState(false);
   const [, forceToolbarUpdate] = useState(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -211,6 +213,7 @@ export function ProjectPageEditorPage() {
           sessionStorage.removeItem(freshKey);
         }
         setTitle(res.page.title);
+        setTokenValues((res as { tokens?: TokenValues }).tokens ?? {});
         setHeaderHtml(res.page.header_html ?? "");
         setFooterHtml(res.page.footer_html ?? "");
         setShowHeader(!!res.page.header_html);
@@ -527,6 +530,7 @@ export function ProjectPageEditorPage() {
         <div className="rounded-sm border border-border bg-card p-10 shadow-sm sm:p-14">
           <RunningBlock
             kind="header"
+            tokens={tokenValues}
             enabled={showHeader}
             value={headerHtml}
             onChange={(v) => {
@@ -548,6 +552,7 @@ export function ProjectPageEditorPage() {
 
           <RunningBlock
             kind="footer"
+            tokens={tokenValues}
             enabled={showFooter}
             value={footerHtml}
             onChange={(v) => {
@@ -731,16 +736,36 @@ export function ProjectPageEditorPage() {
 }
 
 const FIELD_TOKENS = [
-  { label: "Company name", token: "{{company}}" },
-  { label: "Project name", token: "{{project_name}}" },
-  { label: "Project address", token: "{{project_address}}" },
-  { label: "Today's date", token: "{{date}}" },
+  { label: "Company name", key: "company" },
+  { label: "Project name", key: "project_name" },
+  { label: "Project address", key: "project_address" },
+  { label: "Today's date", key: "date" },
 ];
 
-/** Appends a field token into a header/footer's single `<p>` — resolved server-side on every read, so renaming the project/company later updates it automatically. */
-function appendToken(current: string, token: string): string {
-  if (/<\/p>\s*$/.test(current)) return current.replace(/<\/p>\s*$/, ` ${token}</p>`);
-  return `<p>${token}</p>`;
+export type TokenValues = Record<string, { label: string; empty: boolean }>;
+
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Markup for an inserted merge field. It shows the *resolved* value (the actual
+ * company name), never `{{company}}` — nobody wants to see template source in
+ * their document. The token itself rides along in `data-token`, and the API
+ * converts the pill back to `{{company}}` on save, so the field stays live and
+ * renaming the company still updates every page.
+ */
+function tokenPillHtml(key: string, values: TokenValues): string {
+  const resolved = values[key];
+  const label = resolved?.label ?? key;
+  const empty = resolved?.empty ? ` data-empty="true"` : "";
+  return `<span data-token="${escapeAttr(key)}" data-label="${escapeAttr(label)}"${empty}>${escapeAttr(label)}</span>`;
+}
+
+/** Appends a field into a header/footer's single `<p>`. */
+function appendToken(current: string, html: string): string {
+  if (/<\/p>\s*$/.test(current)) return current.replace(/<\/p>\s*$/, ` ${html}</p>`);
+  return `<p>${html}</p>`;
 }
 
 /**
@@ -752,6 +777,7 @@ function RunningBlock({
   kind,
   enabled,
   value,
+  tokens,
   onChange,
   onEnable,
   onRemove,
@@ -759,6 +785,7 @@ function RunningBlock({
   kind: "header" | "footer";
   enabled: boolean;
   value: string;
+  tokens: TokenValues;
   onChange: (html: string) => void;
   onEnable: () => void;
   onRemove: () => void;
@@ -805,7 +832,10 @@ function RunningBlock({
             className="border-none bg-transparent"
           />
         </div>
-        <FieldTokenMenu onInsert={(token) => onChange(appendToken(value, token))} />
+        <FieldTokenMenu
+          tokens={tokens}
+          onInsert={(key) => onChange(appendToken(value, tokenPillHtml(key, tokens)))}
+        />
         <button
           type="button"
           onClick={onRemove}
@@ -820,7 +850,13 @@ function RunningBlock({
   );
 }
 
-function FieldTokenMenu({ onInsert }: { onInsert: (token: string) => void }) {
+function FieldTokenMenu({
+  onInsert,
+  tokens,
+}: {
+  onInsert: (key: string) => void;
+  tokens: TokenValues;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -828,12 +864,22 @@ function FieldTokenMenu({ onInsert }: { onInsert: (token: string) => void }) {
           Insert field
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {FIELD_TOKENS.map((f) => (
-          <DropdownMenuItem key={f.token} onClick={() => onInsert(f.token)}>
-            {f.label}
-          </DropdownMenuItem>
-        ))}
+      <DropdownMenuContent align="end" className="w-60">
+        {FIELD_TOKENS.map((f) => {
+          const resolved = tokens[f.key];
+          return (
+            <DropdownMenuItem key={f.key} onClick={() => onInsert(f.key)}>
+              <span className="min-w-0">
+                <span className="block font-bold">{f.label}</span>
+                {/* Preview of what will actually be inserted, so it's obvious
+                    this drops in the real value and not a code token. */}
+                <span className="block truncate text-xs text-muted-foreground">
+                  {resolved && !resolved.empty ? resolved.label : "Not set — add it in Settings"}
+                </span>
+              </span>
+            </DropdownMenuItem>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );

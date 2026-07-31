@@ -293,9 +293,48 @@ async function requireActiveSub(supabase: AuthedContext["supabase"], userId: str
   if (!isActive) throw new Error("Auto-reports require a paid plan. Upgrade to Pro or Team.");
 }
 
-export async function summarizePhotosReportService(
+/** Groups timestamps into a human timeline: how many visits, over what span. */
+function describeTimeline(takenAt: Array<string | null>): string {
+  const dates = takenAt
+    .filter((t): t is string => !!t)
+    .map((t) => new Date(t))
+    .filter((d) => !Number.isNaN(d.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime());
+  if (!dates.length) return "";
+
+  const dayKey = (d: Date) => d.toDateString();
+  const days = Array.from(new Set(dates.map(dayKey)));
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  const fmtDate = (d: Date) => d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  const fmtTime = (d: Date) => d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+
+  if (days.length === 1) {
+    return `All photos were captured on ${fmtDate(first)}, between ${fmtTime(first)} and ${fmtTime(last)} — a single visit.`;
+  }
+  return (
+    `Photos span ${days.length} separate days, from ${fmtDate(first)} to ${fmtDate(last)}. ` +
+    `Treat each day as a distinct visit when describing sequence.`
+  );
+}
+
+/**
+ * Assembles the factual context block the drafting prompts work from.
+ *
+ * Covers what the field actually records about a job: photo metadata (caption,
+ * tags, capture time), project info, the timeline the photos describe, spoken
+ * notes narrated during a walkthrough, and any completed per-photo AI analysis.
+ * Shared by the site-log and report prompts so both reason over identical
+ * material.
+ *
+ * Photos keep the user's chosen order (that's the document's order), but the
+ * timeline is derived from real capture times and stated separately — so the
+ * model can narrate sequence without the document being reshuffled.
+ */
+async function buildPhotoContext(
   ctx: AuthedContext,
-  data: { photoIds: string[]; title?: string },
+  photoIds: string[],
+  opts: { includeComments?: boolean } = {},
 ) {
   const { supabase, userId } = ctx;
   if (!aiKeyConfigured()) throw new Error("AI is not configured");
@@ -303,30 +342,70 @@ export async function summarizePhotosReportService(
 
   const { data: photos } = await supabase
     .from("photos")
-    .select("id, caption, taken_at, storage_path, project_id")
-    .in("id", data.photoIds);
+    .select("id, caption, taken_at, created_at, storage_path, project_id")
+    .in("id", photoIds);
   if (!photos?.length) throw new Error("No photos found");
 
   const projectIds = Array.from(new Set((photos as any[]).map((p: any) => p.project_id).filter(Boolean))) as string[];
-  const { data: projects } = await supabase
-    .from("projects")
-    .select("id, name, street, city, state")
-    .in("id", projectIds.length ? projectIds : ["00000000-0000-0000-0000-000000000000"]);
-  const projectById = new Map(((projects as any[]) ?? []).map((p: any) => [p.id, p]));
+  const safeIds = projectIds.length ? projectIds : ["00000000-0000-0000-0000-000000000000"];
 
-  const { data: analyses } = await supabase
-    .from("ai_analyses")
-    .select("photo_id, ocr_text, labels, defects, report_text, recommendations")
-    .in("photo_id", data.photoIds)
-    .eq("status", "completed");
+  const [{ data: projects }, { data: analyses }, { data: tagRows }, { data: walkRows }, commentRes] =
+    await Promise.all([
+      supabase.from("projects").select("id, name, street, city, state").in("id", safeIds),
+      supabase
+        .from("ai_analyses")
+        .select("photo_id, ocr_text, labels, defects, report_text, recommendations")
+        .in("photo_id", photoIds)
+        .eq("status", "completed"),
+      (supabase as any).from("photo_tags").select("photo_id, tags(name)").in("photo_id", photoIds),
+      // Narration captured while walking the site — this is how a Report or
+      // Site Log "pulls from a walkthrough": the spoken note rides on the photo.
+      (supabase as any)
+        .from("walkthrough_photos")
+        .select("photo_id, spoken_note")
+        .in("photo_id", photoIds),
+      opts.includeComments
+        ? (supabase as any)
+            .from("photo_comments")
+            .select("photo_id, body, created_at")
+            .in("photo_id", photoIds)
+            .order("created_at", { ascending: true })
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+
+  const projectById = new Map(((projects as any[]) ?? []).map((p: any) => [p.id, p]));
   const analysisByPhoto = new Map(((analyses as any[]) ?? []).map((a: any) => [a.photo_id, a]));
+
+  const tagsByPhoto = new Map<string, string[]>();
+  for (const row of ((tagRows as any[]) ?? [])) {
+    const name = row?.tags?.name;
+    if (!name) continue;
+    tagsByPhoto.set(row.photo_id, [...(tagsByPhoto.get(row.photo_id) ?? []), name]);
+  }
+
+  const notesByPhoto = new Map<string, string>();
+  for (const row of ((walkRows as any[]) ?? [])) {
+    const note = String(row?.spoken_note ?? "").trim();
+    if (note) notesByPhoto.set(row.photo_id, note);
+  }
+
+  const commentsByPhoto = new Map<string, string[]>();
+  for (const row of (((commentRes as any)?.data as any[]) ?? [])) {
+    const body = String(row?.body ?? "").trim();
+    if (!body) continue;
+    commentsByPhoto.set(row.photo_id, [...(commentsByPhoto.get(row.photo_id) ?? []), body]);
+  }
 
   const photoSummaries = (photos as any[]).map((p: any, i: number) => {
     const a = analysisByPhoto.get(p.id);
     const proj = p.project_id ? projectById.get(p.project_id) : undefined;
     const cap = cleanCaption(p.caption);
+    const tags = tagsByPhoto.get(p.id) ?? [];
+    const note = notesByPhoto.get(p.id);
+    const comments = commentsByPhoto.get(p.id) ?? [];
     return [
       `Photo ${i + 1}${cap ? ` — ${cap}` : ""}`,
+      cap ? null : `(no caption recorded)`,
       proj
         ? `Project: ${proj.name}${
             [proj.street, proj.city, proj.state].filter(Boolean).length
@@ -334,7 +413,10 @@ export async function summarizePhotosReportService(
               : ""
           }`
         : null,
+      tags.length ? `Tags: ${tags.join(", ")}` : null,
       p.taken_at ? `Taken: ${new Date(p.taken_at).toLocaleString()}` : null,
+      note ? `Spoken note during walkthrough: "${note}"` : null,
+      comments.length ? `Team notes: ${comments.join(" | ")}` : null,
       a?.report_text ? `Findings: ${a.report_text}` : null,
       a?.defects?.length ? `Defects: ${JSON.stringify(a.defects)}` : null,
       a?.recommendations?.length ? `Recommendations: ${(a.recommendations as string[]).join("; ")}` : null,
@@ -342,6 +424,29 @@ export async function summarizePhotosReportService(
     ].filter(Boolean).join("\n");
   }).join("\n\n---\n\n");
 
+  const proj = projectById.get(projectIds[0]);
+  const timeline = describeTimeline((photos as any[]).map((p: any) => p.taken_at ?? p.created_at));
+  const allTags = Array.from(new Set(Array.from(tagsByPhoto.values()).flat()));
+  const overview = [
+    proj ? `Project: ${proj.name}` : null,
+    proj && [proj.street, proj.city, proj.state].filter(Boolean).length
+      ? `Address: ${[proj.street, proj.city, proj.state].filter(Boolean).join(", ")}`
+      : null,
+    `Photos in this document: ${photos.length}`,
+    timeline || null,
+    allTags.length ? `Tags across these photos: ${allTags.join(", ")}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    photoSummaries: `PROJECT & TIMELINE\n${overview}\n\n=== PHOTOS ===\n\n${photoSummaries}`,
+    photoCount: photos.length,
+  };
+}
+
+/** Shared chat call — returns the assistant's message text. */
+async function chatComplete(system: string, user: string): Promise<string> {
   const ep = chatEndpoint(CHAT_MODEL);
   const res = await fetch(ep.url, {
     method: "POST",
@@ -349,8 +454,8 @@ export async function summarizePhotosReportService(
     body: JSON.stringify({
       model: ep.model,
       messages: [
-        { role: "system", content: "You are SitePix AI, drafting a clean daily SITE LOG from a set of site photos. Your job is to SUMMARIZE what was captured — the photo captions, tags, project context, and any spoken notes — into a clear, professional recap. Structure the Markdown as: # Title, ## Overview (2-3 short sentences describing what the visit covered), ## Photo Notes (bulleted, one bullet per photo, referencing the caption/tag/context factually), ## Notes & Follow-ups (only if the source material explicitly mentions them). STYLE RULES: Keep the tone neutral, factual, and summary-focused — like a site log entry, not an engineering diagnosis. Do NOT call things 'critical', 'code violations', 'safety hazards', or 'severity: high'. Do NOT invent defects, recommendations, or risks. Do NOT add opinions the source material does not state. If prior AI defect/recommendation notes are included, mention them only as brief observations, not as diagnostic conclusions. Use short bullets and clean spacing." },
-        { role: "user", content: `${data.title ? `Report title: ${data.title}\n\n` : ""}Photos and context:\n\n${photoSummaries}` },
+        { role: "system", content: system },
+        { role: "user", content: user },
       ],
     }),
   });
@@ -361,8 +466,84 @@ export async function summarizePhotosReportService(
     throw new Error(`AI error ${res.status}: ${t.slice(0, 200)}`);
   }
   const json = await res.json();
-  const markdown = json.choices?.[0]?.message?.content ?? "";
-  return { markdown, photoCount: photos.length };
+  return json.choices?.[0]?.message?.content ?? "";
+}
+
+/**
+ * SITE LOG voice: the technician's own quick record of a visit. Terse bullets,
+ * minimal ceremony — explicitly not a customer-facing document.
+ */
+const SITE_LOG_SYSTEM =
+  "You are SitePix AI writing a technician's own SITE LOG — a fast internal record of a site visit, NOT a customer-facing report. " +
+  "Output Markdown with ONLY these sections: '## What was done' (3-6 terse bullets, fragments not full sentences, e.g. '- Replaced condensate pump, unit 4B'), " +
+  "and '## Follow-ups' (bullets, ONLY if the source material explicitly mentions outstanding work; omit the whole section otherwise). " +
+  "Do NOT write an intro, a title, a conclusion, or any prose paragraphs. Do NOT pad. Keep each bullet under 12 words where possible. " +
+  "STYLE RULES: neutral and factual. Do NOT call things 'critical', 'code violations', or 'safety hazards'. Do NOT invent defects, " +
+  "recommendations, or risks not present in the source material.";
+
+/**
+ * REPORT voice: a formal, client-facing document. Produces the two narrative
+ * bookends — an opening summary and a closing conclusion — which the page
+ * generator places around the photo sections.
+ */
+const REPORT_SYSTEM =
+  "You are SitePix AI drafting a formal, client-facing site REPORT. Produce EXACTLY two Markdown sections and nothing else:\n" +
+  "## Executive Summary\n<2-4 full sentences describing the scope of the visit and what was documented>\n\n" +
+  "## Conclusion\n<2-3 full sentences closing out the report: what the documentation shows overall and any stated next steps>\n\n" +
+  "Write in complete, professional prose — no bullets. Do NOT include a title, photo-by-photo notes, or any other section. " +
+  "STYLE RULES: neutral and factual. Do NOT call things 'critical', 'code violations', or 'safety hazards'. Do NOT invent defects, " +
+  "recommendations, findings, or risks that the source material does not state. If the source material is thin, keep it brief rather than embellishing.";
+
+export async function summarizePhotosReportService(
+  ctx: AuthedContext,
+  data: { photoIds: string[]; title?: string },
+) {
+  // Site Log is the technician's own internal record, so team photo comments
+  // are fair game here. They are deliberately NOT fed to the client-facing
+  // Report — internal @mention discussion must not leak into a deliverable.
+  const { photoSummaries, photoCount } = await buildPhotoContext(ctx, data.photoIds, {
+    includeComments: true,
+  });
+  const markdown = await chatComplete(
+    SITE_LOG_SYSTEM,
+    `${data.title ? `Site log title: ${data.title}\n\n` : ""}Photos and context:\n\n${photoSummaries}`,
+  );
+  return { markdown, photoCount };
+}
+
+/**
+ * Drafts the narrative bookends for a formal report. Returns raw Markdown for
+ * each; a missing section simply comes back empty so the caller can omit it
+ * rather than printing an empty heading.
+ */
+export async function draftReportNarrativeService(
+  ctx: AuthedContext,
+  data: { photoIds: string[]; title?: string },
+): Promise<{ summary: string; conclusion: string }> {
+  const { photoSummaries } = await buildPhotoContext(ctx, data.photoIds);
+  const markdown = await chatComplete(
+    REPORT_SYSTEM,
+    `${data.title ? `Report title: ${data.title}\n\n` : ""}Photos and context:\n\n${photoSummaries}`,
+  );
+  return {
+    summary: extractSection(markdown, "Executive Summary"),
+    conclusion: extractSection(markdown, "Conclusion"),
+  };
+}
+
+/**
+ * Pulls the body of a `## Heading` block out of the model's Markdown.
+ *
+ * The lookahead terminates at the next heading or at the absolute end of the
+ * string — `$(?![\s\S])` rather than `\z`, which JavaScript does not support
+ * (and which silently matched nothing, returning every section empty).
+ */
+function extractSection(markdown: string, heading: string): string {
+  const re = new RegExp(
+    `^#{1,3}\\s*${heading}\\s*$([\\s\\S]*?)(?=^#{1,3}\\s|$(?![\\s\\S]))`,
+    "im",
+  );
+  return re.exec(markdown ?? "")?.[1]?.trim() ?? "";
 }
 
 export async function describeSiteLogPhotosService(ctx: AuthedContext, data: { photoIds: string[] }) {

@@ -18,7 +18,8 @@ import {
 import { SelectPhotosForPageDialog } from "@/features/projects/components/SelectPhotosForPageDialog";
 import { ChoosePageTemplateDialog } from "@/features/projects/components/ChoosePageTemplateDialog";
 
-type AiTemplate = "daily_log" | "summary" | "report";
+/** "summary" is intentionally absent — that flow now lives in Walkthroughs. */
+type AiTemplate = "daily_log" | "report";
 
 /**
  * The single place a project document gets generated — Daily Log, Summary,
@@ -108,29 +109,30 @@ export function GenerateDocumentMenu({
           <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
             Generate from this project
           </DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => setAiTemplate("summary")}>
-            <Sparkles className="mr-2 h-4 w-4 text-primary" />
+          <DropdownMenuItem onClick={() => setAiTemplate("report")}>
+            <ClipboardList className="mr-2 h-4 w-4 text-primary" />
             <span>
-              <span className="block font-bold">Summary</span>
-              <span className="block text-xs text-muted-foreground">AI brief from your photos</span>
+              <span className="block font-bold">Report</span>
+              <span className="block text-xs text-muted-foreground">
+                Client-ready: title page, summary, photo sections, conclusion
+              </span>
             </span>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setAiTemplate("daily_log")}>
             <Sparkles className="mr-2 h-4 w-4 text-primary" />
             <span>
-              <span className="block font-bold">Daily Log</span>
+              <span className="block font-bold">Site Log</span>
               <span className="block text-xs text-muted-foreground">
-                AI overview of today with next steps
+                Quick internal bullets for your own record
               </span>
             </span>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setAiTemplate("report")}>
-            <ClipboardList className="mr-2 h-4 w-4" />
-            <span>
-              <span className="block font-bold">Report</span>
-              <span className="block text-xs text-muted-foreground">Insert layout and add photos</span>
-            </span>
-          </DropdownMenuItem>
+          {/*
+            "Summary" deliberately isn't here. It duplicated Site Log for
+            photo-only input; the summary that earns its keep is the spoken
+            walkthrough recap, which Walkthroughs generates automatically on
+            finish from the recording's transcript and snapshots.
+          */}
 
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setTemplatePickerOpen(true)}>
@@ -155,9 +157,7 @@ export function GenerateDocumentMenu({
       <SelectPhotosForPageDialog
         open={!!aiTemplate}
         projectId={projectId}
-        templateLabel={
-          aiTemplate === "daily_log" ? "Daily Log" : aiTemplate === "summary" ? "Summary" : "Report"
-        }
+        templateLabel={aiTemplate === "daily_log" ? "Site Log" : "Report"}
         generating={generating}
         onCancel={() => setAiTemplate(null)}
         onGenerate={handleGenerate}

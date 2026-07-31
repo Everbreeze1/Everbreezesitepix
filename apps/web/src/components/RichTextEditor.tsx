@@ -4,6 +4,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { Bold, Italic, List, ListOrdered, Heading1, Heading2, Heading3 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { MergeToken } from "@/lib/tiptap-fill-field";
 
 interface Props {
   value: string;
@@ -43,6 +44,10 @@ export function RichTextEditor({
         horizontalRule: false,
       }),
       Placeholder.configure({ placeholder: placeholder ?? "" }),
+      // Header/footer merge fields render as a pill showing the resolved
+      // company/project value. Without this node registered, Tiptap would
+      // strip the span on parse and the token would be lost on the next save.
+      MergeToken,
     ],
     content: value || "",
     editorProps: {

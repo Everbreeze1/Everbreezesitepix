@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
-import { summarizePhotosReportService } from "../ai/service";
+import { summarizePhotosReportService, draftReportNarrativeService } from "../ai/service";
+import { cleanCaption } from "@sitepix/shared";
 
 /**
  * Minimal Markdown → HTML for the constrained subset our AI prompts emit
@@ -94,19 +95,21 @@ export interface GeneratedPhoto {
 /**
  * A caption line per photo, directly beneath its row.
  *
- * Seeded from the photo's own caption so field metadata carries into the
- * document instead of being retyped; photos without one get a visible prompt
- * so there is an obvious place to write a comment. Numbering matches the
- * "Photo N" convention the seeded templates use.
+ * Captions are run through `cleanCaption` first: uploads default the caption to
+ * the source filename (`IMG_1234.JPG`, `sitepix-178155…jpg`), which is not
+ * information — printing it made documents read as though every photo were
+ * annotated when none were. A photo with nothing real recorded says so plainly
+ * instead of showing its filename.
  */
 function captionLineHtml(photos: GeneratedPhoto[], startIndex: number): string {
   return photos
     .map((p, i) => {
       const n = startIndex + i;
-      const text = p.caption?.trim()
-        ? escapeHtml(p.caption.trim())
-        : `<span style="color: rgb(156,163,175)">Add a comment</span>`;
-      return `<p><em><strong>Photo ${n}</strong> &ndash; ${text}</em></p>`;
+      const real = cleanCaption(p.caption);
+      const text = real
+        ? `<em>${escapeHtml(real)}</em>`
+        : `<em style="color: rgb(156,163,175)">No information was recorded for this photo.</em>`;
+      return `<p><strong>Photo ${n}</strong> &ndash; ${text}</p>`;
     })
     .join("");
 }
@@ -146,6 +149,37 @@ function sectionedReportHtml(photos: GeneratedPhoto[]): string {
     );
   }
   return sections.join("");
+}
+
+/**
+ * Title page for a generated report — the same shape as the seeded "Pre-Built
+ * Report" templates: rules top and bottom, oversized centred title, muted
+ * address/date, and a Spacer paragraph sized to push the body onto page two.
+ * (See apps/web/src/lib/tiptap-spacer.ts — an empty `<p style="height:…">` is
+ * deliberate blank space that the PDF renderer honours.)
+ */
+function coverPageHtml(args: {
+  title: string;
+  projectName: string;
+  address: string;
+  today: string;
+  author: string;
+}): string {
+  const line = (text: string, color: string, size?: string) =>
+    text
+      ? `<p style="text-align:center"><span style="${size ? `font-size: ${size}; ` : ""}color: ${color}">${escapeHtml(text)}</span></p>`
+      : "";
+  return (
+    `<hr>` +
+    `<h1 style="text-align:center"><span style="font-size: 34px">${escapeHtml(args.projectName || args.title)}</span></h1>` +
+    line(args.address, "rgb(107,114,128)") +
+    line(args.today, "rgb(156,163,175)") +
+    `<p style="height: 420px"></p>` +
+    (args.author
+      ? `<p style="text-align:center"><span style="font-size: 12px; color: rgb(156,163,175)">Prepared by ${escapeHtml(args.author)}</span></p>`
+      : "") +
+    `<hr>`
+  );
 }
 
 function escapeHtml(s: string): string {
@@ -219,38 +253,54 @@ export async function generateProjectPageService(
   }));
 
   // AI is best-effort: a generation failure must not cost the user their page.
-  let bodyHtml = "";
+  let contentHtml = "";
   let aiFailed: string | null = null;
+
   if (data.template === "report") {
-    bodyHtml = sectionedReportHtml(photos);
-  } else {
+    // Formal, client-facing: title page, opening summary, photo sections,
+    // closing conclusion.
+    let summary = "";
+    let conclusion = "";
     try {
-      const res = await summarizePhotosReportService(ctx, { photoIds: data.photoIds, title });
-      const html = markdownToHtml(res.markdown ?? "");
-      // The AI emits its own `# Title` heading; the page already has a title field.
-      bodyHtml = html.replace(/^<h1>.*?<\/h1>/, "");
+      const res = await draftReportNarrativeService(ctx, { photoIds: data.photoIds, title });
+      summary = markdownToHtml(res.summary);
+      conclusion = markdownToHtml(res.conclusion);
     } catch (e: any) {
       aiFailed = e?.message ?? "AI unavailable";
-      bodyHtml = `<h2>Overview</h2><p></p>`;
     }
-    bodyHtml += photoGridHtml(photos);
+    contentHtml =
+      coverPageHtml({ title, projectName, address, today, author }) +
+      `<h2>Executive Summary</h2>` +
+      (summary || `<p></p>`) +
+      sectionedReportHtml(photos) +
+      `<h2>Conclusion</h2>` +
+      (conclusion || `<p></p>`);
+  } else {
+    // Site log: the technician's own quick record. Compact header, terse
+    // bullets, photos — deliberately not dressed up as a client deliverable.
+    let bodyHtml = "";
+    try {
+      const res = await summarizePhotosReportService(ctx, { photoIds: data.photoIds, title });
+      // The prompt is told not to emit a title, but strip one defensively —
+      // the page already has a title field.
+      bodyHtml = markdownToHtml(res.markdown ?? "").replace(/^<h1>.*?<\/h1>/, "");
+    } catch (e: any) {
+      aiFailed = e?.message ?? "AI unavailable";
+      bodyHtml = `<h2>What was done</h2><ul><li><p></p></li></ul>`;
+    }
+    const meta = [
+      projectName ? `<strong>${escapeHtml(projectName)}</strong>` : "",
+      address ? escapeHtml(address) : "",
+      escapeHtml(today),
+      author ? escapeHtml(author) : "",
+    ]
+      .filter(Boolean)
+      .join(" &middot; ");
+    contentHtml =
+      `<p><span style="color: rgb(107,114,128)">${meta}</span></p>` +
+      bodyHtml +
+      photoGridHtml(photos);
   }
-
-  const header =
-    data.template === "daily_log"
-      ? `<p><strong>Project Name:</strong> ${escapeHtml(projectName)}</p>` +
-        `<p><strong>Project Address:</strong> ${escapeHtml(address)}</p>` +
-        `<p><strong>Summary Date:</strong> ${escapeHtml(today)}</p>` +
-        (author ? `<p><strong>Takers:</strong> ${escapeHtml(author)}</p>` : "")
-      : "";
-
-  const footer =
-    data.template === "daily_log"
-      ? `<h2>Remaining To-Dos</h2><ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Add a to-do here</p></li></ul>` +
-        `<h2>Notes</h2><p>Add any additional notes here.</p>`
-      : "";
-
-  const contentHtml = header + bodyHtml + footer;
 
   const { data: row, error } = await (ctx.supabase as any)
     .from("project_pages")
