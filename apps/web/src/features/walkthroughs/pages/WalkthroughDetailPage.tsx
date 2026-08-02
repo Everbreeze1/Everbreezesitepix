@@ -32,6 +32,8 @@ import { supabase } from "@/integrations/sitepix/client";
 import { sitepixApi } from "@/lib/sitepix-api";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
+import { useSubscription } from "@/hooks/use-subscription";
+import { UpgradeDialog } from "@/components/UpgradeDialog";
 import {
   generateWalkthroughReport,
   setWalkthroughShare,
@@ -67,6 +69,9 @@ export function WalkthroughDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const confirm = useConfirm();
+  const { canUseAutoReports, autoReportsUsed, autoReportsLimit, autoReportsRemaining, bumpAutoReportsUsed } =
+    useSubscription();
+  const [autoReportUpgradeOpen, setAutoReportUpgradeOpen] = useState(false);
   const [walk, setWalk] = useState<Walkthrough | null>(null);
   const [projectName, setProjectName] = useState<string>("");
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
@@ -264,14 +269,22 @@ export function WalkthroughDetailPage() {
 
   const onRegenerate = async () => {
     if (!walk) return;
+    // Client-side check is only for a fast, friendly upgrade prompt — the
+    // server (assertAutoReportAllowed) is the actual enforcing authority.
+    if (!canUseAutoReports || autoReportsRemaining <= 0) {
+      setAutoReportUpgradeOpen(true);
+      return;
+    }
     setRegenerating(true);
     try {
       const { markdown: md } = await regenerate({ data: { walkthroughId: walk.id } });
       setMarkdown(md);
+      bumpAutoReportsUsed();
       toast.success("Report regenerated");
       void load();
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to regenerate");
+      if (/Auto Reports/i.test(e?.message ?? "")) setAutoReportUpgradeOpen(true);
+      else toast.error(e?.message ?? "Failed to regenerate");
     } finally {
       setRegenerating(false);
     }
@@ -594,7 +607,16 @@ export function WalkthroughDetailPage() {
         </Card>
       ) : (
         <Card className="mt-4 flex items-center justify-between gap-3 p-4">
-          <p className="text-sm text-muted-foreground">No report yet.</p>
+          <div>
+            <p className="text-sm text-muted-foreground">No report yet.</p>
+            {canUseAutoReports && (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {autoReportsLimit === Infinity
+                  ? "Unlimited Auto Reports on Team"
+                  : `${autoReportsUsed}/${autoReportsLimit} Auto Reports used this month`}
+              </p>
+            )}
+          </div>
           <Button size="sm" onClick={onRegenerate} disabled={regenerating}>
             {regenerating ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -605,6 +627,18 @@ export function WalkthroughDetailPage() {
           </Button>
         </Card>
       )}
+
+      <UpgradeDialog
+        open={autoReportUpgradeOpen}
+        onOpenChange={setAutoReportUpgradeOpen}
+        feature="Auto Reports"
+        description={
+          !canUseAutoReports
+            ? "Auto Reports (AI reports generated from a walkthrough's narration and photos) are a Pro and Team feature. Upgrade to generate reports from your walkthroughs."
+            : `You've used all ${autoReportsLimit} Auto Reports included with Pro this month. Upgrade to Team for unlimited Auto Reports, or wait until next month.`
+        }
+        recommendedPlan={!canUseAutoReports ? "pro" : "team"}
+      />
     </div>
   );
 }

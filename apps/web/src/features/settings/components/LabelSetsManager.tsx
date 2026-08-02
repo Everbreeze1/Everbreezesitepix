@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/EmptyState";
+import { SURFACE_CARD } from "@/components/ui/surface";
 import {
   Loader2,
   Plus,
@@ -313,7 +314,7 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
 
   if (loading) {
     return (
-      <Card className="flex items-center justify-center p-16">
+      <Card className={`${SURFACE_CARD} flex items-center justify-center p-16`}>
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </Card>
     );
@@ -361,7 +362,7 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
             <Plus className="mr-1.5 h-4 w-4" /> New label set
           </Button>
         )}
-        <Card className="overflow-hidden p-0">
+        <Card className={`${SURFACE_CARD} overflow-hidden p-0`}>
           <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
             <span className="text-xs font-medium text-muted-foreground">
               {visibleSets.length} set{visibleSets.length === 1 ? "" : "s"}
@@ -420,7 +421,7 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
       <div className="space-y-4">
         {selected ? (
           <>
-            <Card className="p-5">
+            <Card className={`${SURFACE_CARD} p-5`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold leading-tight">{selected.name}</h2>
@@ -457,7 +458,7 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
               </div>
             </Card>
 
-            <Card className="p-5">
+            <Card className={`${SURFACE_CARD} p-5`}>
               <div className="mb-3 flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-semibold">Labels in this set</h3>
@@ -503,7 +504,7 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
             </Card>
           </>
         ) : (
-          <Card className="p-8 text-center text-sm text-muted-foreground">
+          <Card className={`${SURFACE_CARD} p-8 text-center text-sm text-muted-foreground`}>
             Select a label set on the left.
           </Card>
         )}

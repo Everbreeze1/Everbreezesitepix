@@ -22,6 +22,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/EmptyState";
+import {
+  SectionHeading,
+  SURFACE_BUTTON,
+  SURFACE_CARD_INTERACTIVE,
+} from "@/components/ui/surface";
+import { cn } from "@/lib/utils";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -770,27 +776,42 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   return (
     <div className="space-y-4">
       <ChipStyles />
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <SectionHeading
+        eyebrow="Reusable documents"
+        title="Document templates"
+        description="Word-style templates with dynamic placeholders that auto-fill from project data."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              className={SURFACE_BUTTON}
+              onClick={() => setShowArchived((v) => !v)}
+            >
+              {showArchived ? "Hide archived" : "Show archived"}
+            </Button>
+            {canManage && (
+              <Button variant="outline" className={SURFACE_BUTTON} onClick={loadSampleSiteLogs}>
+                <Sparkles className="h-4 w-4" /> Load sample site logs
+              </Button>
+            )}
+            {canManage && (
+              <Button className={SURFACE_BUTTON} onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4" /> New template
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
+        <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
         <div>
-          <h2 className="text-lg font-semibold">Document templates</h2>
-          <p className="text-sm text-muted-foreground">
-            Word-style templates with dynamic placeholders that auto-fill from project data.
+          <p className="font-semibold">How to use a template</p>
+          <p className="mt-0.5 text-blue-900/80 dark:text-blue-200/80">
+            Open a project → <strong>Documents</strong> → <strong>Create</strong> →{" "}
+            <strong>More Templates</strong>, then pick one to start a new page from it. Templates
+            you create or edit here appear there right away — there's nothing else to publish.
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowArchived((v) => !v)}>
-            {showArchived ? "Hide archived" : "Show archived"}
-          </Button>
-          {canManage && (
-            <Button variant="outline" size="sm" onClick={loadSampleSiteLogs}>
-              <Sparkles className="mr-1 h-4 w-4" /> Load sample site logs
-            </Button>
-          )}
-          {canManage && (
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" /> New template
-            </Button>
-          )}
         </div>
       </div>
 
@@ -808,7 +829,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
           }
         />
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visible.map((t) => {
             const body = parseBody(t.body);
             const preset = STYLE_PRESETS.find((p) => p.key === body.style) ?? STYLE_PRESETS[0];
@@ -817,15 +838,20 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
             // RLS rejects writes to them, so only Duplicate is offered.
             const isExample = t.team_id === null;
             return (
-              <Card key={t.id} className="flex flex-col gap-3 p-4">
+              <Card
+                key={t.id}
+                className={cn(SURFACE_CARD_INTERACTIVE, "flex flex-col gap-3.5 p-5")}
+              >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-start gap-2">
-                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
-                      <Icon className="h-4 w-4" />
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                      <Icon className="h-[18px] w-[18px]" />
                     </div>
                     <div className="min-w-0">
-                      <div className="truncate font-medium">{t.name}</div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="truncate text-[15px] font-bold tracking-tight text-foreground">
+                        {t.name}
+                      </div>
+                      <div className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
                         {preset.label} · {t.fields.length} placeholder
                         {t.fields.length === 1 ? "" : "s"}
                       </div>
@@ -841,13 +867,13 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                     </Badge>
                   ) : null}
                 </div>
-                <div className="rounded border bg-muted/30 p-2 text-[11px] text-muted-foreground line-clamp-3">
+                <div className="rounded-lg border border-border/60 bg-muted/40 p-3 text-[11px] leading-relaxed text-muted-foreground line-clamp-3">
                   {body.html
                     .replace(/<[^>]+>/g, " ")
                     .trim()
                     .slice(0, 180) || "Empty document"}
                 </div>
-                <div className="mt-auto flex flex-wrap gap-1">
+                <div className="mt-auto flex flex-wrap gap-1 border-t border-border/60 pt-3">
                   {canManage && !isExample && (
                     <Button
                       size="sm"

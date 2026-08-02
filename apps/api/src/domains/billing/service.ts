@@ -6,6 +6,9 @@ import type { ServiceContext } from "../../lib/user-context";
 
 const PLAN_VALUES = ["starter", "pro", "team"] as const;
 
+/** Free trial granted on every new subscription, all tiers. */
+const TRIAL_DAYS = 14;
+
 export const createCheckoutSessionInputSchema = z.object({
   plan: z.enum(PLAN_VALUES),
   origin: z.string().url(),
@@ -76,6 +79,9 @@ export async function createCheckoutSessionService(
     cancel_url: `${data.origin}/pricing`,
     metadata: { team_id: team.id, plan: data.plan, interval: data.interval, seats: String(data.seats) },
     subscription_data: {
+      // Every tier advertises the same free trial on /pricing — keep this in
+      // sync with TRIAL_DAYS in apps/web/src/lib/pricing.ts.
+      trial_period_days: TRIAL_DAYS,
       metadata: { team_id: team.id, plan: data.plan, interval: data.interval, seats: String(data.seats) },
     },
     // Our products don't have a Stripe tax_code assigned, which Managed

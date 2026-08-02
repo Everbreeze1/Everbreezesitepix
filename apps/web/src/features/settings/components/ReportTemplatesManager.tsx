@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/EmptyState";
+import { SURFACE_CARD } from "@/components/ui/surface";
 import {
   FileText,
   Loader2,
@@ -316,7 +317,7 @@ export function ReportTemplatesManager({ teamId, canManage }: Props) {
 
   if (loading) {
     return (
-      <Card className="flex items-center justify-center p-16">
+      <Card className={`${SURFACE_CARD} flex items-center justify-center p-16`}>
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </Card>
     );
@@ -363,7 +364,7 @@ export function ReportTemplatesManager({ teamId, canManage }: Props) {
             <Plus className="mr-1.5 h-4 w-4" /> New report template
           </Button>
         )}
-        <Card className="overflow-hidden p-0">
+        <Card className={`${SURFACE_CARD} overflow-hidden p-0`}>
           <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
             <span className="text-xs font-medium text-muted-foreground">
               {visible.length} template{visible.length === 1 ? "" : "s"}
@@ -422,7 +423,7 @@ export function ReportTemplatesManager({ teamId, canManage }: Props) {
             onDelete={() => void remove(selected)}
           />
         ) : (
-          <Card className="flex flex-col items-center justify-center gap-2 p-16 text-center">
+          <Card className={`${SURFACE_CARD} flex flex-col items-center justify-center gap-2 p-16 text-center`}>
             <Sparkles className="h-6 w-6 text-muted-foreground/70" />
             <p className="text-sm font-medium">Select a template</p>
           </Card>
@@ -461,7 +462,7 @@ function TemplatePreview({
   const CoverIcon = cover.icon;
 
   return (
-    <Card className="overflow-hidden p-0">
+    <Card className={`${SURFACE_CARD} overflow-hidden p-0`}>
       <div className="border-b border-border/60 bg-gradient-to-br from-primary/[0.04] via-background to-background px-6 py-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">

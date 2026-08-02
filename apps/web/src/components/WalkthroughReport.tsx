@@ -86,63 +86,48 @@ export function WalkthroughPhotoSteps({ steps }: { steps: WalkthroughPhotoStep[]
           {steps.length} {steps.length === 1 ? "photo" : "photos"}
         </span>
       </div>
-      <ol className="space-y-4">
+      {/* Photo and its note are fused into one card — image on top, note directly
+          beneath with no gap — rather than a side-by-side layout that collapses
+          into an unrelated-looking stack on narrow screens. The offset badge on
+          the photo (not a "Photo N" label) is enough to place it in the walk. */}
+      <ol className="grid gap-4 sm:grid-cols-2">
         {steps.map((step, idx) => {
           const note = step.spoken_note?.trim();
+          const caption = cleanCaption(step.caption);
           return (
             <li
               key={`${step.photo_id}-${idx}`}
-              className="grid gap-4 overflow-hidden rounded-xl border border-border bg-card p-3 shadow-sm sm:grid-cols-[minmax(220px,0.9fr)_minmax(0,1fr)] sm:p-4"
+              className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
             >
-              <div className="overflow-hidden rounded-lg border border-border bg-muted">
+              <div className="relative aspect-[4/3] bg-muted">
                 {step.image_url ? (
                   <img
                     src={step.image_url}
-                    alt={`Walkthrough photo ${idx + 1}`}
+                    alt={note || caption || "Walkthrough photo"}
                     loading="lazy"
                     decoding="async"
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 480px"
-                    className="aspect-[4/3] h-full w-full bg-muted object-cover"
+                    sizes="(max-width: 640px) 100vw, 50vw"
+                    className="h-full w-full object-cover"
                   />
                 ) : (
-                  <div className="flex aspect-[4/3] items-center justify-center text-muted-foreground">
+                  <div className="flex h-full w-full items-center justify-center text-muted-foreground">
                     <ImageOff className="h-6 w-6" />
                   </div>
                 )}
+                <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 font-mono text-[11px] font-medium text-white backdrop-blur-sm">
+                  {formatOffset(step.offset_seconds)}
+                </span>
               </div>
 
-              <div className="flex min-w-0 flex-col justify-between gap-3 py-1">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="inline-flex items-center rounded-full bg-primary px-2.5 py-0.5 font-semibold text-primary-foreground">
-                      Photo {idx + 1}
-                    </span>
-                    <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
-                      {formatOffset(step.offset_seconds)}
-                    </span>
-                    {step.taken_at ? (
-                      <span className="text-muted-foreground">
-                        {new Date(step.taken_at).toLocaleTimeString([], {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    ) : null}
-                  </div>
-                  {note ? (
-                    <blockquote className="mt-3 border-l-2 border-primary/40 pl-3 text-sm italic leading-relaxed text-foreground">
-                      &ldquo;{note}&rdquo;
-                    </blockquote>
-                  ) : (
-                    <p className="mt-3 text-sm italic leading-relaxed text-muted-foreground">
-                      No narration captured near this photo.
-                    </p>
-                  )}
-                </div>
-                {(() => {
-                  const c = cleanCaption(step.caption);
-                  return c ? <p className="truncate text-xs text-muted-foreground">{c}</p> : null;
-                })()}
+              <div className="border-t border-amber-200 bg-amber-50 px-3.5 py-2.5 dark:border-amber-900/40 dark:bg-amber-950/30">
+                {note ? (
+                  <p className="text-sm italic leading-relaxed text-foreground">&ldquo;{note}&rdquo;</p>
+                ) : (
+                  <p className="text-sm italic leading-relaxed text-muted-foreground">
+                    No narration captured near this photo.
+                  </p>
+                )}
+                {caption && <p className="mt-1 text-xs text-muted-foreground">{caption}</p>}
               </div>
             </li>
           );

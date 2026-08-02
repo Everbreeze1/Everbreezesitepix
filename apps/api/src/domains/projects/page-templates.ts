@@ -2,6 +2,39 @@ import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 import { resolvePageTokens, bracketsToFillFields } from "./pages";
 
+const REAL_PHOTO_IMG_RE = /<img\b[^>]*\bdata-photo-id="[0-9a-fA-F-]{36}"[^>]*>/g;
+
+/** Matches the placeholder art in the seeded templates / apps/web/src/lib/tiptap-photo-slot.ts. */
+function slotSvg(label: string): string {
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='220' height='280'>` +
+    `<rect x='0.5' y='0.5' width='219' height='279' rx='6' fill='rgb(244,245,247)' ` +
+    `stroke='rgb(203,208,216)' stroke-dasharray='5 4'/>` +
+    `<text x='110' y='132' font-family='sans-serif' font-size='14' font-weight='700' ` +
+    `fill='rgb(107,114,128)' text-anchor='middle'>${label}</text>` +
+    `<text x='110' y='152' font-family='sans-serif' font-size='11' ` +
+    `fill='rgb(156,163,175)' text-anchor='middle'>Click to add</text>` +
+    `</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * Replaces every real project photo with a generic numbered placeholder slot —
+ * same art the seeded templates ship with — so saving a page as a template
+ * never leaks that project's photos to whoever else picks up the template.
+ * Width/height are carried over from the original tag so the layout (a 2-up
+ * or 4-up photo row) survives unchanged; only the pixels are removed.
+ */
+function stripPhotosToSlots(html: string): string {
+  let n = 0;
+  return html.replace(REAL_PHOTO_IMG_RE, (tag) => {
+    n += 1;
+    const width = /\bwidth="([^"]*)"/.exec(tag)?.[1] ?? "48%";
+    const height = /\bheight="([^"]*)"/.exec(tag)?.[1] ?? "280";
+    return `<img src="${slotSvg(`Photo ${n}`)}" width="${width}" height="${height}" alt="Photo slot ${n}">`;
+  });
+}
+
 export interface DocumentTemplateSummary {
   id: string;
   name: string;
@@ -135,7 +168,9 @@ export async function savePageAsTemplateService(
     .eq("user_id", ctx.userId)
     .maybeSingle();
 
-  const html = page.content_html as string;
+  // Keep the layout (photo rows, section structure) but never carry this
+  // project's actual photos into a reusable template.
+  const html = stripPhotosToSlots(page.content_html as string);
   const fields = Array.from(
     new Set(Array.from(html.matchAll(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi), (m) => m[1].toLowerCase())),
   ).sort();
