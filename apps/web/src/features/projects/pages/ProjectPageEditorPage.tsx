@@ -88,6 +88,7 @@ import {
 import { ProjectImage, isPhotoSlot } from "@/lib/tiptap-project-image";
 import { DocumentToolbar } from "@/features/projects/components/DocumentToolbar";
 import { Spacer } from "@/lib/tiptap-spacer";
+import { InfoPanel } from "@/lib/tiptap-info-panel";
 import { FillField, MergeToken } from "@/lib/tiptap-fill-field";
 import { downloadBase64File } from "@/lib/download-file";
 
@@ -173,6 +174,7 @@ export function ProjectPageEditorPage() {
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       ProjectImage,
       Spacer,
+      InfoPanel,
       FillField,
       MergeToken,
       Table.configure({ resizable: false }),

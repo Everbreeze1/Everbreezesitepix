@@ -77,23 +77,33 @@ export function markdownToHtml(md: string): string {
  * Photos are persisted as `data-photo-id` only — `src` is re-signed on every
  * read (see resolvePageImages), because signed storage URLs expire.
  *
- * Laid out two per row at 48% width (matching the seeded "Pre-Built Report"
- * templates and apps/web/src/lib/tiptap-photo-slot.ts) rather than one flat
- * unstyled column, so AI-generated pages read as a clean photo grid instead
- * of a stack of full-width images.
+ * Each photo now gets its own shaded card rather than sharing a two-up row,
+ * so the image leads and its byline + description sit with it as one designed
+ * block. Kept below full width so a portrait phone photo doesn't dominate the
+ * page; `object-fit: cover` (styles.css) crops it to the box.
  */
-const PHOTOS_PER_ROW = 2;
-const PHOTO_ROW_WIDTH = "48%";
-const PHOTO_ROW_HEIGHT = 280;
+const PHOTO_ROW_WIDTH = "62%";
+const PHOTO_ROW_HEIGHT = 300;
 
 /** A selected photo plus the metadata already captured in the field. */
 export interface GeneratedPhoto {
   id: string;
   caption: string | null;
+  /** When the shot was taken, for the card's byline. */
+  takenAt: string | null;
+}
+
+/** "3 August 2026" — the byline date on a photo card. */
+function formatPhotoDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 }
 
 /**
- * A caption line per photo, directly beneath its row.
+ * The caption block beneath a photo inside its card: a small-caps byline
+ * ("PHOTO 3 · 3 AUGUST 2026") above the description.
  *
  * Captions are run through `cleanCaption` first: uploads default the caption to
  * the source filename (`IMG_1234.JPG`, `sitepix-178155…jpg`), which is not
@@ -101,54 +111,63 @@ export interface GeneratedPhoto {
  * annotated when none were. A photo with nothing real recorded says so plainly
  * instead of showing its filename.
  */
-function captionLineHtml(photos: GeneratedPhoto[], startIndex: number): string {
-  return photos
-    .map((p, i) => {
-      const n = startIndex + i;
-      const real = cleanCaption(p.caption);
-      const text = real
-        ? `<em>${escapeHtml(real)}</em>`
-        : `<em style="color: rgb(156,163,175)">No information was recorded for this photo.</em>`;
-      return `<p><strong>Photo ${n}</strong> &ndash; ${text}</p>`;
-    })
-    .join("");
-}
-
-function photoRowHtml(photos: GeneratedPhoto[], startIndex: number): string {
-  if (!photos.length) return "";
-  const width = photos.length > 1 ? PHOTO_ROW_WIDTH : "70%";
-  const imgs = photos
-    .map((p) => `<img data-photo-id="${p.id}" src="" width="${width}" height="${PHOTO_ROW_HEIGHT}">`)
-    .join("");
-  return `<p>${imgs}</p>` + captionLineHtml(photos, startIndex);
-}
-
-/** Splits photos into PHOTOS_PER_ROW-wide rows. */
-function photoGridHtml(photos: GeneratedPhoto[]): string {
-  const rows: string[] = [];
-  for (let i = 0; i < photos.length; i += PHOTOS_PER_ROW) {
-    rows.push(photoRowHtml(photos.slice(i, i + PHOTOS_PER_ROW), i + 1));
-  }
-  return rows.join("");
+function captionBlockHtml(photo: GeneratedPhoto, n: number): string {
+  const date = formatPhotoDate(photo.takenAt);
+  const byline = [`Photo ${n}`, date].filter(Boolean).join(" &middot; ");
+  const real = cleanCaption(photo.caption);
+  const body = real
+    ? `<p>${escapeHtml(real)}</p>`
+    : `<p><em style="color: rgb(156,163,175)">No information was recorded for this photo.</em></p>`;
+  return `<p><span class="panel-caption">${byline}</span></p>` + body;
 }
 
 /**
- * Splits photos into numbered sections of PHOTOS_PER_ROW each — heading,
- * italic summary line, and a body prompt — mirroring the structure of the
- * seeded report templates (see supabase/migrations/*_document_template_00*.sql)
- * so a "Report" quick-created here looks the same as a pre-built one.
+ * One photo per shaded card: the image sits above its own byline and
+ * description, so the picture leads and its details read as a designed unit
+ * rather than a loose caption line floating under a grid.
+ */
+function photoCardHtml(photo: GeneratedPhoto, n: number): string {
+  const img = `<img data-photo-id="${photo.id}" src="" width="${PHOTO_ROW_WIDTH}" height="${PHOTO_ROW_HEIGHT}">`;
+  return panelHtml("photo", `<p>${img}</p>` + captionBlockHtml(photo, n));
+}
+
+/** `<div data-panel="…">` — the InfoPanel node (apps/web/src/lib/tiptap-info-panel.ts). */
+function panelHtml(variant: "meta" | "photo", inner: string): string {
+  return `<div data-panel="${variant}">${inner}</div>`;
+}
+
+/**
+ * The document masthead: project, location, date and author as labelled
+ * fields inside a shaded block, rather than one dim run-on line.
+ */
+function metaPanelHtml(fields: Array<[string, string]>): string {
+  const rows = fields
+    .filter(([, value]) => value)
+    .map(
+      ([label, value]) =>
+        `<p><span class="panel-label">${escapeHtml(label)}</span>${escapeHtml(value)}</p>`,
+    )
+    .join("");
+  return rows ? panelHtml("meta", rows) : "";
+}
+
+/** Every photo as its own card, in the order the user picked them. */
+function photoGridHtml(photos: GeneratedPhoto[]): string {
+  return photos.map((p, i) => photoCardHtml(p, i + 1)).join("");
+}
+
+/**
+ * The evidence body of a formal report: a heading per photo card so each
+ * observation is independently referenceable, with room under it for the
+ * author's own findings.
  */
 function sectionedReportHtml(photos: GeneratedPhoto[]): string {
-  const sections: string[] = [];
-  for (let i = 0; i < photos.length; i += PHOTOS_PER_ROW) {
-    const n = sections.length + 1;
-    sections.push(
-      `<h2>Section ${n}</h2><p><em>Section summary</em></p>` +
-        `<p>Click to add important info or findings.</p>` +
-        photoRowHtml(photos.slice(i, i + PHOTOS_PER_ROW), i + 1),
-    );
-  }
-  return sections.join("");
+  return photos
+    .map((p, i) => {
+      const n = i + 1;
+      return `<h2>Observation ${n}</h2>` + photoCardHtml(p, n) + `<p></p>`;
+    })
+    .join("");
 }
 
 /**
@@ -239,18 +258,22 @@ export async function generateProjectPageService(
   // photoIds to preserve the order the user picked them in.
   const { data: photoRows } = await (ctx.supabase as any)
     .from("photos")
-    .select("id, caption")
+    .select("id, caption, taken_at, created_at")
     .in("id", data.photoIds);
-  const captionById = new Map<string, string | null>(
-    ((photoRows as Array<{ id: string; caption: string | null }>) ?? []).map((r) => [
-      r.id,
-      r.caption,
-    ]),
+  type PhotoRow = { id: string; caption: string | null; taken_at: string | null; created_at: string | null };
+  const rowById = new Map<string, PhotoRow>(
+    ((photoRows as PhotoRow[]) ?? []).map((r) => [r.id, r]),
   );
-  const photos: GeneratedPhoto[] = data.photoIds.map((id) => ({
-    id,
-    caption: captionById.get(id) ?? null,
-  }));
+  const photos: GeneratedPhoto[] = data.photoIds.map((id) => {
+    const row = rowById.get(id);
+    return {
+      id,
+      caption: row?.caption ?? null,
+      // Fall back to upload time when the camera recorded no EXIF timestamp,
+      // so a card always carries a date rather than an empty byline.
+      takenAt: row?.taken_at ?? row?.created_at ?? null,
+    };
+  });
 
   // AI is best-effort: a generation failure must not cost the user their page.
   let contentHtml = "";
@@ -292,16 +315,13 @@ export async function generateProjectPageService(
       aiFailed = e?.message ?? "AI unavailable";
       bodyHtml = `<h2>What was done</h2><ul><li><p></p></li></ul>`;
     }
-    const meta = [
-      projectName ? `<strong>${escapeHtml(projectName)}</strong>` : "",
-      address ? escapeHtml(address) : "",
-      escapeHtml(today),
-      author ? escapeHtml(author) : "",
-    ]
-      .filter(Boolean)
-      .join(" &middot; ");
     contentHtml =
-      `<p><span style="color: rgb(107,114,128)">${meta}</span></p>` +
+      metaPanelHtml([
+        ["Project", projectName],
+        ["Location", address],
+        ["Date", today],
+        ["Prepared by", author],
+      ]) +
       bodyHtml +
       photoGridHtml(photos);
   }

@@ -98,12 +98,13 @@ function makeSnapshot(v: {
 }
 
 export function ShowcaseBuilderPage() {
-  const { showcaseId } = useParams({ from: "/_app/showcases/$showcaseId" });
+  const { showcaseId } = useParams({ from: "/_app/showcases_/$showcaseId" });
   const { profile } = useProfile();
   const confirm = useConfirm();
 
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [title, setTitle] = useState("");
@@ -142,10 +143,11 @@ export function ShowcaseBuilderPage() {
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const s = await getShowcase({ data: { id: showcaseId } });
       if (!s) {
-        toast.error("Showcase not found");
+        setLoadError("This showcase no longer exists.");
         return;
       }
       setTitle(s.title);
@@ -184,7 +186,7 @@ export function ShowcaseBuilderPage() {
         sections: loadedSections,
       });
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not load showcase");
+      setLoadError(e?.message ?? "Could not load showcase");
     } finally {
       setLoading(false);
     }
@@ -366,6 +368,28 @@ export function ShowcaseBuilderPage() {
     return (
       <div className="flex min-h-full items-center justify-center p-10">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Fail loudly rather than rendering an empty editor the user could type into
+  // and then lose — a failed load means Save would fail too.
+  if (loadError) {
+    return (
+      <div className="p-6 sm:p-10">
+        <Link
+          to="/showcases"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" /> Showcases
+        </Link>
+        <div className="mt-6 rounded-2xl border border-border bg-card p-10 text-center">
+          <p className="text-sm font-bold text-foreground">Couldn't open this showcase</p>
+          <p className="mx-auto mt-2 max-w-md text-xs text-muted-foreground">{loadError}</p>
+          <Button className="mt-5" variant="outline" onClick={() => void load()}>
+            Try again
+          </Button>
+        </div>
       </div>
     );
   }

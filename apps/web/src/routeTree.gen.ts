@@ -42,7 +42,7 @@ import { Route as ShareReportsTokenRouteImport } from './routes/share.reports.$t
 import { Route as SharePhotosTokenRouteImport } from './routes/share.photos.$token'
 import { Route as SharePagesTokenRouteImport } from './routes/share.pages.$token'
 import { Route as AppWalkthroughsWalkthroughIdRouteImport } from './routes/_app.walkthroughs.$walkthroughId'
-import { Route as AppShowcasesShowcaseIdRouteImport } from './routes/_app.showcases.$showcaseId'
+import { Route as AppShowcasesShowcaseIdRouteImport } from './routes/_app.showcases_.$showcaseId'
 import { Route as AppSettingsWorkflowsRouteImport } from './routes/_app.settings.workflows'
 import { Route as AppSettingsChecklistsRouteImport } from './routes/_app.settings.checklists'
 import { Route as AppProjectsTrashRouteImport } from './routes/_app.projects.trash'
@@ -223,9 +223,9 @@ const AppWalkthroughsWalkthroughIdRoute =
     getParentRoute: () => AppRoute,
   } as any)
 const AppShowcasesShowcaseIdRoute = AppShowcasesShowcaseIdRouteImport.update({
-  id: '/$showcaseId',
-  path: '/$showcaseId',
-  getParentRoute: () => AppShowcasesRoute,
+  id: '/showcases_/$showcaseId',
+  path: '/showcases/$showcaseId',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsWorkflowsRoute = AppSettingsWorkflowsRouteImport.update({
   id: '/settings/workflows',
@@ -315,7 +315,7 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof AppNotificationsRoute
   '/report-issue': typeof AppReportIssueRoute
   '/reports': typeof AppReportsRoute
-  '/showcases': typeof AppShowcasesRouteWithChildren
+  '/showcases': typeof AppShowcasesRoute
   '/teams': typeof AppTeamsRoute
   '/templates': typeof AppTemplatesRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -362,7 +362,7 @@ export interface FileRoutesByTo {
   '/notifications': typeof AppNotificationsRoute
   '/report-issue': typeof AppReportIssueRoute
   '/reports': typeof AppReportsRoute
-  '/showcases': typeof AppShowcasesRouteWithChildren
+  '/showcases': typeof AppShowcasesRoute
   '/teams': typeof AppTeamsRoute
   '/templates': typeof AppTemplatesRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -412,7 +412,7 @@ export interface FileRoutesById {
   '/_app/notifications': typeof AppNotificationsRoute
   '/_app/report-issue': typeof AppReportIssueRoute
   '/_app/reports': typeof AppReportsRoute
-  '/_app/showcases': typeof AppShowcasesRouteWithChildren
+  '/_app/showcases': typeof AppShowcasesRoute
   '/_app/teams': typeof AppTeamsRoute
   '/_app/templates': typeof AppTemplatesRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -426,7 +426,7 @@ export interface FileRoutesById {
   '/_app/projects/trash': typeof AppProjectsTrashRoute
   '/_app/settings/checklists': typeof AppSettingsChecklistsRoute
   '/_app/settings/workflows': typeof AppSettingsWorkflowsRoute
-  '/_app/showcases/$showcaseId': typeof AppShowcasesShowcaseIdRoute
+  '/_app/showcases_/$showcaseId': typeof AppShowcasesShowcaseIdRoute
   '/_app/walkthroughs/$walkthroughId': typeof AppWalkthroughsWalkthroughIdRoute
   '/share/pages/$token': typeof SharePagesTokenRoute
   '/share/photos/$token': typeof SharePhotosTokenRoute
@@ -572,7 +572,7 @@ export interface FileRouteTypes {
     | '/_app/projects/trash'
     | '/_app/settings/checklists'
     | '/_app/settings/workflows'
-    | '/_app/showcases/$showcaseId'
+    | '/_app/showcases_/$showcaseId'
     | '/_app/walkthroughs/$walkthroughId'
     | '/share/pages/$token'
     | '/share/photos/$token'
@@ -840,12 +840,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWalkthroughsWalkthroughIdRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/showcases/$showcaseId': {
-      id: '/_app/showcases/$showcaseId'
-      path: '/$showcaseId'
+    '/_app/showcases_/$showcaseId': {
+      id: '/_app/showcases_/$showcaseId'
+      path: '/showcases/$showcaseId'
       fullPath: '/showcases/$showcaseId'
       preLoaderRoute: typeof AppShowcasesShowcaseIdRouteImport
-      parentRoute: typeof AppShowcasesRoute
+      parentRoute: typeof AppRoute
     }
     '/_app/settings/workflows': {
       id: '/_app/settings/workflows'
@@ -973,18 +973,6 @@ const AppAdminRouteWithChildren = AppAdminRoute._addFileChildren(
   AppAdminRouteChildren,
 )
 
-interface AppShowcasesRouteChildren {
-  AppShowcasesShowcaseIdRoute: typeof AppShowcasesShowcaseIdRoute
-}
-
-const AppShowcasesRouteChildren: AppShowcasesRouteChildren = {
-  AppShowcasesShowcaseIdRoute: AppShowcasesShowcaseIdRoute,
-}
-
-const AppShowcasesRouteWithChildren = AppShowcasesRoute._addFileChildren(
-  AppShowcasesRouteChildren,
-)
-
 interface AppRouteChildren {
   AppAdminRoute: typeof AppAdminRouteWithChildren
   AppCollaboratorsRoute: typeof AppCollaboratorsRoute
@@ -995,7 +983,7 @@ interface AppRouteChildren {
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppReportIssueRoute: typeof AppReportIssueRoute
   AppReportsRoute: typeof AppReportsRoute
-  AppShowcasesRoute: typeof AppShowcasesRouteWithChildren
+  AppShowcasesRoute: typeof AppShowcasesRoute
   AppTeamsRoute: typeof AppTeamsRoute
   AppTemplatesRoute: typeof AppTemplatesRoute
   AppGroupsGroupIdRoute: typeof AppGroupsGroupIdRoute
@@ -1004,6 +992,7 @@ interface AppRouteChildren {
   AppProjectsTrashRoute: typeof AppProjectsTrashRoute
   AppSettingsChecklistsRoute: typeof AppSettingsChecklistsRoute
   AppSettingsWorkflowsRoute: typeof AppSettingsWorkflowsRoute
+  AppShowcasesShowcaseIdRoute: typeof AppShowcasesShowcaseIdRoute
   AppWalkthroughsWalkthroughIdRoute: typeof AppWalkthroughsWalkthroughIdRoute
   AppProjectsIndexRoute: typeof AppProjectsIndexRoute
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
@@ -1021,7 +1010,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppNotificationsRoute: AppNotificationsRoute,
   AppReportIssueRoute: AppReportIssueRoute,
   AppReportsRoute: AppReportsRoute,
-  AppShowcasesRoute: AppShowcasesRouteWithChildren,
+  AppShowcasesRoute: AppShowcasesRoute,
   AppTeamsRoute: AppTeamsRoute,
   AppTemplatesRoute: AppTemplatesRoute,
   AppGroupsGroupIdRoute: AppGroupsGroupIdRoute,
@@ -1030,6 +1019,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppProjectsTrashRoute: AppProjectsTrashRoute,
   AppSettingsChecklistsRoute: AppSettingsChecklistsRoute,
   AppSettingsWorkflowsRoute: AppSettingsWorkflowsRoute,
+  AppShowcasesShowcaseIdRoute: AppShowcasesShowcaseIdRoute,
   AppWalkthroughsWalkthroughIdRoute: AppWalkthroughsWalkthroughIdRoute,
   AppProjectsIndexRoute: AppProjectsIndexRoute,
   AppSettingsIndexRoute: AppSettingsIndexRoute,
@@ -1062,13 +1052,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

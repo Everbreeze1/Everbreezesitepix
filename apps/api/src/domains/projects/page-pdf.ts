@@ -128,7 +128,30 @@ function sanitizeForWinAnsi(s: string): string {
     .replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF]/g, "");
 }
 
+/**
+ * Embedded images, keyed by source URL, for the lifetime of one export.
+ *
+ * Panels are rendered twice — once against a scratch page purely to measure
+ * how tall the shaded box needs to be, then again for real (see
+ * `renderPanel`). Without this cache that would re-fetch and re-embed every
+ * photo inside a panel, doubling both the network cost and the file size.
+ * A WeakMap keyed on the document keeps entries from leaking across exports.
+ */
+const imageCache = new WeakMap<PDFDocument, Map<string, PDFImage | null>>();
+
 async function tryEmbedImage(pdf: PDFDocument, url: string): Promise<PDFImage | null> {
+  let perDoc = imageCache.get(pdf);
+  if (!perDoc) {
+    perDoc = new Map();
+    imageCache.set(pdf, perDoc);
+  }
+  if (perDoc.has(url)) return perDoc.get(url) ?? null;
+  const embedded = await embedImageUncached(pdf, url);
+  perDoc.set(url, embedded);
+  return embedded;
+}
+
+async function embedImageUncached(pdf: PDFDocument, url: string): Promise<PDFImage | null> {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
@@ -462,6 +485,77 @@ function readAlign(node: ElementNode): "left" | "center" | "right" {
   return (m?.[1] as "left" | "center" | "right" | undefined) ?? "left";
 }
 
+/** Panel chrome — matches `.tiptap [data-panel]` in apps/web/src/styles.css. */
+const PANEL_FILL = rgb(0.965, 0.972, 0.98);
+const PANEL_PAD_X = 14;
+const PANEL_PAD_Y = 12;
+const PANEL_GAP = 10;
+
+/**
+ * A shaded card (the InfoPanel node — see apps/web/src/lib/tiptap-info-panel.ts).
+ *
+ * pdf-lib has no z-ordering: whatever is drawn last sits on top, so the
+ * background rectangle has to be drawn *before* its contents, which means
+ * knowing the height up front. We get that by rendering the children once
+ * against a throwaway page to measure the vertical space they consume, then
+ * discarding it and rendering for real over the box. Images embedded during
+ * the measure pass are cached (see `tryEmbedImage`), so the second pass costs
+ * no extra network or file size.
+ *
+ * If the content is taller than the remaining space on the page, the box is
+ * skipped and the children render unboxed — a card split across a page break
+ * would otherwise draw a rectangle that runs off the bottom.
+ */
+async function renderPanel(layout: Layout, node: ElementNode) {
+  const realPage = layout.page;
+  const realY = layout.y;
+  const pagesBefore = layout.pdf.getPageCount();
+  const startY = PAGE_H - MARGIN;
+
+  // --- measure pass -------------------------------------------------------
+  // Children draw onto throwaway pages. `renderNode` may call newPage() when
+  // content is tall, so remove every page this pass created, not just one.
+  layout.page = layout.pdf.addPage([PAGE_W, PAGE_H]);
+  layout.y = startY;
+  let measured = 0;
+  try {
+    for (const child of node.children) await renderNode(layout, child);
+    const pagesAdded = layout.pdf.getPageCount() - pagesBefore;
+    // A panel that spilled onto another scratch page is taller than one page;
+    // treat it as unboxable rather than computing a wrong height.
+    measured = pagesAdded > 1 ? Number.POSITIVE_INFINITY : startY - layout.y;
+  } finally {
+    for (let i = layout.pdf.getPageCount() - 1; i >= pagesBefore; i--) layout.pdf.removePage(i);
+    layout.page = realPage;
+    layout.y = realY;
+  }
+
+  // --- real pass ----------------------------------------------------------
+  // Children always draw at the normal margin; the box is drawn slightly
+  // *outset* around them instead of insetting the content, which avoids
+  // threading an x-offset through every drawText/drawImage call in the
+  // renderer just for this one node type.
+  const boxHeight = measured + PANEL_PAD_Y * 2;
+  const fits = Number.isFinite(measured) && layout.y - boxHeight >= layout.bottomBoundary;
+  if (fits) {
+    layout.page.drawRectangle({
+      x: MARGIN - PANEL_PAD_X,
+      y: layout.y - boxHeight,
+      width: CONTENT_W + PANEL_PAD_X * 2,
+      height: boxHeight,
+      color: PANEL_FILL,
+      borderColor: BORDER,
+      borderWidth: 0.75,
+    });
+    layout.y -= PANEL_PAD_Y;
+  }
+
+  for (const child of node.children) await renderNode(layout, child);
+
+  if (fits) layout.y -= PANEL_PAD_Y;
+  layout.y -= PANEL_GAP;
+}
+
 async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered = false, index = 1) {
   if (node.type === "text") return;
   const empty: Style = { bold: false, italic: false, underline: false, color: null, fontFamily: null, fontSize: null };
@@ -525,6 +619,16 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
     }
     case "img": {
       await renderImageRow(layout, [node]);
+      return;
+    }
+    case "div": {
+      // The InfoPanel node — a shaded card. Any other div is a plain wrapper
+      // and falls through to the default child walk.
+      if (node.attrs["data-panel"]) {
+        await renderPanel(layout, node);
+        return;
+      }
+      for (const child of node.children) await renderNode(layout, child, listDepth, ordered, index);
       return;
     }
     case "hr": {

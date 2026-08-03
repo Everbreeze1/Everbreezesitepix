@@ -202,17 +202,30 @@ export async function listShowcasesService(ctx: AuthedContext): Promise<{ showca
     .order("created_at", { ascending: false });
   const rows = (data as any[]) ?? [];
 
-  const [{ data: countRows }, urlMap] = await Promise.all([
-    (ctx.supabase as any)
-      .from("showcase_items")
-      .select("showcase_id")
-      .in("showcase_id", rows.map((r) => r.id)),
-    resolvePhotoUrls(rows.map((r) => r.cover_photo_id).filter(Boolean)),
-  ]);
+  const { data: countRows } = await (ctx.supabase as any)
+    .from("showcase_items")
+    .select("showcase_id, photo_id, position")
+    .in("showcase_id", rows.map((r) => r.id))
+    .order("position", { ascending: true });
+
   const countByShowcase = new Map<string, number>();
+  const firstPhotoByShowcase = new Map<string, string>();
   ((countRows as any[]) ?? []).forEach((r) => {
     countByShowcase.set(r.showcase_id, (countByShowcase.get(r.showcase_id) ?? 0) + 1);
+    if (!firstPhotoByShowcase.has(r.showcase_id) && r.photo_id) {
+      firstPhotoByShowcase.set(r.showcase_id, r.photo_id);
+    }
   });
+
+  // Thumbnails fall back to the showcase's first photo when no explicit cover
+  // was chosen — otherwise every card renders as an empty grey placeholder,
+  // since nothing in the builder sets cover_photo_id.
+  const thumbIdByShowcase = new Map<string, string>();
+  rows.forEach((r) => {
+    const id = r.cover_photo_id ?? firstPhotoByShowcase.get(r.id);
+    if (id) thumbIdByShowcase.set(r.id, id);
+  });
+  const urlMap = await resolvePhotoUrls(Array.from(new Set(thumbIdByShowcase.values())));
 
   return {
     showcases: rows.map((r) => ({
@@ -223,7 +236,10 @@ export async function listShowcasesService(ctx: AuthedContext): Promise<{ showca
       share_token: r.share_token,
       revoked_at: r.revoked_at,
       item_count: countByShowcase.get(r.id) ?? 0,
-      cover_image_url: r.cover_photo_id ? urlMap.get(r.cover_photo_id)?.image_url ?? null : null,
+      cover_image_url: (() => {
+        const thumbId = thumbIdByShowcase.get(r.id);
+        return thumbId ? (urlMap.get(thumbId)?.image_url || null) : null;
+      })(),
       created_at: r.created_at,
       updated_at: r.updated_at,
     })),

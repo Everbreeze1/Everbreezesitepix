@@ -294,7 +294,7 @@ export function ProjectDetailPage() {
     navigate({
       to: "/projects/$projectId",
       params: { projectId },
-      search: (prev) => ({ ...prev, panel: resolved ?? undefined }),
+      search: (prev: ProjectDetailSearch) => ({ ...prev, panel: resolved ?? undefined }),
       replace: true,
     });
   }
@@ -637,7 +637,7 @@ export function ProjectDetailPage() {
       navigate({
         to: "/projects/$projectId",
         params: { projectId },
-        search: (prev) => ({ ...prev, camera: undefined }),
+        search: (prev: ProjectDetailSearch) => ({ ...prev, camera: undefined }),
         replace: true,
       });
     }
@@ -653,7 +653,7 @@ export function ProjectDetailPage() {
       navigate({
         to: "/projects/$projectId",
         params: { projectId },
-        search: (prev) => ({ ...prev, walkthrough: undefined }),
+        search: (prev: ProjectDetailSearch) => ({ ...prev, walkthrough: undefined }),
         replace: true,
       });
     }

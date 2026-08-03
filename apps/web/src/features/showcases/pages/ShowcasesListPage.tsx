@@ -135,7 +135,7 @@ export function ShowcasesListPage() {
     <div className="p-6 sm:p-10">
       <PageHeader
         title="Showcases"
-        description="Pick photos, add captions, and publish a polished portfolio page."
+        description="Build a shareable brochure of your best work — pick projects, write the copy, publish."
         actions={
           <Button onClick={() => setCreateOpen(true)} className="bg-primary text-primary-foreground hover:bg-primary/90">
             <Plus className="mr-1.5 h-4 w-4" /> New Showcase
