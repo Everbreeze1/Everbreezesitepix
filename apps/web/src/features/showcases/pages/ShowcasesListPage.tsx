@@ -1,17 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import {
-  Layers,
-  Loader2,
-  Plus,
-  Trash2,
-  Eye,
-  EyeOff,
-  Copy,
-  ExternalLink,
-  MoreVertical,
-  Pencil,
-} from "lucide-react";
+import { Layers, Loader2, Plus, Trash2, ExternalLink, MoreVertical, Share2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,9 +26,9 @@ import {
   listShowcases,
   createShowcase,
   deleteShowcase,
-  setShowcaseShare,
   type ShowcaseSummary,
 } from "@/lib/showcases.functions";
+import { ShowcaseShareDialog } from "@/features/showcases/components/ShowcaseShareDialog";
 
 export function ShowcasesListPage() {
   const navigate = useNavigate();
@@ -49,6 +38,7 @@ export function ShowcasesListPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [creating, setCreating] = useState(false);
+  const [shareFor, setShareFor] = useState<ShowcaseSummary | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -93,17 +83,10 @@ export function ShowcasesListPage() {
     }
   };
 
-  const toggleShare = async (s: ShowcaseSummary) => {
-    const enable = !!s.revoked_at;
-    try {
-      await setShowcaseShare({ data: { id: s.id, enable } });
-      setShowcases((prev) =>
-        prev.map((x) => (x.id === s.id ? { ...x, revoked_at: enable ? null : new Date().toISOString() } : x)),
-      );
-      toast.success(enable ? "Share link enabled" : "Share link disabled");
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed");
-    }
+  /** Keeps the card's Live/Draft pill in step with the share dialog's switch. */
+  const applyShareChange = (id: string, revokedAt: string | null) => {
+    setShowcases((prev) => prev.map((x) => (x.id === id ? { ...x, revoked_at: revokedAt } : x)));
+    setShareFor((cur) => (cur && cur.id === id ? { ...cur, revoked_at: revokedAt } : cur));
   };
 
   if (subLoading) {
@@ -162,92 +145,110 @@ export function ShowcasesListPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {showcases.map((s) => (
-              <Card key={s.id} className="overflow-hidden">
-                <Link to="/showcases/$showcaseId" params={{ showcaseId: s.id }}>
-                  <div className="aspect-video bg-muted">
-                    {s.cover_image_url ? (
-                      <img src={s.cover_image_url} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-muted-foreground">
-                        <Layers className="h-8 w-8" />
-                      </div>
-                    )}
-                  </div>
-                </Link>
-                <div className="flex items-start justify-between gap-2 p-4">
+              <Card
+                key={s.id}
+                className="group relative overflow-hidden transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg"
+              >
+                {/* Stretched link: the whole card opens the builder, while the
+                    menu and Share button below sit above it on z-index. A real
+                    anchor (not an onClick) keeps keyboard focus, middle-click
+                    and "open in new tab" working. */}
+                <Link
+                  to="/showcases/$showcaseId"
+                  params={{ showcaseId: s.id }}
+                  aria-label={`Open ${s.title}`}
+                  className="absolute inset-0 z-[1] rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+
+                <div className="relative aspect-video bg-muted">
+                  {s.cover_image_url ? (
+                    <img
+                      src={s.cover_image_url}
+                      alt=""
+                      className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-muted-foreground">
+                      <Layers className="h-8 w-8" />
+                    </div>
+                  )}
+                  <span
+                    className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide backdrop-blur-sm ${
+                      s.revoked_at
+                        ? "bg-black/55 text-white/90"
+                        : "bg-emerald-500/90 text-white"
+                    }`}
+                  >
+                    {s.revoked_at ? "Draft" : "Live"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 p-4">
                   <div className="min-w-0">
-                    <Link
-                      to="/showcases/$showcaseId"
-                      params={{ showcaseId: s.id }}
-                      className="truncate text-sm font-semibold hover:underline"
-                    >
-                      {s.title}
-                    </Link>
+                    <p className="truncate text-sm font-semibold text-foreground">{s.title}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      {s.item_count} photo{s.item_count === 1 ? "" : "s"} ·{" "}
-                      {s.revoked_at ? "Not published" : "Published"}
+                      {s.item_count} photo{s.item_count === 1 ? "" : "s"}
                     </p>
                   </div>
-                  {/* An explicit button, not just the card/title link — opening
-                      the builder was previously discoverable only by guessing
-                      the cover image was clickable. */}
-                  <Button asChild size="sm" variant="outline" className="shrink-0">
-                    <Link to="/showcases/$showcaseId" params={{ showcaseId: s.id }}>
-                      <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
-                    </Link>
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="shrink-0">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() =>
-                          window.open(`${window.location.origin}/share/showcases/${s.share_token}`, "_blank")
-                        }
-                        disabled={!!s.revoked_at}
-                      >
-                        <ExternalLink className="mr-2 h-4 w-4" /> Open share page
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          navigator.clipboard.writeText(
-                            `${window.location.origin}/share/showcases/${s.share_token}`,
-                          );
-                          toast.success("Link copied");
-                        }}
-                        disabled={!!s.revoked_at}
-                      >
-                        <Copy className="mr-2 h-4 w-4" /> Copy link
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => toggleShare(s)}>
-                        {s.revoked_at ? (
-                          <>
-                            <Eye className="mr-2 h-4 w-4" /> Publish
-                          </>
-                        ) : (
-                          <>
-                            <EyeOff className="mr-2 h-4 w-4" /> Unpublish
-                          </>
-                        )}
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => doDelete(s.id)}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+
+                  <div className="relative z-[2] flex shrink-0 items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-2 text-xs font-bold"
+                      onClick={() => setShareFor(s)}
+                    >
+                      <Share2 className="mr-1.5 h-3.5 w-3.5" /> Share
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setShareFor(s)}>
+                          <Share2 className="mr-2 h-4 w-4" /> Share…
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            window.open(
+                              `${window.location.origin}/share/showcases/${s.share_token}`,
+                              "_blank",
+                            )
+                          }
+                          disabled={!!s.revoked_at}
+                        >
+                          <ExternalLink className="mr-2 h-4 w-4" /> Open share page
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => doDelete(s.id)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
               </Card>
             ))}
           </div>
         )}
       </div>
+
+      {shareFor && (
+        <ShowcaseShareDialog
+          open
+          onOpenChange={(o) => !o && setShareFor(null)}
+          showcaseId={shareFor.id}
+          title={shareFor.title}
+          shareToken={shareFor.share_token}
+          revokedAt={shareFor.revoked_at}
+          onChanged={(revokedAt) => applyShareChange(shareFor.id, revokedAt)}
+        />
+      )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-md">

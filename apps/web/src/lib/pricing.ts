@@ -24,7 +24,14 @@ export interface PlanPricing {
    * invites — a plan can't be sold for more seats than it can hold.
    */
   maxSeats: number;
-  features: string[];
+  /**
+   * What this tier adds over the one below it — NOT its full feature list.
+   *
+   * Stored as a delta so "what am I missing by staying on Starter?" is a real
+   * computation (`gainsBetween`) rather than a hardcoded "Everything in X"
+   * string that can drift out of sync with the list beneath it.
+   */
+  adds: string[];
 }
 
 export const PLANS: PlanPricing[] = [
@@ -37,7 +44,7 @@ export const PLANS: PlanPricing[] = [
     includedSeats: 1,
     additionalSeatMonthly: 15,
     maxSeats: 2,
-    features: [
+    adds: [
       "Photo & video capture",
       "Basic project management",
       "Tags & labels",
@@ -55,8 +62,7 @@ export const PLANS: PlanPricing[] = [
     includedSeats: 3,
     additionalSeatMonthly: 29,
     maxSeats: 50,
-    features: [
-      "Everything in Starter",
+    adds: [
       "Company watermark",
       "Walkthroughs + 100 Auto Reports/mo",
       "AI-assisted Site Logs",
@@ -74,8 +80,7 @@ export const PLANS: PlanPricing[] = [
     includedSeats: 3,
     additionalSeatMonthly: 39,
     maxSeats: 50,
-    features: [
-      "Everything in Pro",
+    adds: [
       "Workflows",
       "Project blueprints",
       "Advanced roles & permissions",
@@ -87,6 +92,48 @@ export const PLANS: PlanPricing[] = [
 
 /** Highest seat count any plan can hold — the stepper's ceiling. */
 export const MAX_SEATS = Math.max(...PLANS.map((p) => p.maxSeats));
+
+/** Cheapest to richest. Index doubles as the tier rank. */
+export const PLAN_ORDER: BillingPlan[] = PLANS.map((p) => p.id);
+
+export function tierRank(id: BillingPlan): number {
+  const i = PLAN_ORDER.indexOf(id);
+  // An unrecognised/absent plan sorts below everything, so an inactive or
+  // unknown subscription is treated as "nothing yet" and every tier reads as
+  // an upgrade rather than accidentally hiding all of them.
+  return i === -1 ? -1 : i;
+}
+
+export function planById(id: BillingPlan): PlanPricing | undefined {
+  return PLANS.find((p) => p.id === id);
+}
+
+/**
+ * The full feature list to show on a plan card: everything inherited from the
+ * tiers below, rolled up as one line, followed by this tier's own additions.
+ */
+export function displayFeatures(plan: PlanPricing): string[] {
+  const rank = tierRank(plan.id);
+  if (rank <= 0) return plan.adds;
+  return [`Everything in ${PLANS[rank - 1].name}`, ...plan.adds];
+}
+
+/**
+ * Everything gained by moving from `from` up to `to` — the concrete answer to
+ * "what am I missing out on?". Empty when `to` is not actually higher.
+ */
+export function gainsBetween(from: BillingPlan | null, to: BillingPlan): string[] {
+  const fromRank = from ? tierRank(from) : -1;
+  const toRank = tierRank(to);
+  if (toRank <= fromRank) return [];
+  return PLANS.slice(fromRank + 1, toRank + 1).flatMap((p) => p.adds);
+}
+
+/** Tiers strictly above the caller's current one — the real upgrade options. */
+export function higherTiers(current: BillingPlan | null): PlanPricing[] {
+  const rank = current ? tierRank(current) : -1;
+  return PLANS.slice(rank + 1);
+}
 
 /**
  * A monthly figure adjusted for the billing interval. Annual is quoted as an

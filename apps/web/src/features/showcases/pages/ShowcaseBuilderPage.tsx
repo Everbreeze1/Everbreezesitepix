@@ -7,12 +7,10 @@ import {
   X as XIcon,
   ArrowUp,
   ArrowDown,
-  Copy,
-  ExternalLink,
   Eye,
-  EyeOff,
   Pencil,
   Save,
+  Share2,
   FolderPlus,
   Images,
   Check,
@@ -34,12 +32,8 @@ import { cn } from "@/lib/utils";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useProfile } from "@/hooks/use-profile";
-import {
-  getShowcase,
-  updateShowcase,
-  setShowcaseSections,
-  setShowcaseShare,
-} from "@/lib/showcases.functions";
+import { getShowcase, updateShowcase, setShowcaseSections } from "@/lib/showcases.functions";
+import { ShowcaseShareDialog } from "@/features/showcases/components/ShowcaseShareDialog";
 import {
   ShowcasePhotoPickerDialog,
   type PickedPhoto,
@@ -121,6 +115,7 @@ export function ShowcaseBuilderPage() {
 
   /** Picker target: a section key, or "new" to build sections from projects. */
   const [pickerFor, setPickerFor] = useState<string | "new" | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   /** Serialized last-saved state — the source of truth for the dirty flag. */
   const savedSnapshotRef = useRef<string>("");
@@ -350,18 +345,6 @@ export function ShowcaseBuilderPage() {
     );
   };
 
-  const toggleShare = async () => {
-    const enable = !!revokedAt;
-    try {
-      await setShowcaseShare({ data: { id: showcaseId, enable } });
-      setRevokedAt(enable ? null : new Date().toISOString());
-      toast.success(enable ? "Published" : "Unpublished");
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed");
-    }
-  };
-
-  const shareUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/share/showcases/${shareToken}`;
   const photoCount = sections.reduce((n, s) => n + s.items.length, 0);
 
   if (loading) {
@@ -472,6 +455,15 @@ export function ShowcaseBuilderPage() {
                 <Eye className="mr-1.5 h-3.5 w-3.5" /> Preview
               </Button>
             </div>
+
+            <Button
+              size="sm"
+              variant={revokedAt ? "outline" : "secondary"}
+              onClick={() => setShareOpen(true)}
+            >
+              <Share2 className="mr-1.5 h-3.5 w-3.5" />
+              {revokedAt ? "Share" : "Shared"}
+            </Button>
 
             <Button size="sm" onClick={save} disabled={saving || !dirty}>
               {saving ? (
@@ -660,52 +652,39 @@ export function ShowcaseBuilderPage() {
               </div>
             </div>
 
+            {/* Publishing lives in the Share dialog off the top bar — the same
+                one the Showcases list uses — so there is a single place in the
+                product that answers "how do I send this to someone?". */}
             <div className="h-fit rounded-2xl border border-border bg-card p-6">
-              <p className="text-sm font-extrabold text-foreground">Share</p>
+              <p className="text-sm font-extrabold text-foreground">Status</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {revokedAt
-                  ? "Not published — this link won't work until you publish."
-                  : "Live at this link."}
+                  ? "This showcase is a draft — only your team can see it."
+                  : "Live. Anyone with the link can view it."}
               </p>
-              {dirty && !revokedAt && (
-                <p className="mt-2 text-xs text-amber-600">
-                  Save first — visitors still see the last saved version.
-                </p>
-              )}
-              <Button onClick={toggleShare} variant="outline" className="mt-4 w-full">
-                {revokedAt ? (
-                  <>
-                    <Eye className="mr-1.5 h-4 w-4" /> Publish
-                  </>
-                ) : (
-                  <>
-                    <EyeOff className="mr-1.5 h-4 w-4" /> Unpublish
-                  </>
-                )}
+              <Button
+                variant="outline"
+                className="mt-4 w-full"
+                onClick={() => setShareOpen(true)}
+              >
+                <Share2 className="mr-1.5 h-4 w-4" />
+                {revokedAt ? "Publish & get link" : "Share link"}
               </Button>
-              {!revokedAt && (
-                <div className="mt-2 space-y-2">
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => {
-                      navigator.clipboard.writeText(shareUrl);
-                      toast.success("Link copied");
-                    }}
-                  >
-                    <Copy className="mr-1.5 h-4 w-4" /> Copy link
-                  </Button>
-                  <Button asChild variant="outline" className="w-full">
-                    <a href={shareUrl} target="_blank" rel="noreferrer">
-                      <ExternalLink className="mr-1.5 h-4 w-4" /> Open share page
-                    </a>
-                  </Button>
-                </div>
-              )}
             </div>
           </div>
         </div>
       )}
+
+      <ShowcaseShareDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        showcaseId={showcaseId}
+        title={title || "Untitled showcase"}
+        shareToken={shareToken}
+        revokedAt={revokedAt}
+        onChanged={setRevokedAt}
+        hasUnsavedChanges={dirty}
+      />
 
       <ShowcasePhotoPickerDialog
         open={pickerFor !== null}

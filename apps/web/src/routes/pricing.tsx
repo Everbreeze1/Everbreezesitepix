@@ -21,9 +21,13 @@ import {
   PLANS,
   TRIAL_DAYS,
   annualTotal,
+  displayFeatures,
   exceedsSeatCap,
+  gainsBetween,
+  higherTiers,
   monthlyRate,
   monthlyTotal,
+  planById,
   type BillingInterval,
   type PlanPricing,
 } from "@/lib/pricing";
@@ -269,7 +273,7 @@ function PublicPricingPage() {
                 </Button>
 
                 <p className="mt-4 font-manrope text-xs text-muted-foreground">{plan.tagline}</p>
-                <FeatureList features={plan.features} />
+                <FeatureList features={displayFeatures(plan)} />
               </div>
             );
           })}
@@ -288,7 +292,19 @@ interface MyTeamResult {
 
 /** Reached by signed-in users — from Settings/Teams "Manage plan", or from
  * the upgrade banner/gate dialog shown app-wide for a team with no active
- * subscription yet. */
+ * subscription yet.
+ *
+ * Deliberately NOT the public page's three-column shelf. A signed-in visitor
+ * is not choosing between three products from scratch — they hold a position
+ * and are deciding whether to move up from it. So this leads with the plan
+ * they're on and shows only genuine upgrades, each answering "what am I
+ * missing?" with the concrete feature delta rather than a full list they'd
+ * have to diff by eye.
+ *
+ * Prices stay: the CTA here goes straight to Stripe checkout, so hiding the
+ * number would mean the first place a customer learns the cost is the payment
+ * page. They're reframed as a delta against what the team already pays, which
+ * is the figure that actually drives an upgrade decision. */
 function AuthedPricingPage() {
   const qc = useQueryClient();
   const [interval, setInterval] = useState<BillingInterval>("monthly");
@@ -297,6 +313,14 @@ function AuthedPricingPage() {
     queryKey: ["my-team"],
     queryFn: async () => (await getMyTeam()) as MyTeamResult,
   });
+
+  // An inactive subscription is treated as holding no tier at all, so every
+  // plan reads as an upgrade instead of one being marked "current" while the
+  // team can't actually use it.
+  const currentPlan: BillingPlan | null = data?.isActive ? data.plan : null;
+  const current = currentPlan ? planById(currentPlan) : undefined;
+  const upgrades = higherTiers(currentPlan);
+  const atTopTier = !!currentPlan && upgrades.length === 0;
 
   return (
     <SubscriptionGateProvider>
@@ -311,35 +335,61 @@ function AuthedPricingPage() {
                   <Crown className="h-6 w-6 text-sidebar-ring" strokeWidth={2} />
                 </span>
                 <h1 className="font-display mt-6 text-4xl font-bold tracking-tight text-foreground">
-                  Choose your plan
+                  {atTopTier ? "Your plan" : current ? "Upgrade your plan" : "Choose your plan"}
                 </h1>
                 <p className="mt-3 max-w-xl font-manrope text-sm text-muted-foreground">
-                  Every plan starts with a {TRIAL_DAYS}-day free trial. Change or cancel anytime
-                  from Settings.
+                  {current
+                    ? "Change or cancel anytime from Settings."
+                    : `Every plan starts with a ${TRIAL_DAYS}-day free trial. Change or cancel anytime from Settings.`}
                 </p>
-
-                <div className="mt-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-8">
-                  <CrewSizePicker seats={seats} onChange={setSeats} />
-                  <IntervalToggle interval={interval} onChange={setInterval} />
-                </div>
 
                 {!isLoading && !data?.team ? (
                   <CreateTeamPrompt
                     onCreated={() => qc.invalidateQueries({ queryKey: ["my-team"] })}
                   />
                 ) : (
-                  <div className="mt-10 grid gap-6 md:grid-cols-3">
-                    {PLANS.map((plan) => (
-                      <PlanCard
-                        key={plan.id}
-                        plan={plan}
-                        interval={interval}
-                        seats={seats}
-                        disabled={isLoading || !data?.team}
-                        isCurrent={!!data?.isActive && data.plan === plan.id}
-                      />
-                    ))}
-                  </div>
+                  <>
+                    {current && (
+                      <CurrentPlanPanel plan={current} seats={seats} interval={interval} />
+                    )}
+
+                    {upgrades.length > 0 && (
+                      <>
+                        <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-8">
+                          <CrewSizePicker seats={seats} onChange={setSeats} />
+                          <IntervalToggle interval={interval} onChange={setInterval} />
+                        </div>
+
+                        <div
+                          className={`mt-8 grid gap-6 ${
+                            upgrades.length === 1 ? "max-w-xl" : "md:grid-cols-2"
+                          }`}
+                        >
+                          {upgrades.map((plan) => (
+                            <PlanCard
+                              key={plan.id}
+                              plan={plan}
+                              interval={interval}
+                              seats={seats}
+                              disabled={isLoading || !data?.team}
+                              currentPlan={currentPlan}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {atTopTier && (
+                      <p className="mt-8 max-w-xl font-manrope text-sm text-muted-foreground">
+                        You're on the highest tier — every feature is unlocked. Manage seats,
+                        payment method and invoices from{" "}
+                        <Link to="/settings" className="font-bold text-primary hover:underline">
+                          Settings
+                        </Link>
+                        .
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </main>
@@ -391,20 +441,72 @@ function CreateTeamPrompt({ onCreated }: { onCreated: () => void }) {
   );
 }
 
+/**
+ * What the team is on today, stated plainly above the upgrade options so the
+ * page opens with the user's own position rather than a sales grid.
+ */
+function CurrentPlanPanel({
+  plan,
+  seats,
+  interval,
+}: {
+  plan: PlanPricing;
+  seats: number;
+  interval: BillingInterval;
+}) {
+  return (
+    <div className="mt-8 rounded-[28px] border border-border bg-card p-6 sm:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 font-manrope text-[11px] font-extrabold uppercase tracking-wider text-primary">
+            <Check className="h-3 w-3" /> Your plan
+          </span>
+          <p className="font-display mt-3 text-3xl font-bold tracking-tight text-foreground">
+            {plan.name}
+          </p>
+          <p className="mt-1 font-manrope text-sm text-muted-foreground">{plan.tagline}</p>
+        </div>
+        <div className="text-right">
+          <p className="font-display text-2xl font-bold tracking-tight text-foreground">
+            ${monthlyTotal(plan, seats, interval)}
+            <span className="ml-1 text-sm font-medium text-muted-foreground">/month</span>
+          </p>
+          <p className="mt-1 font-manrope text-xs text-muted-foreground">
+            {plan.includedSeats} user{plan.includedSeats === 1 ? "" : "s"} included · up to{" "}
+            {plan.maxSeats}
+          </p>
+          <Button asChild variant="outline" size="sm" className="mt-3 rounded-lg font-manrope font-bold">
+            <Link to="/settings">Manage billing</Link>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PlanCard({
   plan,
   interval,
   seats,
   disabled,
-  isCurrent,
+  currentPlan,
 }: {
   plan: PlanPricing;
   interval: BillingInterval;
   seats: number;
   disabled: boolean;
-  isCurrent: boolean;
+  /** Null when the team has no active subscription — then nothing is "extra". */
+  currentPlan: BillingPlan | null;
 }) {
   const capped = exceedsSeatCap(plan, seats);
+  // The concrete answer to "what am I missing?" — only what this tier adds
+  // beyond what the team already has, so there's nothing to diff by eye.
+  const gains = gainsBetween(currentPlan, plan.id);
+  const currentPricing = currentPlan ? planById(currentPlan) : undefined;
+  const delta = currentPricing
+    ? monthlyTotal(plan, seats, interval) - monthlyTotal(currentPricing, seats, interval)
+    : null;
+
   const m = useMutation({
     mutationFn: () =>
       createCheckoutSession({
@@ -418,40 +520,59 @@ function PlanCard({
 
   return (
     <div
-      className={`flex flex-col rounded-[28px] border p-7 text-sidebar-foreground transition-opacity ${
-        isCurrent ? "border-sidebar-ring bg-sidebar" : "border-sidebar-border bg-sidebar"
-      } ${capped ? "opacity-60" : ""}`}
+      className={`flex flex-col rounded-[28px] border border-sidebar-border bg-sidebar p-7 text-sidebar-foreground transition-opacity ${
+        capped ? "opacity-60" : ""
+      }`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <p className="font-manrope text-xs font-extrabold uppercase tracking-[1.5px] text-sidebar-ring">
-          {plan.name}
-        </p>
-        {isCurrent && (
-          <span className="rounded-full bg-sidebar-ring/15 px-2.5 py-1 font-manrope text-[10px] font-extrabold uppercase tracking-wider text-sidebar-ring">
-            Current plan
-          </span>
-        )}
-      </div>
+      <p className="font-manrope text-xs font-extrabold uppercase tracking-[1.5px] text-sidebar-ring">
+        {plan.name}
+      </p>
 
       <div className="mt-3">
         <PriceBlock plan={plan} seats={seats} interval={interval} muted />
       </div>
 
+      {/* The upgrade decision is driven by the difference, not the sticker. */}
+      {delta !== null && delta > 0 && !capped && (
+        <p className="mt-2 font-manrope text-xs font-bold text-sidebar-ring">
+          +${delta}/month more than your current plan
+        </p>
+      )}
+
       <p className="mt-3 font-manrope text-sm text-sidebar-foreground/65">{plan.tagline}</p>
 
-      <FeatureList features={plan.features} muted />
+      {gains.length > 0 ? (
+        <div className="mt-6 flex-1">
+          <p className="font-manrope text-[11px] font-extrabold uppercase tracking-wider text-sidebar-foreground/50">
+            {currentPlan ? "What you'll unlock" : "What's included"}
+          </p>
+          <ul className="mt-3 space-y-2.5">
+            {gains.map((f) => (
+              <li
+                key={f}
+                className="flex items-start gap-2 font-manrope text-sm text-sidebar-foreground/85"
+              >
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-sidebar-ring" />
+                {f}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <FeatureList features={displayFeatures(plan)} muted />
+      )}
 
       <Button
-        disabled={isCurrent || disabled || capped || m.isPending}
+        disabled={disabled || capped || m.isPending}
         onClick={() => m.mutate()}
         className="mt-7 h-11 rounded-lg bg-sidebar-ring font-manrope text-sm font-bold text-sidebar-foreground hover:bg-sidebar-ring/90 disabled:opacity-60"
       >
-        {isCurrent ? (
-          "Current plan"
-        ) : capped ? (
+        {capped ? (
           `Up to ${plan.maxSeats} users`
         ) : m.isPending ? (
           <Loader2 className="h-4 w-4 animate-spin" />
+        ) : currentPlan ? (
+          `Upgrade to ${plan.name}`
         ) : (
           `Start ${TRIAL_DAYS}-day free trial`
         )}
