@@ -232,16 +232,10 @@ export function PhotoCommentsPanel({
     }
   };
 
+  // No heading here — the parent Section already says "Comments"; the
+  // @-mention hint moved into that header's action slot.
   return (
     <div className="flex h-full min-h-0 flex-col text-white">
-      <div className="mb-2 flex items-center justify-between">
-        <div className="text-xs font-semibold uppercase tracking-wide text-white/70">
-          Comments
-          {comments.length > 0 && <span className="ml-1.5 text-white/50">· {comments.length}</span>}
-        </div>
-        <div className="text-[11px] text-white/50">Use @ to mention teammates</div>
-      </div>
-
       <div
         ref={listRef}
         className="flex-1 space-y-2 overflow-y-auto rounded-lg border border-white/10 bg-white/5 p-2 pr-3"

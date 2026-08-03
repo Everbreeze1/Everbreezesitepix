@@ -165,15 +165,11 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
     }
   };
 
+  // No heading here — PhotoDetailsPanel already renders a "Tasks" section
+  // header above this slot, so titling it again produced the stacked
+  // "TASKS / TASKS ON THIS PHOTO" pair seen in the lightbox.
   return (
     <div className="flex h-full min-h-0 flex-col text-white">
-      <div className="mb-2 flex items-center justify-between">
-        <div className="text-xs font-semibold uppercase tracking-wide text-white/70">
-          Tasks on this photo
-        </div>
-        <div className="text-[11px] text-white/50">{tasks.length} total</div>
-      </div>
-
       {/* Add form */}
       <div className="flex items-center gap-2">
         <Input

@@ -325,7 +325,15 @@ export function PhotoDetailsPanel({
 
         {/* Comments */}
         <Section>
-          <SectionHeader icon={MessageSquare} label="Comments" />
+          <SectionHeader
+            icon={MessageSquare}
+            label="Comments"
+            action={
+              <span className="text-[10px] font-medium normal-case tracking-normal text-white/40">
+                @ to mention
+              </span>
+            }
+          />
           <div className="min-h-[120px]">{commentsSlot}</div>
         </Section>
       </div>
