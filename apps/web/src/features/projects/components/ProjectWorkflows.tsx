@@ -719,7 +719,7 @@ function PhaseRunner({
 
   return (
     <div
-      className={`rounded-lg border ${complete ? "border-emerald-500/40 bg-emerald-500/5" : "border-border bg-muted/20"}`}
+      className={`rounded-2xl border-[0.8px] ${complete ? "border-emerald-500/40 bg-emerald-500/5" : "border-border bg-muted/20"}`}
     >
       <button
         type="button"
@@ -763,7 +763,7 @@ function PhaseRunner({
               return (
                 <label
                   key={it.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-card px-3 py-2"
+                  className="flex cursor-pointer items-center gap-3 rounded-xl border-[0.8px] border-border bg-card px-3 py-2.5 transition-colors hover:border-primary/30 hover:bg-card/80"
                 >
                   <Checkbox
                     checked={!!it.completed_at}
@@ -795,7 +795,7 @@ function PhaseRunner({
             }
             // note
             return (
-              <div key={it.id} className="rounded-md border border-border bg-card px-3 py-2">
+              <div key={it.id} className="rounded-xl border-[0.8px] border-border bg-card px-3 py-2.5">
                 <div className="flex items-center gap-2">
                   <StickyNote className="h-4 w-4 text-muted-foreground" />
                   <span className="flex-1 text-sm font-medium">{it.label}</span>
@@ -816,7 +816,7 @@ function PhaseRunner({
             );
           })}
 
-          <div className="rounded-md border border-border bg-card px-3 py-2">
+          <div className="rounded-xl border-[0.8px] border-border bg-card px-3 py-2.5">
             <div className="mb-1 text-xs font-medium text-muted-foreground">Phase notes</div>
             <Textarea
               value={notes}
@@ -831,7 +831,7 @@ function PhaseRunner({
           </div>
 
           {phase.requires_signoff && (
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border-[0.8px] border-border bg-card px-3 py-2.5">
               <Signature className="h-4 w-4 text-muted-foreground" />
               {phase.signed_off_at ? (
                 <>
@@ -910,7 +910,7 @@ function PhotoItem({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
-    <div className="rounded-md border border-border bg-card px-3 py-2">
+    <div className="rounded-xl border-[0.8px] border-border bg-card px-3 py-2.5">
       <div className="flex items-center gap-2">
         <Camera className="h-4 w-4 text-muted-foreground" />
         <span className="flex-1 text-sm font-medium">{item.label}</span>
@@ -937,7 +937,7 @@ function PhotoItem({
 
       {item.photo_id ? (
         <div className="mt-2 flex items-center gap-3">
-          <div className="h-20 w-20 overflow-hidden rounded-md bg-muted">
+          <div className="h-20 w-20 overflow-hidden rounded-lg bg-muted">
             {url ? (
               <img
                 src={url}

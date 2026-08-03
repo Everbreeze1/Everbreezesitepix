@@ -19,7 +19,9 @@ export async function submitFeedback(input: SubmitFeedbackInput): Promise<void> 
   const { error } = await supabase.from("issue_reports").insert({
     user_id: input.userId ?? null,
     email: input.email ?? null,
-    message: (input.message ?? "").trim().slice(0, 4000),
+    // The table's text column is `description` — NOT `message`, whatever the
+    // generated types used to say. See 20260803040000.
+    description: (input.message ?? "").trim().slice(0, 4000),
     kind: input.kind,
     feature: input.feature ?? null,
     sentiment: input.sentiment ?? null,

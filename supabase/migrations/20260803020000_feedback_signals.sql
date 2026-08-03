@@ -35,9 +35,11 @@ CREATE TABLE IF NOT EXISTS public.issue_reports (
 --    the column is already there, so this repairs a partially-shaped table
 --    without knowing which columns it currently has.
 ALTER TABLE public.issue_reports
-  ADD COLUMN IF NOT EXISTS user_id    uuid,
-  ADD COLUMN IF NOT EXISTS email      text,
-  ADD COLUMN IF NOT EXISTS message    text,
+  ADD COLUMN IF NOT EXISTS user_id     uuid,
+  ADD COLUMN IF NOT EXISTS email       text,
+  -- The text column is `description`. An earlier cut of this file said
+  -- `message`, which does not exist on the deployed table — see 20260803040000.
+  ADD COLUMN IF NOT EXISTS description text,
   ADD COLUMN IF NOT EXISTS url        text,
   ADD COLUMN IF NOT EXISTS user_agent text,
   ADD COLUMN IF NOT EXISTS status     text NOT NULL DEFAULT 'new',
@@ -47,19 +49,19 @@ ALTER TABLE public.issue_reports
   ADD COLUMN IF NOT EXISTS source     text NOT NULL DEFAULT 'page',
   ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
 
--- 3. `message` must be nullable: a one-tap thumbs signal has no text. Guarded,
---    because DROP NOT NULL errors if the column was only just created above
---    (already nullable) in some Postgres versions, and to keep this re-runnable.
+-- 3. The text column must be nullable: a one-tap thumbs signal has no text.
+--    Guarded so this stays re-runnable and never touches a column that is
+--    already nullable.
 DO $$
 BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public'
       AND table_name   = 'issue_reports'
-      AND column_name  = 'message'
+      AND column_name  = 'description'
       AND is_nullable  = 'NO'
   ) THEN
-    ALTER TABLE public.issue_reports ALTER COLUMN message DROP NOT NULL;
+    ALTER TABLE public.issue_reports ALTER COLUMN description DROP NOT NULL;
   END IF;
 END $$;
 

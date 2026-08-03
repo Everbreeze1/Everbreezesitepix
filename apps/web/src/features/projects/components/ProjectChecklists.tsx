@@ -899,7 +899,7 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
                         return (
                           <li
                             key={it.id}
-                            className="group rounded-lg border border-transparent px-3 py-2.5 transition-colors hover:border-border/60 hover:bg-muted/40"
+                            className="group rounded-xl border-[0.8px] border-transparent px-3 py-2.5 transition-colors hover:border-border/60 hover:bg-muted/40"
                           >
                             <div className="flex items-start gap-2.5">
                               {it.item_type === "checkbox" || !it.item_type ? (
@@ -1268,7 +1268,7 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
               </p>
               <ul className="mt-3 space-y-2">
                 {(viewingCompleted.snapshot?.items ?? []).map((it: any, idx: number) => (
-                  <li key={idx} className="rounded-md border border-border p-3">
+                  <li key={idx} className="rounded-xl border-[0.8px] border-border bg-card/60 p-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <div
                         className={`h-4 w-4 shrink-0 rounded-sm border ${
@@ -1366,7 +1366,7 @@ function ItemResponse({ item, onChange }: { item: ChecklistItem; onChange: (valu
               key={o}
               type="button"
               onClick={() => onChange(value === o ? null : o)}
-              className={`min-w-[72px] rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
+              className={`min-w-[72px] rounded-lg border px-4 py-2 text-sm font-bold transition-colors ${
                 value === o ? colors[i] : "border-border text-muted-foreground hover:bg-muted/60"
               }`}
             >
@@ -1565,7 +1565,7 @@ function AttachPhotosDialog({
         </DialogHeader>
 
         {/* Upload actions — always available */}
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 p-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border-[0.8px] border-dashed border-border bg-muted/30 p-3">
           <input
             ref={uploadInputRef}
             type="file"
@@ -1616,7 +1616,7 @@ function AttachPhotosDialog({
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : photos.length === 0 ? (
-          <div className="rounded-md border border-border bg-background py-8 text-center text-sm text-muted-foreground">
+          <div className="rounded-xl border-[0.8px] border-dashed border-border bg-muted/20 py-8 text-center text-sm text-muted-foreground">
             No photos in this project yet — upload or take one above to attach it to this item.
           </div>
         ) : (
@@ -1635,7 +1635,7 @@ function AttachPhotosDialog({
                     type="button"
                     disabled={isAttached}
                     onClick={() => togglePick(p.id)}
-                    className={`relative aspect-square overflow-hidden rounded-md border-2 transition-all ${
+                    className={`relative aspect-square overflow-hidden rounded-lg border-2 transition-all ${
                       isAttached
                         ? "border-emerald-500/60 opacity-50"
                         : isPicked

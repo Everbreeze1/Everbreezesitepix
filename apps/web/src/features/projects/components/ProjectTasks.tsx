@@ -392,7 +392,9 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
     return (
       <Card
         key={t.id}
-        className="cursor-pointer p-3 hover:border-primary/40 transition"
+        // Matches the list-view row (rounded-2xl, hairline border, translucent
+        // fill) so the same task doesn't change shape when you flip views.
+        className="cursor-pointer rounded-2xl border-[0.8px] border-border bg-card/70 p-3.5 transition hover:border-primary/40 hover:bg-card"
         onClick={() => setEditing(t)}
       >
         <div className="flex items-start justify-between gap-2">
@@ -537,13 +539,18 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
               const col = tasks.filter((t) => t.status === s);
               const SM = STATUS_META[s];
               return (
-                <div key={s} className="rounded-lg bg-muted/30 p-2">
-                  <div className="mb-2 flex items-center justify-between px-1">
-                    <div className={`flex items-center gap-1.5 text-xs font-medium ${SM.cls}`}>
+                <div
+                  key={s}
+                  className="rounded-2xl border-[0.8px] border-border bg-muted/30 p-3"
+                >
+                  <div className="mb-2.5 flex items-center justify-between px-0.5">
+                    <div
+                      className={`flex items-center gap-1.5 font-manrope text-[11px] font-extrabold uppercase tracking-[0.08em] ${SM.cls}`}
+                    >
                       <SM.icon className="h-3.5 w-3.5" />
                       {SM.label}
                     </div>
-                    <span className="text-[11px] tabular-nums text-muted-foreground">
+                    <span className="rounded-full bg-background/60 px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
                       {col.length}
                     </span>
                   </div>

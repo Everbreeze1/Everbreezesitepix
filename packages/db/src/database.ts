@@ -184,10 +184,10 @@ export type Database = {
         Row: {
           created_at: string
           email: string | null
+          description: string | null
           feature: string | null
           id: string
           kind: string
-          message: string | null
           sentiment: string | null
           source: string
           status: string
@@ -197,11 +197,11 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          description?: string | null
           email?: string | null
           feature?: string | null
           id?: string
           kind?: string
-          message?: string | null
           sentiment?: string | null
           source?: string
           status?: string
@@ -211,11 +211,11 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          description?: string | null
           email?: string | null
           feature?: string | null
           id?: string
           kind?: string
-          message?: string | null
           sentiment?: string | null
           source?: string
           status?: string
