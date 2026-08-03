@@ -1,13 +1,22 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Layers, Loader2, Plus, Trash2, ExternalLink, MoreVertical, Share2 } from "lucide-react";
+import {
+  Layers,
+  Loader2,
+  Plus,
+  Trash2,
+  ExternalLink,
+  MoreVertical,
+  Share2,
+  Sparkles,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -21,10 +30,12 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/sitepix/client";
 import { useSubscription } from "@/hooks/use-subscription";
 import {
   listShowcases,
   createShowcase,
+  createShowcaseFromProject,
   deleteShowcase,
   type ShowcaseSummary,
 } from "@/lib/showcases.functions";
@@ -39,6 +50,10 @@ export function ShowcasesListPage() {
   const [title, setTitle] = useState("");
   const [creating, setCreating] = useState(false);
   const [shareFor, setShareFor] = useState<ShowcaseSummary | null>(null);
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; location: string | null }>>(
+    [],
+  );
+  const [projectsLoading, setProjectsLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -68,6 +83,49 @@ export function ShowcasesListPage() {
       navigate({ to: "/showcases/$showcaseId", params: { showcaseId: res.id } });
     } catch (e: any) {
       toast.error(e?.message ?? "Could not create showcase");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  /** Loaded lazily when the dialog opens — the list page itself doesn't need it. */
+  const loadProjects = async () => {
+    setProjectsLoading(true);
+    try {
+      const { data } = await supabase
+        .from("projects")
+        .select("id, name, location, street, city, state")
+        .order("updated_at", { ascending: false })
+        .limit(50);
+      setProjects(
+        ((data as any[]) ?? []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          location:
+            p.location ?? [p.street, p.city, p.state].filter(Boolean).join(", ") ?? null,
+        })),
+      );
+    } catch {
+      setProjects([]);
+    } finally {
+      setProjectsLoading(false);
+    }
+  };
+
+  const openCreate = () => {
+    setCreateOpen(true);
+    void loadProjects();
+  };
+
+  const doCreateFromProject = async (projectId: string) => {
+    setCreating(true);
+    try {
+      const res = await createShowcaseFromProject({ data: { projectId } });
+      toast.success(`Showcase built from ${res.photoCount} photos — edit anything you like.`);
+      setCreateOpen(false);
+      navigate({ to: "/showcases/$showcaseId", params: { showcaseId: res.id } });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not build showcase");
     } finally {
       setCreating(false);
     }
@@ -120,7 +178,7 @@ export function ShowcasesListPage() {
         title="Showcases"
         description="Build a shareable brochure of your best work — pick projects, write the copy, publish."
         actions={
-          <Button onClick={() => setCreateOpen(true)} className="bg-primary text-primary-foreground hover:bg-primary/90">
+          <Button onClick={openCreate} className="bg-primary text-primary-foreground hover:bg-primary/90">
             <Plus className="mr-1.5 h-4 w-4" /> New Showcase
           </Button>
         }
@@ -137,7 +195,7 @@ export function ShowcasesListPage() {
             title="No showcases yet"
             description="Build your first portfolio page to show prospects what your crew can do."
             action={
-              <Button onClick={() => setCreateOpen(true)}>
+              <Button onClick={openCreate}>
                 <Plus className="mr-2 h-4 w-4" /> New Showcase
               </Button>
             }
@@ -251,25 +309,77 @@ export function ShowcasesListPage() {
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>New Showcase</DialogTitle>
+            <DialogDescription>
+              Build one from a finished job in one click, or start from a blank page.
+            </DialogDescription>
           </DialogHeader>
-          <Input
-            value={title}
-            autoFocus
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Kitchen &amp; Bath Remodels"
-          />
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setCreateOpen(false)} disabled={creating}>
-              Cancel
-            </Button>
-            <Button onClick={doCreate} disabled={creating || !title.trim()}>
-              {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create
-            </Button>
-          </DialogFooter>
+
+          {/* Project-first: everything a showcase needs (name, address, photos
+              already tagged before/progress/after) is on the project, so
+              generating the finished draft beats asking the user to author it. */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              Build from a project
+            </p>
+            {projectsLoading ? (
+              <div className="flex justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : projects.length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                No projects with photos yet.
+              </p>
+            ) : (
+              <div className="mt-2 max-h-64 space-y-1 overflow-y-auto pr-1">
+                {projects.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={creating}
+                    onClick={() => doCreateFromProject(p.id)}
+                    className="flex w-full items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition hover:border-primary/50 hover:bg-accent disabled:opacity-60"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-foreground">{p.name}</p>
+                      {p.location && (
+                        <p className="truncate text-xs text-muted-foreground">{p.location}</p>
+                      )}
+                    </div>
+                    <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 py-1">
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+              or
+            </span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              Start blank
+            </p>
+            <div className="mt-2 flex gap-2">
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Kitchen &amp; Bath Remodels"
+                onKeyDown={(e) => e.key === "Enter" && title.trim() && void doCreate()}
+              />
+              <Button onClick={doCreate} disabled={creating || !title.trim()} className="shrink-0">
+                {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

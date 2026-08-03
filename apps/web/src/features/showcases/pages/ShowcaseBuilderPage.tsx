@@ -70,6 +70,7 @@ function makeSnapshot(v: {
   layout: string;
   accentColor: string;
   showContact: boolean;
+  showReviews: boolean;
   introHtml: string;
   outroHtml: string;
   sections: EditorSection[];
@@ -80,6 +81,7 @@ function makeSnapshot(v: {
     layout: v.layout,
     accentColor: v.accentColor,
     showContact: v.showContact,
+    showReviews: v.showReviews,
     introHtml: v.introHtml,
     outroHtml: v.outroHtml,
     sections: v.sections.map((s) => ({
@@ -106,6 +108,7 @@ export function ShowcaseBuilderPage() {
   const [layout, setLayout] = useState<"grid" | "masonry" | "featured">("grid");
   const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT);
   const [showContact, setShowContact] = useState(true);
+  const [showReviews, setShowReviews] = useState(true);
   const [introHtml, setIntroHtml] = useState("");
   const [outroHtml, setOutroHtml] = useState("");
   const [sections, setSections] = useState<EditorSection[]>([]);
@@ -128,11 +131,12 @@ export function ShowcaseBuilderPage() {
         layout,
         accentColor,
         showContact,
+        showReviews,
         introHtml,
         outroHtml,
         sections,
       }),
-    [title, tagline, layout, accentColor, showContact, introHtml, outroHtml, sections],
+    [title, tagline, layout, accentColor, showContact, showReviews, introHtml, outroHtml, sections],
   );
   const dirty = !loading && snapshot !== savedSnapshotRef.current;
 
@@ -150,6 +154,7 @@ export function ShowcaseBuilderPage() {
       setLayout(s.layout as "grid" | "masonry" | "featured");
       setAccentColor(s.accent_color || DEFAULT_ACCENT);
       setShowContact(s.show_contact);
+      setShowReviews(s.show_reviews);
       setIntroHtml(s.intro_html ?? "");
       setOutroHtml(s.outro_html ?? "");
       setShareToken(s.share_token);
@@ -176,6 +181,7 @@ export function ShowcaseBuilderPage() {
         layout: s.layout,
         accentColor: s.accent_color || DEFAULT_ACCENT,
         showContact: s.show_contact,
+        showReviews: s.show_reviews,
         introHtml: s.intro_html ?? "",
         outroHtml: s.outro_html ?? "",
         sections: loadedSections,
@@ -203,6 +209,7 @@ export function ShowcaseBuilderPage() {
           layout,
           accentColor,
           showContact,
+          showReviews,
           introHtml: introHtml || null,
           outroHtml: outroHtml || null,
         },
@@ -385,6 +392,7 @@ export function ShowcaseBuilderPage() {
     outro_html: outroHtml || null,
     accent_color: accentColor,
     show_contact: showContact,
+    show_reviews: showReviews,
     cover_image_url: sections.flatMap((s) => s.items).find((i) => i.image_url)?.image_url ?? null,
     sections: sections.map((s) => ({
       id: s.key,
@@ -640,6 +648,25 @@ export function ShowcaseBuilderPage() {
                   </div>
                   <Switch checked={showContact} onCheckedChange={setShowContact} />
                 </div>
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-foreground">Ask for a review</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Adds your review links after the work. Turn off for a portfolio you send to
+                      prospects.
+                    </p>
+                  </div>
+                  <Switch checked={showReviews} onCheckedChange={setShowReviews} />
+                </div>
+                {showReviews && (
+                  <p className="text-xs text-muted-foreground">
+                    Review links come from{" "}
+                    <Link to="/settings" className="underline">
+                      Settings
+                    </Link>
+                    . Nothing shows here if you haven&rsquo;t added any.
+                  </p>
+                )}
                 {showContact && !profile?.company_phone && !profile?.company_address && (
                   <p className="text-xs text-amber-600">
                     Your company phone and address are empty — add them in{" "}

@@ -28,7 +28,7 @@ function PublicShowcasePage() {
         const res = await getPublicShowcase({ data: { token } });
         if (!cancelled) setData(res);
       } catch {
-        if (!cancelled) setData({ status: "not_found", showcase: null, company: null });
+        if (!cancelled) setData({ status: "not_found", showcase: null, company: null, reviewLinks: [] });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -63,7 +63,13 @@ function PublicShowcasePage() {
     );
   }
 
-  return <ShowcaseView showcase={data.showcase} company={data.company} />;
+  return (
+    <ShowcaseView
+      showcase={data.showcase}
+      company={data.company}
+      reviewLinks={data.reviewLinks}
+    />
+  );
   // Layout lives entirely in <ShowcaseView> so this page and the builder's
   // preview can never drift apart.
 }

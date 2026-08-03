@@ -50,6 +50,7 @@ export interface ShowcaseDetail {
   outro_html: string | null;
   accent_color: string | null;
   show_contact: boolean;
+  show_reviews: boolean;
   cover_photo_id: string | null;
   cover_image_url: string | null;
   sections: ShowcaseSectionDetail[];
@@ -65,10 +66,12 @@ export interface PublicShowcase {
     outro_html: string | null;
     accent_color: string | null;
     show_contact: boolean;
+    show_reviews: boolean;
     cover_image_url: string | null;
     sections: ShowcaseSectionDetail[];
   } | null;
   company: ShowcaseCompany | null;
+  reviewLinks: Array<{ url: string; label: string | null; platform: string }>;
 }
 
 export const listShowcases = rpcOp<undefined, { showcases: ShowcaseSummary[] }>("listShowcases");
@@ -90,6 +93,7 @@ export const updateShowcase = rpcOp<
     outroHtml?: string | null;
     accentColor?: string | null;
     showContact?: boolean;
+    showReviews?: boolean;
   },
   { ok: true }
 >("updateShowcase");
@@ -106,6 +110,12 @@ export const setShowcaseSections = rpcOp<
   },
   { ok: true }
 >("setShowcaseSections");
+
+/** One-click: builds a finished showcase from a project's phase-tagged photos. */
+export const createShowcaseFromProject = rpcOp<
+  { projectId: string; maxPhotos?: number },
+  { id: string; photoCount: number }
+>("createShowcaseFromProject");
 
 export const deleteShowcase = rpcOp<{ id: string }, { ok: true }>("deleteShowcase");
 

@@ -21,6 +21,7 @@ import { Route as FaqRouteImport } from './routes/faq'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
+import { Route as AppTimelineRouteImport } from './routes/_app.timeline'
 import { Route as AppTemplatesRouteImport } from './routes/_app.templates'
 import { Route as AppTeamsRouteImport } from './routes/_app.teams'
 import { Route as AppShowcasesRouteImport } from './routes/_app.showcases'
@@ -115,6 +116,11 @@ const InviteTokenRoute = InviteTokenRouteImport.update({
   id: '/invite/$token',
   path: '/invite/$token',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppTimelineRoute = AppTimelineRouteImport.update({
+  id: '/timeline',
+  path: '/timeline',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppTemplatesRoute = AppTemplatesRouteImport.update({
   id: '/templates',
@@ -318,6 +324,7 @@ export interface FileRoutesByFullPath {
   '/showcases': typeof AppShowcasesRoute
   '/teams': typeof AppTeamsRoute
   '/templates': typeof AppTemplatesRoute
+  '/timeline': typeof AppTimelineRoute
   '/invite/$token': typeof InviteTokenRoute
   '/admin/audit-log': typeof AppAdminAuditLogRoute
   '/admin/notifications': typeof AppAdminNotificationsRoute
@@ -365,6 +372,7 @@ export interface FileRoutesByTo {
   '/showcases': typeof AppShowcasesRoute
   '/teams': typeof AppTeamsRoute
   '/templates': typeof AppTemplatesRoute
+  '/timeline': typeof AppTimelineRoute
   '/invite/$token': typeof InviteTokenRoute
   '/admin/audit-log': typeof AppAdminAuditLogRoute
   '/admin/notifications': typeof AppAdminNotificationsRoute
@@ -415,6 +423,7 @@ export interface FileRoutesById {
   '/_app/showcases': typeof AppShowcasesRoute
   '/_app/teams': typeof AppTeamsRoute
   '/_app/templates': typeof AppTemplatesRoute
+  '/_app/timeline': typeof AppTimelineRoute
   '/invite/$token': typeof InviteTokenRoute
   '/_app/admin/audit-log': typeof AppAdminAuditLogRoute
   '/_app/admin/notifications': typeof AppAdminNotificationsRoute
@@ -465,6 +474,7 @@ export interface FileRouteTypes {
     | '/showcases'
     | '/teams'
     | '/templates'
+    | '/timeline'
     | '/invite/$token'
     | '/admin/audit-log'
     | '/admin/notifications'
@@ -512,6 +522,7 @@ export interface FileRouteTypes {
     | '/showcases'
     | '/teams'
     | '/templates'
+    | '/timeline'
     | '/invite/$token'
     | '/admin/audit-log'
     | '/admin/notifications'
@@ -561,6 +572,7 @@ export interface FileRouteTypes {
     | '/_app/showcases'
     | '/_app/teams'
     | '/_app/templates'
+    | '/_app/timeline'
     | '/invite/$token'
     | '/_app/admin/audit-log'
     | '/_app/admin/notifications'
@@ -692,6 +704,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/invite/$token'
       preLoaderRoute: typeof InviteTokenRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/timeline': {
+      id: '/_app/timeline'
+      path: '/timeline'
+      fullPath: '/timeline'
+      preLoaderRoute: typeof AppTimelineRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/templates': {
       id: '/_app/templates'
@@ -986,6 +1005,7 @@ interface AppRouteChildren {
   AppShowcasesRoute: typeof AppShowcasesRoute
   AppTeamsRoute: typeof AppTeamsRoute
   AppTemplatesRoute: typeof AppTemplatesRoute
+  AppTimelineRoute: typeof AppTimelineRoute
   AppGroupsGroupIdRoute: typeof AppGroupsGroupIdRoute
   AppProjectsProjectIdRoute: typeof AppProjectsProjectIdRoute
   AppProjectsNewRoute: typeof AppProjectsNewRoute
@@ -1013,6 +1033,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppShowcasesRoute: AppShowcasesRoute,
   AppTeamsRoute: AppTeamsRoute,
   AppTemplatesRoute: AppTemplatesRoute,
+  AppTimelineRoute: AppTimelineRoute,
   AppGroupsGroupIdRoute: AppGroupsGroupIdRoute,
   AppProjectsProjectIdRoute: AppProjectsProjectIdRoute,
   AppProjectsNewRoute: AppProjectsNewRoute,

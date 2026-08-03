@@ -1,5 +1,5 @@
 import { useRouter } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Plus,
@@ -15,7 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
   Signature,
-  Save,
+  Check,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,8 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
+import { SURFACE_CARD } from "@/components/ui/surface";
+import { cn } from "@/lib/utils";
 
 type ItemKind = "check" | "photo" | "note";
 
@@ -94,16 +96,78 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
   const [creating, setCreating] = useState(false);
   const [openPhases, setOpenPhases] = useState<Record<string, boolean>>({});
 
-  // Pending (unsaved) edits — flushed on Save
-  const [pendingTemplate, setPendingTemplate] = useState<Record<string, Partial<Template>>>({});
-  const [pendingPhases, setPendingPhases] = useState<Record<string, Partial<Phase>>>({});
-  const [pendingItems, setPendingItems] = useState<Record<string, Partial<Item>>>({});
-  const [saving, setSaving] = useState(false);
+  /**
+   * Autosave.
+   *
+   * This editor used to be split-brained: adding or deleting a phase/item wrote
+   * to the database instantly, while *renaming* one sat in a pending map until
+   * you found "Save changes". Two different persistence models in one panel
+   * meant you could never tell which of your edits had actually stuck — and an
+   * add would refetch everything underneath your unsaved renames.
+   *
+   * Now every edit behaves the same way: it lands in local state immediately and
+   * is flushed to the server shortly after you stop typing, with one honest
+   * status line. Same model as the document editor and the template designers
+   * users already know.
+   */
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Row patches waiting to be written; keyed by table then id. */
+  const queueRef = useRef<{
+    templates: Record<string, Partial<Template>>;
+    phases: Record<string, Partial<Phase>>;
+    items: Record<string, Partial<Item>>;
+  }>({ templates: {}, phases: {}, items: {} });
 
-  const pendingCount =
-    Object.keys(pendingTemplate).length +
-    Object.keys(pendingPhases).length +
-    Object.keys(pendingItems).length;
+  const flush = async () => {
+    const q = queueRef.current;
+    queueRef.current = { templates: {}, phases: {}, items: {} };
+    const ops: PromiseLike<any>[] = [];
+    const push = (table: string, id: string, patch: any) =>
+      ops.push(
+        supabase
+          .from(table as any)
+          .update(patch)
+          .eq("id", id)
+          .then((r: any) => {
+            if (r.error) throw r.error;
+          }),
+      );
+    for (const [id, patch] of Object.entries(q.templates)) push("workflow_templates", id, patch);
+    for (const [id, patch] of Object.entries(q.phases)) push("workflow_template_phases", id, patch);
+    for (const [id, patch] of Object.entries(q.items)) push("workflow_template_items", id, patch);
+    if (ops.length === 0) return;
+
+    setSaveState("saving");
+    try {
+      await Promise.all(ops);
+      setSaveState("saved");
+    } catch (e: any) {
+      setSaveState("error");
+      toast.error(e?.message ?? "Couldn't save that change");
+    }
+  };
+
+  /** Queue a patch and (re)arm the debounce. */
+  const queueSave = (
+    table: "templates" | "phases" | "items",
+    id: string,
+    patch: Record<string, unknown>,
+  ) => {
+    const bucket = queueRef.current[table] as Record<string, any>;
+    bucket[id] = { ...(bucket[id] ?? {}), ...patch };
+    if (flushTimer.current) clearTimeout(flushTimer.current);
+    flushTimer.current = setTimeout(() => void flush(), 700);
+  };
+
+  // Never strand an edit because the user navigated away mid-debounce.
+  useEffect(() => {
+    return () => {
+      if (flushTimer.current) clearTimeout(flushTimer.current);
+      void flush();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -150,90 +214,22 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Local state is the source of truth for the UI now — edits are already
+  // applied to templates/phases/items before being queued for the server, so
+  // there is no pending overlay to merge in.
   const visibleTemplates = templates.filter((t) => showArchived || !t.archived);
-  const rawSelected = templates.find((t) => t.id === selectedId) ?? null;
-  const selected = useMemo(
-    () => (rawSelected ? { ...rawSelected, ...(pendingTemplate[rawSelected.id] ?? {}) } : null),
-    [rawSelected, pendingTemplate],
-  );
+  const selected = templates.find((t) => t.id === selectedId) ?? null;
   const selectedPhases = useMemo(
-    () =>
-      phases
-        .filter((p) => p.template_id === selectedId)
-        .map((p) => ({ ...p, ...(pendingPhases[p.id] ?? {}) })),
-    [phases, selectedId, pendingPhases],
+    () => phases.filter((p) => p.template_id === selectedId),
+    [phases, selectedId],
   );
-  const effectiveItems = useMemo(
-    () => items.map((it) => ({ ...it, ...(pendingItems[it.id] ?? {}) })),
-    [items, pendingItems],
-  );
+  const effectiveItems = items;
 
+  /** Switching templates flushes anything still in the debounce window. */
   const trySelect = async (id: string | null) => {
-    if (
-      pendingCount > 0 &&
-      !(await confirm({ description: "Discard unsaved changes?", variant: "destructive" }))
-    )
-      return;
-    setPendingTemplate({});
-    setPendingPhases({});
-    setPendingItems({});
+    if (flushTimer.current) clearTimeout(flushTimer.current);
+    await flush();
     setSelectedId(id);
-  };
-
-  const discardPending = () => {
-    setPendingTemplate({});
-    setPendingPhases({});
-    setPendingItems({});
-  };
-
-  const saveAll = async () => {
-    setSaving(true);
-    try {
-      const ops: PromiseLike<any>[] = [];
-      for (const [id, patch] of Object.entries(pendingTemplate)) {
-        ops.push(
-          supabase
-            .from("workflow_templates" as any)
-            .update(patch)
-            .eq("id", id)
-            .then((r: any) => {
-              if (r.error) throw r.error;
-            }),
-        );
-      }
-      for (const [id, patch] of Object.entries(pendingPhases)) {
-        ops.push(
-          supabase
-            .from("workflow_template_phases" as any)
-            .update(patch)
-            .eq("id", id)
-            .then((r: any) => {
-              if (r.error) throw r.error;
-            }),
-        );
-      }
-      for (const [id, patch] of Object.entries(pendingItems)) {
-        ops.push(
-          supabase
-            .from("workflow_template_items" as any)
-            .update(patch)
-            .eq("id", id)
-            .then((r: any) => {
-              if (r.error) throw r.error;
-            }),
-        );
-      }
-      await Promise.all(ops);
-      setPendingTemplate({});
-      setPendingPhases({});
-      setPendingItems({});
-      toast.success("Saved");
-      await load();
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to save");
-    } finally {
-      setSaving(false);
-    }
   };
 
   const createTemplate = async () => {
@@ -347,22 +343,26 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
     const { data, error } = await supabase
       .from("workflow_template_phases" as any)
       .insert({ template_id: selectedId, position, name: `Phase ${position + 1}` })
-      .select("id")
+      .select("id, template_id, position, name, description, requires_signoff")
       .single();
     if (error || !data) {
-      toast.error("Failed");
+      toast.error("Couldn't add that phase");
       return;
     }
+    // Append locally instead of refetching every template — a full reload here
+    // replaced the rows out from under any edit still in the debounce window.
+    setPhases((xs) => [...xs, data as unknown as Phase]);
     setOpenPhases((m) => ({ ...m, [(data as any).id]: true }));
-    void load();
   };
 
   const updatePhase = (id: string, patch: Partial<Phase>) => {
-    setPendingPhases((m) => ({ ...m, [id]: { ...(m[id] ?? {}), ...patch } }));
+    setPhases((xs) => xs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    queueSave("phases", id, patch);
   };
 
   const updateTemplate = (id: string, patch: Partial<Template>) => {
-    setPendingTemplate((m) => ({ ...m, [id]: { ...(m[id] ?? {}), ...patch } }));
+    setTemplates((xs) => xs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    queueSave("templates", id, patch);
   };
 
   const deletePhase = async (id: string) => {
@@ -390,19 +390,21 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
   const addItem = async (phaseId: string, kind: ItemKind, label: string, required: boolean) => {
     if (!label.trim()) return;
     const position = items.filter((i) => i.phase_id === phaseId).length;
-    const { error } = await supabase.from("workflow_template_items" as any).insert({
-      phase_id: phaseId,
-      position,
-      kind,
-      label: label.trim(),
-      required,
-    });
-    if (error) toast.error("Failed");
-    else void load();
+    const { data, error } = await supabase
+      .from("workflow_template_items" as any)
+      .insert({ phase_id: phaseId, position, kind, label: label.trim(), required })
+      .select("id, phase_id, position, kind, label, required")
+      .single();
+    if (error || !data) {
+      toast.error("Couldn't add that step");
+      return;
+    }
+    setItems((xs) => [...xs, data as unknown as Item]);
   };
 
   const updateItem = (id: string, patch: Partial<Item>) => {
-    setPendingItems((m) => ({ ...m, [id]: { ...(m[id] ?? {}), ...patch } }));
+    setItems((xs) => xs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    queueSave("items", id, patch);
   };
 
   const deleteItem = async (id: string) => {
@@ -474,11 +476,10 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
             size="sm"
             className="h-8 -ml-2"
             onClick={async () => {
-              if (
-                pendingCount > 0 &&
-                !(await confirm({ description: "Discard unsaved changes?", variant: "destructive" }))
-              )
-                return;
+              // Nothing to discard any more — just make sure a debounced edit
+              // lands before we leave.
+              if (flushTimer.current) clearTimeout(flushTimer.current);
+              await flush();
               if (window.history.length > 1) router.history.back();
               else void router.navigate({ to: "/settings" });
             }}
@@ -501,7 +502,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
       )}
 
       {loading ? (
-        <Card className="mt-6 flex items-center justify-center p-12">
+        <Card className={cn(SURFACE_CARD, "mt-6 flex items-center justify-center p-12")}>
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </Card>
       ) : templates.length === 0 ? (
@@ -519,11 +520,13 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
         />
       ) : (
         <div className="mt-6 grid gap-4 md:grid-cols-[260px_1fr]">
-          <Card className="p-2">
-            <div className="flex items-center justify-between px-2 py-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Workflows</span>
+          <Card className={cn(SURFACE_CARD, "h-fit p-2")}>
+            <div className="flex items-center justify-between px-2 py-2">
+              <span className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+                Workflows
+              </span>
               <button
-                className="text-xs text-muted-foreground hover:text-foreground"
+                className="text-[11px] font-bold text-muted-foreground transition-colors hover:text-foreground"
                 onClick={() => setShowArchived((s) => !s)}
               >
                 {showArchived ? "Hide archived" : "Show archived"}
@@ -531,11 +534,16 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
             </div>
             <ul className="space-y-0.5">
               {visibleTemplates.map((t) => (
-                <li key={t.id}>
+                <li key={t.id} className="relative">
+                  {selectedId === t.id && (
+                    <span className="absolute inset-y-1.5 left-0 w-1 rounded-r-full bg-primary" />
+                  )}
                   <button
                     onClick={() => trySelect(t.id)}
-                    className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors ${
-                      selectedId === t.id ? "bg-primary/10 text-foreground" : "hover:bg-muted/60"
+                    className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${
+                      selectedId === t.id
+                        ? "bg-primary/[0.07] font-bold text-foreground"
+                        : "font-medium hover:bg-muted/60"
                     }`}
                   >
                     <span className="truncate">{t.name}</span>
@@ -551,7 +559,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
           </Card>
 
           {selected ? (
-            <Card className="p-6 sm:p-8">
+            <Card className={cn(SURFACE_CARD, "p-6 sm:p-8")}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1 space-y-2">
                   <Input
@@ -582,7 +590,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => void duplicateTemplate(rawSelected!)}
+                    onClick={() => void duplicateTemplate(selected!)}
                   >
                     <Copy className="mr-1.5 h-4 w-4" />
                     Duplicate
@@ -590,7 +598,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => void toggleArchived(rawSelected!)}
+                    onClick={() => void toggleArchived(selected!)}
                   >
                     {selected.archived ? (
                       <>
@@ -608,7 +616,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
                     variant="ghost"
                     size="icon"
                     className="text-muted-foreground hover:text-destructive"
-                    onClick={() => void deleteTemplate(rawSelected!)}
+                    onClick={() => void deleteTemplate(selected!)}
                     aria-label="Delete workflow"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -645,39 +653,32 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
                 Add phase
               </Button>
 
-              {/* Save toolbar */}
-              <div className="sticky bottom-0 -mx-6 sm:-mx-8 mt-6 flex items-center justify-between gap-2 border-t border-border bg-card/95 px-6 sm:px-8 py-3 backdrop-blur">
-                <span className="text-xs text-muted-foreground">
-                  {pendingCount > 0
-                    ? `${pendingCount} unsaved change${pendingCount === 1 ? "" : "s"}`
-                    : "All changes saved"}
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={discardPending}
-                    disabled={pendingCount === 0 || saving}
-                  >
-                    Discard
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => void saveAll()}
-                    disabled={pendingCount === 0 || saving}
-                  >
-                    {saving ? (
-                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Save className="mr-1.5 h-4 w-4" />
-                    )}
-                    Save changes
-                  </Button>
-                </div>
+              {/* Autosave status — no Save button to hunt for, and no way to
+                  be unsure whether an edit stuck. */}
+              <div className="sticky bottom-0 -mx-6 mt-6 flex items-center justify-end gap-2 border-t border-border bg-card/95 px-6 py-3 backdrop-blur sm:-mx-8 sm:px-8">
+                {saveState === "saving" ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Saving…
+                  </span>
+                ) : saveState === "error" ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-destructive">
+                    Couldn't save — check your connection
+                  </span>
+                ) : saveState === "saved" ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    <Check className="h-3.5 w-3.5" />
+                    All changes saved
+                  </span>
+                ) : (
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    Changes save automatically
+                  </span>
+                )}
               </div>
             </Card>
           ) : (
-            <Card className="flex items-center justify-center p-12 text-sm text-muted-foreground">
+            <Card className={cn(SURFACE_CARD, "flex items-center justify-center p-12 text-sm text-muted-foreground")}>
               Select a workflow to edit
             </Card>
           )}
@@ -720,8 +721,8 @@ function PhaseEditor({
   };
 
   return (
-    <div className="rounded-lg border border-border bg-muted/20">
-      <div className="flex items-center gap-2 px-3 py-2">
+    <div className="rounded-2xl border-[0.8px] border-border bg-muted/20 transition-colors">
+      <div className="flex items-center gap-2 px-3 py-2.5">
         <button
           onClick={onToggle}
           className="text-muted-foreground hover:text-foreground"
@@ -767,7 +768,7 @@ function PhaseEditor({
               return (
                 <li
                   key={it.id}
-                  className="group flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5"
+                  className="group flex items-center gap-2 rounded-xl border-[0.8px] border-border bg-card px-2.5 py-2 transition-colors hover:border-primary/30"
                 >
                   <Icon className="h-4 w-4 text-muted-foreground" />
                   <Input

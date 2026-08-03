@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -68,11 +69,13 @@ import {
   ChevronDown,
   ArrowLeft,
   LayoutTemplate,
+  FilePlus2,
   PanelRightOpen,
   PanelRightClose,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { createPageFromTemplate } from "@/lib/project-pages.functions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -606,6 +609,7 @@ const PlaceholderChips = Extension.create<{ getValue: (token: string) => string 
 // ---------------------------------------------------------------------------
 export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const confirm = useConfirm();
   const [items, setItems] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -619,6 +623,59 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newStyle, setNewStyle] = useState<DocStyle>("report");
+  /** Template awaiting a project to be applied to. */
+  const [useFor, setUseFor] = useState<DocumentTemplate | null>(null);
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; location: string | null }>>(
+    [],
+  );
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [applying, setApplying] = useState(false);
+
+  const openUse = (t: DocumentTemplate) => {
+    setUseFor(t);
+    setProjectsLoading(true);
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from("projects")
+          .select("id, name, location, street, city, state")
+          .order("updated_at", { ascending: false })
+          .limit(50);
+        setProjects(
+          ((data as any[]) ?? []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            location: p.location ?? [p.street, p.city, p.state].filter(Boolean).join(", ") ?? null,
+          })),
+        );
+      } catch {
+        setProjects([]);
+      } finally {
+        setProjectsLoading(false);
+      }
+    })();
+  };
+
+  const applyToProject = async (projectId: string) => {
+    if (!useFor) return;
+    setApplying(true);
+    try {
+      const res = await createPageFromTemplate({
+        data: { projectId, templateId: useFor.id },
+      });
+      setUseFor(null);
+      // Straight into the new page: the point of "use" is to end up editing the
+      // document, not back on a settings screen wondering if it worked.
+      navigate({
+        to: "/projects/$projectId/pages/$pageId",
+        params: { projectId, pageId: res.page.id },
+      });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not use this template");
+    } finally {
+      setApplying(false);
+    }
+  };
 
   useEffect(() => {
     void load();
@@ -808,9 +865,9 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
         <div>
           <p className="font-semibold">How to use a template</p>
           <p className="mt-0.5 text-blue-900/80 dark:text-blue-200/80">
-            Open a project → <strong>Documents</strong> → <strong>Create</strong> →{" "}
-            <strong>More Templates</strong>, then pick one to start a new page from it. Templates
-            you create or edit here appear there right away — there's nothing else to publish.
+            Hit <strong>Use in a project</strong> on any template below and pick the job — the
+            document is created with its fields already filled in. They&rsquo;re also available
+            inside a project under <strong>Documents → Create → More Templates</strong>.
           </p>
         </div>
       </div>
@@ -874,6 +931,14 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                     .slice(0, 180) || "Empty document"}
                 </div>
                 <div className="mt-auto flex flex-wrap gap-1 border-t border-border/60 pt-3">
+                  {/* The primary verb. Without it the Templates page could only
+                      author templates, never apply one — which is exactly why
+                      "not sure how to use that template again" came back as
+                      feedback. Available on examples too: using one doesn't
+                      write to it, so the read-only rule doesn't apply. */}
+                  <Button size="sm" onClick={() => openUse(t)}>
+                    <FilePlus2 className="mr-1 h-3.5 w-3.5" /> Use in a project
+                  </Button>
                   {canManage && !isExample && (
                     <Button
                       size="sm"
@@ -928,6 +993,52 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
           })}
         </div>
       )}
+
+      {/* Use-in-a-project picker */}
+      <Dialog open={!!useFor} onOpenChange={(o) => !o && setUseFor(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="truncate">Use “{useFor?.name}”</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Pick a project and we&rsquo;ll create the document there with its fields already
+            filled in from that project.
+          </p>
+          {projectsLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : projects.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              You don&rsquo;t have any projects yet.
+            </p>
+          ) : (
+            <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+              {projects.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={applying}
+                  onClick={() => applyToProject(p.id)}
+                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition hover:border-primary/50 hover:bg-accent disabled:opacity-60"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-foreground">{p.name}</p>
+                    {p.location && (
+                      <p className="truncate text-xs text-muted-foreground">{p.location}</p>
+                    )}
+                  </div>
+                  {applying ? (
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                  ) : (
+                    <FilePlus2 className="h-4 w-4 shrink-0 text-primary" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

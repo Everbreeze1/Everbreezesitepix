@@ -12,6 +12,7 @@ import {
   HelpCircle,
   ChevronRight,
   Layers,
+  CalendarDays,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import {
@@ -42,6 +43,7 @@ const baseItems = [
 const teamItem = { title: "Teams", url: "/teams", icon: Users } as const;
 const collabItem = { title: "Collaborators", url: "/collaborators", icon: Users } as const;
 const templatesItem = { title: "Templates", url: "/templates", icon: LayoutTemplate } as const;
+const timelineItem = { title: "Timeline", url: "/timeline", icon: CalendarDays } as const;
 const showcasesItem = { title: "Showcases", url: "/showcases", icon: Layers } as const;
 const pricingItem = { title: "Upgrade", url: "/pricing", icon: Crown } as const;
 const helpItem = { title: "Help Center", url: "/help", icon: HelpCircle } as const;
@@ -91,7 +93,7 @@ export function AppSidebar() {
   const showShowcases = !!teamData?.isInternal || (!!teamData?.isActive && plan === "team");
   const navItems = [
     ...baseItems,
-    ...(showTemplates ? [templatesItem] : []),
+    ...(showTemplates ? [timelineItem, templatesItem] : []),
     ...(showShowcases ? [showcasesItem] : []),
     ...(showOwnerNav ? [teamItem] : [collabItem]),
   ];

@@ -205,6 +205,8 @@ import {
   updateTextSnippetService,
 } from "../projects/text-snippets";
 import {
+  createShowcaseFromProjectInputSchema,
+  createShowcaseFromProjectService,
   createShowcaseInputSchema,
   createShowcaseService,
   deleteShowcaseInputSchema,
@@ -223,6 +225,10 @@ import {
   updateShowcaseInputSchema,
   updateShowcaseService,
 } from "../showcases/service";
+import {
+  listTimelineActivityInputSchema,
+  listTimelineActivityService,
+} from "../timeline/service";
 
 export type RpcEntry = {
   public?: boolean;
@@ -785,6 +791,14 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   setShowcaseItems: authed(
     (d) => setShowcaseItemsInputSchema.parse(d),
     setShowcaseItemsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  listTimelineActivity: authed(
+    (d) => listTimelineActivityInputSchema.parse(d),
+    listTimelineActivityService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  createShowcaseFromProject: authed(
+    (d) => createShowcaseFromProjectInputSchema.parse(d),
+    createShowcaseFromProjectService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   setShowcaseSections: authed(
     (d) => setShowcaseSectionsInputSchema.parse(d),

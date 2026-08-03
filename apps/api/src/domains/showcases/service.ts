@@ -45,6 +45,7 @@ export interface ShowcaseDetail {
   outro_html: string | null;
   accent_color: string | null;
   show_contact: boolean;
+  show_reviews: boolean;
   cover_photo_id: string | null;
   cover_image_url: string | null;
   sections: ShowcaseSectionDetail[];
@@ -59,6 +60,15 @@ export interface ShowcaseCompany {
   email: string | null;
 }
 
+/**
+ * Showcase photos render up to full viewport width (the lead image bleeds edge
+ * to edge), so this has to stay generous — the win is not serving thumbnails,
+ * it is not serving 4000px camera originals.
+ */
+const SHOWCASE_PHOTO_WIDTH = 1400;
+/** List-page cover thumbnails are ~400px on screen; 800 covers retina. */
+const CARD_THUMB_WIDTH = 800;
+
 async function myTeamId(ctx: AuthedContext): Promise<string | null> {
   const { data } = await ctx.supabase
     .from("team_members" as any)
@@ -68,8 +78,50 @@ async function myTeamId(ctx: AuthedContext): Promise<string | null> {
   return (data as any)?.team_id ?? null;
 }
 
+/**
+ * Signs each path with a width cap so a showcase serves ~1400px renditions
+ * instead of 4000px camera originals — roughly a 10x payload reduction on a
+ * page that is mostly photography.
+ *
+ * Has to be one call per path: the batch `createSignedUrls` does not accept
+ * `transform`, only the singular `createSignedUrl` does. That is affordable
+ * here because a showcase is capped at 60 photos, and would NOT be for an
+ * unbounded surface like the gallery.
+ *
+ * Returns null if transformation is unavailable (it needs a paid Supabase
+ * plan), so the caller can fall back to plain signed URLs rather than serving
+ * a page of broken images.
+ */
+async function signTransformed(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  paths: string[],
+  width: number,
+): Promise<Record<string, string> | null> {
+  const results = await Promise.all(
+    paths.map(async (path) => {
+      const { data, error } = await admin.storage
+        .from("site-photos")
+        .createSignedUrl(path, 60 * 60, {
+          transform: { width, resize: "contain", quality: 80 },
+        });
+      return { path, url: data?.signedUrl ?? null, failed: !!error };
+    }),
+  );
+  // If every request failed the feature isn't available at all; bail so the
+  // caller uses the untransformed batch path instead of showing nothing.
+  if (results.every((r) => r.failed)) {
+    console.warn("[showcases] image transformation unavailable, serving originals");
+    return null;
+  }
+  const map: Record<string, string> = {};
+  for (const r of results) if (r.url) map[r.path] = r.url;
+  return map;
+}
+
 async function resolvePhotoUrls(
   photoIds: string[],
+  /** Max rendered width. Omit to serve originals. */
+  width?: number,
 ): Promise<Map<string, { image_url: string; storage_path: string }>> {
   const admin = getSupabaseAdmin();
   const out = new Map<string, { image_url: string; storage_path: string }>();
@@ -86,7 +138,17 @@ async function resolvePhotoUrls(
   // *other* photo's signed URL in the same batch call.
   const needSign = rows.filter((r) => !r.image_url && r.storage_path);
   let signedMap: Record<string, string> = {};
-  if (needSign.length) {
+  if (needSign.length && width) {
+    const transformed = await signTransformed(
+      admin,
+      needSign.map((r) => r.storage_path),
+      width,
+    );
+    if (transformed) signedMap = transformed;
+  }
+  // Either no width was asked for, or transformation isn't available on this
+  // project's plan — fall back to the (batched, cheaper) original URLs.
+  if (needSign.length && !Object.keys(signedMap).length) {
     const { data: signed, error } = await admin.storage
       .from("site-photos")
       .createSignedUrls(
@@ -144,7 +206,7 @@ async function loadSections(
 
   const sections = (sectionRows as any[]) ?? [];
   const items = (itemRows as any[]) ?? [];
-  const urlMap = await resolvePhotoUrls(items.map((i) => i.photo_id));
+  const urlMap = await resolvePhotoUrls(items.map((i) => i.photo_id), SHOWCASE_PHOTO_WIDTH);
 
   // Project names are looked up separately rather than via a PostgREST embed —
   // `project_id` is deliberately not a FK (see the migration), so an embed
@@ -225,7 +287,7 @@ export async function listShowcasesService(ctx: AuthedContext): Promise<{ showca
     const id = r.cover_photo_id ?? firstPhotoByShowcase.get(r.id);
     if (id) thumbIdByShowcase.set(r.id, id);
   });
-  const urlMap = await resolvePhotoUrls(Array.from(new Set(thumbIdByShowcase.values())));
+  const urlMap = await resolvePhotoUrls(Array.from(new Set(thumbIdByShowcase.values())), CARD_THUMB_WIDTH);
 
   return {
     showcases: rows.map((r) => ({
@@ -255,7 +317,7 @@ export async function getShowcaseService(
   const { data: row } = await (ctx.supabase as any)
     .from("showcases")
     .select(
-      "id, title, tagline, layout, share_token, revoked_at, intro_html, outro_html, accent_color, show_contact, cover_photo_id",
+      "id, title, tagline, layout, share_token, revoked_at, intro_html, outro_html, accent_color, show_contact, show_reviews, cover_photo_id",
     )
     .eq("id", data.id)
     .maybeSingle();
@@ -263,7 +325,7 @@ export async function getShowcaseService(
 
   const [sections, coverMap] = await Promise.all([
     loadSections(ctx.supabase, data.id),
-    resolvePhotoUrls(row.cover_photo_id ? [row.cover_photo_id] : []),
+    resolvePhotoUrls(row.cover_photo_id ? [row.cover_photo_id] : [], SHOWCASE_PHOTO_WIDTH),
   ]);
 
   return {
@@ -277,6 +339,7 @@ export async function getShowcaseService(
     outro_html: row.outro_html ?? null,
     accent_color: row.accent_color ?? null,
     show_contact: row.show_contact ?? true,
+    show_reviews: row.show_reviews ?? true,
     cover_photo_id: row.cover_photo_id ?? null,
     cover_image_url: row.cover_photo_id
       ? (coverMap.get(row.cover_photo_id)?.image_url ?? null)
@@ -305,6 +368,137 @@ export async function createShowcaseService(
   return { id: row.id };
 }
 
+export const createShowcaseFromProjectInputSchema = z.object({
+  projectId: z.string().uuid(),
+  /** Cap so a job with hundreds of photos becomes a showcase, not a dump. */
+  maxPhotos: z.number().int().min(1).max(60).default(24),
+});
+
+/** Photos are already tagged before/progress/after — that ordering IS the story. */
+const PHASE_SECTIONS: Array<{ phase: string; title: string; body: string }> = [
+  { phase: "before", title: "Before", body: "<p>Where we started.</p>" },
+  { phase: "progress", title: "The work", body: "<p>What it took to get there.</p>" },
+  { phase: "after", title: "After", body: "<p>The finished result.</p>" },
+];
+
+/**
+ * Builds a complete, publishable showcase from one project in a single call.
+ *
+ * The manual builder asks for a title, sections, photo picks and copy before
+ * anything exists — which is why building one felt like assembling a report.
+ * Everything it asks for is already known: the project has a name and address,
+ * and its photos are already phase-tagged. So generate the finished draft and
+ * let the user edit it, rather than making them author it from an empty page.
+ */
+export async function createShowcaseFromProjectService(
+  ctx: AuthedContext,
+  data: z.infer<typeof createShowcaseFromProjectInputSchema>,
+): Promise<{ id: string; photoCount: number }> {
+  const teamId = await myTeamId(ctx);
+  if (!teamId) throw Object.assign(new Error("No team"), { status: 400 });
+
+  const { data: project } = await (ctx.supabase as any)
+    .from("projects")
+    .select("id, name, street, city, state")
+    .eq("id", data.projectId)
+    .maybeSingle();
+  if (!project) throw Object.assign(new Error("Project not found"), { status: 404 });
+
+  // Walkthrough frames are working footage, not portfolio material.
+  const { data: photoRows } = await (ctx.supabase as any)
+    .from("photos")
+    .select("id, caption, phase, taken_at, created_at")
+    .eq("project_id", data.projectId)
+    .eq("archived", false)
+    .or("phase.is.null,phase.neq.walkthrough")
+    .order("taken_at", { ascending: true, nullsFirst: false })
+    .limit(200);
+
+  const photos = ((photoRows as any[]) ?? []).slice(0, data.maxPhotos);
+  if (!photos.length) {
+    throw Object.assign(new Error("This project has no photos to showcase yet."), { status: 400 });
+  }
+
+  const address = [project.street, project.city, project.state].filter(Boolean).join(", ");
+  const safeName = String(project.name ?? "this project")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  const grouped = PHASE_SECTIONS.map((s) => ({
+    ...s,
+    photos: photos.filter((p) => p.phase === s.phase),
+  })).filter((s) => s.photos.length > 0);
+
+  // Untagged photos still deserve a home; if nothing is tagged at all this is
+  // the only section and the showcase reads as a simple gallery.
+  const untagged = photos.filter((p) => !PHASE_SECTIONS.some((s) => s.phase === p.phase));
+  const sections = [
+    ...grouped,
+    ...(untagged.length
+      ? [
+          {
+            title: grouped.length ? "More from this job" : "The work",
+            body: grouped.length ? "" : "<p>A look at what we did on this project.</p>",
+            photos: untagged,
+          },
+        ]
+      : []),
+  ];
+
+  const { data: row, error } = await (ctx.supabase as any)
+    .from("showcases")
+    .insert({
+      team_id: teamId,
+      created_by: ctx.userId,
+      title: project.name,
+      tagline: address || null,
+      // `featured` bleeds each section's lead photo edge to edge. That is
+      // striking once or twice and relentless four times over, so it is only
+      // the default for short showcases.
+      layout: sections.length <= 2 ? "featured" : "grid",
+      // A generated showcase should read as finished, not skeletal — an empty
+      // opening and close is most of what made the first draft feel unpolished.
+      // This is a starting draft the user edits, not final copy.
+      intro_html: `<p>A closer look at ${safeName}. Every photo below was taken on site by our crew.</p>`,
+      outro_html: `<p>Looking for work like this? Get in touch for a free estimate.</p>`,
+      // The finished result is the shot that sells the job, so lead with it.
+      cover_photo_id: (photos.find((p) => p.phase === "after") ?? photos[0]).id,
+    })
+    .select("id")
+    .single();
+  if (error) throw Object.assign(new Error(error.message), { status: 400 });
+  const showcaseId = row.id as string;
+
+  for (const [index, section] of sections.entries()) {
+    const { data: sectionRow, error: sectionErr } = await (ctx.supabase as any)
+      .from("showcase_sections")
+      .insert({
+        showcase_id: showcaseId,
+        project_id: data.projectId,
+        title: section.title,
+        body_html: section.body || null,
+        position: index,
+      })
+      .select("id")
+      .single();
+    if (sectionErr) throw Object.assign(new Error(sectionErr.message), { status: 400 });
+
+    const { error: itemsErr } = await (ctx.supabase as any).from("showcase_items").insert(
+      section.photos.map((p: any, i: number) => ({
+        showcase_id: showcaseId,
+        section_id: sectionRow.id,
+        photo_id: p.id,
+        caption: sanitizeCaption(p.caption) || null,
+        position: i,
+      })),
+    );
+    if (itemsErr) throw Object.assign(new Error(itemsErr.message), { status: 400 });
+  }
+
+  return { id: showcaseId, photoCount: photos.length };
+}
+
 export const updateShowcaseInputSchema = z.object({
   id: z.string().uuid(),
   title: z.string().trim().min(1).max(160).optional(),
@@ -319,6 +513,7 @@ export const updateShowcaseInputSchema = z.object({
     .nullable()
     .optional(),
   showContact: z.boolean().optional(),
+  showReviews: z.boolean().optional(),
 });
 
 export async function updateShowcaseService(
@@ -334,6 +529,7 @@ export async function updateShowcaseService(
   if (data.outroHtml !== undefined) patch.outro_html = data.outroHtml;
   if (data.accentColor !== undefined) patch.accent_color = data.accentColor;
   if (data.showContact !== undefined) patch.show_contact = data.showContact;
+  if (data.showReviews !== undefined) patch.show_reviews = data.showReviews;
   if (!Object.keys(patch).length) return { ok: true };
   const { error } = await (ctx.supabase as any).from("showcases").update(patch).eq("id", data.id);
   if (error) throw Object.assign(new Error(error.message), { status: 400 });
@@ -477,10 +673,12 @@ export interface PublicShowcase {
     outro_html: string | null;
     accent_color: string | null;
     show_contact: boolean;
+    show_reviews: boolean;
     cover_image_url: string | null;
     sections: ShowcaseSectionDetail[];
   } | null;
   company: ShowcaseCompany | null;
+  reviewLinks: Array<{ url: string; label: string | null; platform: string }>;
 }
 
 export async function getPublicShowcaseService(
@@ -490,21 +688,31 @@ export async function getPublicShowcaseService(
   const { data: row } = await (admin as any)
     .from("showcases")
     .select(
-      "id, title, tagline, layout, revoked_at, created_by, intro_html, outro_html, accent_color, show_contact, cover_photo_id",
+      "id, team_id, title, tagline, layout, revoked_at, created_by, intro_html, outro_html, accent_color, show_contact, show_reviews, cover_photo_id",
     )
     .eq("share_token", data.token)
     .maybeSingle();
-  if (!row) return { status: "not_found", showcase: null, company: null };
-  if (row.revoked_at) return { status: "revoked", showcase: null, company: null };
+  if (!row) return { status: "not_found", showcase: null, company: null, reviewLinks: [] };
+  if (row.revoked_at) return { status: "revoked", showcase: null, company: null, reviewLinks: [] };
 
-  const [sections, { data: profile }, coverMap] = await Promise.all([
+  const [sections, { data: profile }, coverMap, { data: reviewRows }] = await Promise.all([
     loadSections(admin, row.id),
     admin
       .from("profiles")
       .select("company, company_logo_url, company_phone, company_address, email")
       .eq("id", row.created_by)
       .maybeSingle(),
-    resolvePhotoUrls(row.cover_photo_id ? [row.cover_photo_id] : []),
+    resolvePhotoUrls(row.cover_photo_id ? [row.cover_photo_id] : [], SHOWCASE_PHOTO_WIDTH),
+    // The team's own review links (Settings → review links), so a finished-job
+    // page can ask for the review at the moment the customer is looking at the
+    // work. Skipped entirely when the showcase has the CTA turned off.
+    row.show_reviews === false
+      ? Promise.resolve({ data: [] as any[] })
+      : (admin as any)
+          .from("team_review_links")
+          .select("platform, url, label, position")
+          .eq("team_id", row.team_id)
+          .order("position", { ascending: true }),
   ]);
 
   // Fall back to the first photo in the showcase so the masthead always has a
@@ -525,6 +733,7 @@ export async function getPublicShowcaseService(
       outro_html: row.outro_html ?? null,
       accent_color: row.accent_color ?? null,
       show_contact: row.show_contact ?? true,
+      show_reviews: row.show_reviews ?? true,
       cover_image_url: coverImageUrl,
       sections,
     },
@@ -537,5 +746,10 @@ export async function getPublicShowcaseService(
           email: p.email ?? null,
         }
       : null,
+    reviewLinks: ((reviewRows as any[]) ?? []).map((r) => ({
+      url: r.url as string,
+      label: (r.label as string | null) ?? null,
+      platform: r.platform as string,
+    })),
   };
 }

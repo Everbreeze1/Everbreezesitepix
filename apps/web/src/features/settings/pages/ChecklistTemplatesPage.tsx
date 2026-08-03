@@ -3,6 +3,7 @@ import {
   Plus,
   Trash2,
   Loader2,
+  Check,
   ClipboardList,
   GripVertical,
   Archive,
@@ -59,6 +60,8 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
+import { SURFACE_CARD } from "@/components/ui/surface";
+import { cn } from "@/lib/utils";
 
 type ItemType = "checkbox" | "rating" | "text" | "pass_fail" | "numeric" | "yes_no";
 
@@ -168,6 +171,12 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
     description: string;
   } | null>(null);
   const [startersOpen, setStartersOpen] = useState(false);
+  /**
+   * Autosave status. Edits here already persisted on blur, but silently — with
+   * no Save button and no confirmation, the only way to find out whether your
+   * work stuck was to reload the page. Matches WorkflowTemplatesPage.
+   */
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   const load = async () => {
     setLoading(true);
@@ -325,40 +334,61 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
   const addItem = async (type: ItemType = "checkbox") => {
     if (!selectedId) return;
     const position = selectedItems.length;
-    const { error } = await supabase.from("checklist_template_items" as any).insert({
-      template_id: selectedId,
-      label: "New item",
-      required: false,
-      position,
-      item_type: type,
-    });
-    if (error) toast.error("Failed");
-    else void load();
+    setSaveState("saving");
+    const { data, error } = await supabase
+      .from("checklist_template_items" as any)
+      .insert({
+        template_id: selectedId,
+        label: "New item",
+        required: false,
+        position,
+        item_type: type,
+      })
+      .select("id, template_id, label, description, required, position, item_type")
+      .single();
+    if (error || !data) {
+      setSaveState("error");
+      toast.error("Couldn't add that item");
+      return;
+    }
+    // Append locally rather than refetching every template — a full reload here
+    // discarded in-flight edits and made adding an item feel like a page load.
+    setItems((xs) => [...xs, data as unknown as TemplateItem]);
+    setSaveState("saved");
   };
 
   const updateItem = async (id: string, patch: Partial<TemplateItem>) => {
+    const prev = items.find((x) => x.id === id);
     setItems((xs) => xs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    setSaveState("saving");
     const { error } = await supabase
       .from("checklist_template_items" as any)
       .update(patch)
       .eq("id", id);
     if (error) {
-      toast.error("Failed");
-      void load();
+      setSaveState("error");
+      toast.error("Couldn't save that change");
+      if (prev) setItems((xs) => xs.map((x) => (x.id === id ? prev : x)));
+      return;
     }
+    setSaveState("saved");
   };
 
   const deleteItem = async (id: string) => {
     const prev = items;
     setItems((xs) => xs.filter((x) => x.id !== id));
+    setSaveState("saving");
     const { error } = await supabase
       .from("checklist_template_items" as any)
       .delete()
       .eq("id", id);
     if (error) {
-      toast.error("Failed");
+      setSaveState("error");
+      toast.error("Couldn't delete that item");
       setItems(prev);
+      return;
     }
+    setSaveState("saved");
   };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -375,7 +405,8 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
       return [...others, ...reordered.map((r, idx) => ({ ...r, position: idx }))];
     });
     // Persist new positions
-    await Promise.all(
+    setSaveState("saving");
+    const results = await Promise.all(
       reordered.map((r, idx) =>
         supabase
           .from("checklist_template_items" as any)
@@ -383,6 +414,12 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
           .eq("id", r.id),
       ),
     );
+    if (results.some((r: any) => r?.error)) {
+      setSaveState("error");
+      toast.error("Couldn't save the new order");
+      return;
+    }
+    setSaveState("saved");
   };
 
   const containerCls = embedded ? "" : "container mx-auto max-w-6xl px-4 pb-24 pt-4 md:pt-6";
@@ -405,7 +442,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
                 </DialogHeader>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {STARTER_TEMPLATES.map((s) => (
-                    <Card key={s.name} className="p-3">
+                    <Card key={s.name} className={cn(SURFACE_CARD, "p-3.5")}>
                       <div className="font-medium text-sm">{s.name}</div>
                       <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
                         {s.description}
@@ -491,7 +528,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
       })()}
 
       {loading ? (
-        <Card className="mt-6 flex items-center justify-center p-12">
+        <Card className={cn(SURFACE_CARD, "mt-6 flex items-center justify-center p-12")}>
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </Card>
       ) : templates.length === 0 ? (
@@ -515,7 +552,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
         />
       ) : (
         <div className="mt-6 grid gap-4 md:grid-cols-[280px_1fr]">
-          <Card className="p-2 h-fit">
+          <Card className={cn(SURFACE_CARD, "h-fit p-2")}>
             <div className="flex items-center justify-between px-2 py-1.5">
               <span className="text-xs font-medium text-muted-foreground">Templates</span>
               <button
@@ -532,7 +569,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
                   <li key={t.id}>
                     <button
                       onClick={() => setSelectedId(t.id)}
-                      className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors ${
+                      className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${
                         selectedId === t.id ? "bg-primary/10 text-foreground" : "hover:bg-muted/60"
                       }`}
                     >
@@ -555,7 +592,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
           </Card>
 
           {selected ? (
-            <Card className="p-4">
+            <Card className={cn(SURFACE_CARD, "p-5 sm:p-6")}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   {editingDetails ? (
@@ -668,7 +705,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
                 </DndContext>
 
                 {selectedItems.length === 0 && (
-                  <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                  <div className="rounded-xl border-[0.8px] border-dashed border-border bg-muted/20 p-8 text-center text-sm text-muted-foreground">
                     No items yet. Add your first item below.
                   </div>
                 )}
@@ -692,10 +729,34 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
                     </Button>
                   );
                 })}
+
+                {/* Autosave status — this editor persists on blur, so without
+                    a signal there was no way to know an edit had landed. */}
+                <span className="ml-auto">
+                  {saveState === "saving" ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Saving…
+                    </span>
+                  ) : saveState === "error" ? (
+                    <span className="text-xs font-bold text-destructive">
+                      Couldn't save — check your connection
+                    </span>
+                  ) : saveState === "saved" ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      <Check className="h-3.5 w-3.5" />
+                      All changes saved
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      Changes save automatically
+                    </span>
+                  )}
+                </span>
               </div>
             </Card>
           ) : (
-            <Card className="flex items-center justify-center p-12 text-sm text-muted-foreground">
+            <Card className={cn(SURFACE_CARD, "flex items-center justify-center p-12 text-sm text-muted-foreground")}>
               Select a template to edit
             </Card>
           )}
@@ -734,7 +795,7 @@ function SortableItemRow({
     <li
       ref={setNodeRef}
       style={style}
-      className="group rounded-md border border-border bg-card p-2.5"
+      className="group rounded-xl border-[0.8px] border-border bg-card p-3 transition-colors hover:border-primary/30"
     >
       <div className="flex items-start gap-2">
         <button

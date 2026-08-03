@@ -29,6 +29,7 @@ import {
   Info,
   Pencil,
   CheckSquare,
+  CalendarDays,
   Workflow,
   ListChecks,
   MessageSquare,
@@ -42,6 +43,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { EditProjectDialog } from "@/features/projects/components/EditProjectDialog";
 import { ProjectActionsMenu } from "@/features/projects/components/ProjectActionsMenu";
 import { ProjectChecklists } from "@/features/projects/components/ProjectChecklists";
+import { TimelineCalendar } from "@/features/timeline/components/TimelineCalendar";
 import { ProjectWorkflows } from "@/features/projects/components/ProjectWorkflows";
 import { ProjectTasks, type ProjectTasksHandle } from "@/features/projects/components/ProjectTasks";
 import { ProjectDocuments } from "@/features/projects/components/ProjectDocuments";
@@ -134,7 +136,7 @@ const WALKTHROUGH_MAX_SECONDS: Record<string, number> = { pro: 600, team: 1200 }
 export type ProjectDetailSearch = {
   camera?: 1;
   walkthrough?: 1;
-  panel?: "tasks" | "checklists" | "walkthroughs" | "reports" | "workflows" | "trash";
+  panel?: "tasks" | "checklists" | "walkthroughs" | "reports" | "workflows" | "trash" | "timeline";
 };
 
 import type { Project, Photo, Report } from "../types";
@@ -2059,14 +2061,18 @@ export function ProjectDetailPage() {
   // (AI report generation lives in the global sidebar, not this page.)
 
   // Full-page panel view — replaces the project page when a tab is opened.
-  // Walkthroughs, Checklists, Documents, Workflows, and Tasks render inline instead (alongside the hero + tab nav), see below.
+  // Walkthroughs, Checklists, Documents, Workflows, Tasks and Timeline render
+  // inline instead (alongside the hero + tab nav), see below. Anything missing
+  // from this list falls through to the full-page branch, which only knows how
+  // to draw Trash — so it would render as an empty page.
   if (
     panel &&
     panel !== "walkthroughs" &&
     panel !== "checklists" &&
     panel !== "reports" &&
     panel !== "workflows" &&
-    panel !== "tasks"
+    panel !== "tasks" &&
+    panel !== "timeline"
   ) {
     const panelTitle = panel === "trash" ? "Trash" : "";
     return (
@@ -2323,6 +2329,9 @@ export function ProjectDetailPage() {
               },
               { key: "workflows", label: "Workflows", count: counts.workflows, icon: Workflow },
               { key: "tasks", label: "Tasks", count: counts.tasksOpen, icon: CheckSquare },
+              // No count: a timeline is a view of the photos already counted on
+              // the Photos tab, so a number here would double-count the same work.
+              { key: "timeline", label: "Timeline", count: null, icon: CalendarDays },
             ] as const
           ).map((tab) => {
             const active = (tab.key === "photos" && panel === null) || panel === tab.key;
@@ -2357,9 +2366,11 @@ export function ProjectDetailPage() {
                   <Icon className="h-3.5 w-3.5" />
                 </span>
                 {tab.label}
-                <span className={active ? "text-primary-foreground/70" : "text-muted-foreground"}>
-                  {tab.count}
-                </span>
+                {tab.count !== null && (
+                  <span className={active ? "text-primary-foreground/70" : "text-muted-foreground"}>
+                    {tab.count}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -2460,6 +2471,12 @@ export function ProjectDetailPage() {
       )}
 
       {panel === "checklists" && <ProjectChecklists projectId={project.id} />}
+      {/* Free on every plan — the company-wide view at /timeline is the paid one. */}
+      {panel === "timeline" && (
+        <div className="mt-9">
+          <TimelineCalendar projectId={project.id} />
+        </div>
+      )}
       {panel === "reports" && (
         <div className="mt-9">
           <ProjectDocuments
