@@ -26,7 +26,7 @@ export async function submitFeedback(input: SubmitFeedbackInput): Promise<void> 
     source: input.source,
     url: typeof window !== "undefined" ? window.location.href : null,
     user_agent: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 500) : null,
-  } as never);
+  });
   if (error) throw new Error(error.message);
 }
 
