@@ -286,6 +286,8 @@ function PublicPricingPage() {
 
 interface MyTeamResult {
   team: { id: string; name: string } | null;
+  /** Used to price the page for the crew the team actually has today. */
+  members: { id: string }[];
   plan: BillingPlan;
   isActive: boolean;
 }
@@ -308,11 +310,17 @@ interface MyTeamResult {
 function AuthedPricingPage() {
   const qc = useQueryClient();
   const [interval, setInterval] = useState<BillingInterval>("monthly");
-  const [seats, setSeats] = useState(1);
+  // Null until the user touches the stepper, so the page opens priced for the
+  // crew the team actually has rather than for one person — a 6-person team
+  // seeing a 1-seat price would be quoted a number they can never pay.
+  const [seatsOverride, setSeatsOverride] = useState<number | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ["my-team"],
     queryFn: async () => (await getMyTeam()) as MyTeamResult,
   });
+
+  const teamSeats = Math.min(MAX_SEATS, Math.max(1, data?.members?.length ?? 1));
+  const seats = seatsOverride ?? teamSeats;
 
   // An inactive subscription is treated as holding no tier at all, so every
   // plan reads as an upgrade instead of one being marked "current" while the
@@ -356,9 +364,15 @@ function AuthedPricingPage() {
                     {upgrades.length > 0 && (
                       <>
                         <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-8">
-                          <CrewSizePicker seats={seats} onChange={setSeats} />
+                          <CrewSizePicker seats={seats} onChange={setSeatsOverride} />
                           <IntervalToggle interval={interval} onChange={setInterval} />
                         </div>
+                        {seatsOverride !== null && seatsOverride !== teamSeats && (
+                          <p className="mt-3 font-manrope text-xs text-muted-foreground">
+                            Priced for {seatsOverride} user{seatsOverride === 1 ? "" : "s"} — your
+                            team has {teamSeats} today.
+                          </p>
+                        )}
 
                         <div
                           className={`mt-8 grid gap-6 ${
@@ -467,10 +481,18 @@ function CurrentPlanPanel({
           <p className="mt-1 font-manrope text-sm text-muted-foreground">{plan.tagline}</p>
         </div>
         <div className="text-right">
-          <p className="font-display text-2xl font-bold tracking-tight text-foreground">
-            ${monthlyTotal(plan, seats, interval)}
-            <span className="ml-1 text-sm font-medium text-muted-foreground">/month</span>
-          </p>
+          {/* Past its own seat cap this plan has no price — quoting an
+              extrapolated one would invent a tier we don't sell. */}
+          {exceedsSeatCap(plan, seats) ? (
+            <p className="font-display text-lg font-bold tracking-tight text-foreground">
+              Holds up to {plan.maxSeats} user{plan.maxSeats === 1 ? "" : "s"}
+            </p>
+          ) : (
+            <p className="font-display text-2xl font-bold tracking-tight text-foreground">
+              ${monthlyTotal(plan, seats, interval)}
+              <span className="ml-1 text-sm font-medium text-muted-foreground">/month</span>
+            </p>
+          )}
           <p className="mt-1 font-manrope text-xs text-muted-foreground">
             {plan.includedSeats} user{plan.includedSeats === 1 ? "" : "s"} included · up to{" "}
             {plan.maxSeats}
@@ -503,9 +525,13 @@ function PlanCard({
   // beyond what the team already has, so there's nothing to diff by eye.
   const gains = gainsBetween(currentPlan, plan.id);
   const currentPricing = currentPlan ? planById(currentPlan) : undefined;
-  const delta = currentPricing
-    ? monthlyTotal(plan, seats, interval) - monthlyTotal(currentPricing, seats, interval)
-    : null;
+  // Only meaningful while the current plan can actually seat this crew —
+  // past its cap it has no price at this size, so there's nothing to diff.
+  const currentIsPriceable = !!currentPricing && !exceedsSeatCap(currentPricing, seats);
+  const delta =
+    currentPricing && currentIsPriceable
+      ? monthlyTotal(plan, seats, interval) - monthlyTotal(currentPricing, seats, interval)
+      : null;
 
   const m = useMutation({
     mutationFn: () =>
@@ -533,9 +559,17 @@ function PlanCard({
       </div>
 
       {/* The upgrade decision is driven by the difference, not the sticker. */}
-      {delta !== null && delta > 0 && !capped && (
+      {!capped && delta !== null && delta > 0 && (
         <p className="mt-2 font-manrope text-xs font-bold text-sidebar-ring">
           +${delta}/month more than your current plan
+        </p>
+      )}
+      {/* No delta to show because the current plan can't seat this crew at
+          all — which is itself the reason to move up, so say that instead. */}
+      {!capped && currentPricing && !currentIsPriceable && (
+        <p className="mt-2 font-manrope text-xs font-bold text-sidebar-ring">
+          Your {currentPricing.name} plan holds only {currentPricing.maxSeats} user
+          {currentPricing.maxSeats === 1 ? "" : "s"}
         </p>
       )}
 

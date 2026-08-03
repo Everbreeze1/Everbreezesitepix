@@ -169,7 +169,7 @@ export const savePageAsTemplateInputSchema = z.object({
   name: z.string().trim().min(1).max(160),
 });
 
-/** "Save as a New Template" from the page editor — mirrors CompanyCam's ··· menu action. */
+/** "Save as a New Template" from the page editor's ··· menu. */
 export async function savePageAsTemplateService(
   ctx: AuthedContext,
   data: z.infer<typeof savePageAsTemplateInputSchema>,

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type Stripe from "stripe";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { getStripe, planToPriceId, type BillingPlan, type BillingInterval } from "../../lib/stripe";
+import { PLAN_MEMBER_CAP } from "../../lib/team-plan";
 import type { ServiceContext } from "../../lib/user-context";
 
 const PLAN_VALUES = ["starter", "pro", "team"] as const;
@@ -65,6 +66,18 @@ export async function createCheckoutSessionService(
   ctx: ServiceContext,
   data: z.infer<typeof createCheckoutSessionInputSchema>,
 ) {
+  // The pricing page disables the stepper past each tier's cap, but this RPC
+  // is callable directly — without this a caller could buy 40 seats of Starter
+  // and land on a subscription the invite flow (PLAN_MEMBER_CAP) then refuses
+  // to honour, i.e. paid-for seats that can never be filled.
+  const seatCap = PLAN_MEMBER_CAP[data.plan as BillingPlan];
+  if (data.seats > seatCap) {
+    throw new Error(
+      `The ${data.plan} plan holds up to ${seatCap} user${seatCap === 1 ? "" : "s"}. ` +
+        `Choose a higher plan for a crew of ${data.seats}.`,
+    );
+  }
+
   const team = await requireOwnedTeam(ctx);
   const email = (ctx.claims as any)?.email as string | undefined;
   const customerId = await ensureStripeCustomer(team, email);

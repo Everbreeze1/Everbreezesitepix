@@ -137,7 +137,7 @@ export function higherTiers(current: BillingPlan | null): PlanPricing[] {
 
 /**
  * A monthly figure adjusted for the billing interval. Annual is quoted as an
- * equivalent monthly rate (what CompanyCam and most SaaS pricing pages show),
+ * equivalent monthly rate (the convention on most SaaS pricing pages),
  * so `$24/mo` becomes `$19/mo billed annually` rather than `$228`.
  */
 export function monthlyRate(monthly: number, interval: BillingInterval): number {

@@ -6,6 +6,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { AppHeader } from "@/components/AppHeader";
 import { MobileTabBar } from "@/components/MobileTabBar";
 import { FloatingCameraButton } from "@/components/FloatingCameraButton";
+import { FeedbackPrompt } from "@/components/FeedbackPrompt";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
 import { SubscriptionGateProvider } from "@/hooks/use-subscription-gate";
@@ -87,6 +88,7 @@ function AppLayout() {
             </main>
             <MobileTabBar />
             <FloatingCameraButton />
+            <FeedbackPrompt />
           </div>
         </div>
         <UpgradeGateDialog />

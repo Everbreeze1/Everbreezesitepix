@@ -2,6 +2,20 @@ import type { AuthedContext } from "./user-context";
 
 export type BillingTier = "starter" | "pro" | "team";
 
+/**
+ * Hard seat ceiling per tier — what actually blocks invites (teams/service.ts)
+ * and what checkout refuses to sell beyond (billing/service.ts).
+ *
+ * Mirrors `maxSeats` in apps/web/src/lib/pricing.ts, which is what the pricing
+ * page's seat stepper disables against. Keep the two in sync: the web value
+ * decides what a visitor can *ask* for, this one decides what we'll *honour*.
+ */
+export const PLAN_MEMBER_CAP: Record<BillingTier, number> = {
+  starter: 2,
+  pro: 50,
+  team: 50,
+};
+
 export interface CallerPlan {
   /** Subscription is live (or the team is flagged internal/complimentary). */
   isActive: boolean;

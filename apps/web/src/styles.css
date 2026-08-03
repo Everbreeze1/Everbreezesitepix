@@ -140,6 +140,21 @@
 }
 @utility animate-marquee { animation: marquee 28s linear infinite; }
 
+/* Radix Accordion open/close. components/ui/accordion.tsx has always asked for
+   `animate-accordion-down`/`-up`, but the keyframes were never defined — so
+   every accordion in the app snapped open instantly. Radix measures the panel
+   and exposes `--radix-accordion-content-height` for exactly this. */
+@keyframes accordion-down {
+  from { height: 0; opacity: 0; }
+  to { height: var(--radix-accordion-content-height); opacity: 1; }
+}
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); opacity: 1; }
+  to { height: 0; opacity: 0; }
+}
+@utility animate-accordion-down { animation: accordion-down 180ms ease-out; }
+@utility animate-accordion-up { animation: accordion-up 160ms ease-in; }
+
 @layer base {
   html, body {
     -webkit-tap-highlight-color: transparent;

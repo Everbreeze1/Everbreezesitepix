@@ -1,15 +1,10 @@
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
+import { PLAN_MEMBER_CAP } from "../../lib/team-plan";
 import { insertNotification } from "../notifications/service";
 
 
 type TeamPlan = "starter" | "pro" | "team";
-
-const PLAN_MEMBER_CAP: Record<TeamPlan, number> = {
-  starter: 2,
-  pro: 50,
-  team: 50,
-};
 
 function effectiveMemberLimit(team: any): number {
   return team?.member_limit ?? PLAN_MEMBER_CAP[(team?.plan as TeamPlan) ?? "starter"];

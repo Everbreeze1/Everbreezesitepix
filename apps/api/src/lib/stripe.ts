@@ -32,9 +32,19 @@ function requirePriceEnv(name: string): string {
 }
 
 /**
- * Per-seat price IDs (checkout sets `quantity` = seat count, so these must be
- * configured as per-unit Stripe Prices, not flat fees, for the seat stepper
- * on the pricing page to actually charge correctly).
+ * Seat-based price IDs. Checkout sets `quantity` = total seat count, so each
+ * Price MUST be configured in Stripe as **graduated tiered** pricing to match
+ * what /pricing advertises (base price covers N seats, then a lower rate for
+ * each additional seat). For Pro monthly that is:
+ *
+ *   Tier 1 — first 3 units:  flat fee $119, per-unit $0
+ *   Tier 2 — 4 and above:    per-unit $29
+ *
+ * A plain flat per-unit Price is WRONG here: at quantity=5 it would bill
+ * 5 x $119 = $595 instead of the advertised $119 + 2 x $29 = $177. The tier
+ * boundaries and amounts must mirror `basePriceMonthly` / `includedSeats` /
+ * `additionalSeatMonthly` in apps/web/src/lib/pricing.ts, with annual Prices
+ * set to the same figures less the 20% ANNUAL_DISCOUNT.
  *
  * `_MONTHLY` env vars are optional and fall back to the original unsuffixed
  * `STRIPE_PRICE_<PLAN>` vars, so existing monthly checkout configured before

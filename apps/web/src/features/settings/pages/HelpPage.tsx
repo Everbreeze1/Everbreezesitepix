@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Camera,
@@ -11,9 +12,17 @@ import {
   Sparkles,
   Map as MapIcon,
   Settings,
-  BookOpen,
-  ArrowUpRight,
+  Search,
+  X,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from "@/components/ui/accordion";
 
 type Guide = {
   id: string;
@@ -319,31 +328,53 @@ const CATEGORIES: Category[] = [
   },
 ];
 
-const QUICK_LINKS = [
-  {
-    href: "#photos",
-    icon: BookOpen,
-    title: "Getting started",
-    blurb: "Set up your workspace and first project.",
-    highlight: false,
-  },
-  {
-    href: "#capture",
-    icon: Camera,
-    title: "Capture on site",
-    blurb: "Learn photos, walkthroughs, and offline capture.",
-    highlight: true,
-  },
-  {
-    href: "#templates",
-    icon: LayoutTemplate,
-    title: "Templates",
-    blurb: "Central library for reusable checklists and workflows.",
-    highlight: false,
-  },
-] as const;
+const ALL_GUIDE_IDS = CATEGORIES.flatMap((c) => c.guides.map((g) => g.id));
+const TOTAL_GUIDES = ALL_GUIDE_IDS.length;
+
+/** Everything a guide can be matched on, lowercased once per render pass. */
+function guideHaystack(g: Guide): string {
+  return [g.title, g.summary, ...g.steps, ...(g.tips ?? [])].join(" ").toLowerCase();
+}
 
 export function HelpPage() {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState<string[]>([]);
+
+  const q = query.trim().toLowerCase();
+
+  /** Categories with non-matching guides removed; empty categories drop out. */
+  const results = useMemo(() => {
+    if (!q) return CATEGORIES;
+    return CATEGORIES.map((cat) => {
+      // A category-level match (its own title/blurb) keeps all of its guides,
+      // so searching "workflows" shows the whole section rather than nothing.
+      const catMatches = `${cat.title} ${cat.blurb}`.toLowerCase().includes(q);
+      const guides = catMatches ? cat.guides : cat.guides.filter((g) => guideHaystack(g).includes(q));
+      return { ...cat, guides };
+    }).filter((cat) => cat.guides.length > 0);
+  }, [q]);
+
+  const matchCount = results.reduce((n, c) => n + c.guides.length, 0);
+
+  // Searching auto-opens what matched — the answer should be on screen, not
+  // one more click away.
+  useEffect(() => {
+    if (!q) return;
+    setOpen(results.flatMap((c) => c.guides.map((g) => g.id)));
+  }, [q, results]);
+
+  // Deep links (/help#annotate) still work: open that guide and scroll to it.
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (!id || !ALL_GUIDE_IDS.includes(id)) return;
+    setOpen((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    window.requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ block: "center" });
+    });
+  }, []);
+
+  const allOpen = open.length >= TOTAL_GUIDES;
+
   return (
     <div className="p-10">
       <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.52px] text-muted-foreground">
@@ -356,123 +387,133 @@ export function HelpPage() {
         Guides, tips, and answers for every SitePix workflow.
       </p>
 
-      <div className="mt-8 grid gap-5 md:grid-cols-3">
-        {QUICK_LINKS.map((q) => (
-          <a
-            key={q.title}
-            href={q.href}
-            className={`flex flex-col rounded-[24px] border-[0.8px] p-6 transition-colors ${
-              q.highlight
-                ? "border-transparent bg-primary hover:bg-primary/95"
-                : "border-border bg-card/[0.82] hover:bg-card"
-            }`}
+      {/*
+        One scannable list rather than three copies of the same navigation.
+        This page previously showed 3 shortcut cards, then 10 category cards,
+        then every one of the 20 guides fully expanded — so finding an answer
+        meant scrolling past all of them. Topics are now collapsed by default
+        and open in place.
+      */}
+      <div className="mt-8 max-w-4xl">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search help — e.g. “annotate”, “PDF”, “offline”…"
+              className="h-11 rounded-xl pl-9 pr-9 text-sm font-medium"
+              aria-label="Search help topics"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            className="h-11 shrink-0 rounded-xl text-xs font-bold"
+            onClick={() => setOpen(allOpen ? [] : ALL_GUIDE_IDS)}
           >
-            <span
-              className={`flex h-11 w-11 items-center justify-center rounded-2xl ${
-                q.highlight ? "bg-primary-foreground/15" : "bg-primary/10"
-              }`}
-            >
-              <q.icon
-                className={`h-5 w-5 ${q.highlight ? "text-primary-foreground" : "text-primary"}`}
-                strokeWidth={1.75}
-              />
-            </span>
-            <h2
-              className={`font-manrope mt-10 text-lg font-extrabold ${q.highlight ? "text-primary-foreground" : "text-foreground"}`}
-            >
-              {q.title}
-            </h2>
-            <p
-              className={`font-manrope mt-2 text-sm ${q.highlight ? "text-primary-foreground/75" : "text-muted-foreground"}`}
-            >
-              {q.blurb}
+            {allOpen ? "Collapse all" : "Expand all"}
+          </Button>
+        </div>
+
+        <p className="font-manrope mt-3 text-xs font-semibold text-muted-foreground">
+          {q
+            ? `${matchCount} ${matchCount === 1 ? "topic" : "topics"} matching “${query.trim()}”`
+            : `${TOTAL_GUIDES} topics across ${CATEGORIES.length} categories`}
+        </p>
+
+        {results.length === 0 ? (
+          <div className="mt-8 rounded-2xl border-[0.8px] border-dashed border-border bg-card/60 p-10 text-center">
+            <p className="font-manrope text-sm font-bold text-foreground">No topics match that.</p>
+            <p className="font-manrope mt-1 text-sm text-muted-foreground">
+              Try a different word, or clear the search to browse everything.
             </p>
-            <span
-              className={`font-manrope mt-auto inline-flex items-center gap-1 pt-5 text-xs font-extrabold ${
-                q.highlight ? "text-primary-foreground" : "text-primary"
-              }`}
-            >
-              Open guide <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.75} />
-            </span>
-          </a>
-        ))}
-      </div>
-
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {CATEGORIES.map((cat) => (
-          <a
-            key={cat.id}
-            href={`#${cat.id}`}
-            className="flex flex-col rounded-[14px] border-[0.8px] border-border bg-card/[0.82] p-6 transition-colors hover:bg-card"
+            <Button variant="outline" className="mt-4 rounded-xl text-xs font-bold" onClick={() => setQuery("")}>
+              Clear search
+            </Button>
+          </div>
+        ) : (
+          <Accordion
+            type="multiple"
+            value={open}
+            onValueChange={setOpen}
+            className="mt-6 space-y-8"
           >
-            <div className="flex items-center gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-primary/10">
-                <cat.icon className="h-5 w-5 text-primary" strokeWidth={1.75} />
-              </span>
-              <h3 className="font-manrope text-base font-bold tracking-[-0.4px] text-foreground">
-                {cat.title}
-              </h3>
-            </div>
-            <p className="font-manrope mt-2 text-sm leading-5 text-muted-foreground">{cat.blurb}</p>
-          </a>
-        ))}
-      </div>
-
-      <div className="mt-14 max-w-4xl">
-        {CATEGORIES.map((cat) => (
-          <section
-            key={cat.id}
-            id={cat.id}
-            className="scroll-mt-24 border-t border-border py-10 first:border-t-0 first:pt-0"
-          >
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <cat.icon className="h-5 w-5 text-primary" strokeWidth={1.75} />
-              </span>
-              <div>
-                <h2 className="font-manrope text-lg font-bold text-foreground">{cat.title}</h2>
-                <p className="font-manrope text-sm text-muted-foreground">{cat.blurb}</p>
-              </div>
-            </div>
-            <div className="mt-5 space-y-4">
-              {cat.guides.map((g) => (
-                <div
-                  key={g.id}
-                  id={g.id}
-                  className="scroll-mt-24 rounded-2xl border-[0.8px] border-border bg-card p-6"
-                >
-                  <h3 className="font-manrope text-base font-bold text-foreground">{g.title}</h3>
-                  <p className="font-manrope mt-1 text-sm text-muted-foreground">{g.summary}</p>
-                  <ol className="font-manrope mt-4 ml-5 list-decimal space-y-2 text-sm text-muted-foreground">
-                    {g.steps.map((s, i) => (
-                      <li key={i} className="pl-1">
-                        {s}
-                      </li>
-                    ))}
-                  </ol>
-                  {g.tips && g.tips.length > 0 && (
-                    <div className="mt-4 space-y-2">
-                      {g.tips.map((t, i) => (
-                        <div
-                          key={i}
-                          className="flex items-start gap-2 rounded-lg bg-muted p-3 text-sm"
-                        >
-                          <span className="font-manrope mt-0.5 shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-bold text-primary">
-                            Tip
-                          </span>
-                          <span className="font-manrope text-muted-foreground">{t}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+            {results.map((cat) => (
+              <section key={cat.id} id={cat.id} className="scroll-mt-24">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                    <cat.icon className="h-[18px] w-[18px] text-primary" strokeWidth={1.75} />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="font-manrope text-base font-bold tracking-[-0.3px] text-foreground">
+                      {cat.title}
+                    </h2>
+                    <p className="font-manrope text-xs text-muted-foreground">{cat.blurb}</p>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </section>
-        ))}
+
+                <div className="mt-3 overflow-hidden rounded-2xl border-[0.8px] border-border bg-card/[0.82]">
+                  {cat.guides.map((g) => (
+                    <AccordionItem
+                      key={g.id}
+                      value={g.id}
+                      id={g.id}
+                      className="scroll-mt-24 border-b-[0.8px] border-border px-5 last:border-b-0"
+                    >
+                      <AccordionTrigger className="gap-4 py-4 hover:no-underline">
+                        <span className="min-w-0 text-left">
+                          <span className="font-manrope block text-sm font-bold text-foreground">
+                            {g.title}
+                          </span>
+                          <span className="font-manrope mt-0.5 block text-xs text-muted-foreground">
+                            {g.summary}
+                          </span>
+                        </span>
+                      </AccordionTrigger>
+                      <AccordionContent className="pb-5">
+                        <ol className="font-manrope ml-4 list-decimal space-y-2 text-sm leading-relaxed text-muted-foreground">
+                          {g.steps.map((s, i) => (
+                            <li key={i} className="pl-1">
+                              {s}
+                            </li>
+                          ))}
+                        </ol>
+                        {g.tips && g.tips.length > 0 && (
+                          <div className="mt-4 space-y-2">
+                            {g.tips.map((t, i) => (
+                              <div
+                                key={i}
+                                className="flex items-start gap-2 rounded-lg bg-muted p-3 text-sm"
+                              >
+                                <span className="font-manrope mt-0.5 shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-bold text-primary">
+                                  Tip
+                                </span>
+                                <span className="font-manrope text-muted-foreground">{t}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </Accordion>
+        )}
       </div>
 
-      <div className="mt-4 max-w-4xl rounded-2xl border-[0.8px] border-border bg-card/60 p-6 text-center">
+      <div className="mt-8 max-w-4xl rounded-2xl border-[0.8px] border-border bg-card/60 p-6 text-center">
         <h3 className="font-manrope text-base font-bold text-foreground">
           Can't find what you need?
         </h3>

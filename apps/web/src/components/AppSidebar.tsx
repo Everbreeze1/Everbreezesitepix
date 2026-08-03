@@ -45,7 +45,8 @@ const templatesItem = { title: "Templates", url: "/templates", icon: LayoutTempl
 const showcasesItem = { title: "Showcases", url: "/showcases", icon: Layers } as const;
 const pricingItem = { title: "Upgrade", url: "/pricing", icon: Crown } as const;
 const helpItem = { title: "Help Center", url: "/help", icon: HelpCircle } as const;
-const reportIssueItem = { title: "Report issue", url: "/report-issue", icon: LifeBuoy } as const;
+// Covers bugs *and* feature suggestions now, so "Report issue" undersold it.
+const reportIssueItem = { title: "Feedback", url: "/report-issue", icon: LifeBuoy } as const;
 
 function getInitials(name?: string | null, email?: string | null) {
   const trimmed = name?.trim();
