@@ -13,7 +13,6 @@ import {
   LogOut,
   Sparkles,
   Lock,
-  CreditCard,
   Search,
   RefreshCcw,
   UserPlus,
@@ -49,7 +48,6 @@ import {
   updateMemberRole,
   leaveTeam,
   resendInvite,
-  createBillingPortalSession,
 } from "@/features/teams/api";
 import { relativeTime } from "@sitepix/shared";
 
@@ -131,7 +129,6 @@ export function TeamsPage() {
       myRole={data.myRole ?? "member"}
       plan={(data.plan as TeamPlan) ?? "starter"}
       memberLimit={data.memberLimit ?? 2}
-      sharingEnabled={!!data.sharingEnabled}
       onChange={invalidate}
     />
   );
@@ -309,7 +306,6 @@ function TeamDashboard({
   myRole,
   plan,
   memberLimit,
-  sharingEnabled,
   onChange,
 }: {
   team: any;
@@ -318,7 +314,6 @@ function TeamDashboard({
   myRole: string;
   plan: TeamPlan;
   memberLimit: number;
-  sharingEnabled: boolean;
   onChange: () => void;
 }) {
   const canManage = myRole === "owner" || myRole === "admin";
