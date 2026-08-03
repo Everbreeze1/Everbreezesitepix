@@ -643,6 +643,11 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
               icon={BookmarkPlus}
               title="No templates yet"
               description="Save any checklist as a template to reuse it across projects."
+              action={
+                <Button variant="outline" onClick={() => setTab("active")}>
+                  Go to active checklists
+                </Button>
+              }
             />
           ) : (
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -683,6 +688,11 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
               icon={CheckCircle2}
               title="No completed checklists yet"
               description="Fill out a checklist and mark it complete to save it here."
+              action={
+                <Button variant="outline" onClick={() => setTab("active")}>
+                  Go to active checklists
+                </Button>
+              }
             />
           ) : (
             <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -733,11 +743,23 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
           const visible = tab === "all" ? checklists : checklists.filter((c) => !c.completed_at);
           if (visible.length === 0) {
             return (
+              // The action belongs here, not in prose telling the reader to go
+              // hunt for a button somewhere else on the page.
               <EmptyState
                 icon={ClipboardList}
                 title={tab === "active" ? "No active checklists" : "No checklists yet"}
-                description='Click "Use template" to get started.'
+                description={
+                  tab === "active"
+                    ? "Every checklist here is complete. Start another from a template."
+                    : "Start from a template — QA walks, punch lists, safety checks."
+                }
                 className="mt-6"
+                action={
+                  <Button onClick={() => setCreateOpen(true)}>
+                    <LayoutTemplate className="mr-1.5 h-4 w-4" />
+                    Use a template
+                  </Button>
+                }
               />
             );
           }

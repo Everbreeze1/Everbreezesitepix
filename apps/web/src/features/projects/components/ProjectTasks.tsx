@@ -138,6 +138,35 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
   const [filter, setFilter] = useState<"all" | Status>("all");
   const [view, setView] = useState<"list" | "board">("list");
   const [members, setMembers] = useState<TeamMemberLite[]>([]);
+  /** Inline quick-add: most punch-list items are just a sentence. */
+  const [quickTitle, setQuickTitle] = useState("");
+  const [quickAdding, setQuickAdding] = useState(false);
+
+  async function quickAdd() {
+    const t = quickTitle.trim();
+    if (!t || !user?.id) return;
+    setQuickAdding(true);
+    const { error } = await supabase.from("tasks" as any).insert({
+      project_id: projectId,
+      created_by: user.id,
+      title: t,
+      description: null,
+      assignee_user_id: null,
+      assignee_email: null,
+      due_date: null,
+      priority: "medium",
+      status: "open",
+      completed_at: null,
+      photo_ids: [],
+    });
+    setQuickAdding(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setQuickTitle("");
+    void load();
+  }
 
   useImperativeHandle(ref, () => ({
     createWithPhoto: (photoId: string) => {
@@ -512,6 +541,36 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
         </div>
       </div>
 
+      {/*
+        Type-and-Enter beats a modal for a punch-list item. The full dialog is
+        still one click away for priority/assignee/due-date — this just removes
+        the modal from the 90% case, matching the inline add that already
+        exists in the photo lightbox's task panel.
+      */}
+      <div className="mt-5 flex items-center gap-2">
+        <Input
+          value={quickTitle}
+          onChange={(e) => setQuickTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void quickAdd();
+            }
+          }}
+          placeholder="Add a task and press Enter…"
+          className="h-10 rounded-xl text-sm font-medium"
+          aria-label="Add a task"
+        />
+        <Button
+          variant="outline"
+          className="h-10 shrink-0 rounded-xl px-3 text-xs font-bold"
+          disabled={quickAdding || !quickTitle.trim()}
+          onClick={() => void quickAdd()}
+        >
+          {quickAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+        </Button>
+      </div>
+
       <div className="mt-5">
         {loading ? (
           <div className="flex items-center justify-center py-10">
@@ -522,6 +581,17 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
             icon={CheckSquare}
             title="No tasks yet"
             description="Track punch-list items, follow-ups, and to-dos for this project."
+            action={
+              <Button
+                onClick={() => {
+                  setSeedPhotoIds([]);
+                  setCreating(true);
+                }}
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add the first task
+              </Button>
+            }
           />
         ) : view === "list" ? (
           visible.length === 0 ? (
@@ -529,6 +599,11 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
               icon={CheckSquare}
               title="Nothing here"
               description="No tasks match this filter."
+              action={
+                <Button variant="outline" onClick={() => setFilter("all")}>
+                  Show all tasks
+                </Button>
+              }
             />
           ) : (
             <ul className="space-y-3">{visible.map(renderTaskRow)}</ul>
