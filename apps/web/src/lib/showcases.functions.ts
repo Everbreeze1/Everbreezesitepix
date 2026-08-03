@@ -21,6 +21,24 @@ export interface ShowcaseItemDetail {
   image_url: string;
 }
 
+export interface ShowcaseSectionDetail {
+  id: string;
+  project_id: string | null;
+  project_name: string | null;
+  title: string | null;
+  body_html: string | null;
+  position: number;
+  items: ShowcaseItemDetail[];
+}
+
+export interface ShowcaseCompany {
+  name: string | null;
+  logo_url: string | null;
+  phone: string | null;
+  address: string | null;
+  email: string | null;
+}
+
 export interface ShowcaseDetail {
   id: string;
   title: string;
@@ -28,7 +46,13 @@ export interface ShowcaseDetail {
   layout: string;
   share_token: string;
   revoked_at: string | null;
-  items: ShowcaseItemDetail[];
+  intro_html: string | null;
+  outro_html: string | null;
+  accent_color: string | null;
+  show_contact: boolean;
+  cover_photo_id: string | null;
+  cover_image_url: string | null;
+  sections: ShowcaseSectionDetail[];
 }
 
 export interface PublicShowcase {
@@ -37,9 +61,14 @@ export interface PublicShowcase {
     title: string;
     tagline: string | null;
     layout: string;
-    items: Array<{ photo_id: string; caption: string | null; image_url: string }>;
+    intro_html: string | null;
+    outro_html: string | null;
+    accent_color: string | null;
+    show_contact: boolean;
+    cover_image_url: string | null;
+    sections: ShowcaseSectionDetail[];
   } | null;
-  company: { name: string | null; logo_url: string | null } | null;
+  company: ShowcaseCompany | null;
 }
 
 export const listShowcases = rpcOp<undefined, { showcases: ShowcaseSummary[] }>("listShowcases");
@@ -57,9 +86,26 @@ export const updateShowcase = rpcOp<
     tagline?: string | null;
     layout?: "grid" | "masonry" | "featured";
     coverPhotoId?: string | null;
+    introHtml?: string | null;
+    outroHtml?: string | null;
+    accentColor?: string | null;
+    showContact?: boolean;
   },
   { ok: true }
 >("updateShowcase");
+
+export const setShowcaseSections = rpcOp<
+  {
+    showcaseId: string;
+    sections: Array<{
+      projectId?: string | null;
+      title?: string | null;
+      bodyHtml?: string | null;
+      items: Array<{ photoId: string; caption?: string | null }>;
+    }>;
+  },
+  { ok: true }
+>("setShowcaseSections");
 
 export const deleteShowcase = rpcOp<{ id: string }, { ok: true }>("deleteShowcase");
 

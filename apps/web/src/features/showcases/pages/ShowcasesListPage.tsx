@@ -1,6 +1,17 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Layers, Loader2, Plus, Trash2, Eye, EyeOff, Copy, ExternalLink, MoreVertical } from "lucide-react";
+import {
+  Layers,
+  Loader2,
+  Plus,
+  Trash2,
+  Eye,
+  EyeOff,
+  Copy,
+  ExternalLink,
+  MoreVertical,
+  Pencil,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -177,6 +188,14 @@ export function ShowcasesListPage() {
                       {s.revoked_at ? "Not published" : "Published"}
                     </p>
                   </div>
+                  {/* An explicit button, not just the card/title link — opening
+                      the builder was previously discoverable only by guessing
+                      the cover image was clickable. */}
+                  <Button asChild size="sm" variant="outline" className="shrink-0">
+                    <Link to="/showcases/$showcaseId" params={{ showcaseId: s.id }}>
+                      <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+                    </Link>
+                  </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="shrink-0">

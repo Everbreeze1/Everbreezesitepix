@@ -24,6 +24,16 @@ export interface ShowcaseItemDetail {
   image_url: string;
 }
 
+export interface ShowcaseSectionDetail {
+  id: string;
+  project_id: string | null;
+  project_name: string | null;
+  title: string | null;
+  body_html: string | null;
+  position: number;
+  items: ShowcaseItemDetail[];
+}
+
 export interface ShowcaseDetail {
   id: string;
   title: string;
@@ -31,7 +41,22 @@ export interface ShowcaseDetail {
   layout: string;
   share_token: string;
   revoked_at: string | null;
-  items: ShowcaseItemDetail[];
+  intro_html: string | null;
+  outro_html: string | null;
+  accent_color: string | null;
+  show_contact: boolean;
+  cover_photo_id: string | null;
+  cover_image_url: string | null;
+  sections: ShowcaseSectionDetail[];
+}
+
+/** Company details rendered in a showcase's masthead + contact block. */
+export interface ShowcaseCompany {
+  name: string | null;
+  logo_url: string | null;
+  phone: string | null;
+  address: string | null;
+  email: string | null;
 }
 
 async function myTeamId(ctx: AuthedContext): Promise<string | null> {
@@ -54,17 +79,34 @@ async function resolvePhotoUrls(
     .select("id, storage_path, image_url")
     .in("id", photoIds);
   const rows = (data as Array<{ id: string; storage_path: string; image_url: string | null }>) ?? [];
-  const needSign = rows.filter((r) => !r.image_url);
+  // A photo whose row is missing entirely (deleted, or the id never existed —
+  // showcase_items.photo_id has no FK) never reaches `rows`, so it silently
+  // has no entry in `out` and the caller's `?? ""` fallback kicks in. That's
+  // fine; what must not happen is one bad `storage_path` poisoning every
+  // *other* photo's signed URL in the same batch call.
+  const needSign = rows.filter((r) => !r.image_url && r.storage_path);
   let signedMap: Record<string, string> = {};
   if (needSign.length) {
-    const { data: signed } = await admin.storage
+    const { data: signed, error } = await admin.storage
       .from("site-photos")
       .createSignedUrls(
         needSign.map((r) => r.storage_path),
         60 * 60,
       );
+    if (error) {
+      console.error("[showcases] failed to sign photo URLs", {
+        error: error.message,
+        count: needSign.length,
+      });
+    }
     signed?.forEach((s, i) => {
       if (s.signedUrl) signedMap[needSign[i].storage_path] = s.signedUrl;
+      else if (s.error) {
+        console.error("[showcases] failed to sign one photo URL", {
+          storagePath: needSign[i].storage_path,
+          error: s.error,
+        });
+      }
     });
   }
   rows.forEach((r) => {
@@ -73,6 +115,80 @@ async function resolvePhotoUrls(
       storage_path: r.storage_path,
     });
   });
+  return out;
+}
+
+/**
+ * Loads a showcase's sections with their photos, using whichever client is
+ * passed (the caller's for the authed builder, the admin one for the public
+ * page). Items written before the brochure migration have `section_id = NULL`;
+ * they come back as one implicit untitled section so an old showcase keeps
+ * rendering until it is next edited.
+ */
+async function loadSections(
+  db: any,
+  showcaseId: string,
+): Promise<ShowcaseSectionDetail[]> {
+  const [{ data: sectionRows }, { data: itemRows }] = await Promise.all([
+    db
+      .from("showcase_sections")
+      .select("id, project_id, title, body_html, position")
+      .eq("showcase_id", showcaseId)
+      .order("position", { ascending: true }),
+    db
+      .from("showcase_items")
+      .select("id, photo_id, caption, position, section_id")
+      .eq("showcase_id", showcaseId)
+      .order("position", { ascending: true }),
+  ]);
+
+  const sections = (sectionRows as any[]) ?? [];
+  const items = (itemRows as any[]) ?? [];
+  const urlMap = await resolvePhotoUrls(items.map((i) => i.photo_id));
+
+  // Project names are looked up separately rather than via a PostgREST embed —
+  // `project_id` is deliberately not a FK (see the migration), so an embed
+  // cannot be resolved and would silently return nothing.
+  const projectIds = Array.from(new Set(sections.map((s) => s.project_id).filter(Boolean)));
+  const projectNames = new Map<string, string>();
+  if (projectIds.length) {
+    const { data: projectRows } = await getSupabaseAdmin()
+      .from("projects")
+      .select("id, name")
+      .in("id", projectIds);
+    ((projectRows as any[]) ?? []).forEach((p) => projectNames.set(p.id, p.name ?? ""));
+  }
+
+  const toDetail = (i: any): ShowcaseItemDetail => ({
+    id: i.id,
+    photo_id: i.photo_id,
+    caption: sanitizeCaption(i.caption),
+    position: i.position,
+    image_url: urlMap.get(i.photo_id)?.image_url ?? "",
+  });
+
+  const out: ShowcaseSectionDetail[] = sections.map((s) => ({
+    id: s.id,
+    project_id: s.project_id ?? null,
+    project_name: s.project_id ? (projectNames.get(s.project_id) ?? null) : null,
+    title: s.title ?? null,
+    body_html: s.body_html ?? null,
+    position: s.position,
+    items: items.filter((i) => i.section_id === s.id).map(toDetail),
+  }));
+
+  const ungrouped = items.filter((i) => !i.section_id);
+  if (ungrouped.length) {
+    out.push({
+      id: "legacy-ungrouped",
+      project_id: null,
+      project_name: null,
+      title: null,
+      body_html: null,
+      position: out.length,
+      items: ungrouped.map(toDetail),
+    });
+  }
   return out;
 }
 
@@ -122,18 +238,17 @@ export async function getShowcaseService(
 ): Promise<ShowcaseDetail | null> {
   const { data: row } = await (ctx.supabase as any)
     .from("showcases")
-    .select("id, title, tagline, layout, share_token, revoked_at")
+    .select(
+      "id, title, tagline, layout, share_token, revoked_at, intro_html, outro_html, accent_color, show_contact, cover_photo_id",
+    )
     .eq("id", data.id)
     .maybeSingle();
   if (!row) return null;
 
-  const { data: itemRows } = await (ctx.supabase as any)
-    .from("showcase_items")
-    .select("id, photo_id, caption, position")
-    .eq("showcase_id", data.id)
-    .order("position", { ascending: true });
-  const items = (itemRows as any[]) ?? [];
-  const urlMap = await resolvePhotoUrls(items.map((i) => i.photo_id));
+  const [sections, coverMap] = await Promise.all([
+    loadSections(ctx.supabase, data.id),
+    resolvePhotoUrls(row.cover_photo_id ? [row.cover_photo_id] : []),
+  ]);
 
   return {
     id: row.id,
@@ -142,13 +257,15 @@ export async function getShowcaseService(
     layout: row.layout,
     share_token: row.share_token,
     revoked_at: row.revoked_at,
-    items: items.map((i) => ({
-      id: i.id,
-      photo_id: i.photo_id,
-      caption: sanitizeCaption(i.caption),
-      position: i.position,
-      image_url: urlMap.get(i.photo_id)?.image_url ?? "",
-    })),
+    intro_html: row.intro_html ?? null,
+    outro_html: row.outro_html ?? null,
+    accent_color: row.accent_color ?? null,
+    show_contact: row.show_contact ?? true,
+    cover_photo_id: row.cover_photo_id ?? null,
+    cover_image_url: row.cover_photo_id
+      ? (coverMap.get(row.cover_photo_id)?.image_url ?? null)
+      : null,
+    sections,
   };
 }
 
@@ -178,6 +295,14 @@ export const updateShowcaseInputSchema = z.object({
   tagline: z.string().max(300).nullable().optional(),
   layout: z.enum(["grid", "masonry", "featured"]).optional(),
   coverPhotoId: z.string().uuid().nullable().optional(),
+  introHtml: z.string().max(20_000).nullable().optional(),
+  outroHtml: z.string().max(20_000).nullable().optional(),
+  accentColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Accent colour must be a #rrggbb hex value")
+    .nullable()
+    .optional(),
+  showContact: z.boolean().optional(),
 });
 
 export async function updateShowcaseService(
@@ -189,8 +314,80 @@ export async function updateShowcaseService(
   if (data.tagline !== undefined) patch.tagline = data.tagline;
   if (data.layout !== undefined) patch.layout = data.layout;
   if (data.coverPhotoId !== undefined) patch.cover_photo_id = data.coverPhotoId;
+  if (data.introHtml !== undefined) patch.intro_html = data.introHtml;
+  if (data.outroHtml !== undefined) patch.outro_html = data.outroHtml;
+  if (data.accentColor !== undefined) patch.accent_color = data.accentColor;
+  if (data.showContact !== undefined) patch.show_contact = data.showContact;
+  if (!Object.keys(patch).length) return { ok: true };
   const { error } = await (ctx.supabase as any).from("showcases").update(patch).eq("id", data.id);
   if (error) throw Object.assign(new Error(error.message), { status: 400 });
+  return { ok: true };
+}
+
+export const setShowcaseSectionsInputSchema = z.object({
+  showcaseId: z.string().uuid(),
+  sections: z
+    .array(
+      z.object({
+        projectId: z.string().uuid().nullable().optional(),
+        title: z.string().max(200).nullable().optional(),
+        bodyHtml: z.string().max(20_000).nullable().optional(),
+        items: z
+          .array(
+            z.object({
+              photoId: z.string().uuid(),
+              caption: z.string().max(500).nullable().optional(),
+            }),
+          )
+          .max(200),
+      }),
+    )
+    .max(50),
+});
+
+/**
+ * Replace-all write of a showcase's whole body (sections + their photos) —
+ * the same delete-then-insert shape as setShowcaseItems, so the builder can
+ * save reordering, regrouping and removal in one round trip rather than
+ * diffing on the client.
+ *
+ * Deleting the sections cascades their items away; the separate items delete
+ * clears any pre-migration rows that still carry `section_id = NULL`.
+ */
+export async function setShowcaseSectionsService(
+  ctx: AuthedContext,
+  data: z.infer<typeof setShowcaseSectionsInputSchema>,
+): Promise<{ ok: true }> {
+  const db = ctx.supabase as any;
+  await db.from("showcase_sections").delete().eq("showcase_id", data.showcaseId);
+  await db.from("showcase_items").delete().eq("showcase_id", data.showcaseId);
+
+  for (const [index, section] of data.sections.entries()) {
+    const { data: sectionRow, error: sectionErr } = await db
+      .from("showcase_sections")
+      .insert({
+        showcase_id: data.showcaseId,
+        project_id: section.projectId ?? null,
+        title: section.title ?? null,
+        body_html: section.bodyHtml ?? null,
+        position: index,
+      })
+      .select("id")
+      .single();
+    if (sectionErr) throw Object.assign(new Error(sectionErr.message), { status: 400 });
+    if (!section.items.length) continue;
+
+    const { error: itemsErr } = await db.from("showcase_items").insert(
+      section.items.map((it, i) => ({
+        showcase_id: data.showcaseId,
+        section_id: sectionRow.id,
+        photo_id: it.photoId,
+        caption: it.caption ?? null,
+        position: i,
+      })),
+    );
+    if (itemsErr) throw Object.assign(new Error(itemsErr.message), { status: 400 });
+  }
   return { ok: true };
 }
 
@@ -260,9 +457,14 @@ export interface PublicShowcase {
     title: string;
     tagline: string | null;
     layout: string;
-    items: Array<{ photo_id: string; caption: string | null; image_url: string }>;
+    intro_html: string | null;
+    outro_html: string | null;
+    accent_color: string | null;
+    show_contact: boolean;
+    cover_image_url: string | null;
+    sections: ShowcaseSectionDetail[];
   } | null;
-  company: { name: string | null; logo_url: string | null } | null;
+  company: ShowcaseCompany | null;
 }
 
 export async function getPublicShowcaseService(
@@ -271,35 +473,53 @@ export async function getPublicShowcaseService(
   const admin = getSupabaseAdmin();
   const { data: row } = await (admin as any)
     .from("showcases")
-    .select("id, title, tagline, layout, revoked_at, created_by")
+    .select(
+      "id, title, tagline, layout, revoked_at, created_by, intro_html, outro_html, accent_color, show_contact, cover_photo_id",
+    )
     .eq("share_token", data.token)
     .maybeSingle();
   if (!row) return { status: "not_found", showcase: null, company: null };
   if (row.revoked_at) return { status: "revoked", showcase: null, company: null };
 
-  const [{ data: itemRows }, { data: profile }] = await Promise.all([
-    (admin as any)
-      .from("showcase_items")
-      .select("photo_id, caption, position")
-      .eq("showcase_id", row.id)
-      .order("position", { ascending: true }),
-    admin.from("profiles").select("company, company_logo_url").eq("id", row.created_by).maybeSingle(),
+  const [sections, { data: profile }, coverMap] = await Promise.all([
+    loadSections(admin, row.id),
+    admin
+      .from("profiles")
+      .select("company, company_logo_url, company_phone, company_address, email")
+      .eq("id", row.created_by)
+      .maybeSingle(),
+    resolvePhotoUrls(row.cover_photo_id ? [row.cover_photo_id] : []),
   ]);
-  const items = (itemRows as any[]) ?? [];
-  const urlMap = await resolvePhotoUrls(items.map((i) => i.photo_id));
 
+  // Fall back to the first photo in the showcase so the masthead always has a
+  // hero image, even when no explicit cover was chosen.
+  const firstPhoto = sections.flatMap((s) => s.items).find((i) => i.image_url)?.image_url ?? null;
+  const coverImageUrl = row.cover_photo_id
+    ? (coverMap.get(row.cover_photo_id)?.image_url || firstPhoto)
+    : firstPhoto;
+
+  const p = profile as any;
   return {
     status: "ok",
     showcase: {
       title: row.title,
       tagline: row.tagline,
       layout: row.layout,
-      items: items.map((i) => ({
-        photo_id: i.photo_id,
-        caption: sanitizeCaption(i.caption),
-        image_url: urlMap.get(i.photo_id)?.image_url ?? "",
-      })),
+      intro_html: row.intro_html ?? null,
+      outro_html: row.outro_html ?? null,
+      accent_color: row.accent_color ?? null,
+      show_contact: row.show_contact ?? true,
+      cover_image_url: coverImageUrl,
+      sections,
     },
-    company: profile ? { name: (profile as any).company, logo_url: (profile as any).company_logo_url } : null,
+    company: p
+      ? {
+          name: p.company ?? null,
+          logo_url: p.company_logo_url ?? null,
+          phone: p.company_phone ?? null,
+          address: p.company_address ?? null,
+          email: p.email ?? null,
+        }
+      : null,
   };
 }

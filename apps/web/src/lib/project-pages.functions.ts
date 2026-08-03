@@ -105,6 +105,8 @@ export interface DocumentTemplateSummary {
   id: string;
   name: string;
   description: string | null;
+  /** Trade grouping for built-ins ("Field Reports", …); null for team templates. */
+  category: string | null;
   isExample: boolean;
   fields: string[];
   updatedAt: string;

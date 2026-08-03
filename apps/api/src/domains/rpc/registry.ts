@@ -216,6 +216,8 @@ import {
   publicShowcaseInputSchema,
   setShowcaseItemsInputSchema,
   setShowcaseItemsService,
+  setShowcaseSectionsInputSchema,
+  setShowcaseSectionsService,
   setShowcaseShareInputSchema,
   setShowcaseShareService,
   updateShowcaseInputSchema,
@@ -783,6 +785,10 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   setShowcaseItems: authed(
     (d) => setShowcaseItemsInputSchema.parse(d),
     setShowcaseItemsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  setShowcaseSections: authed(
+    (d) => setShowcaseSectionsInputSchema.parse(d),
+    setShowcaseSectionsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   setShowcaseShare: authed(
     (d) => setShowcaseShareInputSchema.parse(d),

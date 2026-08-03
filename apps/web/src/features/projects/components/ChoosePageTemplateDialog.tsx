@@ -63,17 +63,39 @@ export function ChoosePageTemplateDialog({
     return templates.filter((t) => {
       if (filter === "team" && t.isExample) return false;
       if (filter === "example" && !t.isExample) return false;
-      if (q && !t.name.toLowerCase().includes(q)) return false;
+      // Match the trade and the summary too — searching "roof" or "invoice"
+      // should find a template whose name says neither.
+      if (q) {
+        const haystack = `${t.name} ${t.category ?? ""} ${t.description ?? ""}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
       return true;
     });
   }, [templates, filter, search]);
 
-  /** Grouped so "Your Company" always reads above the built-in examples. */
+  /**
+   * "Your Company" first, then the built-ins split by trade category — the
+   * category lives in the template's body rather than being spelled out in
+   * every name, so the headings do that work instead.
+   */
   const sections = useMemo<Array<[string, DocumentTemplateSummary[]]>>(() => {
-    const groups: Array<[string, DocumentTemplateSummary[]]> = [
-      ["Your Company", visible.filter((t) => !t.isExample)],
-      ["Example Templates", visible.filter((t) => t.isExample)],
-    ];
+    const mine = visible.filter((t) => !t.isExample);
+    const groups: Array<[string, DocumentTemplateSummary[]]> = mine.length
+      ? [["Your Company", mine]]
+      : [];
+
+    const byCategory = new Map<string, DocumentTemplateSummary[]>();
+    for (const t of visible.filter((x) => x.isExample)) {
+      const key = t.category ?? "Templates";
+      const list = byCategory.get(key);
+      if (list) list.push(t);
+      else byCategory.set(key, [t]);
+    }
+    for (const [cat, items] of Array.from(byCategory.entries()).sort((a, b) =>
+      a[0].localeCompare(b[0]),
+    )) {
+      groups.push([cat, items]);
+    }
     return groups.filter(([, items]) => items.length > 0);
   }, [visible]);
 

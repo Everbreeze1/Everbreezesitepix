@@ -39,22 +39,33 @@ export interface DocumentTemplateSummary {
   id: string;
   name: string;
   description: string | null;
+  /**
+   * Trade grouping ("Field Reports", "Roofing & Exterior", …). Built-in
+   * templates carry this instead of encoding the category in the name; a
+   * team's own saved templates have none.
+   */
+  category: string | null;
   /** null team_id = a built-in example template shared across all teams. */
   isExample: boolean;
   fields: string[];
   updatedAt: string;
 }
 
-/** `document_templates.body` is `{ style, html, description }` (see DocumentTemplatesManager). */
-function parseBody(body: unknown): { html: string; description: string | null } {
+/** `document_templates.body` is `{ style, html, description, category }` (see DocumentTemplatesManager). */
+function parseBody(body: unknown): {
+  html: string;
+  description: string | null;
+  category: string | null;
+} {
   if (body && typeof body === "object") {
     const b = body as Record<string, unknown>;
     return {
       html: typeof b.html === "string" ? b.html : "",
       description: typeof b.description === "string" && b.description ? b.description : null,
+      category: typeof b.category === "string" && b.category ? b.category : null,
     };
   }
-  return { html: "", description: null };
+  return { html: "", description: null, category: null };
 }
 
 export async function listDocumentTemplatesService(
@@ -67,20 +78,28 @@ export async function listDocumentTemplatesService(
     .order("updated_at", { ascending: false });
   if (error) throw new Error(error.message);
 
-  const templates: DocumentTemplateSummary[] = ((data as any[]) ?? []).map((t) => ({
-    id: t.id,
-    name: t.name,
-    description: parseBody(t.body).description,
-    isExample: t.team_id === null,
-    fields: (t.fields as string[]) ?? [],
-    updatedAt: t.updated_at,
-  }));
+  const templates: DocumentTemplateSummary[] = ((data as any[]) ?? []).map((t) => {
+    const parsed = parseBody(t.body);
+    return {
+      id: t.id,
+      name: t.name,
+      description: parsed.description,
+      category: parsed.category,
+      isExample: t.team_id === null,
+      fields: (t.fields as string[]) ?? [],
+      updatedAt: t.updated_at,
+    };
+  });
 
   // The team's own templates first (most recently touched at the top), then
-  // the built-in examples, which read best in their numbered order by name.
+  // the built-ins grouped by trade category, alphabetical within each.
   templates.sort((a, b) => {
     if (a.isExample !== b.isExample) return a.isExample ? 1 : -1;
-    if (a.isExample) return a.name.localeCompare(b.name);
+    if (a.isExample) {
+      const cat = (a.category ?? "").localeCompare(b.category ?? "");
+      if (cat !== 0) return cat;
+      return a.name.localeCompare(b.name);
+    }
     return b.updatedAt.localeCompare(a.updatedAt);
   });
 
