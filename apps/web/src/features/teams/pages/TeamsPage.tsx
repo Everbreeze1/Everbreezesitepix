@@ -336,7 +336,12 @@ function TeamDashboard({
         description="Manage the people who capture, review, and share your project record."
         actions={
           <>
-            {isOwner && <ManageBillingButton />}
+            {/*
+              No billing action here. Billing has one home — Settings → Billing
+              — and duplicating the Stripe portal on this page meant two places
+              to keep in sync and two places for a user to look. This page is
+              about people and seats; upgrade paths still point at /pricing.
+            */}
             {!isOwner && <LeaveTeamButton onLeft={onChange} />}
             {canManage && !atCap && (
               <Button
@@ -351,27 +356,6 @@ function TeamDashboard({
         }
       />
 
-      {!sharingEnabled && (
-        <div className="mt-6 flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600">
-            <Lock className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="font-manrope text-sm font-bold text-foreground">
-              Project sharing is off on Starter
-            </div>
-            <p className="mt-0.5 font-manrope text-xs text-muted-foreground">
-              Starter teams can add 1 additional user, but each person keeps their own projects.
-              Upgrade to <strong>Pro</strong> or <strong>Team</strong> to share projects, photos,
-              and reports across the team.
-            </p>
-          </div>
-          <Button asChild size="sm" className="shrink-0 bg-primary hover:bg-primary/90">
-            <Link to="/pricing">Upgrade</Link>
-          </Button>
-        </div>
-      )}
-
       {atCap && canManage && (
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-border bg-card/60 p-5">
           <div className="flex items-center gap-3">
@@ -384,7 +368,7 @@ function TeamDashboard({
               </h2>
               <p className="font-manrope text-xs text-muted-foreground">
                 {plan === "starter"
-                  ? "Starter includes 2 users (you + 1). Upgrade to add more teammates and share projects."
+                  ? "Starter includes 2 users (you + 1), sharing the same projects. Upgrade to add more teammates."
                   : "Remove a member or upgrade your plan to invite more."}
               </p>
             </div>
@@ -420,27 +404,6 @@ function TeamDashboard({
         seatsLeft={seatsLeft}
       />
     </div>
-  );
-}
-
-// ----------------------------------------------------------------
-function ManageBillingButton() {
-  const openPortal = createBillingPortalSession;
-  const m = useMutation({
-    mutationFn: () =>
-      openPortal({
-        data: { origin: typeof window !== "undefined" ? window.location.origin : "" },
-      }),
-    onSuccess: (res) => {
-      window.location.href = res.url;
-    },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to open billing portal"),
-  });
-  return (
-    <Button variant="outline" disabled={m.isPending} onClick={() => m.mutate()}>
-      <CreditCard className="mr-2 h-4 w-4" />
-      {m.isPending ? "Opening…" : "Manage billing"}
-    </Button>
   );
 }
 

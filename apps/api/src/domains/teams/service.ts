@@ -214,7 +214,12 @@ export async function getMyTeamService(ctx: AuthedContext) {
       subscriptionStatus: (team?.subscription_status as string) ?? "inactive",
       isInternal,
       isActive: isInternal || team?.subscription_status === "active",
-      sharingEnabled: isInternal || plan !== "starter",
+      // Every plan shares the project record now, including Starter — small
+      // crews are the point of Starter's second seat, and a seat that can't see
+      // the shared work is not a seat. Plans differ by seat count (Starter 2,
+      // Pro/Team 50), enforced via teams.member_limit. Mirrors the DB predicate
+      // in supabase/migrations/20260803040000_starter_project_sharing.sql.
+      sharingEnabled: true,
     };
   }
 
