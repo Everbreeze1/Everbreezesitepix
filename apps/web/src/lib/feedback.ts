@@ -31,6 +31,32 @@ export async function submitFeedback(input: SubmitFeedbackInput): Promise<void> 
 }
 
 // ---------------------------------------------------------------------------
+// Prompt funnel telemetry
+// ---------------------------------------------------------------------------
+
+export type PromptEvent = "shown" | "dismissed" | "answered";
+
+/**
+ * Records what happened to a prompt so response/dismissal rates have a
+ * denominator — a dismissal count without impressions isn't a rate.
+ *
+ * Fire-and-forget by design: this is disposable telemetry, so a failure here
+ * (offline, RLS, migration not applied yet) must never surface to the user or
+ * block the thing they were actually doing. Callers do not await it.
+ */
+export function logPromptEvent(userId: string, feature: string, event: PromptEvent): void {
+  void (async () => {
+    try {
+      await supabase
+        .from("feedback_prompt_events" as never)
+        .insert({ user_id: userId, feature, event } as never);
+    } catch {
+      /* telemetry is never worth an error in front of the user */
+    }
+  })();
+}
+
+// ---------------------------------------------------------------------------
 // Which surface is the user on?
 // ---------------------------------------------------------------------------
 

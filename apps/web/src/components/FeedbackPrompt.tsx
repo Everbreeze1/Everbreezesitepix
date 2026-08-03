@@ -10,6 +10,7 @@ import {
   beginFeedbackSession,
   canPrompt,
   featureForPath,
+  logPromptEvent,
   markFeatureAnswered,
   markPromptDismissed,
   markPromptShown,
@@ -63,6 +64,8 @@ export function FeedbackPrompt() {
       setMessage("");
       setVisible(true);
       markPromptShown(user.id);
+      // The denominator for every rate below.
+      logPromptEvent(user.id, match.key, "shown");
     }, DWELL_MS);
 
     return () => window.clearTimeout(timer);
@@ -72,8 +75,10 @@ export function FeedbackPrompt() {
 
   const close = () => setVisible(false);
 
+  /** Both the X and "Not now" land here — declining is declining either way. */
   const dismiss = () => {
     markPromptDismissed(user.id);
+    logPromptEvent(user.id, feature.key, "dismissed");
     close();
   };
 
@@ -94,6 +99,7 @@ export function FeedbackPrompt() {
         email: user.email ?? null,
       });
       markFeatureAnswered(user.id, feature.key);
+      logPromptEvent(user.id, feature.key, "answered");
       setStep("done");
       window.setTimeout(close, 2200);
     } catch (e: any) {
