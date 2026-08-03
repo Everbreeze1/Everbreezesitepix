@@ -277,6 +277,34 @@ export function ProjectWorkflows({ projectId }: { projectId: string }) {
     }
   };
 
+  /**
+   * Checking a workflow item used to await the write and then reload the whole
+   * workflow before the box moved — a visible lag on every tap, and worse on a
+   * job-site connection. The checkbox now flips immediately and rolls back if
+   * the write fails, matching how ProjectChecklists has always behaved.
+   *
+   * Lives here rather than in PhaseRunner because this is where `items` is
+   * owned; the runner only receives a filtered slice.
+   */
+  const toggleItemOptimistic = async (it: Item) => {
+    const next = it.completed_at ? null : new Date().toISOString();
+    setItems((prev) =>
+      prev.map((x) =>
+        x.id === it.id
+          ? { ...x, completed_at: next, completed_by: next ? (user?.id ?? null) : null }
+          : x,
+      ),
+    );
+    const { error } = await supabase
+      .from("project_workflow_items" as any)
+      .update({ completed_at: next, completed_by: next ? (user?.id ?? null) : null })
+      .eq("id", it.id);
+    if (error) {
+      toast.error("Couldn't update that step");
+      setItems((prev) => prev.map((x) => (x.id === it.id ? it : x)));
+    }
+  };
+
   const deleteWorkflow = async (w: Workflow) => {
     if (!(await confirm({ description: `Remove workflow “${w.name}” from this project?`, variant: "destructive" }))) return;
     const { error } = await supabase
@@ -358,6 +386,7 @@ export function ProjectWorkflows({ projectId }: { projectId: string }) {
                     photoUrls={photoUrls}
                     projectId={projectId}
                     onChange={load}
+                    onToggleItem={toggleItemOptimistic}
                     onDelete={() => void deleteWorkflow(w)}
                   />
                 </div>
@@ -486,6 +515,7 @@ function WorkflowCard({
   photoUrls,
   projectId,
   onChange,
+  onToggleItem,
   onDelete,
 }: {
   workflow: Workflow;
@@ -494,6 +524,7 @@ function WorkflowCard({
   photoUrls: Record<string, string>;
   projectId: string;
   onChange: () => Promise<void> | void;
+  onToggleItem: (item: Item) => Promise<void> | void;
   onDelete: () => void;
 }) {
   const allItems = useMemo(
@@ -508,6 +539,28 @@ function WorkflowCard({
   const signedPhases = phases.filter((p) => !p.requires_signoff || !!p.signed_off_at).length;
   const phasesComplete = phases.filter((p) => isPhaseComplete(p, items)).length;
 
+  /**
+   * Auto-advance: the crew's attention should follow the work.
+   *
+   * The active phase is simply the first one that isn't finished — derived, so
+   * there is no stored cursor to get out of sync (phase completion is itself
+   * computed by isPhaseComplete). Finishing a phase's last required item
+   * recomputes this, which folds that phase away and opens the next one.
+   */
+  const activePhaseId = useMemo(
+    () => phases.find((p) => !isPhaseComplete(p, items))?.id ?? null,
+    [phases, items],
+  );
+
+  // Manual expand/collapse is still honoured, but re-seeds whenever the work
+  // moves on — otherwise a phase you opened three steps ago stays open forever.
+  const [openPhaseIds, setOpenPhaseIds] = useState<string[]>([]);
+  useEffect(() => {
+    setOpenPhaseIds(activePhaseId ? [activePhaseId] : []);
+  }, [activePhaseId]);
+
+  const allPhasesDone = phases.length > 0 && phasesComplete === phases.length;
+
   return (
     <div className="rounded-3xl border border-border bg-card/70 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -517,6 +570,12 @@ function WorkflowCard({
             <p className="mt-0.5 text-xs text-muted-foreground">{workflow.description}</p>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            {allPhasesDone && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="h-3 w-3" />
+                Complete
+              </span>
+            )}
             <span>
               {phasesComplete} / {phases.length} phases complete
             </span>
@@ -555,6 +614,14 @@ function WorkflowCard({
             photoUrls={photoUrls}
             projectId={projectId}
             onChange={onChange}
+            onToggleItem={onToggleItem}
+            isActive={ph.id === activePhaseId}
+            open={openPhaseIds.includes(ph.id)}
+            onOpenChange={(next) =>
+              setOpenPhaseIds((prev) =>
+                next ? [...prev, ph.id] : prev.filter((id) => id !== ph.id),
+              )
+            }
           />
         ))}
       </div>
@@ -583,16 +650,27 @@ function PhaseRunner({
   photoUrls,
   projectId,
   onChange,
+  onToggleItem,
+  isActive,
+  open,
+  onOpenChange,
 }: {
   phase: Phase;
   items: Item[];
   photoUrls: Record<string, string>;
   projectId: string;
   onChange: () => Promise<void> | void;
+  onToggleItem: (item: Item) => Promise<void> | void;
+  /** The first unfinished phase — the one the crew is working now. */
+  isActive: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const { user } = useAuth();
   const confirm = useConfirm();
-  const [open, setOpen] = useState(true);
+  // `open` is controlled by WorkflowCard so finishing a phase can fold it away
+  // and reveal the next one.
+  const setOpen = (fn: (s: boolean) => boolean) => onOpenChange(fn(open));
   const [notes, setNotes] = useState(phase.notes ?? "");
   const notesTimer = useRef<NodeJS.Timeout | null>(null);
   const [signOpen, setSignOpen] = useState(false);
@@ -619,14 +697,9 @@ function PhaseRunner({
     }, 600);
   };
 
-  const toggleCheck = async (it: Item) => {
-    const next = it.completed_at ? null : new Date().toISOString();
-    await supabase
-      .from("project_workflow_items" as any)
-      .update({ completed_at: next, completed_by: next ? (user?.id ?? null) : null })
-      .eq("id", it.id);
-    await onChange();
-  };
+  // Delegates to the state owner so the checkbox flips instantly instead of
+  // waiting on a write plus a full workflow reload.
+  const toggleCheck = (it: Item) => onToggleItem(it);
 
   const updateNote = async (it: Item, val: string) => {
     await supabase
@@ -719,7 +792,13 @@ function PhaseRunner({
 
   return (
     <div
-      className={`rounded-2xl border-[0.8px] ${complete ? "border-emerald-500/40 bg-emerald-500/5" : "border-border bg-muted/20"}`}
+      className={`rounded-2xl border-[0.8px] transition-colors ${
+        complete
+          ? "border-emerald-500/40 bg-emerald-500/5"
+          : isActive
+            ? "border-primary/40 bg-primary/[0.04] ring-1 ring-primary/10"
+            : "border-border bg-muted/20"
+      }`}
     >
       <button
         type="button"
@@ -731,8 +810,14 @@ function PhaseRunner({
         ) : (
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         )}
-        <span className="text-sm font-medium">{phase.name}</span>
-        {complete && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+        <span className="text-sm font-bold">{phase.name}</span>
+        {complete ? (
+          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+        ) : isActive ? (
+          <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-primary">
+            Now
+          </span>
+        ) : null}
         <div className="ml-auto flex items-center gap-2 text-[11px] text-muted-foreground">
           <span>
             {done} / {total}

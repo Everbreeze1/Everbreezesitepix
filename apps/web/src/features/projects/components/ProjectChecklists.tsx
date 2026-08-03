@@ -17,6 +17,8 @@ import {
   Upload,
   Camera,
   LayoutTemplate,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import { compressImageFile } from "@/features/photos/components/CameraCapture";
 import { Textarea } from "@/components/ui/textarea";
@@ -387,6 +389,51 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
       setItems((prev) =>
         prev.map((x) => (x.id === item.id ? { ...x, completed_at: item.completed_at } : x)),
       );
+    }
+  };
+
+  /**
+   * Reorder an item within its checklist.
+   *
+   * Up/down controls rather than drag-and-drop: these lists are filled in on a
+   * phone on site, where dragging inside a nested scrolling panel is easy to
+   * start by accident and hard to finish accurately. Buttons also come with
+   * keyboard and screen-reader support for free. Optimistic, with rollback.
+   */
+  const moveItem = async (item: ChecklistItem, dir: -1 | 1) => {
+    const siblings = items
+      .filter((x) => x.checklist_id === item.checklist_id)
+      .sort((a, b) => a.position - b.position);
+    const idx = siblings.findIndex((x) => x.id === item.id);
+    const targetIdx = idx + dir;
+    if (idx < 0 || targetIdx < 0 || targetIdx >= siblings.length) return;
+    const a = siblings[idx];
+    const b = siblings[targetIdx];
+    if (a.position === b.position) return; // duplicate positions — nothing meaningful to swap
+
+    setItems((prev) =>
+      prev.map((x) =>
+        x.id === a.id
+          ? { ...x, position: b.position }
+          : x.id === b.id
+            ? { ...x, position: a.position }
+            : x,
+      ),
+    );
+
+    const [r1, r2] = await Promise.all([
+      supabase
+        .from("project_checklist_items" as any)
+        .update({ position: b.position })
+        .eq("id", a.id),
+      supabase
+        .from("project_checklist_items" as any)
+        .update({ position: a.position })
+        .eq("id", b.id),
+    ]);
+    if (r1.error || r2.error) {
+      toast.error("Couldn't reorder");
+      setItems((prev) => prev.map((x) => (x.id === a.id ? a : x.id === b.id ? b : x)));
     }
   };
 
@@ -916,13 +963,35 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
 
                   {its.length > 0 && (
                     <ul className="mt-2 space-y-2.5">
-                      {its.map((it) => {
+                      {its.map((it, itIdx) => {
                         const photos = photosByItem.get(it.id) ?? [];
                         return (
                           <li
                             key={it.id}
                             className="group rounded-xl border-[0.8px] border-transparent px-3 py-2.5 transition-colors hover:border-border/60 hover:bg-muted/40"
                           >
+                            {/* Reorder controls — revealed on hover/focus so a
+                                filled-in checklist stays calm to read. */}
+                            <div className="float-right ml-2 flex shrink-0 flex-col opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                              <button
+                                type="button"
+                                aria-label={`Move “${it.label}” up`}
+                                disabled={itIdx === 0}
+                                onClick={() => void moveItem(it, -1)}
+                                className="rounded p-0.5 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+                              >
+                                <ChevronUp className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Move “${it.label}” down`}
+                                disabled={itIdx === its.length - 1}
+                                onClick={() => void moveItem(it, 1)}
+                                className="rounded p-0.5 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+                              >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                             <div className="flex items-start gap-2.5">
                               {it.item_type === "checkbox" || !it.item_type ? (
                                 <Checkbox
