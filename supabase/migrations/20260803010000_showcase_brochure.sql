@@ -16,14 +16,39 @@
 -- read back as one implicit untitled section, so showcases created before this
 -- migration keep rendering exactly as they did until they're next edited.
 --
--- Apply via the SitePix Supabase SQL editor (or `supabase db push`). Idempotent.
+-- ---------------------------------------------------------------------------
+-- IF YOU HIT "40P01: deadlock detected"
+-- ---------------------------------------------------------------------------
+-- That is not a problem with this SQL. ALTER TABLE needs an AccessExclusiveLock,
+-- and the SQL editor runs a whole script as ONE transaction — so the lock taken
+-- on `showcases` in PART 1 is held until the very end, while the live app is
+-- reading `showcases` and `showcase_items` in the opposite order. The two block
+-- each other and Postgres kills one.
+--
+-- Fix: close any open SitePix browser tabs (that stops the app polling), then
+-- run the PARTS BELOW ONE AT A TIME rather than the whole file at once. Each
+-- part is small, takes its locks briefly, and commits before the next begins.
+-- Everything is idempotent, so re-running any part — or the whole file — is
+-- safe whether or not it partially applied.
+--
+-- Apply via the SitePix Supabase SQL editor (or `supabase db push`).
+-- ---------------------------------------------------------------------------
 
+-- Fail fast rather than queueing behind app traffic and deadlocking. If a part
+-- errors with "canceling statement due to lock timeout", nothing was applied —
+-- close the app tabs and run it again.
+SET lock_timeout = '5s';
+
+
+-- === PART 1 — new columns on showcases =====================================
 ALTER TABLE public.showcases
   ADD COLUMN IF NOT EXISTS intro_html   text,
   ADD COLUMN IF NOT EXISTS outro_html   text,
   ADD COLUMN IF NOT EXISTS accent_color text,
   ADD COLUMN IF NOT EXISTS show_contact boolean NOT NULL DEFAULT true;
 
+
+-- === PART 2 — the sections table ===========================================
 CREATE TABLE IF NOT EXISTS public.showcase_sections (
   id          uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   showcase_id uuid NOT NULL REFERENCES public.showcases(id) ON DELETE CASCADE,
@@ -39,6 +64,10 @@ CREATE TABLE IF NOT EXISTS public.showcase_sections (
 CREATE INDEX IF NOT EXISTS showcase_sections_showcase_id_idx
   ON public.showcase_sections(showcase_id, position);
 
+
+-- === PART 3 — link existing items to sections ==============================
+-- This is the statement most likely to deadlock, because showcase_items is the
+-- table the app reads most. Run it on its own if the whole file keeps failing.
 ALTER TABLE public.showcase_items
   ADD COLUMN IF NOT EXISTS section_id uuid
     REFERENCES public.showcase_sections(id) ON DELETE CASCADE;
@@ -46,6 +75,9 @@ ALTER TABLE public.showcase_items
 CREATE INDEX IF NOT EXISTS showcase_items_section_id_idx
   ON public.showcase_items(section_id, position);
 
+
+-- === PART 4 — grants and row-level security ================================
+-- Cheap locks only; safe to run any time.
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.showcase_sections TO authenticated;
 GRANT ALL ON public.showcase_sections TO service_role;
 
