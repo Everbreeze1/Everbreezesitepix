@@ -23,6 +23,8 @@ import {
 } from "@/hooks/use-label-catalog";
 import { ColorPicker } from "@/components/ColorPicker";
 import { EmptyState } from "@/components/EmptyState";
+import { SURFACE_CARD, SURFACE_BUTTON } from "@/components/ui/surface";
+import { cn } from "@/lib/utils";
 import { useConfirm } from "@/hooks/use-confirm";
 
 interface Props {
@@ -109,11 +111,16 @@ export function LabelsManager({ teamId, userId, canManage, templateUsage, projec
   };
 
   return (
-    <Card className="overflow-hidden p-0">
+    <Card className={cn(SURFACE_CARD, "overflow-hidden p-0")}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-5 py-4">
         <div>
-          <h3 className="text-base font-semibold">Labels</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+            Shared taxonomy
+          </p>
+          <h3 className="font-display mt-1.5 text-xl font-bold tracking-[-0.6px] text-foreground">
+            Labels
+          </h3>
+          <p className="mt-1.5 text-xs text-muted-foreground">
             Company-wide labels you can attach to project templates and projects.
           </p>
         </div>
@@ -122,11 +129,11 @@ export function LabelsManager({ teamId, userId, canManage, templateUsage, projec
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search labels…"
-            className="h-9 w-48 rounded-lg"
+            className="h-9 w-48 rounded-xl"
           />
           {canManage && (
-            <Button size="sm" className="rounded-lg" onClick={openCreate}>
-              <Plus className="mr-1.5 h-4 w-4" />
+            <Button className={SURFACE_BUTTON} onClick={openCreate}>
+              <Plus className="h-4 w-4" />
               New label
             </Button>
           )}

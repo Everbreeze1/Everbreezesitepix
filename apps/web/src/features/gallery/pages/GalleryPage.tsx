@@ -63,6 +63,7 @@ import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
+import { PhotoThumb } from "@/components/PhotoThumb";
 import { CameraCapture, compressImageFile } from "@/features/photos/components/CameraCapture";
 import { TagPhotoDialog } from "@/features/photos/components/TagPhotoDialog";
 import { applyWatermarkToFile, type BeforeAfterTag, type WatermarkContext } from "@/lib/watermark";
@@ -1295,14 +1296,17 @@ export function GalleryPage() {
                 className="group flex flex-col overflow-hidden rounded-3xl bg-sidebar text-left shadow-[0_20px_35px_-26px_rgba(16,25,41,0.55)] transition-transform hover:-translate-y-0.5"
               >
                 <div className="relative aspect-[4/3] w-full overflow-hidden">
-                  {signed[p.id] && (
-                    <img
-                      src={signed[p.id]}
-                      alt={p.caption ?? ""}
-                      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                      loading="lazy"
-                    />
-                  )}
+                  {/* Thumbnail, not the camera original — a 200-photo grid of
+                      full-res site photos is the single heaviest thing in the
+                      app on a phone. Falls back to the full image if the
+                      project's plan has no image transformation. */}
+                  <PhotoThumb
+                    storagePath={p.storage_path}
+                    fallbackUrl={signed[p.id]}
+                    width={400}
+                    alt={p.caption ?? ""}
+                    className="transition duration-300 group-hover:scale-105"
+                  />
                   {watermarkUrl && signed[p.id] && (
                     <img
                       src={watermarkUrl}
