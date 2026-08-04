@@ -46,7 +46,12 @@ CREATE TABLE IF NOT EXISTS public.portfolios (
   -- One site per team. The UNIQUE constraint is what makes "get or create my
   -- portfolio" a safe upsert rather than a read-then-insert race.
   team_id       uuid NOT NULL UNIQUE REFERENCES public.teams(id) ON DELETE CASCADE,
-  created_by    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  -- SET NULL, not CASCADE — deliberately unlike showcases.created_by. A
+  -- showcase belongs to whoever built it, but the portfolio is the *company's*
+  -- public website: cascading would delete a live marketing site (and free its
+  -- slug for anyone to claim) the day the employee who first opened the page
+  -- leaves. Nothing reads this column; it exists for attribution only.
+  created_by    uuid REFERENCES auth.users(id) ON DELETE SET NULL,
 
   -- The public URL: /p/<slug>. Globally unique, lowercase, hyphenated.
   slug          text NOT NULL UNIQUE,
@@ -147,37 +152,69 @@ CREATE INDEX IF NOT EXISTS showcases_site_order_idx
 
 -- === PART 3 — backfill slugs for existing showcases ========================
 -- Without this, every showcase created before today is unreachable on the site
--- (the project route matches on slug). Slugify the title, de-duplicate with a
--- row number, and fall back to the id when a title slugifies to nothing.
-UPDATE public.showcases s
-SET slug = d.candidate
-FROM (
-  SELECT
-    id,
-    CASE WHEN rn = 1 THEN base ELSE base || '-' || rn::text END AS candidate
-  FROM (
-    SELECT
-      id,
-      base,
-      row_number() OVER (PARTITION BY team_id, base ORDER BY created_at, id) AS rn
-    FROM (
-      SELECT
-        id,
-        team_id,
-        created_at,
-        COALESCE(
-          NULLIF(
-            trim(both '-' from regexp_replace(lower(title), '[^a-z0-9]+', '-', 'g')),
-            ''
-          ),
-          'showcase-' || left(id::text, 8)
-        ) AS base
-      FROM public.showcases
-      WHERE slug IS NULL
-    ) AS slugged
-  ) AS numbered
-) AS d
-WHERE s.id = d.id AND s.slug IS NULL;
+-- (the project route matches on slug).
+--
+-- This is a row-at-a-time loop rather than one clever UPDATE ... row_number()
+-- for a reason that a set-based version gets wrong: the de-duplication has to
+-- consider slugs that ALREADY exist, not just the ones being generated in this
+-- pass. PART 2 creates the UNIQUE index before this runs, and the app assigns
+-- slugs to new showcases at creation — so if anyone creates a showcase between
+-- PART 2 and PART 3 (entirely possible; the app is live), a window function
+-- that only sees `slug IS NULL` rows will happily generate a duplicate and take
+-- the whole migration down with a 23505.
+--
+-- The loop re-checks the table on every candidate, so it is correct regardless
+-- of what is already there. Showcase counts are small and this runs once.
+--
+-- The slugify expression mirrors slugify() in
+-- apps/api/src/domains/portfolio/slug.ts: fold accents, drop apostrophes so
+-- "Dave's" becomes daves and not dave-s, collapse everything else to hyphens,
+-- and cap at 50 characters. Backfilled URLs have to look like the ones the app
+-- generates from here on, or the same job title produces two different slugs
+-- depending on when it was created.
+DO $$
+DECLARE
+  r         RECORD;
+  base      text;
+  candidate text;
+  n         int;
+BEGIN
+  FOR r IN
+    SELECT id, team_id, title
+    FROM public.showcases
+    WHERE slug IS NULL
+    ORDER BY created_at, id
+  LOOP
+    base := trim(both '-' from left(
+      trim(both '-' from regexp_replace(
+        translate(
+          -- Apostrophes vanish; every other non-alphanumeric becomes a break.
+          lower(translate(r.title, '''’', '')),
+          'àáâãäåāăąèéêëēĕėęěìíîïĩīĭįıòóôõöøōŏőùúûüũūŭůűųçćĉċčñńņňýÿŷ',
+          'aaaaaaaaaeeeeeeeeeiiiiiiiiiooooooooouuuuuuuuuucccccnnnnyyy'
+        ),
+        '[^a-z0-9]+', '-', 'g'
+      )),
+      50
+    ));
+
+    IF base IS NULL OR base = '' THEN
+      base := 'showcase-' || left(r.id::text, 8);
+    END IF;
+
+    candidate := base;
+    n := 1;
+    WHILE EXISTS (
+      SELECT 1 FROM public.showcases
+      WHERE team_id = r.team_id AND slug = candidate
+    ) LOOP
+      n := n + 1;
+      candidate := base || '-' || n::text;
+    END LOOP;
+
+    UPDATE public.showcases SET slug = candidate WHERE id = r.id;
+  END LOOP;
+END $$;
 
 
 -- === PART 4 — updated_at trigger ===========================================

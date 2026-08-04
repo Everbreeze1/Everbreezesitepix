@@ -201,7 +201,9 @@ ALTER TABLE public.showcases
 CREATE TABLE IF NOT EXISTS public.portfolios (
   id            uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   team_id       uuid NOT NULL UNIQUE REFERENCES public.teams(id) ON DELETE CASCADE,
-  created_by    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  -- SET NULL, not CASCADE — cascading would delete a live marketing site the
+  -- day the employee who first opened the page leaves. Attribution only.
+  created_by    uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   slug          text NOT NULL UNIQUE,
   business_name text,
   logo_url      text,
@@ -265,35 +267,55 @@ CREATE INDEX IF NOT EXISTS showcases_site_order_idx
   ON public.showcases(team_id, on_site, featured DESC, position, created_at DESC);
 
 -- --- 5c: backfill slugs so existing showcases are reachable ---
-UPDATE public.showcases s
-SET slug = d.candidate
-FROM (
-  SELECT
-    id,
-    CASE WHEN rn = 1 THEN base ELSE base || '-' || rn::text END AS candidate
-  FROM (
-    SELECT
-      id,
-      base,
-      row_number() OVER (PARTITION BY team_id, base ORDER BY created_at, id) AS rn
-    FROM (
-      SELECT
-        id,
-        team_id,
-        created_at,
-        COALESCE(
-          NULLIF(
-            trim(both '-' from regexp_replace(lower(title), '[^a-z0-9]+', '-', 'g')),
-            ''
-          ),
-          'showcase-' || left(id::text, 8)
-        ) AS base
-      FROM public.showcases
-      WHERE slug IS NULL
-    ) AS slugged
-  ) AS numbered
-) AS d
-WHERE s.id = d.id AND s.slug IS NULL;
+-- Row-at-a-time on purpose: de-duplication must consider slugs that ALREADY
+-- exist, not just the ones generated in this pass. 5b creates the UNIQUE index
+-- before this runs and the app assigns slugs at creation, so a showcase created
+-- between 5b and 5c would collide with a set-based backfill and abort the whole
+-- file with a 23505. The slugify expression mirrors slugify() in
+-- apps/api/src/domains/portfolio/slug.ts (fold accents, drop apostrophes, cap
+-- at 50) so backfilled URLs match the ones the app generates from here on.
+DO $$
+DECLARE
+  r         RECORD;
+  base      text;
+  candidate text;
+  n         int;
+BEGIN
+  FOR r IN
+    SELECT id, team_id, title
+    FROM public.showcases
+    WHERE slug IS NULL
+    ORDER BY created_at, id
+  LOOP
+    base := trim(both '-' from left(
+      trim(both '-' from regexp_replace(
+        translate(
+          lower(translate(r.title, '''’', '')),
+          'àáâãäåāăąèéêëēĕėęěìíîïĩīĭįıòóôõöøōŏőùúûüũūŭůűųçćĉċčñńņňýÿŷ',
+          'aaaaaaaaaeeeeeeeeeiiiiiiiiiooooooooouuuuuuuuuucccccnnnnyyy'
+        ),
+        '[^a-z0-9]+', '-', 'g'
+      )),
+      50
+    ));
+
+    IF base IS NULL OR base = '' THEN
+      base := 'showcase-' || left(r.id::text, 8);
+    END IF;
+
+    candidate := base;
+    n := 1;
+    WHILE EXISTS (
+      SELECT 1 FROM public.showcases
+      WHERE team_id = r.team_id AND slug = candidate
+    ) LOOP
+      n := n + 1;
+      candidate := base || '-' || n::text;
+    END LOOP;
+
+    UPDATE public.showcases SET slug = candidate WHERE id = r.id;
+  END LOOP;
+END $$;
 
 -- --- 5d: updated_at trigger ---
 DROP TRIGGER IF EXISTS portfolios_updated_at_trg ON public.portfolios;
