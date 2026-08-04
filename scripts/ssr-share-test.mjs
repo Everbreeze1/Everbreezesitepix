@@ -1,16 +1,24 @@
 #!/usr/bin/env node
 /**
- * SSR regression test for the public walkthrough share route.
+ * SSR regression test for the public, anonymous routes.
  *
- * Imports the built Vercel function entry (Nitro `vercel` preset, Build
- * Output API v3) and invokes its `fetch` handler in-process. Asserts that:
+ * Imports the built Vercel function entry (Nitro `vercel` preset, Build Output
+ * API v3) and invokes its `fetch` handler in-process. For each route it asserts:
  *   1. The handler returns a Response (no thrown exception, no h3-swallowed
  *      `{"unhandled":true,"message":"HTTPError"}` 500).
- *   2. The status is < 500 (we expect 200 — the route renders the
- *      "Walkthrough unavailable" fallback for an unknown token).
+ *   2. The status is < 500 — every one of these routes is expected to render a
+ *      graceful "unavailable" state for unknown ids, not blow up.
+ *   3. The body looks like the intended route rather than some other document.
  *
- * This guards against operator-precedence / nullish-coalescing bugs in the
- * share route loader (see prior fix in share.walkthroughs.$token.tsx).
+ * This originally guarded one operator-precedence bug in the walkthrough share
+ * loader. It now covers the portfolio site and its embeds too, because those
+ * routes load data in a *route loader* — so a loader that throws takes down a
+ * page a search engine is crawling, rather than flashing an error inside an
+ * already-rendered shell the way the older client-fetching share pages do.
+ *
+ * The API is not reachable from this harness, so every loader here exercises
+ * its catch path. That is exactly the case worth pinning: a marketing page must
+ * degrade to "unavailable", never to a 500.
  *
  * Run after `npm run build`. The `test:ssr` npm script does both.
  */
@@ -19,74 +27,106 @@ import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
-const ENTRY = resolve(
-  process.cwd(),
-  "apps/web/.vercel/output/functions/__server.func/index.mjs",
-);
+const ENTRY = resolve(process.cwd(), "apps/web/.vercel/output/functions/__server.func/index.mjs");
 
-const entryPath = ENTRY;
-
-if (!existsSync(entryPath)) {
+if (!existsSync(ENTRY)) {
   console.error(`✗ Built server entry not found at ${ENTRY}`);
   console.error("  Run `npm run build` first, or use `npm run test:ssr`.");
   process.exit(1);
 }
 
-const TEST_TOKEN = "00000000-0000-0000-0000-000000000000";
-const URL_PATH = `/share/walkthroughs/${TEST_TOKEN}`;
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+
+/** `expect` is matched case-insensitively; at least one entry must be present. */
+const ROUTES = [
+  { path: `/share/walkthroughs/${NIL_UUID}`, expect: ["walkthrough"] },
+  { path: `/share/showcases/${NIL_UUID}`, expect: ["showcase"] },
+  { path: "/p/a-portfolio-that-does-not-exist", expect: ["portfolio"] },
+  { path: "/p/a-portfolio-that-does-not-exist/some-project", expect: ["project"] },
+  { path: `/embed/gallery/${NIL_UUID}`, expect: ["gallery"] },
+  { path: `/embed/map/${NIL_UUID}`, expect: ["map"] },
+  {
+    // Pure server handler, no React — asserts the snippet contractors paste is
+    // actually served rather than falling through to the SPA shell.
+    path: "/embed.js",
+    expect: ["sitepix:embed:height", "data-sitepix"],
+  },
+  {
+    // Enumerates published portfolios; must survive the API being unreachable.
+    path: "/sitemap.xml",
+    expect: ["<urlset"],
+  },
+];
 
 // Minimal Vercel Node function context shim — the handler only touches
-// context.waitUntil, everything else (static assets, ISR headers) is handled
-// by Vercel's routing layer, not this function.
+// context.waitUntil, everything else (static assets, ISR headers) is handled by
+// Vercel's routing layer, not this function.
 const context = { waitUntil() {} };
 
+const failures = [];
 function fail(msg) {
   console.error(`✗ ${msg}`);
-  process.exit(1);
+  failures.push(msg);
 }
 
 let worker;
 try {
-  worker = (await import(pathToFileURL(entryPath).href)).default;
+  worker = (await import(pathToFileURL(ENTRY).href)).default;
 } catch (err) {
-  fail(`Failed to import built server entry: ${err?.stack ?? err}`);
+  console.error(`✗ Failed to import built server entry: ${err?.stack ?? err}`);
+  process.exit(1);
 }
 
 if (typeof worker?.fetch !== "function") {
-  fail("Built server entry has no default.fetch export");
+  console.error("✗ Built server entry has no default.fetch export");
+  process.exit(1);
 }
 
-const request = new Request(`https://test.local${URL_PATH}`, { method: "GET" });
+for (const route of ROUTES) {
+  let response;
+  try {
+    response = await worker.fetch(
+      new Request(`https://test.local${route.path}`, { method: "GET" }),
+      context,
+    );
+  } catch (err) {
+    fail(`SSR fetch threw for ${route.path}: ${err?.stack ?? err}`);
+    continue;
+  }
 
-let response;
-try {
-  response = await worker.fetch(request, context);
-} catch (err) {
-  fail(`SSR fetch threw: ${err?.stack ?? err}`);
+  if (!(response instanceof Response)) {
+    fail(`SSR fetch did not return a Response for ${route.path} (got ${typeof response})`);
+    continue;
+  }
+
+  const body = await response.text();
+
+  if (response.status >= 500) {
+    fail(`SSR returned ${response.status} for ${route.path}\n--- body ---\n${body.slice(0, 800)}`);
+    continue;
+  }
+
+  if (body.includes('"unhandled":true') && body.includes('"message":"HTTPError"')) {
+    fail(
+      `SSR returned h3-swallowed HTTPError envelope for ${route.path}\n--- body ---\n${body.slice(0, 800)}`,
+    );
+    continue;
+  }
+
+  const haystack = body.toLowerCase();
+  if (!route.expect.some((needle) => haystack.includes(needle.toLowerCase()))) {
+    fail(
+      `SSR response for ${route.path} does not look like that route (wanted one of ${route.expect.join(", ")}).\n--- body (first 800) ---\n${body.slice(0, 800)}`,
+    );
+    continue;
+  }
+
+  console.log(`✓ SSR ${route.path} → ${response.status} (${body.length} bytes)`);
 }
 
-if (!(response instanceof Response)) {
-  fail(`SSR fetch did not return a Response (got ${typeof response})`);
+if (failures.length) {
+  console.error(`\n✗ ${failures.length} of ${ROUTES.length} SSR routes failed`);
+  process.exit(1);
 }
 
-const body = await response.text();
-
-if (response.status >= 500) {
-  fail(`SSR returned ${response.status} for ${URL_PATH}\n--- body ---\n${body.slice(0, 1000)}`);
-}
-
-if (body.includes('"unhandled":true') && body.includes('"message":"HTTPError"')) {
-  fail(
-    `SSR returned h3-swallowed HTTPError envelope for ${URL_PATH}\n--- body ---\n${body.slice(0, 1000)}`,
-  );
-}
-
-// Sanity: the share route's fallback markup should be present for an unknown
-// token. If it isn't we likely served the wrong document (e.g. asset 404 path).
-if (!body.includes("Walkthrough") && !body.includes("walkthrough")) {
-  fail(
-    `SSR response for ${URL_PATH} does not look like the share route.\n--- body (first 1000) ---\n${body.slice(0, 1000)}`,
-  );
-}
-
-console.log(`✓ SSR ${URL_PATH} → ${response.status} (${body.length} bytes)`);
+console.log(`\n✓ all ${ROUTES.length} SSR routes rendered`);

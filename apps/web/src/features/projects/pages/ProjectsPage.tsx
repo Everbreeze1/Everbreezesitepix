@@ -2,6 +2,7 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query-keys";
+import { PhotoThumb } from "@/components/PhotoThumb";
 import {
   Camera,
   FolderKanban,
@@ -132,6 +133,7 @@ export function ProjectsPage() {
   const routeSearch = useSearch({ strict: false }) as { q?: string };
   const [allProjects, setAllProjects] = useState<ProjectRow[]>([]);
   const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
+  const [coverPaths, setCoverPaths] = useState<Record<string, string>>({});
   const [sampleUrls, setSampleUrls] = useState<Record<string, string[]>>({});
   const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
   const [reportCounts, setReportCounts] = useState<Record<string, number>>({});
@@ -219,6 +221,7 @@ export function ProjectsPage() {
     projectTagMap: Record<string, TagRow[]>;
     allTags: TagRow[];
     coverUrls: Record<string, string>;
+    coverPaths: Record<string, string>;
     sampleUrls: Record<string, string[]>;
     photoCounts: Record<string, number>;
     reportCounts: Record<string, number>;
@@ -241,6 +244,7 @@ export function ProjectsPage() {
         projectTagMap: {},
         allTags: [],
         coverUrls: {},
+        coverPaths: {},
         sampleUrls: {},
         photoCounts: {},
         reportCounts: {},
@@ -325,10 +329,14 @@ export function ProjectsPage() {
       const pathsToSign: string[] = [];
       const signOwner: Array<{ pid: string; idx: number }> = [];
       const cover: Record<string, string> = {};
+      // Storage paths for the covers, so the card can request a thumbnail
+      // rather than downloading a full-res photo per project tile.
+      const coverPaths: Record<string, string> = {};
       const samples: Record<string, string[]> = {};
       Object.entries(samplesByProject).forEach(([pid, list]) => {
         samples[pid] = list.map(() => "");
         list.forEach((f, i) => {
+          if (i === 0 && f.storage_path) coverPaths[pid] = f.storage_path;
           if (f.image_url) {
             samples[pid][i] = f.image_url;
             if (i === 0) cover[pid] = f.image_url;
@@ -422,6 +430,7 @@ export function ProjectsPage() {
         projectTagMap: ptMap,
         allTags: allTagsList,
         coverUrls: cover,
+        coverPaths,
         sampleUrls: samples,
         photoCounts: counts,
         reportCounts: rc,
@@ -436,6 +445,7 @@ export function ProjectsPage() {
       projectTagMap: ptMap,
       allTags: allTagsList,
       coverUrls: {},
+      coverPaths: {},
       sampleUrls: {},
       photoCounts: {},
       reportCounts: {},
@@ -504,6 +514,7 @@ export function ProjectsPage() {
     setProjectTagMap(projectsQuery.data.projectTagMap);
     setAllTags(projectsQuery.data.allTags);
     setCoverUrls(projectsQuery.data.coverUrls);
+    setCoverPaths(projectsQuery.data.coverPaths);
     setSampleUrls(projectsQuery.data.sampleUrls);
     setPhotoCounts(projectsQuery.data.photoCounts);
     setReportCounts(projectsQuery.data.reportCounts);
@@ -1467,6 +1478,7 @@ export function ProjectsPage() {
                   hasQueryOrFilter={!!query.trim() || tab !== "all" || selectedTagIds.length > 0}
                   projectTagMap={projectTagMap}
                   coverUrls={coverUrls}
+                  coverPaths={coverPaths}
                   photoCounts={photoCounts}
                   reportCounts={reportCounts}
                   checklistCounts={checklistCounts}
@@ -1593,6 +1605,7 @@ function ProjectsList({
   loading,
   hasQueryOrFilter,
   coverUrls,
+  coverPaths,
   photoCounts,
   reportCounts,
   checklistCounts,
@@ -1606,6 +1619,7 @@ function ProjectsList({
   loading: boolean;
   hasQueryOrFilter: boolean;
   coverUrls: Record<string, string>;
+  coverPaths: Record<string, string>;
   photoCounts: Record<string, number>;
   reportCounts: Record<string, number>;
   checklistCounts: Record<string, number>;
@@ -1655,12 +1669,13 @@ function ProjectsList({
               className="relative block h-40 w-full shrink-0 overflow-hidden bg-muted"
               aria-label={`Open ${p.name}`}
             >
-              {cover ? (
-                <img
-                  src={cover}
+              {cover || coverPaths[p.id] ? (
+                <PhotoThumb
+                  storagePath={coverPaths[p.id]}
+                  fallbackUrl={cover}
+                  width={420}
                   alt={`${p.name} cover`}
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  loading="lazy"
+                  className="transition-transform duration-300 group-hover:scale-105"
                 />
               ) : (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">

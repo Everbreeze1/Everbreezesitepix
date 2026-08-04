@@ -63,9 +63,9 @@ function platformLabel(platform: string): string {
  * and the only strong colour is the company's own accent. That is the whole
  * difference between this and a report.
  *
- * Shared by the public share page (routes/share.showcases.$token.tsx) and the
- * builder's live preview, so what the user edits is exactly what a prospect
- * sees. Never fork these two call sites.
+ * Shared by the public share page (routes/share.showcases.$token.tsx), the
+ * builder's live preview, and the portfolio site's project pages — so what the
+ * user edits is exactly what a prospect sees. Never fork these call sites.
  *
  * Rich text goes through <RichText>, which parses a small known tag subset into
  * React elements rather than injecting HTML — this page is served to anonymous
@@ -76,12 +76,22 @@ export function ShowcaseView({
   company,
   reviewLinks = [],
   footer = true,
+  brandInMasthead = true,
+  minHeight = true,
 }: {
   showcase: ShowcaseViewData;
   company?: ShowcaseViewCompany | null;
   /** Team review links; rendered only when the showcase has the CTA enabled. */
   reviewLinks?: ShowcaseReviewLink[];
   footer?: boolean;
+  /**
+   * Logo + company name over the cover photo. Off inside the portfolio site,
+   * where the sticky site header already carries the brand a few pixels above —
+   * repeating it makes the masthead look like a duplicated banner.
+   */
+  brandInMasthead?: boolean;
+  /** Off when embedded in a page that owns its own full-height layout. */
+  minHeight?: boolean;
 }) {
   const s = showcase;
   const accent = s.accent_color || DEFAULT_ACCENT;
@@ -93,7 +103,7 @@ export function ShowcaseView({
   );
 
   return (
-    <div className="min-h-screen bg-white text-neutral-900 antialiased">
+    <div className={cn("bg-white text-neutral-900 antialiased", minHeight && "min-h-screen")}>
       {/* Masthead. Full-bleed photography with the headline sitting on it —
           the single biggest lever on whether this reads as premium. */}
       <header className="relative isolate overflow-hidden">
@@ -112,7 +122,7 @@ export function ShowcaseView({
 
         <div className="absolute inset-x-0 bottom-0">
           <div className="mx-auto max-w-6xl px-6 pb-12 lg:px-10 lg:pb-16">
-            {(company?.logo_url || company?.name) && (
+            {brandInMasthead && (company?.logo_url || company?.name) && (
               <div className="mb-6 flex items-center gap-3">
                 {company.logo_url && (
                   <img

@@ -44,6 +44,7 @@ import { EditProjectDialog } from "@/features/projects/components/EditProjectDia
 import { ProjectActionsMenu } from "@/features/projects/components/ProjectActionsMenu";
 import { ProjectChecklists } from "@/features/projects/components/ProjectChecklists";
 import { TimelineCalendar } from "@/features/timeline/components/TimelineCalendar";
+import { PhotoThumb } from "@/components/PhotoThumb";
 import { ProjectWorkflows } from "@/features/projects/components/ProjectWorkflows";
 import { ProjectTasks, type ProjectTasksHandle } from "@/features/projects/components/ProjectTasks";
 import { ProjectDocuments } from "@/features/projects/components/ProjectDocuments";
@@ -2782,12 +2783,13 @@ export function ProjectDetailPage() {
                               : "Open photo"
                           }
                         >
-                          {url ? (
-                            <img
-                              src={url}
+                          {url || p.storage_path ? (
+                            <PhotoThumb
+                              storagePath={p.storage_path}
+                              fallbackUrl={url}
+                              width={480}
                               alt={p.caption ?? ""}
-                              className="h-full w-full object-cover transition group-hover:scale-105"
-                              loading="lazy"
+                              className="transition group-hover:scale-105"
                             />
                           ) : (
                             <div className="flex h-full items-center justify-center text-muted-foreground">

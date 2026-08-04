@@ -1259,7 +1259,7 @@ export function PhotoAnnotator({
                           type="button"
                           onClick={() => setTextMode(m)}
                           className={cn(
-                            "h-7 flex-1 rounded-md px-2 text-[11px] font-semibold capitalize transition",
+                            "h-7 flex-1 rounded-lg px-2 text-[11px] font-semibold capitalize transition",
                             textMode === m
                               ? "bg-primary text-primary-foreground"
                               : "bg-white/10 text-white/70 hover:bg-white/15",
@@ -1297,7 +1297,7 @@ export function PhotoAnnotator({
                             key={u}
                             type="button"
                             onClick={() => appendUnit(u)}
-                            className="h-7 flex-1 rounded-md bg-white/10 px-2 text-[11px] font-semibold text-white/85 hover:bg-white/20"
+                            className="h-7 flex-1 rounded-lg bg-white/10 px-2 text-[11px] font-semibold text-white/85 transition-colors hover:bg-white/20"
                           >
                             {u.trim()}
                           </button>
@@ -1381,7 +1381,7 @@ export function PhotoAnnotator({
                             placeholder="Length"
                             className="h-9 w-24 text-sm bg-neutral-800 border-white/10 text-white placeholder:text-white/40"
                           />
-                          <div className="flex gap-0.5 rounded-md bg-white/10 p-0.5">
+                          <div className="flex gap-0.5 rounded-lg bg-white/10 p-0.5">
                             {(["in", "ft", "cm", "m"] as const).map((u) => (
                               <button
                                 key={u}
@@ -1546,7 +1546,7 @@ export function PhotoAnnotator({
                         <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 rounded-full bg-neutral-900/90 px-0.5 text-[11px] leading-none shadow">
                           {stickerGlyph}
                         </span>
-                        <span className="pointer-events-none absolute right-full mr-3 whitespace-nowrap rounded-md bg-neutral-900/95 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg ring-1 ring-white/10 transition-opacity duration-150 group-hover:opacity-100">
+                        <span className="pointer-events-none absolute right-full mr-3 whitespace-nowrap rounded-lg bg-neutral-900/95 px-2.5 py-1.5 text-[11px] font-semibold text-white opacity-0 shadow-xl ring-1 ring-white/10 transition-opacity duration-150 group-hover:opacity-100">
                           Stickers
                         </span>
                       </button>
@@ -1578,7 +1578,7 @@ export function PhotoAnnotator({
                                     setStickerPickerOpen(false);
                                   }}
                                   className={cn(
-                                    "flex h-9 w-9 items-center justify-center rounded-md border text-xl leading-none transition",
+                                    "flex h-9 w-9 items-center justify-center rounded-lg border text-xl leading-none transition",
                                     stickerGlyph === glyph
                                       ? "border-primary bg-primary/20"
                                       : "border-white/10 bg-neutral-800 hover:bg-neutral-700",
@@ -1612,7 +1612,7 @@ export function PhotoAnnotator({
                           className="pointer-events-none absolute bottom-1 right-1 h-3 w-3 rounded-full border-2 border-white/80 shadow-md"
                           style={{ backgroundColor: color }}
                         />
-                        <span className="pointer-events-none absolute right-full mr-3 whitespace-nowrap rounded-md bg-neutral-900/95 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg ring-1 ring-white/10 transition-opacity duration-150 group-hover:opacity-100">
+                        <span className="pointer-events-none absolute right-full mr-3 whitespace-nowrap rounded-lg bg-neutral-900/95 px-2.5 py-1.5 text-[11px] font-semibold text-white opacity-0 shadow-xl ring-1 ring-white/10 transition-opacity duration-150 group-hover:opacity-100">
                           Color · {width}px
                         </span>
                       </button>
@@ -1671,7 +1671,7 @@ export function PhotoAnnotator({
                               type="button"
                               onClick={() => updateSelectedWidth(w)}
                               className={cn(
-                                "flex-1 rounded-md py-1 text-[11px]",
+                                "flex-1 rounded-lg py-1 text-[11px] font-semibold transition-colors",
                                 width === w
                                   ? "bg-primary text-primary-foreground"
                                   : "bg-white/10 text-white/70 hover:bg-white/15",
@@ -1694,7 +1694,7 @@ export function PhotoAnnotator({
                         className="group relative mx-auto flex h-11 w-11 items-center justify-center rounded-2xl text-white/85 transition-all duration-200 hover:scale-105 hover:bg-white/10"
                       >
                         <Sliders className="h-5 w-5" />
-                        <span className="pointer-events-none absolute right-full mr-3 whitespace-nowrap rounded-md bg-neutral-900/95 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg ring-1 ring-white/10 transition-opacity duration-150 group-hover:opacity-100">
+                        <span className="pointer-events-none absolute right-full mr-3 whitespace-nowrap rounded-lg bg-neutral-900/95 px-2.5 py-1.5 text-[11px] font-semibold text-white opacity-0 shadow-xl ring-1 ring-white/10 transition-opacity duration-150 group-hover:opacity-100">
                           Adjust
                         </span>
                       </button>
@@ -1716,7 +1716,7 @@ export function PhotoAnnotator({
                           setContrast(100);
                           setSaturation(100);
                         }}
-                        className="w-full rounded-md bg-white/10 py-1.5 text-xs text-white/80 hover:bg-white/15"
+                        className="w-full rounded-lg bg-white/10 py-2 text-xs font-semibold text-white/80 transition-colors hover:bg-white/15"
                       >
                         Reset
                       </button>
@@ -1761,7 +1761,7 @@ export function PhotoAnnotator({
                   ) : (
                     <Check className="h-5 w-5" strokeWidth={3} />
                   )}
-                  <span className="pointer-events-none absolute right-full mr-3 whitespace-nowrap rounded-md bg-neutral-900/95 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-lg ring-1 ring-white/10 transition-opacity duration-150 group-hover:opacity-100">
+                  <span className="pointer-events-none absolute right-full mr-3 whitespace-nowrap rounded-lg bg-neutral-900/95 px-2.5 py-1.5 text-[11px] font-semibold text-white opacity-0 shadow-xl ring-1 ring-white/10 transition-opacity duration-150 group-hover:opacity-100">
                     Done & Save
                   </span>
                 </button>
@@ -1840,7 +1840,7 @@ function ToolBtn({
           style={{ backgroundColor: activeColor }}
         />
       )}
-      <span className="pointer-events-none absolute right-full mr-3 z-10 whitespace-nowrap rounded-md bg-neutral-900/95 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg ring-1 ring-white/10 transition-opacity duration-150 group-hover:opacity-100">
+      <span className="pointer-events-none absolute right-full mr-3 z-10 whitespace-nowrap rounded-lg bg-neutral-900/95 px-2.5 py-1.5 text-[11px] font-semibold text-white opacity-0 shadow-xl ring-1 ring-white/10 transition-opacity duration-150 group-hover:opacity-100">
         {label}
       </span>
     </button>

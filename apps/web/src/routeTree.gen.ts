@@ -18,8 +18,10 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as HowItWorksRouteImport } from './routes/how-it-works'
 import { Route as FeaturesRouteImport } from './routes/features'
 import { Route as FaqRouteImport } from './routes/faq'
+import { Route as EmbedDotjsRouteImport } from './routes/embed[.]js'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PSlugRouteImport } from './routes/p.$slug'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as AppTimelineRouteImport } from './routes/_app.timeline'
 import { Route as AppTemplatesRouteImport } from './routes/_app.templates'
@@ -42,6 +44,9 @@ import { Route as ShareShowcasesTokenRouteImport } from './routes/share.showcase
 import { Route as ShareReportsTokenRouteImport } from './routes/share.reports.$token'
 import { Route as SharePhotosTokenRouteImport } from './routes/share.photos.$token'
 import { Route as SharePagesTokenRouteImport } from './routes/share.pages.$token'
+import { Route as PSlugShowcaseSlugRouteImport } from './routes/p.$slug_.$showcaseSlug'
+import { Route as EmbedMapKeyRouteImport } from './routes/embed.map.$key'
+import { Route as EmbedGalleryKeyRouteImport } from './routes/embed.gallery.$key'
 import { Route as AppWalkthroughsWalkthroughIdRouteImport } from './routes/_app.walkthroughs.$walkthroughId'
 import { Route as AppShowcasesShowcaseIdRouteImport } from './routes/_app.showcases_.$showcaseId'
 import { Route as AppSettingsWorkflowsRouteImport } from './routes/_app.settings.workflows'
@@ -103,6 +108,11 @@ const FaqRoute = FaqRouteImport.update({
   path: '/faq',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EmbedDotjsRoute = EmbedDotjsRouteImport.update({
+  id: '/embed.js',
+  path: '/embed.js',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
@@ -110,6 +120,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PSlugRoute = PSlugRouteImport.update({
+  id: '/p/$slug',
+  path: '/p/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InviteTokenRoute = InviteTokenRouteImport.update({
@@ -222,6 +237,21 @@ const SharePagesTokenRoute = SharePagesTokenRouteImport.update({
   path: '/share/pages/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PSlugShowcaseSlugRoute = PSlugShowcaseSlugRouteImport.update({
+  id: '/p/$slug_/$showcaseSlug',
+  path: '/p/$slug/$showcaseSlug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EmbedMapKeyRoute = EmbedMapKeyRouteImport.update({
+  id: '/embed/map/$key',
+  path: '/embed/map/$key',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EmbedGalleryKeyRoute = EmbedGalleryKeyRouteImport.update({
+  id: '/embed/gallery/$key',
+  path: '/embed/gallery/$key',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppWalkthroughsWalkthroughIdRoute =
   AppWalkthroughsWalkthroughIdRouteImport.update({
     id: '/walkthroughs/$walkthroughId',
@@ -303,6 +333,7 @@ const AppProjectsProjectIdPagesPageIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/embed.js': typeof EmbedDotjsRoute
   '/faq': typeof FaqRoute
   '/features': typeof FeaturesRoute
   '/how-it-works': typeof HowItWorksRoute
@@ -326,6 +357,7 @@ export interface FileRoutesByFullPath {
   '/templates': typeof AppTemplatesRoute
   '/timeline': typeof AppTimelineRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/p/$slug': typeof PSlugRoute
   '/admin/audit-log': typeof AppAdminAuditLogRoute
   '/admin/notifications': typeof AppAdminNotificationsRoute
   '/admin/teams': typeof AppAdminTeamsRouteWithChildren
@@ -338,6 +370,9 @@ export interface FileRoutesByFullPath {
   '/settings/workflows': typeof AppSettingsWorkflowsRoute
   '/showcases/$showcaseId': typeof AppShowcasesShowcaseIdRoute
   '/walkthroughs/$walkthroughId': typeof AppWalkthroughsWalkthroughIdRoute
+  '/embed/gallery/$key': typeof EmbedGalleryKeyRoute
+  '/embed/map/$key': typeof EmbedMapKeyRoute
+  '/p/$slug/$showcaseSlug': typeof PSlugShowcaseSlugRoute
   '/share/pages/$token': typeof SharePagesTokenRoute
   '/share/photos/$token': typeof SharePhotosTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
@@ -352,6 +387,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/embed.js': typeof EmbedDotjsRoute
   '/faq': typeof FaqRoute
   '/features': typeof FeaturesRoute
   '/how-it-works': typeof HowItWorksRoute
@@ -374,6 +410,7 @@ export interface FileRoutesByTo {
   '/templates': typeof AppTemplatesRoute
   '/timeline': typeof AppTimelineRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/p/$slug': typeof PSlugRoute
   '/admin/audit-log': typeof AppAdminAuditLogRoute
   '/admin/notifications': typeof AppAdminNotificationsRoute
   '/admin/teams': typeof AppAdminTeamsRouteWithChildren
@@ -386,6 +423,9 @@ export interface FileRoutesByTo {
   '/settings/workflows': typeof AppSettingsWorkflowsRoute
   '/showcases/$showcaseId': typeof AppShowcasesShowcaseIdRoute
   '/walkthroughs/$walkthroughId': typeof AppWalkthroughsWalkthroughIdRoute
+  '/embed/gallery/$key': typeof EmbedGalleryKeyRoute
+  '/embed/map/$key': typeof EmbedMapKeyRoute
+  '/p/$slug/$showcaseSlug': typeof PSlugShowcaseSlugRoute
   '/share/pages/$token': typeof SharePagesTokenRoute
   '/share/photos/$token': typeof SharePhotosTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
@@ -402,6 +442,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
+  '/embed.js': typeof EmbedDotjsRoute
   '/faq': typeof FaqRoute
   '/features': typeof FeaturesRoute
   '/how-it-works': typeof HowItWorksRoute
@@ -425,6 +466,7 @@ export interface FileRoutesById {
   '/_app/templates': typeof AppTemplatesRoute
   '/_app/timeline': typeof AppTimelineRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/p/$slug': typeof PSlugRoute
   '/_app/admin/audit-log': typeof AppAdminAuditLogRoute
   '/_app/admin/notifications': typeof AppAdminNotificationsRoute
   '/_app/admin/teams': typeof AppAdminTeamsRouteWithChildren
@@ -437,6 +479,9 @@ export interface FileRoutesById {
   '/_app/settings/workflows': typeof AppSettingsWorkflowsRoute
   '/_app/showcases_/$showcaseId': typeof AppShowcasesShowcaseIdRoute
   '/_app/walkthroughs/$walkthroughId': typeof AppWalkthroughsWalkthroughIdRoute
+  '/embed/gallery/$key': typeof EmbedGalleryKeyRoute
+  '/embed/map/$key': typeof EmbedMapKeyRoute
+  '/p/$slug_/$showcaseSlug': typeof PSlugShowcaseSlugRoute
   '/share/pages/$token': typeof SharePagesTokenRoute
   '/share/photos/$token': typeof SharePhotosTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
@@ -453,6 +498,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/embed.js'
     | '/faq'
     | '/features'
     | '/how-it-works'
@@ -476,6 +522,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/timeline'
     | '/invite/$token'
+    | '/p/$slug'
     | '/admin/audit-log'
     | '/admin/notifications'
     | '/admin/teams'
@@ -488,6 +535,9 @@ export interface FileRouteTypes {
     | '/settings/workflows'
     | '/showcases/$showcaseId'
     | '/walkthroughs/$walkthroughId'
+    | '/embed/gallery/$key'
+    | '/embed/map/$key'
+    | '/p/$slug/$showcaseSlug'
     | '/share/pages/$token'
     | '/share/photos/$token'
     | '/share/reports/$token'
@@ -502,6 +552,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/embed.js'
     | '/faq'
     | '/features'
     | '/how-it-works'
@@ -524,6 +575,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/timeline'
     | '/invite/$token'
+    | '/p/$slug'
     | '/admin/audit-log'
     | '/admin/notifications'
     | '/admin/teams'
@@ -536,6 +588,9 @@ export interface FileRouteTypes {
     | '/settings/workflows'
     | '/showcases/$showcaseId'
     | '/walkthroughs/$walkthroughId'
+    | '/embed/gallery/$key'
+    | '/embed/map/$key'
+    | '/p/$slug/$showcaseSlug'
     | '/share/pages/$token'
     | '/share/photos/$token'
     | '/share/reports/$token'
@@ -551,6 +606,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_app'
+    | '/embed.js'
     | '/faq'
     | '/features'
     | '/how-it-works'
@@ -574,6 +630,7 @@ export interface FileRouteTypes {
     | '/_app/templates'
     | '/_app/timeline'
     | '/invite/$token'
+    | '/p/$slug'
     | '/_app/admin/audit-log'
     | '/_app/admin/notifications'
     | '/_app/admin/teams'
@@ -586,6 +643,9 @@ export interface FileRouteTypes {
     | '/_app/settings/workflows'
     | '/_app/showcases_/$showcaseId'
     | '/_app/walkthroughs/$walkthroughId'
+    | '/embed/gallery/$key'
+    | '/embed/map/$key'
+    | '/p/$slug_/$showcaseSlug'
     | '/share/pages/$token'
     | '/share/photos/$token'
     | '/share/reports/$token'
@@ -602,6 +662,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  EmbedDotjsRoute: typeof EmbedDotjsRoute
   FaqRoute: typeof FaqRoute
   FeaturesRoute: typeof FeaturesRoute
   HowItWorksRoute: typeof HowItWorksRoute
@@ -612,6 +673,10 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   InviteTokenRoute: typeof InviteTokenRoute
+  PSlugRoute: typeof PSlugRoute
+  EmbedGalleryKeyRoute: typeof EmbedGalleryKeyRoute
+  EmbedMapKeyRoute: typeof EmbedMapKeyRoute
+  PSlugShowcaseSlugRoute: typeof PSlugShowcaseSlugRoute
   SharePagesTokenRoute: typeof SharePagesTokenRoute
   SharePhotosTokenRoute: typeof SharePhotosTokenRoute
   ShareReportsTokenRoute: typeof ShareReportsTokenRoute
@@ -684,6 +749,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FaqRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/embed.js': {
+      id: '/embed.js'
+      path: '/embed.js'
+      fullPath: '/embed.js'
+      preLoaderRoute: typeof EmbedDotjsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app': {
       id: '/_app'
       path: ''
@@ -696,6 +768,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/p/$slug': {
+      id: '/p/$slug'
+      path: '/p/$slug'
+      fullPath: '/p/$slug'
+      preLoaderRoute: typeof PSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/invite/$token': {
@@ -850,6 +929,27 @@ declare module '@tanstack/react-router' {
       path: '/share/pages/$token'
       fullPath: '/share/pages/$token'
       preLoaderRoute: typeof SharePagesTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/p/$slug_/$showcaseSlug': {
+      id: '/p/$slug_/$showcaseSlug'
+      path: '/p/$slug/$showcaseSlug'
+      fullPath: '/p/$slug/$showcaseSlug'
+      preLoaderRoute: typeof PSlugShowcaseSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/embed/map/$key': {
+      id: '/embed/map/$key'
+      path: '/embed/map/$key'
+      fullPath: '/embed/map/$key'
+      preLoaderRoute: typeof EmbedMapKeyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/embed/gallery/$key': {
+      id: '/embed/gallery/$key'
+      path: '/embed/gallery/$key'
+      fullPath: '/embed/gallery/$key'
+      preLoaderRoute: typeof EmbedGalleryKeyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/walkthroughs/$walkthroughId': {
@@ -1054,6 +1154,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  EmbedDotjsRoute: EmbedDotjsRoute,
   FaqRoute: FaqRoute,
   FeaturesRoute: FeaturesRoute,
   HowItWorksRoute: HowItWorksRoute,
@@ -1064,6 +1165,10 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   InviteTokenRoute: InviteTokenRoute,
+  PSlugRoute: PSlugRoute,
+  EmbedGalleryKeyRoute: EmbedGalleryKeyRoute,
+  EmbedMapKeyRoute: EmbedMapKeyRoute,
+  PSlugShowcaseSlugRoute: PSlugShowcaseSlugRoute,
   SharePagesTokenRoute: SharePagesTokenRoute,
   SharePhotosTokenRoute: SharePhotosTokenRoute,
   ShareReportsTokenRoute: ShareReportsTokenRoute,

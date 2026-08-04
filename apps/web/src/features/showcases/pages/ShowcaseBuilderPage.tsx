@@ -32,8 +32,15 @@ import { cn } from "@/lib/utils";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useProfile } from "@/hooks/use-profile";
-import { getShowcase, updateShowcase, setShowcaseSections } from "@/lib/showcases.functions";
+import {
+  getShowcase,
+  updateShowcase,
+  setShowcaseSections,
+  type ShowcaseDetail,
+} from "@/lib/showcases.functions";
+import { getMyPortfolio, type MyPortfolio } from "@/lib/portfolio.functions";
 import { ShowcaseShareDialog } from "@/features/showcases/components/ShowcaseShareDialog";
+import { ShowcaseSiteCard } from "@/features/showcases/components/ShowcaseSiteCard";
 import {
   ShowcasePhotoPickerDialog,
   type PickedPhoto,
@@ -116,6 +123,11 @@ export function ShowcaseBuilderPage() {
   const [shareToken, setShareToken] = useState("");
   const [revokedAt, setRevokedAt] = useState<string | null>(null);
 
+  /** Site-only metadata. Owned by <ShowcaseSiteCard>, which saves it itself —
+   *  deliberately outside the document snapshot below. */
+  const [detail, setDetail] = useState<ShowcaseDetail | null>(null);
+  const [portfolio, setPortfolio] = useState<MyPortfolio | null>(null);
+
   /** Picker target: a section key, or "new" to build sections from projects. */
   const [pickerFor, setPickerFor] = useState<string | "new" | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
@@ -159,6 +171,7 @@ export function ShowcaseBuilderPage() {
       setOutroHtml(s.outro_html ?? "");
       setShareToken(s.share_token);
       setRevokedAt(s.revoked_at);
+      setDetail(s);
       const loadedSections: EditorSection[] = s.sections.map((sec) => ({
         key: nextKey(),
         project_id: sec.project_id,
@@ -197,6 +210,23 @@ export function ShowcaseBuilderPage() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showcaseId]);
+
+  // Fetched alongside, not inside, load(): the site card needs the portfolio's
+  // slug and published state, but a portfolio that fails to load must not stop
+  // the user editing the showcase itself.
+  useEffect(() => {
+    let cancelled = false;
+    getMyPortfolio()
+      .then((p) => {
+        if (!cancelled) setPortfolio(p);
+      })
+      .catch(() => {
+        if (!cancelled) setPortfolio(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const save = async () => {
     setSaving(true);
@@ -604,8 +634,20 @@ export function ShowcaseBuilderPage() {
             </div>
           </div>
 
-          {/* Right rail: design + share */}
+          {/* Right rail: site listing + design + share */}
           <div className="space-y-6">
+            {/* Highest in the rail because it answers "will anyone see this?",
+                which outranks every styling choice underneath it. */}
+            {detail && (
+              <ShowcaseSiteCard
+                showcase={detail}
+                portfolioSlug={portfolio?.portfolio.slug ?? null}
+                portfolioPublished={!!portfolio?.portfolio.published}
+                serviceTypeSuggestions={portfolio?.serviceTypes ?? []}
+                onSaved={(patch) => setDetail((d) => (d ? { ...d, ...patch } : d))}
+              />
+            )}
+
             <div className="h-fit rounded-2xl border border-border bg-card p-6">
               <p className="text-sm font-extrabold text-foreground">Design</p>
               <div className="mt-4 space-y-4">

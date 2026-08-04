@@ -229,6 +229,27 @@ import {
   listTimelineActivityInputSchema,
   listTimelineActivityService,
 } from "../timeline/service";
+import {
+  checkPortfolioSlugInputSchema,
+  checkPortfolioSlugService,
+  getMyPortfolioService,
+  reorderPortfolioShowcasesInputSchema,
+  reorderPortfolioShowcasesService,
+  rotatePortfolioEmbedKeyService,
+  updatePortfolioInputSchema,
+  updatePortfolioService,
+  updateShowcaseSiteInputSchema,
+  updateShowcaseSiteService,
+} from "../portfolio/service";
+import {
+  getPortfolioEmbedService,
+  getPublicPortfolioService,
+  getPublicPortfolioShowcaseService,
+  listPublicPortfolioUrlsService,
+  portfolioEmbedInputSchema,
+  publicPortfolioInputSchema,
+  publicPortfolioShowcaseInputSchema,
+} from "../portfolio/public";
 
 export type RpcEntry = {
   public?: boolean;
@@ -910,6 +931,53 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     (d) => deleteTextSnippetInputSchema.parse(d),
     deleteTextSnippetService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
+
+  // ---- portfolio site -----------------------------------------------------
+  getMyPortfolio: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return getMyPortfolioService(ctx);
+    },
+  },
+  updatePortfolio: authed(
+    (d) => updatePortfolioInputSchema.parse(d),
+    updatePortfolioService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  checkPortfolioSlug: authed(
+    (d) => checkPortfolioSlugInputSchema.parse(d),
+    checkPortfolioSlugService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  rotatePortfolioEmbedKey: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return rotatePortfolioEmbedKeyService(ctx);
+    },
+  },
+  updateShowcaseSite: authed(
+    (d) => updateShowcaseSiteInputSchema.parse(d),
+    updateShowcaseSiteService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  reorderPortfolioShowcases: authed(
+    (d) => reorderPortfolioShowcasesInputSchema.parse(d),
+    reorderPortfolioShowcasesService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  getPublicPortfolio: pub(
+    (d) => publicPortfolioInputSchema.parse(d),
+    getPublicPortfolioService as (data: never) => Promise<unknown>,
+  ),
+  getPublicPortfolioShowcase: pub(
+    (d) => publicPortfolioShowcaseInputSchema.parse(d),
+    getPublicPortfolioShowcaseService as (data: never) => Promise<unknown>,
+  ),
+  getPortfolioEmbed: pub(
+    (d) => portfolioEmbedInputSchema.parse(d),
+    getPortfolioEmbedService as (data: never) => Promise<unknown>,
+  ),
+  // Consumed by sitemap.xml, which is itself anonymous.
+  listPublicPortfolioUrls: {
+    public: true,
+    handle: async () => listPublicPortfolioUrlsService(),
+  },
 };
 
 export const PUBLIC_RPC_OPS = new Set(

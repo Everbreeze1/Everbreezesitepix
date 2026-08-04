@@ -2,6 +2,7 @@ import { z } from "zod";
 import { sanitizeCaption } from "@sitepix/shared";
 import type { AuthedContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";
+import { slugify, uniqueSlug } from "../portfolio/slug";
 
 export interface ShowcaseSummary {
   id: string;
@@ -14,6 +15,13 @@ export interface ShowcaseSummary {
   cover_image_url: string | null;
   created_at: string;
   updated_at: string;
+  /** Portfolio-site state, so the list can show and toggle it inline. */
+  slug: string | null;
+  service_type: string | null;
+  city: string | null;
+  state: string | null;
+  on_site: boolean;
+  featured: boolean;
 }
 
 export interface ShowcaseItemDetail {
@@ -49,6 +57,18 @@ export interface ShowcaseDetail {
   cover_photo_id: string | null;
   cover_image_url: string | null;
   sections: ShowcaseSectionDetail[];
+  /** Portfolio-site metadata — edited separately via updateShowcaseSite. */
+  slug: string | null;
+  service_type: string | null;
+  products_used: string[];
+  summary: string | null;
+  city: string | null;
+  state: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  on_site: boolean;
+  featured: boolean;
+  completed_on: string | null;
 }
 
 /** Company details rendered in a showcase's masthead + contact block. */
@@ -65,11 +85,11 @@ export interface ShowcaseCompany {
  * to edge), so this has to stay generous — the win is not serving thumbnails,
  * it is not serving 4000px camera originals.
  */
-const SHOWCASE_PHOTO_WIDTH = 1400;
+export const SHOWCASE_PHOTO_WIDTH = 1400;
 /** List-page cover thumbnails are ~400px on screen; 800 covers retina. */
-const CARD_THUMB_WIDTH = 800;
+export const CARD_THUMB_WIDTH = 800;
 
-async function myTeamId(ctx: AuthedContext): Promise<string | null> {
+export async function myTeamId(ctx: AuthedContext): Promise<string | null> {
   const { data } = await ctx.supabase
     .from("team_members" as any)
     .select("team_id")
@@ -118,7 +138,7 @@ async function signTransformed(
   return map;
 }
 
-async function resolvePhotoUrls(
+export async function resolvePhotoUrls(
   photoIds: string[],
   /** Max rendered width. Omit to serve originals. */
   width?: number,
@@ -187,7 +207,7 @@ async function resolvePhotoUrls(
  * they come back as one implicit untitled section so an old showcase keeps
  * rendering until it is next edited.
  */
-async function loadSections(
+export async function loadSections(
   db: any,
   showcaseId: string,
 ): Promise<ShowcaseSectionDetail[]> {
@@ -259,8 +279,14 @@ export async function listShowcasesService(ctx: AuthedContext): Promise<{ showca
   if (!teamId) return { showcases: [] };
   const { data } = await (ctx.supabase as any)
     .from("showcases")
-    .select("id, title, tagline, layout, share_token, revoked_at, cover_photo_id, created_at, updated_at")
+    .select(
+      "id, title, tagline, layout, share_token, revoked_at, cover_photo_id, created_at, updated_at, slug, service_type, city, state, on_site, featured, position",
+    )
     .eq("team_id", teamId)
+    // Site order, not creation order: this list is now also the running order of
+    // the portfolio's grid, so the two must agree or reordering looks broken.
+    .order("featured", { ascending: false })
+    .order("position", { ascending: true })
     .order("created_at", { ascending: false });
   const rows = (data as any[]) ?? [];
 
@@ -304,6 +330,12 @@ export async function listShowcasesService(ctx: AuthedContext): Promise<{ showca
       })(),
       created_at: r.created_at,
       updated_at: r.updated_at,
+      slug: r.slug ?? null,
+      service_type: r.service_type ?? null,
+      city: r.city ?? null,
+      state: r.state ?? null,
+      on_site: r.on_site ?? true,
+      featured: r.featured ?? false,
     })),
   };
 }
@@ -317,7 +349,7 @@ export async function getShowcaseService(
   const { data: row } = await (ctx.supabase as any)
     .from("showcases")
     .select(
-      "id, title, tagline, layout, share_token, revoked_at, intro_html, outro_html, accent_color, show_contact, show_reviews, cover_photo_id",
+      "id, title, tagline, layout, share_token, revoked_at, intro_html, outro_html, accent_color, show_contact, show_reviews, cover_photo_id, slug, service_type, products_used, summary, city, state, latitude, longitude, on_site, featured, completed_on",
     )
     .eq("id", data.id)
     .maybeSingle();
@@ -345,7 +377,38 @@ export async function getShowcaseService(
       ? (coverMap.get(row.cover_photo_id)?.image_url ?? null)
       : null,
     sections,
+    slug: row.slug ?? null,
+    service_type: row.service_type ?? null,
+    products_used: row.products_used ?? [],
+    summary: row.summary ?? null,
+    city: row.city ?? null,
+    state: row.state ?? null,
+    latitude: row.latitude ?? null,
+    longitude: row.longitude ?? null,
+    on_site: row.on_site ?? true,
+    featured: row.featured ?? false,
+    completed_on: row.completed_on ?? null,
   };
+}
+
+/**
+ * Reserves a per-team URL slug for a new showcase.
+ *
+ * Every showcase gets one at creation rather than lazily on first publish: the
+ * portfolio site routes on slug, and a showcase that exists but is unreachable
+ * is a bug the user can only discover by publishing and finding a 404.
+ *
+ * Reads the team's existing slugs in one query — a team's showcase count is
+ * small and bounded in practice, so this beats probing candidates serially.
+ */
+async function nextShowcaseSlug(db: any, teamId: string, title: string): Promise<string> {
+  const { data } = await db
+    .from("showcases")
+    .select("slug")
+    .eq("team_id", teamId)
+    .not("slug", "is", null);
+  const taken = ((data as Array<{ slug: string }>) ?? []).map((r) => r.slug);
+  return uniqueSlug(slugify(title), taken, "project");
 }
 
 export const createShowcaseInputSchema = z.object({
@@ -361,7 +424,13 @@ export async function createShowcaseService(
   if (!teamId) throw Object.assign(new Error("No team"), { status: 400 });
   const { data: row, error } = await (ctx.supabase as any)
     .from("showcases")
-    .insert({ team_id: teamId, created_by: ctx.userId, title: data.title, tagline: data.tagline ?? null })
+    .insert({
+      team_id: teamId,
+      created_by: ctx.userId,
+      title: data.title,
+      tagline: data.tagline ?? null,
+      slug: await nextShowcaseSlug(ctx.supabase, teamId, data.title),
+    })
     .select("id")
     .single();
   if (error) throw Object.assign(new Error(error.message), { status: 400 });
@@ -399,7 +468,7 @@ export async function createShowcaseFromProjectService(
 
   const { data: project } = await (ctx.supabase as any)
     .from("projects")
-    .select("id, name, street, city, state")
+    .select("id, name, street, city, state, latitude, longitude, tags")
     .eq("id", data.projectId)
     .maybeSingle();
   if (!project) throw Object.assign(new Error("Project not found"), { status: 404 });
@@ -420,6 +489,11 @@ export async function createShowcaseFromProjectService(
   }
 
   const address = [project.street, project.city, project.state].filter(Boolean).join(", ");
+  // "Completed" is the last time anyone photographed the job — the only date
+  // the data actually supports. Photos are ordered ascending, so take the tail.
+  const lastShot = [...photos].reverse().find((p) => p.taken_at || p.created_at);
+  const completedOn =
+    (lastShot?.taken_at ?? lastShot?.created_at)?.slice(0, 10) ?? null;
   const safeName = String(project.name ?? "this project")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -464,6 +538,22 @@ export async function createShowcaseFromProjectService(
       outro_html: `<p>Looking for work like this? Get in touch for a free estimate.</p>`,
       // The finished result is the shot that sells the job, so lead with it.
       cover_photo_id: (photos.find((p) => p.phase === "after") ?? photos[0]).id,
+
+      // --- portfolio-site metadata -----------------------------------------
+      // Denormalised from the project on purpose: a published portfolio has to
+      // keep rendering (and keep its map pin) after the project is deleted.
+      slug: await nextShowcaseSlug(ctx.supabase, teamId, project.name ?? "project"),
+      summary: address ? `${project.name} — ${address}` : null,
+      // A project's first tag is how teams already label the trade ("Roofing",
+      // "Kitchen"), so it is the best available guess at a service type. The
+      // user can correct it in the builder; guessing beats an empty facet that
+      // leaves every card unfilterable.
+      service_type: (project.tags as string[] | null)?.[0]?.trim() || null,
+      city: project.city ?? null,
+      state: project.state ?? null,
+      latitude: project.latitude ?? null,
+      longitude: project.longitude ?? null,
+      completed_on: completedOn,
     })
     .select("id")
     .single();

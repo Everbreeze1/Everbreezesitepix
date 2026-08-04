@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Search, Check } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/sitepix/client";
+import { PhotoThumb } from "@/components/PhotoThumb";
 
 interface PhotoRow {
   id: string;
@@ -246,7 +247,13 @@ export function ShowcasePhotoPickerDialog({
                                 checked ? "border-primary ring-2 ring-primary/30" : "border-transparent"
                               }`}
                             >
-                              <img src={urlFor(p)} alt="" className="h-full w-full object-cover" />
+                              {/* 300 photos as ~120px tiles — the clearest case
+                                  in the app for thumbnails over originals. */}
+                              <PhotoThumb
+                                storagePath={p.storage_path}
+                                fallbackUrl={urlFor(p)}
+                                width={200}
+                              />
                               {checked && (
                                 <div className="absolute right-1 top-1 rounded-full bg-primary p-0.5 text-primary-foreground">
                                   <Check className="h-3 w-3" />

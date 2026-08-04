@@ -224,7 +224,7 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
             return (
               <div
                 key={t.id}
-                className="group flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-2 py-1.5"
+                className="group flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-2 transition-colors hover:border-white/20 hover:bg-white/[0.08]"
               >
                 <button
                   type="button"
@@ -294,7 +294,7 @@ function AssigneePicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`flex items-center gap-1.5 rounded-md border border-white/15 bg-white/5 px-2 text-xs text-white/80 hover:bg-white/10 ${compact ? "h-9" : "h-7"}`}
+          className={`flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 ${compact ? "h-9" : "h-7"}`}
           aria-label="Assignee"
         >
           {selected ? (
@@ -334,7 +334,7 @@ function AssigneePicker({
                 onChange("");
                 setOpen(false);
               }}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent"
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs hover:bg-accent"
             >
               <UserPlus className="h-3.5 w-3.5 text-muted-foreground" />
               Unassign
@@ -353,7 +353,7 @@ function AssigneePicker({
                   onChange(c.userId);
                   setOpen(false);
                 }}
-                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent ${c.userId === value ? "bg-accent" : ""}`}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs hover:bg-accent ${c.userId === value ? "bg-accent" : ""}`}
               >
                 <Avatar className="h-6 w-6">
                   {c.avatarUrl && <AvatarImage src={c.avatarUrl} alt="" />}

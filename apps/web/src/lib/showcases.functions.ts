@@ -11,6 +11,13 @@ export interface ShowcaseSummary {
   cover_image_url: string | null;
   created_at: string;
   updated_at: string;
+  /** Portfolio-site state, so the list can show and toggle it inline. */
+  slug: string | null;
+  service_type: string | null;
+  city: string | null;
+  state: string | null;
+  on_site: boolean;
+  featured: boolean;
 }
 
 export interface ShowcaseItemDetail {
@@ -54,6 +61,18 @@ export interface ShowcaseDetail {
   cover_photo_id: string | null;
   cover_image_url: string | null;
   sections: ShowcaseSectionDetail[];
+  /** Portfolio-site metadata — edited separately via updateShowcaseSite. */
+  slug: string | null;
+  service_type: string | null;
+  products_used: string[];
+  summary: string | null;
+  city: string | null;
+  state: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  on_site: boolean;
+  featured: boolean;
+  completed_on: string | null;
 }
 
 export interface PublicShowcase {

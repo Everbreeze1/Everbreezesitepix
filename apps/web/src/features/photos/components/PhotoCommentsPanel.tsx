@@ -238,7 +238,7 @@ export function PhotoCommentsPanel({
     <div className="flex h-full min-h-0 flex-col text-white">
       <div
         ref={listRef}
-        className="flex-1 space-y-2 overflow-y-auto rounded-lg border border-white/10 bg-white/5 p-2 pr-3"
+        className="flex-1 space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-white/5 p-2.5 pr-3"
       >
         {loading ? (
           <div className="flex items-center justify-center py-6 text-white/60">
@@ -265,7 +265,7 @@ export function PhotoCommentsPanel({
                     <span className="font-medium text-white/90">{mine ? "You" : name}</span>
                     <span className="text-white/40">{formatRelativeTime(c.createdAt)}</span>
                   </div>
-                  <div className="mt-0.5 whitespace-pre-wrap break-words rounded-md bg-white/10 px-2 py-1.5 text-sm text-white/95">
+                  <div className="mt-0.5 whitespace-pre-wrap break-words rounded-lg bg-white/10 px-2.5 py-2 text-sm leading-relaxed text-white/95">
                     {renderBodyWithMentions(c.body)}
                   </div>
                 </div>
@@ -288,7 +288,7 @@ export function PhotoCommentsPanel({
       <div className="relative mt-2">
         {mentionQuery !== null &&
           (mentionMatches.length > 0 || contributorsLoading || contributors.length === 0) && (
-            <div className="absolute bottom-full left-0 z-10 mb-1 w-64 overflow-hidden rounded-lg border border-white/10 bg-neutral-900 shadow-lg">
+            <div className="absolute bottom-full left-0 z-10 mb-1.5 w-64 overflow-hidden rounded-xl border border-white/10 bg-neutral-900 shadow-xl">
               <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/50">
                 Mention teammate
               </div>
