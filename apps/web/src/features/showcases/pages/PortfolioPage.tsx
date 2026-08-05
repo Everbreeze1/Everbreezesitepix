@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { Check, Code2, ExternalLink, Globe, Layers, Loader2, Copy } from "lucide-react";
+import { Check, Code2, ExternalLink, Globe, Layers, Loader2, Copy, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -55,8 +55,12 @@ export function PortfolioPage() {
     if (isTeam) void load();
   }, [isTeam, load]);
 
+  // `portfolio` is null for a plain member of a team that has no portfolio yet
+  // (create-on-read is an owner/admin privilege — see getMyPortfolioService),
+  // so a patch has nothing to merge into and must be a no-op rather than
+  // spreading null into a half-built object.
   const patchPortfolio = (patch: Partial<PortfolioDetail>) =>
-    setData((d) => (d ? { ...d, portfolio: { ...d.portfolio, ...patch } } : d));
+    setData((d) => (d?.portfolio ? { ...d, portfolio: { ...d.portfolio, ...patch } } : d));
 
   const togglePublished = async (published: boolean) => {
     setPublishing(true);
@@ -114,6 +118,30 @@ export function PortfolioPage() {
     );
   }
 
+  // The service returns a null portfolio deliberately, so that a member who
+  // cannot create one lands on an empty state rather than a red error box.
+  // Without this branch the page dereferenced null and crashed instead.
+  if (!data.portfolio) {
+    return (
+      <div className="p-6 sm:p-10">
+        <PageHeader
+          title="Portfolio"
+          description="A shareable mini-site of your best work."
+        />
+        <div className="mt-8 rounded-2xl border border-border bg-card/70 p-10 text-center">
+          <Globe className="mx-auto h-10 w-10 text-muted-foreground/60" />
+          <p className="mt-4 text-sm font-bold text-foreground">
+            No portfolio site yet
+          </p>
+          <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+            An owner or admin on your team needs to set this up. Once they do, every project
+            you publish will appear here.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const p = data.portfolio;
   const siteUrl =
     typeof window !== "undefined" ? `${window.location.origin}/p/${p.slug}` : `/p/${p.slug}`;
@@ -135,6 +163,7 @@ export function PortfolioPage() {
       <PublishBar
         published={p.published}
         publishing={publishing}
+        canEdit={data.canEdit}
         siteUrl={siteUrl}
         onToggle={togglePublished}
       />
@@ -153,26 +182,35 @@ export function PortfolioPage() {
         </TabsList>
 
         <TabsContent value="site" className="mt-6">
-          <PortfolioSitePanel
-            data={data}
-            serviceTypes={data.serviceTypes}
-            onSaved={patchPortfolio}
-          />
+          {data.canEdit ? (
+            <PortfolioSitePanel
+              portfolio={p}
+              serviceTypes={data.serviceTypes}
+              onSaved={patchPortfolio}
+            />
+          ) : (
+            <ReadOnlyNotice what="the site's branding and copy" />
+          )}
         </TabsContent>
 
         <TabsContent value="projects" className="mt-6">
           <ShowcasesPanel
             portfolioSlug={p.slug}
             published={p.published}
+            canEdit={data.canEdit}
             onCountsChanged={() => void load()}
           />
         </TabsContent>
 
         <TabsContent value="embeds" className="mt-6">
-          <PortfolioEmbedsPanel
-            portfolio={p}
-            onEmbedKeyChanged={(embed_key) => patchPortfolio({ embed_key })}
-          />
+          {data.canEdit ? (
+            <PortfolioEmbedsPanel
+              portfolio={p}
+              onEmbedKeyChanged={(embed_key) => patchPortfolio({ embed_key })}
+            />
+          ) : (
+            <ReadOnlyNotice what="the website embed snippets" />
+          )}
         </TabsContent>
       </Tabs>
     </div>
@@ -187,11 +225,13 @@ export function PortfolioPage() {
 function PublishBar({
   published,
   publishing,
+  canEdit,
   siteUrl,
   onToggle,
 }: {
   published: boolean;
   publishing: boolean;
+  canEdit: boolean;
   siteUrl: string;
   onToggle: (v: boolean) => void;
 }) {
@@ -239,7 +279,9 @@ function PublishBar({
           </a>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Your site isn't public yet. Publish to get a shareable link and turn on embeds.
+            {canEdit
+              ? "Your site isn't public yet. Publish to get a shareable link and turn on embeds."
+              : "Your site isn't public yet. An owner or admin can publish it."}
           </p>
         )}
       </div>
@@ -255,11 +297,34 @@ function PublishBar({
             {copied ? "Copied" : "Copy link"}
           </Button>
         )}
-        <label className="flex cursor-pointer items-center gap-2">
-          <Switch checked={published} disabled={publishing} onCheckedChange={onToggle} />
-          <span className="text-xs font-bold text-muted-foreground">Publish</span>
-        </label>
+        {canEdit && (
+          <label className="flex cursor-pointer items-center gap-2">
+            <Switch checked={published} disabled={publishing} onCheckedChange={onToggle} />
+            <span className="text-xs font-bold text-muted-foreground">Publish</span>
+          </label>
+        )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Shown in place of an editor a plain member may open but not use.
+ *
+ * The tab still exists rather than being hidden: "why can't I see Embeds?" is a
+ * worse question than "why is this read-only?", and only one of them answers
+ * itself. Writes are blocked by RLS regardless — this is the explanation, not
+ * the enforcement.
+ */
+function ReadOnlyNotice({ what }: { what: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-border p-10 text-center">
+      <Lock className="mx-auto h-7 w-7 text-muted-foreground/60" />
+      <p className="mt-3 text-sm font-bold text-foreground">Only owners and admins can edit this</p>
+      <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+        Your team&rsquo;s portfolio is its public face, so changes to {what} are limited to owners
+        and admins. You can still add and edit your own projects.
+      </p>
     </div>
   );
 }

@@ -49,12 +49,17 @@ export interface ShowcaseCardRow {
 }
 
 /**
- * Featured first, then the manual position, then newest. Mirrors the
- * showcases_site_order_idx so the ordering the UI promises is the one the
- * index can actually serve.
+ * Manual position, then newest first as the tie-break for rows that have never
+ * been dragged (they all sit at position 0).
+ *
+ * `featured` deliberately does NOT sort here. It used to, and that quietly
+ * fought the drag-to-reorder UI: dropping an ordinary project above a featured
+ * one wrote the position the user asked for, then the next read hoisted the
+ * featured row back to the top and the card appeared to snap back. One
+ * ordering rule the user controls directly beats two that disagree — so
+ * `featured` is now purely a badge on the card.
  */
 export function compareCardRows(a: ShowcaseCardRow, b: ShowcaseCardRow): number {
-  if (!!a.featured !== !!b.featured) return a.featured ? -1 : 1;
   const pa = a.position ?? 0;
   const pb = b.position ?? 0;
   if (pa !== pb) return pa - pb;

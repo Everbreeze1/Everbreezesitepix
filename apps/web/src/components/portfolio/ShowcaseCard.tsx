@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowUpRight, Images, MapPin } from "lucide-react";
+import { ArrowUpRight, Images, MapPin, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { readableTextOn } from "@/lib/contrast";
 import type { PortfolioShowcaseCard } from "@/lib/portfolio.functions";
@@ -51,14 +51,27 @@ export function ShowcaseCard({
             without dimming the whole image the way a flat overlay would. */}
         <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/70 to-transparent" />
 
-        {card.service_type && (
-          <span
-            className="absolute left-3 top-3 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] shadow-sm"
-            style={{ backgroundColor: accent, color: readableTextOn(accent) }}
-          >
-            {card.service_type}
-          </span>
-        )}
+        <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-2">
+          {card.service_type ? (
+            <span
+              className="rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] shadow-sm"
+              style={{ backgroundColor: accent, color: readableTextOn(accent) }}
+            >
+              {card.service_type}
+            </span>
+          ) : (
+            <span />
+          )}
+          {/* `featured` stopped controlling grid order once the owner could drag
+              the order themselves — it survives as this badge, which is the
+              part customers actually see. */}
+          {card.featured && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-neutral-900 shadow-sm">
+              <Star className="h-3 w-3 fill-current" />
+              Featured
+            </span>
+          )}
+        </div>
 
         <div className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-2 text-white">
           {location ? (

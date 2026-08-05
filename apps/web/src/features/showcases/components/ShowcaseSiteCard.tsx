@@ -166,7 +166,8 @@ export function ShowcaseSiteCard({
           <span className="min-w-0">
             <span className="block text-sm font-bold text-foreground">Feature this project</span>
             <span className="block text-xs text-muted-foreground">
-              Featured projects lead the grid.
+              Adds a “Featured” badge to its card. Grid order is set by dragging in Portfolio →
+              Projects.
             </span>
           </span>
         </button>

@@ -39,6 +39,13 @@ interface Props {
   confirmLabel?: string;
   title?: string;
   description?: string;
+  /**
+   * One photo at a time. Used for the portfolio hero and a showcase's cover,
+   * where "selected" means *this one*, not *these ones* — so picking a second
+   * photo replaces the first instead of adding to it, and the per-project
+   * "Select all" is hidden because it cannot mean anything here.
+   */
+  singleSelect?: boolean;
 }
 
 export function ShowcasePhotoPickerDialog({
@@ -48,6 +55,7 @@ export function ShowcasePhotoPickerDialog({
   confirmLabel = "Add",
   title = "Add photos",
   description = "Photos are grouped by project — use “Select all” to pull in a whole job at once.",
+  singleSelect = false,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [photos, setPhotos] = useState<PhotoRow[]>([]);
@@ -154,6 +162,7 @@ export function ShowcasePhotoPickerDialog({
 
   const toggle = (id: string) =>
     setSelected((prev) => {
+      if (singleSelect) return prev.has(id) ? new Set() : new Set([id]);
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -226,14 +235,16 @@ export function ShowcasePhotoPickerDialog({
                             {g.photos.length} photo{g.photos.length === 1 ? "" : "s"}
                           </span>
                         </p>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 shrink-0 text-xs font-bold"
-                          onClick={() => toggleProject(g.photos)}
-                        >
-                          {allSelected ? "Clear" : "Select all"}
-                        </Button>
+                        {!singleSelect && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 shrink-0 text-xs font-bold"
+                            onClick={() => toggleProject(g.photos)}
+                          >
+                            {allSelected ? "Clear" : "Select all"}
+                          </Button>
+                        )}
                       </div>
                       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
                         {g.photos.map((p) => {
@@ -275,8 +286,14 @@ export function ShowcasePhotoPickerDialog({
               Cancel
             </Button>
             <Button onClick={confirm} disabled={selected.size === 0}>
-              {confirmLabel} {selected.size > 0 ? selected.size : ""} photo
-              {selected.size === 1 ? "" : "s"}
+              {singleSelect ? (
+                confirmLabel
+              ) : (
+                <>
+                  {confirmLabel} {selected.size > 0 ? selected.size : ""} photo
+                  {selected.size === 1 ? "" : "s"}
+                </>
+              )}
             </Button>
           </DialogFooter>
         </div>

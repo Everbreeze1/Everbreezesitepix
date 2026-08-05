@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Loader2, Save, TriangleAlert } from "lucide-react";
+import { Check, ImagePlus, Loader2, Save, TriangleAlert, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,12 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/sitepix/client";
 import {
   checkPortfolioSlug,
   updatePortfolio,
   type MyPortfolio,
   type PortfolioDetail,
 } from "@/lib/portfolio.functions";
+import { ShowcasePhotoPickerDialog } from "./ShowcasePhotoPickerDialog";
 import { TagInput } from "./TagInput";
 
 const DEFAULT_ACCENT = "#2563eb";
@@ -22,9 +25,11 @@ const DEFAULT_ACCENT = "#2563eb";
 interface Draft {
   slug: string;
   businessName: string;
+  logoUrl: string;
   accentColor: string;
   heroHeadline: string;
   heroSubhead: string;
+  heroPhotoId: string | null;
   aboutHtml: string;
   services: string[];
   serviceAreas: string[];
@@ -44,9 +49,11 @@ function toDraft(p: PortfolioDetail): Draft {
   return {
     slug: p.slug,
     businessName: p.business_name ?? "",
+    logoUrl: p.logo_url ?? "",
     accentColor: p.accent_color || DEFAULT_ACCENT,
     heroHeadline: p.hero_headline ?? "",
     heroSubhead: p.hero_subhead ?? "",
+    heroPhotoId: p.hero_photo_id,
     aboutHtml: p.about_html ?? "",
     services: p.services ?? [],
     serviceAreas: p.service_areas ?? [],
@@ -73,22 +80,31 @@ function toDraft(p: PortfolioDetail): Draft {
  * behaviour on its own.
  */
 export function PortfolioSitePanel({
-  data,
+  portfolio,
   onSaved,
   serviceTypes,
 }: {
-  data: MyPortfolio;
+  portfolio: PortfolioDetail;
   onSaved: (patch: Partial<PortfolioDetail>) => void;
   serviceTypes: string[];
 }) {
-  const [draft, setDraft] = useState<Draft>(() => toDraft(data.portfolio));
+  const { user } = useAuth();
+  const [draft, setDraft] = useState<Draft>(() => toDraft(portfolio));
   const [saving, setSaving] = useState(false);
-  const savedRef = useRef(JSON.stringify(toDraft(data.portfolio)));
+  const savedRef = useRef(JSON.stringify(toDraft(portfolio)));
   const [slugState, setSlugState] = useState<{
     checking: boolean;
     available: boolean;
     reason: string | null;
   }>({ checking: false, available: true, reason: null });
+
+  // Hero preview is tracked separately from the id: the picker hands back a
+  // signed URL we can show immediately, while `hero_image_url` from the server
+  // only refreshes on the next load.
+  const [heroPreview, setHeroPreview] = useState<string | null>(portfolio.hero_image_url);
+  const [heroPickerOpen, setHeroPickerOpen] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInput = useRef<HTMLInputElement | null>(null);
 
   const snapshot = useMemo(() => JSON.stringify(draft), [draft]);
   const dirty = snapshot !== savedRef.current;
@@ -99,7 +115,7 @@ export function PortfolioSitePanel({
   // contractor has already handed out, so it is worth telling them it's free
   // *before* they press Save rather than rejecting the save afterwards.
   useEffect(() => {
-    if (draft.slug === data.portfolio.slug) {
+    if (draft.slug === portfolio.slug) {
       setSlugState({ checking: false, available: true, reason: null });
       return;
     }
@@ -113,7 +129,39 @@ export function PortfolioSitePanel({
       }
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [draft.slug, data.portfolio.slug]);
+  }, [draft.slug, portfolio.slug]);
+
+  /**
+   * Uploaded to the same `company-logos` bucket Settings uses, but stored on
+   * the portfolio rather than the profile — the marketing site's logo and the
+   * one stamped on reports are allowed to differ.
+   */
+  const onLogoUpload = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file || !user) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Logo must be an image");
+      return;
+    }
+    setUploadingLogo(true);
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const path = `${user.id}/portfolio-logo-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("company-logos")
+        .upload(path, file, { contentType: file.type, upsert: true });
+      if (upErr) {
+        toast.error(upErr.message);
+        return;
+      }
+      const { data: pub } = supabase.storage.from("company-logos").getPublicUrl(path);
+      set("logoUrl", pub.publicUrl);
+      toast.success("Logo uploaded — press Save to publish it.");
+    } finally {
+      setUploadingLogo(false);
+      if (logoInput.current) logoInput.current.value = "";
+    }
+  };
 
   const save = async () => {
     if (!slugState.available) {
@@ -126,9 +174,11 @@ export function PortfolioSitePanel({
         data: {
           slug: draft.slug,
           businessName: draft.businessName || null,
+          logoUrl: draft.logoUrl || null,
           accentColor: draft.accentColor,
           heroHeadline: draft.heroHeadline || null,
           heroSubhead: draft.heroSubhead || null,
+          heroPhotoId: draft.heroPhotoId,
           aboutHtml: draft.aboutHtml || null,
           services: draft.services,
           serviceAreas: draft.serviceAreas,
@@ -148,7 +198,10 @@ export function PortfolioSitePanel({
       onSaved({
         slug: res.slug,
         business_name: draft.businessName || null,
+        logo_url: draft.logoUrl || null,
         accent_color: draft.accentColor,
+        hero_photo_id: draft.heroPhotoId,
+        hero_image_url: heroPreview,
         show_map: draft.showMap,
         show_reviews: draft.showReviews,
       });
@@ -207,14 +260,52 @@ export function PortfolioSitePanel({
                   placeholder="acme-roofing"
                 />
               </div>
-              <SlugStatus changed={draft.slug !== data.portfolio.slug} state={slugState} />
+              <SlugStatus changed={draft.slug !== portfolio.slug} state={slugState} />
             </div>
           </Card>
 
           <Card
             title="Cover"
-            hint="The first thing a prospect sees. The hero photo is your newest project's cover."
+            hint="The first thing a prospect sees — full-bleed, with your headline over it."
           >
+            <div>
+              <Label>Hero photo</Label>
+              {/* The single biggest lever on whether the site reads as premium,
+                  so it gets a real preview at roughly the ratio it renders at
+                  rather than a filename and a hope. */}
+              <div className="relative overflow-hidden rounded-xl border border-border bg-muted">
+                {heroPreview ? (
+                  <img src={heroPreview} alt="" className="aspect-[21/9] w-full object-cover" />
+                ) : (
+                  <div className="flex aspect-[21/9] flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <ImagePlus className="h-7 w-7 opacity-60" />
+                    <p className="px-6 text-center text-xs">
+                      No hero chosen — your newest project&rsquo;s cover is used instead.
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => setHeroPickerOpen(true)}>
+                  <ImagePlus className="mr-1.5 h-3.5 w-3.5" />
+                  {draft.heroPhotoId ? "Change hero photo" : "Choose hero photo"}
+                </Button>
+                {draft.heroPhotoId && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-muted-foreground"
+                    onClick={() => {
+                      set("heroPhotoId", null);
+                      setHeroPreview(null);
+                    }}
+                  >
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Use newest project
+                  </Button>
+                )}
+              </div>
+            </div>
+
             <div>
               <Label>Business name</Label>
               <Input
@@ -222,6 +313,54 @@ export function PortfolioSitePanel({
                 onChange={(e) => set("businessName", e.target.value)}
                 placeholder="Acme Roofing"
               />
+            </div>
+
+            <div>
+              <Label>Logo</Label>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-muted">
+                  {draft.logoUrl ? (
+                    <img src={draft.logoUrl} alt="" className="h-full w-full object-contain" />
+                  ) : (
+                    <span className="text-lg font-black text-muted-foreground">
+                      {(draft.businessName || "?").slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <input
+                  ref={logoInput}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => onLogoUpload(e.target.files)}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={uploadingLogo}
+                  onClick={() => logoInput.current?.click()}
+                >
+                  {uploadingLogo ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {draft.logoUrl ? "Replace" : "Upload"}
+                </Button>
+                {draft.logoUrl && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-muted-foreground"
+                    onClick={() => set("logoUrl", "")}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Sits in the site header and footer. Separate from the logo stamped on reports.
+              </p>
             </div>
             <div>
               <Label>Headline</Label>
@@ -406,6 +545,22 @@ export function PortfolioSitePanel({
           </Card>
         </div>
       </div>
+
+      <ShowcasePhotoPickerDialog
+        open={heroPickerOpen}
+        onClose={() => setHeroPickerOpen(false)}
+        singleSelect
+        title="Choose your hero photo"
+        description="The full-width shot at the top of your site. Pick your most impressive finished job."
+        confirmLabel="Use this photo"
+        onPick={(picked) => {
+          setHeroPickerOpen(false);
+          const photo = picked[0];
+          if (!photo) return;
+          set("heroPhotoId", photo.id);
+          setHeroPreview(photo.image_url);
+        }}
+      />
     </div>
   );
 }

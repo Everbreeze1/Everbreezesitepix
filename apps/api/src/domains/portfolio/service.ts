@@ -40,7 +40,15 @@ export interface PortfolioDetail {
 }
 
 export interface MyPortfolio {
-  portfolio: PortfolioDetail;
+  /**
+   * Null only when the team has no portfolio yet AND this user may not create
+   * one. Writes are owner/admin-only, so a plain member who opens the page
+   * before anyone has set it up gets an explanatory empty state rather than an
+   * error page.
+   */
+  portfolio: PortfolioDetail | null;
+  /** Whether this user may edit the site. Mirrors the RLS write policy. */
+  canEdit: boolean;
   /** Every showcase on the team, on-site or not, in site order. */
   showcases: Array<PortfolioShowcaseCard & { on_site: boolean; is_draft: boolean }>;
   /** Distinct service types already in use, to power the builder's combobox. */
@@ -90,11 +98,30 @@ async function pickPortfolioSlug(seed: string, teamId: string): Promise<string> 
  * reasoning as createShowcaseFromProject generating finished copy.
  */
 export async function getMyPortfolioService(ctx: AuthedContext): Promise<MyPortfolio> {
-  const teamId = await myTeamId(ctx);
-  if (!teamId) badRequest("You need a team before you can publish a portfolio.");
-
   const db = ctx.supabase as any;
+  const { data: membership } = await db
+    .from("team_members")
+    .select("team_id, role")
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+  const teamId = (membership as any)?.team_id as string | undefined;
+  if (!teamId) badRequest("You need a team before you can publish a portfolio.");
+  const canEdit = ["owner", "admin"].includes((membership as any)?.role ?? "");
+
   let { data: row } = await db.from("portfolios").select("*").eq("team_id", teamId).maybeSingle();
+
+  // Create-on-read is an owner/admin privilege. Returning null here — rather
+  // than letting the insert fail on RLS — is what keeps a plain member's first
+  // visit an empty state instead of a red error box.
+  if (!row && !canEdit) {
+    const cards = await loadTeamShowcaseCards(db, teamId);
+    return {
+      portfolio: null,
+      canEdit,
+      showcases: cards,
+      serviceTypes: distinctServiceTypes(cards),
+    };
+  }
 
   if (!row) {
     const { data: profile } = await db
@@ -152,11 +179,16 @@ export async function getMyPortfolioService(ctx: AuthedContext): Promise<MyPortf
 
   return {
     portfolio: toDetail(row, heroMap),
+    canEdit,
     showcases: cards,
-    serviceTypes: Array.from(
-      new Set(cards.map((c) => c.service_type).filter((s): s is string => !!s?.trim())),
-    ).sort((a, b) => a.localeCompare(b)),
+    serviceTypes: distinctServiceTypes(cards),
   };
+}
+
+function distinctServiceTypes(cards: Array<{ service_type: string | null }>): string[] {
+  return Array.from(
+    new Set(cards.map((c) => c.service_type).filter((s): s is string => !!s?.trim())),
+  ).sort((a, b) => a.localeCompare(b));
 }
 
 async function resolveHeroImage(photoId: string | null): Promise<string | null> {

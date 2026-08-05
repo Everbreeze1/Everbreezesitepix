@@ -52,7 +52,10 @@ export interface PortfolioDetail {
 }
 
 export interface MyPortfolio {
-  portfolio: PortfolioDetail;
+  /** Null when the team has no portfolio yet and this user may not create one. */
+  portfolio: PortfolioDetail | null;
+  /** Whether this user may edit the site. Mirrors the RLS write policy. */
+  canEdit: boolean;
   showcases: Array<PortfolioShowcaseCard & { on_site: boolean; is_draft: boolean }>;
   serviceTypes: string[];
 }

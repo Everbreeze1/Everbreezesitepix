@@ -80,6 +80,7 @@ function makeSnapshot(v: {
   showReviews: boolean;
   introHtml: string;
   outroHtml: string;
+  coverPhotoId: string | null;
   sections: EditorSection[];
 }): string {
   return JSON.stringify({
@@ -91,6 +92,7 @@ function makeSnapshot(v: {
     showReviews: v.showReviews,
     introHtml: v.introHtml,
     outroHtml: v.outroHtml,
+    coverPhotoId: v.coverPhotoId,
     sections: v.sections.map((s) => ({
       p: s.project_id,
       t: s.title,
@@ -119,6 +121,9 @@ export function ShowcaseBuilderPage() {
   const [introHtml, setIntroHtml] = useState("");
   const [outroHtml, setOutroHtml] = useState("");
   const [sections, setSections] = useState<EditorSection[]>([]);
+  /** Explicit masthead photo. Null falls back to the first photo in the body. */
+  const [coverPhotoId, setCoverPhotoId] = useState<string | null>(null);
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
 
   const [shareToken, setShareToken] = useState("");
   const [revokedAt, setRevokedAt] = useState<string | null>(null);
@@ -128,8 +133,12 @@ export function ShowcaseBuilderPage() {
   const [detail, setDetail] = useState<ShowcaseDetail | null>(null);
   const [portfolio, setPortfolio] = useState<MyPortfolio | null>(null);
 
-  /** Picker target: a section key, or "new" to build sections from projects. */
-  const [pickerFor, setPickerFor] = useState<string | "new" | null>(null);
+  /**
+   * Picker target: a section key, "new" to build sections from projects, or
+   * "cover" to choose the masthead photo. One dialog, three jobs — three
+   * separate mounted dialogs would each load the same 300 photos.
+   */
+  const [pickerFor, setPickerFor] = useState<string | "new" | "cover" | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
 
   /** Serialized last-saved state — the source of truth for the dirty flag. */
@@ -146,9 +155,21 @@ export function ShowcaseBuilderPage() {
         showReviews,
         introHtml,
         outroHtml,
+        coverPhotoId,
         sections,
       }),
-    [title, tagline, layout, accentColor, showContact, showReviews, introHtml, outroHtml, sections],
+    [
+      title,
+      tagline,
+      layout,
+      accentColor,
+      showContact,
+      showReviews,
+      introHtml,
+      outroHtml,
+      coverPhotoId,
+      sections,
+    ],
   );
   const dirty = !loading && snapshot !== savedSnapshotRef.current;
 
@@ -172,6 +193,8 @@ export function ShowcaseBuilderPage() {
       setShareToken(s.share_token);
       setRevokedAt(s.revoked_at);
       setDetail(s);
+      setCoverPhotoId(s.cover_photo_id);
+      setCoverImageUrl(s.cover_image_url);
       const loadedSections: EditorSection[] = s.sections.map((sec) => ({
         key: nextKey(),
         project_id: sec.project_id,
@@ -197,6 +220,7 @@ export function ShowcaseBuilderPage() {
         showReviews: s.show_reviews,
         introHtml: s.intro_html ?? "",
         outroHtml: s.outro_html ?? "",
+        coverPhotoId: s.cover_photo_id,
         sections: loadedSections,
       });
     } catch (e: any) {
@@ -242,6 +266,7 @@ export function ShowcaseBuilderPage() {
           showReviews,
           introHtml: introHtml || null,
           outroHtml: outroHtml || null,
+          coverPhotoId,
         },
       });
       await setShowcaseSections({
@@ -340,6 +365,12 @@ export function ShowcaseBuilderPage() {
     setPickerFor(null);
     if (!picked.length || !target) return;
 
+    if (target === "cover") {
+      setCoverPhotoId(picked[0].id);
+      setCoverImageUrl(picked[0].image_url);
+      return;
+    }
+
     if (target === "new") {
       // One section per project, titled with the project's name — this is the
       // "pick which project to show off" flow.
@@ -423,7 +454,12 @@ export function ShowcaseBuilderPage() {
     accent_color: accentColor,
     show_contact: showContact,
     show_reviews: showReviews,
-    cover_image_url: sections.flatMap((s) => s.items).find((i) => i.image_url)?.image_url ?? null,
+    // Explicit cover wins; otherwise the first photo in the body, which is what
+    // the public page falls back to as well.
+    cover_image_url:
+      coverImageUrl ??
+      sections.flatMap((s) => s.items).find((i) => i.image_url)?.image_url ??
+      null,
     sections: sections.map((s) => ({
       id: s.key,
       project_name: s.project_name,
@@ -532,9 +568,50 @@ export function ShowcaseBuilderPage() {
             <div className="rounded-2xl border border-border bg-card p-6">
               <p className="text-sm font-extrabold text-foreground">Cover</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                The headline of your brochure. The first photo you add becomes the cover image.
+                The masthead of this project&rsquo;s page, and the thumbnail on your portfolio grid.
               </p>
               <div className="mt-4 space-y-4">
+                <div>
+                  <Label>Cover photo</Label>
+                  <div className="overflow-hidden rounded-xl border border-border bg-muted">
+                    {previewData.cover_image_url ? (
+                      <img
+                        src={previewData.cover_image_url}
+                        alt=""
+                        className="aspect-[16/9] w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex aspect-[16/9] flex-col items-center justify-center gap-2 text-muted-foreground">
+                        <Images className="h-7 w-7 opacity-60" />
+                        <p className="text-xs">Add photos below and one becomes the cover</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setPickerFor("cover")}>
+                      <Images className="mr-1.5 h-3.5 w-3.5" />
+                      {coverPhotoId ? "Change cover" : "Choose cover"}
+                    </Button>
+                    {coverPhotoId && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground"
+                        onClick={() => {
+                          setCoverPhotoId(null);
+                          setCoverImageUrl(null);
+                        }}
+                      >
+                        Use first photo
+                      </Button>
+                    )}
+                    {!coverPhotoId && (
+                      <span className="text-xs text-muted-foreground">
+                        Using the first photo in this showcase.
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <div>
                   <Label>Title</Label>
                   <Input
@@ -641,8 +718,8 @@ export function ShowcaseBuilderPage() {
             {detail && (
               <ShowcaseSiteCard
                 showcase={detail}
-                portfolioSlug={portfolio?.portfolio.slug ?? null}
-                portfolioPublished={!!portfolio?.portfolio.published}
+                portfolioSlug={portfolio?.portfolio?.slug ?? null}
+                portfolioPublished={!!portfolio?.portfolio?.published}
                 serviceTypeSuggestions={portfolio?.serviceTypes ?? []}
                 onSaved={(patch) => setDetail((d) => (d ? { ...d, ...patch } : d))}
               />
@@ -759,13 +836,22 @@ export function ShowcaseBuilderPage() {
         open={pickerFor !== null}
         onClose={() => setPickerFor(null)}
         onPick={handlePicked}
-        title={pickerFor === "new" ? "Add work from your projects" : "Add photos to this section"}
-        description={
-          pickerFor === "new"
-            ? "Pick whole projects or individual photos — each project becomes its own section."
-            : "Photos are grouped by project. Use “Select all” to pull in a whole job at once."
+        singleSelect={pickerFor === "cover"}
+        title={
+          pickerFor === "cover"
+            ? "Choose the cover photo"
+            : pickerFor === "new"
+              ? "Add work from your projects"
+              : "Add photos to this section"
         }
-        confirmLabel={pickerFor === "new" ? "Add" : "Add"}
+        description={
+          pickerFor === "cover"
+            ? "The full-width shot at the top of this project's page. The finished result usually sells it best."
+            : pickerFor === "new"
+              ? "Pick whole projects or individual photos — each project becomes its own section."
+              : "Photos are grouped by project. Use “Select all” to pull in a whole job at once."
+        }
+        confirmLabel={pickerFor === "cover" ? "Use this photo" : "Add"}
       />
     </div>
   );

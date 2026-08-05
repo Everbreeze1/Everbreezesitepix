@@ -283,9 +283,9 @@ export async function listShowcasesService(ctx: AuthedContext): Promise<{ showca
       "id, title, tagline, layout, share_token, revoked_at, cover_photo_id, created_at, updated_at, slug, service_type, city, state, on_site, featured, position",
     )
     .eq("team_id", teamId)
-    // Site order, not creation order: this list is now also the running order of
-    // the portfolio's grid, so the two must agree or reordering looks broken.
-    .order("featured", { ascending: false })
+    // Site order, not creation order: this list is now also the running order
+    // of the portfolio's grid, so the two must agree or reordering looks
+    // broken. Matches compareCardRows — position only, newest as tie-break.
     .order("position", { ascending: true })
     .order("created_at", { ascending: false });
   const rows = (data as any[]) ?? [];
