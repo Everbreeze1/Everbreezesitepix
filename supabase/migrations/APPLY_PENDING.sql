@@ -405,6 +405,34 @@ BEGIN
   END LOOP;
 END $$;
 
+-- --- 5f: backfill map pins from the projects the work came from ---
+-- Showcases built before createShowcaseFromProject denormalised location have
+-- NULL city/state/lat/lng, so they never get a map pin and never count toward
+-- "areas served" — the project map silently renders as nothing.
+--
+-- The coordinates already exist on the project (geocoded when its address was
+-- entered), so this copies them across the same way 5c backfills slugs.
+--
+-- COALESCE, not assignment: a value the owner typed by hand always wins, and
+-- re-running can never overwrite it. DISTINCT ON takes the first section's
+-- project, which for a generated showcase is the only one anyway.
+UPDATE public.showcases s
+SET city      = COALESCE(s.city, p.city),
+    state     = COALESCE(s.state, p.state),
+    latitude  = COALESCE(s.latitude, p.latitude),
+    longitude = COALESCE(s.longitude, p.longitude)
+FROM (
+  SELECT DISTINCT ON (sec.showcase_id)
+         sec.showcase_id, pr.city, pr.state, pr.latitude, pr.longitude
+  FROM public.showcase_sections sec
+  JOIN public.projects pr ON pr.id = sec.project_id
+  WHERE sec.project_id IS NOT NULL
+  ORDER BY sec.showcase_id, sec.position
+) p
+WHERE p.showcase_id = s.id
+  AND (s.latitude IS NULL OR s.longitude IS NULL OR s.city IS NULL OR s.state IS NULL);
+
+
 -- --- 5d: updated_at trigger ---
 DROP TRIGGER IF EXISTS portfolios_updated_at_trg ON public.portfolios;
 CREATE TRIGGER portfolios_updated_at_trg
