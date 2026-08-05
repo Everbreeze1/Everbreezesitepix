@@ -54,8 +54,16 @@ export interface PortfolioDetail {
 export interface MyPortfolio {
   /** Null when the team has no portfolio yet and this user may not create one. */
   portfolio: PortfolioDetail | null;
-  /** Whether this user may edit the site. Mirrors the RLS write policy. */
-  canEdit: boolean;
+  /**
+   * Whether this user may edit the site. Mirrors the RLS write policy.
+   *
+   * Optional on purpose: web and API deploy separately, so during a rolling
+   * release this field is absent from an older API's response. Callers must
+   * treat `undefined` as *allowed* — RLS is the real enforcement, and failing
+   * closed here would lock every owner out of their own portfolio for the
+   * length of the deploy window.
+   */
+  canEdit?: boolean;
   showcases: Array<PortfolioShowcaseCard & { on_site: boolean; is_draft: boolean }>;
   serviceTypes: string[];
 }

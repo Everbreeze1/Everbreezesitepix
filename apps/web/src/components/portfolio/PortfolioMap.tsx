@@ -38,9 +38,7 @@ export function PortfolioMap({
   // swaps one project for another without changing the count.
   const pins = useMemo(
     () =>
-      showcases.filter(
-        (s) => typeof s.latitude === "number" && typeof s.longitude === "number",
-      ),
+      showcases.filter((s) => typeof s.latitude === "number" && typeof s.longitude === "number"),
     [showcases],
   );
 

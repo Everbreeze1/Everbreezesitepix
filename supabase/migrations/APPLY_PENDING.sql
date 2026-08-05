@@ -263,8 +263,13 @@ ALTER TABLE public.showcases
 CREATE UNIQUE INDEX IF NOT EXISTS showcases_team_slug_idx
   ON public.showcases(team_id, slug) WHERE slug IS NOT NULL;
 
+-- Key order mirrors listShowcasesService/compareCardRows exactly. `featured` is
+-- deliberately absent: it used to lead the sort and fought drag-to-reorder, so
+-- ordering is `position` alone now and featured is just a badge. The DROP makes
+-- this correct even if an earlier attempt created the old shape.
+DROP INDEX IF EXISTS public.showcases_site_order_idx;
 CREATE INDEX IF NOT EXISTS showcases_site_order_idx
-  ON public.showcases(team_id, on_site, featured DESC, position, created_at DESC);
+  ON public.showcases(team_id, on_site, position, created_at DESC);
 
 -- --- 5c: backfill slugs so existing showcases are reachable ---
 -- Row-at-a-time on purpose: de-duplication must consider slugs that ALREADY

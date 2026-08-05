@@ -145,9 +145,15 @@ ALTER TABLE public.showcases
 CREATE UNIQUE INDEX IF NOT EXISTS showcases_team_slug_idx
   ON public.showcases(team_id, slug) WHERE slug IS NOT NULL;
 
--- Drives the site's ordered grid: featured first, then manual position.
+-- Drives the site's ordered grid. Key order mirrors listShowcasesService and
+-- compareCardRows exactly — `featured` is deliberately NOT in here. It used to
+-- lead the sort, which fought drag-to-reorder (a card dropped above a featured
+-- one snapped back on the next read), so ordering is now `position` alone and
+-- `featured` is just a badge. An index that disagrees with the query can't
+-- serve the sort at all, so the two have to be changed together.
+DROP INDEX IF EXISTS public.showcases_site_order_idx;
 CREATE INDEX IF NOT EXISTS showcases_site_order_idx
-  ON public.showcases(team_id, on_site, featured DESC, position, created_at DESC);
+  ON public.showcases(team_id, on_site, position, created_at DESC);
 
 
 -- === PART 3 — backfill slugs for existing showcases ========================

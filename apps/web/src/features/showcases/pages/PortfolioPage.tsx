@@ -124,18 +124,13 @@ export function PortfolioPage() {
   if (!data.portfolio) {
     return (
       <div className="p-6 sm:p-10">
-        <PageHeader
-          title="Portfolio"
-          description="A shareable mini-site of your best work."
-        />
+        <PageHeader title="Portfolio" description="A shareable mini-site of your best work." />
         <div className="mt-8 rounded-2xl border border-border bg-card/70 p-10 text-center">
           <Globe className="mx-auto h-10 w-10 text-muted-foreground/60" />
-          <p className="mt-4 text-sm font-bold text-foreground">
-            No portfolio site yet
-          </p>
+          <p className="mt-4 text-sm font-bold text-foreground">No portfolio site yet</p>
           <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-            An owner or admin on your team needs to set this up. Once they do, every project
-            you publish will appear here.
+            An owner or admin on your team needs to set this up. Once they do, every project you
+            publish will appear here.
           </p>
         </div>
       </div>
@@ -143,6 +138,10 @@ export function PortfolioPage() {
   }
 
   const p = data.portfolio;
+  // Fail OPEN on an older API that doesn't send the field yet: RLS blocks the
+  // write anyway, so the worst case is a clear error toast — whereas failing
+  // closed would show every owner a read-only site during a rolling deploy.
+  const canEdit = data.canEdit ?? true;
   const siteUrl =
     typeof window !== "undefined" ? `${window.location.origin}/p/${p.slug}` : `/p/${p.slug}`;
 
@@ -163,7 +162,7 @@ export function PortfolioPage() {
       <PublishBar
         published={p.published}
         publishing={publishing}
-        canEdit={data.canEdit}
+        canEdit={canEdit}
         siteUrl={siteUrl}
         onToggle={togglePublished}
       />
@@ -182,7 +181,7 @@ export function PortfolioPage() {
         </TabsList>
 
         <TabsContent value="site" className="mt-6">
-          {data.canEdit ? (
+          {canEdit ? (
             <PortfolioSitePanel
               portfolio={p}
               serviceTypes={data.serviceTypes}
@@ -197,13 +196,13 @@ export function PortfolioPage() {
           <ShowcasesPanel
             portfolioSlug={p.slug}
             published={p.published}
-            canEdit={data.canEdit}
+            canEdit={canEdit}
             onCountsChanged={() => void load()}
           />
         </TabsContent>
 
         <TabsContent value="embeds" className="mt-6">
-          {data.canEdit ? (
+          {canEdit ? (
             <PortfolioEmbedsPanel
               portfolio={p}
               onEmbedKeyChanged={(embed_key) => patchPortfolio({ embed_key })}

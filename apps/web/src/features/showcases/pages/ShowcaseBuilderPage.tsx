@@ -316,8 +316,7 @@ export function ShowcaseBuilderPage() {
       { key: nextKey(), project_id: null, project_name: null, title: "", body_html: "", items: [] },
     ]);
 
-  const removeSection = (key: string) =>
-    setSections((prev) => prev.filter((s) => s.key !== key));
+  const removeSection = (key: string) => setSections((prev) => prev.filter((s) => s.key !== key));
 
   const moveSection = (key: string, dir: -1 | 1) =>
     setSections((prev) => {
@@ -457,9 +456,7 @@ export function ShowcaseBuilderPage() {
     // Explicit cover wins; otherwise the first photo in the body, which is what
     // the public page falls back to as well.
     cover_image_url:
-      coverImageUrl ??
-      sections.flatMap((s) => s.items).find((i) => i.image_url)?.image_url ??
-      null,
+      coverImageUrl ?? sections.flatMap((s) => s.items).find((i) => i.image_url)?.image_url ?? null,
     sections: sections.map((s) => ({
       id: s.key,
       project_name: s.project_name,
@@ -671,8 +668,8 @@ export function ShowcaseBuilderPage() {
                   <Images className="mx-auto h-8 w-8 text-muted-foreground/60" />
                   <p className="mt-3 text-sm font-bold text-foreground">Nothing to show off yet</p>
                   <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-                    “Add from projects” pulls in a job's photos and creates a section for it —
-                    the fastest way to build this out.
+                    “Add from projects” pulls in a job's photos and creates a section for it — the
+                    fastest way to build this out.
                   </p>
                 </div>
               ) : (
@@ -808,11 +805,7 @@ export function ShowcaseBuilderPage() {
                   ? "This showcase is a draft — only your team can see it."
                   : "Live. Anyone with the link can view it."}
               </p>
-              <Button
-                variant="outline"
-                className="mt-4 w-full"
-                onClick={() => setShareOpen(true)}
-              >
+              <Button variant="outline" className="mt-4 w-full" onClick={() => setShareOpen(true)}>
                 <Share2 className="mr-1.5 h-4 w-4" />
                 {revokedAt ? "Publish & get link" : "Share link"}
               </Button>
@@ -961,7 +954,11 @@ function SectionEditor({
                 )}
                 <div className="absolute inset-x-1 top-1 flex justify-between opacity-0 transition-opacity group-hover:opacity-100">
                   <div className="flex gap-1">
-                    <IconChip onClick={() => onMoveItem(i, -1)} disabled={i === 0} label="Move left">
+                    <IconChip
+                      onClick={() => onMoveItem(i, -1)}
+                      disabled={i === 0}
+                      label="Move left"
+                    >
                       <ArrowUp className="h-3 w-3 -rotate-90" />
                     </IconChip>
                     <IconChip
@@ -972,7 +969,11 @@ function SectionEditor({
                       <ArrowDown className="h-3 w-3 -rotate-90" />
                     </IconChip>
                   </div>
-                  <IconChip onClick={() => onRemoveItem(item.photo_id)} label="Remove photo" destructive>
+                  <IconChip
+                    onClick={() => onRemoveItem(item.photo_id)}
+                    label="Remove photo"
+                    destructive
+                  >
                     <XIcon className="h-3 w-3" />
                   </IconChip>
                 </div>

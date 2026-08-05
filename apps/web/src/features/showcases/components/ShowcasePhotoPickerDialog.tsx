@@ -68,7 +68,6 @@ export function ShowcasePhotoPickerDialog({
     setSelected(new Set());
     setQuery("");
     void loadPhotos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const loadPhotos = async () => {
@@ -114,12 +113,10 @@ export function ShowcasePhotoPickerDialog({
 
       const needSign = rows.filter((r) => !r.image_url && r.storage_path);
       if (needSign.length) {
-        const { data: signedUrls } = await supabase.storage
-          .from("site-photos")
-          .createSignedUrls(
-            needSign.map((r) => r.storage_path),
-            60 * 60,
-          );
+        const { data: signedUrls } = await supabase.storage.from("site-photos").createSignedUrls(
+          needSign.map((r) => r.storage_path),
+          60 * 60,
+        );
         const map: Record<string, string> = {};
         signedUrls?.forEach((s, i) => {
           if (s.signedUrl) map[needSign[i].id] = s.signedUrl;
@@ -140,13 +137,17 @@ export function ShowcasePhotoPickerDialog({
     const q = query.trim().toLowerCase();
     if (!q) return photos;
     return photos.filter(
-      (p) => p.project_name.toLowerCase().includes(q) || (p.caption ?? "").toLowerCase().includes(q),
+      (p) =>
+        p.project_name.toLowerCase().includes(q) || (p.caption ?? "").toLowerCase().includes(q),
     );
   }, [photos, query]);
 
   /** Photos bucketed by project, preserving the newest-project-first order. */
   const groups = useMemo(() => {
-    const byProject = new Map<string, { projectId: string; projectName: string; photos: PhotoRow[] }>();
+    const byProject = new Map<
+      string,
+      { projectId: string; projectName: string; photos: PhotoRow[] }
+    >();
     for (const p of filtered) {
       const g = byProject.get(p.project_id);
       if (g) g.photos.push(p);
@@ -255,7 +256,9 @@ export function ShowcasePhotoPickerDialog({
                               type="button"
                               onClick={() => toggle(p.id)}
                               className={`group relative aspect-square overflow-hidden rounded-md border-2 transition ${
-                                checked ? "border-primary ring-2 ring-primary/30" : "border-transparent"
+                                checked
+                                  ? "border-primary ring-2 ring-primary/30"
+                                  : "border-transparent"
                               }`}
                             >
                               {/* 300 photos as ~120px tiles — the clearest case
