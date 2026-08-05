@@ -41,67 +41,123 @@ SET lock_timeout = '5s';
 
 
 -- === PART 1 — the portfolios table =========================================
+-- Minimal CREATE followed by ADD COLUMN IF NOT EXISTS — the same shape the
+-- issue_reports migration uses. This is NOT stylistic:
+--
+--   CREATE TABLE IF NOT EXISTS is a no-op on a table that already exists.
+--
+-- So a single full table definition silently skips every later correction on
+-- any database that ran an earlier cut of this file: the table keeps whatever
+-- shape it was first created with, forever, while the file still claims to be
+-- idempotent. Splitting it means re-running actually CONVERGES.
 CREATE TABLE IF NOT EXISTS public.portfolios (
   id            uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   -- One site per team. The UNIQUE constraint is what makes "get or create my
   -- portfolio" a safe upsert rather than a read-then-insert race.
   team_id       uuid NOT NULL UNIQUE REFERENCES public.teams(id) ON DELETE CASCADE,
-  -- SET NULL, not CASCADE — deliberately unlike showcases.created_by. A
-  -- showcase belongs to whoever built it, but the portfolio is the *company's*
-  -- public website: cascading would delete a live marketing site (and free its
-  -- slug for anyone to claim) the day the employee who first opened the page
-  -- leaves. Nothing reads this column; it exists for attribution only.
-  created_by    uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-
-  -- The public URL: /p/<slug>. Globally unique, lowercase, hyphenated.
+  -- The public URL: /p/<slug>. Globally unique, lowercase, hyphenated. In the
+  -- CREATE rather than below because a portfolio without one is unroutable —
+  -- there is no sane "add it later" path for it.
   slug          text NOT NULL UNIQUE,
-
-  -- Branding. Seeded from the owner's profile on first create, but editable —
-  -- the marketing name on a portfolio is often not the legal entity name.
-  business_name text,
-  logo_url      text,
-  accent_color  text,
-
-  -- Above the fold.
-  hero_headline text,
-  hero_subhead  text,
-  hero_photo_id uuid,
-
-  -- Body copy + the two lists that drive filtering and local credibility.
-  about_html    text,
-  services      text[] NOT NULL DEFAULT '{}',
-  service_areas text[] NOT NULL DEFAULT '{}',
-
-  -- Contact block + primary call to action.
-  phone         text,
-  email         text,
-  address       text,
-  website_url   text,
-  cta_label     text,
-  cta_url       text,
-
-  show_map      boolean NOT NULL DEFAULT true,
-  show_reviews  boolean NOT NULL DEFAULT true,
-
-  -- Nothing is publicly reachable until this flips. Separate from showcases'
-  -- own revoked_at so unpublishing the site does not revoke existing
-  -- share links people may already have sent to customers.
-  published     boolean NOT NULL DEFAULT false,
-
-  -- Embeds are keyed separately from the slug so the contractor can rotate the
-  -- widget key (breaking third-party embeds) without changing their site URL,
-  -- and so a scraped embed key never reveals the admin surface.
-  embed_key     uuid NOT NULL DEFAULT gen_random_uuid() UNIQUE,
-
-  seo_title       text,
-  seo_description text,
-
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS portfolios_slug_idx      ON public.portfolios(slug);
-CREATE INDEX IF NOT EXISTS portfolios_embed_key_idx ON public.portfolios(embed_key);
+ALTER TABLE public.portfolios
+  -- Nullable here, and SET NULL in the repair block below — deliberately unlike
+  -- showcases.created_by. A showcase belongs to whoever built it, but the
+  -- portfolio is the *company's* public website: cascading would delete a live
+  -- marketing site (and free its slug for anyone to claim) the day the employee
+  -- who first opened the page leaves. Attribution only; nothing reads it.
+  ADD COLUMN IF NOT EXISTS created_by      uuid,
+
+  -- Branding. Seeded from the owner's profile on first create, but editable —
+  -- the marketing name on a portfolio is often not the legal entity name.
+  ADD COLUMN IF NOT EXISTS business_name   text,
+  ADD COLUMN IF NOT EXISTS logo_url        text,
+  ADD COLUMN IF NOT EXISTS accent_color    text,
+
+  -- Above the fold.
+  ADD COLUMN IF NOT EXISTS hero_headline   text,
+  ADD COLUMN IF NOT EXISTS hero_subhead    text,
+  ADD COLUMN IF NOT EXISTS hero_photo_id   uuid,
+
+  -- Body copy + the two lists that drive filtering and local credibility.
+  ADD COLUMN IF NOT EXISTS about_html      text,
+  ADD COLUMN IF NOT EXISTS services        text[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS service_areas   text[] NOT NULL DEFAULT '{}',
+
+  -- Contact block + primary call to action.
+  ADD COLUMN IF NOT EXISTS phone           text,
+  ADD COLUMN IF NOT EXISTS email           text,
+  ADD COLUMN IF NOT EXISTS address         text,
+  ADD COLUMN IF NOT EXISTS website_url     text,
+  ADD COLUMN IF NOT EXISTS cta_label       text,
+  ADD COLUMN IF NOT EXISTS cta_url         text,
+
+  ADD COLUMN IF NOT EXISTS show_map        boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS show_reviews    boolean NOT NULL DEFAULT true,
+
+  -- Nothing is publicly reachable until this flips. Separate from showcases'
+  -- own revoked_at so unpublishing the site does not revoke existing share
+  -- links people may already have sent to customers.
+  ADD COLUMN IF NOT EXISTS published       boolean NOT NULL DEFAULT false,
+
+  -- Embeds are keyed separately from the slug so the contractor can rotate the
+  -- widget key (breaking third-party embeds) without changing their site URL,
+  -- and so a scraped embed key never reveals the admin surface. UNIQUE lives in
+  -- the index below — a column-level UNIQUE cannot be re-run idempotently here.
+  ADD COLUMN IF NOT EXISTS embed_key       uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  ADD COLUMN IF NOT EXISTS seo_title       text,
+  ADD COLUMN IF NOT EXISTS seo_description text;
+
+-- Named to match what the old inline `embed_key ... UNIQUE` produced, so this
+-- is a no-op on databases that already carry that constraint.
+CREATE UNIQUE INDEX IF NOT EXISTS portfolios_embed_key_key ON public.portfolios(embed_key);
+
+-- Repair for databases created by an earlier cut of this file, where created_by
+-- was NOT NULL and cascaded. Both are corrected in place; on a fresh database
+-- the column is already nullable and this only attaches the foreign key.
+DO $$
+DECLARE
+  fk_name   text;
+  fk_action "char";
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'portfolios'
+      AND column_name = 'created_by' AND is_nullable = 'NO'
+  ) THEN
+    ALTER TABLE public.portfolios ALTER COLUMN created_by DROP NOT NULL;
+  END IF;
+
+  SELECT c.conname, c.confdeltype INTO fk_name, fk_action
+  FROM pg_constraint c
+  JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+  WHERE c.conrelid = 'public.portfolios'::regclass
+    AND c.contype = 'f'
+    AND a.attname = 'created_by'
+  LIMIT 1;
+
+  -- confdeltype: 'n' = SET NULL, 'c' = CASCADE, 'a' = NO ACTION, 'r' = RESTRICT
+  IF fk_name IS NOT NULL AND fk_action <> 'n' THEN
+    EXECUTE format('ALTER TABLE public.portfolios DROP CONSTRAINT %I', fk_name);
+    fk_name := NULL;
+  END IF;
+
+  IF fk_name IS NULL THEN
+    ALTER TABLE public.portfolios
+      ADD CONSTRAINT portfolios_created_by_fkey
+      FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+-- slug and embed_key are both UNIQUE, and a UNIQUE constraint is already backed
+-- by an index — so the plain indexes an earlier cut created were pure
+-- duplication. Dropped rather than left to cost every write forever.
+DROP INDEX IF EXISTS public.portfolios_slug_idx;
+DROP INDEX IF EXISTS public.portfolios_embed_key_idx;
 
 -- Reserved words that would collide with existing top-level routes, so a team
 -- cannot claim /p/login-shaped paths if the URL scheme is ever flattened.
