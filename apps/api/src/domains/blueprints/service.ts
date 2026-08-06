@@ -65,6 +65,7 @@ export async function applyProjectBlueprintService(
     label_sets: 0,
     workflows: 0,
   };
+  const failed: Array<{ kind: string; reason: string }> = [];
 
   // Blueprint labels → merge onto project
   const { data: tpl } = await supabaseAdmin
@@ -225,7 +226,7 @@ export async function applyProjectBlueprintService(
         if (!wt) continue;
         const { data: phases } = await supabaseAdmin
           .from("workflow_template_phases" as any)
-          .select("id, name, position")
+          .select("id, name, position, description, requires_signoff")
           .eq("template_id", it.ref_id)
           .order("position", { ascending: true });
         const { data: created } = await supabaseAdmin
@@ -242,13 +243,24 @@ export async function applyProjectBlueprintService(
         for (const p of (phases as any[]) ?? []) {
           const { data: newPhase } = await supabaseAdmin
             .from("project_workflow_phases" as any)
-            .insert({ workflow_id: (created as any).id, name: p.name, position: p.position } as any)
+            .insert({
+              workflow_id: (created as any).id,
+              name: p.name,
+              position: p.position,
+              // Carried over from the template. Dropping these turned every
+              // sign-off gate into an ordinary phase on the applied copy.
+              description: p.description ?? null,
+              requires_signoff: !!p.requires_signoff,
+            } as any)
             .select("id")
             .single();
           if (!newPhase) continue;
           const { data: pItems } = await supabaseAdmin
             .from("workflow_template_items" as any)
-            .select("label, position, required")
+            // `kind` is NOT NULL with no default on project_workflow_items, so
+            // omitting it here rejected every row — a blueprint containing a
+            // workflow produced phases with no steps at all.
+            .select("label, position, required, kind")
             .eq("phase_id", p.id)
             .order("position", { ascending: true });
           const rows = ((pItems as any[]) ?? []).map((x: any) => ({
@@ -256,15 +268,25 @@ export async function applyProjectBlueprintService(
             label: x.label,
             position: x.position,
             required: !!x.required,
+            kind: x.kind ?? "check",
           }));
-          if (rows.length) await supabaseAdmin.from("project_workflow_items" as any).insert(rows);
+          if (rows.length) {
+            const { error: itemsErr } = await supabaseAdmin
+              .from("project_workflow_items" as any)
+              .insert(rows);
+            if (itemsErr) throw itemsErr;
+          }
         }
         counts.workflows++;
       }
     } catch (e) {
+      // One bad item must not abort the rest of the blueprint, but it also
+      // must not be invisible — the caller reports these so "applied" never
+      // silently means "applied most of it".
       console.error("apply blueprint item failed", it, e);
+      failed.push({ kind: it.kind, reason: e instanceof Error ? e.message : String(e) });
     }
   }
 
-  return { counts };
+  return { counts, failed };
 }

@@ -407,7 +407,7 @@ export function PortfolioSitePanel({
 
           <Card
             title="Areas served"
-            hint="Shown as chips beside the project map. Leave empty to use the cities from your projects."
+            hint="Shown as chips beside the map. Leave empty to use the cities from your portfolios."
           >
             <TagInput
               value={draft.serviceAreas}

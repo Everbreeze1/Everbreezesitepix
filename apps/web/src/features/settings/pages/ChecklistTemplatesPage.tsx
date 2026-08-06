@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   Trash2,
   Loader2,
-  Check,
   ClipboardList,
-  GripVertical,
   Archive,
   ArchiveRestore,
   Copy,
@@ -16,32 +14,38 @@ import {
   CheckCircle2,
   Hash,
   ToggleLeft,
+  MoreHorizontal,
+  Eye,
+  MessageSquareText,
+  ListChecks,
+  ListPlus,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   DndContext,
   closestCenter,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -50,6 +54,7 @@ import {
 import {
   SortableContext,
   arrayMove,
+  sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
@@ -60,8 +65,25 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
+import { BulkAddItemsDialog } from "@/components/BulkAddItemsDialog";
 import { SURFACE_CARD } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
+import {
+  AddTarget,
+  BuilderBackToList,
+  BuilderCanvas,
+  BuilderLayout,
+  BuilderRail,
+  BuilderRailItem,
+  BuilderTitleBar,
+  DragHandle,
+  QuietInput,
+  QuietTextarea,
+  RequiredToggle,
+  StatChip,
+} from "@/features/settings/components/template-builder/builder-ui";
+import { restrictToVerticalAxis } from "@/features/settings/components/template-builder/builder-tokens";
+import { useAutosave } from "@/features/settings/components/template-builder/use-autosave";
 
 type ItemType = "checkbox" | "rating" | "text" | "pass_fail" | "numeric" | "yes_no";
 
@@ -82,14 +104,55 @@ interface TemplateItem {
   description: string | null;
 }
 
-const ITEM_TYPES: { value: ItemType; label: string; icon: typeof CheckSquare; hint: string }[] = [
-  { value: "checkbox", label: "Checkbox", icon: CheckSquare, hint: "Simple done / not done" },
-  { value: "rating", label: "Rating (1–5)", icon: Star, hint: "Star scale for assessments" },
-  { value: "text", label: "Text field", icon: Type, hint: "Free-form note" },
-  { value: "pass_fail", label: "Pass / Fail", icon: CheckCircle2, hint: "Inspection result" },
-  { value: "numeric", label: "Numeric", icon: Hash, hint: "Measurement or count" },
-  { value: "yes_no", label: "Yes / No", icon: ToggleLeft, hint: "Quick binary answer" },
-];
+const TYPE_META: Record<
+  ItemType,
+  { label: string; short: string; icon: typeof CheckSquare; hint: string; tint: string }
+> = {
+  checkbox: {
+    label: "Checkbox",
+    short: "Check",
+    icon: CheckSquare,
+    hint: "Simple done / not done",
+    tint: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  },
+  rating: {
+    label: "Rating (1–5)",
+    short: "Rating",
+    icon: Star,
+    hint: "Star scale for assessments",
+    tint: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  },
+  text: {
+    label: "Text field",
+    short: "Text",
+    icon: Type,
+    hint: "Free-form note",
+    tint: "border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  },
+  pass_fail: {
+    label: "Pass / Fail",
+    short: "Pass/Fail",
+    icon: CheckCircle2,
+    hint: "Inspection result",
+    tint: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  },
+  numeric: {
+    label: "Numeric",
+    short: "Number",
+    icon: Hash,
+    hint: "Measurement or count",
+    tint: "border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
+  },
+  yes_no: {
+    label: "Yes / No",
+    short: "Yes/No",
+    icon: ToggleLeft,
+    hint: "Quick binary answer",
+    tint: "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+  },
+};
+
+const TYPE_ORDER: ItemType[] = ["checkbox", "pass_fail", "yes_no", "rating", "numeric", "text"];
 
 const STARTER_TEMPLATES: {
   name: string;
@@ -154,6 +217,11 @@ const STARTER_TEMPLATES: {
   },
 ];
 
+const TABLES = {
+  templates: "checklist_templates",
+  items: "checklist_template_items",
+} as const;
+
 export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { user } = useAuth();
   const confirm = useConfirm();
@@ -161,27 +229,41 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
   const [templates, setTemplates] = useState<Template[]>([]);
   const [items, setItems] = useState<TemplateItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
+  const [pane, setPane] = useState<"list" | "editor">("list");
   const [createOpen, setCreateOpen] = useState(false);
+  const [startersOpen, setStartersOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [creating, setCreating] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
-  const [editingDetails, setEditingDetails] = useState<{
-    name: string;
-    description: string;
-  } | null>(null);
-  const [startersOpen, setStartersOpen] = useState(false);
+  const [focusItemId, setFocusItemId] = useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+
   /**
-   * Autosave status. Edits here already persisted on blur, but silently — with
-   * no Save button and no confirmation, the only way to find out whether your
-   * work stuck was to reload the page. Matches WorkflowTemplatesPage.
+   * One save model for everything on this screen. Name and description used to
+   * sit behind an Edit → Save → Cancel round trip while the items below them
+   * autosaved on blur; two contradictory contracts in one panel is why saving
+   * felt unreliable. Now every field debounces into the same queue and reports
+   * through the same status line.
    */
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const save = useAutosave(
+    (table, id, patch) =>
+      supabase
+        .from(table as any)
+        .update(patch)
+        .eq("id", id)
+        .then((r: any) => {
+          if (r.error) throw r.error;
+        }),
+    { onError: (e: any) => toast.error(e?.message ?? "Couldn't save that change") },
+  );
 
   const load = async () => {
     setLoading(true);
     const { data: tpls } = await supabase
-      .from("checklist_templates" as any)
+      .from(TABLES.templates as any)
       .select("id, name, description, archived, created_at")
       .order("created_at", { ascending: true });
     const list = ((tpls as any[]) ?? []) as Template[];
@@ -189,15 +271,16 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
     if (list.length) {
       const ids = list.map((t) => t.id);
       const { data: its } = await supabase
-        .from("checklist_template_items" as any)
+        .from(TABLES.items as any)
         .select("id, template_id, position, label, required, item_type, description")
         .in("template_id", ids)
         .order("position", { ascending: true });
       setItems(((its as any[]) ?? []) as TemplateItem[]);
-      if (!selectedId || !list.find((t) => t.id === selectedId)) {
-        const firstActive = list.find((t) => !t.archived);
-        setSelectedId(firstActive?.id ?? list[0]?.id ?? null);
-      }
+      setSelectedId((cur) =>
+        cur && list.some((t) => t.id === cur)
+          ? cur
+          : (list.find((t) => !t.archived)?.id ?? list[0]?.id ?? null),
+      );
     } else {
       setItems([]);
       setSelectedId(null);
@@ -207,20 +290,38 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
 
   useEffect(() => {
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const visibleTemplates = templates.filter((t) => showArchived || !t.archived);
+  const visibleTemplates = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return templates
+      .filter((t) => showArchived || !t.archived)
+      .filter(
+        (t) =>
+          !q || t.name.toLowerCase().includes(q) || (t.description ?? "").toLowerCase().includes(q),
+      );
+  }, [templates, showArchived, search]);
+
   const selected = templates.find((t) => t.id === selectedId) ?? null;
   const selectedItems = useMemo(
     () => items.filter((i) => i.template_id === selectedId).sort((a, b) => a.position - b.position),
     [items, selectedId],
   );
+  const requiredCount = selectedItems.filter((i) => i.required).length;
+  const typeCount = new Set(selectedItems.map((i) => i.item_type)).size;
+
+  /* ---------------------------------------------------------- templates */
+
+  const selectTemplate = async (id: string) => {
+    await save.flush();
+    setSelectedId(id);
+    setPane("editor");
+  };
 
   const createTemplate = async (name: string, description: string | null) => {
     if (!user) return null;
     const { data, error } = await supabase
-      .from("checklist_templates" as any)
+      .from(TABLES.templates as any)
       .insert({ created_by: user.id, name: name.trim(), description: description?.trim() || null })
       .select("id")
       .single();
@@ -236,14 +337,14 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
     setCreating(true);
     const id = await createTemplate(newName, newDesc);
     setCreating(false);
-    if (id) {
-      toast.success("Template created");
-      setNewName("");
-      setNewDesc("");
-      setCreateOpen(false);
-      setSelectedId(id);
-      await load();
-    }
+    if (!id) return;
+    setNewName("");
+    setNewDesc("");
+    setCreateOpen(false);
+    setSelectedId(id);
+    setPane("editor");
+    await load();
+    await addItem("checkbox", id, 0);
   };
 
   const createFromStarter = async (s: (typeof STARTER_TEMPLATES)[number]) => {
@@ -251,18 +352,20 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
     try {
       const id = await createTemplate(s.name, s.description);
       if (!id) return;
-      const rows = s.items.map((it, idx) => ({
-        template_id: id,
-        position: idx,
-        label: it.label,
-        required: !!it.required,
-        item_type: it.item_type,
-        description: it.description ?? null,
-      }));
-      const { error } = await supabase.from("checklist_template_items" as any).insert(rows);
+      const { error } = await supabase.from(TABLES.items as any).insert(
+        s.items.map((it, idx) => ({
+          template_id: id,
+          position: idx,
+          label: it.label,
+          required: !!it.required,
+          item_type: it.item_type,
+          description: it.description ?? null,
+        })),
+      );
       if (error) toast.error(error.message);
       else toast.success(`Created “${s.name}”`);
       setSelectedId(id);
+      setPane("editor");
       setStartersOpen(false);
       await load();
     } finally {
@@ -271,20 +374,20 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
   };
 
   const duplicateTemplate = async (t: Template) => {
-    if (!user) return;
     const id = await createTemplate(`${t.name} (copy)`, t.description);
     if (!id) return;
-    const its = items.filter((i) => i.template_id === t.id);
+    const its = items.filter((i) => i.template_id === t.id).sort((a, b) => a.position - b.position);
     if (its.length) {
-      const rows = its.map((it, idx) => ({
-        template_id: id,
-        position: idx,
-        label: it.label,
-        required: it.required,
-        item_type: it.item_type,
-        description: it.description,
-      }));
-      const { error } = await supabase.from("checklist_template_items" as any).insert(rows);
+      const { error } = await supabase.from(TABLES.items as any).insert(
+        its.map((it, idx) => ({
+          template_id: id,
+          position: idx,
+          label: it.label,
+          required: it.required,
+          item_type: it.item_type,
+          description: it.description,
+        })),
+      );
       if (error) toast.error(error.message);
     }
     toast.success("Template duplicated");
@@ -293,53 +396,59 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
   };
 
   const toggleArchived = async (t: Template) => {
-    const { error } = await supabase
-      .from("checklist_templates" as any)
-      .update({ archived: !t.archived })
-      .eq("id", t.id);
-    if (error) toast.error("Failed");
-    else void load();
+    setTemplates((xs) => xs.map((x) => (x.id === t.id ? { ...x, archived: !x.archived } : x)));
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from(TABLES.templates as any)
+        .update({ archived: !t.archived })
+        .eq("id", t.id),
+    );
+    if (!ok)
+      setTemplates((xs) => xs.map((x) => (x.id === t.id ? { ...x, archived: t.archived } : x)));
+    else toast.success(t.archived ? "Template restored" : "Template archived");
   };
 
   const deleteTemplate = async (t: Template) => {
-    if (!(await confirm({ description: `Delete template "${t.name}"? This cannot be undone.`, variant: "destructive" }))) return;
+    if (
+      !(await confirm({
+        title: "Delete template",
+        description: `“${t.name}” and all of its items will be removed. Checklists already added to a project keep their copy.`,
+        confirmText: "Delete template",
+        variant: "destructive",
+      }))
+    )
+      return;
     const { error } = await supabase
-      .from("checklist_templates" as any)
+      .from(TABLES.templates as any)
       .delete()
       .eq("id", t.id);
-    if (error) toast.error("Failed");
-    else {
-      if (selectedId === t.id) setSelectedId(null);
-      void load();
+    if (error) {
+      toast.error(error.message);
+      return;
     }
+    if (selectedId === t.id) {
+      setSelectedId(null);
+      setPane("list");
+    }
+    void load();
   };
 
-  const saveDetails = async () => {
-    if (!selected || !editingDetails) return;
-    const { error } = await supabase
-      .from("checklist_templates" as any)
-      .update({
-        name: editingDetails.name.trim(),
-        description: editingDetails.description.trim() || null,
-      })
-      .eq("id", selected.id);
-    if (error) toast.error("Failed");
-    else {
-      toast.success("Saved");
-      setEditingDetails(null);
-      void load();
-    }
+  const updateTemplate = (id: string, patch: Partial<Template>) => {
+    setTemplates((xs) => xs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    save.queueSave(TABLES.templates, id, patch as Record<string, unknown>);
   };
 
-  const addItem = async (type: ItemType = "checkbox") => {
-    if (!selectedId) return;
-    const position = selectedItems.length;
-    setSaveState("saving");
+  /* -------------------------------------------------------------- items */
+
+  const addItem = async (type: ItemType = "checkbox", templateId?: string, at?: number) => {
+    const tplId = templateId ?? selectedId;
+    if (!tplId) return;
+    const position = at ?? items.filter((i) => i.template_id === tplId).length;
     const { data, error } = await supabase
-      .from("checklist_template_items" as any)
+      .from(TABLES.items as any)
       .insert({
-        template_id: selectedId,
-        label: "New item",
+        template_id: tplId,
+        label: "",
         required: false,
         position,
         item_type: type,
@@ -347,51 +456,93 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
       .select("id, template_id, label, description, required, position, item_type")
       .single();
     if (error || !data) {
-      setSaveState("error");
       toast.error("Couldn't add that item");
       return;
     }
-    // Append locally rather than refetching every template — a full reload here
-    // discarded in-flight edits and made adding an item feel like a page load.
-    setItems((xs) => [...xs, data as unknown as TemplateItem]);
-    setSaveState("saved");
+    const item = data as unknown as TemplateItem;
+    setItems((xs) => [...xs, item]);
+    setFocusItemId(item.id);
   };
 
-  const updateItem = async (id: string, patch: Partial<TemplateItem>) => {
-    const prev = items.find((x) => x.id === id);
-    setItems((xs) => xs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
-    setSaveState("saving");
-    const { error } = await supabase
-      .from("checklist_template_items" as any)
-      .update(patch)
-      .eq("id", id);
+  /** One insert for the whole pasted list rather than a round trip per line. */
+  const addItemsBulk = async (labels: string[], type: ItemType) => {
+    if (!selectedId || !labels.length) return;
+    const start = items.filter((i) => i.template_id === selectedId).length;
+    const { data, error } = await supabase
+      .from(TABLES.items as any)
+      .insert(
+        labels.map((label, idx) => ({
+          template_id: selectedId,
+          position: start + idx,
+          label,
+          required: false,
+          item_type: type,
+        })),
+      )
+      .select("id, template_id, position, label, required, item_type, description");
     if (error) {
-      setSaveState("error");
-      toast.error("Couldn't save that change");
-      if (prev) setItems((xs) => xs.map((x) => (x.id === id ? prev : x)));
+      toast.error(error.message ?? "Couldn't add those items");
       return;
     }
-    setSaveState("saved");
+    setItems((xs) => [...xs, ...(((data as any[]) ?? []) as TemplateItem[])]);
+    save.markSaved();
+    toast.success(`${labels.length} item${labels.length === 1 ? "" : "s"} added`);
+  };
+
+  const updateItem = (id: string, patch: Partial<TemplateItem>) => {
+    setItems((xs) => xs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    save.queueSave(TABLES.items, id, patch as Record<string, unknown>);
   };
 
   const deleteItem = async (id: string) => {
     const prev = items;
     setItems((xs) => xs.filter((x) => x.id !== id));
-    setSaveState("saving");
-    const { error } = await supabase
-      .from("checklist_template_items" as any)
-      .delete()
-      .eq("id", id);
-    if (error) {
-      setSaveState("error");
-      toast.error("Couldn't delete that item");
-      setItems(prev);
-      return;
-    }
-    setSaveState("saved");
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from(TABLES.items as any)
+        .delete()
+        .eq("id", id),
+    );
+    if (!ok) setItems(prev);
   };
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const duplicateItem = async (source: TemplateItem) => {
+    const after = selectedItems.filter((i) => i.position > source.position);
+    const { data, error } = await supabase
+      .from(TABLES.items as any)
+      .insert({
+        template_id: source.template_id,
+        position: source.position + 1,
+        label: source.label,
+        required: source.required,
+        item_type: source.item_type,
+        description: source.description,
+      })
+      .select("id, template_id, label, description, required, position, item_type")
+      .single();
+    if (error || !data) {
+      toast.error("Couldn't duplicate that item");
+      return;
+    }
+    setItems((xs) => [
+      ...xs.map((x) => (after.some((a) => a.id === x.id) ? { ...x, position: x.position + 1 } : x)),
+      data as unknown as TemplateItem,
+    ]);
+    await Promise.all(
+      after.map((i) =>
+        supabase
+          .from(TABLES.items as any)
+          .update({ position: i.position + 1 })
+          .eq("id", i.id),
+      ),
+    );
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   const handleDragEnd = async (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
@@ -399,133 +550,53 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
     const newIndex = selectedItems.findIndex((i) => i.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
     const reordered = arrayMove(selectedItems, oldIndex, newIndex);
-    // Optimistic
     setItems((xs) => {
       const others = xs.filter((x) => x.template_id !== selectedId);
       return [...others, ...reordered.map((r, idx) => ({ ...r, position: idx }))];
     });
-    // Persist new positions
-    setSaveState("saving");
-    const results = await Promise.all(
-      reordered.map((r, idx) =>
-        supabase
-          .from("checklist_template_items" as any)
-          .update({ position: idx })
-          .eq("id", r.id),
-      ),
-    );
-    if (results.some((r: any) => r?.error)) {
-      setSaveState("error");
-      toast.error("Couldn't save the new order");
-      return;
-    }
-    setSaveState("saved");
+    await save.runImmediate(async () => {
+      const results = await Promise.all(
+        reordered.map((r, idx) =>
+          supabase
+            .from(TABLES.items as any)
+            .update({ position: idx })
+            .eq("id", r.id),
+        ),
+      );
+      const bad = results.find((r: any) => r?.error);
+      if (bad) throw (bad as any).error;
+    });
   };
 
-  const containerCls = embedded ? "" : "container mx-auto max-w-6xl px-4 pb-24 pt-4 md:pt-6";
+  /* --------------------------------------------------------------- view */
+
+  const headerActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button size="sm" variant="outline" onClick={() => setStartersOpen(true)}>
+        <Sparkles className="mr-1.5 h-4 w-4" />
+        Starters
+      </Button>
+      <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Plus className="mr-1.5 h-4 w-4" />
+        New template
+      </Button>
+    </div>
+  );
 
   return (
-    <div className={containerCls}>
-      {(() => {
-        const actions = (
-          <div className="flex flex-wrap items-center gap-2">
-            <Dialog open={startersOpen} onOpenChange={setStartersOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Sparkles className="mr-1.5 h-4 w-4" />
-                  Starter templates
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Starter templates</DialogTitle>
-                </DialogHeader>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {STARTER_TEMPLATES.map((s) => (
-                    <Card key={s.name} className={cn(SURFACE_CARD, "p-3.5")}>
-                      <div className="font-medium text-sm">{s.name}</div>
-                      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                        {s.description}
-                      </p>
-                      <div className="mt-2 text-[11px] text-muted-foreground">
-                        {s.items.length} items
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="mt-3 w-full"
-                        onClick={() => void createFromStarter(s)}
-                        disabled={creating}
-                      >
-                        Use this template
-                      </Button>
-                    </Card>
-                  ))}
-                </div>
-              </DialogContent>
-            </Dialog>
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm">
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  New template
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>New checklist template</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-3">
-                  <div>
-                    <Label htmlFor="tpl-name">Name</Label>
-                    <Input
-                      id="tpl-name"
-                      value={newName}
-                      onChange={(e) => setNewName(e.target.value)}
-                      placeholder="e.g. Pre-pour inspection"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="tpl-desc">Description (optional)</Label>
-                    <Textarea
-                      id="tpl-desc"
-                      value={newDesc}
-                      onChange={(e) => setNewDesc(e.target.value)}
-                      rows={2}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setCreateOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={() => void submitCreate()}
-                    disabled={!newName.trim() || creating}
-                  >
-                    {creating && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-                    Create
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
-        );
-        return embedded ? (
-          <div className="flex justify-end">{actions}</div>
-        ) : (
-          <PageHeader
-            backTo="/settings"
-            backLabel="Settings"
-            eyebrow="Workspace tools"
-            title="Checklist templates"
-            description="Build reusable inspection and service checklists with rich item types."
-            actions={actions}
-          />
-        );
-      })()}
+    <div className={embedded ? "" : "container mx-auto max-w-6xl px-4 pb-24 pt-4 md:pt-6"}>
+      {embedded ? (
+        <div className="flex justify-end">{headerActions}</div>
+      ) : (
+        <PageHeader
+          backTo="/settings"
+          backLabel="Settings"
+          eyebrow="Workspace tools"
+          title="Checklist templates"
+          description="Reusable inspection and service checklists — checkboxes, ratings, measurements, and pass/fail results."
+          actions={headerActions}
+        />
+      )}
 
       {loading ? (
         <Card className={cn(SURFACE_CARD, "mt-6 flex items-center justify-center p-12")}>
@@ -535,340 +606,627 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
         <EmptyState
           icon={ClipboardList}
           title="No templates yet"
-          description="Start from a pre-built example or create your own from scratch."
+          description="Start from a pre-built inspection or build your own. Either way you can rename, reorder, and retype every item after."
           action={
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStartersOpen(true)}>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button onClick={() => setStartersOpen(true)}>
                 <Sparkles className="mr-1.5 h-4 w-4" />
-                Browse starters
+                Start from a template
               </Button>
-              <Button onClick={() => setCreateOpen(true)}>
+              <Button variant="outline" onClick={() => setCreateOpen(true)}>
                 <Plus className="mr-1.5 h-4 w-4" />
-                New template
+                Blank template
               </Button>
             </div>
           }
           className="mt-6"
         />
       ) : (
-        <div className="mt-6 grid gap-4 md:grid-cols-[280px_1fr]">
-          <Card className={cn(SURFACE_CARD, "h-fit p-2")}>
-            <div className="flex items-center justify-between px-2 py-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Templates</span>
-              <button
-                className="text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => setShowArchived((s) => !s)}
-              >
-                {showArchived ? "Hide archived" : "Show archived"}
-              </button>
-            </div>
-            <ul className="space-y-0.5">
-              {visibleTemplates.map((t) => {
-                const count = items.filter((i) => i.template_id === t.id).length;
-                return (
-                  <li key={t.id}>
-                    <button
-                      onClick={() => setSelectedId(t.id)}
-                      className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${
-                        selectedId === t.id ? "bg-primary/10 text-foreground" : "hover:bg-muted/60"
-                      }`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate">{t.name}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {count} item{count === 1 ? "" : "s"}
-                        </div>
-                      </div>
-                      {t.archived && (
-                        <Badge variant="outline" className="text-[10px]">
-                          Archived
-                        </Badge>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </Card>
-
-          {selected ? (
-            <Card className={cn(SURFACE_CARD, "p-5 sm:p-6")}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  {editingDetails ? (
-                    <div className="space-y-2">
-                      <Input
-                        value={editingDetails.name}
-                        onChange={(e) =>
-                          setEditingDetails({ ...editingDetails, name: e.target.value })
-                        }
-                        className="h-9 text-base font-semibold"
-                      />
-                      <Textarea
-                        value={editingDetails.description}
-                        onChange={(e) =>
-                          setEditingDetails({ ...editingDetails, description: e.target.value })
-                        }
-                        rows={2}
-                        placeholder="Description"
-                      />
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={() => void saveDetails()}>
-                          Save
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditingDetails(null)}>
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <h2 className="text-base font-semibold">{selected.name}</h2>
-                      {selected.description && (
-                        <p className="mt-1 text-sm text-muted-foreground">{selected.description}</p>
-                      )}
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {selectedItems.length} item{selectedItems.length === 1 ? "" : "s"}
-                      </p>
-                    </>
-                  )}
-                </div>
-                {!editingDetails && (
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setEditingDetails({
-                          name: selected.name,
-                          description: selected.description ?? "",
-                        })
-                      }
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => void duplicateTemplate(selected)}
-                    >
-                      <Copy className="mr-1.5 h-4 w-4" />
-                      Duplicate
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => void toggleArchived(selected)}>
-                      {selected.archived ? (
-                        <>
-                          <ArchiveRestore className="mr-1.5 h-4 w-4" />
-                          Unarchive
-                        </>
-                      ) : (
-                        <>
-                          <Archive className="mr-1.5 h-4 w-4" />
-                          Archive
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-muted-foreground hover:text-destructive"
-                      onClick={() => void deleteTemplate(selected)}
-                      aria-label="Delete template"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-4">
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <SortableContext
-                    items={selectedItems.map((i) => i.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <ul className="space-y-2">
-                      {selectedItems.map((it) => (
-                        <SortableItemRow
-                          key={it.id}
-                          item={it}
-                          onChange={(patch) => void updateItem(it.id, patch)}
-                          onDelete={() => void deleteItem(it.id)}
-                        />
-                      ))}
-                    </ul>
-                  </SortableContext>
-                </DndContext>
-
-                {selectedItems.length === 0 && (
-                  <div className="rounded-xl border-[0.8px] border-dashed border-border bg-muted/20 p-8 text-center text-sm text-muted-foreground">
-                    No items yet. Add your first item below.
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
-                <span className="text-xs text-muted-foreground">Add item:</span>
-                {ITEM_TYPES.map((t) => {
-                  const Icon = t.icon;
+        <BuilderLayout
+          pane={pane}
+          rail={
+            <BuilderRail
+              label="Templates"
+              search={search}
+              onSearchChange={setSearch}
+              searchPlaceholder="Search templates…"
+              showArchived={showArchived}
+              onToggleArchived={() => setShowArchived((s) => !s)}
+              footer={
+                <AddTarget onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" />
+                  New template
+                </AddTarget>
+              }
+            >
+              {visibleTemplates.length === 0 ? (
+                <li className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  No templates match “{search}”.
+                </li>
+              ) : (
+                visibleTemplates.map((t) => {
+                  const count = items.filter((i) => i.template_id === t.id).length;
                   return (
-                    <Button
-                      key={t.value}
-                      size="sm"
-                      variant="outline"
-                      className="h-8"
-                      onClick={() => void addItem(t.value)}
-                      title={t.hint}
-                    >
-                      <Icon className="mr-1.5 h-3.5 w-3.5" />
-                      {t.label}
-                    </Button>
+                    <BuilderRailItem
+                      key={t.id}
+                      active={selectedId === t.id}
+                      name={t.name}
+                      archived={t.archived}
+                      meta={`${count} item${count === 1 ? "" : "s"}`}
+                      onSelect={() => void selectTemplate(t.id)}
+                    />
                   );
-                })}
+                })
+              )}
+            </BuilderRail>
+          }
+          canvas={
+            selected ? (
+              <>
+                <BuilderBackToList label="All templates" onClick={() => setPane("list")} />
+                <BuilderCanvas>
+                  <BuilderTitleBar
+                    icon={<ClipboardList className="h-4.5 w-4.5" />}
+                    title={selected.name}
+                    description={selected.description ?? ""}
+                    titlePlaceholder="Template name"
+                    descriptionPlaceholder="When should the crew fill this out?"
+                    onTitleChange={(v) => updateTemplate(selected.id, { name: v })}
+                    onDescriptionChange={(v) =>
+                      updateTemplate(selected.id, { description: v || null })
+                    }
+                    saveState={save.state}
+                    stats={
+                      <>
+                        <StatChip icon={ListChecks}>
+                          {selectedItems.length} item{selectedItems.length === 1 ? "" : "s"}
+                        </StatChip>
+                        {requiredCount > 0 && (
+                          <StatChip>
+                            <span className="text-amber-600 dark:text-amber-400">
+                              {requiredCount} required
+                            </span>
+                          </StatChip>
+                        )}
+                        {typeCount > 1 && <StatChip>{typeCount} answer types</StatChip>}
+                      </>
+                    }
+                    banner={
+                      selected.archived ? (
+                        <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-[11.5px] font-semibold text-muted-foreground">
+                          <Archive className="h-3.5 w-3.5" />
+                          Archived — it won't show up when adding a checklist to a project.
+                        </div>
+                      ) : null
+                    }
+                    actions={
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="hidden sm:inline-flex"
+                          onClick={() => setPreviewOpen(true)}
+                        >
+                          <Eye className="mr-1.5 h-4 w-4" />
+                          Preview
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" aria-label="Template actions">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuItem
+                              className="sm:hidden"
+                              onClick={() => setPreviewOpen(true)}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              Preview
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => void duplicateTemplate(selected)}>
+                              <Copy className="mr-2 h-4 w-4" />
+                              Duplicate
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => void toggleArchived(selected)}>
+                              {selected.archived ? (
+                                <>
+                                  <ArchiveRestore className="mr-2 h-4 w-4" />
+                                  Restore
+                                </>
+                              ) : (
+                                <>
+                                  <Archive className="mr-2 h-4 w-4" />
+                                  Archive
+                                </>
+                              )}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => void deleteTemplate(selected)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete template
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </>
+                    }
+                  />
 
-                {/* Autosave status — this editor persists on blur, so without
-                    a signal there was no way to know an edit had landed. */}
-                <span className="ml-auto">
-                  {saveState === "saving" ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Saving…
-                    </span>
-                  ) : saveState === "error" ? (
-                    <span className="text-xs font-bold text-destructive">
-                      Couldn't save — check your connection
-                    </span>
-                  ) : saveState === "saved" ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                      <Check className="h-3.5 w-3.5" />
-                      All changes saved
-                    </span>
-                  ) : (
-                    <span className="text-xs font-semibold text-muted-foreground">
-                      Changes save automatically
-                    </span>
-                  )}
-                </span>
-              </div>
-            </Card>
-          ) : (
-            <Card className={cn(SURFACE_CARD, "flex items-center justify-center p-12 text-sm text-muted-foreground")}>
-              Select a template to edit
-            </Card>
-          )}
-        </div>
+                  <div className="px-4 pb-5 pt-4 sm:px-6">
+                    {selectedItems.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                        No items yet. Add the first thing the crew has to answer.
+                      </p>
+                    ) : (
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        modifiers={[restrictToVerticalAxis]}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <SortableContext
+                          items={selectedItems.map((i) => i.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <ul className="space-y-1.5">
+                            {selectedItems.map((it, idx) => (
+                              <ItemRow
+                                key={it.id}
+                                index={idx}
+                                item={it}
+                                autoFocus={focusItemId === it.id}
+                                onFocused={() => setFocusItemId(null)}
+                                onChange={(patch) => updateItem(it.id, patch)}
+                                onDelete={() => void deleteItem(it.id)}
+                                onDuplicate={() => void duplicateItem(it)}
+                                onAddAfter={() => void addItem(it.item_type)}
+                              />
+                            ))}
+                          </ul>
+                        </SortableContext>
+                      </DndContext>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                      <AddTarget className="h-10 w-auto flex-1" onClick={() => void addItem()}>
+                        <Plus className="h-4 w-4" />
+                        Add item
+                      </AddTarget>
+                      {/* The escape hatch from one-at-a-time entry: most
+                          checklists already exist as a list somewhere. */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-10"
+                        onClick={() => setBulkOpen(true)}
+                      >
+                        <ListPlus className="mr-1.5 h-4 w-4" />
+                        Paste a list
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-10">
+                            Add typed item
+                            <MoreHorizontal className="ml-1.5 h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-60">
+                          <DropdownMenuLabel className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                            Answer type
+                          </DropdownMenuLabel>
+                          {TYPE_ORDER.map((t) => {
+                            const m = TYPE_META[t];
+                            const I = m.icon;
+                            return (
+                              <DropdownMenuItem key={t} onClick={() => void addItem(t)}>
+                                <I className="mr-2 h-4 w-4" />
+                                <span className="flex-1">
+                                  {m.label}
+                                  <span className="block text-[11px] text-muted-foreground">
+                                    {m.hint}
+                                  </span>
+                                </span>
+                              </DropdownMenuItem>
+                            );
+                          })}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                </BuilderCanvas>
+              </>
+            ) : (
+              <Card
+                className={cn(
+                  SURFACE_CARD,
+                  "flex flex-col items-center justify-center gap-2 p-16 text-center",
+                )}
+              >
+                <ClipboardList className="h-6 w-6 text-muted-foreground/70" />
+                <p className="text-sm font-semibold">Select a template to edit</p>
+              </Card>
+            )
+          }
+        />
       )}
+
+      {/* ---------------------------------------------------------- dialogs */}
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New checklist template</DialogTitle>
+            <DialogDescription>
+              Name it after the job it covers. You'll add items next.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="tpl-name">Name</Label>
+              <Input
+                id="tpl-name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newName.trim()) {
+                    e.preventDefault();
+                    void submitCreate();
+                  }
+                }}
+                placeholder="e.g. Pre-pour inspection"
+                autoFocus
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="tpl-desc">Description (optional)</Label>
+              <Textarea
+                id="tpl-desc"
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+                rows={2}
+                placeholder="When should the crew fill this out?"
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void submitCreate()} disabled={!newName.trim() || creating}>
+              {creating && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+              Create template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={startersOpen} onOpenChange={setStartersOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Start from a proven checklist</DialogTitle>
+            <DialogDescription>
+              Each one comes fully populated. Rename, reorder, or delete anything after.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-[60vh] gap-3 overflow-y-auto sm:grid-cols-2">
+            {STARTER_TEMPLATES.map((s) => (
+              <Card key={s.name} className={cn(SURFACE_CARD, "flex flex-col p-4")}>
+                <div className="font-display text-lg font-bold tracking-[-0.3px]">{s.name}</div>
+                <p className="mt-1 flex-1 text-xs leading-relaxed text-muted-foreground">
+                  {s.description}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {[...new Set(s.items.map((i) => i.item_type))].map((t) => {
+                    const m = TYPE_META[t];
+                    const I = m.icon;
+                    return (
+                      <span
+                        key={t}
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold",
+                          m.tint,
+                        )}
+                      >
+                        <I className="h-3 w-3" />
+                        {m.short}
+                      </span>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 text-[11px] font-semibold text-muted-foreground">
+                  {s.items.length} items · {s.items.filter((i) => i.required).length} required
+                </div>
+                <Button
+                  size="sm"
+                  className="mt-3 w-full"
+                  onClick={() => void createFromStarter(s)}
+                  disabled={creating}
+                >
+                  Use this template
+                </Button>
+              </Card>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <BulkAddItemsDialog<ItemType>
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        onAdd={addItemsBulk}
+        types={TYPE_ORDER.map((t) => ({
+          value: t,
+          label: TYPE_META[t].short,
+          icon: TYPE_META[t].icon,
+        }))}
+        defaultType="checkbox"
+        description={`One per line — they'll be appended to “${selected?.name ?? "this template"}”. Bullets and numbering are stripped automatically.`}
+      />
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Field preview</DialogTitle>
+            <DialogDescription>
+              How “{selected?.name}” looks to the crew on a project.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[65vh] space-y-1.5 overflow-y-auto rounded-2xl border border-border bg-muted/25 p-3">
+            {selectedItems.length === 0 ? (
+              <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+                Add an item to see the preview.
+              </p>
+            ) : (
+              selectedItems.map((it) => <PreviewRow key={it.id} item={it} />)
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function SortableItemRow({
+/* ====================================================================== */
+
+function ItemRow({
+  index,
   item,
+  autoFocus,
+  onFocused,
   onChange,
   onDelete,
+  onDuplicate,
+  onAddAfter,
 }: {
+  index: number;
   item: TemplateItem;
+  autoFocus: boolean;
+  onFocused: () => void;
   onChange: (patch: Partial<TemplateItem>) => void;
   onDelete: () => void;
+  onDuplicate: () => void;
+  onAddAfter: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
   });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-  const [label, setLabel] = useState(item.label);
-  const [desc, setDesc] = useState(item.description ?? "");
-  useEffect(() => setLabel(item.label), [item.label]);
-  useEffect(() => setDesc(item.description ?? ""), [item.description]);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const removed = useRef(false);
+  // Helper text is opt-in per item — an always-present empty textarea under
+  // every row was most of what made this list feel like a form to survive.
+  const [showHelp, setShowHelp] = useState(!!item.description);
 
-  const typeMeta = ITEM_TYPES.find((t) => t.value === item.item_type) ?? ITEM_TYPES[0];
-  const Icon = typeMeta.icon;
+  useEffect(() => {
+    if (autoFocus) {
+      inputRef.current?.focus();
+      onFocused();
+    }
+  }, [autoFocus, onFocused]);
+
+  const meta = TYPE_META[item.item_type] ?? TYPE_META.checkbox;
+  const Icon = meta.icon;
+
+  const remove = () => {
+    if (removed.current) return;
+    removed.current = true;
+    onDelete();
+  };
+
+  /**
+   * Discard a never-named row, but only once focus actually leaves it —
+   * otherwise reaching for the type chip on a row you just added would delete
+   * it out from under you.
+   */
+  const discardIfUnnamed = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (item.label.trim()) return;
+    const next = e.relatedTarget as Node | null;
+    if (next && e.currentTarget.closest("li")?.contains(next)) return;
+    remove();
+  };
 
   return (
     <li
       ref={setNodeRef}
-      style={style}
-      className="group rounded-xl border-[0.8px] border-border bg-card p-3 transition-colors hover:border-primary/30"
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "group rounded-xl border border-border bg-card px-1.5 py-1.5 transition-colors hover:border-primary/30",
+        isDragging && "z-30 opacity-90 shadow-[0px_14px_28px_-18px_rgba(16,25,41,0.55)]",
+      )}
     >
-      <div className="flex items-start gap-2">
-        <button
-          {...attributes}
-          {...listeners}
-          className="mt-1.5 cursor-grab text-muted-foreground/50 hover:text-muted-foreground active:cursor-grabbing"
-          aria-label="Drag to reorder"
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              onBlur={() => label !== item.label && onChange({ label })}
-              placeholder="Item label"
-              className="h-8 flex-1 min-w-[200px] text-sm"
-            />
-            <Select
-              value={item.item_type}
-              onValueChange={(v) => onChange({ item_type: v as ItemType })}
+      <div className="flex items-center gap-1.5">
+        <DragHandle {...attributes} {...listeners} />
+        <span className="w-5 shrink-0 text-right text-[11px] font-bold tabular-nums text-muted-foreground/60">
+          {index + 1}
+        </span>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title={`${meta.label} — click to change`}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[10.5px] font-extrabold uppercase tracking-wide transition-opacity hover:opacity-80",
+                meta.tint,
+              )}
             >
-              <SelectTrigger className="h-8 w-[160px] text-xs">
-                <div className="flex items-center gap-1.5">
-                  <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                  <SelectValue />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                {ITEM_TYPES.map((t) => {
-                  const I = t.icon;
-                  return (
-                    <SelectItem key={t.value} value={t.value} className="text-sm">
-                      <div className="flex items-center gap-2">
-                        <I className="h-3.5 w-3.5" />
-                        {t.label}
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-            <div className="flex items-center gap-1.5">
-              <Switch
-                checked={item.required}
-                onCheckedChange={(v) => onChange({ required: !!v })}
-                aria-label="Required"
-              />
-              <span className="text-[11px] text-muted-foreground">Required</span>
-            </div>
+              <Icon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{meta.short}</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-60">
+            <DropdownMenuLabel className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+              Answer type
+            </DropdownMenuLabel>
+            {TYPE_ORDER.map((t) => {
+              const m = TYPE_META[t];
+              const I = m.icon;
+              return (
+                <DropdownMenuItem key={t} onClick={() => onChange({ item_type: t })}>
+                  <I className="mr-2 h-4 w-4" />
+                  <span className="flex-1">
+                    {m.label}
+                    <span className="block text-[11px] text-muted-foreground">{m.hint}</span>
+                  </span>
+                  {item.item_type === t && (
+                    <CheckSquare className="ml-2 h-3.5 w-3.5 text-primary" />
+                  )}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <QuietInput
+          ref={inputRef}
+          value={item.label}
+          onChange={(e) => onChange({ label: e.target.value })}
+          onBlur={discardIfUnnamed}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (item.label.trim()) onAddAfter();
+              else e.currentTarget.blur();
+            } else if (e.key === "Escape") {
+              e.currentTarget.blur();
+            } else if (e.key === "Backspace" && !item.label) {
+              e.preventDefault();
+              remove();
+            }
+          }}
+          placeholder="What does the crew check?"
+          aria-label="Item label"
+        />
+
+        <RequiredToggle required={item.required} onToggle={(v) => onChange({ required: v })} />
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-destructive"
-              onClick={onDelete}
-              aria-label="Delete item"
+              className="h-7 w-7 shrink-0 text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 max-md:opacity-60"
+              onMouseDown={(e) => e.preventDefault()}
+              aria-label="Item actions"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <MoreHorizontal className="h-4 w-4" />
             </Button>
-          </div>
-          <Textarea
-            value={desc}
-            onChange={(e) => setDesc(e.target.value)}
-            onBlur={() =>
-              (desc || "") !== (item.description ?? "") && onChange({ description: desc || null })
-            }
-            placeholder="Helper text / instructions (optional)"
-            rows={1}
-            className="resize-none text-xs text-muted-foreground"
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem onClick={() => setShowHelp((s) => !s)}>
+              <MessageSquareText className="mr-2 h-4 w-4" />
+              {showHelp || item.description ? "Hide helper text" : "Add helper text"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onDuplicate}>
+              <Copy className="mr-2 h-4 w-4" />
+              Duplicate item
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={remove}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete item
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Indent lines up with the type chip — the chip's width varies by label. */}
+      {(showHelp || item.description) && (
+        <div className="pl-[52px] pr-9">
+          <QuietTextarea
+            value={item.description ?? ""}
+            onChange={(e) => onChange({ description: e.target.value || null })}
+            placeholder="Helper text shown under this item in the field…"
+            aria-label="Helper text"
+            className="text-xs text-muted-foreground"
           />
         </div>
-      </div>
+      )}
     </li>
+  );
+}
+
+/** Read-only rendering of one item as the crew answers it. */
+function PreviewRow({ item }: { item: TemplateItem }) {
+  const label = item.label || "Untitled item";
+  const header = (
+    <div className="flex items-center gap-2">
+      <span className="flex-1 text-sm font-medium">{label}</span>
+      {item.required && (
+        <span className="text-[10px] font-extrabold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+          Required
+        </span>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="rounded-xl border border-border bg-card px-3 py-2.5">
+      {item.item_type === "checkbox" ? (
+        <div className="flex items-center gap-3">
+          <Checkbox checked={false} disabled aria-hidden />
+          {header}
+        </div>
+      ) : (
+        header
+      )}
+      {item.description && (
+        <p className="mt-1 text-[11px] text-muted-foreground">{item.description}</p>
+      )}
+
+      {item.item_type === "rating" && (
+        <div className="mt-2 flex gap-1">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <Star key={n} className="h-5 w-5 text-muted-foreground/40" />
+          ))}
+        </div>
+      )}
+      {(item.item_type === "pass_fail" || item.item_type === "yes_no") && (
+        <div className="mt-2 flex gap-1.5">
+          {(item.item_type === "pass_fail" ? ["Pass", "Fail"] : ["Yes", "No"]).map((v) => (
+            <span
+              key={v}
+              className="rounded-lg border border-border px-3 py-1 text-xs font-semibold text-muted-foreground"
+            >
+              {v}
+            </span>
+          ))}
+        </div>
+      )}
+      {item.item_type === "numeric" && (
+        <div className="mt-2 w-32 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">
+          0.00
+        </div>
+      )}
+      {item.item_type === "text" && (
+        <div className="mt-2 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+          Type an answer…
+        </div>
+      )}
+    </div>
   );
 }

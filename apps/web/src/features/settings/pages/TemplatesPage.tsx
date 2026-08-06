@@ -65,6 +65,8 @@ import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { LabelChip, LabelPicker } from "@/features/photos/components/LabelPicker";
+import { ApplyBlueprintDialog } from "@/features/settings/components/ApplyBlueprintDialog";
+import { KIND_OUTCOME } from "@/features/settings/components/blueprint-outcomes";
 import { LabelsManager } from "@/features/settings/components/LabelsManager";
 import { LabelSetsManager } from "@/features/settings/components/LabelSetsManager";
 import { ReportTemplatesManager } from "@/features/settings/components/ReportTemplatesManager";
@@ -157,6 +159,8 @@ export function TemplatesPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState("");
   const [activeLabels, setActiveLabels] = useState<string[]>([]);
+
+  const [applyOpen, setApplyOpen] = useState(false);
 
   // Edit dialog state
   const [editOpen, setEditOpen] = useState(false);
@@ -297,6 +301,49 @@ export function TemplatesPage() {
   }, [templates, showArchived, search, activeLabels]);
   const selected = templates.find((t) => t.id === selectedId) ?? null;
   const selectedAttached = attached.filter((a) => a.project_template_id === selectedId);
+
+  /**
+   * Flattened contents of the selected blueprint, in apply order. Lifted out of
+   * the sections renderer so the Apply dialog can show what it is about to
+   * create before anything is written.
+   */
+  const selectedBlueprintItems = useMemo(() => {
+    if (!selectedId) return [] as Array<{ kind: TemplateItemKind; name: string }>;
+    const libFor = (k: TemplateItemKind): Array<{ id: string; name: string }> =>
+      k === "checklist"
+        ? checklistTemplates.map((c) => ({ id: c.id, name: c.name }))
+        : k === "document"
+          ? docTpls
+          : k === "report"
+            ? reportTpls
+            : k === "label_set"
+              ? labelSetTpls
+              : workflowTpls;
+    const legacy = attached
+      .filter((a) => a.project_template_id === selectedId)
+      .map((a) => ({
+        kind: "checklist" as TemplateItemKind,
+        name:
+          checklistTemplates.find((x) => x.id === a.checklist_template_id)?.name ??
+          "(deleted checklist)",
+      }));
+    const rest = tplItems
+      .filter((i) => i.project_template_id === selectedId)
+      .map((i) => ({
+        kind: i.kind,
+        name: libFor(i.kind).find((x) => x.id === i.ref_id)?.name ?? "(deleted)",
+      }));
+    return [...legacy, ...rest];
+  }, [
+    selectedId,
+    attached,
+    tplItems,
+    checklistTemplates,
+    docTpls,
+    reportTpls,
+    labelSetTpls,
+    workflowTpls,
+  ]);
   const attachedIds = new Set(selectedAttached.map((a) => a.checklist_template_id));
   const availableChecklists = checklistTemplates.filter(
     (c) => !c.archived && !attachedIds.has(c.id),
@@ -418,7 +465,13 @@ export function TemplatesPage() {
   };
 
   const deleteTemplate = async (t: ProjectTemplate) => {
-    if (!(await confirm({ description: `Delete template "${t.name}"? This cannot be undone.`, variant: "destructive" }))) return;
+    if (
+      !(await confirm({
+        description: `Delete template "${t.name}"? This cannot be undone.`,
+        variant: "destructive",
+      }))
+    )
+      return;
     const { error } = await supabase
       .from("project_templates" as any)
       .delete()
@@ -720,60 +773,83 @@ export function TemplatesPage() {
                             <Clock className="h-3.5 w-3.5" />
                             Created {timeAgo(selected.created_at)}
                           </span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <LayoutTemplate className="h-3.5 w-3.5" />
+                            {selectedBlueprintItems.length} section
+                            {selectedBlueprintItems.length === 1 ? "" : "s"}
+                          </span>
                         </div>
                       </div>
-                      {canManage && (
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openEdit(selected)}
-                            className="rounded-lg"
-                          >
-                            <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                            Edit
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="rounded-lg"
-                                aria-label="More actions"
-                              >
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-44">
-                              <DropdownMenuItem onClick={() => void duplicateTemplate(selected)}>
-                                <Copy className="mr-2 h-4 w-4" />
-                                Duplicate
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => void toggleArchived(selected)}>
-                                {selected.archived ? (
-                                  <>
-                                    <ArchiveRestore className="mr-2 h-4 w-4" />
-                                    Unarchive
-                                  </>
-                                ) : (
-                                  <>
-                                    <Archive className="mr-2 h-4 w-4" />
-                                    Archive
-                                  </>
-                                )}
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => void deleteTemplate(selected)}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {/*
+                          The action the whole page exists for. A blueprint used
+                          to be appliable only while creating a project, so one
+                          authored here had no route to the jobs already
+                          running — you could build a blueprint and never find
+                          out what it did.
+                        */}
+                        <Button
+                          size="sm"
+                          className="rounded-lg"
+                          onClick={() => setApplyOpen(true)}
+                          disabled={selectedBlueprintItems.length === 0 && !selected.labels?.length}
+                        >
+                          <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                          Apply to project
+                        </Button>
+                        {canManage && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEdit(selected)}
+                              className="rounded-lg"
+                            >
+                              <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                              Edit
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="rounded-lg"
+                                  aria-label="More actions"
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-44">
+                                <DropdownMenuItem onClick={() => void duplicateTemplate(selected)}>
+                                  <Copy className="mr-2 h-4 w-4" />
+                                  Duplicate
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => void toggleArchived(selected)}>
+                                  {selected.archived ? (
+                                    <>
+                                      <ArchiveRestore className="mr-2 h-4 w-4" />
+                                      Unarchive
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Archive className="mr-2 h-4 w-4" />
+                                      Archive
+                                    </>
+                                  )}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => void deleteTemplate(selected)}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -1008,10 +1084,18 @@ export function TemplatesPage() {
                                   >
                                     {kindMeta[r.kind].icon}
                                   </span>
-                                  <Badge variant="outline" className="text-[10px]">
+                                  <Badge variant="outline" className="shrink-0 text-[10px]">
                                     {kindMeta[r.kind].label}
                                   </Badge>
-                                  <span className="flex-1 truncate text-sm">{r.name}</span>
+                                  {/* Naming the template type stopped short of
+                                      the useful part: what it turns into once
+                                      the blueprint lands on a project. */}
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-sm">{r.name}</span>
+                                    <span className="block truncate text-[11px] text-muted-foreground">
+                                      → {KIND_OUTCOME[r.kind].becomes}
+                                    </span>
+                                  </span>
                                   {canManage && (
                                     <Button
                                       variant="ghost"
@@ -1291,6 +1375,17 @@ export function TemplatesPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {selected && (
+        <ApplyBlueprintDialog
+          open={applyOpen}
+          onOpenChange={setApplyOpen}
+          blueprintId={selected.id}
+          blueprintName={selected.name}
+          items={selectedBlueprintItems}
+          labels={selected.labels ?? []}
+        />
       )}
     </div>
   );

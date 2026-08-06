@@ -100,7 +100,7 @@ export function ShowcasesPanel({
       const res = await listShowcases();
       setShowcases(res.showcases);
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not load showcases");
+      toast.error(e?.message ?? "Could not load portfolios");
     } finally {
       setLoading(false);
     }
@@ -116,12 +116,12 @@ export function ShowcasesPanel({
     setCreating(true);
     try {
       const res = await createShowcase({ data: { title: t } });
-      toast.success("Showcase created");
+      toast.success("Portfolio created");
       setCreateOpen(false);
       setTitle("");
       navigate({ to: "/showcases/$showcaseId", params: { showcaseId: res.id } });
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not create showcase");
+      toast.error(e?.message ?? "Could not create portfolio");
     } finally {
       setCreating(false);
     }
@@ -159,11 +159,11 @@ export function ShowcasesPanel({
     setCreating(true);
     try {
       const res = await createShowcaseFromProject({ data: { projectId } });
-      toast.success(`Showcase built from ${res.photoCount} photos — edit anything you like.`);
+      toast.success(`Portfolio built from ${res.photoCount} photos — edit anything you like.`);
       setCreateOpen(false);
       navigate({ to: "/showcases/$showcaseId", params: { showcaseId: res.id } });
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not build showcase");
+      toast.error(e?.message ?? "Could not build portfolio");
     } finally {
       setCreating(false);
     }
@@ -174,9 +174,9 @@ export function ShowcasesPanel({
       await deleteShowcase({ data: { id } });
       setShowcases((prev) => prev.filter((x) => x.id !== id));
       onCountsChanged?.();
-      toast.success("Showcase deleted");
+      toast.success("Portfolio deleted");
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not delete showcase");
+      toast.error(e?.message ?? "Could not delete portfolio");
     }
   };
 
@@ -276,7 +276,7 @@ export function ShowcasesPanel({
         </div>
         {canEdit && (
           <Button onClick={openCreate}>
-            <Plus className="mr-1.5 h-4 w-4" /> New showcase
+            <Plus className="mr-1.5 h-4 w-4" /> New portfolio
           </Button>
         )}
       </div>
@@ -288,11 +288,11 @@ export function ShowcasesPanel({
       ) : showcases.length === 0 ? (
         <EmptyState
           icon={Layers}
-          title="No projects yet"
-          description="Build your first project page from a finished job — it becomes a page on your portfolio site."
+          title="No portfolios yet"
+          description="Build your first portfolio from a finished job — it becomes a page on your public site."
           action={
             <Button onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" /> New showcase
+              <Plus className="mr-2 h-4 w-4" /> New portfolio
             </Button>
           }
         />
@@ -333,7 +333,7 @@ export function ShowcasesPanel({
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>New showcase</DialogTitle>
+            <DialogTitle>New portfolio</DialogTitle>
             <DialogDescription>
               Build one from a finished job in one click, or start from a blank page.
             </DialogDescription>

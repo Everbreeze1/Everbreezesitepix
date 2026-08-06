@@ -24,7 +24,11 @@ import {
   RefreshCw,
   Plus,
   MessageSquare,
+  LayoutGrid,
+  CalendarDays,
 } from "lucide-react";
+import { endOfMonth, format, startOfMonth } from "date-fns";
+import { PhotoCalendar } from "@/features/gallery/components/PhotoCalendar";
 import {
   PhotoCommentsPanel,
   type CommentContributor,
@@ -155,6 +159,25 @@ export function GalleryPage() {
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+
+  /**
+   * Grid vs calendar.
+   *
+   * The grid answers "what have we got"; it can't answer "what happened on the
+   * 12th" or "which weeks were busy", which is most of what people bring to a
+   * field-photo archive. In calendar mode the visible month *is* the date
+   * range — the separate Date pill would be a second, contradictory way to say
+   * the same thing, so it steps aside.
+   */
+  const [view, setView] = useState<"grid" | "calendar">("grid");
+  const [month, setMonth] = useState<Date>(() => startOfMonth(new Date()));
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  const calendarView = view === "calendar";
+  const rangeFrom = calendarView ? format(startOfMonth(month), "yyyy-MM-dd") : dateFrom;
+  const rangeTo = calendarView ? format(endOfMonth(month), "yyyy-MM-dd") : dateTo;
+  /** A single month is a much smaller slice than "everything recent". */
+  const photoLimit = calendarView ? 600 : 200;
   const [tagSearch, setTagSearch] = useState<string>("");
   // Company-wide tag library (not just tags already applied to loaded
   // photos) so the filter picker matches the project label picker, which
@@ -322,11 +345,11 @@ export function GalleryPage() {
       .or("phase.is.null,phase.neq.walkthrough")
       .not("storage_path", "like", "%/walkthroughs/%")
       .order("created_at", { ascending: false })
-      .limit(200);
+      .limit(photoLimit);
     if (projectFilter.length > 0) q = q.in("project_id", projectFilter);
-    if (dateFrom) q = q.gte("created_at", new Date(dateFrom).toISOString());
-    if (dateTo) {
-      const end = new Date(dateTo);
+    if (rangeFrom) q = q.gte("created_at", new Date(rangeFrom).toISOString());
+    if (rangeTo) {
+      const end = new Date(rangeTo);
       end.setHours(23, 59, 59, 999);
       q = q.lte("created_at", end.toISOString());
     }
@@ -369,7 +392,11 @@ export function GalleryPage() {
     // Filters are part of the key, so switching filters naturally fetches
     // fresh (different key) while re-visiting a previously-seen filter
     // combo within staleTime serves from cache.
-    queryKey: qk.galleryPhotos(user?.id ?? "", { projectFilter, dateFrom, dateTo }),
+    queryKey: qk.galleryPhotos(user?.id ?? "", {
+      projectFilter,
+      dateFrom: rangeFrom,
+      dateTo: rangeTo,
+    }),
     queryFn: loadPhotos,
     enabled: !!user,
     staleTime: 60_000,
@@ -1043,8 +1070,43 @@ export function GalleryPage() {
       )}
 
       {projects.length > 0 && (
-        <div className="mt-5 rounded-[14px] border border-border bg-card p-4">
-          <div className="flex flex-wrap items-end gap-2">
+        <div className="mt-5 rounded-[14px] border border-border bg-card p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Grid vs calendar. Segmented, so the current mode is never in doubt. */}
+            <div className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-muted p-0.5">
+              {(
+                [
+                  { key: "grid", label: "Grid", icon: LayoutGrid },
+                  { key: "calendar", label: "Calendar", icon: CalendarDays },
+                ] as const
+              ).map((v) => {
+                const on = view === v.key;
+                return (
+                  <button
+                    key={v.key}
+                    type="button"
+                    onClick={() => {
+                      setView(v.key);
+                      // A day picked in a previous session would otherwise sit
+                      // selected in a month it doesn't belong to.
+                      setSelectedDay(null);
+                    }}
+                    aria-pressed={on}
+                    className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 font-manrope text-xs font-bold transition ${
+                      on
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <v.icon className="h-3.5 w-3.5" />
+                    {v.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <span aria-hidden className="mx-0.5 hidden h-6 w-px shrink-0 bg-border sm:block" />
+
             {/* Projects multi-select */}
             <Popover>
               <PopoverTrigger asChild>
@@ -1104,12 +1166,15 @@ export function GalleryPage() {
               </PopoverContent>
             </Popover>
 
-            {/* Date range */}
+            {/* Date range — in calendar view the visible month already is the
+                range, so this would be a second way to say the same thing. */}
             <Popover>
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-muted px-3 font-manrope text-foreground"
+                  className={`inline-flex h-9 items-center gap-1.5 rounded-full bg-muted px-3 font-manrope text-foreground ${
+                    calendarView ? "hidden" : ""
+                  }`}
                 >
                   <span className="text-xs font-semibold uppercase tracking-[0.3px] text-muted-foreground">
                     Date
@@ -1227,7 +1292,9 @@ export function GalleryPage() {
               </PopoverContent>
             </Popover>
 
-            {(projectFilter.length > 0 || tagFilter.length > 0 || dateFrom || dateTo) && (
+            {(projectFilter.length > 0 ||
+              tagFilter.length > 0 ||
+              (!calendarView && (dateFrom || dateTo))) && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -1245,93 +1312,113 @@ export function GalleryPage() {
             )}
 
             <div className="ml-auto font-manrope text-xs font-bold text-muted-foreground">
-              {visiblePhotos.length} of {photos.length} photo{photos.length === 1 ? "" : "s"}
+              {calendarView
+                ? `${visiblePhotos.length} this month`
+                : `${visiblePhotos.length} of ${photos.length} photo${photos.length === 1 ? "" : "s"}`}
             </div>
           </div>
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
-        {loading ? (
-          <Card className="col-span-full p-8 text-center text-muted-foreground">
-            Loading photos…
-          </Card>
-        ) : visiblePhotos.length === 0 ? (
-          projects.length > 0 && (
-            <Card className="col-span-full flex flex-col items-center p-12 text-center border-dashed">
-              <Upload className="h-10 w-10 text-muted-foreground" />
-              <h2 className="mt-3 text-lg font-semibold">
-                {photos.length === 0 ? "No photos yet" : "No photos match your filters"}
-              </h2>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                {photos.length === 0
-                  ? "Snap a photo on-site or upload from your device."
-                  : "Try adjusting projects, dates, or tags."}
-              </p>
-              {photos.length === 0 && (
-                <div className="mt-4 flex gap-2">
-                  <Button onClick={openCamera} disabled={uploading}>
-                    <Camera className="mr-2 h-4 w-4" />
-                    Take photo
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={openUpload}
-                    disabled={uploading}
-                  >
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload
-                  </Button>
-                </div>
-              )}
+      {projects.length > 0 && calendarView && (
+        <PhotoCalendar
+          month={month}
+          onMonthChange={(next) => {
+            setMonth(next);
+            setSelectedDay(null);
+          }}
+          photos={visiblePhotos}
+          signed={signed}
+          projects={projects}
+          selectedDay={selectedDay}
+          onSelectDay={setSelectedDay}
+          onOpenPhoto={(p) => void openPhoto(p)}
+          loading={loading}
+          capped={photos.length >= photoLimit}
+        />
+      )}
+
+      {/* Unmounted rather than hidden in calendar view — a `hidden` grid still
+          mounts every tile and fires a signed-thumbnail request per photo. */}
+      {!calendarView && (
+        <div className="mt-6 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+          {loading ? (
+            <Card className="col-span-full p-8 text-center text-muted-foreground">
+              Loading photos…
             </Card>
-          )
-        ) : (
-          visiblePhotos.map((p) => {
-            const project = projects.find((pr) => pr.id === p.project_id);
-            return (
-              <button
-                key={p.id}
-                onClick={() => openPhoto(p)}
-                className="group flex flex-col overflow-hidden rounded-3xl bg-sidebar text-left shadow-[0_20px_35px_-26px_rgba(16,25,41,0.55)] transition-transform hover:-translate-y-0.5"
-              >
-                <div className="relative aspect-[4/3] w-full overflow-hidden">
-                  {/* Thumbnail, not the camera original — a 200-photo grid of
+          ) : visiblePhotos.length === 0 ? (
+            projects.length > 0 && (
+              <Card className="col-span-full flex flex-col items-center p-12 text-center border-dashed">
+                <Upload className="h-10 w-10 text-muted-foreground" />
+                <h2 className="mt-3 text-lg font-semibold">
+                  {photos.length === 0 ? "No photos yet" : "No photos match your filters"}
+                </h2>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                  {photos.length === 0
+                    ? "Snap a photo on-site or upload from your device."
+                    : "Try adjusting projects, dates, or tags."}
+                </p>
+                {photos.length === 0 && (
+                  <div className="mt-4 flex gap-2">
+                    <Button onClick={openCamera} disabled={uploading}>
+                      <Camera className="mr-2 h-4 w-4" />
+                      Take photo
+                    </Button>
+                    <Button variant="outline" onClick={openUpload} disabled={uploading}>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload
+                    </Button>
+                  </div>
+                )}
+              </Card>
+            )
+          ) : (
+            visiblePhotos.map((p) => {
+              const project = projects.find((pr) => pr.id === p.project_id);
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => openPhoto(p)}
+                  className="group flex flex-col overflow-hidden rounded-3xl bg-sidebar text-left shadow-[0_20px_35px_-26px_rgba(16,25,41,0.55)] transition-transform hover:-translate-y-0.5"
+                >
+                  <div className="relative aspect-[4/3] w-full overflow-hidden">
+                    {/* Thumbnail, not the camera original — a 200-photo grid of
                       full-res site photos is the single heaviest thing in the
                       app on a phone. Falls back to the full image if the
                       project's plan has no image transformation. */}
-                  <PhotoThumb
-                    storagePath={p.storage_path}
-                    fallbackUrl={signed[p.id]}
-                    width={400}
-                    alt={p.caption ?? ""}
-                    className="transition duration-300 group-hover:scale-105"
-                  />
-                  {watermarkUrl && signed[p.id] && (
-                    <img
-                      src={watermarkUrl}
-                      alt=""
-                      aria-hidden
-                      className="pointer-events-none absolute bottom-2 right-2 h-7 w-auto max-w-[35%] opacity-40 drop-shadow-sm"
+                    <PhotoThumb
+                      storagePath={p.storage_path}
+                      fallbackUrl={signed[p.id]}
+                      width={400}
+                      alt={p.caption ?? ""}
+                      className="transition duration-300 group-hover:scale-105"
                     />
-                  )}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-sidebar/90 to-transparent px-4 pb-3 pt-8">
-                    <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[1.2px] text-sidebar-foreground/90">
-                      Site record
+                    {watermarkUrl && signed[p.id] && (
+                      <img
+                        src={watermarkUrl}
+                        alt=""
+                        aria-hidden
+                        className="pointer-events-none absolute bottom-2 right-2 h-7 w-auto max-w-[35%] opacity-40 drop-shadow-sm"
+                      />
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-sidebar/90 to-transparent px-4 pb-3 pt-8">
+                      <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[1.2px] text-sidebar-foreground/90">
+                        Site record
+                      </p>
+                    </div>
+                  </div>
+                  <div className="px-4 py-3">
+                    <p className="truncate font-manrope text-[11px] font-bold text-sidebar-foreground/70">
+                      {cleanCaption(p.caption) ??
+                        `${project?.name ?? "Unassigned"} · ${timeAgo(p.created_at)}`}
                     </p>
                   </div>
-                </div>
-                <div className="px-4 py-3">
-                  <p className="truncate font-manrope text-[11px] font-bold text-sidebar-foreground/70">
-                    {cleanCaption(p.caption) ??
-                      `${project?.name ?? "Unassigned"} · ${timeAgo(p.created_at)}`}
-                  </p>
-                </div>
-              </button>
-            );
-          })
-        )}
-      </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {projects.length > 0 && (
         <DropdownMenu>

@@ -139,7 +139,7 @@ export function ShowcaseView({
               </div>
             )}
             <h1 className="font-display max-w-4xl text-balance text-5xl font-bold uppercase leading-[0.92] tracking-[-0.01em] text-white sm:text-7xl lg:text-8xl">
-              {s.title || "Untitled showcase"}
+              {s.title || "Untitled portfolio"}
             </h1>
             {s.tagline && (
               <p className="mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-white/80 lg:text-xl">
@@ -164,7 +164,7 @@ export function ShowcaseView({
 
         {visibleSections.length === 0 ? (
           <p className="py-28 text-center text-sm text-neutral-400">
-            This showcase doesn&rsquo;t have any work in it yet.
+            This portfolio doesn&rsquo;t have any work in it yet.
           </p>
         ) : (
           visibleSections.map((section, i) => (
@@ -203,8 +203,7 @@ export function ShowcaseView({
                 Happy with the work?
               </h2>
               <p className="mx-auto mt-3 max-w-md text-pretty text-base leading-relaxed text-neutral-600">
-                A quick review makes a real difference to a small business. It takes about a
-                minute.
+                A quick review makes a real difference to a small business. It takes about a minute.
               </p>
               <div className="mt-7 flex flex-wrap justify-center gap-3">
                 {reviewLinks.map((link, i) => (
@@ -362,7 +361,11 @@ function PhotoGallery({ items, layout }: { items: ShowcaseViewItem[]; layout: st
       <div className="mx-auto max-w-6xl px-6 lg:px-10">
         <div className="grid gap-3 sm:grid-cols-2">
           {items.map((item) => (
-            <Figure key={item.photo_id} item={item} imgClassName="aspect-[4/5] w-full object-cover" />
+            <Figure
+              key={item.photo_id}
+              item={item}
+              imgClassName="aspect-[4/5] w-full object-cover"
+            />
           ))}
         </div>
       </div>

@@ -53,7 +53,7 @@ export function ShowcaseShareDialog({
     try {
       await setShowcaseShare({ data: { id: showcaseId, enable } });
       onChanged(enable ? null : new Date().toISOString());
-      toast.success(enable ? "Showcase published" : "Sharing turned off");
+      toast.success(enable ? "Portfolio published" : "Sharing turned off");
     } catch (e: any) {
       toast.error(e?.message ?? "Could not update sharing");
     } finally {
@@ -72,7 +72,7 @@ export function ShowcaseShareDialog({
         <DialogHeader>
           <DialogTitle className="truncate">Share “{title}”</DialogTitle>
           <DialogDescription>
-            Anyone with the link can view this showcase — no SitePix account needed.
+            Anyone with the link can view this portfolio — no SitePix account needed.
           </DialogDescription>
         </DialogHeader>
 
@@ -86,7 +86,7 @@ export function ShowcaseShareDialog({
               <p className="text-xs text-muted-foreground">
                 {published
                   ? "Send it to prospects, post it anywhere"
-                  : "Only your team can see this showcase"}
+                  : "Only your team can see this portfolio"}
               </p>
             </div>
           </div>

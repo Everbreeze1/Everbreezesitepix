@@ -30,6 +30,11 @@ import {
   Trash2,
   Layers,
   Settings2,
+  LayoutGrid,
+  CircleDot,
+  CheckCircle2,
+  SlidersHorizontal,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +70,16 @@ import { CreateBoardDialog } from "@/features/projects/components/CreateBoardDia
 import { TagBoardDetailView } from "@/features/projects/components/TagBoardDetailView";
 import { BoardSettingsSheet } from "@/features/projects/components/BoardSettingsSheet";
 
+/** Panes of the single Filters popover. */
+const FILTER_PANES = [
+  { key: "views", label: "Views", icon: Eye },
+  { key: "tags", label: "Tags", icon: TagIcon },
+  { key: "labels", label: "Labels", icon: Bookmark },
+  { key: "people", label: "People", icon: UsersIcon },
+  { key: "date", label: "Date", icon: CalendarIcon },
+] as const;
+type FilterPaneKey = (typeof FILTER_PANES)[number]["key"];
+
 const DEFAULT_LABELS: Array<{ name: string; color: string }> = [
   { name: "Lead", color: "#3b82f6" },
   { name: "Proposal Sent", color: "#8b5cf6" },
@@ -93,7 +108,13 @@ interface ProjectRow {
   completed_at?: string | null;
 }
 
-type TabKey = "all" | "active" | "completed" | "groups" | "boards" | "starred" | "archived";
+/**
+ * Starred and Archived used to be tabs too. They are refinements of whichever
+ * list you are already looking at, not separate lists — "starred, active
+ * projects" was unreachable when they were mutually exclusive tabs — so they
+ * moved into the Filters popover as toggles and this run got shorter.
+ */
+type TabKey = "all" | "active" | "completed" | "groups" | "boards";
 
 interface TagRow {
   id: string;
@@ -158,22 +179,34 @@ export function ProjectsPage() {
   const [tab, setTab] = useState<TabKey>("all");
   const [query, setQuery] = useState(routeSearch.q ?? "");
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [tagsOpen, setTagsOpen] = useState(false);
 
   // Project label filter (color-managed labels stored on projects.labels[])
   const labelCatalog = useLabelCatalog();
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
-  const [labelsFilterOpen, setLabelsFilterOpen] = useState(false);
   const [labelMode, setLabelMode] = useState<"OR" | "AND">("OR");
 
   // Contributor filter (based on photo uploaders + project creator)
   const [selectedContributors, setSelectedContributors] = useState<string[]>([]);
-  const [contribOpen, setContribOpen] = useState(false);
 
   // Date range: uses created_at (Start) + completed_at (End) semantics.
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
-  const [dateOpen, setDateOpen] = useState(false);
+
+  // Ex-tabs, now refinements that compose with whatever view is selected.
+  const [starredOnly, setStarredOnly] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+
+  /**
+   * Refinement lives behind one control now.
+   *
+   * Tags, Labels, Assignees and Date each used to be their own 46px-tall button
+   * beside the search box, so the toolbar read as five competing actions before
+   * you had narrowed anything at all. They are panes of one "Filters" popover
+   * instead — same filters, one button, one count badge telling you whether
+   * anything is narrowing the list.
+   */
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterPane, setFilterPane] = useState<FilterPaneKey>("views");
 
   // Groups
   const fetchGroups = listProjectGroups;
@@ -226,7 +259,10 @@ export function ProjectsPage() {
     photoCounts: Record<string, number>;
     reportCounts: Record<string, number>;
     checklistCounts: Record<string, number>;
-    recentMembers: Record<string, Array<{ id: string; name: string | null; avatar: string | null }>>;
+    recentMembers: Record<
+      string,
+      Array<{ id: string; name: string | null; avatar: string | null }>
+    >;
     recentPhotos: Array<{
       id: string;
       project_id: string;
@@ -380,7 +416,10 @@ export function ProjectsPage() {
           ? supabase.storage.from("site-photos").createSignedUrls(pathsToSign, 60 * 60)
           : Promise.resolve({ data: null }),
         uploaderIds.length
-          ? (supabase as any).from("profiles").select("id, full_name, avatar_url").in("id", uploaderIds)
+          ? (supabase as any)
+              .from("profiles")
+              .select("id, full_name, avatar_url")
+              .in("id", uploaderIds)
           : Promise.resolve({ data: null }),
         needSign.length
           ? supabase.storage.from("site-photos").createSignedUrls(needSign, 60 * 60)
@@ -397,8 +436,11 @@ export function ProjectsPage() {
       const profileMap: Record<string, { id: string; name: string | null; avatar: string | null }> =
         {};
       (
-        (profs.data as Array<{ id: string; full_name: string | null; avatar_url: string | null }>) ??
-        []
+        (profs.data as Array<{
+          id: string;
+          full_name: string | null;
+          avatar_url: string | null;
+        }>) ?? []
       ).forEach((p) => {
         profileMap[p.id] = { id: p.id, name: p.full_name, avatar: p.avatar_url };
       });
@@ -570,9 +612,11 @@ export function ProjectsPage() {
 
   const filteredProjects = useMemo(() => {
     let list = allProjects;
-    if (tab === "archived") list = list.filter((p) => p.archived);
-    else list = list.filter((p) => !p.archived);
-    if (tab === "starred") list = list.filter((p) => p.starred);
+    // "Show archived" widens the list rather than replacing it, so an archived
+    // project can still be found under Active/Completed — the old Archived tab
+    // was a separate world you had to leave your view to visit.
+    if (!showArchived) list = list.filter((p) => !p.archived);
+    if (starredOnly) list = list.filter((p) => p.starred);
     if (tab === "active") list = list.filter((p) => p.status === "active");
     if (tab === "completed") list = list.filter((p) => p.status === "completed");
     const q = query.trim().toLowerCase();
@@ -637,6 +681,8 @@ export function ProjectsPage() {
     recentMembers,
     dateFrom,
     dateTo,
+    starredOnly,
+    showArchived,
   ]);
 
   const projectPickerRows: ProjectPickerRow[] = useMemo(
@@ -687,15 +733,19 @@ export function ProjectsPage() {
   const starredCount = allProjects.filter((p) => p.starred && !p.archived).length;
   const archivedCount = allProjects.filter((p) => p.archived).length;
 
-  // Two runs separated by a divider: status filters over the project list, then
-  // the saved collections. Mixing them in one undifferentiated strip of seven
-  // pills was the main reason this row read as cluttered.
-  const tabs: Array<{ key: TabKey; label: string; count: number; icon?: any; startsGroup?: boolean }> = [
-    { key: "all", label: "All", count: activeCount },
-    { key: "active", label: "Active", count: activeStatusCount },
-    { key: "completed", label: "Completed", count: completedCount },
-    { key: "starred", label: "Starred", count: starredCount, icon: Star },
-    { key: "archived", label: "Archived", count: archivedCount, icon: Archive },
+  // Two runs separated by a divider: the status views over the project list,
+  // then the saved collections. Every pill carries an icon so the run reads as
+  // one navigation control — the same strip the project home page uses.
+  const tabs: Array<{
+    key: TabKey;
+    label: string;
+    count: number;
+    icon: any;
+    startsGroup?: boolean;
+  }> = [
+    { key: "all", label: "All", count: activeCount, icon: LayoutGrid },
+    { key: "active", label: "Active", count: activeStatusCount, icon: CircleDot },
+    { key: "completed", label: "Completed", count: completedCount, icon: CheckCircle2 },
     { key: "groups", label: "Groups", count: groups.length, icon: FolderPlus, startsGroup: true },
     // Key stays "boards" (route/state/table naming); only the label is
     // user-facing, and "Pipeline" describes what the columns actually are.
@@ -705,13 +755,26 @@ export function ProjectsPage() {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const scrollBy = (dx: number) => scrollerRef.current?.scrollBy({ left: dx, behavior: "smooth" });
 
-  const hasActiveFilters =
-    !!query ||
-    selectedTagIds.length > 0 ||
-    selectedLabels.length > 0 ||
-    selectedContributors.length > 0 ||
-    !!dateFrom ||
-    !!dateTo;
+  /** Refinements behind the Filters button. Search is counted separately. */
+  const filterCount =
+    selectedTagIds.length +
+    selectedLabels.length +
+    selectedContributors.length +
+    (dateFrom || dateTo ? 1 : 0) +
+    (starredOnly ? 1 : 0) +
+    (showArchived ? 1 : 0);
+  const hasActiveFilters = !!query || filterCount > 0;
+
+  const clearAllFilters = () => {
+    setQuery("");
+    setSelectedTagIds([]);
+    setSelectedLabels([]);
+    setSelectedContributors([]);
+    setDateFrom("");
+    setDateTo("");
+    setStarredOnly(false);
+    setShowArchived(false);
+  };
 
   const bodyLabel =
     tab === "groups"
@@ -720,21 +783,15 @@ export function ProjectsPage() {
         ? activeBoard
           ? activeBoard.name
           : "Pipelines"
-        : tab === "starred"
-          ? "Starred"
-          : tab === "archived"
-            ? "Archived"
-            : tab === "active"
-              ? "Active projects"
-              : tab === "completed"
-                ? "Completed projects"
-                : "All projects";
+        : tab === "active"
+          ? "Active projects"
+          : tab === "completed"
+            ? "Completed projects"
+            : starredOnly
+              ? "Starred projects"
+              : "All projects";
   const bodyShownCount =
-    tab === "groups"
-      ? groups.length
-      : tab === "boards"
-        ? boards.length
-        : filteredProjects.length;
+    tab === "groups" ? groups.length : tab === "boards" ? boards.length : filteredProjects.length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -810,46 +867,187 @@ export function ProjectsPage() {
             </div>
           </div>
 
-          {/* Filter card: search, tags/labels/assignees/date, tab pills */}
-          <div className="mt-6 rounded-3xl border border-border bg-card/[0.82] p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search projects by name or address…"
-                  className="h-[45.6px] rounded-xl border-border bg-card/80 pl-10 text-sm shadow-none placeholder:text-muted-foreground"
-                />
-                {query && (
-                  <button
-                    type="button"
-                    onClick={() => setQuery("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    aria-label="Clear search"
-                  >
-                    <XIcon className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Popover open={tagsOpen} onOpenChange={setTagsOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="h-[45.6px] shrink-0 gap-2 rounded-xl border-border bg-card/70 px-3.5 text-xs font-extrabold text-muted-foreground shadow-none"
+          {/*
+            Tab strip in its own card, directly under the hero — the same
+            control the project home page uses. It used to be the third row
+            inside a combined "filter card", which made choosing a view and
+            narrowing a list look like the same job.
+          */}
+          <div className="mt-3.5 overflow-x-auto rounded-2xl border border-border bg-card/80 p-2 shadow-[0px_16px_32px_-28px_rgba(16,25,41,0.6)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex min-w-max items-center gap-1">
+              {tabs.map((t) => {
+                const active = tab === t.key;
+                const Icon = t.icon;
+                return (
+                  <Fragment key={t.key}>
+                    {t.startsGroup && <span className="mx-1.5 h-6 w-px shrink-0 bg-border" />}
+                    <button
+                      type="button"
+                      onClick={() => setTab(t.key)}
+                      className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-extrabold transition ${
+                        active
+                          ? "bg-primary text-primary-foreground shadow-lg"
+                          : "text-muted-foreground hover:bg-accent"
+                      }`}
                     >
-                      <TagIcon className="h-4 w-4 text-primary" />
-                      Tags
-                      {selectedTagIds.length > 0 && (
-                        <span className="ml-1 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
-                          {selectedTagIds.length}
+                      <span
+                        className={`flex h-7 w-7 items-center justify-center rounded-lg ${
+                          active ? "bg-primary-foreground/20" : "bg-muted"
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                      {t.label}
+                      <span
+                        className={active ? "text-primary-foreground/70" : "text-muted-foreground"}
+                      >
+                        {t.count}
+                      </span>
+                    </button>
+                  </Fragment>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Search stays in the open; every other refinement is one button. */}
+          <div className="mt-3.5 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search projects by name or address…"
+                className="h-11 rounded-xl border-border bg-card/80 pl-10 text-sm shadow-none placeholder:text-muted-foreground"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Clear search"
+                >
+                  <XIcon className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="h-11 shrink-0 gap-2 rounded-xl border-border bg-card/70 px-4 text-xs font-extrabold text-muted-foreground shadow-none"
+                >
+                  <SlidersHorizontal className="h-4 w-4 text-primary" />
+                  Filters
+                  {filterCount > 0 && (
+                    <span className="ml-0.5 rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold text-primary-foreground">
+                      {filterCount}
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[340px] p-0" align="end">
+                <div className="flex items-center gap-0.5 border-b border-border p-1.5">
+                  {FILTER_PANES.map((p) => {
+                    const paneActive = filterPane === p.key;
+                    const n =
+                      p.key === "views"
+                        ? (starredOnly ? 1 : 0) + (showArchived ? 1 : 0)
+                        : p.key === "tags"
+                          ? selectedTagIds.length
+                          : p.key === "labels"
+                            ? selectedLabels.length
+                            : p.key === "people"
+                              ? selectedContributors.length
+                              : dateFrom || dateTo
+                                ? 1
+                                : 0;
+                    return (
+                      <button
+                        key={p.key}
+                        type="button"
+                        onClick={() => setFilterPane(p.key)}
+                        className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-bold transition ${
+                          paneActive
+                            ? "bg-foreground text-background"
+                            : "text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        <p.icon className="h-3.5 w-3.5" />
+                        <span className="flex items-center gap-1">
+                          {p.label}
+                          {n > 0 && (
+                            <span className={paneActive ? "text-background/60" : "text-primary"}>
+                              {n}
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-72 p-3" align="end">
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {filterPane === "views" && (
+                  <div className="p-3">
+                    <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Narrow the current view
+                    </div>
+                    <div className="space-y-0.5">
+                      {(
+                        [
+                          {
+                            key: "starred",
+                            icon: Star,
+                            label: "Starred only",
+                            hint: "Just the projects you've starred",
+                            count: starredCount,
+                            checked: starredOnly,
+                            toggle: () => setStarredOnly((s) => !s),
+                          },
+                          {
+                            key: "archived",
+                            icon: Archive,
+                            label: "Include archived",
+                            hint: "Show archived projects alongside the rest",
+                            count: archivedCount,
+                            checked: showArchived,
+                            toggle: () => setShowArchived((s) => !s),
+                          },
+                        ] as const
+                      ).map((v) => (
+                        <div
+                          key={v.key}
+                          role="button"
+                          tabIndex={0}
+                          onClick={v.toggle}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              v.toggle();
+                            }
+                          }}
+                          className={`flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 transition ${
+                            v.checked ? "bg-accent/70" : "hover:bg-muted"
+                          }`}
+                        >
+                          <Checkbox checked={v.checked} />
+                          <v.icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium">{v.label}</div>
+                            <div className="text-[11px] text-muted-foreground">{v.hint}</div>
+                          </div>
+                          <span className="text-xs font-semibold text-muted-foreground">
+                            {v.count}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {filterPane === "tags" && (
+                  <div className="p-3">
                     <div className="mb-2 flex items-center justify-between px-1">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                         Select tags
@@ -910,26 +1108,11 @@ export function ProjectsPage() {
                         Clear tag filters
                       </button>
                     )}
-                  </PopoverContent>
-                </Popover>
+                  </div>
+                )}
 
-                {/* Project Labels filter */}
-                <Popover open={labelsFilterOpen} onOpenChange={setLabelsFilterOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="h-[45.6px] shrink-0 gap-2 rounded-xl border-border bg-card/70 px-3.5 text-xs font-extrabold text-muted-foreground shadow-none"
-                    >
-                      <Bookmark className="h-4 w-4 text-primary" />
-                      Labels
-                      {selectedLabels.length > 0 && (
-                        <span className="ml-1 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
-                          {selectedLabels.length}
-                        </span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-72 p-3" align="end">
+                {filterPane === "labels" && (
+                  <div className="p-3">
                     <div className="mb-2 flex items-center justify-between px-1">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                         Project labels
@@ -997,26 +1180,11 @@ export function ProjectsPage() {
                         Clear label filters
                       </button>
                     )}
-                  </PopoverContent>
-                </Popover>
+                  </div>
+                )}
 
-                {/* Contributor filter */}
-                <Popover open={contribOpen} onOpenChange={setContribOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="h-[45.6px] shrink-0 gap-2 rounded-xl border-border bg-card/70 px-3.5 text-xs font-extrabold text-muted-foreground shadow-none"
-                    >
-                      <UsersIcon className="h-4 w-4 text-primary" />
-                      Assignees
-                      {selectedContributors.length > 0 && (
-                        <span className="ml-1 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
-                          {selectedContributors.length}
-                        </span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-72 p-3" align="end">
+                {filterPane === "people" && (
+                  <div className="p-3">
                     <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                       Filter by contributor
                     </div>
@@ -1070,26 +1238,11 @@ export function ProjectsPage() {
                         Clear contributor filters
                       </button>
                     )}
-                  </PopoverContent>
-                </Popover>
+                  </div>
+                )}
 
-                {/* Date range filter */}
-                <Popover open={dateOpen} onOpenChange={setDateOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="h-[45.6px] shrink-0 gap-2 rounded-xl border-border bg-card/70 px-3.5 text-xs font-extrabold text-muted-foreground shadow-none"
-                    >
-                      <CalendarIcon className="h-4 w-4 text-primary" />
-                      Date
-                      {(dateFrom || dateTo) && (
-                        <span className="ml-1 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
-                          1
-                        </span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-72 p-3" align="end">
+                {filterPane === "date" && (
+                  <div className="p-3">
                     <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                       Filter by date range
                     </div>
@@ -1133,225 +1286,234 @@ export function ProjectsPage() {
                         </button>
                       )}
                     </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
+                  </div>
+                )}
 
-            {hasActiveFilters && (
-              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/50 px-3 py-2">
-                <span className="text-xs font-semibold text-muted-foreground">Active filters:</span>
-                {selectedLabels.map((name) => (
-                  <LabelChip
-                    key={`lbl-${name}`}
-                    label={name}
-                    onRemove={() => setSelectedLabels((p) => p.filter((x) => x !== name))}
-                  />
-                ))}
-                {selectedTagIds.map((id) => {
-                  const t = allTags.find((x) => x.id === id);
-                  if (!t) return null;
-                  return (
-                    <TagPill
-                      key={id}
-                      name={t.name}
-                      size="sm"
-                      onRemove={() => setSelectedTagIds((prev) => prev.filter((x) => x !== id))}
-                    />
-                  );
-                })}
-                {selectedContributors.map((id) => {
-                  const c = contributorOptions.find((x) => x.id === id);
-                  return (
-                    <span
-                      key={`c-${id}`}
-                      className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
-                    >
-                      {c?.name ?? "Contributor"}
-                      <button
-                        type="button"
-                        onClick={() => setSelectedContributors((p) => p.filter((x) => x !== id))}
-                        className="rounded-full p-0.5 hover:bg-background"
-                        aria-label="Remove"
-                      >
-                        <XIcon className="h-3 w-3" />
-                      </button>
-                    </span>
-                  );
-                })}
-                {(dateFrom || dateTo) && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                    {dateFrom || "…"} → {dateTo || "…"}
+                {filterCount > 0 && (
+                  <div className="border-t border-border p-1.5">
                     <button
                       type="button"
                       onClick={() => {
+                        setSelectedTagIds([]);
+                        setSelectedLabels([]);
+                        setSelectedContributors([]);
                         setDateFrom("");
                         setDateTo("");
+                        setStarredOnly(false);
+                        setShowArchived(false);
                       }}
-                      className="rounded-full p-0.5 hover:bg-background"
-                      aria-label="Clear dates"
+                      className="w-full rounded-lg py-1.5 text-center text-xs font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground"
                     >
-                      <XIcon className="h-3 w-3" />
+                      Clear all filters
                     </button>
-                  </span>
+                  </div>
                 )}
-                {query && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                    Keyword: “{query}”
-                    <button
-                      type="button"
-                      onClick={() => setQuery("")}
-                      className="rounded-full p-0.5 hover:bg-background"
-                      aria-label="Clear keyword"
-                    >
-                      <XIcon className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuery("");
-                    setSelectedTagIds([]);
-                    setSelectedLabels([]);
-                    setSelectedContributors([]);
-                    setDateFrom("");
-                    setDateTo("");
-                  }}
-                  className="ml-auto text-xs font-medium text-muted-foreground hover:text-foreground"
-                >
-                  Clear all
-                </button>
-              </div>
-            )}
-
-            {/* Tabs */}
-            <div className="mt-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="flex min-w-max items-center gap-2">
-                {tabs.map((t) => {
-                  const active = tab === t.key;
-                  const Icon = t.icon;
-                  return (
-                    <Fragment key={t.key}>
-                      {t.startsGroup && <span className="mx-1 h-5 w-px shrink-0 bg-border" />}
-                      <button
-                        type="button"
-                        onClick={() => setTab(t.key)}
-                        className={`inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-xs font-extrabold transition ${
-                          active
-                            ? "bg-foreground text-background shadow-lg"
-                            : "bg-muted text-muted-foreground hover:bg-accent"
-                        }`}
-                      >
-                        {Icon && <Icon className="h-3.5 w-3.5" />}
-                        {t.label}
-                        <span className={active ? "text-background/60" : "text-muted-foreground/60"}>
-                          {t.count}
-                        </span>
-                      </button>
-                    </Fragment>
-                  );
-                })}
-              </div>
-            </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
-          {/*
-            Recent activity strip. Hidden on the collection tabs (Groups,
-            Pipelines): those are workspaces the user came to work in, and a
-            tall photo rail above them pushes the actual content below the
-            fold before it can be read.
-          */}
-          {tab !== "groups" && tab !== "boards" && !loading && recentPhotos.length > 0 && (
-            <div className="mt-9">
-              <div className="mb-4 flex items-end justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted-foreground">
-                    Fresh from the field
-                  </p>
-                  <h2 className="mt-1 text-xl font-extrabold tracking-tight text-foreground">
-                    Recent activity
-                  </h2>
-                  <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
-                    Click a record to inspect it
-                  </p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="hidden h-8 w-8 sm:inline-flex"
-                    onClick={() => scrollBy(-320)}
-                    aria-label="Scroll left"
+          {hasActiveFilters && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/50 px-3 py-2">
+              <span className="text-xs font-semibold text-muted-foreground">Active filters:</span>
+              {starredOnly && (
+                <button
+                  type="button"
+                  onClick={() => setStarredOnly(false)}
+                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground hover:bg-accent"
+                >
+                  <Star className="h-3 w-3" />
+                  Starred only
+                  <XIcon className="h-3 w-3" />
+                </button>
+              )}
+              {showArchived && (
+                <button
+                  type="button"
+                  onClick={() => setShowArchived(false)}
+                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground hover:bg-accent"
+                >
+                  <Archive className="h-3 w-3" />
+                  Including archived
+                  <XIcon className="h-3 w-3" />
+                </button>
+              )}
+              {selectedLabels.map((name) => (
+                <LabelChip
+                  key={`lbl-${name}`}
+                  label={name}
+                  onRemove={() => setSelectedLabels((p) => p.filter((x) => x !== name))}
+                />
+              ))}
+              {selectedTagIds.map((id) => {
+                const t = allTags.find((x) => x.id === id);
+                if (!t) return null;
+                return (
+                  <TagPill
+                    key={id}
+                    name={t.name}
+                    size="sm"
+                    onRemove={() => setSelectedTagIds((prev) => prev.filter((x) => x !== id))}
+                  />
+                );
+              })}
+              {selectedContributors.map((id) => {
+                const c = contributorOptions.find((x) => x.id === id);
+                return (
+                  <span
+                    key={`c-${id}`}
+                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
                   >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="hidden h-8 w-8 sm:inline-flex"
-                    onClick={() => scrollBy(320)}
-                    aria-label="Scroll right"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                  <Button asChild variant="ghost" size="sm" className="text-xs">
-                    <Link to="/gallery">
-                      View feed <ArrowRight className="ml-1 h-3 w-3" />
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-              <div
-                ref={scrollerRef}
-                className="-mx-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              >
-                <div className="flex gap-4">
-                  {recentPhotos.map((p, i) => (
-                    <Link
-                      key={p.id}
-                      to="/projects/$projectId"
-                      params={{ projectId: p.project_id }}
-                      preload="intent"
-                      className={`group relative block h-48 shrink-0 overflow-hidden rounded-3xl bg-muted shadow-[0_18px_32px_-24px_rgba(16,25,41,0.65)] ${
-                        i === 0 ? "w-72 sm:w-80" : "w-52 sm:w-60"
-                      }`}
+                    {c?.name ?? "Contributor"}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedContributors((p) => p.filter((x) => x !== id))}
+                      className="rounded-full p-0.5 hover:bg-background"
+                      aria-label="Remove"
                     >
-                      {p.url ? (
-                        <img
-                          src={p.url}
-                          alt={p.caption ?? "Site photo"}
-                          loading="lazy"
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                          <ImageIcon className="h-6 w-6 opacity-50" />
-                        </div>
-                      )}
-                      {/*
-                        Deeper, higher-reaching scrim than before: the label sits
-                        on arbitrary photography, and a light sky behind it was
-                        washing the caption out.
-                      */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-sidebar via-sidebar/60 to-transparent" />
-                      <div className="absolute inset-x-0 bottom-0 p-4">
-                        <p className="truncate text-base font-extrabold leading-tight text-sidebar-foreground drop-shadow">
-                          {p.project_name}
-                        </p>
-                        <p className="mt-1 text-xs font-bold text-sidebar-foreground/80">
-                          {timeAgo(p.created_at)}
-                        </p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
+                      <XIcon className="h-3 w-3" />
+                    </button>
+                  </span>
+                );
+              })}
+              {(dateFrom || dateTo) && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                  {dateFrom || "…"} → {dateTo || "…"}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDateFrom("");
+                      setDateTo("");
+                    }}
+                    className="rounded-full p-0.5 hover:bg-background"
+                    aria-label="Clear dates"
+                  >
+                    <XIcon className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {query && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                  Keyword: “{query}”
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    className="rounded-full p-0.5 hover:bg-background"
+                    aria-label="Clear keyword"
+                  >
+                    <XIcon className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="ml-auto text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                Clear all
+              </button>
             </div>
           )}
 
+          {/*
+            Recent activity strip.
+            Hidden on the collection tabs (Groups, Pipelines) — those are
+            workspaces the user came to work in — and now also hidden the moment
+            a search or filter is active. It is a tall photo rail sitting
+            directly above the results, so leaving it up while someone hunts for
+            one specific project pushed the thing they asked for below the fold.
+            Searching means "show me results", not "show me everything recent".
+          */}
+          {tab !== "groups" &&
+            tab !== "boards" &&
+            !hasActiveFilters &&
+            !loading &&
+            recentPhotos.length > 0 && (
+              <div className="mt-8">
+                <div className="mb-4 flex items-end justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
+                      Fresh from the field
+                    </p>
+                    <h2 className="font-display mt-2 text-2xl font-bold leading-tight tracking-tight text-foreground">
+                      Recent activity
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="hidden h-8 w-8 sm:inline-flex"
+                      onClick={() => scrollBy(-320)}
+                      aria-label="Scroll left"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="hidden h-8 w-8 sm:inline-flex"
+                      onClick={() => scrollBy(320)}
+                      aria-label="Scroll right"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button asChild variant="ghost" size="sm" className="text-xs">
+                      <Link to="/gallery">
+                        View feed <ArrowRight className="ml-1 h-3 w-3" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+                <div
+                  ref={scrollerRef}
+                  className="-mx-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                >
+                  <div className="flex gap-4">
+                    {recentPhotos.map((p, i) => (
+                      <Link
+                        key={p.id}
+                        to="/projects/$projectId"
+                        params={{ projectId: p.project_id }}
+                        preload="intent"
+                        className={`group relative block h-40 shrink-0 overflow-hidden rounded-3xl bg-muted shadow-[0_18px_32px_-24px_rgba(16,25,41,0.65)] ${
+                          i === 0 ? "w-64 sm:w-72" : "w-48 sm:w-56"
+                        }`}
+                      >
+                        {p.url ? (
+                          <img
+                            src={p.url}
+                            alt={p.caption ?? "Site photo"}
+                            loading="lazy"
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                            <ImageIcon className="h-6 w-6 opacity-50" />
+                          </div>
+                        )}
+                        {/*
+                          Deeper, higher-reaching scrim than before: the label sits
+                          on arbitrary photography, and a light sky behind it was
+                          washing the caption out.
+                        */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-sidebar via-sidebar/60 to-transparent" />
+                        <div className="absolute inset-x-0 bottom-0 p-4">
+                          <p className="truncate text-base font-extrabold leading-tight text-sidebar-foreground drop-shadow">
+                            {p.project_name}
+                          </p>
+                          <p className="mt-1 text-xs font-bold text-sidebar-foreground/80">
+                            {timeAgo(p.created_at)}
+                          </p>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
           {/* All projects / Groups / Boards */}
-          <div className="mt-9">
+          <div className="mt-8">
             {/*
               On the Boards tab the board strip below already names the active
               board, so this header would repeat it — and repeat it a third time
@@ -1361,10 +1523,10 @@ export function ProjectsPage() {
             {tab !== "boards" && (
               <div className="flex items-end justify-between gap-2">
                 <div>
-                  <p className="text-[11px] font-extrabold uppercase tracking-[0.15em] text-muted-foreground">
+                  <p className="text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
                     Workspace library
                   </p>
-                  <h2 className="mt-1 text-xl font-extrabold tracking-tight text-foreground">
+                  <h2 className="font-display mt-2 text-2xl font-bold leading-tight tracking-tight text-foreground">
                     {bodyLabel}
                   </h2>
                 </div>

@@ -179,7 +179,7 @@ export function ShowcaseBuilderPage() {
     try {
       const s = await getShowcase({ data: { id: showcaseId } });
       if (!s) {
-        setLoadError("This showcase no longer exists.");
+        setLoadError("This portfolio no longer exists.");
         return;
       }
       setTitle(s.title);
@@ -224,7 +224,7 @@ export function ShowcaseBuilderPage() {
         sections: loadedSections,
       });
     } catch (e: any) {
-      setLoadError(e?.message ?? "Could not load showcase");
+      setLoadError(e?.message ?? "Could not load portfolio");
     } finally {
       setLoading(false);
     }
@@ -258,7 +258,7 @@ export function ShowcaseBuilderPage() {
       await updateShowcase({
         data: {
           id: showcaseId,
-          title: title.trim() || "Untitled showcase",
+          title: title.trim() || "Untitled portfolio",
           tagline: tagline.trim() || null,
           layout,
           accentColor,
@@ -281,9 +281,9 @@ export function ShowcaseBuilderPage() {
         },
       });
       savedSnapshotRef.current = snapshot;
-      toast.success("Showcase saved");
+      toast.success("Portfolio saved");
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not save showcase");
+      toast.error(e?.message ?? "Could not save portfolio");
     } finally {
       setSaving(false);
     }
@@ -296,7 +296,7 @@ export function ShowcaseBuilderPage() {
       if (!dirty) return false;
       const leave = await confirm({
         title: "Leave without saving?",
-        description: "This showcase has unsaved changes. If you leave now they won't be saved.",
+        description: "This portfolio has unsaved changes. If you leave now they won't be saved.",
         confirmText: "Leave",
         cancelText: "Stay",
         variant: "destructive",
@@ -434,7 +434,7 @@ export function ShowcaseBuilderPage() {
           <ArrowLeft className="h-4 w-4" /> Showcases
         </Link>
         <div className="mt-6 rounded-2xl border border-border bg-card p-10 text-center">
-          <p className="text-sm font-bold text-foreground">Couldn't open this showcase</p>
+          <p className="text-sm font-bold text-foreground">Couldn't open this portfolio</p>
           <p className="mx-auto mt-2 max-w-md text-xs text-muted-foreground">{loadError}</p>
           <Button className="mt-5" variant="outline" onClick={() => void load()}>
             Try again
@@ -802,7 +802,7 @@ export function ShowcaseBuilderPage() {
               <p className="text-sm font-extrabold text-foreground">Status</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {revokedAt
-                  ? "This showcase is a draft — only your team can see it."
+                  ? "This portfolio is a draft — only your team can see it."
                   : "Live. Anyone with the link can view it."}
               </p>
               <Button variant="outline" className="mt-4 w-full" onClick={() => setShareOpen(true)}>
@@ -818,7 +818,7 @@ export function ShowcaseBuilderPage() {
         open={shareOpen}
         onOpenChange={setShareOpen}
         showcaseId={showcaseId}
-        title={title || "Untitled showcase"}
+        title={title || "Untitled portfolio"}
         shareToken={shareToken}
         revokedAt={revokedAt}
         onChanged={setRevokedAt}

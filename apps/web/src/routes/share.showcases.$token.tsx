@@ -8,8 +8,8 @@ import { ShowcaseView } from "@/components/ShowcaseView";
 export const Route = createFileRoute("/share/showcases/$token")({
   head: () => ({
     meta: [
-      { title: "Showcase — SitePix" },
-      { name: "description", content: "A job showcase shared from SitePix." },
+      { title: "Portfolio — SitePix" },
+      { name: "description", content: "A job portfolio shared from SitePix." },
       { name: "robots", content: "noindex,nofollow" },
     ],
   }),
@@ -28,7 +28,8 @@ function PublicShowcasePage() {
         const res = await getPublicShowcase({ data: { token } });
         if (!cancelled) setData(res);
       } catch {
-        if (!cancelled) setData({ status: "not_found", showcase: null, company: null, reviewLinks: [] });
+        if (!cancelled)
+          setData({ status: "not_found", showcase: null, company: null, reviewLinks: [] });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -50,10 +51,10 @@ function PublicShowcasePage() {
     return (
       <div className="container mx-auto max-w-xl px-4 py-20 text-center">
         <ImageOff className="mx-auto h-10 w-10 text-muted-foreground" />
-        <h1 className="mt-4 text-xl font-semibold">Showcase unavailable</h1>
+        <h1 className="mt-4 text-xl font-semibold">Portfolio unavailable</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {data?.status === "revoked"
-            ? "This showcase has been unpublished."
+            ? "This portfolio has been unpublished."
             : "This link is invalid or no longer available."}
         </p>
         <Button asChild className="mt-6">
@@ -64,11 +65,7 @@ function PublicShowcasePage() {
   }
 
   return (
-    <ShowcaseView
-      showcase={data.showcase}
-      company={data.company}
-      reviewLinks={data.reviewLinks}
-    />
+    <ShowcaseView showcase={data.showcase} company={data.company} reviewLinks={data.reviewLinks} />
   );
   // Layout lives entirely in <ShowcaseView> so this page and the builder's
   // preview can never drift apart.

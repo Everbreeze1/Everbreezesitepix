@@ -19,8 +19,20 @@ import {
   LayoutTemplate,
   ChevronUp,
   ChevronDown,
+  ListPlus,
+  Type as TypeIcon,
+  Hash,
+  ToggleLeft,
 } from "lucide-react";
 import { compressImageFile } from "@/features/photos/components/CameraCapture";
+import { BulkAddItemsDialog } from "@/components/BulkAddItemsDialog";
+import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,6 +66,61 @@ interface Template {
   description: string | null;
 }
 type ItemType = "checkbox" | "rating" | "text" | "pass_fail" | "numeric" | "yes_no";
+
+/**
+ * Answer types, sharing the colour language of the template designer so the
+ * same concept doesn't look like two different things depending on whether
+ * you're authoring a checklist or filling one in.
+ */
+const RUNTIME_TYPE_META: Record<
+  ItemType,
+  { label: string; short: string; icon: typeof CheckSquare; tint: string }
+> = {
+  checkbox: {
+    label: "Checkbox",
+    short: "Check",
+    icon: CheckSquare,
+    tint: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  },
+  pass_fail: {
+    label: "Pass / Fail",
+    short: "Pass/Fail",
+    icon: CheckCircle2,
+    tint: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  },
+  yes_no: {
+    label: "Yes / No",
+    short: "Yes/No",
+    icon: ToggleLeft,
+    tint: "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+  },
+  rating: {
+    label: "Rating (1–5)",
+    short: "Rating",
+    icon: Star,
+    tint: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  },
+  numeric: {
+    label: "Numeric",
+    short: "Number",
+    icon: Hash,
+    tint: "border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
+  },
+  text: {
+    label: "Text / Notes",
+    short: "Text",
+    icon: TypeIcon,
+    tint: "border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  },
+};
+const RUNTIME_TYPE_ORDER: ItemType[] = [
+  "checkbox",
+  "pass_fail",
+  "yes_no",
+  "rating",
+  "numeric",
+  "text",
+];
 interface ChecklistItem {
   id: string;
   checklist_id: string;
@@ -119,6 +186,8 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [viewingCompleted, setViewingCompleted] = useState<Checklist | null>(null);
   const [editingChecklist, setEditingChecklist] = useState<Checklist | null>(null);
+  /** Checklist id whose "paste a list" dialog is open. */
+  const [bulkForChecklist, setBulkForChecklist] = useState<string | null>(null);
 
   const signPhotos = async (rows: ProjectPhoto[]) => {
     const map: Record<string, string> = {};
@@ -505,6 +574,32 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
     void load();
   };
 
+  /**
+   * Append a pasted list in one insert.
+   *
+   * Adding a 30-line punch list one label at a time was the slowest thing on
+   * this panel, and that list nearly always already exists in a spec or an
+   * email. Same flow as the template designer, so the two behave alike.
+   */
+  const addItemsBulk = async (checklistId: string, labels: string[], type: ItemType) => {
+    if (!labels.length) return;
+    const start = (itemsByChecklist.get(checklistId) ?? []).length;
+    const { error } = await supabase.from("project_checklist_items" as any).insert(
+      labels.map((label, idx) => ({
+        checklist_id: checklistId,
+        label,
+        position: start + idx,
+        item_type: type,
+      })),
+    );
+    if (error) {
+      toast.error(error.message ?? "Couldn't add those items");
+      return;
+    }
+    toast.success(`${labels.length} item${labels.length === 1 ? "" : "s"} added`);
+    void load();
+  };
+
   const deleteItem = async (itemId: string) => {
     const prev = items;
     setItems((xs) => xs.filter((x) => x.id !== itemId));
@@ -519,7 +614,13 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
   };
 
   const deleteChecklist = async (id: string) => {
-    if (!(await confirm({ description: "Delete this checklist and all its items?", variant: "destructive" }))) return;
+    if (
+      !(await confirm({
+        description: "Delete this checklist and all its items?",
+        variant: "destructive",
+      }))
+    )
+      return;
     const prev = checklists;
     setChecklists((xs) => xs.filter((x) => x.id !== id));
     const { error } = await supabase
@@ -1144,9 +1245,55 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
                   )}
 
                   {editable && (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                    // One row: type the label and press Enter. The answer type
+                    // is a compact chip menu rather than a 150px select
+                    // competing with the field you actually type in, and
+                    // "Paste a list" covers the case where the list already
+                    // exists somewhere else.
+                    <div className="mt-3 flex items-center gap-1.5 rounded-xl border border-border bg-card px-1.5 py-1.5">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            title={`${RUNTIME_TYPE_META[adding[cl.id]?.type ?? "checkbox"].label} — click to change`}
+                            className={cn(
+                              "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[10.5px] font-extrabold uppercase tracking-wide transition-opacity hover:opacity-80",
+                              RUNTIME_TYPE_META[adding[cl.id]?.type ?? "checkbox"].tint,
+                            )}
+                          >
+                            {(() => {
+                              const I = RUNTIME_TYPE_META[adding[cl.id]?.type ?? "checkbox"].icon;
+                              return <I className="h-3.5 w-3.5" />;
+                            })()}
+                            <span className="hidden sm:inline">
+                              {RUNTIME_TYPE_META[adding[cl.id]?.type ?? "checkbox"].short}
+                            </span>
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-56">
+                          {RUNTIME_TYPE_ORDER.map((t) => {
+                            const m = RUNTIME_TYPE_META[t];
+                            const I = m.icon;
+                            return (
+                              <DropdownMenuItem
+                                key={t}
+                                onClick={() =>
+                                  setAdding((s) => ({
+                                    ...s,
+                                    [cl.id]: { label: s[cl.id]?.label ?? "", type: t },
+                                  }))
+                                }
+                              >
+                                <I className="mr-2 h-4 w-4" />
+                                {m.label}
+                              </DropdownMenuItem>
+                            );
+                          })}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
                       <Input
-                        placeholder="Add item…"
+                        placeholder="Add an item and press Enter…"
                         value={adding[cl.id]?.label ?? ""}
                         onChange={(e) =>
                           setAdding((s) => ({
@@ -1160,50 +1307,25 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
                             void addItem(cl.id);
                           }
                         }}
-                        className="h-9 min-w-[180px] flex-1 text-sm"
+                        className="h-8 flex-1 border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0"
                       />
-                      <Select
-                        value={adding[cl.id]?.type ?? "checkbox"}
-                        onValueChange={(v) =>
-                          setAdding((s) => ({
-                            ...s,
-                            [cl.id]: { label: s[cl.id]?.label ?? "", type: v as ItemType },
-                          }))
-                        }
-                      >
-                        <SelectTrigger className="h-9 w-[150px] text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="checkbox" className="text-sm">
-                            Checkbox
-                          </SelectItem>
-                          <SelectItem value="pass_fail" className="text-sm">
-                            Pass / Fail
-                          </SelectItem>
-                          <SelectItem value="yes_no" className="text-sm">
-                            Yes / No
-                          </SelectItem>
-                          <SelectItem value="rating" className="text-sm">
-                            Rating (1–5)
-                          </SelectItem>
-                          <SelectItem value="numeric" className="text-sm">
-                            Numeric
-                          </SelectItem>
-                          <SelectItem value="text" className="text-sm">
-                            Text / Notes
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
+
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="h-9"
+                        variant="ghost"
+                        className="h-8 shrink-0 px-2 text-xs font-bold text-muted-foreground"
+                        onClick={() => setBulkForChecklist(cl.id)}
+                      >
+                        <ListPlus className="mr-1 h-4 w-4" />
+                        <span className="hidden sm:inline">Paste a list</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-8 shrink-0"
                         onClick={() => void addItem(cl.id)}
                         disabled={!(adding[cl.id]?.label ?? "").trim()}
                       >
                         <Plus className="h-4 w-4" />
-                        Add
                       </Button>
                     </div>
                   )}
@@ -1406,6 +1528,21 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
         }
         onClose={() => setAttachFor(null)}
         onAttached={() => void load()}
+      />
+
+      <BulkAddItemsDialog<ItemType>
+        open={!!bulkForChecklist}
+        onOpenChange={(v) => !v && setBulkForChecklist(null)}
+        onAdd={async (labels, type) => {
+          if (bulkForChecklist) await addItemsBulk(bulkForChecklist, labels, type);
+        }}
+        types={RUNTIME_TYPE_ORDER.map((t) => ({
+          value: t,
+          label: RUNTIME_TYPE_META[t].short,
+          icon: RUNTIME_TYPE_META[t].icon,
+        }))}
+        defaultType="checkbox"
+        description="One per line — they'll be appended to this checklist. Bullets and numbering are stripped automatically."
       />
     </div>
   );
