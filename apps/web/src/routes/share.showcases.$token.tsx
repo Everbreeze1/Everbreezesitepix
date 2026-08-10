@@ -8,8 +8,8 @@ import { ShowcaseView } from "@/components/ShowcaseView";
 export const Route = createFileRoute("/share/showcases/$token")({
   head: () => ({
     meta: [
-      { title: "Portfolio — SitePix" },
-      { name: "description", content: "A job portfolio shared from SitePix." },
+      { title: "Project — SitePix" },
+      { name: "description", content: "A completed job shared from SitePix." },
       { name: "robots", content: "noindex,nofollow" },
     ],
   }),
@@ -51,10 +51,10 @@ function PublicShowcasePage() {
     return (
       <div className="container mx-auto max-w-xl px-4 py-20 text-center">
         <ImageOff className="mx-auto h-10 w-10 text-muted-foreground" />
-        <h1 className="mt-4 text-xl font-semibold">Portfolio unavailable</h1>
+        <h1 className="mt-4 text-xl font-semibold">Project unavailable</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {data?.status === "revoked"
-            ? "This portfolio has been unpublished."
+            ? "This project has been unpublished."
             : "This link is invalid or no longer available."}
         </p>
         <Button asChild className="mt-6">

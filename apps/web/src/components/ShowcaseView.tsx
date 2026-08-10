@@ -139,7 +139,7 @@ export function ShowcaseView({
               </div>
             )}
             <h1 className="font-display max-w-4xl text-balance text-5xl font-bold uppercase leading-[0.92] tracking-[-0.01em] text-white sm:text-7xl lg:text-8xl">
-              {s.title || "Untitled portfolio"}
+              {s.title || "Untitled project"}
             </h1>
             {s.tagline && (
               <p className="mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-white/80 lg:text-xl">
@@ -164,7 +164,7 @@ export function ShowcaseView({
 
         {visibleSections.length === 0 ? (
           <p className="py-28 text-center text-sm text-neutral-400">
-            This portfolio doesn&rsquo;t have any work in it yet.
+            This project doesn&rsquo;t have any work in it yet.
           </p>
         ) : (
           visibleSections.map((section, i) => (

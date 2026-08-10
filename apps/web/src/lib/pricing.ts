@@ -83,6 +83,10 @@ export const PLANS: PlanPricing[] = [
     adds: [
       "Workflows",
       "Project blueprints",
+      // The Portfolio lock screen sends people here with "See Team plan", and
+      // this list is what they land on — it named every other Team feature
+      // except the one they clicked for.
+      "Portfolio site + website embeds",
       "Advanced roles & permissions",
       "Unlimited Auto Reports",
       "Highest storage",

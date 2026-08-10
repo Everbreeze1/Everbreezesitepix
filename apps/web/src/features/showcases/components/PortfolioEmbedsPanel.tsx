@@ -111,7 +111,7 @@ export function PortfolioEmbedsPanel({
         <EmbedCard
           icon={Images}
           title="Website gallery"
-          description="A scrollable grid of your portfolios, filterable by service. Best on a “Our work” or “Gallery” page."
+          description="A scrollable grid of your projects, filterable by service. Best on a “Our work” or “Gallery” page."
           snippet={gallerySnippet}
           previewSrc={`${origin}/embed/gallery/${portfolio.embed_key}?columns=${columns}&limit=${limit}${showFilters ? "" : "&filters=0"}`}
           previewHeight={520}
@@ -198,7 +198,7 @@ export function PortfolioEmbedsPanel({
           </li>
           <li>
             <span className="font-bold text-foreground">3.</span> Paste and publish. It resizes
-            itself and updates automatically whenever you add a portfolio.
+            itself and updates automatically whenever you add a project.
           </li>
         </ol>
 

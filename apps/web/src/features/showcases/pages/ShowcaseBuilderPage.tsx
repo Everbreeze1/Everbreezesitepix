@@ -179,7 +179,7 @@ export function ShowcaseBuilderPage() {
     try {
       const s = await getShowcase({ data: { id: showcaseId } });
       if (!s) {
-        setLoadError("This portfolio no longer exists.");
+        setLoadError("This project no longer exists.");
         return;
       }
       setTitle(s.title);
@@ -224,7 +224,7 @@ export function ShowcaseBuilderPage() {
         sections: loadedSections,
       });
     } catch (e: any) {
-      setLoadError(e?.message ?? "Could not load portfolio");
+      setLoadError(e?.message ?? "Could not load this project");
     } finally {
       setLoading(false);
     }
@@ -258,7 +258,7 @@ export function ShowcaseBuilderPage() {
       await updateShowcase({
         data: {
           id: showcaseId,
-          title: title.trim() || "Untitled portfolio",
+          title: title.trim() || "Untitled project",
           tagline: tagline.trim() || null,
           layout,
           accentColor,
@@ -281,9 +281,9 @@ export function ShowcaseBuilderPage() {
         },
       });
       savedSnapshotRef.current = snapshot;
-      toast.success("Portfolio saved");
+      toast.success("Project saved");
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not save portfolio");
+      toast.error(e?.message ?? "Could not save this project");
     } finally {
       setSaving(false);
     }
@@ -296,7 +296,7 @@ export function ShowcaseBuilderPage() {
       if (!dirty) return false;
       const leave = await confirm({
         title: "Leave without saving?",
-        description: "This portfolio has unsaved changes. If you leave now they won't be saved.",
+        description: "This project has unsaved changes. If you leave now they won't be saved.",
         confirmText: "Leave",
         cancelText: "Stay",
         variant: "destructive",
@@ -431,10 +431,10 @@ export function ShowcaseBuilderPage() {
           to="/showcases"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="h-4 w-4" /> Showcases
+          <ArrowLeft className="h-4 w-4" /> Portfolio
         </Link>
         <div className="mt-6 rounded-2xl border border-border bg-card p-10 text-center">
-          <p className="text-sm font-bold text-foreground">Couldn't open this portfolio</p>
+          <p className="text-sm font-bold text-foreground">Couldn't open this project</p>
           <p className="mx-auto mt-2 max-w-md text-xs text-muted-foreground">{loadError}</p>
           <Button className="mt-5" variant="outline" onClick={() => void load()}>
             Try again
@@ -487,7 +487,7 @@ export function ShowcaseBuilderPage() {
             to="/showcases"
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft className="h-4 w-4" /> Showcases
+            <ArrowLeft className="h-4 w-4" /> Portfolio
           </Link>
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -604,7 +604,7 @@ export function ShowcaseBuilderPage() {
                     )}
                     {!coverPhotoId && (
                       <span className="text-xs text-muted-foreground">
-                        Using the first photo in this showcase.
+                        Using the first photo in this project.
                       </span>
                     )}
                   </div>
@@ -668,8 +668,8 @@ export function ShowcaseBuilderPage() {
                   <Images className="mx-auto h-8 w-8 text-muted-foreground/60" />
                   <p className="mt-3 text-sm font-bold text-foreground">Nothing to show off yet</p>
                   <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-                    “Add from projects” pulls in a job's photos and creates a section for it — the
-                    fastest way to build this out.
+                    “Add from projects” pulls in a job&rsquo;s photos and creates a section from
+                    them — the fastest way to build this out.
                   </p>
                 </div>
               ) : (
@@ -768,7 +768,7 @@ export function ShowcaseBuilderPage() {
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-foreground">Ask for a review</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      Adds your review links after the work. Turn off for a portfolio you send to
+                      Adds your review links after the work. Turn off for a project page you send to
                       prospects.
                     </p>
                   </div>
@@ -796,13 +796,13 @@ export function ShowcaseBuilderPage() {
             </div>
 
             {/* Publishing lives in the Share dialog off the top bar — the same
-                one the Showcases list uses — so there is a single place in the
-                product that answers "how do I send this to someone?". */}
+                one the Portfolio's project list uses — so there is a single
+                place that answers "how do I send this to someone?". */}
             <div className="h-fit rounded-2xl border border-border bg-card p-6">
               <p className="text-sm font-extrabold text-foreground">Status</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {revokedAt
-                  ? "This portfolio is a draft — only your team can see it."
+                  ? "This project is a draft — only your team can see it."
                   : "Live. Anyone with the link can view it."}
               </p>
               <Button variant="outline" className="mt-4 w-full" onClick={() => setShareOpen(true)}>
@@ -818,7 +818,7 @@ export function ShowcaseBuilderPage() {
         open={shareOpen}
         onOpenChange={setShareOpen}
         showcaseId={showcaseId}
-        title={title || "Untitled portfolio"}
+        title={title || "Untitled project"}
         shareToken={shareToken}
         revokedAt={revokedAt}
         onChanged={setRevokedAt}
@@ -841,8 +841,11 @@ export function ShowcaseBuilderPage() {
           pickerFor === "cover"
             ? "The full-width shot at the top of this project's page. The finished result usually sells it best."
             : pickerFor === "new"
-              ? "Pick whole projects or individual photos — each project becomes its own section."
-              : "Photos are grouped by project. Use “Select all” to pull in a whole job at once."
+              ? // "each one" rather than "each project": the page being edited
+                // is itself a project now, so naming the source the same way in
+                // the same sentence read as a project inside a project.
+                "Pick whole jobs or individual photos — each one becomes its own section."
+              : "Photos are grouped by job. Use “Select all” to pull in a whole one at once."
         }
         confirmLabel={pickerFor === "cover" ? "Use this photo" : "Add"}
       />

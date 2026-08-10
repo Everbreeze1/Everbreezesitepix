@@ -152,9 +152,12 @@ export async function applyProjectBlueprintService(
           .select("position, label, required, item_type, description")
           .eq("template_id", it.ref_id)
           .order("position", { ascending: true });
+        // Renumber from zero: the select above is already ordered by position,
+        // and carrying a template's stored numbers across propagates any gaps
+        // or duplicates into the new checklist. Matches applyTemplate on the web.
         const rows = ((tItems as any[]) ?? []).map((x: any, idx: number) => ({
           checklist_id: (created as any).id,
-          position: x.position ?? idx,
+          position: idx,
           label: x.label,
           required: x.required ?? false,
           item_type: x.item_type ?? "checkbox",

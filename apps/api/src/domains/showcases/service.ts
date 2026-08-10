@@ -485,7 +485,7 @@ export async function createShowcaseFromProjectService(
 
   const photos = ((photoRows as any[]) ?? []).slice(0, data.maxPhotos);
   if (!photos.length) {
-    throw Object.assign(new Error("This project has no photos to showcase yet."), { status: 400 });
+    throw Object.assign(new Error("This project has no photos yet."), { status: 400 });
   }
 
   const address = [project.street, project.city, project.state].filter(Boolean).join(", ");

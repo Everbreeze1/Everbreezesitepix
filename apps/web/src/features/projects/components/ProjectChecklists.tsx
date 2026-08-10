@@ -16,7 +16,6 @@ import {
   CheckSquare,
   Upload,
   Camera,
-  LayoutTemplate,
   ChevronUp,
   ChevronDown,
   ListPlus,
@@ -29,10 +28,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -100,6 +100,11 @@ interface Checklist {
   completed_at: string | null;
   snapshot?: any;
 }
+/** Every column a `ChecklistItem` needs — shared so the refetch and the
+ *  optimistic inserts can never select different shapes. */
+const ITEM_COLUMNS =
+  "id, checklist_id, position, label, required, completed_at, notes, item_type, description, response_value";
+
 interface ItemPhoto {
   id: string;
   item_id: string;
@@ -146,7 +151,7 @@ export function ProjectChecklists({
   const [adding, setAdding] = useState<Record<string, { label: string; type: ItemType }>>({});
   const [attachForId, setAttachForId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
-  const [tab, setTab] = useState<"all" | "active" | "completed" | "templates">("active");
+  const [tab, setTab] = useState<"active" | "completed">("active");
   const [createOpen, setCreateOpen] = useState(false);
   /*
    * Open dialogs are tracked by id, never by a copy of the row.
@@ -238,9 +243,7 @@ export function ProjectChecklists({
 
         const itRes = await supabase
           .from("project_checklist_items" as any)
-          .select(
-            "id, checklist_id, position, label, required, completed_at, notes, item_type, description, response_value",
-          )
+          .select(ITEM_COLUMNS)
           .in(
             "checklist_id",
             clList.map((c) => c.id),
@@ -533,10 +536,17 @@ export function ProjectChecklists({
   /**
    * Reorder an item within its checklist.
    *
-   * Up/down controls rather than drag-and-drop: these lists are filled in on a
-   * phone on site, where dragging inside a nested scrolling panel is easy to
-   * start by accident and hard to finish accurately. Buttons also come with
-   * keyboard and screen-reader support for free. Optimistic, with rollback.
+   * Up/down rather than drag-and-drop: these lists are filled in on a phone on
+   * site, where dragging inside a nested scrolling panel is easy to start by
+   * accident and hard to finish accurately. Buttons also come with keyboard and
+   * screen-reader support for free. Optimistic, with rollback.
+   *
+   * Reorders by array index and renumbers 0..n rather than swapping the two
+   * rows' stored `position` values. Deleting a middle item never renumbered the
+   * survivors while both insert paths derived the next position from the array
+   * *length* rather than max+1, so duplicate positions were routine — and a
+   * swap between two rows already holding the same number moved nothing at all.
+   * Renumbering makes the move correct and heals a list that had drifted.
    */
   const moveItem = async (item: ChecklistItem, dir: -1 | 1) => {
     touch();
@@ -546,35 +556,43 @@ export function ProjectChecklists({
     const idx = siblings.findIndex((x) => x.id === item.id);
     const targetIdx = idx + dir;
     if (idx < 0 || targetIdx < 0 || targetIdx >= siblings.length) return;
-    const a = siblings[idx];
-    const b = siblings[targetIdx];
-    if (a.position === b.position) return; // duplicate positions — nothing meaningful to swap
 
-    setItems((prev) =>
-      prev.map((x) =>
-        x.id === a.id
-          ? { ...x, position: b.position }
-          : x.id === b.id
-            ? { ...x, position: a.position }
-            : x,
-      ),
+    const reordered = siblings.slice();
+    const [moved] = reordered.splice(idx, 1);
+    reordered.splice(targetIdx, 0, moved);
+    const renumbered = reordered.map((x, i) => ({ ...x, position: i }));
+    const changed = renumbered.filter(
+      (x) => siblings.find((s) => s.id === x.id)?.position !== x.position,
     );
+    if (!changed.length) return;
+
+    // Rollback restores `position` on the rows this move touched, rather than
+    // replaying a whole-array snapshot. The realtime subscription and the
+    // debounced answer queue both write into `items` while this request is in
+    // flight, so putting the entire array back would take a neighbour's new row
+    // or a half-typed response down with the failed reorder.
+    const before = new Map(
+      changed.map((x) => [x.id, siblings.find((s) => s.id === x.id)!.position]),
+    );
+    setItems((xs) => xs.map((x) => renumbered.find((r) => r.id === x.id) ?? x));
 
     const ok = await save.runImmediate(async () => {
-      const [r1, r2] = await Promise.all([
-        supabase
-          .from("project_checklist_items" as any)
-          .update({ position: b.position })
-          .eq("id", a.id),
-        supabase
-          .from("project_checklist_items" as any)
-          .update({ position: a.position })
-          .eq("id", b.id),
-      ]);
-      if (r1.error) throw r1.error;
-      if (r2.error) throw r2.error;
+      const results = await Promise.all(
+        changed.map((x) =>
+          supabase
+            .from("project_checklist_items" as any)
+            .update({ position: x.position })
+            .eq("id", x.id),
+        ),
+      );
+      const bad = results.find((r) => r?.error);
+      if (bad?.error) throw bad.error;
     });
-    if (!ok) setItems((prev) => prev.map((x) => (x.id === a.id ? a : x.id === b.id ? b : x)));
+    if (!ok) {
+      setItems((xs) =>
+        xs.map((x) => (before.has(x.id) ? { ...x, position: before.get(x.id)! } : x)),
+      );
+    }
   };
 
   /**
@@ -637,18 +655,41 @@ export function ProjectChecklists({
     }
   };
 
+  /**
+   * The next free position, from max+1 rather than the array's length.
+   *
+   * Length is only correct while positions are a gapless 0..n-1 run, and
+   * `deleteItem` doesn't renumber survivors — so deleting a middle item and
+   * adding another handed the new row a number one of its siblings already
+   * held. Duplicate positions are what made the reorder controls silently do
+   * nothing (see `moveItem`).
+   */
+  const nextPosition = (checklistId: string) =>
+    (itemsByChecklist.get(checklistId) ?? []).reduce((max, i) => Math.max(max, i.position), -1) + 1;
+
   const addItem = async (checklistId: string) => {
     const entry = adding[checklistId] ?? { label: "", type: "checkbox" as ItemType };
     const label = entry.label.trim();
     if (!label) return;
     touch();
-    const position = (itemsByChecklist.get(checklistId) ?? []).length;
-    const ok = await save.runImmediate(() =>
-      supabase
+    const position = nextPosition(checklistId);
+    // The new row is merged into local state before the refetch lands. `load()`
+    // is fired unawaited below and takes two sequential round trips, so on a
+    // slow link a second Enter would otherwise read a list that still didn't
+    // contain the first item and hand both of them the same position — the
+    // exact drift `nextPosition` exists to stop.
+    const out: { row: ChecklistItem | null } = { row: null };
+    const ok = await save.runImmediate(async () => {
+      const res = await supabase
         .from("project_checklist_items" as any)
-        .insert({ checklist_id: checklistId, label, position, item_type: entry.type }),
-    );
+        .insert({ checklist_id: checklistId, label, position, item_type: entry.type })
+        .select(ITEM_COLUMNS)
+        .single();
+      if (res.error) throw res.error;
+      out.row = res.data as unknown as ChecklistItem;
+    });
     if (!ok) return;
+    if (out.row) setItems((xs) => [...xs, out.row as ChecklistItem]);
     setAdding((s) => ({ ...s, [checklistId]: { label: "", type: entry.type } }));
     void load({ silent: true });
   };
@@ -663,18 +704,27 @@ export function ProjectChecklists({
   const addItemsBulk = async (checklistId: string, labels: string[], type: ItemType) => {
     if (!labels.length) return;
     touch();
-    const start = (itemsByChecklist.get(checklistId) ?? []).length;
-    const ok = await save.runImmediate(() =>
-      supabase.from("project_checklist_items" as any).insert(
-        labels.map((label, idx) => ({
-          checklist_id: checklistId,
-          label,
-          position: start + idx,
-          item_type: type,
-        })),
-      ),
-    );
+    const start = nextPosition(checklistId);
+    // Merged locally for the same reason as `addItem` — a paste followed
+    // straight away by a typed item must not reuse the pasted rows' positions.
+    const out: { rows: ChecklistItem[] } = { rows: [] };
+    const ok = await save.runImmediate(async () => {
+      const res = await supabase
+        .from("project_checklist_items" as any)
+        .insert(
+          labels.map((label, idx) => ({
+            checklist_id: checklistId,
+            label,
+            position: start + idx,
+            item_type: type,
+          })),
+        )
+        .select(ITEM_COLUMNS);
+      if (res.error) throw res.error;
+      out.rows = ((res.data as unknown as ChecklistItem[]) ?? []).slice();
+    });
     if (!ok) return;
+    if (out.rows.length) setItems((xs) => [...xs, ...out.rows]);
     toast.success(`${labels.length} item${labels.length === 1 ? "" : "s"} added`);
     void load({ silent: true });
   };
@@ -853,20 +903,23 @@ export function ProjectChecklists({
 
   return (
     <div>
+      {/* Eyebrow and title used to be one sentence written twice ("Checks that
+          travel with the job" over "Checks that move with the work"), which is
+          ~86px of restated heading before a single checklist is on screen. */}
       <RunnerPanelHeader
-        eyebrow="Checks that travel with the job"
-        title="Checks that move with the work"
+        eyebrow="Project"
+        title="Checklists"
         description={
           checklists.length === 0
-            ? "Simple task lists for this project. For multi-phase processes with sign-off, use Workflows."
+            ? "Task lists that travel with this job. For multi-phase processes with sign-off, use Workflows."
             : activeCount === 0
               ? `All ${checklists.length} checklist${checklists.length === 1 ? "" : "s"} on this job are complete.`
-              : `${activeCount} active · ${checklists.length} attached to this project record.`
+              : `${activeCount} still open on this job.`
         }
         actions={
           <Button onClick={() => setCreateOpen(true)} className={cn(SURFACE_BUTTON, "bg-primary")}>
-            <LayoutTemplate className="h-4 w-4" />
-            Use template
+            <Plus className="h-4 w-4" />
+            New checklist
           </Button>
         }
       />
@@ -874,24 +927,24 @@ export function ProjectChecklists({
       {/* Filter strip. Deliberately plain toggle buttons rather than
           role="tablist"/role="tab": half-implemented tab semantics are worse
           than none — a screen reader would promise arrow-key navigation and an
-          associated tabpanel that don't exist here. */}
+          associated tabpanel that don't exist here.
+
+          Two entries, not four. "All" was arithmetic rather than a filter, and
+          "Templates" was not a filter of this project's checklists at all — its
+          count came from the template library while its three neighbours
+          counted checklists, and its only content was an Apply grid duplicating
+          the "New checklist" button directly above it. */}
       <div className="mt-6 flex flex-wrap gap-1 border-b border-border">
         {(
           [
-            { key: "all", label: "All" },
             { key: "active", label: "Active" },
             { key: "completed", label: "Completed" },
-            { key: "templates", label: "Templates" },
           ] as const
         ).map((t) => {
           const count =
-            t.key === "all"
-              ? checklists.length
-              : t.key === "active"
-                ? checklists.filter((c) => !c.completed_at).length
-                : t.key === "completed"
-                  ? checklists.filter((c) => c.completed_at).length
-                  : templates.length;
+            t.key === "active"
+              ? checklists.filter((c) => !c.completed_at).length
+              : checklists.filter((c) => c.completed_at).length;
           const active = tab === t.key;
           return (
             <button
@@ -926,52 +979,6 @@ export function ProjectChecklists({
           description="You may be offline. Nothing has been lost — try again once you have a connection."
           onRetry={() => void load()}
         />
-      ) : tab === "templates" ? (
-        <div className="mt-6">
-          {templates.length === 0 ? (
-            <EmptyState
-              icon={BookmarkPlus}
-              title="No templates yet"
-              description="Save any checklist as a template to reuse it across projects."
-              action={
-                <Button variant="outline" onClick={() => setTab("active")}>
-                  Go to active checklists
-                </Button>
-              }
-            />
-          ) : (
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {templates.map((t) => (
-                <li key={t.id}>
-                  <Card className="flex items-start justify-between gap-3 p-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{t.name}</p>
-                      {t.description && (
-                        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-                          {t.description}
-                        </p>
-                      )}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="min-h-9 shrink-0"
-                      onClick={() => void applyTemplate(t.id)}
-                      disabled={applyingId !== null}
-                    >
-                      {applyingId === t.id ? (
-                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Plus className="mr-1 h-3.5 w-3.5" />
-                      )}
-                      Apply
-                    </Button>
-                  </Card>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
       ) : tab === "completed" ? (
         <div className="mt-6">
           {checklists.filter((c) => c.completed_at).length === 0 ? (
@@ -999,7 +1006,7 @@ export function ProjectChecklists({
                       tone="complete"
                       title={c.name}
                       statusLabel="Complete"
-                      meta={`${done} of ${snapItems.length} items complete`}
+                      meta={`${done}/${snapItems.length} answered`}
                       done={done}
                       total={snapItems.length}
                       progressLabel={`${c.name} progress`}
@@ -1012,24 +1019,24 @@ export function ProjectChecklists({
         </div>
       ) : (
         (() => {
-          const visible = tab === "all" ? checklists : checklists.filter((c) => !c.completed_at);
+          const visible = checklists.filter((c) => !c.completed_at);
           if (visible.length === 0) {
             return (
               // The action belongs here, not in prose telling the reader to go
               // hunt for a button somewhere else on the page.
               <EmptyState
                 icon={ClipboardList}
-                title={tab === "active" ? "No active checklists" : "No checklists yet"}
+                title={checklists.length ? "Nothing open right now" : "No checklists yet"}
                 description={
-                  tab === "active"
-                    ? "Every checklist here is complete. Start another from a template."
-                    : "Start from a template — QA walks, punch lists, safety checks."
+                  checklists.length
+                    ? "Every checklist on this job is complete."
+                    : "QA walks, punch lists, safety checks — start from a template or paste a list you already have."
                 }
                 className="mt-6"
                 action={
                   <Button onClick={() => setCreateOpen(true)}>
-                    <LayoutTemplate className="mr-1.5 h-4 w-4" />
-                    Use a template
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    New checklist
                   </Button>
                 }
               />
@@ -1049,10 +1056,10 @@ export function ProjectChecklists({
                     icon={ClipboardList}
                     tone={tone}
                     title={cl.name}
-                    statusLabel={isComplete ? "Complete" : done > 0 ? "In progress" : "Not started"}
-                    meta={
-                      its.length === 0 ? "No items yet" : `${done} of ${its.length} items complete`
-                    }
+                    // Only the terminal state earns a pill; "In progress" and
+                    // "Not started" are already legible from the bar below.
+                    statusLabel={isComplete ? "Complete" : undefined}
+                    meta={its.length === 0 ? "No items yet" : `${done}/${its.length} done`}
                     detail={
                       requiredOpen > 0 ? (
                         <RunnerStatusPill tone="blocked" icon={AlertCircle}>
@@ -1154,12 +1161,11 @@ export function ProjectChecklists({
                       </span>
                     </div>
 
+                    {/* The required-open count is stated once, in the footer
+                        beside the button it disables. It used to appear here as
+                        well — two counts ~400px apart in different colours and
+                        sentence forms, both on screen at the same time. */}
                     <div className="flex flex-wrap items-center gap-2 pt-2.5">
-                      {requiredOpen > 0 && (
-                        <RunnerStatusPill tone="blocked" icon={AlertCircle}>
-                          {requiredOpen} required open
-                        </RunnerStatusPill>
-                      )}
                       {!editable && (
                         <RunnerStatusPill tone="idle" icon={Lock}>
                           View / fill only
@@ -1193,9 +1199,22 @@ export function ProjectChecklists({
 
                   <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3 sm:px-6">
                     {its.length === 0 && (
-                      <p className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-                        Nothing on this checklist yet — add the first item below.
-                      </p>
+                      <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center">
+                        <p className="text-xs text-muted-foreground">
+                          Nothing on this checklist yet — add the first item below.
+                        </p>
+                        {editable && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-3"
+                            onClick={() => setBulkForChecklist(cl.id)}
+                          >
+                            <ListPlus className="mr-1.5 h-4 w-4" />
+                            Paste a list you already have
+                          </Button>
+                        )}
+                      </div>
                     )}
                     {its.length > 0 && (
                       <ul className="space-y-2.5">
@@ -1206,30 +1225,22 @@ export function ProjectChecklists({
                               key={it.id}
                               className="group rounded-xl border border-transparent px-3 py-2.5 transition-colors hover:border-border/60 hover:bg-muted/40"
                             >
-                              {/* Reorder controls. Quiet on a mouse, but always
-                                present on touch — there is no hover on a phone,
-                                which is exactly where these buttons exist to be
-                                used, and they were invisible there. */}
-                              <div className="float-right ml-2 flex shrink-0 flex-col opacity-100 transition-opacity sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover:opacity-100">
-                                <button
-                                  type="button"
-                                  aria-label={`Move “${it.label}” up`}
-                                  disabled={itIdx === 0}
-                                  onClick={() => void moveItem(it, -1)}
-                                  className="-mr-1 rounded p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
-                                >
-                                  <ChevronUp className="h-4 w-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  aria-label={`Move “${it.label}” down`}
-                                  disabled={itIdx === its.length - 1}
-                                  onClick={() => void moveItem(it, 1)}
-                                  className="-mr-1 rounded p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </button>
-                              </div>
+                              {/*
+                                Three affordances at rest: tick it, read it,
+                                photograph it. Everything that *edits the list
+                                rather than fills it in* — required, reorder,
+                                delete — lives in the row's ⋯ menu.
+
+                                It used to carry seven, because `editable` is an
+                                ownership check rather than a mode: whoever
+                                applied the template always saw the full
+                                authoring toolkit stacked on top of the one
+                                control they came to use. The reorder chevrons
+                                were worse than crowded — they rendered with no
+                                `editable` guard at all, so a user holding the
+                                "View / fill only" pill could still reorder
+                                somebody else's checklist.
+                              */}
                               <div className="flex items-start gap-2.5">
                                 {it.item_type === "checkbox" || !it.item_type ? (
                                   <Checkbox
@@ -1259,29 +1270,21 @@ export function ProjectChecklists({
                                     >
                                       {it.label}
                                     </span>
-                                    {editable ? (
-                                      <button
-                                        onClick={() => void toggleRequired(it)}
-                                        aria-pressed={it.required}
-                                        className={cn(
-                                          "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide transition-colors",
-                                          it.required
-                                            ? "border-amber-500/40 bg-amber-500/12 text-amber-700 dark:text-amber-300"
-                                            : "border-border text-muted-foreground/70 hover:border-amber-500/40 hover:text-amber-600 dark:hover:text-amber-300",
-                                        )}
-                                        title={
-                                          it.required
-                                            ? "Required — the checklist can't be completed without it"
-                                            : "Optional"
-                                        }
+                                    {/* Badge the exception, never the rule. The
+                                        editable branch used to stamp an
+                                        uppercase OPTIONAL pill on every
+                                        non-required row — on a default punch
+                                        list that is a badge on 100% of rows
+                                        carrying zero information. Toggling it
+                                        now lives in the row's ⋯ menu. */}
+                                    {it.required && (
+                                      <span
+                                        className="shrink-0 rounded-full border border-amber-500/40 bg-amber-500/12 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-700 dark:text-amber-300"
+                                        title="Required — the checklist can't be completed without it"
                                       >
-                                        {it.required ? "Required" : "Optional"}
-                                      </button>
-                                    ) : it.required ? (
-                                      <span className="shrink-0 rounded-full border border-amber-500/40 bg-amber-500/12 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-700 dark:text-amber-300">
                                         Required
                                       </span>
-                                    ) : null}
+                                    )}
                                     {/* Read-only. Switching the answer type wipes
                                       the recorded response, and offering that as
                                       a bare dropdown next to every filled-in row
@@ -1297,11 +1300,10 @@ export function ProjectChecklists({
                                         {TYPE_META[it.item_type].short}
                                       </span>
                                     )}
-                                    {photos.length > 0 && (
-                                      <span className="text-[10px] text-muted-foreground">
-                                        {photos.length} photo{photos.length === 1 ? "" : "s"}
-                                      </span>
-                                    )}
+                                    {/* No "2 photos" counter here — the
+                                        thumbnails render immediately below, and
+                                        counting them in text pushed long labels
+                                        onto a second line on a phone. */}
                                   </div>
                                   {it.description && (
                                     <p className="mt-0.5 text-xs text-muted-foreground">
@@ -1317,10 +1319,13 @@ export function ProjectChecklists({
                                     </div>
                                   )}
                                 </div>
+                                {/* Stays visible for everyone, including a
+                                    non-owner filling the list in: attaching
+                                    evidence is part of *doing* the check. */}
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-9 w-9 text-muted-foreground hover:text-foreground"
+                                  className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
                                   onClick={() => setAttachForId(it.id)}
                                   aria-label={`Attach photos to “${it.label}”`}
                                   title="Attach photos"
@@ -1328,15 +1333,46 @@ export function ProjectChecklists({
                                   <ImagePlus className="h-4 w-4" />
                                 </Button>
                                 {editable && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-9 w-9 text-muted-foreground opacity-100 hover:text-destructive sm:opacity-0 sm:focus-visible:opacity-100 sm:group-hover:opacity-100"
-                                    onClick={() => void deleteItem(it.id)}
-                                    aria-label={`Delete “${it.label}”`}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-9 w-9 shrink-0 text-muted-foreground"
+                                        aria-label={`Edit “${it.label}”`}
+                                      >
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-52">
+                                      <DropdownMenuItem onClick={() => void toggleRequired(it)}>
+                                        <AlertCircle className="mr-2 h-4 w-4" />
+                                        {it.required ? "Make optional" : "Mark required"}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        disabled={itIdx === 0}
+                                        onClick={() => void moveItem(it, -1)}
+                                      >
+                                        <ChevronUp className="mr-2 h-4 w-4" />
+                                        Move up
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        disabled={itIdx === its.length - 1}
+                                        onClick={() => void moveItem(it, 1)}
+                                      >
+                                        <ChevronDown className="mr-2 h-4 w-4" />
+                                        Move down
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        className="text-destructive focus:text-destructive"
+                                        onClick={() => void deleteItem(it.id)}
+                                      >
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Delete item
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 )}
                               </div>
                               {photos.length > 0 && (
@@ -1378,98 +1414,138 @@ export function ProjectChecklists({
                   </div>
 
                   <div className="shrink-0 border-t border-border/60 px-5 py-3 sm:px-6">
-                    {editable && (
+                    {editable &&
                       // One row: type the label and press Enter. The answer type
                       // is a compact chip menu rather than a 150px select
                       // competing with the field you actually type in, and
                       // "Paste a list" covers the case where the list already
                       // exists somewhere else.
-                      <div className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-1.5 py-1.5">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              type="button"
-                              title={`${TYPE_META[adding[cl.id]?.type ?? "checkbox"].label} — click to change`}
-                              className={cn(
-                                "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[10.5px] font-extrabold uppercase tracking-wide transition-opacity hover:opacity-80",
-                                TYPE_META[adding[cl.id]?.type ?? "checkbox"].tint,
-                              )}
+                      (() => {
+                        const draft = adding[cl.id] ?? { label: "", type: "checkbox" as ItemType };
+                        const typeMeta = TYPE_META[draft.type];
+                        return (
+                          <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-card px-2 py-1.5">
+                            {/* text-base on touch: anything under 16px makes iOS
+                                Safari zoom the whole viewport on focus. */}
+                            <Input
+                              placeholder="Add an item and press Enter…"
+                              aria-label="New checklist item"
+                              value={draft.label}
+                              onChange={(e) =>
+                                setAdding((s) => ({
+                                  ...s,
+                                  [cl.id]: { label: e.target.value, type: draft.type },
+                                }))
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  void addItem(cl.id);
+                                }
+                              }}
+                              className="h-9 min-w-[7rem] flex-1 border-0 bg-transparent px-1 text-base shadow-none focus-visible:ring-0 sm:text-sm"
+                            />
+
+                            {/* The answer-type chip is shown only once it is not
+                                the default, so the common case — a plain
+                                checkbox — costs nothing at rest. It used to sit
+                                lit in front of the field announcing "CHECK"
+                                before you had typed anything. */}
+                            {draft.type !== "checkbox" && (
+                              <button
+                                type="button"
+                                title={`${typeMeta.label} — click to clear`}
+                                onClick={() =>
+                                  setAdding((s) => ({
+                                    ...s,
+                                    [cl.id]: { label: draft.label, type: "checkbox" },
+                                  }))
+                                }
+                                className={cn(
+                                  "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[10.5px] font-extrabold uppercase tracking-wide transition-opacity hover:opacity-80",
+                                  typeMeta.tint,
+                                )}
+                              >
+                                <typeMeta.icon className="h-3.5 w-3.5" />
+                                {typeMeta.short}
+                              </button>
+                            )}
+
+                            {/*
+                              Labelled at every width, and an outline rather than
+                              a ghost. The label was `hidden sm:inline` with no
+                              aria-label, so on the phone — where a 30-line punch
+                              list is most painful to type one item at a time —
+                              this was a bare icon that screen readers announced
+                              as nothing at all.
+                            */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="min-h-9 shrink-0"
+                              onClick={() => setBulkForChecklist(cl.id)}
+                              title="Paste a list of items, one per line"
                             >
-                              {(() => {
-                                const I = TYPE_META[adding[cl.id]?.type ?? "checkbox"].icon;
-                                return <I className="h-3.5 w-3.5" />;
-                              })()}
-                              <span className="hidden sm:inline">
-                                {TYPE_META[adding[cl.id]?.type ?? "checkbox"].short}
-                              </span>
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="w-56">
-                            {TYPE_ORDER.map((t) => {
-                              const m = TYPE_META[t];
-                              const I = m.icon;
-                              return (
-                                <DropdownMenuItem
-                                  key={t}
-                                  onClick={() =>
-                                    setAdding((s) => ({
-                                      ...s,
-                                      [cl.id]: { label: s[cl.id]?.label ?? "", type: t },
-                                    }))
-                                  }
+                              <ListPlus className="mr-1.5 h-4 w-4" />
+                              Paste a list
+                            </Button>
+
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9 shrink-0 text-muted-foreground"
+                                  aria-label="Answer type for the next item"
                                 >
-                                  <I className="mr-2 h-4 w-4" />
-                                  {m.label}
-                                </DropdownMenuItem>
-                              );
-                            })}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-60">
+                                <DropdownMenuLabel className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                                  Answer type
+                                </DropdownMenuLabel>
+                                {TYPE_ORDER.map((t) => {
+                                  const m = TYPE_META[t];
+                                  const I = m.icon;
+                                  return (
+                                    <DropdownMenuItem
+                                      key={t}
+                                      onClick={() =>
+                                        setAdding((s) => ({
+                                          ...s,
+                                          [cl.id]: { label: s[cl.id]?.label ?? "", type: t },
+                                        }))
+                                      }
+                                    >
+                                      <I className="mr-2 h-4 w-4" />
+                                      <span className="flex-1">
+                                        {m.label}
+                                        <span className="block text-[11px] text-muted-foreground">
+                                          {m.hint}
+                                        </span>
+                                      </span>
+                                    </DropdownMenuItem>
+                                  );
+                                })}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
 
-                        {/* text-base on touch: anything under 16px makes iOS
-                            Safari zoom the whole viewport on focus. */}
-                        <Input
-                          placeholder="Add an item and press Enter…"
-                          aria-label="New checklist item"
-                          value={adding[cl.id]?.label ?? ""}
-                          onChange={(e) =>
-                            setAdding((s) => ({
-                              ...s,
-                              [cl.id]: {
-                                label: e.target.value,
-                                type: s[cl.id]?.type ?? "checkbox",
-                              },
-                            }))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              void addItem(cl.id);
-                            }
-                          }}
-                          className="h-9 flex-1 border-0 bg-transparent px-1 text-base shadow-none focus-visible:ring-0 sm:text-sm"
-                        />
-
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="min-h-9 shrink-0 px-2 text-xs font-bold text-muted-foreground"
-                          onClick={() => setBulkForChecklist(cl.id)}
-                        >
-                          <ListPlus className="mr-1 h-4 w-4" />
-                          <span className="hidden sm:inline">Paste a list</span>
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="min-h-9 shrink-0"
-                          onClick={() => void addItem(cl.id)}
-                          disabled={!(adding[cl.id]?.label ?? "").trim()}
-                          aria-label="Add item"
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
+                            {/* Only once there is something to add — Enter does
+                                the same job and the placeholder says so. */}
+                            {!!draft.label.trim() && (
+                              <Button
+                                size="sm"
+                                className="min-h-9 shrink-0"
+                                onClick={() => void addItem(cl.id)}
+                                aria-label="Add item"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                     {/*
                      * No Save button.
@@ -1487,11 +1563,9 @@ export function ProjectChecklists({
                           {requiredOpen} required item{requiredOpen === 1 ? "" : "s"} still open
                         </span>
                       )}
-                      {its.length === 0 && (
-                        <span className="mr-auto text-[11.5px] font-semibold text-muted-foreground">
-                          Add at least one item to complete this checklist.
-                        </span>
-                      )}
+                      {/* The empty case is already stated in the body above,
+                          with the action attached; repeating it here was the
+                          same sentence twice on one screen. */}
                       <Button
                         size="sm"
                         className="min-h-9"

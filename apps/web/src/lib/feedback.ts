@@ -66,8 +66,10 @@ export function logPromptEvent(userId: string, feature: string, event: PromptEve
 const FEATURE_ROUTES: Array<{ test: RegExp; key: string; label: string }> = [
   { test: /^\/projects\/[^/]+\/pages\//, key: "documents", label: "Documents" },
   { test: /^\/projects\/[^/]+\/reports\//, key: "report_builder", label: "the report builder" },
-  { test: /^\/showcases\/[^/]+/, key: "showcases", label: "Showcases" },
-  { test: /^\/showcases/, key: "showcases", label: "Showcases" },
+  // `key` is written to issue_reports.feature and feedback_prompt_events —
+  // renaming it would split the existing telemetry, so only the label moves.
+  { test: /^\/showcases\/[^/]+/, key: "showcases", label: "Portfolio" },
+  { test: /^\/showcases/, key: "showcases", label: "Portfolio" },
   { test: /^\/walkthroughs\//, key: "walkthroughs", label: "Walkthroughs" },
   { test: /^\/templates/, key: "templates", label: "Templates" },
   { test: /^\/gallery/, key: "gallery", label: "the Gallery" },

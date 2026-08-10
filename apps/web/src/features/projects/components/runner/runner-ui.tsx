@@ -188,7 +188,13 @@ export function RunnerCard({
   icon: ComponentType<{ className?: string; strokeWidth?: number }>;
   tone: RunTone;
   title: string;
-  statusLabel: string;
+  /**
+   * Optional. Omit it when the progress bar and `meta` already say the same
+   * thing — a card that reports "In progress", "3 of 8 items complete" and a
+   * 37%-filled bar is three renderings of two integers, which is most of what
+   * made these grids read as generated rather than designed.
+   */
+  statusLabel?: string;
   /** One line of counts under the title. */
   meta: ReactNode;
   /** Optional richer body — a next-step line, a phase pipeline. */
@@ -217,7 +223,7 @@ export function RunnerCard({
           >
             <Icon className="h-5 w-5" strokeWidth={1.75} />
           </span>
-          <RunnerStatusPill tone={tone}>{statusLabel}</RunnerStatusPill>
+          {statusLabel && <RunnerStatusPill tone={tone}>{statusLabel}</RunnerStatusPill>}
         </div>
 
         <p className="mt-5 line-clamp-2 font-manrope text-base font-extrabold leading-snug text-foreground">

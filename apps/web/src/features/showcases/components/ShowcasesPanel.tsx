@@ -56,8 +56,12 @@ import { reorderPortfolioShowcases, updateShowcaseSite } from "@/lib/portfolio.f
 import { ShowcaseShareDialog } from "@/features/showcases/components/ShowcaseShareDialog";
 
 /**
- * The list of showcases — now framed as "the projects on your site" rather than
- * "your standalone brochures".
+ * The projects on the portfolio site.
+ *
+ * Naming rule this file follows: the *site* is the Portfolio; each thing in
+ * this grid is a **project**. The first rename pass replaced "showcase" with
+ * "portfolio" one-for-one, which left the word naming both the container and
+ * its contents — "New portfolio" inside a tab called "Projects".
  *
  * The order here IS the order visitors see, so the grid is drag-sortable and
  * each card carries the two site controls that matter at a glance: whether the
@@ -100,7 +104,7 @@ export function ShowcasesPanel({
       const res = await listShowcases();
       setShowcases(res.showcases);
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not load portfolios");
+      toast.error(e?.message ?? "Could not load your projects");
     } finally {
       setLoading(false);
     }
@@ -116,12 +120,12 @@ export function ShowcasesPanel({
     setCreating(true);
     try {
       const res = await createShowcase({ data: { title: t } });
-      toast.success("Portfolio created");
+      toast.success("Project created");
       setCreateOpen(false);
       setTitle("");
       navigate({ to: "/showcases/$showcaseId", params: { showcaseId: res.id } });
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not create portfolio");
+      toast.error(e?.message ?? "Could not create that project");
     } finally {
       setCreating(false);
     }
@@ -159,11 +163,11 @@ export function ShowcasesPanel({
     setCreating(true);
     try {
       const res = await createShowcaseFromProject({ data: { projectId } });
-      toast.success(`Portfolio built from ${res.photoCount} photos — edit anything you like.`);
+      toast.success(`Project page built from ${res.photoCount} photos — edit anything you like.`);
       setCreateOpen(false);
       navigate({ to: "/showcases/$showcaseId", params: { showcaseId: res.id } });
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not build portfolio");
+      toast.error(e?.message ?? "Could not build that project page");
     } finally {
       setCreating(false);
     }
@@ -174,9 +178,9 @@ export function ShowcasesPanel({
       await deleteShowcase({ data: { id } });
       setShowcases((prev) => prev.filter((x) => x.id !== id));
       onCountsChanged?.();
-      toast.success("Portfolio deleted");
+      toast.success("Project deleted");
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not delete portfolio");
+      toast.error(e?.message ?? "Could not delete that project");
     }
   };
 
@@ -276,7 +280,7 @@ export function ShowcasesPanel({
         </div>
         {canEdit && (
           <Button onClick={openCreate}>
-            <Plus className="mr-1.5 h-4 w-4" /> New portfolio
+            <Plus className="mr-1.5 h-4 w-4" /> New project
           </Button>
         )}
       </div>
@@ -288,11 +292,11 @@ export function ShowcasesPanel({
       ) : showcases.length === 0 ? (
         <EmptyState
           icon={Layers}
-          title="No portfolios yet"
-          description="Build your first portfolio from a finished job — it becomes a page on your public site."
+          title="No projects yet"
+          description="Build your first project page from a finished job — it becomes a page on your public portfolio site."
           action={
             <Button onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" /> New portfolio
+              <Plus className="mr-2 h-4 w-4" /> New project
             </Button>
           }
         />
@@ -333,25 +337,29 @@ export function ShowcasesPanel({
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>New portfolio</DialogTitle>
+            <DialogTitle>New project</DialogTitle>
             <DialogDescription>
               Build one from a finished job in one click, or start from a blank page.
             </DialogDescription>
           </DialogHeader>
 
-          {/* Project-first: everything a showcase needs (name, address, photos
-              already tagged before/progress/after) is on the project, so
-              generating the finished draft beats asking the user to author it. */}
+          {/* Project-first: everything a project page needs (name, address,
+              photos already tagged before/progress/after) is on the project
+              record, so generating the finished draft beats asking the user to
+              author it. */}
           <div>
+            {/* "a finished job", not "a project" — the thing being created is
+                itself called a project now, and this list is the source, not
+                the result. */}
             <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-              Build from a project
+              Build from a finished job
             </p>
             {projectsLoading ? (
               <div className="flex justify-center py-6">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             ) : projects.length === 0 ? (
-              <p className="mt-2 text-sm text-muted-foreground">No projects with photos yet.</p>
+              <p className="mt-2 text-sm text-muted-foreground">No jobs with photos yet.</p>
             ) : (
               <div className="mt-2 max-h-64 space-y-1 overflow-y-auto pr-1">
                 {projects.map((p) => (

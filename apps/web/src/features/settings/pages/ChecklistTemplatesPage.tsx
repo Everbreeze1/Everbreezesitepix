@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertCircle,
   Plus,
   Trash2,
   Loader2,
@@ -289,7 +290,21 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
     setSelectedId(id);
     setPane("editor");
     await load();
-    await addItem("checkbox", id, 0);
+    /*
+     * Deliberately lands on the empty state rather than inserting a blank row.
+     *
+     * It used to `addItem("checkbox", id, 0)` here — one database round trip
+     * for a nameless row, focused before the author had decided anything, which
+     * silently framed "build a template" as twenty more of the same. The empty
+     * state now offers "Paste a list" as its primary action and "Add one item"
+     * beside it, so the choice is the author's and the bulk path is the one
+     * that reads first.
+     *
+     * Not auto-opening the paste dialog from here on purpose: it would mean
+     * unmounting this dialog and mounting another in the same beat, and Radix
+     * only releases the body scroll lock once the first has finished animating
+     * out. A button the user presses is worth more than a modal that appears.
+     */
   };
 
   const createFromStarter = async (s: (typeof STARTER_TEMPLATES)[number]) => {
@@ -385,10 +400,23 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
 
   /* -------------------------------------------------------------- items */
 
-  const addItem = async (type: ItemType = "checkbox", templateId?: string, at?: number) => {
+  /**
+   * The next free position, from max+1 rather than the array's length.
+   *
+   * Length is only correct while positions are a gapless 0..n-1 run, and
+   * `deleteItem` doesn't renumber the survivors — so deleting a middle item and
+   * adding another handed the new row a number one of its siblings already
+   * held, and two items then sorted arbitrarily against each other.
+   */
+  const nextPosition = (templateId: string) =>
+    items
+      .filter((i) => i.template_id === templateId)
+      .reduce((max, i) => Math.max(max, i.position), -1) + 1;
+
+  const addItem = async (type: ItemType = "checkbox", templateId?: string) => {
     const tplId = templateId ?? selectedId;
     if (!tplId) return;
-    const position = at ?? items.filter((i) => i.template_id === tplId).length;
+    const position = nextPosition(tplId);
     const { data, error } = await supabase
       .from(TABLES.items as any)
       .insert({
@@ -412,7 +440,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
   /** One insert for the whole pasted list rather than a round trip per line. */
   const addItemsBulk = async (labels: string[], type: ItemType) => {
     if (!selectedId || !labels.length) return;
-    const start = items.filter((i) => i.template_id === selectedId).length;
+    const start = nextPosition(selectedId);
     const { data, error } = await supabase
       .from(TABLES.items as any)
       .insert(
@@ -702,9 +730,24 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
 
                   <div className="px-4 pb-5 pt-4 sm:px-6">
                     {selectedItems.length === 0 ? (
-                      <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                        No items yet. Add the first thing the crew has to answer.
-                      </p>
+                      // Dead prose replaced by the two ways in, paste first.
+                      <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center">
+                        <p className="text-sm font-semibold text-foreground">No items yet</p>
+                        <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+                          Most checklists already exist somewhere — a spec, an email, a punch list.
+                          Paste it in and every line becomes an item.
+                        </p>
+                        <div className="mt-4 flex flex-wrap justify-center gap-2">
+                          <Button size="sm" onClick={() => setBulkOpen(true)}>
+                            <ListPlus className="mr-1.5 h-4 w-4" />
+                            Paste a list
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => void addItem()}>
+                            <Plus className="mr-1.5 h-4 w-4" />
+                            Add one item
+                          </Button>
+                        </div>
+                      </div>
                     ) : (
                       <DndContext
                         sensors={sensors}
@@ -735,6 +778,12 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
                       </DndContext>
                     )}
 
+                    {/* Two visible controls and an overflow, the same shape as
+                        the in-project composer — the crew filling a checklist
+                        in and the manager who authored it should not be
+                        learning two different bars. "Add typed item" used to be
+                        a third full-width button spelling out what the ⋯ menu
+                        now holds. */}
                     <div className="mt-3 flex flex-wrap items-center gap-1.5">
                       <AddTarget className="h-10 w-auto flex-1" onClick={() => void addItem()}>
                         <Plus className="h-4 w-4" />
@@ -753,14 +802,18 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-10">
-                            Add typed item
-                            <MoreHorizontal className="ml-1.5 h-4 w-4" />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-10 w-10 shrink-0 text-muted-foreground"
+                            aria-label="Add an item with a specific answer type"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-60">
                           <DropdownMenuLabel className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                            Answer type
+                            Add with answer type
                           </DropdownMenuLabel>
                           {TYPE_ORDER.map((t) => {
                             const m = TYPE_META[t];
@@ -805,7 +858,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
           <DialogHeader>
             <DialogTitle>New checklist template</DialogTitle>
             <DialogDescription>
-              Name it after the job it covers. You'll add items next.
+              Name it after the job it covers. You can paste your whole list in next.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -1067,7 +1120,13 @@ function ItemRow({
           aria-label="Item label"
         />
 
-        <RequiredToggle required={item.required} onToggle={(v) => onChange({ required: v })} />
+        {/* Badge the exception, not the rule: most items are optional, so an
+            always-on OPTIONAL pill was a uniform badge on twenty rows carrying
+            no information. Marking one required moved into the ⋯ menu below
+            rather than behind a hover-reveal — `group-hover` compiles inside
+            `@media (hover: hover)`, so on a tablet the control would have been
+            permanently invisible, and it is the only way to set this flag. */}
+        {item.required && <RequiredToggle required onToggle={(v) => onChange({ required: v })} />}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -1082,6 +1141,10 @@ function ItemRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem onClick={() => onChange({ required: !item.required })}>
+              <AlertCircle className="mr-2 h-4 w-4" />
+              {item.required ? "Make optional" : "Mark required"}
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setShowHelp((s) => !s)}>
               <MessageSquareText className="mr-2 h-4 w-4" />
               {showHelp || item.description ? "Hide helper text" : "Add helper text"}

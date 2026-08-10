@@ -461,7 +461,7 @@ export async function updateShowcaseSiteService(
         .eq("slug", clean)
         .neq("id", data.id)
         .maybeSingle();
-      if (clash) badRequest(`"${clean}" is already used by another showcase.`);
+      if (clash) badRequest(`"${clean}" is already used by another project.`);
       patch.slug = clean;
     }
   }
@@ -485,10 +485,10 @@ export async function updateShowcaseSiteService(
     .select("slug")
     .maybeSingle();
   if (error) {
-    if ((error as any).code === "23505") badRequest("That address is already used by another showcase.");
+    if ((error as any).code === "23505") badRequest("That address is already used by another project.");
     badRequest(error.message);
   }
-  if (!updated) notFound("That showcase no longer exists, or you can't edit it.");
+  if (!updated) notFound("That project no longer exists, or you can't edit it.");
   return { ok: true, slug: (updated as any).slug ?? null };
 }
 

@@ -12,7 +12,9 @@ import {
   HelpCircle,
   ChevronRight,
   Layers,
+  Lock,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import {
   Sidebar,
@@ -88,15 +90,26 @@ export function AppSidebar() {
   // (they can apply templates); only owners/admins can create/edit (enforced on the page).
   const plan: string = (teamData?.plan as string | undefined) ?? "starter";
   const showTemplates = plan === "pro" || plan === "team";
-  // Showcases: Team plan only (or the internal/complimentary override) — this
-  // is stricter than showTemplates above, which also accepts inactive teams
-  // by not checking isActive; Showcases is worth gating precisely since it's
-  // the first real Team-tier-exclusive nav item.
-  const showShowcases = !!teamData?.isInternal || (!!teamData?.isActive && plan === "team");
-  const navItems = [
+  /*
+   * Portfolio is a Team-tier feature, but it is *badged*, never removed.
+   *
+   * Dropping the row from the array is what produced "the Portfolio is still
+   * not showing": a team on the Team plan whose `subscription_status` is
+   * anything other than "active" (trialing, past_due, or simply never written)
+   * got no nav row, no page, and no explanation — while Templates, which
+   * checks `plan` alone, stayed visible right above it. Two gates of different
+   * strictness reading as "half the app vanished".
+   *
+   * PortfolioPage already renders the upsell for a locked account, and this is
+   * the rule that page states for its own tabs: "why can't I see Embeds?" is a
+   * worse question than "why is this read-only?" — only one answers itself.
+   * Nothing leaks by showing the row: the API and RLS gate on team membership.
+   */
+  const portfolioLocked = !(!!teamData?.isInternal || (!!teamData?.isActive && plan === "team"));
+  const navItems: Array<{ title: string; url: string; icon: LucideIcon; locked?: boolean }> = [
     ...baseItems,
     ...(showTemplates ? [templatesItem] : []),
-    ...(showShowcases ? [showcasesItem] : []),
+    { ...showcasesItem, locked: portfolioLocked },
     ...(showOwnerNav ? [teamItem] : [collabItem]),
   ];
   const toolItems = [...(showOwnerNav ? [pricingItem] : []), helpItem, reportIssueItem];
@@ -143,6 +156,17 @@ export function AppSidebar() {
                           <item.icon className={iconBase} />
                         </span>
                         {!collapsed && <span>{item.title}</span>}
+                        {!collapsed && item.locked && (
+                          // The name goes on a real text node, not as aria-label
+                          // on the <svg> — lucide spreads props straight onto the
+                          // element, and an aria-label there is only reliably
+                          // announced with role="img". The link still reads as
+                          // "Portfolio, Team plan"; the icon is decoration.
+                          <span className="ml-auto flex shrink-0 items-center">
+                            <Lock className="h-3.5 w-3.5 text-sidebar-foreground/40" aria-hidden />
+                            <span className="sr-only">Team plan</span>
+                          </span>
+                        )}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

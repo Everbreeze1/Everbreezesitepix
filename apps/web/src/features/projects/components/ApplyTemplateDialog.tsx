@@ -169,9 +169,14 @@ export function ApplyTemplateDialog({
         .select("id")
         .single();
       if (error || !created) throw error ?? new Error("Failed");
+      // Renumber from zero rather than carrying the template's stored
+      // positions across — rows already arrive ordered, and a template whose
+      // own positions have gaps or duplicates would otherwise hand the new
+      // checklist a list the reorder controls can't move. Matches
+      // ProjectChecklists.applyTemplate.
       const rows = ((items as any[]) ?? []).map((it: any, idx: number) => ({
         checklist_id: (created as any).id,
-        position: it.position ?? idx,
+        position: idx,
         label: it.label,
         required: it.required ?? false,
         item_type: it.item_type ?? "checkbox",

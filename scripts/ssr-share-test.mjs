@@ -40,7 +40,11 @@ const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 /** `expect` is matched case-insensitively; at least one entry must be present. */
 const ROUTES = [
   { path: `/share/walkthroughs/${NIL_UUID}`, expect: ["walkthrough"] },
-  { path: `/share/showcases/${NIL_UUID}`, expect: ["showcase"] },
+  // Matched against the route's own <title>, not the URL. "showcase" used to
+  // pass on the path segment alone, so the assertion stayed green through the
+  // rename without ever reading a byte the route actually rendered. This body
+  // is streamed, so the head is the only server-rendered text there is.
+  { path: `/share/showcases/${NIL_UUID}`, expect: ["<title>project"] },
   { path: "/p/a-portfolio-that-does-not-exist", expect: ["portfolio"] },
   { path: "/p/a-portfolio-that-does-not-exist/some-project", expect: ["project"] },
   { path: `/embed/gallery/${NIL_UUID}`, expect: ["gallery"] },
