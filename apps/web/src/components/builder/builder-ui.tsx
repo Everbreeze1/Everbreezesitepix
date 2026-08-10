@@ -52,8 +52,11 @@ export function BuilderLayout({
 }) {
   return (
     <div className="mt-6 gap-5 md:grid md:grid-cols-[minmax(0,272px)_minmax(0,1fr)] md:items-start">
-      {/* Same 82px app-header offset as the title bar. */}
-      <div className={cn("md:sticky md:top-[98px] md:block", pane === "list" ? "block" : "hidden")}>
+      {/* Same app-header offset as the title bar, so the two panes pin flush.
+          This read 98px — the 82px header offset added on top of a pre-existing
+          `top-4` instead of replacing it — which left the rail docking 16px
+          below the canvas once you scrolled. */}
+      <div className={cn("md:sticky md:top-[82px] md:block", pane === "list" ? "block" : "hidden")}>
         {rail}
       </div>
       <div className={cn("min-w-0 md:block", pane === "editor" ? "block" : "hidden")}>{canvas}</div>

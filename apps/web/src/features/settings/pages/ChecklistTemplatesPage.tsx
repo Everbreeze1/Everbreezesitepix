@@ -413,10 +413,64 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
       .filter((i) => i.template_id === templateId)
       .reduce((max, i) => Math.max(max, i.position), -1) + 1;
 
-  const addItem = async (type: ItemType = "checkbox", templateId?: string) => {
-    const tplId = templateId ?? selectedId;
+  /**
+   * Push a set of rows down one slot to open a gap, locally first and then on
+   * the server. Both insert-below paths — `duplicateItem` and `addItem`'s
+   * `after` option — go through here, so "make room at N+1" has exactly one
+   * implementation rather than two that can drift.
+   *
+   * The gaps `deleteItem` leaves behind can't cause a collision: a displaced
+   * row at p > source lands at p+1 >= source+2, and every row that isn't
+   * displaced keeps a number at or below source. Slot source+1 is free by
+   * construction, gapless run or not.
+   *
+   * Every result is checked and the writes report through the shared status
+   * line, the way `handleDragEnd` already does it. `duplicateItem` used to fire
+   * them bare — and since the query builder resolves to `{ error }` instead of
+   * rejecting, a failed shift left the screen showing an order the database
+   * didn't have, with no toast, until the next load put two rows on one number.
+   */
+  const shiftDown = async (displaced: TemplateItem[]) => {
+    if (!displaced.length) return;
+    const ids = new Set(displaced.map((d) => d.id));
+    setItems((xs) => xs.map((x) => (ids.has(x.id) ? { ...x, position: x.position + 1 } : x)));
+    const ok = await save.runImmediate(async () => {
+      const results = await Promise.all(
+        displaced.map((d) =>
+          supabase
+            .from(TABLES.items as any)
+            .update({ position: d.position + 1 })
+            .eq("id", d.id),
+        ),
+      );
+      const bad = results.find((r: any) => r?.error);
+      if (bad) throw (bad as any).error;
+    });
+    // Refetch rather than roll back: these are independent requests, so a
+    // failure can be partial — some rows moved, some didn't — and no local undo
+    // is right for both. `runImmediate` has already surfaced the error.
+    if (!ok) await load();
+  };
+
+  const addItem = async (
+    type: ItemType = "checkbox",
+    { templateId, after }: { templateId?: string; after?: TemplateItem } = {},
+  ) => {
+    const tplId = templateId ?? after?.template_id ?? selectedId;
     if (!tplId) return;
-    const position = nextPosition(tplId);
+    /*
+     * Appends by default; `after` drops the new row directly below a specific
+     * one, which is the only thing Enter on a mid-list row can honestly mean.
+     * This used to append unconditionally, so Enter on item 3 of 20 built item
+     * 21 and then dragged the caret down there with it.
+     *
+     * `displaced` is snapshotted before the await, while `items` still excludes
+     * the row being inserted.
+     */
+    const displaced = after
+      ? items.filter((i) => i.template_id === tplId && i.position > after.position)
+      : [];
+    const position = after ? after.position + 1 : nextPosition(tplId);
     const { data, error } = await supabase
       .from(TABLES.items as any)
       .insert({
@@ -435,6 +489,9 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
     const item = data as unknown as TemplateItem;
     setItems((xs) => [...xs, item]);
     setFocusItemId(item.id);
+    // Not awaited: the order is already right locally, and making the caret
+    // wait on one round trip per displaced row would buy nothing.
+    void shiftDown(displaced);
   };
 
   /** One insert for the whole pasted list rather than a round trip per line. */
@@ -480,7 +537,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
   };
 
   const duplicateItem = async (source: TemplateItem) => {
-    const after = selectedItems.filter((i) => i.position > source.position);
+    const displaced = selectedItems.filter((i) => i.position > source.position);
     const { data, error } = await supabase
       .from(TABLES.items as any)
       .insert({
@@ -497,18 +554,8 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
       toast.error("Couldn't duplicate that item");
       return;
     }
-    setItems((xs) => [
-      ...xs.map((x) => (after.some((a) => a.id === x.id) ? { ...x, position: x.position + 1 } : x)),
-      data as unknown as TemplateItem,
-    ]);
-    await Promise.all(
-      after.map((i) =>
-        supabase
-          .from(TABLES.items as any)
-          .update({ position: i.position + 1 })
-          .eq("id", i.id),
-      ),
-    );
+    setItems((xs) => [...xs, data as unknown as TemplateItem]);
+    await shiftDown(displaced);
   };
 
   const sensors = useSensors(
@@ -770,7 +817,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
                                 onChange={(patch) => updateItem(it.id, patch)}
                                 onDelete={() => void deleteItem(it.id)}
                                 onDuplicate={() => void duplicateItem(it)}
-                                onAddAfter={() => void addItem(it.item_type)}
+                                onAddAfter={() => void addItem(it.item_type, { after: it })}
                               />
                             ))}
                           </ul>
@@ -1053,7 +1100,12 @@ function ItemRow({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "group rounded-xl border border-border bg-card px-1.5 py-1.5 transition-colors hover:border-primary/30",
-        isDragging && "z-30 opacity-90 shadow-[0px_14px_28px_-18px_rgba(16,25,41,0.55)]",
+        // `relative`, because z-index is inert on a static box: this read
+        // `z-30` and did nothing at all, so the row being dragged was painted
+        // in plain DOM order and the rows below it clipped its lift shadow.
+        // The value has to stay under the sticky BuilderTitleBar (z-10) and
+        // AppHeader (z-20) — at z-30 it would have floated over both.
+        isDragging && "relative z-[5] opacity-90 shadow-[0px_14px_28px_-18px_rgba(16,25,41,0.55)]",
       )}
     >
       <div className="flex items-center gap-1.5">

@@ -830,7 +830,11 @@ export function TemplatesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:py-10">
+      {/* pt-only responsive scaling. `md:py-10` used to sit here, and because a
+          variant shorthand outranks the unvariated `pb-32`, desktop bottom
+          padding collapsed to 40px — less than the 84px the floating camera
+          button occupies, so the last row of every tab sat under it. */}
+      <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pt-10">
         {/* Hero — same shell, ornament, badge and stats rail as Projects and the
             project home page. Templates was the last product surface still
             wearing the plain settings header, which is most of why it read as a
