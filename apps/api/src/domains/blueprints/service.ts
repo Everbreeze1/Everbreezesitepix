@@ -26,7 +26,9 @@ async function requireOwnProject(ctx: ServiceContext, projectId: string) {
     .eq("id", projectId)
     .maybeSingle();
   if (!project || project.created_by !== ctx.userId) {
-    throw new Error("Project not found");
+    // 404, not a bare Error: without a status this collapsed to a 500
+    // internal_error, so an ownership rejection looked like a server crash.
+    throw Object.assign(new Error("Project not found"), { status: 404 });
   }
 }
 

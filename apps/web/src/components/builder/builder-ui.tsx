@@ -3,6 +3,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type ComponentProps,
   type ComponentType,
   type ReactNode,
@@ -188,7 +189,21 @@ export function BuilderCanvas({
   children: ReactNode;
   className?: string;
 }) {
-  return <Card className={cn(SURFACE_CARD, "overflow-hidden p-0", className)}>{children}</Card>;
+  /*
+   * Deliberately NOT `overflow-hidden`.
+   *
+   * `overflow: hidden` makes this card a scroll container, and `position:
+   * sticky` resolves against its nearest scrollport — so the title bar stuck to
+   * the CARD instead of the page. As you scrolled, the bar slid down over the
+   * card's own first rows: checklist item 1 disappeared behind it and item 2
+   * was cut in half, while `top-[82px]` never actually took effect. That is the
+   * bug this screen was reported for.
+   *
+   * The card is only rounded, not clipping anything that needs it — the title
+   * bar carries its own `rounded-t-2xl` so its fill still follows the corners,
+   * and every other child sits inside padding.
+   */
+  return <Card className={cn(SURFACE_CARD, "p-0", className)}>{children}</Card>;
 }
 
 /**
@@ -221,42 +236,107 @@ export function BuilderTitleBar({
   descriptionPlaceholder?: string;
   banner?: ReactNode;
 }) {
-  return (
-    // top-[82px], not top-0: the page is the scroll container and AppHeader is
-    // `sticky top-0 h-[82px]`, so top-0 parked this bar underneath it — the
-    // save status it exists to keep in view was hidden behind the app chrome.
-    <div className="sticky top-[82px] z-10 border-b border-border/60 bg-gradient-to-b from-card via-card to-card/95 px-4 pb-3 pt-4 backdrop-blur sm:px-6 sm:pt-5">
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          {icon}
-        </div>
-        <div className="min-w-0 flex-1">
-          <QuietInput
-            value={title}
-            onChange={(e) => onTitleChange(e.target.value)}
-            placeholder={titlePlaceholder}
-            aria-label="Template name"
-            className="font-display text-[26px] font-bold leading-tight tracking-[-0.7px] sm:text-[30px]"
-          />
-          <QuietTextarea
-            value={description}
-            onChange={(e) => onDescriptionChange(e.target.value)}
-            placeholder={descriptionPlaceholder}
-            aria-label="Template description"
-            className="mt-0.5 text-[13px] text-muted-foreground"
-          />
-        </div>
-        <div className="flex shrink-0 items-center gap-1">{actions}</div>
-      </div>
+  /*
+   * Condense once the bar docks.
+   *
+   * At full height this bar is ~220px, and with AppHeader above it that parked
+   * roughly 300px of a 900px viewport permanently over the list — the first
+   * item was completely hidden and the second was cut in half. The header even
+   * advertised "1 required" while covering the required item.
+   *
+   * A zero-height sentinel sits directly above the bar; once it passes the
+   * dock line the bar drops its description and stat row and shrinks its title,
+   * keeping only what it exists for: which template you're in, and whether it
+   * saved. Scroll back up and it returns.
+   */
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const [condensed, setCondensed] = useState(false);
 
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 pl-12">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">{stats}</div>
-        <div className="ml-auto">
-          <SaveStatus state={saveState} />
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([entry]) => setCondensed(!entry.isIntersecting), {
+      // The bar docks under AppHeader, so "off screen" means past 82px, not 0.
+      rootMargin: "-82px 0px 0px 0px",
+      threshold: 0,
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  return (
+    <>
+      <div ref={sentinelRef} aria-hidden className="h-px" />
+      {/* top-[82px], not top-0: the page is the scroll container and AppHeader
+          is `sticky top-0 h-[82px]`, so top-0 parked this bar underneath it —
+          the save status it exists to keep in view was hidden behind the app
+          chrome. */}
+      <div
+        className={cn(
+          // `rounded-t-2xl` replaces the clipping the card used to do with
+          // `overflow-hidden` — which broke this bar's stickiness entirely.
+          "sticky top-[82px] z-10 rounded-t-2xl border-b border-border/60 bg-gradient-to-b from-card via-card to-card/95 px-4 backdrop-blur transition-[padding] duration-150 sm:px-6",
+          condensed ? "py-2" : "pb-3 pt-4 sm:pt-5",
+        )}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-150",
+              condensed ? "mt-0 h-7 w-7" : "mt-0.5 h-9 w-9",
+            )}
+          >
+            {icon}
+          </div>
+          <div className="min-w-0 flex-1">
+            <QuietInput
+              value={title}
+              onChange={(e) => onTitleChange(e.target.value)}
+              placeholder={titlePlaceholder}
+              aria-label="Template name"
+              className={cn(
+                "font-display font-bold leading-tight tracking-[-0.7px] transition-[font-size] duration-150",
+                condensed ? "text-[17px]" : "text-[26px] sm:text-[30px]",
+              )}
+            />
+            {/* Hidden with a class rather than unmounted: `QuietTextarea`
+                auto-sizes from its own scrollHeight, and remounting it on every
+                scroll would re-measure a zero-height box. */}
+            <div className={cn(condensed && "hidden")}>
+              <QuietTextarea
+                value={description}
+                onChange={(e) => onDescriptionChange(e.target.value)}
+                placeholder={descriptionPlaceholder}
+                aria-label="Template description"
+                className="mt-0.5 text-[13px] text-muted-foreground"
+              />
+            </div>
+          </div>
+          {/* The save state is the one thing that must survive condensing —
+              "did that save?" being a scroll away is what this bar exists to
+              prevent. Only ever one of the two is rendered. */}
+          {condensed && (
+            <div className="hidden shrink-0 items-center pt-1 sm:flex">
+              <SaveStatus state={saveState} />
+            </div>
+          )}
+          <div className="flex shrink-0 items-center gap-1">{actions}</div>
         </div>
+
+        <div
+          className={cn(
+            "mt-2 flex-wrap items-center gap-x-3 gap-y-1.5 pl-12",
+            condensed ? "hidden" : "flex",
+          )}
+        >
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">{stats}</div>
+          <div className="ml-auto">
+            <SaveStatus state={saveState} />
+          </div>
+        </div>
+        {banner}
       </div>
-      {banner}
-    </div>
+    </>
   );
 }
 
