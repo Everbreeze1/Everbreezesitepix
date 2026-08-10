@@ -2105,7 +2105,7 @@ export function ProjectDetailPage() {
             <div className="w-24" />
           </div>
         </div>
-        <div className="container mx-auto max-w-6xl px-4 py-8 md:py-10 pb-32">
+        <div className="container mx-auto max-w-6xl px-4 pb-32 pt-8 md:pt-10">
           {panel === "trash" && (
             <ProjectTrash projectId={project.id} onChanged={() => void load({ silent: true })} />
           )}
@@ -2120,7 +2120,7 @@ export function ProjectDetailPage() {
   }
 
   return (
-    <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:py-10">
+    <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pt-10">
       <BusyOverlay
         open={uploading}
         title="Uploading photo…"

@@ -148,8 +148,10 @@ export function CollaboratorsPage() {
   const owner = members.find((m) => m.role === "owner");
   const ownerName = owner?.profile?.full_name ?? owner?.profile?.email ?? "Account owner";
 
+  // pb-24, not pb-20: the floating camera button occupies 84px of the
+  // bottom-right corner, so 80px left it grazing the last card.
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-8 md:py-12 pb-20 space-y-6">
+    <div className="container mx-auto max-w-5xl space-y-6 px-4 pb-24 pt-8 md:pt-12">
       {/* Hero / overview */}
       <Card className="overflow-hidden border-primary/20 bg-gradient-subtle p-6 md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">

@@ -167,7 +167,7 @@ export function ReportsIndexPage() {
   });
 
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-6 md:py-10">
+    <div className="container mx-auto max-w-5xl px-4 pb-24 pt-6 md:pt-10">
       <PageHeader
         eyebrow="Documentation"
         title="Reports"

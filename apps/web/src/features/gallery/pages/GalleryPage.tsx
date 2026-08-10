@@ -1006,7 +1006,7 @@ export function GalleryPage() {
 
   return (
     <div
-      className="container mx-auto px-4 py-6 md:py-10"
+      className="container mx-auto px-4 pb-24 pt-6 md:pt-10"
       style={{
         transform: `translateY(${Math.min(pull, 70) * 0.5}px)`,
         transition: refreshing || pull === 0 ? "transform 200ms ease" : undefined,

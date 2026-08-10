@@ -545,7 +545,13 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
 
   const addPhase = async () => {
     if (!selectedId) return;
-    await addPhaseTo(selectedId, selectedPhases.length, `Phase ${selectedPhases.length + 1}`);
+    // max+1, not `.length`. `deletePhase` doesn't renumber the survivors, so
+    // deleting a middle phase and adding another handed the new one a number a
+    // sibling already held, and the two then sorted arbitrarily against each
+    // other. The display name still counts, because that only has to be unused
+    // enough to read as a fresh phase.
+    const position = selectedPhases.reduce((max, p) => Math.max(max, p.position), -1) + 1;
+    await addPhaseTo(selectedId, position, `Phase ${selectedPhases.length + 1}`);
   };
 
   const updatePhase = (id: string, patch: Partial<Phase>) => {
@@ -581,10 +587,50 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
     }
   };
 
+  /**
+   * Push a set of rows down one slot to open a gap at source+1, locally first
+   * and then on the server. Phases and steps both need this, so it is written
+   * once and parameterised by table rather than open-coded twice.
+   *
+   * The gaps `deletePhase` / `deleteItem` leave behind can't cause a collision:
+   * a displaced row at p > source lands at p+1 >= source+2, and every row that
+   * isn't displaced keeps a number at or below source.
+   *
+   * Every result is checked, the way `reorderPhases` already does it.
+   * `duplicatePhase` used to fire these bare — and since the query builder
+   * resolves to `{ error }` instead of rejecting, a failed shift returned as if
+   * it had worked, leaving the screen showing an order the database didn't
+   * have until the next load put two rows on one number.
+   */
+  const shiftDown = async <T extends { id: string; position: number }>(
+    table: string,
+    displaced: T[],
+    setter: (updater: (xs: T[]) => T[]) => void,
+  ) => {
+    if (!displaced.length) return;
+    const ids = new Set(displaced.map((d) => d.id));
+    setter((xs) => xs.map((x) => (ids.has(x.id) ? { ...x, position: x.position + 1 } : x)));
+    const ok = await save.runImmediate(async () => {
+      const results = await Promise.all(
+        displaced.map((d) =>
+          supabase
+            .from(table as any)
+            .update({ position: d.position + 1 })
+            .eq("id", d.id),
+        ),
+      );
+      const bad = results.find((r: any) => r?.error);
+      if (bad) throw (bad as any).error;
+    });
+    // Refetch rather than roll back: these are independent requests, so a
+    // failure can be partial and no local undo is right for both halves.
+    if (!ok) await load();
+  };
+
   const duplicatePhase = async (ph: Phase) => {
     if (!selectedId) return;
     const position = ph.position + 1;
-    const after = selectedPhases.filter((p) => p.position > ph.position);
+    const displaced = selectedPhases.filter((p) => p.position > ph.position);
     const { data, error } = await supabase
       .from(TABLES.phases as any)
       .insert({
@@ -618,20 +664,10 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
         .select("id, phase_id, position, kind, label, required");
       newItems = ((its as any[]) ?? []) as Item[];
     }
-    // Push everything after the source phase down one slot.
-    setPhases((xs) => [
-      ...xs.map((x) => (after.some((a) => a.id === x.id) ? { ...x, position: x.position + 1 } : x)),
-      newPhase,
-    ]);
+    setPhases((xs) => [...xs, newPhase]);
     setItems((xs) => [...xs, ...newItems]);
-    await Promise.all(
-      after.map((p) =>
-        supabase
-          .from(TABLES.phases as any)
-          .update({ position: p.position + 1 })
-          .eq("id", p.id),
-      ),
-    );
+    // Push everything after the source phase down one slot.
+    await shiftDown(TABLES.phases, displaced, setPhases);
   };
 
   const reorderPhases = async (from: number, to: number) => {
@@ -656,8 +692,22 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
 
   /* -------------------------------------------------------------- items */
 
-  const addItem = async (phaseId: string, kind: ItemKind) => {
-    const position = (itemsByPhase.get(phaseId) ?? []).length;
+  const addItem = async (phaseId: string, kind: ItemKind, after?: Item) => {
+    const siblings = itemsByPhase.get(phaseId) ?? [];
+    /*
+     * Appends by default; `after` drops the new step directly below a specific
+     * one, which is the only thing Enter on a mid-list step can honestly mean.
+     * This used to append unconditionally, so Enter on step 3 of 20 built step
+     * 21 and then dragged the caret down there with it.
+     *
+     * The append case is max+1 rather than `.length` for the same reason
+     * `addPhase` is: `deleteItem` doesn't renumber, so length reused a number a
+     * sibling already held.
+     */
+    const displaced = after ? siblings.filter((i) => i.position > after.position) : [];
+    const position = after
+      ? after.position + 1
+      : siblings.reduce((max, i) => Math.max(max, i.position), -1) + 1;
     const { data, error } = await supabase
       .from(TABLES.items as any)
       .insert({ phase_id: phaseId, position, kind, label: "", required: false })
@@ -670,6 +720,9 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
     const item = data as unknown as Item;
     setItems((xs) => [...xs, item]);
     setFocusItemId(item.id);
+    // Not awaited: the order is already right locally, and making the caret
+    // wait on one round trip per displaced step would buy nothing.
+    void shiftDown(TABLES.items, displaced, setItems);
   };
 
   const updateItem = (id: string, patch: Partial<Item>) => {
@@ -998,7 +1051,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
                               onUpdate={(patch) => updatePhase(ph.id, patch)}
                               onDelete={() => void deletePhase(ph)}
                               onDuplicate={() => void duplicatePhase(ph)}
-                              onAddItem={(kind) => void addItem(ph.id, kind)}
+                              onAddItem={(kind, after) => void addItem(ph.id, kind, after)}
                               onUpdateItem={updateItem}
                               onDeleteItem={(id) => void deleteItem(id)}
                             />
@@ -1180,7 +1233,7 @@ function PhaseCard({
   onUpdate: (patch: Partial<Phase>) => void;
   onDelete: () => void;
   onDuplicate: () => void;
-  onAddItem: (kind: ItemKind) => void;
+  onAddItem: (kind: ItemKind, after?: Item) => void;
   onUpdateItem: (id: string, patch: Partial<Item>) => void;
   onDeleteItem: (id: string) => void;
 }) {
@@ -1207,7 +1260,10 @@ function PhaseCard({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "group/phase relative rounded-2xl border border-border bg-card transition-shadow",
-        isDragging && "z-30 opacity-90 shadow-[0px_18px_36px_-20px_rgba(16,25,41,0.55)]",
+        // The card is already `relative`, so this z-index is live — at z-30 a
+        // dragged phase floated over the sticky BuilderTitleBar (z-10) and the
+        // AppHeader (z-20). It only needs to clear its sibling phases.
+        isDragging && "z-[5] opacity-90 shadow-[0px_18px_36px_-20px_rgba(16,25,41,0.55)]",
       )}
     >
       <div className="flex items-start gap-1 px-2.5 py-2.5">
@@ -1332,7 +1388,7 @@ function PhaseCard({
                     onFocused={onItemFocused}
                     onChange={(patch) => onUpdateItem(it.id, patch)}
                     onDelete={() => onDeleteItem(it.id)}
-                    onAddAfter={() => onAddItem(it.kind)}
+                    onAddAfter={() => onAddItem(it.kind, it)}
                   />
                 ))}
               </ul>
@@ -1422,7 +1478,11 @@ function StepRow({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "group flex items-center gap-1.5 rounded-xl border border-border bg-background/60 px-1.5 py-1.5 transition-colors hover:border-primary/30",
-        isDragging && "z-30 opacity-90 shadow-[0px_14px_28px_-18px_rgba(16,25,41,0.55)]",
+        // `relative`, because z-index is inert on a static box: this read
+        // `z-30` and did nothing, so a dragged step was painted in plain DOM
+        // order and the steps below it clipped its lift shadow. Stays under
+        // BuilderTitleBar (z-10) and AppHeader (z-20).
+        isDragging && "relative z-[5] opacity-90 shadow-[0px_14px_28px_-18px_rgba(16,25,41,0.55)]",
       )}
     >
       <DragHandle {...attributes} {...listeners} />

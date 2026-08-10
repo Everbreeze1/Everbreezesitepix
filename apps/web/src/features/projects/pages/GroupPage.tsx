@@ -264,7 +264,7 @@ export function GroupPage() {
   const { group, projects, recent_photos, totals } = data;
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-6 md:py-10">
+    <div className="container mx-auto max-w-6xl px-4 pb-24 pt-6 md:pt-10">
       {/* Header */}
       <div className="mb-6">
         <Button

@@ -1284,7 +1284,7 @@ export function ProjectsPage() {
 
         {/* Same container as the project home page, so the content edge does not
             jump when you click through from this list into a project. */}
-        <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:py-10">
+        <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pt-10">
           {/* Hero — same shell, ornament, badge and stats rail as the project home page. */}
           <div className="relative overflow-hidden rounded-[32px] bg-sidebar">
             <div className="pointer-events-none absolute -right-24 -top-28 h-[288px] w-[288px] rounded-full border-[28px] border-sidebar-ring/20" />
