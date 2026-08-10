@@ -444,6 +444,20 @@ export function GalleryPage() {
     if (search.project) setProjectFilter([search.project]);
   }, [search.project]);
 
+  // `view` seeds from the URL, but the initial state only runs on mount — so
+  // arriving at ?view=calendar while the gallery is already open (the /timeline
+  // redirect, back/forward, a shared link) would leave the grid showing. Only
+  // acts when the param is actually present, so navigating to a bare /gallery
+  // doesn't yank the user out of the calendar.
+  useEffect(() => {
+    if (search.view) {
+      setView(search.view);
+      setSelectedDay(null);
+      setPhotos([]);
+      setSigned({});
+    }
+  }, [search.view]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {

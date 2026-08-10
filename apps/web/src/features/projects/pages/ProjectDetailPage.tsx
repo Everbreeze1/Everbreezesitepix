@@ -44,11 +44,9 @@ import { EditProjectDialog } from "@/features/projects/components/EditProjectDia
 import { ProjectActionsMenu } from "@/features/projects/components/ProjectActionsMenu";
 import { ProjectChecklists } from "@/features/projects/components/ProjectChecklists";
 import { startOfMonth } from "date-fns";
-import {
-  PhotoCalendar,
-  type CalendarPhoto,
-} from "@/features/gallery/components/PhotoCalendar";
+import { PhotoCalendar, type CalendarPhoto } from "@/features/gallery/components/PhotoCalendar";
 import { PhotoThumb } from "@/components/PhotoThumb";
+import { PageTabStrip } from "@/components/PageTabStrip";
 import { ProjectWorkflows } from "@/features/projects/components/ProjectWorkflows";
 import { ProjectTasks, type ProjectTasksHandle } from "@/features/projects/components/ProjectTasks";
 import { ProjectDocuments } from "@/features/projects/components/ProjectDocuments";
@@ -2324,74 +2322,37 @@ export function ProjectDetailPage() {
         </div>
       </div>
 
-      <div className="mt-3.5 overflow-x-auto rounded-2xl border border-border bg-card/80 p-2 shadow-[0px_16px_32px_-28px_rgba(16,25,41,0.6)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="flex min-w-max items-center gap-1">
-          {(
-            [
-              { key: "photos", label: "Photos", count: photos.length, icon: Camera },
-              { key: "reports", label: "Documents", count: counts.documents, icon: FileText },
-              {
-                key: "checklists",
-                label: "Checklists",
-                count: counts.checklists,
-                icon: ListChecks,
-              },
-              {
-                key: "walkthroughs",
-                label: "Walkthroughs",
-                count: walkthroughs.length,
-                icon: Footprints,
-              },
-              { key: "workflows", label: "Workflows", count: counts.workflows, icon: Workflow },
-              { key: "tasks", label: "Tasks", count: counts.tasksOpen, icon: CheckSquare },
-              // No count: the calendar is a view of the photos already counted
-              // on the Photos tab, so a number here would double-count the
-              // same work.
-              { key: "calendar", label: "Calendar", count: null, icon: CalendarDays },
-            ] as const
-          ).map((tab) => {
-            const active = (tab.key === "photos" && panel === null) || panel === tab.key;
-            const Icon = tab.icon;
-            const handleClick = () => {
-              if (tab.key === "photos") {
-                setPanel(null);
-                return;
-              }
-              if (tab.key === "workflows" && !isTeam) {
-                setWorkflowsUpgradeOpen(true);
-                return;
-              }
-              setPanel((cur) => (cur === tab.key ? null : (tab.key as any)));
-            };
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={handleClick}
-                className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-extrabold transition ${
-                  active
-                    ? "bg-primary text-primary-foreground shadow-lg"
-                    : "text-muted-foreground hover:bg-accent"
-                }`}
-              >
-                <span
-                  className={`flex h-7 w-7 items-center justify-center rounded-lg ${
-                    active ? "bg-primary-foreground/20" : "bg-muted"
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                </span>
-                {tab.label}
-                {tab.count !== null && (
-                  <span className={active ? "text-primary-foreground/70" : "text-muted-foreground"}>
-                    {tab.count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <PageTabStrip
+        className="mt-3.5"
+        value={panel ?? "photos"}
+        items={[
+          { key: "photos", label: "Photos", count: photos.length, icon: Camera },
+          { key: "reports", label: "Documents", count: counts.documents, icon: FileText },
+          { key: "checklists", label: "Checklists", count: counts.checklists, icon: ListChecks },
+          {
+            key: "walkthroughs",
+            label: "Walkthroughs",
+            count: walkthroughs.length,
+            icon: Footprints,
+          },
+          { key: "workflows", label: "Workflows", count: counts.workflows, icon: Workflow },
+          { key: "tasks", label: "Tasks", count: counts.tasksOpen, icon: CheckSquare },
+          // No count: the calendar is a view of the photos already counted on
+          // the Photos tab, so a number here would double-count the same work.
+          { key: "calendar", label: "Calendar", count: null, icon: CalendarDays },
+        ]}
+        onChange={(key) => {
+          if (key === "photos") {
+            setPanel(null);
+            return;
+          }
+          if (key === "workflows" && !isTeam) {
+            setWorkflowsUpgradeOpen(true);
+            return;
+          }
+          setPanel((cur) => (cur === key ? null : (key as any)));
+        }}
+      />
 
       {/* Other panels open as dedicated full pages (see early return above). Walkthroughs renders inline. */}
       {panel === "walkthroughs" && (
@@ -2488,10 +2449,7 @@ export function ProjectDetailPage() {
 
       {panel === "checklists" && (
         <div className="mt-9">
-          <ProjectChecklists
-            projectId={project.id}
-            onChanged={() => void load({ silent: true })}
-          />
+          <ProjectChecklists projectId={project.id} onChanged={() => void load({ silent: true })} />
         </div>
       )}
       {/* The same calendar the gallery uses, scoped to this job — one
@@ -2552,9 +2510,7 @@ export function ProjectDetailPage() {
               icon={Workflow}
               title="Workflows are a Team plan feature"
               description="Multi-phase workflows with checklists, photo prompts, and sign-offs per phase are available on the Team plan."
-              action={
-                <Button onClick={() => setWorkflowsUpgradeOpen(true)}>See Team plan</Button>
-              }
+              action={<Button onClick={() => setWorkflowsUpgradeOpen(true)}>See Team plan</Button>}
             />
           )}
         </div>

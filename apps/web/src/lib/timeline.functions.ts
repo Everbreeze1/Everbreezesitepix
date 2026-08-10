@@ -27,6 +27,8 @@ export const listTimelineActivity = rpcOp<
     to: string;
     projectIds?: string[];
     tags?: string[];
+    /** IANA zone. Preferred over the offset, which can't know about DST. */
+    timeZone?: string;
     tzOffsetMinutes?: number;
     withThumbnails?: boolean;
   },

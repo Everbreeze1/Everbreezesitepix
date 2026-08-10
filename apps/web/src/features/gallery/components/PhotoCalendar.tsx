@@ -13,7 +13,14 @@ import {
   startOfWeek,
   startOfYear,
 } from "date-fns";
-import { CalendarDays, ChevronLeft, ChevronRight, Camera, FolderKanban } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Camera,
+  FolderKanban,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PhotoThumb } from "@/components/PhotoThumb";
@@ -67,6 +74,15 @@ const dayKey = (d: Date) => format(d, "yyyy-MM-dd");
 
 /** The instant a photo was actually captured, falling back to when it synced. */
 const shotAt = (p: CalendarPhoto) => p.taken_at ?? p.created_at;
+
+/** The viewer's IANA zone, or undefined on the rare runtime that withholds it. */
+const viewerTimeZone = (): string | undefined => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 /**
  * Month view of the photo library, with a year heatmap behind the same header.
@@ -148,6 +164,10 @@ export function PhotoCalendar({
           to: range.to,
           projectIds: scopeIds.length ? scopeIds : undefined,
           tags: scopeTags.length ? scopeTags : undefined,
+          // The zone, not just today's offset: the day panel builds its window
+          // from a real local date, so bucketing the cells on a frozen offset
+          // makes the two disagree either side of a daylight-saving change.
+          timeZone: viewerTimeZone(),
           tzOffsetMinutes: new Date().getTimezoneOffset(),
           // The year heatmap only needs counts; skipping thumbnails there
           // avoids ~365 signed-URL requests for pixels nobody sees.
@@ -284,24 +304,42 @@ export function PhotoCalendar({
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-          <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-muted-foreground">
-            <Camera className="h-3.5 w-3.5" />
-            {totalPhotos.toLocaleString()} photo{totalPhotos === 1 ? "" : "s"}
-          </span>
-          <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-muted-foreground">
-            <CalendarDays className="h-3.5 w-3.5" />
-            {activeDays} active day{activeDays === 1 ? "" : "s"}
-          </span>
-          {showProjectBreakdown && (
-            <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-muted-foreground">
-              <FolderKanban className="h-3.5 w-3.5" />
-              {projectsTouched} project{projectsTouched === 1 ? "" : "s"}
+          {/* A failed load must not read as an empty month — this whole view
+              exists to be trusted about counts. */}
+          {activityQuery.isError ? (
+            <span className="inline-flex items-center gap-1.5 text-[11.5px] font-bold text-destructive">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Couldn&apos;t load this {view}&apos;s activity
+              <button
+                type="button"
+                onClick={() => void activityQuery.refetch()}
+                className="underline underline-offset-2 hover:no-underline"
+              >
+                Retry
+              </button>
             </span>
-          )}
-          {activityQuery.data?.capped && (
-            <span className="text-[11.5px] font-bold text-amber-600 dark:text-amber-400">
-              Too much activity to count exactly — totals are a floor
-            </span>
+          ) : (
+            <>
+              <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-muted-foreground">
+                <Camera className="h-3.5 w-3.5" />
+                {totalPhotos.toLocaleString()} photo{totalPhotos === 1 ? "" : "s"}
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-muted-foreground">
+                <CalendarDays className="h-3.5 w-3.5" />
+                {activeDays} active day{activeDays === 1 ? "" : "s"}
+              </span>
+              {showProjectBreakdown && (
+                <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-muted-foreground">
+                  <FolderKanban className="h-3.5 w-3.5" />
+                  {projectsTouched} project{projectsTouched === 1 ? "" : "s"}
+                </span>
+              )}
+              {activityQuery.data?.capped && (
+                <span className="text-[11.5px] font-bold text-amber-600 dark:text-amber-400">
+                  Too much activity to count exactly — totals are a floor
+                </span>
+              )}
+            </>
           )}
         </div>
 
@@ -431,6 +469,22 @@ export function PhotoCalendar({
                 <p className="max-w-[200px] text-xs text-muted-foreground">
                   Days with captures show a thumbnail and a count.
                 </p>
+              </div>
+            ) : dayQuery.isError ? (
+              // Same reasoning as the header: "no photos" and "we couldn't ask"
+              // must not look identical.
+              <div className="flex flex-col items-center gap-2 py-10 text-center">
+                <AlertTriangle className="h-6 w-6 text-destructive" />
+                <p className="text-xs font-semibold text-destructive">
+                  Couldn&apos;t load this day
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void dayQuery.refetch()}
+                  className="text-xs underline underline-offset-2 hover:no-underline"
+                >
+                  Retry
+                </button>
               </div>
             ) : dayQuery.isPending ? (
               <p className="py-10 text-center text-sm text-muted-foreground">Loading…</p>

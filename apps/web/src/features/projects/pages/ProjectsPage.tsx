@@ -1,5 +1,5 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query-keys";
 import { PhotoThumb } from "@/components/PhotoThumb";
@@ -9,14 +9,10 @@ import {
   FileText,
   Plus,
   MapPin,
-  ArrowRight,
-  Image as ImageIcon,
   Clock,
   Star,
   Archive,
   ArchiveRestore,
-  ChevronLeft,
-  ChevronRight,
   MoreHorizontal,
   ImageOff,
   RefreshCw,
@@ -38,6 +34,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SectionHeading, SURFACE_CARD_INTERACTIVE } from "@/components/ui/surface";
+import { PageTabStrip } from "@/components/PageTabStrip";
+import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -109,12 +108,25 @@ interface ProjectRow {
 }
 
 /**
- * Starred and Archived used to be tabs too. They are refinements of whichever
- * list you are already looking at, not separate lists — "starred, active
- * projects" was unreachable when they were mutually exclusive tabs — so they
- * moved into the Filters popover as toggles and this run got shorter.
+ * Tabs are destinations, not refinements.
+ *
+ * This run used to be All / Active / Completed / Starred / Archived / Groups /
+ * Pipelines — seven pills of two different kinds. Starred and Archived went
+ * first: they are refinements of whichever list you are already looking at
+ * ("starred, active projects" was unreachable while they were mutually
+ * exclusive tabs), so they became toggles in the Filters popover. Active and
+ * Completed are the same species — predicates over the one projects array — so
+ * they followed, onto the hero stats rail (one click) and the Filters popover
+ * (discoverable). What is left is the three things that are genuinely
+ * different content: the project list, saved Groups, and Pipelines.
  */
-type TabKey = "all" | "active" | "completed" | "groups" | "boards";
+type TabKey = "projects" | "groups" | "boards";
+
+/** Status is a refinement of the project list, reachable from the hero stats and the Filters popover. */
+type StatusFilter = "any" | "active" | "completed";
+
+/** hide = the default list; include = widen with archived; only = the archive itself. */
+type ArchivedMode = "hide" | "include" | "only";
 
 interface TagRow {
   id: string;
@@ -162,23 +174,14 @@ export function ProjectsPage() {
   const [recentMembers, setRecentMembers] = useState<
     Record<string, Array<{ id: string; name: string | null; avatar: string | null }>>
   >({});
-  const [recentPhotos, setRecentPhotos] = useState<
-    Array<{
-      id: string;
-      project_id: string;
-      project_name: string;
-      caption: string | null;
-      url: string;
-      created_at: string;
-    }>
-  >([]);
   const [projectTagMap, setProjectTagMap] = useState<Record<string, TagRow[]>>({});
   const [allTags, setAllTags] = useState<TagRow[]>([]);
 
   // Tab + search state
-  const [tab, setTab] = useState<TabKey>("all");
+  const [tab, setTab] = useState<TabKey>("projects");
   const [query, setQuery] = useState(routeSearch.q ?? "");
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("any");
 
   // Project label filter (color-managed labels stored on projects.labels[])
   const labelCatalog = useLabelCatalog();
@@ -194,7 +197,16 @@ export function ProjectsPage() {
 
   // Ex-tabs, now refinements that compose with whatever view is selected.
   const [starredOnly, setStarredOnly] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
+  /**
+   * Archived is three-state, not a checkbox.
+   *
+   * "include" is the old widening toggle — it lets an archived project still be
+   * found under Active or Completed, which a separate Archived tab never could.
+   * But the hero stat rail needs "only": every stat there is a number you can
+   * click, and a button reading "12 archived" that makes the list *grow* by 12
+   * is a different gesture wearing the same clothes as the three beside it.
+   */
+  const [archivedMode, setArchivedMode] = useState<ArchivedMode>("hide");
 
   /**
    * Refinement lives behind one control now.
@@ -263,14 +275,6 @@ export function ProjectsPage() {
       string,
       Array<{ id: string; name: string | null; avatar: string | null }>
     >;
-    recentPhotos: Array<{
-      id: string;
-      project_id: string;
-      project_name: string;
-      caption: string | null;
-      url: string;
-      created_at: string;
-    }>;
   }
 
   const load = async (): Promise<ProjectsSnapshot> => {
@@ -286,7 +290,6 @@ export function ProjectsPage() {
         reportCounts: {},
         checklistCounts: {},
         recentMembers: {},
-        recentPhotos: [],
       };
     }
     void seedDefaultLabelsIfNeeded();
@@ -319,9 +322,9 @@ export function ProjectsPage() {
     if (projects.length) {
       const ids = projects.map((p) => p.id);
 
-      // These four queries are independent of each other — run them as one
-      // round-trip instead of four sequential ones.
-      const [{ data: ph }, { data: rep }, { data: cl }, { data: rp }] = await Promise.all([
+      // These three queries are independent of each other — run them as one
+      // round-trip instead of three sequential ones.
+      const [{ data: ph }, { data: rep }, { data: cl }] = await Promise.all([
         supabase
           .from("photos")
           .select("project_id, storage_path, image_url, uploaded_by, created_at")
@@ -331,13 +334,6 @@ export function ProjectsPage() {
           .order("created_at", { ascending: false }),
         (supabase as any).from("project_reports").select("project_id").in("project_id", ids),
         (supabase as any).from("project_checklists").select("project_id").in("project_id", ids),
-        supabase
-          .from("photos")
-          .select("id, project_id, caption, storage_path, image_url, created_at")
-          .or("phase.is.null,phase.neq.walkthrough")
-          .not("storage_path", "like", "%/walkthroughs/%")
-          .order("created_at", { ascending: false })
-          .limit(12),
       ]);
       const samplesByProject: Record<
         string,
@@ -395,23 +391,10 @@ export function ProjectsPage() {
 
       const uploaderIds = Array.from(new Set(Object.values(uploadersByProject).flat()));
 
-      const rpList = (
-        (rp as Array<{
-          id: string;
-          project_id: string;
-          caption: string | null;
-          storage_path: string;
-          image_url: string | null;
-          created_at: string;
-        }>) ?? []
-      ).filter((r) => !r.storage_path.includes("/walkthroughs/"));
-      const projNameById = new Map(projects.map((p) => [p.id, p.name]));
-      const needSign = rpList.filter((r) => !r.image_url).map((r) => r.storage_path);
-
-      // These three depend on different results from the wave above, but not
-      // on each other — sign cover/sample paths, look up uploader profiles,
-      // and sign recent-photo paths all in one round-trip instead of three.
-      const [signedCovers, profs, signedRecent] = await Promise.all([
+      // These two depend on different results from the wave above, but not on
+      // each other — sign cover/sample paths and look up uploader profiles in
+      // one round-trip instead of two.
+      const [signedCovers, profs] = await Promise.all([
         pathsToSign.length
           ? supabase.storage.from("site-photos").createSignedUrls(pathsToSign, 60 * 60)
           : Promise.resolve({ data: null }),
@@ -420,9 +403,6 @@ export function ProjectsPage() {
               .from("profiles")
               .select("id, full_name, avatar_url")
               .in("id", uploaderIds)
-          : Promise.resolve({ data: null }),
-        needSign.length
-          ? supabase.storage.from("site-photos").createSignedUrls(needSign, 60 * 60)
           : Promise.resolve({ data: null }),
       ]);
 
@@ -454,19 +434,6 @@ export function ProjectsPage() {
         );
       });
 
-      const signedMap: Record<string, string> = {};
-      signedRecent.data?.forEach((s, i) => {
-        if (s.signedUrl) signedMap[needSign[i]] = s.signedUrl;
-      });
-      const recentPhotosList = rpList.map((r) => ({
-        id: r.id,
-        project_id: r.project_id,
-        project_name: projNameById.get(r.project_id) ?? "Project",
-        caption: r.caption,
-        url: r.image_url ?? signedMap[r.storage_path] ?? "",
-        created_at: r.created_at,
-      }));
-
       return {
         projects,
         projectTagMap: ptMap,
@@ -478,7 +445,6 @@ export function ProjectsPage() {
         reportCounts: rc,
         checklistCounts: cc,
         recentMembers: membersByProject,
-        recentPhotos: recentPhotosList,
       };
     }
 
@@ -493,7 +459,6 @@ export function ProjectsPage() {
       reportCounts: {},
       checklistCounts: {},
       recentMembers: {},
-      recentPhotos: [],
     };
   };
 
@@ -562,7 +527,6 @@ export function ProjectsPage() {
     setReportCounts(projectsQuery.data.reportCounts);
     setChecklistCounts(projectsQuery.data.checklistCounts);
     setRecentMembers(projectsQuery.data.recentMembers);
-    setRecentPhotos(projectsQuery.data.recentPhotos);
   }, [projectsQuery.data]);
 
   useEffect(() => {
@@ -612,13 +576,14 @@ export function ProjectsPage() {
 
   const filteredProjects = useMemo(() => {
     let list = allProjects;
-    // "Show archived" widens the list rather than replacing it, so an archived
-    // project can still be found under Active/Completed — the old Archived tab
-    // was a separate world you had to leave your view to visit.
-    if (!showArchived) list = list.filter((p) => !p.archived);
+    // "include" widens the list rather than replacing it, so an archived project
+    // can still be found under Active/Completed — the old Archived tab was a
+    // separate world you had to leave your view to visit. "only" is that world,
+    // for when you deliberately went looking for it.
+    if (archivedMode === "hide") list = list.filter((p) => !p.archived);
+    else if (archivedMode === "only") list = list.filter((p) => p.archived);
     if (starredOnly) list = list.filter((p) => p.starred);
-    if (tab === "active") list = list.filter((p) => p.status === "active");
-    if (tab === "completed") list = list.filter((p) => p.status === "completed");
+    if (statusFilter !== "any") list = list.filter((p) => p.status === statusFilter);
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter((p) => {
@@ -672,7 +637,7 @@ export function ProjectsPage() {
   }, [
     allProjects,
     projectTagMap,
-    tab,
+    statusFilter,
     query,
     selectedTagIds,
     selectedLabels,
@@ -682,7 +647,7 @@ export function ProjectsPage() {
     dateFrom,
     dateTo,
     starredOnly,
-    showArchived,
+    archivedMode,
   ]);
 
   const projectPickerRows: ProjectPickerRow[] = useMemo(
@@ -733,27 +698,59 @@ export function ProjectsPage() {
   const starredCount = allProjects.filter((p) => p.starred && !p.archived).length;
   const archivedCount = allProjects.filter((p) => p.archived).length;
 
-  // Two runs separated by a divider: the status views over the project list,
-  // then the saved collections. Every pill carries an icon so the run reads as
-  // one navigation control — the same strip the project home page uses.
-  const tabs: Array<{
-    key: TabKey;
-    label: string;
-    count: number;
-    icon: any;
-    startsGroup?: boolean;
-  }> = [
-    { key: "all", label: "All", count: activeCount, icon: LayoutGrid },
-    { key: "active", label: "Active", count: activeStatusCount, icon: CircleDot },
-    { key: "completed", label: "Completed", count: completedCount, icon: CheckCircle2 },
-    { key: "groups", label: "Groups", count: groups.length, icon: FolderPlus, startsGroup: true },
+  // Three destinations, one per kind of thing. Every pill carries an icon so
+  // the run reads as one navigation control — the same strip, now literally the
+  // same component, that the project home page uses.
+  const tabs = [
+    { key: "projects", label: "Projects", count: activeCount, icon: LayoutGrid },
+    { key: "groups", label: "Groups", count: groups.length, icon: FolderPlus },
     // Key stays "boards" (route/state/table naming); only the label is
     // user-facing, and "Pipeline" describes what the columns actually are.
     { key: "boards", label: "Pipelines", count: boards.length, icon: Layers },
   ];
 
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const scrollBy = (dx: number) => scrollerRef.current?.scrollBy({ left: dx, behavior: "smooth" });
+  /**
+   * Status stats double as the status filter.
+   *
+   * These four numbers used to be tab labels. Reading the workload and cutting
+   * to it are the same gesture, so the number *is* the control — click "19
+   * active" to see the 19. That is what the pipeline view does well, and it is
+   * why Active/Completed could leave the tab strip without going two clicks deep.
+   */
+  const heroStats = [
+    {
+      key: "active",
+      icon: CircleDot,
+      count: activeStatusCount,
+      label: "active",
+      on: statusFilter === "active",
+      toggle: () => setStatusFilter((s) => (s === "active" ? "any" : "active")),
+    },
+    {
+      key: "completed",
+      icon: CheckCircle2,
+      count: completedCount,
+      label: "completed",
+      on: statusFilter === "completed",
+      toggle: () => setStatusFilter((s) => (s === "completed" ? "any" : "completed")),
+    },
+    {
+      key: "starred",
+      icon: Star,
+      count: starredCount,
+      label: "starred",
+      on: starredOnly,
+      toggle: () => setStarredOnly((s) => !s),
+    },
+    {
+      key: "archived",
+      icon: Archive,
+      count: archivedCount,
+      label: "archived",
+      on: archivedMode === "only",
+      toggle: () => setArchivedMode((m) => (m === "only" ? "hide" : "only")),
+    },
+  ];
 
   /** Refinements behind the Filters button. Search is counted separately. */
   const filterCount =
@@ -761,19 +758,26 @@ export function ProjectsPage() {
     selectedLabels.length +
     selectedContributors.length +
     (dateFrom || dateTo ? 1 : 0) +
+    (statusFilter !== "any" ? 1 : 0) +
     (starredOnly ? 1 : 0) +
-    (showArchived ? 1 : 0);
-  const hasActiveFilters = !!query || filterCount > 0;
+    (archivedMode !== "hide" ? 1 : 0);
+  const hasActiveFilters = !!query.trim() || filterCount > 0;
 
-  const clearAllFilters = () => {
-    setQuery("");
+  /** Clears the popover's refinements. Does not touch the search keyword. */
+  const clearRefinements = () => {
     setSelectedTagIds([]);
     setSelectedLabels([]);
     setSelectedContributors([]);
     setDateFrom("");
     setDateTo("");
+    setStatusFilter("any");
     setStarredOnly(false);
-    setShowArchived(false);
+    setArchivedMode("hide");
+  };
+
+  const clearAllFilters = () => {
+    setQuery("");
+    clearRefinements();
   };
 
   const bodyLabel =
@@ -783,15 +787,471 @@ export function ProjectsPage() {
         ? activeBoard
           ? activeBoard.name
           : "Pipelines"
-        : tab === "active"
-          ? "Active projects"
-          : tab === "completed"
-            ? "Completed projects"
-            : starredOnly
-              ? "Starred projects"
-              : "All projects";
-  const bodyShownCount =
-    tab === "groups" ? groups.length : tab === "boards" ? boards.length : filteredProjects.length;
+        : archivedMode === "only"
+          ? "Archived projects"
+          : statusFilter === "active"
+            ? "Active projects"
+            : statusFilter === "completed"
+              ? "Completed projects"
+              : starredOnly
+                ? "Starred projects"
+                : "All projects";
+  const bodyShownCount = tab === "groups" ? groups.length : filteredProjects.length;
+  const bodyDescription =
+    tab === "groups"
+      ? `${bodyShownCount} ${bodyShownCount === 1 ? "group" : "groups"} — related projects sharing photos, stats and views.`
+      : `${bodyShownCount} ${bodyShownCount === 1 ? "project" : "projects"} shown, most recently updated first.`;
+
+  /**
+   * The toolbar is not a band of its own any more — these two render into the
+   * section header's action slot, the way the project home page puts its
+   * controls on the same line as the heading they act on.
+   */
+  const searchInput = (
+    <div className="relative w-full sm:w-60 md:w-72">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={tab === "groups" ? "Search groups…" : "Search projects by name or address…"}
+        className="h-8 rounded-lg border-border bg-card/80 pl-8 pr-8 text-xs shadow-none placeholder:text-muted-foreground"
+      />
+      {query && (
+        <button
+          type="button"
+          onClick={() => setQuery("")}
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Clear search"
+        >
+          <XIcon className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+
+  const filtersPopover = (
+    <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8 shrink-0 gap-1.5 text-xs">
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          Filters
+          {filterCount > 0 && (
+            <span className="ml-0.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
+              {filterCount}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[340px] p-0" align="end">
+        <div className="flex items-center gap-0.5 border-b border-border p-1.5">
+          {FILTER_PANES.map((p) => {
+            const paneActive = filterPane === p.key;
+            const n =
+              p.key === "views"
+                ? (statusFilter !== "any" ? 1 : 0) +
+                  (starredOnly ? 1 : 0) +
+                  (archivedMode !== "hide" ? 1 : 0)
+                : p.key === "tags"
+                  ? selectedTagIds.length
+                  : p.key === "labels"
+                    ? selectedLabels.length
+                    : p.key === "people"
+                      ? selectedContributors.length
+                      : dateFrom || dateTo
+                        ? 1
+                        : 0;
+            return (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setFilterPane(p.key)}
+                className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-bold transition ${
+                  paneActive
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <p.icon className="h-3.5 w-3.5" />
+                <span className="flex items-center gap-1">
+                  {p.label}
+                  {n > 0 && (
+                    <span className={paneActive ? "text-background/60" : "text-primary"}>{n}</span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {filterPane === "views" && (
+          <div className="p-3">
+            {/*
+                  Status used to be three tabs. It is a predicate over the one
+                  project list, same as Starred and Archived, so it lives with
+                  them — reachable here, and one click away on the hero stats.
+                */}
+            <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              Status
+            </div>
+            <div className="mb-3 inline-flex w-full overflow-hidden rounded-lg border border-border">
+              {(
+                [
+                  { key: "any", label: "Any", count: activeCount },
+                  { key: "active", label: "Active", count: activeStatusCount },
+                  { key: "completed", label: "Completed", count: completedCount },
+                ] as const
+              ).map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => setStatusFilter(s.key)}
+                  className={`flex flex-1 items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-semibold transition ${
+                    statusFilter === s.key
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {s.label}
+                  <span
+                    className={
+                      statusFilter === s.key ? "text-background/60" : "text-muted-foreground"
+                    }
+                  >
+                    {s.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              Narrow the current view
+            </div>
+            <div className="space-y-0.5">
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setStarredOnly((s) => !s)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setStarredOnly((s) => !s);
+                  }
+                }}
+                className={`flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 transition ${
+                  starredOnly ? "bg-accent/70" : "hover:bg-muted"
+                }`}
+              >
+                <Checkbox checked={starredOnly} />
+                <Star className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">Starred only</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Just the projects you&apos;ve starred
+                  </div>
+                </div>
+                <span className="text-xs font-semibold text-muted-foreground">{starredCount}</span>
+              </div>
+
+              {/*
+                Three states, not a checkbox: "Include" widens the current view,
+                "Only" is the archive on its own. The hero stat toggles Hide/Only,
+                so the number you click is the number you get.
+              */}
+              <div className="rounded-md px-2 py-2">
+                <div className="flex items-center gap-2.5">
+                  <Archive className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium">Archived projects</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Hidden by default, or shown alongside the rest
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    {archivedCount}
+                  </span>
+                </div>
+                <div className="mt-2 inline-flex w-full overflow-hidden rounded-lg border border-border">
+                  {(
+                    [
+                      { key: "hide", label: "Hide" },
+                      { key: "include", label: "Include" },
+                      { key: "only", label: "Only" },
+                    ] as const
+                  ).map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => setArchivedMode(m.key)}
+                      className={`flex-1 px-2 py-1.5 text-[11px] font-semibold transition ${
+                        archivedMode === m.key
+                          ? "bg-foreground text-background"
+                          : "text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {filterPane === "tags" && (
+          <div className="p-3">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Select tags
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {selectedTagIds.length} selected
+              </span>
+            </div>
+            <div className="max-h-60 overflow-y-auto pr-1">
+              {allTags.length === 0 ? (
+                <div className="px-1 py-3 text-xs text-muted-foreground">
+                  No tags yet — create one on a project to filter by it here.
+                </div>
+              ) : (
+                <div className="space-y-0.5">
+                  {allTags.map((t) => {
+                    const checked = selectedTagIds.includes(t.id);
+                    return (
+                      <div
+                        key={t.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setSelectedTagIds((prev) =>
+                            prev.includes(t.id)
+                              ? prev.filter((id) => id !== t.id)
+                              : [...prev, t.id],
+                          );
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedTagIds((prev) =>
+                              prev.includes(t.id)
+                                ? prev.filter((id) => id !== t.id)
+                                : [...prev, t.id],
+                            );
+                          }
+                        }}
+                        className={`flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 transition ${
+                          checked ? "bg-accent/70" : "hover:bg-muted"
+                        }`}
+                      >
+                        <Checkbox checked={checked} />
+                        <TagPill name={t.name} size="sm" />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {selectedTagIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedTagIds([])}
+                className="mt-2 w-full rounded-md py-1.5 text-center text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                Clear tag filters
+              </button>
+            )}
+          </div>
+        )}
+
+        {filterPane === "labels" && (
+          <div className="p-3">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Project labels
+              </span>
+              <div className="inline-flex overflow-hidden rounded-md border border-border text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => setLabelMode("OR")}
+                  className={`px-2 py-0.5 font-semibold ${labelMode === "OR" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}
+                >
+                  OR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLabelMode("AND")}
+                  className={`px-2 py-0.5 font-semibold ${labelMode === "AND" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}
+                >
+                  AND
+                </button>
+              </div>
+            </div>
+            <div className="max-h-60 overflow-y-auto pr-1">
+              {labelCatalog.rows.length === 0 ? (
+                <div className="px-1 py-3 text-xs text-muted-foreground">
+                  No labels yet — they’ll appear here after your first visit.
+                </div>
+              ) : (
+                <div className="space-y-0.5">
+                  {labelCatalog.rows.map((l) => {
+                    const checked = selectedLabels.includes(l.name);
+                    const toggle = () =>
+                      setSelectedLabels((prev) =>
+                        prev.includes(l.name)
+                          ? prev.filter((x) => x !== l.name)
+                          : [...prev, l.name],
+                      );
+                    return (
+                      <div
+                        key={l.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={toggle}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggle();
+                          }
+                        }}
+                        className={`flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 transition ${checked ? "bg-accent/70" : "hover:bg-muted"}`}
+                      >
+                        <Checkbox checked={checked} />
+                        <LabelChip label={l.name} />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {selectedLabels.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedLabels([])}
+                className="mt-2 w-full rounded-md py-1.5 text-center text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                Clear label filters
+              </button>
+            )}
+          </div>
+        )}
+
+        {filterPane === "people" && (
+          <div className="p-3">
+            <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              Filter by contributor
+            </div>
+            <div className="max-h-60 overflow-y-auto pr-1">
+              {contributorOptions.length === 0 ? (
+                <div className="px-1 py-3 text-xs text-muted-foreground">
+                  No contributors yet — upload photos to a project.
+                </div>
+              ) : (
+                contributorOptions.map((c) => {
+                  const checked = selectedContributors.includes(c.id);
+                  const toggle = () =>
+                    setSelectedContributors((prev) =>
+                      prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id],
+                    );
+                  return (
+                    <div
+                      key={c.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={toggle}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggle();
+                        }
+                      }}
+                      className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 ${checked ? "bg-accent/70" : "hover:bg-muted"}`}
+                    >
+                      <Checkbox checked={checked} />
+                      <Avatar className="h-6 w-6">
+                        {c.avatar ? <AvatarImage src={c.avatar} alt="" /> : null}
+                        <AvatarFallback className="text-[9px]">
+                          {(c.name ?? "?").slice(0, 1).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="truncate text-sm">{c.name ?? "Unknown"}</span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            {selectedContributors.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedContributors([])}
+                className="mt-2 w-full rounded-md py-1.5 text-center text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                Clear contributor filters
+              </button>
+            )}
+          </div>
+        )}
+
+        {filterPane === "date" && (
+          <div className="p-3">
+            <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              Filter by date range
+            </div>
+            <div className="space-y-2">
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground">
+                  Start (created)
+                </label>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground">
+                  End (completed)
+                </label>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Start = when project was created. End = when marked <b>Complete</b> (falls back to
+                last activity if still open).
+              </p>
+              {(dateFrom || dateTo) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateFrom("");
+                    setDateTo("");
+                  }}
+                  className="w-full rounded-md py-1.5 text-center text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                >
+                  Clear dates
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {filterCount > 0 && (
+          <div className="border-t border-border p-1.5">
+            <button
+              type="button"
+              onClick={clearRefinements}
+              className="w-full rounded-lg py-1.5 text-center text-xs font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              Clear all filters
+            </button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -822,721 +1282,141 @@ export function ProjectsPage() {
 
         <MobileAppBanner />
 
-        <div className="mx-auto max-w-6xl px-4 py-8 md:px-10 md:py-10">
-          {/* Hero */}
-          <div className="relative overflow-hidden rounded-[32px] bg-sidebar px-6 py-8 sm:px-9 sm:py-10">
-            <div className="pointer-events-none absolute -top-16 right-0 h-48 w-48 rounded-full bg-sidebar-ring/25 blur-3xl" />
-            <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.15em] text-sidebar-ring">
-                  Workspace library
-                </p>
-                <h1 className="font-display mt-3 text-4xl font-bold leading-[0.85] tracking-tight text-sidebar-foreground sm:text-5xl">
-                  Projects
-                  <br />
-                  in motion.
-                </h1>
-                <p className="mt-4 max-w-md text-sm text-sidebar-foreground/60">
-                  {activeCount} project{activeCount === 1 ? "" : "s"} with every field record,
-                  report, and task in one place.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  asChild
-                  variant="outline"
-                  className="h-[42px] border-sidebar-border bg-transparent text-sidebar-foreground/70 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground"
-                  title="Project Trash"
-                >
-                  <Link to="/projects/trash">
-                    <Trash2 className="mr-2 h-4 w-4" /> Trash
-                  </Link>
-                </Button>
-                <Button
-                  onClick={() =>
-                    guard(
-                      () => navigate({ to: "/projects/new" }),
-                      "Subscribe to create new projects.",
-                    )
-                  }
-                  className="h-[42px] bg-sidebar-ring px-5 shadow-lg shadow-sidebar-ring/20 hover:bg-sidebar-ring/90 text-sidebar-foreground"
-                >
-                  <Plus className="mr-2 h-4 w-4" /> Create project
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/*
-            Tab strip in its own card, directly under the hero — the same
-            control the project home page uses. It used to be the third row
-            inside a combined "filter card", which made choosing a view and
-            narrowing a list look like the same job.
-          */}
-          <div className="mt-3.5 overflow-x-auto rounded-2xl border border-border bg-card/80 p-2 shadow-[0px_16px_32px_-28px_rgba(16,25,41,0.6)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="flex min-w-max items-center gap-1">
-              {tabs.map((t) => {
-                const active = tab === t.key;
-                const Icon = t.icon;
-                return (
-                  <Fragment key={t.key}>
-                    {t.startsGroup && <span className="mx-1.5 h-6 w-px shrink-0 bg-border" />}
-                    <button
-                      type="button"
-                      onClick={() => setTab(t.key)}
-                      className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-extrabold transition ${
-                        active
-                          ? "bg-primary text-primary-foreground shadow-lg"
-                          : "text-muted-foreground hover:bg-accent"
-                      }`}
-                    >
-                      <span
-                        className={`flex h-7 w-7 items-center justify-center rounded-lg ${
-                          active ? "bg-primary-foreground/20" : "bg-muted"
-                        }`}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                      </span>
-                      {t.label}
-                      <span
-                        className={active ? "text-primary-foreground/70" : "text-muted-foreground"}
-                      >
-                        {t.count}
-                      </span>
-                    </button>
-                  </Fragment>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Search stays in the open; every other refinement is one button. */}
-          <div className="mt-3.5 flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search projects by name or address…"
-                className="h-11 rounded-xl border-border bg-card/80 pl-10 text-sm shadow-none placeholder:text-muted-foreground"
-              />
-              {query && (
-                <button
-                  type="button"
-                  onClick={() => setQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  aria-label="Clear search"
-                >
-                  <XIcon className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
-            <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="h-11 shrink-0 gap-2 rounded-xl border-border bg-card/70 px-4 text-xs font-extrabold text-muted-foreground shadow-none"
-                >
-                  <SlidersHorizontal className="h-4 w-4 text-primary" />
-                  Filters
-                  {filterCount > 0 && (
-                    <span className="ml-0.5 rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold text-primary-foreground">
-                      {filterCount}
+        {/* Same container as the project home page, so the content edge does not
+            jump when you click through from this list into a project. */}
+        <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:py-10">
+          {/* Hero — same shell, ornament, badge and stats rail as the project home page. */}
+          <div className="relative overflow-hidden rounded-[32px] bg-sidebar">
+            <div className="pointer-events-none absolute -right-24 -top-28 h-[288px] w-[288px] rounded-full border-[28px] border-sidebar-ring/20" />
+            <div className="relative flex flex-col gap-7 p-6 sm:px-10 sm:py-9">
+              <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="inline-flex items-center rounded-full bg-sidebar-ring px-3 py-1 text-[10px] font-extrabold uppercase tracking-[1.4px] text-sidebar-foreground">
+                      Workspace library
                     </span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[340px] p-0" align="end">
-                <div className="flex items-center gap-0.5 border-b border-border p-1.5">
-                  {FILTER_PANES.map((p) => {
-                    const paneActive = filterPane === p.key;
-                    const n =
-                      p.key === "views"
-                        ? (starredOnly ? 1 : 0) + (showArchived ? 1 : 0)
-                        : p.key === "tags"
-                          ? selectedTagIds.length
-                          : p.key === "labels"
-                            ? selectedLabels.length
-                            : p.key === "people"
-                              ? selectedContributors.length
-                              : dateFrom || dateTo
-                                ? 1
-                                : 0;
-                    return (
-                      <button
-                        key={p.key}
-                        type="button"
-                        onClick={() => setFilterPane(p.key)}
-                        className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-bold transition ${
-                          paneActive
-                            ? "bg-foreground text-background"
-                            : "text-muted-foreground hover:bg-muted"
-                        }`}
-                      >
-                        <p.icon className="h-3.5 w-3.5" />
-                        <span className="flex items-center gap-1">
-                          {p.label}
-                          {n > 0 && (
-                            <span className={paneActive ? "text-background/60" : "text-primary"}>
-                              {n}
-                            </span>
-                          )}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  </div>
+                  <h1 className="font-display mt-3 truncate text-2xl font-bold leading-tight tracking-tight text-sidebar-foreground sm:text-3xl">
+                    Projects
+                  </h1>
                 </div>
 
-                {filterPane === "views" && (
-                  <div className="p-3">
-                    <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Narrow the current view
-                    </div>
-                    <div className="space-y-0.5">
-                      {(
-                        [
-                          {
-                            key: "starred",
-                            icon: Star,
-                            label: "Starred only",
-                            hint: "Just the projects you've starred",
-                            count: starredCount,
-                            checked: starredOnly,
-                            toggle: () => setStarredOnly((s) => !s),
-                          },
-                          {
-                            key: "archived",
-                            icon: Archive,
-                            label: "Include archived",
-                            hint: "Show archived projects alongside the rest",
-                            count: archivedCount,
-                            checked: showArchived,
-                            toggle: () => setShowArchived((s) => !s),
-                          },
-                        ] as const
-                      ).map((v) => (
-                        <div
-                          key={v.key}
-                          role="button"
-                          tabIndex={0}
-                          onClick={v.toggle}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              v.toggle();
-                            }
-                          }}
-                          className={`flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 transition ${
-                            v.checked ? "bg-accent/70" : "hover:bg-muted"
-                          }`}
-                        >
-                          <Checkbox checked={v.checked} />
-                          <v.icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm font-medium">{v.label}</div>
-                            <div className="text-[11px] text-muted-foreground">{v.hint}</div>
-                          </div>
-                          <span className="text-xs font-semibold text-muted-foreground">
-                            {v.count}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {filterPane === "tags" && (
-                  <div className="p-3">
-                    <div className="mb-2 flex items-center justify-between px-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                        Select tags
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {selectedTagIds.length} selected
-                      </span>
-                    </div>
-                    <div className="max-h-60 overflow-y-auto pr-1">
-                      {allTags.length === 0 ? (
-                        <div className="px-1 py-3 text-xs text-muted-foreground">
-                          No tags yet — create one on a project to filter by it here.
-                        </div>
-                      ) : (
-                        <div className="space-y-0.5">
-                          {allTags.map((t) => {
-                            const checked = selectedTagIds.includes(t.id);
-                            return (
-                              <div
-                                key={t.id}
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => {
-                                  setSelectedTagIds((prev) =>
-                                    prev.includes(t.id)
-                                      ? prev.filter((id) => id !== t.id)
-                                      : [...prev, t.id],
-                                  );
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    setSelectedTagIds((prev) =>
-                                      prev.includes(t.id)
-                                        ? prev.filter((id) => id !== t.id)
-                                        : [...prev, t.id],
-                                    );
-                                  }
-                                }}
-                                className={`flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 transition ${
-                                  checked ? "bg-accent/70" : "hover:bg-muted"
-                                }`}
-                              >
-                                <Checkbox checked={checked} />
-                                <TagPill name={t.name} size="sm" />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                    {selectedTagIds.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedTagIds([])}
-                        className="mt-2 w-full rounded-md py-1.5 text-center text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    onClick={() =>
+                      guard(
+                        () => navigate({ to: "/projects/new" }),
+                        "Subscribe to create new projects.",
+                      )
+                    }
+                    className="h-10 rounded-lg bg-sidebar-foreground px-5 font-bold text-sidebar shadow-sm hover:bg-sidebar-foreground/90"
+                  >
+                    <Plus className="mr-2 h-4 w-4 text-sidebar-ring" /> Create project
+                  </Button>
+                  {/* Trash is a rare recovery action; it was sized as a peer of the
+                      page's only primary action. Behind the same overflow trigger
+                      the project home page uses. */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        aria-label="More project actions"
+                        className="h-10 w-10 rounded-xl border-sidebar-foreground/15 bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/20 hover:text-sidebar-foreground"
                       >
-                        Clear tag filters
-                      </button>
-                    )}
-                  </div>
-                )}
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem asChild>
+                        <Link to="/projects/trash">
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Project trash
+                        </Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
 
-                {filterPane === "labels" && (
-                  <div className="p-3">
-                    <div className="mb-2 flex items-center justify-between px-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                        Project labels
-                      </span>
-                      <div className="inline-flex overflow-hidden rounded-md border border-border text-[10px]">
-                        <button
-                          type="button"
-                          onClick={() => setLabelMode("OR")}
-                          className={`px-2 py-0.5 font-semibold ${labelMode === "OR" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}
-                        >
-                          OR
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setLabelMode("AND")}
-                          className={`px-2 py-0.5 font-semibold ${labelMode === "AND" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}
-                        >
-                          AND
-                        </button>
-                      </div>
-                    </div>
-                    <div className="max-h-60 overflow-y-auto pr-1">
-                      {labelCatalog.rows.length === 0 ? (
-                        <div className="px-1 py-3 text-xs text-muted-foreground">
-                          No labels yet — they’ll appear here after your first visit.
-                        </div>
-                      ) : (
-                        <div className="space-y-0.5">
-                          {labelCatalog.rows.map((l) => {
-                            const checked = selectedLabels.includes(l.name);
-                            const toggle = () =>
-                              setSelectedLabels((prev) =>
-                                prev.includes(l.name)
-                                  ? prev.filter((x) => x !== l.name)
-                                  : [...prev, l.name],
-                              );
-                            return (
-                              <div
-                                key={l.id}
-                                role="button"
-                                tabIndex={0}
-                                onClick={toggle}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    toggle();
-                                  }
-                                }}
-                                className={`flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 transition ${checked ? "bg-accent/70" : "hover:bg-muted"}`}
-                              >
-                                <Checkbox checked={checked} />
-                                <LabelChip label={l.name} />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                    {selectedLabels.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedLabels([])}
-                        className="mt-2 w-full rounded-md py-1.5 text-center text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                      >
-                        Clear label filters
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {filterPane === "people" && (
-                  <div className="p-3">
-                    <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Filter by contributor
-                    </div>
-                    <div className="max-h-60 overflow-y-auto pr-1">
-                      {contributorOptions.length === 0 ? (
-                        <div className="px-1 py-3 text-xs text-muted-foreground">
-                          No contributors yet — upload photos to a project.
-                        </div>
-                      ) : (
-                        contributorOptions.map((c) => {
-                          const checked = selectedContributors.includes(c.id);
-                          const toggle = () =>
-                            setSelectedContributors((prev) =>
-                              prev.includes(c.id)
-                                ? prev.filter((x) => x !== c.id)
-                                : [...prev, c.id],
-                            );
-                          return (
-                            <div
-                              key={c.id}
-                              role="button"
-                              tabIndex={0}
-                              onClick={toggle}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  toggle();
-                                }
-                              }}
-                              className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 ${checked ? "bg-accent/70" : "hover:bg-muted"}`}
-                            >
-                              <Checkbox checked={checked} />
-                              <Avatar className="h-6 w-6">
-                                {c.avatar ? <AvatarImage src={c.avatar} alt="" /> : null}
-                                <AvatarFallback className="text-[9px]">
-                                  {(c.name ?? "?").slice(0, 1).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span className="truncate text-sm">{c.name ?? "Unknown"}</span>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                    {selectedContributors.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedContributors([])}
-                        className="mt-2 w-full rounded-md py-1.5 text-center text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                      >
-                        Clear contributor filters
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {filterPane === "date" && (
-                  <div className="p-3">
-                    <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Filter by date range
-                    </div>
-                    <div className="space-y-2">
-                      <div>
-                        <label className="text-[11px] font-medium text-muted-foreground">
-                          Start (created)
-                        </label>
-                        <Input
-                          type="date"
-                          value={dateFrom}
-                          onChange={(e) => setDateFrom(e.target.value)}
-                          className="h-9"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-medium text-muted-foreground">
-                          End (completed)
-                        </label>
-                        <Input
-                          type="date"
-                          value={dateTo}
-                          onChange={(e) => setDateTo(e.target.value)}
-                          className="h-9"
-                        />
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">
-                        Start = when project was created. End = when marked <b>Complete</b> (falls
-                        back to last activity if still open).
-                      </p>
-                      {(dateFrom || dateTo) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDateFrom("");
-                            setDateTo("");
-                          }}
-                          className="w-full rounded-md py-1.5 text-center text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                        >
-                          Clear dates
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {filterCount > 0 && (
-                  <div className="border-t border-border p-1.5">
+              {/* Stats rail — states the workload and cuts to it in the same click. */}
+              <div className="flex flex-col gap-4 border-t border-sidebar-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-1 text-[10px] font-extrabold uppercase tracking-[1.5px] text-sidebar-foreground/45">
+                    Workspace
+                  </span>
+                  <span className="text-xs font-bold text-sidebar-foreground">
+                    {activeCount} {activeCount === 1 ? "project" : "projects"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-5 text-xs font-bold text-sidebar-foreground/60">
+                  {heroStats.map((s) => (
                     <button
+                      key={s.key}
                       type="button"
-                      onClick={() => {
-                        setSelectedTagIds([]);
-                        setSelectedLabels([]);
-                        setSelectedContributors([]);
-                        setDateFrom("");
-                        setDateTo("");
-                        setStarredOnly(false);
-                        setShowArchived(false);
-                      }}
-                      className="w-full rounded-lg py-1.5 text-center text-xs font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                      onClick={s.toggle}
+                      aria-pressed={s.on}
+                      className={cn(
+                        "inline-flex items-center gap-2 rounded-md transition hover:text-sidebar-foreground",
+                        s.on && "text-sidebar-foreground",
+                      )}
                     >
-                      Clear all filters
+                      <s.icon
+                        className={cn(
+                          "h-4 w-4 text-sidebar-ring",
+                          s.key === "starred" && s.on && "fill-current",
+                        )}
+                      />
+                      {s.count} {s.label}
                     </button>
-                  </div>
-                )}
-              </PopoverContent>
-            </Popover>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
 
-          {hasActiveFilters && (
-            <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/50 px-3 py-2">
-              <span className="text-xs font-semibold text-muted-foreground">Active filters:</span>
-              {starredOnly && (
-                <button
-                  type="button"
-                  onClick={() => setStarredOnly(false)}
-                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground hover:bg-accent"
-                >
-                  <Star className="h-3 w-3" />
-                  Starred only
-                  <XIcon className="h-3 w-3" />
-                </button>
-              )}
-              {showArchived && (
-                <button
-                  type="button"
-                  onClick={() => setShowArchived(false)}
-                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground hover:bg-accent"
-                >
-                  <Archive className="h-3 w-3" />
-                  Including archived
-                  <XIcon className="h-3 w-3" />
-                </button>
-              )}
-              {selectedLabels.map((name) => (
-                <LabelChip
-                  key={`lbl-${name}`}
-                  label={name}
-                  onRemove={() => setSelectedLabels((p) => p.filter((x) => x !== name))}
-                />
-              ))}
-              {selectedTagIds.map((id) => {
-                const t = allTags.find((x) => x.id === id);
-                if (!t) return null;
-                return (
-                  <TagPill
-                    key={id}
-                    name={t.name}
-                    size="sm"
-                    onRemove={() => setSelectedTagIds((prev) => prev.filter((x) => x !== id))}
-                  />
-                );
-              })}
-              {selectedContributors.map((id) => {
-                const c = contributorOptions.find((x) => x.id === id);
-                return (
-                  <span
-                    key={`c-${id}`}
-                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
-                  >
-                    {c?.name ?? "Contributor"}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedContributors((p) => p.filter((x) => x !== id))}
-                      className="rounded-full p-0.5 hover:bg-background"
-                      aria-label="Remove"
-                    >
-                      <XIcon className="h-3 w-3" />
-                    </button>
-                  </span>
-                );
-              })}
-              {(dateFrom || dateTo) && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                  {dateFrom || "…"} → {dateTo || "…"}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDateFrom("");
-                      setDateTo("");
-                    }}
-                    className="rounded-full p-0.5 hover:bg-background"
-                    aria-label="Clear dates"
-                  >
-                    <XIcon className="h-3 w-3" />
-                  </button>
-                </span>
-              )}
-              {query && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                  Keyword: “{query}”
-                  <button
-                    type="button"
-                    onClick={() => setQuery("")}
-                    className="rounded-full p-0.5 hover:bg-background"
-                    aria-label="Clear keyword"
-                  >
-                    <XIcon className="h-3 w-3" />
-                  </button>
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="ml-auto text-xs font-medium text-muted-foreground hover:text-foreground"
-              >
-                Clear all
-              </button>
-            </div>
-          )}
+          {/* Literally the same component the project home page uses, so the two
+              strips can no longer drift apart. */}
+          <PageTabStrip
+            className="mt-3.5"
+            items={tabs}
+            value={tab}
+            onChange={(key) => setTab(key as TabKey)}
+          />
 
           {/*
-            Recent activity strip.
-            Hidden on the collection tabs (Groups, Pipelines) — those are
-            workspaces the user came to work in — and now also hidden the moment
-            a search or filter is active. It is a tall photo rail sitting
-            directly above the results, so leaving it up while someone hunts for
-            one specific project pushed the thing they asked for below the fold.
-            Searching means "show me results", not "show me everything recent".
+            One header, and it is the toolbar.
+
+            There used to be a full-width search/Filters band here, an
+            "Active filters:" chip rail under it, a Recent activity rail under
+            that, and then a second header that repeated the hero's own
+            "Workspace library" eyebrow — five bands before the first project.
+            The project home page states the section and puts the controls that
+            act on it on the same line, so this does too.
           */}
-          {tab !== "groups" &&
-            tab !== "boards" &&
-            !hasActiveFilters &&
-            !loading &&
-            recentPhotos.length > 0 && (
-              <div className="mt-8">
-                <div className="mb-4 flex items-end justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
-                      Fresh from the field
-                    </p>
-                    <h2 className="font-display mt-2 text-2xl font-bold leading-tight tracking-tight text-foreground">
-                      Recent activity
-                    </h2>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="hidden h-8 w-8 sm:inline-flex"
-                      onClick={() => scrollBy(-320)}
-                      aria-label="Scroll left"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="hidden h-8 w-8 sm:inline-flex"
-                      onClick={() => scrollBy(320)}
-                      aria-label="Scroll right"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                    <Button asChild variant="ghost" size="sm" className="text-xs">
-                      <Link to="/gallery">
-                        View feed <ArrowRight className="ml-1 h-3 w-3" />
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-                <div
-                  ref={scrollerRef}
-                  className="-mx-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                >
-                  <div className="flex gap-4">
-                    {recentPhotos.map((p, i) => (
-                      <Link
-                        key={p.id}
-                        to="/projects/$projectId"
-                        params={{ projectId: p.project_id }}
-                        preload="intent"
-                        className={`group relative block h-40 shrink-0 overflow-hidden rounded-3xl bg-muted shadow-[0_18px_32px_-24px_rgba(16,25,41,0.65)] ${
-                          i === 0 ? "w-64 sm:w-72" : "w-48 sm:w-56"
-                        }`}
-                      >
-                        {p.url ? (
-                          <img
-                            src={p.url}
-                            alt={p.caption ?? "Site photo"}
-                            loading="lazy"
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                            <ImageIcon className="h-6 w-6 opacity-50" />
-                          </div>
-                        )}
-                        {/*
-                          Deeper, higher-reaching scrim than before: the label sits
-                          on arbitrary photography, and a light sky behind it was
-                          washing the caption out.
-                        */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-sidebar via-sidebar/60 to-transparent" />
-                        <div className="absolute inset-x-0 bottom-0 p-4">
-                          <p className="truncate text-base font-extrabold leading-tight text-sidebar-foreground drop-shadow">
-                            {p.project_name}
-                          </p>
-                          <p className="mt-1 text-xs font-bold text-sidebar-foreground/80">
-                            {timeAgo(p.created_at)}
-                          </p>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-          {/* All projects / Groups / Boards */}
-          <div className="mt-8">
+          {tab !== "boards" && (
+            <SectionHeading
+              className="mt-8"
+              eyebrow={tab === "groups" ? "Saved collections" : "Field records"}
+              title={bodyLabel}
+              description={bodyDescription}
+              actions={
+                <>
+                  {searchInput}
+                  {tab === "projects" && filtersPopover}
+                </>
+              }
+            />
+          )}
+          {/* Projects / Groups / Pipelines */}
+          <div>
             {/*
-              On the Boards tab the board strip below already names the active
-              board, so this header would repeat it — and repeat it a third time
-              inside the board view. Rendering it only for the other tabs keeps
-              one title per screen.
+              No header on the Pipelines tab: the pipeline strip below already
+              names the active pipeline, and the board view names it a third
+              time. One title per screen — and it is why the search box and
+              Filters button, which do not act on a board, disappear here.
             */}
-            {tab !== "boards" && (
-              <div className="flex items-end justify-between gap-2">
-                <div>
-                  <p className="text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
-                    Workspace library
-                  </p>
-                  <h2 className="font-display mt-2 text-2xl font-bold leading-tight tracking-tight text-foreground">
-                    {bodyLabel}
-                  </h2>
-                </div>
-                <span className="text-xs font-semibold text-muted-foreground">
-                  {bodyShownCount} shown
-                </span>
-              </div>
-            )}
-
-            <div className={tab === "boards" ? "" : "mt-5"}>
+            <div className={tab === "boards" ? "mt-8" : "mt-5"}>
               {tab === "groups" ? (
                 <GroupsGrid
                   groups={groups}
@@ -1637,7 +1517,8 @@ export function ProjectsPage() {
                 <ProjectsList
                   projects={filteredProjects}
                   loading={loading}
-                  hasQueryOrFilter={!!query.trim() || tab !== "all" || selectedTagIds.length > 0}
+                  hasQueryOrFilter={hasActiveFilters}
+                  onClearFilters={clearAllFilters}
                   projectTagMap={projectTagMap}
                   coverUrls={coverUrls}
                   coverPaths={coverPaths}
@@ -1766,6 +1647,7 @@ function ProjectsList({
   projects,
   loading,
   hasQueryOrFilter,
+  onClearFilters,
   coverUrls,
   coverPaths,
   photoCounts,
@@ -1780,6 +1662,7 @@ function ProjectsList({
   projects: ProjectRow[];
   loading: boolean;
   hasQueryOrFilter: boolean;
+  onClearFilters: () => void;
   coverUrls: Record<string, string>;
   coverPaths: Record<string, string>;
   photoCounts: Record<string, number>;
@@ -1802,8 +1685,18 @@ function ProjectsList({
         title={hasQueryOrFilter ? "No projects match" : "No projects yet"}
         description={
           hasQueryOrFilter
-            ? "Try a different search term or another tab."
+            ? // Not "try another tab" — the other two tabs are Groups and
+              // Pipelines, which show different things entirely. The only way
+              // out of an empty list is to widen the search or drop a filter.
+              "Try a different search term, or clear your filters to see everything again."
             : "Create your first project to start capturing photos."
+        }
+        action={
+          hasQueryOrFilter ? (
+            <Button variant="outline" onClick={onClearFilters}>
+              <XIcon className="mr-2 h-4 w-4" /> Clear search and filters
+            </Button>
+          ) : undefined
         }
       />
     );
@@ -1823,7 +1716,7 @@ function ProjectsList({
         return (
           <div
             key={p.id}
-            className="group flex flex-col overflow-hidden rounded-3xl border border-border bg-card/90 shadow-[0_20px_50px_-36px_rgba(16,25,41,0.5)] transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_24px_60px_-30px_rgba(16,25,41,0.55)]"
+            className={cn(SURFACE_CARD_INTERACTIVE, "group flex flex-col overflow-hidden")}
           >
             <Link
               to="/projects/$projectId"
@@ -1962,37 +1855,52 @@ function ProjectsList({
               )}
               {tags.length > 0 && <TagPillRow tags={tags.map((t) => t.name)} size="sm" max={4} />}
 
-              <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-[11px] font-semibold text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5" />
-                  {timeAgo(p.updated_at)}
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <FileText className="h-3.5 w-3.5" />
-                  {reportCount} {reportCount === 1 ? "report" : "reports"}
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <FolderKanban className="h-3.5 w-3.5" />
-                  {checklistCount} {checklistCount === 1 ? "list" : "lists"}
-                </span>
+              {/*
+                One meta band, not two. Counts, last activity and the crew used
+                to sit in two stacked bordered rows, which cost a row of cards
+                per screen to say the same thing.
+              */}
+              <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-3">
+                <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] font-semibold text-muted-foreground">
+                  <span
+                    className="inline-flex items-center gap-1.5"
+                    title={`${photoCount} ${photoCount === 1 ? "photo" : "photos"}`}
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                    {photoCount}
+                  </span>
+                  <span
+                    className="inline-flex items-center gap-1.5"
+                    title={`${reportCount} ${reportCount === 1 ? "report" : "reports"}`}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    {reportCount}
+                  </span>
+                  <span
+                    className="inline-flex items-center gap-1.5"
+                    title={`${checklistCount} ${checklistCount === 1 ? "checklist" : "checklists"}`}
+                  >
+                    <FolderKanban className="h-3.5 w-3.5" />
+                    {checklistCount}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5" title="Last activity">
+                    <Clock className="h-3.5 w-3.5" />
+                    {timeAgo(p.updated_at)}
+                  </span>
+                </div>
+                {members.length > 0 && (
+                  <div className="flex shrink-0 -space-x-1.5">
+                    {members.slice(0, 4).map((m) => (
+                      <Avatar key={m.id} className="h-6 w-6 border-2 border-card">
+                        {m.avatar ? <AvatarImage src={m.avatar} alt={m.name ?? ""} /> : null}
+                        <AvatarFallback className="bg-foreground text-[9px] font-extrabold text-background">
+                          {(m.name ?? "?").slice(0, 1).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-
-            <div className="flex items-center justify-between border-t border-border px-5 py-3">
-              <div className="flex -space-x-1.5">
-                {members.slice(0, 4).map((m) => (
-                  <Avatar key={m.id} className="h-6 w-6 border-2 border-card">
-                    {m.avatar ? <AvatarImage src={m.avatar} alt={m.name ?? ""} /> : null}
-                    <AvatarFallback className="bg-foreground text-[9px] font-extrabold text-background">
-                      {(m.name ?? "?").slice(0, 1).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                ))}
-              </div>
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                <Camera className="h-3.5 w-3.5" />
-                {photoCount} {photoCount === 1 ? "photo" : "photos"}
-              </span>
             </div>
           </div>
         );

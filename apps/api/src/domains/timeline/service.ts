@@ -32,6 +32,38 @@ const DAY_MS = 86_400_000;
 const pgArray = (values: string[]) =>
   `{${values.map((v) => `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
 
+/**
+ * Maps an instant to the calendar date it fell on for the viewer.
+ *
+ * Prefers the IANA zone. A fixed offset cannot be right for a whole range:
+ * `getTimezoneOffset()` reports whatever is in force *today*, so a viewer in
+ * New York paging back from August to January buckets by UTC-4 when January is
+ * really UTC-5 — every photo shot in the last hour of a day lands on the next
+ * day. The day panel derives its window from a real local date and so gets it
+ * right, which leaves the cell and the panel disagreeing about the same photo.
+ */
+function makeLocalDate(timeZone: string | undefined, tzOffsetMinutes: number) {
+  if (timeZone) {
+    try {
+      const fmt = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+      // en-CA is expected to yield YYYY-MM-DD; confirm before relying on it,
+      // since ICU builds vary and the keys are compared as strings.
+      if (/^\d{4}-\d{2}-\d{2}$/.test(fmt.format(new Date(0)))) {
+        return (iso: string) => fmt.format(new Date(iso));
+      }
+    } catch {
+      // Unknown zone — fall through to the offset.
+    }
+  }
+  const offsetMs = tzOffsetMinutes * 60_000;
+  return (iso: string) => new Date(new Date(iso).getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
 export interface TimelineDay {
   /** Local calendar date, YYYY-MM-DD. */
   date: string;
@@ -62,9 +94,15 @@ export const listTimelineActivityInputSchema = z.object({
   /** Any-of tag filter, matching how the gallery's tag pills combine. */
   tags: z.array(z.string().min(1).max(128)).max(64).optional(),
   /**
+   * The viewer's IANA zone, e.g. "America/New_York". Preferred over
+   * `tzOffsetMinutes` because it knows when daylight saving starts and stops.
+   */
+  timeZone: z.string().min(1).max(64).optional(),
+  /**
    * Minutes to subtract from UTC to reach the viewer's local time, i.e. exactly
    * what `new Date().getTimezoneOffset()` returns. Without this a photo taken
    * at 7pm local lands on the following UTC day and the calendar is off by one.
+   * Only a fallback now — see `timeZone`.
    */
   tzOffsetMinutes: z.number().int().min(-840).max(840).default(0),
   /** Month view needs a thumbnail per day; the year heatmap only needs counts. */
@@ -120,10 +158,7 @@ export async function listTimelineActivityService(
   const capped = photos.length >= maxRows;
   if (!photos.length) return { days: [], totalPhotos: 0, capped: false };
 
-  const offsetMs = data.tzOffsetMinutes * 60_000;
-  /** Shift into the viewer's local frame, then take the calendar date. */
-  const localDate = (iso: string) =>
-    new Date(new Date(iso).getTime() - offsetMs).toISOString().slice(0, 10);
+  const localDate = makeLocalDate(data.timeZone, data.tzOffsetMinutes);
   // taken_at is when the shutter fired; created_at is when it synced. Prefer
   // the former so photos uploaded the next morning land on the day they were
   // actually shot.
