@@ -122,7 +122,7 @@ function PublicWalkthroughPage() {
   };
 
   return (
-    <div className="container mx-auto max-w-3xl px-4 pb-20 pt-6 md:py-10">
+    <div className="container mx-auto max-w-3xl px-4 pb-20 pt-6 md:pt-10">
       <Card className="p-6">
         <div className="border-b border-border pb-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

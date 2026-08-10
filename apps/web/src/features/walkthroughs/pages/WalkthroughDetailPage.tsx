@@ -69,8 +69,13 @@ export function WalkthroughDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const confirm = useConfirm();
-  const { canUseAutoReports, autoReportsUsed, autoReportsLimit, autoReportsRemaining, bumpAutoReportsUsed } =
-    useSubscription();
+  const {
+    canUseAutoReports,
+    autoReportsUsed,
+    autoReportsLimit,
+    autoReportsRemaining,
+    bumpAutoReportsUsed,
+  } = useSubscription();
   const [autoReportUpgradeOpen, setAutoReportUpgradeOpen] = useState(false);
   const [walk, setWalk] = useState<Walkthrough | null>(null);
   const [projectName, setProjectName] = useState<string>("");
@@ -415,8 +420,11 @@ export function WalkthroughDetailPage() {
     }
   };
 
+  // pt-only responsive scaling — `md:py-10` outranked the `pb-24` and made it
+  // dead at >=768px. Harmless here (the camera button is hidden on
+  // /walkthroughs/), but the class should mean what it says.
   return (
-    <div className="container mx-auto max-w-3xl px-4 pb-24 pt-6 md:py-10">
+    <div className="container mx-auto max-w-3xl px-4 pb-24 pt-6 md:pt-10">
       <Button asChild variant="ghost" size="sm" className="-ml-2 mb-3 h-9">
         <Link
           to="/projects/$projectId"

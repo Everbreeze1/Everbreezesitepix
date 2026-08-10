@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
+import { sanitizePageHtml } from "./sanitize-page-html";
 
 const IMG_TAG_RE = /<img\b[^>]*\bdata-photo-id="([0-9a-fA-F-]{36})"[^>]*>/g;
 
@@ -18,7 +19,10 @@ export function stripPhotoSlots(html: string): string {
 }
 
 /** Rewrites every `<img data-photo-id="...">` tag's `src` to a fresh signed URL — never persist signed URLs, they expire. */
-export async function resolvePageImages(html: string, supabase: SupabaseClient<any>): Promise<string> {
+export async function resolvePageImages(
+  html: string,
+  supabase: SupabaseClient<any>,
+): Promise<string> {
   const ids = Array.from(new Set(Array.from(html.matchAll(IMG_TAG_RE), (m) => m[1])));
   if (!ids.length) return html;
 
@@ -45,7 +49,9 @@ export async function resolvePageImages(html: string, supabase: SupabaseClient<a
   return html.replace(IMG_TAG_RE, (tag, photoId) => {
     const url = urlById.get(photoId);
     if (!url) return tag;
-    return /\bsrc="[^"]*"/.test(tag) ? tag.replace(/\bsrc="[^"]*"/, `src="${url}"`) : tag.replace("<img", `<img src="${url}"`);
+    return /\bsrc="[^"]*"/.test(tag)
+      ? tag.replace(/\bsrc="[^"]*"/, `src="${url}"`)
+      : tag.replace("<img", `<img src="${url}"`);
   });
 }
 
@@ -104,7 +110,10 @@ export const moveDocumentInputSchema = z.object({
   id: z.string().uuid(),
   folderId: z.string().uuid().nullable(),
 });
-export async function moveDocumentService(ctx: AuthedContext, data: z.infer<typeof moveDocumentInputSchema>) {
+export async function moveDocumentService(
+  ctx: AuthedContext,
+  data: z.infer<typeof moveDocumentInputSchema>,
+) {
   const table = data.kind === "page" ? "project_pages" : "project_documents";
   const { error } = await (ctx.supabase as any)
     .from(table)
@@ -144,31 +153,42 @@ export const listProjectDocumentTreeInputSchema = z.object({ projectId: z.string
 export async function listProjectDocumentTreeService(
   ctx: AuthedContext,
   data: z.infer<typeof listProjectDocumentTreeInputSchema>,
-): Promise<{ folders: DocumentTreeFolder[]; pages: DocumentTreePage[]; files: DocumentTreeFile[] }> {
-  const [{ data: folderRows, error: fErr }, { data: pageRows, error: pErr }, { data: fileRows, error: dErr }] =
-    await Promise.all([
-      (ctx.supabase as any)
-        .from("project_document_folders")
-        .select("id, name, created_at")
-        .eq("project_id", data.projectId)
-        .order("name", { ascending: true }),
-      (ctx.supabase as any)
-        .from("project_pages")
-        .select("id, folder_id, title, updated_at")
-        .eq("project_id", data.projectId)
-        .order("updated_at", { ascending: false }),
-      (ctx.supabase as any)
-        .from("project_documents")
-        .select("id, folder_id, file_name, mime_type, size_bytes, created_at")
-        .eq("project_id", data.projectId)
-        .order("created_at", { ascending: false }),
-    ]);
+): Promise<{
+  folders: DocumentTreeFolder[];
+  pages: DocumentTreePage[];
+  files: DocumentTreeFile[];
+}> {
+  const [
+    { data: folderRows, error: fErr },
+    { data: pageRows, error: pErr },
+    { data: fileRows, error: dErr },
+  ] = await Promise.all([
+    (ctx.supabase as any)
+      .from("project_document_folders")
+      .select("id, name, created_at")
+      .eq("project_id", data.projectId)
+      .order("name", { ascending: true }),
+    (ctx.supabase as any)
+      .from("project_pages")
+      .select("id, folder_id, title, updated_at")
+      .eq("project_id", data.projectId)
+      .order("updated_at", { ascending: false }),
+    (ctx.supabase as any)
+      .from("project_documents")
+      .select("id, folder_id, file_name, mime_type, size_bytes, created_at")
+      .eq("project_id", data.projectId)
+      .order("created_at", { ascending: false }),
+  ]);
   if (fErr) throw new Error(fErr.message);
   if (pErr) throw new Error(pErr.message);
   if (dErr) throw new Error(dErr.message);
 
   return {
-    folders: ((folderRows as any[]) ?? []).map((f) => ({ id: f.id, name: f.name, createdAt: f.created_at })),
+    folders: ((folderRows as any[]) ?? []).map((f) => ({
+      id: f.id,
+      name: f.name,
+      createdAt: f.created_at,
+    })),
     pages: ((pageRows as any[]) ?? []).map((p) => ({
       id: p.id,
       kind: "page" as const,
@@ -224,15 +244,25 @@ async function loadTokenValues(
 ): Promise<Record<string, string | null | undefined>> {
   const admin = getSupabaseAdmin();
   const [{ data: project }, { data: profile }] = await Promise.all([
-    (admin as any).from("projects").select("name, street, city, state").eq("id", projectId).maybeSingle(),
+    (admin as any)
+      .from("projects")
+      .select("name, street, city, state")
+      .eq("id", projectId)
+      .maybeSingle(),
     (admin as any)
       .from("profiles")
       .select("full_name, company, company_address, company_phone")
       .eq("id", createdBy)
       .maybeSingle(),
   ]);
-  const address = project ? [project.street, project.city, project.state].filter(Boolean).join(", ") : "";
-  const today = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  const address = project
+    ? [project.street, project.city, project.state].filter(Boolean).join(", ")
+    : "";
+  const today = new Date().toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
   return {
     company: profile?.company,
@@ -280,7 +310,11 @@ export const resolveHeaderFooterTokens = resolvePageTokens;
 // ============================================================
 
 function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 /**
@@ -343,7 +377,11 @@ function escapeHtmlText(s: string): string {
 // ============================================================
 
 function blankTemplateHtml(kind: string | undefined, projectName: string, address: string): string {
-  const today = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  const today = new Date().toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
   if (kind === "daily_log") {
     return `<p><strong>Project Name:</strong> ${projectName}</p><p><strong>Project Address:</strong> ${address}</p><p><strong>Date:</strong> ${today}</p><h2>Overview</h2><p></p>`;
   }
@@ -368,7 +406,9 @@ export async function createProjectPageService(
     .select("name, street, city, state")
     .eq("id", data.projectId)
     .maybeSingle();
-  const address = project ? [project.street, project.city, project.state].filter(Boolean).join(", ") : "";
+  const address = project
+    ? [project.street, project.city, project.state].filter(Boolean).join(", ")
+    : "";
   const contentHtml = blankTemplateHtml(data.template, project?.name ?? "", address);
   const title =
     data.title?.trim() ||
@@ -395,7 +435,10 @@ export async function createProjectPageService(
 }
 
 export const getProjectPageInputSchema = z.object({ pageId: z.string().uuid() });
-export async function getProjectPageService(ctx: AuthedContext, data: z.infer<typeof getProjectPageInputSchema>) {
+export async function getProjectPageService(
+  ctx: AuthedContext,
+  data: z.infer<typeof getProjectPageInputSchema>,
+) {
   const { data: row, error } = await (ctx.supabase as any)
     .from("project_pages")
     .select(
@@ -455,7 +498,10 @@ export async function updateProjectPageService(
   if (data.footerHtml !== undefined) patch.footer_html = pillsToTokens(data.footerHtml);
   if (Object.keys(patch).length === 0) return { ok: true };
 
-  const { error } = await (ctx.supabase as any).from("project_pages").update(patch).eq("id", data.pageId);
+  const { error } = await (ctx.supabase as any)
+    .from("project_pages")
+    .update(patch)
+    .eq("id", data.pageId);
   if (error) throw new Error(error.message);
   return { ok: true };
 }
@@ -465,7 +511,10 @@ export async function deleteProjectPageService(
   ctx: AuthedContext,
   data: z.infer<typeof deleteProjectPageInputSchema>,
 ) {
-  const { error } = await (ctx.supabase as any).from("project_pages").delete().eq("id", data.pageId);
+  const { error } = await (ctx.supabase as any)
+    .from("project_pages")
+    .delete()
+    .eq("id", data.pageId);
   if (error) throw new Error(error.message);
   return { ok: true };
 }
@@ -499,7 +548,10 @@ export async function duplicateProjectPageService(
   return { page: row };
 }
 
-export const setProjectPageShareInputSchema = z.object({ pageId: z.string().uuid(), enable: z.boolean() });
+export const setProjectPageShareInputSchema = z.object({
+  pageId: z.string().uuid(),
+  enable: z.boolean(),
+});
 export async function setProjectPageShareService(
   ctx: AuthedContext,
   data: z.infer<typeof setProjectPageShareInputSchema>,
@@ -534,7 +586,9 @@ export async function getPublicProjectPageService(
   const admin = getSupabaseAdmin();
   const { data: row } = await (admin as any)
     .from("project_pages")
-    .select("project_id, created_by, title, content_html, header_html, footer_html, revoked_at, updated_at")
+    .select(
+      "project_id, created_by, title, content_html, header_html, footer_html, revoked_at, updated_at",
+    )
     .eq("share_token", data.token)
     .maybeSingle();
   if (!row) return { status: "not_found", page: null };
@@ -550,8 +604,21 @@ export async function getPublicProjectPageService(
       h ? resolvePageImages(h, supa).then(stripPhotoSlots) : h,
     ),
   ]);
+  /*
+   * Sanitise on the way out to anonymous visitors. `content_html` is only
+   * length-validated on write, so whatever an authenticated author PUTs is
+   * stored verbatim — and the public share route injects it with
+   * `dangerouslySetInnerHTML`. Cleaning here fixes every row already in the
+   * database, not just future writes.
+   */
   return {
     status: "ok",
-    page: { title: row.title, contentHtml, headerHtml, footerHtml, updatedAt: row.updated_at },
+    page: {
+      title: row.title,
+      contentHtml: sanitizePageHtml(contentHtml ?? ""),
+      headerHtml: sanitizePageHtml(headerHtml ?? null),
+      footerHtml: sanitizePageHtml(footerHtml ?? null),
+      updatedAt: row.updated_at,
+    },
   };
 }

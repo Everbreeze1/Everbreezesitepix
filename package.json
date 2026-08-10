@@ -14,6 +14,8 @@
     "preview": "npm run preview -w @sitepix/web",
     "deploy": "npm run deploy -w @sitepix/web",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "prettier --write .",
     "test:ssr:share": "node scripts/ssr-share-test.mjs",
     "test:ssr": "npm run build && node scripts/ssr-share-test.mjs",
@@ -30,6 +32,7 @@
     "globals": "^15.15.0",
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.56.1"
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^4.1.10"
   }
 }
