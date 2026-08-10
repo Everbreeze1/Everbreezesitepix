@@ -1,4 +1,4 @@
-import { useNavigate, Link } from "@tanstack/react-router";
+import { useNavigate, Link, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, LocateFixed, Loader2, MapPin, LayoutTemplate } from "lucide-react";
@@ -19,6 +19,8 @@ import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { applyProjectBlueprint } from "@/lib/blueprint.functions";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { BlueprintOutcomePreview } from "@/features/settings/components/BlueprintOutcomePreview";
+import { useBlueprintContents } from "@/hooks/use-blueprint-contents";
 import { toast } from "sonner";
 import { qk } from "@/lib/query-keys";
 
@@ -48,6 +50,7 @@ export function NewProjectPage() {
   const { isTeam } = useSubscription();
   const { guard } = useSubscriptionGate();
   const navigate = useNavigate();
+  const search = useSearch({ from: "/_app/projects/new" });
   const qc = useQueryClient();
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -70,7 +73,15 @@ export function NewProjectPage() {
   const [projectTemplates, setProjectTemplates] = useState<
     Array<{ id: string; name: string; labels: string[] }>
   >([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("__none");
+  // "New project from this" on the Templates page arrives with the blueprint
+  // already chosen — the point of that button is that you do not have to find
+  // it again in a dropdown.
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
+    search.blueprint ?? "__none",
+  );
+  const blueprint = useBlueprintContents(
+    selectedTemplateId === "__none" ? null : selectedTemplateId,
+  );
 
   // Load project templates the user can apply (Team plan only — Project
   // Blueprints are a Team-tier differentiator).
@@ -424,19 +435,19 @@ export function NewProjectPage() {
             />
           </div>
 
-          {projectTemplates.length > 0 && (
+          {(projectTemplates.length > 0 || selectedTemplateId !== "__none") && (
             <div className="space-y-1">
               <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
                 <LayoutTemplate className="h-3 w-3" />
-                Apply project template{" "}
+                Apply project blueprint{" "}
                 <span className="normal-case text-muted-foreground/70">(optional)</span>
               </Label>
               <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="No template" />
+                  <SelectValue placeholder="No blueprint" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none">No template</SelectItem>
+                  <SelectItem value="__none">No blueprint</SelectItem>
                   {projectTemplates.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}
@@ -444,6 +455,27 @@ export function NewProjectPage() {
                   ))}
                 </SelectContent>
               </Select>
+
+              {/* Picking a blueprint used to be a name in a dropdown and nothing
+                  else — you found out what it did after the project existed.
+                  Same panel the blueprint's own page shows. */}
+              {selectedTemplateId !== "__none" && (
+                <div className="pt-2">
+                  {blueprint.loading ? (
+                    <div className="flex items-center gap-2 px-1 py-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Loading what this creates…
+                    </div>
+                  ) : (
+                    <BlueprintOutcomePreview
+                      items={blueprint.items}
+                      labels={blueprint.labels}
+                      projectName={form.name.trim() || form.street.trim() || null}
+                      dense
+                    />
+                  )}
+                </div>
+              )}
             </div>
           )}
 

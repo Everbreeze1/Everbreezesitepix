@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ClipboardList,
   Plus,
@@ -127,6 +128,7 @@ export function ProjectChecklists({
   const { user } = useAuth();
   const confirm = useConfirm();
   const promptFor = usePrompt();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [checklists, setChecklists] = useState<Checklist[]>([]);
@@ -824,7 +826,16 @@ export function ProjectChecklists({
         return;
       }
     }
-    toast.success(`Saved “${name.trim()}” as a template`);
+    // Saving a template moves it somewhere the user is not, and nothing said
+    // where. Templates is the hub everything saved ends up in, so the toast
+    // hands over the route rather than leaving people to find it.
+    toast.success(`Saved “${name.trim()}” as a template`, {
+      description: "Find it under Templates → Checklists, or add it to a blueprint.",
+      action: {
+        label: "Open Templates",
+        onClick: () => void navigate({ to: "/templates", search: { tab: "checklists" } }),
+      },
+    });
     // The Templates tab reads from the same list, so refresh it — otherwise the
     // count and the grid stay stale and people save the same template twice.
     void load({ silent: true });

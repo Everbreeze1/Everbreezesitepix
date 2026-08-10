@@ -288,5 +288,24 @@ export async function applyProjectBlueprintService(
     }
   }
 
+  // Ledger row. Everything above lands as ordinary project rows — a checklist
+  // created by a blueprint is indistinguishable from one typed by hand — so
+  // without this the blueprint's own screen can never show where it has been
+  // used. Best-effort on purpose: the work is already committed, and losing the
+  // audit trail must not turn a successful apply into a failed one (notably on
+  // an environment where 20260810000000 has not been run yet).
+  // postgrest-js resolves rather than throws, so the error is checked, not
+  // caught — a missing table comes back as `error`, not an exception.
+  const { error: ledgerErr } = await supabaseAdmin
+    .from("project_blueprint_applications" as any)
+    .insert({
+      blueprint_id: data.blueprintId,
+      project_id: data.projectId,
+      applied_by: ctx.userId,
+      counts,
+      failed_count: failed.length,
+    } as any);
+  if (ledgerErr) console.error("record blueprint application failed", ledgerErr);
+
   return { counts, failed };
 }

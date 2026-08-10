@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Check, FolderOpen, Loader2, Search, Tag, TriangleAlert } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  FolderOpen,
+  Loader2,
+  Search,
+  TriangleAlert,
+  Sparkles,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +26,7 @@ import { applyProjectBlueprint } from "@/lib/blueprint.functions";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { KIND_OUTCOME, type BlueprintItemKind } from "./blueprint-outcomes";
+import { BlueprintOutcomePreview } from "./BlueprintOutcomePreview";
 
 interface ProjectRow {
   id: string;
@@ -27,13 +36,24 @@ interface ProjectRow {
   archived: boolean | null;
 }
 
+interface ApplyResult {
+  projectId: string;
+  projectName: string;
+  counts: Record<string, number>;
+  failed: Array<{ kind: string; reason: string }>;
+  error?: string;
+}
+
 /**
- * Apply a blueprint to an existing project.
+ * Apply a blueprint to one or more existing projects.
  *
  * Blueprints could previously only be applied while creating a project, so an
  * authored blueprint had no visible route to the projects already running —
- * the "how do I actually use this?" gap. Three steps, all on one surface: what
- * it will create, which project it lands on, and what actually happened.
+ * the "how do I actually use this?" gap. And a crew that standardises on a
+ * blueprint mid-season wants it on the twelve jobs already open, not on the
+ * next one only, which is why the target is a multi-select rather than a radio
+ * list. Three steps on one surface: what it will create, which projects it
+ * lands on, and what actually happened to each.
  */
 export function ApplyBlueprintDialog({
   open,
@@ -42,6 +62,8 @@ export function ApplyBlueprintDialog({
   blueprintName,
   items,
   labels,
+  companyName,
+  onApplied,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -51,25 +73,26 @@ export function ApplyBlueprintDialog({
   items: Array<{ kind: BlueprintItemKind; name: string }>;
   /** Labels the blueprint merges onto the project. */
   labels: string[];
+  /** Fills `{{company_name}}` in document and report templates. */
+  companyName?: string | null;
+  /** Fired after at least one project was written to, so callers can refresh. */
+  onApplied?: () => void;
 }) {
   const { user } = useAuth();
   const { profile } = useProfile();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState("");
-  const [targetId, setTargetId] = useState<string | null>(null);
+  const [targetIds, setTargetIds] = useState<string[]>([]);
   const [applying, setApplying] = useState(false);
-  const [result, setResult] = useState<{
-    projectId: string;
-    projectName: string;
-    counts: Record<string, number>;
-    failed: Array<{ kind: string; reason: string }>;
-  } | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [results, setResults] = useState<ApplyResult[] | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setResult(null);
-    setTargetId(null);
+    setResults(null);
+    setTargetIds([]);
+    setProgress(null);
     setQ("");
     let cancelled = false;
     (async () => {
@@ -98,198 +121,181 @@ export function ApplyBlueprintDialog({
     );
   }, [projects, q]);
 
-  /** One row per kind, so "3 checklists" reads as one line, not three. */
-  const summary = useMemo(() => {
-    const map = new Map<BlueprintItemKind, string[]>();
-    for (const it of items) {
-      const bucket = map.get(it.kind);
-      if (bucket) bucket.push(it.name);
-      else map.set(it.kind, [it.name]);
-    }
-    return map;
-  }, [items]);
-
-  const target = projects.find((p) => p.id === targetId) ?? null;
+  const targets = useMemo(
+    () => projects.filter((p) => targetIds.includes(p.id)),
+    [projects, targetIds],
+  );
   const nothingToApply = items.length === 0 && labels.length === 0;
 
+  const toggle = (id: string) =>
+    setTargetIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+
   const apply = async () => {
-    if (!target) return;
+    if (!targets.length) return;
     setApplying(true);
-    try {
-      const res = await applyProjectBlueprint({
-        data: {
-          blueprintId,
+    setProgress({ done: 0, total: targets.length });
+    const collected: ApplyResult[] = [];
+    // Sequential on purpose: each apply is a fan-out of inserts across five
+    // tables, and firing a dozen at once is how you get Postgres to start
+    // rejecting them. The progress line makes the wait legible.
+    for (const target of targets) {
+      try {
+        const res = await applyProjectBlueprint({
+          data: {
+            blueprintId,
+            projectId: target.id,
+            projectName: target.name,
+            projectAddress: [target.street, target.city].filter(Boolean).join(", ") || null,
+            preparedBy: profile?.full_name || user?.email || "",
+            companyName: companyName || undefined,
+          },
+        });
+        collected.push({
           projectId: target.id,
           projectName: target.name,
-          projectAddress: [target.street, target.city].filter(Boolean).join(", ") || null,
-          preparedBy: profile?.full_name || user?.email || "",
-        },
-      });
-      setResult({
-        projectId: target.id,
-        projectName: target.name,
-        counts: res.counts ?? {},
-        failed: res.failed ?? [],
-      });
-      const total = Object.values(res.counts ?? {}).reduce((a, b) => a + b, 0);
-      if (res.failed?.length)
-        toast.warning(`Applied ${total} item(s), ${res.failed.length} failed`);
-      else toast.success(`“${blueprintName}” applied to ${target.name}`);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Couldn't apply this blueprint");
-    } finally {
-      setApplying(false);
+          counts: res.counts ?? {},
+          failed: res.failed ?? [],
+        });
+      } catch (e: any) {
+        collected.push({
+          projectId: target.id,
+          projectName: target.name,
+          counts: {},
+          failed: [],
+          error: e?.message ?? "Couldn't apply this blueprint",
+        });
+      }
+      setProgress({ done: collected.length, total: targets.length });
     }
+    setResults(collected);
+    setApplying(false);
+
+    const okCount = collected.filter((r) => !r.error).length;
+    const errored = collected.filter((r) => r.error);
+    if (okCount) onApplied?.();
+    if (!okCount) toast.error(errored[0]?.error ?? "Couldn't apply this blueprint");
+    else if (errored.length) toast.warning(`Applied to ${okCount} of ${collected.length} projects`);
+    else if (collected.some((r) => r.failed.length))
+      toast.warning(`Applied, but some items couldn't be created`);
+    else
+      toast.success(
+        okCount === 1
+          ? `“${blueprintName}” applied to ${collected[0].projectName}`
+          : `“${blueprintName}” applied to ${okCount} projects`,
+      );
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(v) => (applying ? null : onOpenChange(v))}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-hidden p-0">
         <DialogHeader className="border-b border-border px-5 py-4">
-          <DialogTitle>
-            {result ? "Blueprint applied" : `Apply “${blueprintName}” to a project`}
-          </DialogTitle>
+          <DialogTitle>{results ? "Blueprint applied" : `Apply “${blueprintName}”`}</DialogTitle>
           <DialogDescription>
-            {result
-              ? "Everything below now exists on the project."
-              : "Nothing is created until you choose a project and confirm."}
+            {results
+              ? "Everything below now exists on the projects listed."
+              : "Nothing is created until you pick the projects and confirm."}
           </DialogDescription>
         </DialogHeader>
 
-        {result ? (
-          <div className="max-h-[60vh] overflow-y-auto px-5 py-4">
-            <div className="space-y-1.5">
-              {Object.entries(result.counts)
-                .filter(([, n]) => n > 0)
-                .map(([key, n]) => {
-                  // Service counts are plural keys ("checklists"); map back.
-                  const kind = (Object.keys(KIND_OUTCOME) as BlueprintItemKind[]).find(
-                    (k) => KIND_OUTCOME[k].plural === key,
-                  );
-                  const meta = kind ? KIND_OUTCOME[kind] : null;
-                  const Icon = meta?.icon ?? Check;
-                  return (
-                    <div
-                      key={key}
-                      className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5"
+        {results ? (
+          <div className="max-h-[60vh] space-y-2 overflow-y-auto px-5 py-4">
+            {results.map((r) => {
+              const created = Object.entries(r.counts).filter(([, n]) => n > 0);
+              return (
+                <div
+                  key={r.projectId}
+                  className="rounded-2xl border border-border bg-card/80 p-3.5"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className={cn(
+                        "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
+                        r.error
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-primary/10 text-primary",
+                      )}
                     >
-                      <span
-                        className={cn(
-                          "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
-                          meta?.tint ?? "bg-muted",
-                        )}
-                      >
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold">
-                          {n} {n === 1 ? (meta?.label.toLowerCase() ?? key) : key} created
-                        </div>
-                        {meta && (
-                          <div className="text-[11.5px] text-muted-foreground">{meta.becomes}</div>
-                        )}
-                      </div>
-                      <Check className="h-4 w-4 shrink-0 text-emerald-500" />
+                      {r.error ? (
+                        <TriangleAlert className="h-4 w-4" />
+                      ) : (
+                        <FolderOpen className="h-4 w-4" />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-foreground">{r.projectName}</p>
+                      <p className="text-[11.5px] text-muted-foreground">
+                        {r.error
+                          ? r.error
+                          : created.length === 0
+                            ? "Nothing to create"
+                            : created
+                                .map(([key, n]) => {
+                                  const kind = (
+                                    Object.keys(KIND_OUTCOME) as BlueprintItemKind[]
+                                  ).find((k) => KIND_OUTCOME[k].plural === key);
+                                  const label = kind ? KIND_OUTCOME[kind] : null;
+                                  return `${n} ${n === 1 ? (label?.label.toLowerCase() ?? key) : key}`;
+                                })
+                                .join(" · ")}
+                      </p>
                     </div>
-                  );
-                })}
-
-              {Object.values(result.counts).every((n) => n === 0) && (
-                <p className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
-                  This blueprint had nothing to create.
-                </p>
-              )}
-
-              {result.failed.length > 0 && (
-                <div className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5">
-                  <div className="flex items-center gap-2 text-xs font-bold text-destructive">
-                    <TriangleAlert className="h-3.5 w-3.5" />
-                    {result.failed.length} item{result.failed.length === 1 ? "" : "s"} couldn't be
-                    created
+                    {!r.error && (
+                      <Button asChild size="sm" variant="outline" className="shrink-0 rounded-lg">
+                        <Link to="/projects/$projectId" params={{ projectId: r.projectId }}>
+                          Open
+                          <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
+                    )}
                   </div>
-                  <ul className="mt-1.5 space-y-0.5">
-                    {result.failed.map((f, i) => (
-                      <li key={`${f.kind}-${i}`} className="text-[11.5px] text-muted-foreground">
-                        <span className="font-semibold capitalize">{f.kind}</span> — {f.reason}
-                      </li>
-                    ))}
-                  </ul>
+
+                  {r.failed.length > 0 && (
+                    <ul className="mt-2 space-y-0.5 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2">
+                      {r.failed.map((f, i) => (
+                        <li key={`${f.kind}-${i}`} className="text-[11.5px] text-muted-foreground">
+                          <span className="font-bold capitalize text-destructive">{f.kind}</span> —{" "}
+                          {f.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })}
           </div>
         ) : (
           <div className="max-h-[60vh] space-y-5 overflow-y-auto px-5 py-4">
-            {/* What you'll get. */}
+            {/* What you'll get. Same panel the blueprint detail shows, so the
+                promise on the page and the promise in the dialog cannot drift. */}
             <section>
               <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
                 What this creates
               </p>
-              {nothingToApply ? (
-                <p className="mt-2 rounded-xl border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">
-                  This blueprint is empty — add checklists, workflows, documents or reports to it
-                  first.
-                </p>
-              ) : (
-                <div className="mt-2 space-y-1.5">
-                  {[...summary.entries()].map(([kind, names]) => {
-                    const meta = KIND_OUTCOME[kind];
-                    const Icon = meta.icon;
-                    return (
-                      <div
-                        key={kind}
-                        className="flex items-start gap-3 rounded-xl border border-border bg-card px-3 py-2.5"
-                      >
-                        <span
-                          className={cn(
-                            "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
-                            meta.tint,
-                          )}
-                        >
-                          <Icon className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold">
-                            {names.length}{" "}
-                            {names.length === 1 ? meta.label.toLowerCase() : meta.plural}
-                          </div>
-                          <div className="truncate text-[11.5px] text-muted-foreground">
-                            {names.join(" · ")}
-                          </div>
-                          <div className="mt-0.5 text-[11.5px] text-muted-foreground/80">
-                            → {meta.becomes}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {labels.length > 0 && (
-                    <div className="flex items-start gap-3 rounded-xl border border-border bg-card px-3 py-2.5">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-orange-500/10 text-orange-600 dark:text-orange-400">
-                        <Tag className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold">
-                          {labels.length} label{labels.length === 1 ? "" : "s"}
-                        </div>
-                        <div className="truncate text-[11.5px] text-muted-foreground">
-                          {labels.join(" · ")}
-                        </div>
-                        <div className="mt-0.5 text-[11.5px] text-muted-foreground/80">
-                          → Merged onto the project, existing labels kept
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+              <BlueprintOutcomePreview
+                className="mt-2"
+                items={items}
+                labels={labels}
+                projectName={targets.length === 1 ? targets[0].name : null}
+                dense
+              />
             </section>
 
             {/* Where it goes. */}
             <section>
-              <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
-                Apply to
-              </p>
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+                  Apply to
+                </p>
+                {targetIds.length > 0 && (
+                  <button
+                    type="button"
+                    className="text-[11px] font-bold text-muted-foreground hover:text-foreground"
+                    onClick={() => setTargetIds([])}
+                  >
+                    Clear {targetIds.length} selected
+                  </button>
+                )}
+              </div>
               <div className="relative mt-2">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -310,24 +316,29 @@ export function ApplyBlueprintDialog({
                   </p>
                 ) : (
                   filtered.map((p) => {
-                    const on = targetId === p.id;
+                    const on = targetIds.includes(p.id);
                     const where = [p.street, p.city].filter(Boolean).join(", ");
                     return (
                       <button
                         key={p.id}
                         type="button"
-                        onClick={() => setTargetId(p.id)}
+                        aria-pressed={on}
+                        onClick={() => toggle(p.id)}
                         className={cn(
                           "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition",
                           on ? "bg-primary/10" : "hover:bg-muted",
                         )}
                       >
-                        <FolderOpen
+                        <span
                           className={cn(
-                            "h-4 w-4 shrink-0",
-                            on ? "text-primary" : "text-muted-foreground",
+                            "grid h-4 w-4 shrink-0 place-items-center rounded border",
+                            on
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border",
                           )}
-                        />
+                        >
+                          {on && <Check className="h-3 w-3" />}
+                        </span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium">{p.name}</span>
                           {where && (
@@ -336,7 +347,6 @@ export function ApplyBlueprintDialog({
                             </span>
                           )}
                         </span>
-                        {on && <Check className="h-4 w-4 shrink-0 text-primary" />}
                       </button>
                     );
                   })
@@ -347,28 +357,29 @@ export function ApplyBlueprintDialog({
         )}
 
         <DialogFooter className="border-t border-border px-5 py-3">
-          {result ? (
-            <>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Close
-              </Button>
-              <Button asChild>
-                <Link to="/projects/$projectId" params={{ projectId: result.projectId }}>
-                  Open {result.projectName}
-                  <ArrowRight className="ml-1.5 h-4 w-4" />
-                </Link>
-              </Button>
-            </>
+          {results ? (
+            <Button onClick={() => onOpenChange(false)}>Done</Button>
           ) : (
             <>
               <p className="mr-auto hidden text-xs text-muted-foreground sm:block">
-                {target ? `Applying to ${target.name}` : "Choose a project to continue"}
+                {applying && progress
+                  ? `Applying… ${progress.done} of ${progress.total}`
+                  : targets.length === 0
+                    ? "Choose one or more projects"
+                    : `${targets.length} project${targets.length === 1 ? "" : "s"} selected`}
               </p>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={applying}>
                 Cancel
               </Button>
-              <Button onClick={() => void apply()} disabled={!target || applying || nothingToApply}>
-                {applying && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+              <Button
+                onClick={() => void apply()}
+                disabled={targets.length === 0 || applying || nothingToApply}
+              >
+                {applying ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1.5 h-4 w-4" />
+                )}
                 Apply blueprint
               </Button>
             </>

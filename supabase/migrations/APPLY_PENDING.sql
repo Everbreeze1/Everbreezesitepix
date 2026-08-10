@@ -2,7 +2,7 @@
 -- APPLY PENDING — run this one file, top to bottom, in the Supabase SQL editor.
 -- =============================================================================
 --
--- This is a CONVENIENCE AGGREGATE, not a migration. It contains the five
+-- This is a CONVENIENCE AGGREGATE, not a migration. It contains the six
 -- migrations that are written but not yet applied, in dependency order:
 --
 --   20260803020000_feedback_signals.sql
@@ -10,6 +10,7 @@
 --   20260803040000_issue_reports_description_fix.sql
 --   20260803050000_showcase_review_cta.sql
 --   20260804000000_portfolio_site.sql
+--   20260810000000_project_blueprint_applications.sql
 --
 -- (20260803010000_showcase_brochure.sql is already applied.)
 --
@@ -554,3 +555,48 @@ SELECT column_name, is_nullable
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'issue_reports'
 ORDER BY ordinal_position;
+
+
+-- === PART 6 — blueprint application ledger =================================
+-- Source: 20260810000000_project_blueprint_applications.sql
+--
+-- Records one row per "apply blueprint to project". Unlike PARTS 1-5 the app
+-- does NOT break without this: the apply itself still works and the Templates
+-- screen simply hides its "where has this been used" panel and the project's
+-- "Set up from <blueprint>" link. Run it to turn those on.
+
+CREATE TABLE IF NOT EXISTS public.project_blueprint_applications (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  blueprint_id uuid NOT NULL REFERENCES public.project_templates(id) ON DELETE CASCADE,
+  project_id   uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  applied_by   uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  counts       jsonb NOT NULL DEFAULT '{}'::jsonb,
+  failed_count integer NOT NULL DEFAULT 0,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+
+GRANT SELECT ON public.project_blueprint_applications TO authenticated;
+GRANT ALL ON public.project_blueprint_applications TO service_role;
+
+ALTER TABLE public.project_blueprint_applications ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Read blueprint applications via parent"
+  ON public.project_blueprint_applications;
+CREATE POLICY "Read blueprint applications via parent"
+  ON public.project_blueprint_applications FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM public.project_templates pt
+    WHERE pt.id = project_blueprint_applications.blueprint_id
+      AND (
+        pt.created_by = auth.uid()
+        OR (pt.team_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM public.team_members tm
+          WHERE tm.team_id = pt.team_id AND tm.user_id = auth.uid()
+        ))
+      )
+  ));
+
+CREATE INDEX IF NOT EXISTS project_blueprint_applications_blueprint_idx
+  ON public.project_blueprint_applications(blueprint_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS project_blueprint_applications_project_idx
+  ON public.project_blueprint_applications(project_id, created_at DESC);

@@ -1,6 +1,51 @@
-import { ClipboardList, FileText, Newspaper, Tag, Workflow as WorkflowIcon } from "lucide-react";
+import {
+  ClipboardList,
+  FileText,
+  ListChecks,
+  Newspaper,
+  Tag,
+  Workflow as WorkflowIcon,
+  type LucideIcon,
+} from "lucide-react";
 
 export type BlueprintItemKind = "checklist" | "document" | "report" | "label_set" | "workflow";
+
+/**
+ * The project surface a blueprint item lands on, named exactly as the project
+ * page names it.
+ *
+ * "I don't know what happens when I select a template" is answered by pointing
+ * at a tab the user has already seen. `tab` is the label on the project's own
+ * PageTabStrip — Documents really is the tab keyed `reports`, so the mapping is
+ * spelled out here once rather than guessed at each call site.
+ */
+export type BlueprintDestination = "checklists" | "workflows" | "documents" | "labels";
+
+export const DESTINATION: Record<
+  BlueprintDestination,
+  { tab: string; icon: LucideIcon; blurb: string }
+> = {
+  checklists: {
+    tab: "Checklists",
+    icon: ListChecks,
+    blurb: "Tick-off lists the crew works through on site",
+  },
+  workflows: {
+    tab: "Workflows",
+    icon: WorkflowIcon,
+    blurb: "Phase-by-phase runs with photo prompts and sign-off gates",
+  },
+  documents: {
+    tab: "Documents",
+    icon: FileText,
+    blurb: "Drafts with the project's details already filled in, ready to export",
+  },
+  labels: {
+    tab: "Project labels",
+    icon: Tag,
+    blurb: "How the project sorts and filters across the workspace",
+  },
+};
 
 /**
  * What each blueprint item turns into once it lands on a project.
@@ -16,7 +61,14 @@ export type BlueprintItemKind = "checklist" | "document" | "report" | "label_set
  */
 export const KIND_OUTCOME: Record<
   BlueprintItemKind,
-  { label: string; plural: string; icon: typeof ClipboardList; tint: string; becomes: string }
+  {
+    label: string;
+    plural: string;
+    icon: LucideIcon;
+    tint: string;
+    becomes: string;
+    destination: BlueprintDestination;
+  }
 > = {
   checklist: {
     label: "Checklist",
@@ -24,6 +76,7 @@ export const KIND_OUTCOME: Record<
     icon: ClipboardList,
     tint: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
     becomes: "A checklist the crew ticks off under the project's Checklists tab",
+    destination: "checklists",
   },
   workflow: {
     label: "Workflow",
@@ -31,6 +84,7 @@ export const KIND_OUTCOME: Record<
     icon: WorkflowIcon,
     tint: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
     becomes: "A live run of phases, photo prompts and sign-off gates on the project",
+    destination: "workflows",
   },
   document: {
     label: "Document",
@@ -38,6 +92,7 @@ export const KIND_OUTCOME: Record<
     icon: FileText,
     tint: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
     becomes: "A site log with project name, address, date and author already filled in",
+    destination: "documents",
   },
   report: {
     label: "Report",
@@ -45,6 +100,7 @@ export const KIND_OUTCOME: Record<
     icon: Newspaper,
     tint: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
     becomes: "A draft report under the project's Documents tab, ready to export",
+    destination: "documents",
   },
   label_set: {
     label: "Label set",
@@ -52,5 +108,15 @@ export const KIND_OUTCOME: Record<
     icon: Tag,
     tint: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
     becomes: "Its labels merged onto the project so it sorts and filters correctly",
+    destination: "labels",
   },
 };
+
+/** Kinds in the order a blueprint applies them, for stable UI grouping. */
+export const KIND_ORDER: BlueprintItemKind[] = [
+  "checklist",
+  "workflow",
+  "document",
+  "report",
+  "label_set",
+];

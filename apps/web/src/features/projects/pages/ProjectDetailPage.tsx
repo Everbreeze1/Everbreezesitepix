@@ -43,6 +43,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { EditProjectDialog } from "@/features/projects/components/EditProjectDialog";
 import { ProjectActionsMenu } from "@/features/projects/components/ProjectActionsMenu";
 import { ProjectChecklists } from "@/features/projects/components/ProjectChecklists";
+import { ProjectBlueprintOrigin } from "@/features/projects/components/ProjectBlueprintOrigin";
 import { startOfMonth } from "date-fns";
 import { PhotoCalendar, type CalendarPhoto } from "@/features/gallery/components/PhotoCalendar";
 import { PhotoThumb } from "@/components/PhotoThumb";
@@ -2317,6 +2318,8 @@ export function ProjectDetailPage() {
                 <Calendar className="h-4 w-4 text-sidebar-ring" />
                 Updated {relativeTime(project.updated_at)}
               </span>
+              {/* Only renders if a blueprint was actually applied here. */}
+              <ProjectBlueprintOrigin projectId={project.id} />
             </div>
           </div>
         </div>

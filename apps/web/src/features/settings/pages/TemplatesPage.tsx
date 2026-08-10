@@ -1,5 +1,5 @@
-import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   LayoutTemplate,
   Plus,
@@ -16,12 +16,16 @@ import {
   Tag,
   Tags,
   Newspaper,
-  Check,
   MoreHorizontal,
   Copy,
   Pencil,
   Clock,
   Sparkles,
+  ArrowRight,
+  ArrowUp,
+  ArrowDown,
+  History,
+  Rocket,
   Workflow as WorkflowIcon,
 } from "lucide-react";
 import { ChecklistTemplatesPage } from "@/features/settings/pages/ChecklistTemplatesPage";
@@ -32,15 +36,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -63,16 +64,41 @@ import { useQuery } from "@tanstack/react-query";
 import { getMyTeam } from "@/features/settings/api";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
-import { PageHeader } from "@/components/PageHeader";
+import { PageTabStrip } from "@/components/PageTabStrip";
+import { SURFACE_CARD } from "@/components/ui/surface";
+import { cn } from "@/lib/utils";
 import { LabelChip, LabelPicker } from "@/features/photos/components/LabelPicker";
 import { ApplyBlueprintDialog } from "@/features/settings/components/ApplyBlueprintDialog";
-import { KIND_OUTCOME } from "@/features/settings/components/blueprint-outcomes";
+import { BlueprintOutcomePreview } from "@/features/settings/components/BlueprintOutcomePreview";
+import { KIND_OUTCOME, KIND_ORDER } from "@/features/settings/components/blueprint-outcomes";
 import { LabelsManager } from "@/features/settings/components/LabelsManager";
 import { LabelSetsManager } from "@/features/settings/components/LabelSetsManager";
 import { ReportTemplatesManager } from "@/features/settings/components/ReportTemplatesManager";
 import { DocumentTemplatesManager } from "@/features/settings/components/DocumentTemplatesManager";
 
-import { ensureLabel, hexToChipStyle, useLabelCatalog } from "@/hooks/use-label-catalog";
+import { ensureLabel, useLabelCatalog } from "@/hooks/use-label-catalog";
+
+/**
+ * Tab keys, exported so the route's `validateSearch` and this page cannot
+ * disagree about what a valid tab is.
+ */
+export const TEMPLATE_TAB_KEYS = [
+  "blueprints",
+  "checklists",
+  "workflows",
+  "documents",
+  "reports",
+  "label-sets",
+  "labels",
+] as const;
+
+export type TemplateTabKey = (typeof TEMPLATE_TAB_KEYS)[number];
+
+export type TemplatesSearch = {
+  tab?: TemplateTabKey;
+  /** Opens straight to one blueprint — used by links from projects. */
+  blueprint?: string;
+};
 
 interface ProjectTemplate {
   id: string;
@@ -106,6 +132,33 @@ interface TemplateItem {
   position: number;
 }
 
+/** One recorded apply, from the `project_blueprint_applications` ledger. */
+interface BlueprintApplication {
+  id: string;
+  blueprint_id: string;
+  project_id: string;
+  created_at: string;
+  counts: Record<string, number> | null;
+  failed_count: number;
+  project_name: string | null;
+}
+
+/**
+ * A row in the blueprint's contents list.
+ *
+ * `legacy` rows live in `project_template_checklists`, which predates the
+ * generic `project_template_items` table. Both still apply, so both have to be
+ * editable here — see `persistOrder` for how reordering reconciles them.
+ */
+interface SectionRow {
+  id: string;
+  legacy: boolean;
+  kind: TemplateItemKind;
+  refId: string;
+  name: string;
+  missing: boolean;
+}
+
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
@@ -120,10 +173,43 @@ function timeAgo(iso: string) {
   return `${Math.floor(mo / 12)}y ago`;
 }
 
+const KIND_META: Record<
+  TemplateItemKind,
+  { label: string; icon: typeof ClipboardList; tint: string }
+> = {
+  checklist: {
+    label: KIND_OUTCOME.checklist.label,
+    icon: ClipboardList,
+    tint: KIND_OUTCOME.checklist.tint,
+  },
+  workflow: {
+    label: KIND_OUTCOME.workflow.label,
+    icon: WorkflowIcon,
+    tint: KIND_OUTCOME.workflow.tint,
+  },
+  document: {
+    label: KIND_OUTCOME.document.label,
+    icon: FileText,
+    tint: KIND_OUTCOME.document.tint,
+  },
+  report: { label: KIND_OUTCOME.report.label, icon: Newspaper, tint: KIND_OUTCOME.report.tint },
+  label_set: { label: KIND_OUTCOME.label_set.label, icon: Tag, tint: KIND_OUTCOME.label_set.tint },
+};
+
+/** Which library tab authors a given blueprint section kind. */
+const KIND_TAB: Record<TemplateItemKind, TemplateTabKey> = {
+  checklist: "checklists",
+  workflow: "workflows",
+  document: "documents",
+  report: "reports",
+  label_set: "label-sets",
+};
+
 export function TemplatesPage() {
   const { user } = useAuth();
   const confirm = useConfirm();
   const navigate = useNavigate();
+  const search = useSearch({ from: "/_app/templates" });
   const fetchTeam = getMyTeam;
   const { data: teamData, isLoading: teamLoading } = useQuery({
     queryKey: ["my-team"],
@@ -132,12 +218,23 @@ export function TemplatesPage() {
     staleTime: 60_000,
   });
 
-  const { isPro } = useSubscription();
+  const { isPro, isTeam } = useSubscription();
   const myRole: string | null = teamData?.myRole ?? null;
   const canManage = !myRole || myRole === "owner" || myRole === "admin";
   const gated = !isPro;
 
-  const [tab, setTab] = useState("projects");
+  const tab: TemplateTabKey = search.tab ?? "blueprints";
+  const setTab = useCallback(
+    (next: TemplateTabKey) => {
+      void navigate({
+        to: "/templates",
+        search: (prev: TemplatesSearch) => ({ ...prev, tab: next }),
+        replace: true,
+      });
+    },
+    [navigate],
+  );
+
   const [tplItems, setTplItems] = useState<TemplateItem[]>([]);
   const [addKind, setAddKind] = useState<TemplateItemKind | "">("");
   const [addRefId, setAddRefId] = useState("");
@@ -149,18 +246,24 @@ export function TemplatesPage() {
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
   const [checklistTemplates, setChecklistTemplates] = useState<ChecklistTemplate[]>([]);
   const [attached, setAttached] = useState<AttachedChecklist[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(search.blueprint ?? null);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newLabels, setNewLabels] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
-  const [attaching, setAttaching] = useState<string>("");
   const [showArchived, setShowArchived] = useState(false);
-  const [search, setSearch] = useState("");
-  const [activeLabels, setActiveLabels] = useState<string[]>([]);
+  const [searchText, setSearchText] = useState("");
+  const [reordering, setReordering] = useState(false);
 
   const [applyOpen, setApplyOpen] = useState(false);
+
+  /**
+   * `null` means the ledger is unreadable — most likely migration
+   * 20260810000000 has not been run on this environment yet. The usage panel
+   * hides itself rather than showing a permanently empty "never used".
+   */
+  const [applications, setApplications] = useState<BlueprintApplication[] | null>(null);
 
   // Edit dialog state
   const [editOpen, setEditOpen] = useState(false);
@@ -168,7 +271,30 @@ export function TemplatesPage() {
   const [editDesc, setEditDesc] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
-  const load = async () => {
+  const loadApplications = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("project_blueprint_applications" as any)
+      .select("id, blueprint_id, project_id, created_at, counts, failed_count, projects(name)")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) {
+      setApplications(null);
+      return;
+    }
+    setApplications(
+      ((data as any[]) ?? []).map((r) => ({
+        id: r.id,
+        blueprint_id: r.blueprint_id,
+        project_id: r.project_id,
+        created_at: r.created_at,
+        counts: (r.counts as Record<string, number> | null) ?? {},
+        failed_count: r.failed_count ?? 0,
+        project_name: r.projects?.name ?? null,
+      })),
+    );
+  }, []);
+
+  const load = useCallback(async () => {
     setLoading(true);
     const [tplRes, chkRes, attRes, itemsRes, docRes, repRes, lsRes, wfRes] = await Promise.all([
       supabase
@@ -217,26 +343,37 @@ export function TemplatesPage() {
     setReportTpls(((repRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
     setLabelSetTpls(((lsRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
     setWorkflowTpls(((wfRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
-    if (list.length && (!selectedId || !list.find((t) => t.id === selectedId))) {
-      const firstActive = list.find((t) => !t.archived) ?? list[0];
-      setSelectedId(firstActive?.id ?? null);
-    } else if (!list.length) {
-      setSelectedId(null);
-    }
+    setSelectedId((cur) => {
+      if (cur && list.find((t) => t.id === cur)) return cur;
+      if (!list.length) return null;
+      return (list.find((t) => !t.archived) ?? list[0])?.id ?? null;
+    });
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     if (!user || gated) return;
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, gated]);
+    void loadApplications();
+  }, [user, gated, load, loadApplications]);
+
+  // A `?blueprint=` link should win over whatever was selected, and only once —
+  // the param is cleared so a later click in the rail is not snapped back.
+  useEffect(() => {
+    if (!search.blueprint) return;
+    setSelectedId(search.blueprint);
+    void navigate({
+      to: "/templates",
+      search: (prev: TemplatesSearch): TemplatesSearch => ({
+        ...prev,
+        tab: "blueprints",
+        blueprint: undefined,
+      }),
+      replace: true,
+    });
+  }, [search.blueprint, navigate]);
 
   const labelCatalog = useLabelCatalog();
-  const labelColorByName = (name: string) => {
-    const r = labelCatalog.byName.get((name ?? "").trim().toLowerCase());
-    return r?.color || "#3b82f6";
-  };
 
   // All labels = union of catalog + any used by templates (covers labels created elsewhere).
   const allLabels = useMemo(() => {
@@ -246,11 +383,19 @@ export function TemplatesPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [templates, labelCatalog.rows]);
 
-  const countsByTemplate = useMemo(() => {
+  /** Section count per blueprint, across both storage tables. */
+  const sectionCountByTemplate = useMemo(() => {
     const m = new Map<string, number>();
     for (const a of attached) m.set(a.project_template_id, (m.get(a.project_template_id) ?? 0) + 1);
+    for (const i of tplItems) m.set(i.project_template_id, (m.get(i.project_template_id) ?? 0) + 1);
     return m;
-  }, [attached]);
+  }, [attached, tplItems]);
+
+  const applyCountByTemplate = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of applications ?? []) m.set(a.blueprint_id, (m.get(a.blueprint_id) ?? 0) + 1);
+    return m;
+  }, [applications]);
 
   // Usage counts for the Labels tab.
   const templateUsage = useMemo(() => {
@@ -287,29 +432,21 @@ export function TemplatesPage() {
   }, [user, gated, tab]);
 
   const visibleTemplates = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = searchText.trim().toLowerCase();
     return templates.filter((t) => {
       if (!showArchived && t.archived) return false;
-      if (activeLabels.length && !activeLabels.every((l) => (t.labels ?? []).includes(l)))
-        return false;
       if (q) {
         const hay = `${t.name} ${t.description ?? ""} ${(t.labels ?? []).join(" ")}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [templates, showArchived, search, activeLabels]);
-  const selected = templates.find((t) => t.id === selectedId) ?? null;
-  const selectedAttached = attached.filter((a) => a.project_template_id === selectedId);
+  }, [templates, showArchived, searchText]);
 
-  /**
-   * Flattened contents of the selected blueprint, in apply order. Lifted out of
-   * the sections renderer so the Apply dialog can show what it is about to
-   * create before anything is written.
-   */
-  const selectedBlueprintItems = useMemo(() => {
-    if (!selectedId) return [] as Array<{ kind: TemplateItemKind; name: string }>;
-    const libFor = (k: TemplateItemKind): Array<{ id: string; name: string }> =>
+  const selected = templates.find((t) => t.id === selectedId) ?? null;
+
+  const libFor = useCallback(
+    (k: TemplateItemKind): Array<{ id: string; name: string }> =>
       k === "checklist"
         ? checklistTemplates.map((c) => ({ id: c.id, name: c.name }))
         : k === "document"
@@ -318,35 +455,59 @@ export function TemplatesPage() {
             ? reportTpls
             : k === "label_set"
               ? labelSetTpls
-              : workflowTpls;
-    const legacy = attached
+              : workflowTpls,
+    [checklistTemplates, docTpls, reportTpls, labelSetTpls, workflowTpls],
+  );
+
+  /**
+   * The selected blueprint's contents in apply order.
+   *
+   * Legacy checklist links come first because `applyProjectBlueprintService`
+   * processes them first — the list has to show the order that will actually
+   * happen, not a prettier one.
+   */
+  const sections: SectionRow[] = useMemo(() => {
+    if (!selectedId) return [];
+    const nameOf = (kind: TemplateItemKind, refId: string) =>
+      libFor(kind).find((x) => x.id === refId)?.name ?? null;
+    const legacy: SectionRow[] = attached
       .filter((a) => a.project_template_id === selectedId)
-      .map((a) => ({
-        kind: "checklist" as TemplateItemKind,
-        name:
-          checklistTemplates.find((x) => x.id === a.checklist_template_id)?.name ??
-          "(deleted checklist)",
-      }));
-    const rest = tplItems
+      .map((a) => {
+        const name = nameOf("checklist", a.checklist_template_id);
+        return {
+          id: a.id,
+          legacy: true,
+          kind: "checklist" as TemplateItemKind,
+          refId: a.checklist_template_id,
+          name: name ?? "Deleted checklist template",
+          missing: name === null,
+        };
+      });
+    const rest: SectionRow[] = tplItems
       .filter((i) => i.project_template_id === selectedId)
-      .map((i) => ({
-        kind: i.kind,
-        name: libFor(i.kind).find((x) => x.id === i.ref_id)?.name ?? "(deleted)",
-      }));
+      .map((i) => {
+        const name = nameOf(i.kind, i.ref_id);
+        return {
+          id: i.id,
+          legacy: false,
+          kind: i.kind,
+          refId: i.ref_id,
+          name: name ?? `Deleted ${KIND_META[i.kind].label.toLowerCase()} template`,
+          missing: name === null,
+        };
+      });
     return [...legacy, ...rest];
-  }, [
-    selectedId,
-    attached,
-    tplItems,
-    checklistTemplates,
-    docTpls,
-    reportTpls,
-    labelSetTpls,
-    workflowTpls,
-  ]);
-  const attachedIds = new Set(selectedAttached.map((a) => a.checklist_template_id));
-  const availableChecklists = checklistTemplates.filter(
-    (c) => !c.archived && !attachedIds.has(c.id),
+  }, [selectedId, attached, tplItems, libFor]);
+
+  /** Contents in the shape the outcome preview and the apply dialog expect. */
+  const previewItems = useMemo(
+    () => sections.filter((s) => !s.missing).map((s) => ({ kind: s.kind, name: s.name })),
+    [sections],
+  );
+
+  const selectedApplications = useMemo(
+    () => (applications ?? []).filter((a) => a.blueprint_id === selectedId),
+    [applications, selectedId],
   );
 
   const updateLabels = async (t: ProjectTemplate, labels: string[]) => {
@@ -385,7 +546,7 @@ export function TemplatesPage() {
         .single();
       if (error || !data) throw error ?? new Error("Failed");
 
-      toast.success("Template created");
+      toast.success("Blueprint created");
       setNewName("");
       setNewDesc("");
       setNewLabels([]);
@@ -393,7 +554,7 @@ export function TemplatesPage() {
       setSelectedId((data as any).id);
       await load();
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to create template");
+      toast.error(e?.message ?? "Failed to create blueprint");
     } finally {
       setCreating(false);
     }
@@ -417,7 +578,7 @@ export function TemplatesPage() {
       toast.error("Failed to save");
       return;
     }
-    toast.success("Template updated");
+    toast.success("Blueprint updated");
     setEditOpen(false);
     void load();
   };
@@ -450,7 +611,21 @@ export function TemplatesPage() {
         })),
       );
     }
-    toast.success("Template duplicated");
+    // Copying only the legacy checklist links silently dropped every document,
+    // report, workflow and label set — a "duplicate" of a five-section
+    // blueprint could come back with none of them.
+    const items = tplItems.filter((i) => i.project_template_id === t.id);
+    if (items.length) {
+      await supabase.from("project_template_items" as any).insert(
+        items.map((i) => ({
+          project_template_id: newId,
+          kind: i.kind,
+          ref_id: i.ref_id,
+          position: i.position,
+        })),
+      );
+    }
+    toast.success("Blueprint duplicated");
     setSelectedId(newId);
     void load();
   };
@@ -467,7 +642,7 @@ export function TemplatesPage() {
   const deleteTemplate = async (t: ProjectTemplate) => {
     if (
       !(await confirm({
-        description: `Delete template "${t.name}"? This cannot be undone.`,
+        description: `Delete blueprint "${t.name}"? Projects it has already been applied to keep everything it created. This cannot be undone.`,
         variant: "destructive",
       }))
     )
@@ -483,63 +658,144 @@ export function TemplatesPage() {
     }
   };
 
-  const addItem = async () => {
-    if (!selectedId || !addKind || !addRefId) return;
-    const items = tplItems.filter((i) => i.project_template_id === selectedId);
+  const addOfKind = async (k: TemplateItemKind, refId: string) => {
+    if (!selectedId || !refId) return;
+    if (k === "checklist") {
+      // New checklist links go into the generic table too. The legacy table is
+      // read for what is already there, never written to again.
+      const alreadyLegacy = attached.some(
+        (a) => a.project_template_id === selectedId && a.checklist_template_id === refId,
+      );
+      if (alreadyLegacy) return;
+    }
     const { error } = await supabase.from("project_template_items" as any).insert({
       project_template_id: selectedId,
-      kind: addKind,
-      ref_id: addRefId,
-      position: items.length,
+      kind: k,
+      ref_id: refId,
+      position: sections.length,
     });
     if (error) toast.error(error.message ?? "Failed to add");
-    else {
-      setAddKind("");
-      setAddRefId("");
+    else void load();
+  };
+
+  const removeSection = async (row: SectionRow) => {
+    const table = row.legacy ? "project_template_checklists" : "project_template_items";
+    if (row.legacy) setAttached((xs) => xs.filter((x) => x.id !== row.id));
+    else setTplItems((xs) => xs.filter((x) => x.id !== row.id));
+    const { error } = await supabase
+      .from(table as any)
+      .delete()
+      .eq("id", row.id);
+    if (error) {
+      toast.error("Failed to remove");
       void load();
     }
   };
 
-  const detachItem = async (id: string) => {
-    const prev = tplItems;
-    setTplItems((xs) => xs.filter((x) => x.id !== id));
-    const { error } = await supabase
-      .from("project_template_items" as any)
-      .delete()
-      .eq("id", id);
-    if (error) {
-      toast.error("Failed");
-      setTplItems(prev);
+  /**
+   * Writes a new section order.
+   *
+   * The apply service always runs legacy `project_template_checklists` rows
+   * before `project_template_items`, so an order that interleaves the two
+   * cannot be expressed while a blueprint still has legacy rows. Reordering
+   * therefore migrates them first: copy each legacy link into the generic table
+   * (dropping any that already exist there), then delete the legacy rows. The
+   * copy is verified before the delete, so a failure leaves the blueprint
+   * exactly as it was rather than half-moved.
+   */
+  const persistOrder = async (next: SectionRow[]) => {
+    if (!selectedId) return;
+    setReordering(true);
+    try {
+      const legacyRows = next.filter((r) => r.legacy);
+      if (legacyRows.length) {
+        const existingRefs = new Set(
+          tplItems
+            .filter((i) => i.project_template_id === selectedId && i.kind === "checklist")
+            .map((i) => i.ref_id),
+        );
+        const toInsert = legacyRows.filter((r) => !existingRefs.has(r.refId));
+        if (toInsert.length) {
+          const { error } = await supabase.from("project_template_items" as any).insert(
+            toInsert.map((r) => ({
+              project_template_id: selectedId,
+              kind: "checklist",
+              ref_id: r.refId,
+              position: next.indexOf(r),
+            })),
+          );
+          if (error) throw error;
+        }
+        const { error: delErr } = await supabase
+          .from("project_template_checklists" as any)
+          .delete()
+          .in(
+            "id",
+            legacyRows.map((r) => r.id),
+          );
+        if (delErr) throw delErr;
+        // The insert above had no row ids to work with, so positions are only
+        // correct relative to each other. Re-read to get the real ids, then
+        // write the absolute order in one pass.
+        const { data } = await supabase
+          .from("project_template_items" as any)
+          .select("id, kind, ref_id")
+          .eq("project_template_id", selectedId);
+        const idByRef = new Map(
+          ((data as any[]) ?? []).map((r) => [`${r.kind}:${r.ref_id}`, r.id as string]),
+        );
+        await Promise.all(
+          next.map((r, idx) => {
+            const id = idByRef.get(`${r.kind}:${r.refId}`);
+            if (!id) return Promise.resolve();
+            return supabase
+              .from("project_template_items" as any)
+              .update({ position: idx })
+              .eq("id", id);
+          }),
+        );
+      } else {
+        await Promise.all(
+          next.map((r, idx) =>
+            supabase
+              .from("project_template_items" as any)
+              .update({ position: idx })
+              .eq("id", r.id),
+          ),
+        );
+      }
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Couldn't reorder sections");
+      await load();
+    } finally {
+      setReordering(false);
     }
   };
 
-  const attachChecklist = async (checklistTemplateId: string) => {
-    if (!selectedId || !checklistTemplateId) return;
-    const position = selectedAttached.length;
-    const { error } = await supabase.from("project_template_checklists" as any).insert({
-      project_template_id: selectedId,
-      checklist_template_id: checklistTemplateId,
-      position,
-    });
-    if (error) toast.error(error.message ?? "Failed");
-    else {
-      setAttaching("");
-      void load();
-    }
+  const moveSection = (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= sections.length) return;
+    const next = [...sections];
+    [next[index], next[target]] = [next[target], next[index]];
+    void persistOrder(next);
   };
 
-  const detachChecklist = async (id: string) => {
-    const prev = attached;
-    setAttached((xs) => xs.filter((x) => x.id !== id));
-    const { error } = await supabase
-      .from("project_template_checklists" as any)
-      .delete()
-      .eq("id", id);
-    if (error) {
-      toast.error("Failed");
-      setAttached(prev);
-    }
+  const tabCounts: Record<TemplateTabKey, number> = {
+    blueprints: templates.filter((t) => !t.archived).length,
+    checklists: checklistTemplates.filter((c) => !c.archived).length,
+    workflows: workflowTpls.length,
+    documents: docTpls.length,
+    reports: reportTpls.length,
+    "label-sets": labelSetTpls.length,
+    labels: labelCatalog.rows.length,
   };
+  const buildingBlocks =
+    tabCounts.checklists +
+    tabCounts.workflows +
+    tabCounts.documents +
+    tabCounts.reports +
+    tabCounts["label-sets"];
 
   if (teamLoading) {
     return (
@@ -552,16 +808,12 @@ export function TemplatesPage() {
   if (gated) {
     return (
       <div className="container mx-auto max-w-3xl px-4 pb-24 pt-6">
-        <PageHeader
-          eyebrow="Workspace tools"
-          title="Templates"
-          description="Build reusable project blueprints with checklists, reports, and documents."
-        />
         <Card className="mt-6 p-8 text-center">
           <Lock className="mx-auto h-8 w-8 text-muted-foreground" />
           <h2 className="mt-3 text-lg font-semibold">Upgrade to use Templates</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Project Templates are available on the Pro and Team plans.
+            Build a job setup once, then apply it to every project. Available on the Pro and Team
+            plans.
           </p>
           <Button className="mt-4" onClick={() => navigate({ to: "/pricing" })}>
             View plans
@@ -572,688 +824,166 @@ export function TemplatesPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-7xl px-4 pb-24 pt-4 md:pt-6">
-      <PageHeader
-        eyebrow="Workspace tools"
-        title="Templates"
-        description="Create and manage reusable templates across your company — project setups, documents, checklists, reports, and the labels that organize them."
-      />
-
-      <Tabs value={tab} onValueChange={setTab} className="mt-6">
-        {/*
-          Left-aligned and scrollable rather than centred-and-wrapping: seven
-          tabs wrapped onto a second row and floated to the middle of a
-          full-width bar, which read as a layout accident. The divider splits
-          the two real groups — things you author, and the taxonomy that
-          organizes them.
-        */}
-        <TabsList className="mb-6 flex h-auto w-full justify-start gap-1 overflow-x-auto bg-muted/60 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <TabsTrigger value="projects" className="shrink-0 gap-1.5">
-            <FolderOpen className="h-3.5 w-3.5" />
-            Project blueprints
-          </TabsTrigger>
-          <TabsTrigger value="documents" className="shrink-0 gap-1.5">
-            <FileText className="h-3.5 w-3.5" />
-            Documents
-          </TabsTrigger>
-          <TabsTrigger value="checklists" className="shrink-0 gap-1.5">
-            <ClipboardList className="h-3.5 w-3.5" />
-            Checklists
-          </TabsTrigger>
-          <TabsTrigger value="reports" className="shrink-0 gap-1.5">
-            <Newspaper className="h-3.5 w-3.5" />
-            Reports
-          </TabsTrigger>
-          <TabsTrigger value="workflows" className="shrink-0 gap-1.5">
-            <WorkflowIcon className="h-3.5 w-3.5" />
-            Workflows
-          </TabsTrigger>
-          <span className="mx-1 h-5 w-px shrink-0 self-center bg-border" aria-hidden />
-          <TabsTrigger value="label-sets" className="shrink-0 gap-1.5">
-            <Tags className="h-3.5 w-3.5" />
-            Label sets
-          </TabsTrigger>
-          <TabsTrigger value="labels" className="shrink-0 gap-1.5">
-            <Tag className="h-3.5 w-3.5" />
-            Labels
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="label-sets" className="mt-6">
-          <LabelSetsManager teamId={teamData?.team?.id ?? null} canManage={canManage} />
-        </TabsContent>
-
-        <TabsContent value="projects" className="mt-6">
-          {loading ? (
-            <Card className="flex items-center justify-center p-16">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </Card>
-          ) : templates.length === 0 ? (
-            <EmptyState
-              icon={LayoutTemplate}
-              title="No project templates yet"
-              description={
-                canManage
-                  ? "Create a template to standardize how new projects are set up."
-                  : "Ask your account owner or an admin to create one."
-              }
-              action={
-                canManage ? (
-                  <Button onClick={() => setCreateOpen(true)}>
-                    <Plus className="mr-1.5 h-4 w-4" />
-                    New project template
-                  </Button>
-                ) : null
-              }
-            />
-          ) : (
-            <div className="grid gap-5 lg:grid-cols-[340px_1fr]">
-              {/* Sidebar */}
-              <div className="space-y-3">
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search templates…"
-                    className="h-10 rounded-xl pl-9"
-                  />
-                </div>
-
-                {canManage && (
-                  <Button
-                    className="w-full justify-center rounded-xl"
-                    onClick={() => setCreateOpen(true)}
-                  >
-                    <Plus className="mr-1.5 h-4 w-4" />
-                    New template
-                  </Button>
-                )}
-
-                <Card className="overflow-hidden p-0">
-                  <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {visibleTemplates.length} template
-                      {visibleTemplates.length === 1 ? "" : "s"}
-                    </span>
-                    <button
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowArchived((s) => !s)}
-                    >
-                      {showArchived ? "Hide archived" : "Show archived"}
-                    </button>
-                  </div>
-                  {visibleTemplates.length === 0 ? (
-                    <p className="px-3 py-8 text-center text-xs text-muted-foreground">
-                      No templates match your filters.
-                    </p>
-                  ) : (
-                    <ul className="max-h-[60vh] divide-y divide-border/60 overflow-y-auto">
-                      {visibleTemplates.map((t) => {
-                        const isSelected = selectedId === t.id;
-                        const count = countsByTemplate.get(t.id) ?? 0;
-                        return (
-                          <li key={t.id} className="relative">
-                            {isSelected && (
-                              <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-primary" />
-                            )}
-                            <button
-                              onClick={() => setSelectedId(t.id)}
-                              className={`flex w-full flex-col items-start gap-1.5 px-3.5 py-3 text-left transition-colors ${
-                                isSelected ? "bg-primary/[0.06]" : "hover:bg-muted/50"
-                              }`}
-                            >
-                              <div className="flex w-full items-start justify-between gap-2">
-                                <span className="line-clamp-1 text-sm font-medium">{t.name}</span>
-                                {t.archived && (
-                                  <Badge variant="outline" className="shrink-0 text-[10px]">
-                                    Archived
-                                  </Badge>
-                                )}
-                              </div>
-                              {t.description && (
-                                <p className="line-clamp-1 text-xs text-muted-foreground">
-                                  {t.description}
-                                </p>
-                              )}
-                              {(t.labels?.length ?? 0) > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {t.labels!.slice(0, 3).map((l) => (
-                                    <LabelChip key={l} label={l} size="xs" />
-                                  ))}
-                                  {(t.labels?.length ?? 0) > 3 && (
-                                    <span className="text-[10px] text-muted-foreground">
-                                      +{(t.labels?.length ?? 0) - 3}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              <div className="flex w-full items-center gap-3 text-[11px] text-muted-foreground">
-                                <span className="inline-flex items-center gap-1">
-                                  <ClipboardList className="h-3 w-3" />
-                                  {count} checklist{count === 1 ? "" : "s"}
-                                </span>
-                                <span className="inline-flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {timeAgo(t.created_at)}
-                                </span>
-                              </div>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </Card>
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:py-10">
+        {/* Hero — same shell, ornament, badge and stats rail as Projects and the
+            project home page. Templates was the last product surface still
+            wearing the plain settings header, which is most of why it read as a
+            bolted-on admin screen rather than the thing the workflow runs on. */}
+        <div className="relative overflow-hidden rounded-[32px] bg-sidebar">
+          <div className="pointer-events-none absolute -right-24 -top-28 h-[288px] w-[288px] rounded-full border-[28px] border-sidebar-ring/20" />
+          <div className="relative flex flex-col gap-7 p-6 sm:px-10 sm:py-9">
+            <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <span className="inline-flex items-center rounded-full bg-sidebar-ring px-3 py-1 text-[10px] font-extrabold uppercase tracking-[1.4px] text-sidebar-foreground">
+                  Workspace tools
+                </span>
+                <h1 className="font-display mt-3 truncate text-2xl font-bold leading-tight tracking-tight text-sidebar-foreground sm:text-3xl">
+                  Templates
+                </h1>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-sidebar-foreground/60">
+                  Build a job setup once as a blueprint, then apply it to any project — its
+                  checklists, workflows, documents, reports and labels all land in place.
+                </p>
               </div>
 
-              {/* Main detail */}
-              {selected ? (
-                <Card className="overflow-hidden p-0">
-                  {/* Hero header */}
-                  <div className="border-b border-border/60 bg-gradient-to-br from-primary/[0.04] via-background to-background px-6 py-5">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <LayoutTemplate className="h-4.5 w-4.5" />
-                          </div>
-                          <h2 className="truncate text-xl font-semibold tracking-tight">
-                            {selected.name}
-                          </h2>
-                          {selected.archived && <Badge variant="outline">Archived</Badge>}
-                        </div>
-                        {selected.description && (
-                          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                            {selected.description}
-                          </p>
-                        )}
-                        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                          <span className="inline-flex items-center gap-1.5">
-                            <Clock className="h-3.5 w-3.5" />
-                            Created {timeAgo(selected.created_at)}
-                          </span>
-                          <span className="inline-flex items-center gap-1.5">
-                            <LayoutTemplate className="h-3.5 w-3.5" />
-                            {selectedBlueprintItems.length} section
-                            {selectedBlueprintItems.length === 1 ? "" : "s"}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {/*
-                          The action the whole page exists for. A blueprint used
-                          to be appliable only while creating a project, so one
-                          authored here had no route to the jobs already
-                          running — you could build a blueprint and never find
-                          out what it did.
-                        */}
-                        <Button
-                          size="sm"
-                          className="rounded-lg"
-                          onClick={() => setApplyOpen(true)}
-                          disabled={selectedBlueprintItems.length === 0 && !selected.labels?.length}
-                        >
-                          <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                          Apply to project
-                        </Button>
-                        {canManage && (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openEdit(selected)}
-                              className="rounded-lg"
-                            >
-                              <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                              Edit
-                            </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="rounded-lg"
-                                  aria-label="More actions"
-                                >
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-44">
-                                <DropdownMenuItem onClick={() => void duplicateTemplate(selected)}>
-                                  <Copy className="mr-2 h-4 w-4" />
-                                  Duplicate
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => void toggleArchived(selected)}>
-                                  {selected.archived ? (
-                                    <>
-                                      <ArchiveRestore className="mr-2 h-4 w-4" />
-                                      Unarchive
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Archive className="mr-2 h-4 w-4" />
-                                      Archive
-                                    </>
-                                  )}
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onClick={() => void deleteTemplate(selected)}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Body */}
-                  <div className="space-y-7 px-6 py-6">
-                    {/* Labels */}
-                    <section>
-                      <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        <Tag className="h-3 w-3" />
-                        Labels
-                      </div>
-                      {canManage ? (
-                        <LabelPicker
-                          value={selected.labels ?? []}
-                          onChange={(next) => void updateLabels(selected, next)}
-                          suggestions={allLabels}
-                          triggerLabel="Add label"
-                          teamId={teamData?.team?.id ?? null}
-                          userId={user?.id}
-                        />
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {(selected.labels ?? []).map((l) => (
-                            <LabelChip key={l} label={l} />
-                          ))}
-                          {(selected.labels?.length ?? 0) === 0 && (
-                            <span className="text-xs text-muted-foreground">No labels yet.</span>
-                          )}
-                        </div>
-                      )}
-                    </section>
-
-                    <Separator />
-
-                    {/* Unified sections builder */}
-                    {(() => {
-                      const items = tplItems.filter((i) => i.project_template_id === selectedId);
-                      type Row = {
-                        key: string;
-                        kind: TemplateItemKind;
-                        name: string;
-                        onRemove: () => void;
-                      };
-                      const kindMeta: Record<
-                        TemplateItemKind,
-                        {
-                          label: string;
-                          icon: React.ReactNode;
-                          tint: string;
-                          lib: Array<{ id: string; name: string }>;
-                        }
-                      > = {
-                        checklist: {
-                          label: "Checklist",
-                          icon: <ClipboardList className="h-4 w-4" />,
-                          tint: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-                          lib: checklistTemplates.map((c) => ({ id: c.id, name: c.name })),
-                        },
-                        document: {
-                          label: "Document",
-                          icon: <FileText className="h-4 w-4" />,
-                          tint: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-                          lib: docTpls,
-                        },
-                        report: {
-                          label: "Report",
-                          icon: <FileText className="h-4 w-4" />,
-                          tint: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-                          lib: reportTpls,
-                        },
-                        label_set: {
-                          label: "Label set",
-                          icon: <Tag className="h-4 w-4" />,
-                          tint: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
-                          lib: labelSetTpls,
-                        },
-                        workflow: {
-                          label: "Workflow",
-                          icon: <WorkflowIcon className="h-4 w-4" />,
-                          tint: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
-                          lib: workflowTpls,
-                        },
-                      };
-                      const legacyRows: Row[] = selectedAttached.map((a) => ({
-                        key: `chk-${a.id}`,
-                        kind: "checklist" as TemplateItemKind,
-                        name:
-                          checklistTemplates.find((x) => x.id === a.checklist_template_id)?.name ??
-                          "(deleted checklist)",
-                        onRemove: () => void detachChecklist(a.id),
-                      }));
-                      const newRows: Row[] = items.map((it) => ({
-                        key: `it-${it.id}`,
-                        kind: it.kind,
-                        name:
-                          (kindMeta[it.kind].lib.find((x) => x.id === it.ref_id) as any)?.name ??
-                          "(deleted)",
-                        onRemove: () => void detachItem(it.id),
-                      }));
-                      const rows = [...legacyRows, ...newRows];
-
-                      const counts: Record<TemplateItemKind, number> = {
-                        checklist: 0,
-                        document: 0,
-                        report: 0,
-                        label_set: 0,
-                        workflow: 0,
-                      };
-                      for (const r of rows) counts[r.kind]++;
-
-                      const availableFor = (k: TemplateItemKind) => {
-                        if (k === "checklist") {
-                          const used = new Set(
-                            selectedAttached.map((a) => a.checklist_template_id),
-                          );
-                          return checklistTemplates
-                            .filter((c) => !c.archived && !used.has(c.id))
-                            .map((c) => ({ id: c.id, name: c.name }));
-                        }
-                        const used = new Set(
-                          items.filter((i) => i.kind === k).map((i) => i.ref_id),
-                        );
-                        return kindMeta[k].lib.filter((x) => !used.has(x.id));
-                      };
-
-                      const addOfKind = async (k: TemplateItemKind, refId: string) => {
-                        if (!selectedId || !refId) return;
-                        if (k === "checklist") {
-                          setAttaching(refId);
-                          await attachChecklist(refId);
-                          return;
-                        }
-                        const { error } = await supabase
-                          .from("project_template_items" as any)
-                          .insert({
-                            project_template_id: selectedId,
-                            kind: k,
-                            ref_id: refId,
-                            position: items.length,
-                          });
-                        if (error) toast.error(error.message ?? "Failed to add");
-                        else void load();
-                      };
-
-                      return (
-                        <section>
-                          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <h3 className="text-sm font-semibold">Blueprint sections</h3>
-                              <p className="mt-0.5 text-xs text-muted-foreground">
-                                Everything here is auto-created in the matching project tab when
-                                this blueprint is applied.
-                              </p>
-                            </div>
-                            {canManage && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button size="sm" className="rounded-lg">
-                                    <Plus className="mr-1.5 h-4 w-4" />
-                                    Add section
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-56">
-                                  {(Object.keys(kindMeta) as TemplateItemKind[]).map((k) => (
-                                    <DropdownMenuItem
-                                      key={k}
-                                      onClick={() => {
-                                        setAddKind(k);
-                                        setAddRefId("");
-                                      }}
-                                    >
-                                      <span
-                                        className={`mr-2 inline-flex h-6 w-6 items-center justify-center rounded ${kindMeta[k].tint}`}
-                                      >
-                                        {kindMeta[k].icon}
-                                      </span>
-                                      {kindMeta[k].label}
-                                    </DropdownMenuItem>
-                                  ))}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </div>
-
-                          {/* Preview strip */}
-                          <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                            {(Object.keys(kindMeta) as TemplateItemKind[]).map((k) => (
-                              <div
-                                key={k}
-                                className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2"
-                              >
-                                <span
-                                  className={`inline-flex h-7 w-7 items-center justify-center rounded ${kindMeta[k].tint}`}
-                                >
-                                  {kindMeta[k].icon}
-                                </span>
-                                <div className="min-w-0">
-                                  <div className="text-sm font-semibold leading-none">
-                                    {counts[k]}
-                                  </div>
-                                  <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                                    {kindMeta[k].label}
-                                    {counts[k] === 1 ? "" : "s"}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Rows */}
-                          {rows.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-10 text-center">
-                              <LayoutTemplate className="h-6 w-6 text-muted-foreground/70" />
-                              <p className="mt-2 text-sm font-medium">Nothing attached yet</p>
-                              <p className="mt-0.5 text-xs text-muted-foreground">
-                                Click <span className="font-medium">Add section</span> to bundle
-                                checklists, documents, reports, workflows, or label sets.
-                              </p>
-                            </div>
-                          ) : (
-                            <ul className="space-y-2">
-                              {rows.map((r, idx) => (
-                                <li
-                                  key={r.key}
-                                  className="group flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3.5 py-2.5 transition-colors hover:border-border"
-                                >
-                                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium text-muted-foreground">
-                                    {idx + 1}
-                                  </div>
-                                  <span
-                                    className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded ${kindMeta[r.kind].tint}`}
-                                  >
-                                    {kindMeta[r.kind].icon}
-                                  </span>
-                                  <Badge variant="outline" className="shrink-0 text-[10px]">
-                                    {kindMeta[r.kind].label}
-                                  </Badge>
-                                  {/* Naming the template type stopped short of
-                                      the useful part: what it turns into once
-                                      the blueprint lands on a project. */}
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block truncate text-sm">{r.name}</span>
-                                    <span className="block truncate text-[11px] text-muted-foreground">
-                                      → {KIND_OUTCOME[r.kind].becomes}
-                                    </span>
-                                  </span>
-                                  {canManage && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-                                      onClick={r.onRemove}
-                                      aria-label="Remove"
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-
-                          {/* Picker dialog for chosen kind */}
-                          {canManage && addKind && (
-                            <Dialog
-                              open={!!addKind}
-                              onOpenChange={(o) => {
-                                if (!o) {
-                                  setAddKind("" as TemplateItemKind | "");
-                                  setAddRefId("");
-                                }
-                              }}
-                            >
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle>
-                                    Add {kindMeta[addKind as TemplateItemKind].label.toLowerCase()}
-                                  </DialogTitle>
-                                </DialogHeader>
-                                <div className="space-y-3">
-                                  <p className="text-xs text-muted-foreground">
-                                    Pick a saved{" "}
-                                    {kindMeta[addKind as TemplateItemKind].label.toLowerCase()}{" "}
-                                    template to include in this blueprint.
-                                  </p>
-                                  {availableFor(addKind as TemplateItemKind).length === 0 ? (
-                                    <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-6 text-center text-xs text-muted-foreground">
-                                      No more{" "}
-                                      {kindMeta[addKind as TemplateItemKind].label.toLowerCase()}{" "}
-                                      templates available. Create one in the matching tab first.
-                                    </div>
-                                  ) : (
-                                    <Select value={addRefId} onValueChange={setAddRefId}>
-                                      <SelectTrigger className="h-10 rounded-lg">
-                                        <SelectValue
-                                          placeholder={`Pick a ${kindMeta[addKind as TemplateItemKind].label.toLowerCase()}…`}
-                                        />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {availableFor(addKind as TemplateItemKind).map((x) => (
-                                          <SelectItem key={x.id} value={x.id}>
-                                            {x.name}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  )}
-                                </div>
-                                <DialogFooter>
-                                  <Button
-                                    variant="outline"
-                                    onClick={() => {
-                                      setAddKind("" as TemplateItemKind | "");
-                                      setAddRefId("");
-                                    }}
-                                  >
-                                    Cancel
-                                  </Button>
-                                  <Button
-                                    disabled={!addRefId}
-                                    onClick={async () => {
-                                      const k = addKind as TemplateItemKind;
-                                      const ref = addRefId;
-                                      setAddKind("" as TemplateItemKind | "");
-                                      setAddRefId("");
-                                      await addOfKind(k, ref);
-                                    }}
-                                  >
-                                    <Plus className="mr-1 h-4 w-4" />
-                                    Add to blueprint
-                                  </Button>
-                                </DialogFooter>
-                              </DialogContent>
-                            </Dialog>
-                          )}
-
-                          {canManage && (
-                            <p className="mt-3 text-[11px] text-muted-foreground">
-                              Need a new template first? Open the{" "}
-                              <button
-                                className="text-primary hover:underline"
-                                onClick={() => setTab("checklists")}
-                              >
-                                Checklists
-                              </button>
-                              ,{" "}
-                              <button
-                                className="text-primary hover:underline"
-                                onClick={() => setTab("documents")}
-                              >
-                                Documents
-                              </button>
-                              ,{" "}
-                              <button
-                                className="text-primary hover:underline"
-                                onClick={() => setTab("reports")}
-                              >
-                                Reports
-                              </button>
-                              ,{" "}
-                              <button
-                                className="text-primary hover:underline"
-                                onClick={() => setTab("workflows")}
-                              >
-                                Workflows
-                              </button>
-                              , or{" "}
-                              <button
-                                className="text-primary hover:underline"
-                                onClick={() => setTab("label-sets")}
-                              >
-                                Label sets
-                              </button>{" "}
-                              tab, create one, then come back here.
-                            </p>
-                          )}
-                        </section>
-                      );
-                    })()}
-                  </div>
-                </Card>
-              ) : (
-                <Card className="flex flex-col items-center justify-center gap-2 p-16 text-center">
-                  <Sparkles className="h-6 w-6 text-muted-foreground/70" />
-                  <p className="text-sm font-medium">Select a template</p>
-                  <p className="text-xs text-muted-foreground">
-                    Pick a template from the list to view and edit it.
-                  </p>
-                </Card>
-              )}
+              <div className="flex shrink-0 items-center gap-2">
+                {canManage && (
+                  <Button
+                    onClick={() => {
+                      setTab("blueprints");
+                      setCreateOpen(true);
+                    }}
+                    className="h-10 rounded-lg bg-sidebar-foreground px-5 font-bold text-sidebar shadow-sm hover:bg-sidebar-foreground/90"
+                  >
+                    <Plus className="mr-2 h-4 w-4 text-sidebar-ring" /> New blueprint
+                  </Button>
+                )}
+              </div>
             </div>
+
+            {/* Stats rail — states what the library holds and cuts to it. */}
+            <div className="flex flex-col gap-4 border-t border-sidebar-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="mr-1 text-[10px] font-extrabold uppercase tracking-[1.5px] text-sidebar-foreground/45">
+                  Library
+                </span>
+                <span className="text-xs font-bold text-sidebar-foreground">
+                  {tabCounts.blueprints} {tabCounts.blueprints === 1 ? "blueprint" : "blueprints"}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-5 text-xs font-bold text-sidebar-foreground/60">
+                <button
+                  type="button"
+                  onClick={() => setTab("checklists")}
+                  className="inline-flex items-center gap-2 rounded-md transition hover:text-sidebar-foreground"
+                >
+                  <LayoutTemplate className="h-4 w-4 text-sidebar-ring" />
+                  {buildingBlocks} reusable pieces
+                </button>
+                {applications !== null && (
+                  <span className="inline-flex items-center gap-2">
+                    <Rocket className="h-4 w-4 text-sidebar-ring" />
+                    {applications.length} applied to projects
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* The same strip Projects and the project home page use, so the three
+            hub screens can no longer drift apart. */}
+        <PageTabStrip
+          className="mt-3.5"
+          value={tab}
+          onChange={(key) => setTab(key as TemplateTabKey)}
+          items={[
+            {
+              key: "blueprints",
+              label: "Project blueprints",
+              count: tabCounts.blueprints,
+              icon: FolderOpen,
+            },
+            {
+              key: "checklists",
+              label: "Checklists",
+              count: tabCounts.checklists,
+              icon: ClipboardList,
+            },
+            {
+              key: "workflows",
+              label: "Workflows",
+              count: tabCounts.workflows,
+              icon: WorkflowIcon,
+            },
+            { key: "documents", label: "Documents", count: tabCounts.documents, icon: FileText },
+            { key: "reports", label: "Reports", count: tabCounts.reports, icon: Newspaper },
+            {
+              key: "label-sets",
+              label: "Label sets",
+              count: tabCounts["label-sets"],
+              icon: Tags,
+            },
+            { key: "labels", label: "Labels", count: tabCounts.labels, icon: Tag },
+          ]}
+        />
+
+        <div className="mt-6">
+          {tab === "blueprints" && (
+            <BlueprintsTab
+              loading={loading}
+              canManage={canManage}
+              isTeam={isTeam}
+              templates={templates}
+              visibleTemplates={visibleTemplates}
+              sectionCountByTemplate={sectionCountByTemplate}
+              applyCountByTemplate={applyCountByTemplate}
+              applicationsAvailable={applications !== null}
+              selectedApplications={selectedApplications}
+              selected={selected}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              search={searchText}
+              onSearch={setSearchText}
+              showArchived={showArchived}
+              onToggleArchived={() => setShowArchived((s) => !s)}
+              onCreate={() => setCreateOpen(true)}
+              sections={sections}
+              previewItems={previewItems}
+              reordering={reordering}
+              onMove={moveSection}
+              onRemove={removeSection}
+              onPickKind={(k) => {
+                setAddKind(k);
+                setAddRefId("");
+              }}
+              onApply={() => setApplyOpen(true)}
+              onEdit={openEdit}
+              onDuplicate={duplicateTemplate}
+              onArchiveToggle={toggleArchived}
+              onDelete={deleteTemplate}
+              onUpdateLabels={updateLabels}
+              allLabels={allLabels}
+              teamId={teamData?.team?.id ?? null}
+              userId={user?.id}
+              onGoToTab={setTab}
+              onUpgrade={() => navigate({ to: "/pricing" })}
+            />
           )}
-        </TabsContent>
 
-        <TabsContent value="checklists" className="mt-6">
-          <ChecklistTemplatesPage embedded />
-        </TabsContent>
-
-        <TabsContent value="workflows" className="mt-6">
-          <WorkflowTemplatesPage embedded />
-        </TabsContent>
-
-        <TabsContent value="labels" className="mt-6">
-          {user && (
+          {tab === "checklists" && <ChecklistTemplatesPage embedded />}
+          {tab === "workflows" && <WorkflowTemplatesPage embedded />}
+          {tab === "documents" && (
+            <DocumentTemplatesManager teamId={teamData?.team?.id ?? null} canManage={canManage} />
+          )}
+          {tab === "reports" && (
+            <ReportTemplatesManager teamId={teamData?.team?.id ?? null} canManage={canManage} />
+          )}
+          {tab === "label-sets" && (
+            <LabelSetsManager teamId={teamData?.team?.id ?? null} canManage={canManage} />
+          )}
+          {tab === "labels" && user && (
             <LabelsManager
               teamId={teamData?.team?.id ?? null}
               userId={user.id}
@@ -1262,22 +992,101 @@ export function TemplatesPage() {
               projectUsage={projectUsage}
             />
           )}
-        </TabsContent>
+        </div>
+      </div>
 
-        <TabsContent value="reports" className="mt-6">
-          <ReportTemplatesManager teamId={teamData?.team?.id ?? null} canManage={canManage} />
-        </TabsContent>
-        <TabsContent value="documents" className="mt-6">
-          <DocumentTemplatesManager teamId={teamData?.team?.id ?? null} canManage={canManage} />
-        </TabsContent>
-      </Tabs>
+      {/* Section picker for the chosen kind */}
+      {canManage && addKind && (
+        <Dialog
+          open={!!addKind}
+          onOpenChange={(o) => {
+            if (!o) {
+              setAddKind("");
+              setAddRefId("");
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add {KIND_META[addKind].label.toLowerCase()}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">{KIND_OUTCOME[addKind].becomes}.</p>
+              {(() => {
+                const used = new Set(
+                  sections.filter((s) => s.kind === addKind).map((s) => s.refId),
+                );
+                const available = libFor(addKind).filter((x) => !used.has(x.id));
+                if (available.length === 0) {
+                  return (
+                    <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-6 text-center text-xs text-muted-foreground">
+                      No more {KIND_META[addKind].label.toLowerCase()} templates available.{" "}
+                      <button
+                        className="font-semibold text-primary hover:underline"
+                        onClick={() => {
+                          const target = KIND_TAB[addKind];
+                          setAddKind("");
+                          setTab(target);
+                        }}
+                      >
+                        Create one first
+                      </button>
+                      .
+                    </div>
+                  );
+                }
+                return (
+                  <Select value={addRefId} onValueChange={setAddRefId}>
+                    <SelectTrigger className="h-10 rounded-lg">
+                      <SelectValue
+                        placeholder={`Pick a ${KIND_META[addKind].label.toLowerCase()}…`}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {available.map((x) => (
+                        <SelectItem key={x.id} value={x.id}>
+                          {x.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                );
+              })()}
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setAddKind("");
+                  setAddRefId("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={!addRefId}
+                onClick={async () => {
+                  const k = addKind;
+                  const ref = addRefId;
+                  setAddKind("");
+                  setAddRefId("");
+                  await addOfKind(k, ref);
+                }}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Add to blueprint
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Create dialog */}
       {canManage && (
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>New project template</DialogTitle>
+              <DialogTitle>New project blueprint</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               <div>
@@ -1300,6 +1109,7 @@ export function TemplatesPage() {
                   onChange={(e) => setNewDesc(e.target.value)}
                   rows={2}
                   className="mt-1"
+                  placeholder="When should the crew reach for this one?"
                 />
               </div>
               <div>
@@ -1317,7 +1127,7 @@ export function TemplatesPage() {
                   />
                 </div>
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Pick from existing labels or type to create a new one.
+                  Every project this blueprint is applied to picks these labels up.
                 </p>
               </div>
             </div>
@@ -1339,7 +1149,7 @@ export function TemplatesPage() {
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Edit template</DialogTitle>
+              <DialogTitle>Edit blueprint</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               <div>
@@ -1383,10 +1193,695 @@ export function TemplatesPage() {
           onOpenChange={setApplyOpen}
           blueprintId={selected.id}
           blueprintName={selected.name}
-          items={selectedBlueprintItems}
+          items={previewItems}
           labels={selected.labels ?? []}
+          companyName={teamData?.team?.name ?? null}
+          onApplied={() => void loadApplications()}
         />
       )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Blueprints tab                                                            */
+/* -------------------------------------------------------------------------- */
+
+function BlueprintsTab(props: {
+  loading: boolean;
+  canManage: boolean;
+  isTeam: boolean;
+  templates: ProjectTemplate[];
+  visibleTemplates: ProjectTemplate[];
+  sectionCountByTemplate: Map<string, number>;
+  applyCountByTemplate: Map<string, number>;
+  applicationsAvailable: boolean;
+  selectedApplications: BlueprintApplication[];
+  selected: ProjectTemplate | null;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  search: string;
+  onSearch: (v: string) => void;
+  showArchived: boolean;
+  onToggleArchived: () => void;
+  onCreate: () => void;
+  sections: SectionRow[];
+  previewItems: Array<{ kind: TemplateItemKind; name: string }>;
+  reordering: boolean;
+  onMove: (index: number, dir: -1 | 1) => void;
+  onRemove: (row: SectionRow) => void;
+  onPickKind: (k: TemplateItemKind) => void;
+  onApply: () => void;
+  onEdit: (t: ProjectTemplate) => void;
+  onDuplicate: (t: ProjectTemplate) => void;
+  onArchiveToggle: (t: ProjectTemplate) => void;
+  onDelete: (t: ProjectTemplate) => void;
+  onUpdateLabels: (t: ProjectTemplate, labels: string[]) => void;
+  allLabels: string[];
+  teamId: string | null;
+  userId?: string;
+  onGoToTab: (t: TemplateTabKey) => void;
+  onUpgrade: () => void;
+}) {
+  const {
+    loading,
+    canManage,
+    isTeam,
+    templates,
+    visibleTemplates,
+    sectionCountByTemplate,
+    applyCountByTemplate,
+    applicationsAvailable,
+    selectedApplications,
+    selected,
+    selectedId,
+    onSelect,
+    search,
+    onSearch,
+    showArchived,
+    onToggleArchived,
+    onCreate,
+    sections,
+    previewItems,
+    reordering,
+    onMove,
+    onRemove,
+    onPickKind,
+    onApply,
+    onEdit,
+    onDuplicate,
+    onArchiveToggle,
+    onDelete,
+    onUpdateLabels,
+    allLabels,
+    teamId,
+    userId,
+    onGoToTab,
+    onUpgrade,
+  } = props;
+
+  if (loading) {
+    return (
+      <Card className="flex items-center justify-center p-16">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </Card>
+    );
+  }
+
+  if (templates.length === 0) {
+    return <BlueprintsIntro canManage={canManage} onCreate={onCreate} />;
+  }
+
+  const hasContent = previewItems.length > 0 || (selected?.labels?.length ?? 0) > 0;
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+      {/* Library rail */}
+      <div className="space-y-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+            placeholder="Search blueprints…"
+            className="h-10 rounded-xl pl-9"
+          />
+        </div>
+
+        {canManage && (
+          <Button className="w-full justify-center rounded-xl" onClick={onCreate}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            New blueprint
+          </Button>
+        )}
+
+        <div className={cn(SURFACE_CARD, "overflow-hidden")}>
+          <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
+            <span className="text-xs font-bold text-muted-foreground">
+              {visibleTemplates.length} blueprint{visibleTemplates.length === 1 ? "" : "s"}
+            </span>
+            <button
+              className="text-xs font-bold text-muted-foreground hover:text-foreground"
+              onClick={onToggleArchived}
+            >
+              {showArchived ? "Hide archived" : "Show archived"}
+            </button>
+          </div>
+          {visibleTemplates.length === 0 ? (
+            <p className="px-3 py-8 text-center text-xs text-muted-foreground">
+              No blueprints match your search.
+            </p>
+          ) : (
+            <ul className="max-h-[62vh] divide-y divide-border/60 overflow-y-auto">
+              {visibleTemplates.map((t) => {
+                const isSelected = selectedId === t.id;
+                const sectionCount = sectionCountByTemplate.get(t.id) ?? 0;
+                const applyCount = applyCountByTemplate.get(t.id) ?? 0;
+                return (
+                  <li key={t.id} className="relative">
+                    {isSelected && (
+                      <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-primary" />
+                    )}
+                    <button
+                      onClick={() => onSelect(t.id)}
+                      className={cn(
+                        "flex w-full flex-col items-start gap-1.5 px-3.5 py-3 text-left transition-colors",
+                        isSelected ? "bg-primary/[0.06]" : "hover:bg-muted/50",
+                      )}
+                    >
+                      <div className="flex w-full items-start justify-between gap-2">
+                        <span className="line-clamp-1 text-sm font-bold">{t.name}</span>
+                        {t.archived && (
+                          <Badge variant="outline" className="shrink-0 text-[10px]">
+                            Archived
+                          </Badge>
+                        )}
+                      </div>
+                      {t.description && (
+                        <p className="line-clamp-1 text-xs text-muted-foreground">
+                          {t.description}
+                        </p>
+                      )}
+                      {(t.labels?.length ?? 0) > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {t.labels!.slice(0, 3).map((l) => (
+                            <LabelChip key={l} label={l} size="xs" />
+                          ))}
+                          {(t.labels?.length ?? 0) > 3 && (
+                            <span className="text-[10px] text-muted-foreground">
+                              +{(t.labels?.length ?? 0) - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <div className="flex w-full items-center gap-3 text-[11px] text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          <LayoutTemplate className="h-3 w-3" />
+                          {sectionCount} section{sectionCount === 1 ? "" : "s"}
+                        </span>
+                        {applicationsAvailable && applyCount > 0 && (
+                          <span className="inline-flex items-center gap-1 font-bold text-primary">
+                            <Rocket className="h-3 w-3" />
+                            used {applyCount}×
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* Detail */}
+      {!selected ? (
+        <Card className="flex flex-col items-center justify-center gap-2 p-16 text-center">
+          <Sparkles className="h-6 w-6 text-muted-foreground/70" />
+          <p className="text-sm font-semibold">Select a blueprint</p>
+          <p className="text-xs text-muted-foreground">
+            Pick one from the list to see what it creates and apply it.
+          </p>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {/* Header */}
+          <div className={cn(SURFACE_CARD, "p-5")}>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2.5">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                    <LayoutTemplate className="h-4.5 w-4.5" />
+                  </span>
+                  <h2 className="font-display truncate text-xl font-bold tracking-tight">
+                    {selected.name}
+                  </h2>
+                  {selected.archived && <Badge variant="outline">Archived</Badge>}
+                </div>
+                {selected.description && (
+                  <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                    {selected.description}
+                  </p>
+                )}
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5" />
+                    Created {timeAgo(selected.created_at)}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <LayoutTemplate className="h-3.5 w-3.5" />
+                    {sections.length} section{sections.length === 1 ? "" : "s"}
+                  </span>
+                  {applicationsAvailable && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Rocket className="h-3.5 w-3.5" />
+                      {selectedApplications.length === 0
+                        ? "Never applied yet"
+                        : `Applied ${selectedApplications.length}×`}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* The action the whole page exists for. It sat behind no
+                    explanation at all before: you could author a blueprint and
+                    never find out what it did to anything. */}
+                {isTeam ? (
+                  <Button
+                    size="sm"
+                    className="rounded-lg"
+                    onClick={onApply}
+                    disabled={!hasContent}
+                    title={hasContent ? undefined : "Add at least one section or label first"}
+                  >
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    Apply to projects
+                  </Button>
+                ) : (
+                  // Applying is enforced as a Team feature server-side. Saying
+                  // so here beats letting someone build a blueprint and meet
+                  // the restriction only at the moment they try to use it.
+                  <Button size="sm" className="rounded-lg" onClick={onUpgrade}>
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    Applying is on Team
+                  </Button>
+                )}
+                {isTeam && (
+                  <Button asChild variant="outline" size="sm" className="rounded-lg">
+                    <Link to="/projects/new" search={{ blueprint: selected.id }}>
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      New project from this
+                    </Link>
+                  </Button>
+                )}
+                {canManage && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onEdit(selected)}
+                      className="rounded-lg"
+                    >
+                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                      Edit
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="rounded-lg"
+                          aria-label="More actions"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem onClick={() => onDuplicate(selected)}>
+                          <Copy className="mr-2 h-4 w-4" />
+                          Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onArchiveToggle(selected)}>
+                          {selected.archived ? (
+                            <>
+                              <ArchiveRestore className="mr-2 h-4 w-4" />
+                              Unarchive
+                            </>
+                          ) : (
+                            <>
+                              <Archive className="mr-2 h-4 w-4" />
+                              Archive
+                            </>
+                          )}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => onDelete(selected)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Labels belong with the header: they are applied to the project
+                alongside everything else, not a separate setting. */}
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+              <span className="inline-flex items-center gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+                <Tag className="h-3 w-3" />
+                Labels
+              </span>
+              {canManage ? (
+                <LabelPicker
+                  value={selected.labels ?? []}
+                  onChange={(next) => onUpdateLabels(selected, next)}
+                  suggestions={allLabels}
+                  triggerLabel="Add label"
+                  teamId={teamId}
+                  userId={userId}
+                />
+              ) : (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(selected.labels ?? []).map((l) => (
+                    <LabelChip key={l} label={l} />
+                  ))}
+                  {(selected.labels?.length ?? 0) === 0 && (
+                    <span className="text-xs text-muted-foreground">No labels yet.</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* What applying it does. This is the answer to "when I select a
+              template, what happens to it?" and it comes before the builder on
+              purpose — the outcome is the point, the parts list is detail. */}
+          <div className={cn(SURFACE_CARD, "p-5")}>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+                  When you apply this
+                </p>
+                <h3 className="font-display mt-1.5 text-lg font-bold tracking-tight">
+                  Here is the project you get
+                </h3>
+              </div>
+              {hasContent && isTeam && (
+                <Button size="sm" variant="ghost" className="rounded-lg" onClick={onApply}>
+                  Apply now
+                  <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+            <BlueprintOutcomePreview
+              className="mt-3"
+              items={previewItems}
+              labels={selected.labels ?? []}
+            />
+            {hasContent && (
+              <p className="mt-3 text-[11.5px] leading-relaxed text-muted-foreground">
+                Applying never overwrites anything: existing checklists, documents and labels on the
+                project stay exactly as they are, and these are added alongside them.
+              </p>
+            )}
+          </div>
+
+          {/* Contents */}
+          <div className={cn(SURFACE_CARD, "p-5")}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+                  Blueprint contents
+                </p>
+                <h3 className="font-display mt-1.5 text-lg font-bold tracking-tight">
+                  {sections.length} section{sections.length === 1 ? "" : "s"}, applied in this order
+                </h3>
+              </div>
+              {canManage && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" className="rounded-lg">
+                      <Plus className="mr-1.5 h-4 w-4" />
+                      Add section
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    {KIND_ORDER.map((k) => {
+                      const Icon = KIND_META[k].icon;
+                      return (
+                        <DropdownMenuItem
+                          key={k}
+                          className="items-start gap-2"
+                          onClick={() => onPickKind(k)}
+                        >
+                          <span
+                            className={cn(
+                              "mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded",
+                              KIND_META[k].tint,
+                            )}
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold">
+                              {KIND_META[k].label}
+                            </span>
+                            <span className="block text-[11px] leading-snug text-muted-foreground">
+                              {KIND_OUTCOME[k].becomes}
+                            </span>
+                          </span>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+
+            {sections.length === 0 ? (
+              <div className="mt-4 flex flex-col items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-10 text-center">
+                <LayoutTemplate className="h-6 w-6 text-muted-foreground/70" />
+                <p className="mt-2 text-sm font-semibold">Nothing attached yet</p>
+                <p className="mt-0.5 max-w-sm text-xs leading-relaxed text-muted-foreground">
+                  A blueprint is a bundle of things you have already built. Add checklists,
+                  workflows, documents, reports or label sets and they all land on the project in
+                  one click.
+                </p>
+              </div>
+            ) : (
+              <ul className="mt-4 space-y-2">
+                {sections.map((r, idx) => {
+                  const meta = KIND_META[r.kind];
+                  const Icon = meta.icon;
+                  return (
+                    <li
+                      key={`${r.legacy ? "chk" : "it"}-${r.id}`}
+                      className="group flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3.5 py-2.5 transition-colors hover:border-border"
+                    >
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-bold text-muted-foreground">
+                        {idx + 1}
+                      </div>
+                      <span
+                        className={cn(
+                          "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded",
+                          meta.tint,
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className="hidden shrink-0 text-[10px] sm:inline-flex"
+                      >
+                        {meta.label}
+                      </Badge>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={cn(
+                            "block truncate text-sm font-semibold",
+                            r.missing && "text-destructive",
+                          )}
+                        >
+                          {r.name}
+                        </span>
+                        <span className="block truncate text-[11px] text-muted-foreground">
+                          {r.missing
+                            ? "The source template was deleted — remove this section"
+                            : `→ ${KIND_OUTCOME[r.kind].becomes}`}
+                        </span>
+                      </span>
+                      {canManage && (
+                        <div className="flex shrink-0 items-center">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground disabled:opacity-30"
+                            disabled={idx === 0 || reordering}
+                            onClick={() => onMove(idx, -1)}
+                            aria-label={`Move ${r.name} up`}
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground disabled:opacity-30"
+                            disabled={idx === sections.length - 1 || reordering}
+                            onClick={() => onMove(idx, 1)}
+                            aria-label={`Move ${r.name} down`}
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => onRemove(r)}
+                            aria-label={`Remove ${r.name}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {canManage && (
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                Need a new piece first? Build it under{" "}
+                {(["checklists", "workflows", "documents", "reports", "label-sets"] as const).map(
+                  (key, i, arr) => (
+                    <span key={key}>
+                      <button
+                        className="font-semibold text-primary hover:underline"
+                        onClick={() => onGoToTab(key)}
+                      >
+                        {key === "label-sets" ? "Label sets" : key[0].toUpperCase() + key.slice(1)}
+                      </button>
+                      {i < arr.length - 2 ? ", " : i === arr.length - 2 ? " or " : ""}
+                    </span>
+                  ),
+                )}
+                , then come back here and add it.
+              </p>
+            )}
+          </div>
+
+          {/* Where it has been used */}
+          {applicationsAvailable && (
+            <div className={cn(SURFACE_CARD, "p-5")}>
+              <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+                Track record
+              </p>
+              <h3 className="font-display mt-1.5 text-lg font-bold tracking-tight">
+                Where this blueprint has been used
+              </h3>
+              {selectedApplications.length === 0 ? (
+                <p className="mt-3 rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                  Not applied to any project yet. Every apply is recorded here, with what it
+                  created.
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-1.5">
+                  {selectedApplications.slice(0, 12).map((a) => {
+                    const total = Object.values(a.counts ?? {}).reduce((x, y) => x + y, 0);
+                    return (
+                      <li key={a.id}>
+                        <Link
+                          to="/projects/$projectId"
+                          params={{ projectId: a.project_id }}
+                          className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2 transition-colors hover:border-primary/30"
+                        >
+                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                            <FolderOpen className="h-3.5 w-3.5" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold">
+                              {a.project_name ?? "Project"}
+                            </span>
+                            <span className="block truncate text-[11px] text-muted-foreground">
+                              {total} item{total === 1 ? "" : "s"} created
+                              {a.failed_count > 0 ? ` · ${a.failed_count} failed` : ""} ·{" "}
+                              {timeAgo(a.created_at)}
+                            </span>
+                          </span>
+                          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        </Link>
+                      </li>
+                    );
+                  })}
+                  {selectedApplications.length > 12 && (
+                    <li className="px-3 pt-1 text-[11px] text-muted-foreground">
+                      <History className="mr-1 inline h-3 w-3" />
+                      and {selectedApplications.length - 12} more
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  First-run explainer                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The zero-blueprint state does the teaching.
+ *
+ * "We have templates, but how do we apply them to projects, and how is that
+ * going to look?" is not a question an empty list with a Create button
+ * answers. Three steps, in the order the user will do them.
+ */
+function BlueprintsIntro({ canManage, onCreate }: { canManage: boolean; onCreate: () => void }) {
+  const steps = [
+    {
+      icon: LayoutTemplate,
+      title: "Build the pieces",
+      body: "Checklists, workflows, documents, reports and label sets — each on its own tab above. Anything you save from a project lands there too.",
+    },
+    {
+      icon: FolderOpen,
+      title: "Bundle them into a blueprint",
+      body: "A blueprint is the whole job setup: the checklists the crew runs, the paperwork it produces, the labels that file it.",
+    },
+    {
+      icon: Rocket,
+      title: "Apply it to projects",
+      body: "One click on a new project or a dozen already running. Everything appears in the matching project tab, pre-filled with that project's details.",
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-3">
+        {steps.map((s, i) => (
+          <div key={s.title} className={cn(SURFACE_CARD, "p-5")}>
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                <s.icon className="h-4 w-4" />
+              </span>
+              <span className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+                Step {i + 1}
+              </span>
+            </div>
+            <h3 className="mt-3 text-sm font-bold">{s.title}</h3>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{s.body}</p>
+          </div>
+        ))}
+      </div>
+
+      <EmptyState
+        icon={LayoutTemplate}
+        title="No project blueprints yet"
+        description={
+          canManage
+            ? "Create one to standardise how a job gets set up — then apply it to any project in a click."
+            : "Ask your account owner or an admin to create one."
+        }
+        action={
+          canManage ? (
+            <Button onClick={onCreate}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              New blueprint
+            </Button>
+          ) : null
+        }
+      />
     </div>
   );
 }

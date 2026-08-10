@@ -348,7 +348,14 @@ export function ProjectPageEditorPage() {
     if (!name) return;
     try {
       await savePageAsTemplate({ data: { pageId, name } });
-      toast.success(`Saved "${name}" to your templates`);
+      // It lands in the document library — say so, and offer the route there.
+      toast.success(`Saved "${name}" to your templates`, {
+        description: "Find it under Templates → Documents, or add it to a blueprint.",
+        action: {
+          label: "Open Templates",
+          onClick: () => void navigate({ to: "/templates", search: { tab: "documents" } }),
+        },
+      });
     } catch (e: any) {
       toast.error(e?.message ?? "Could not save template");
     }
