@@ -12,7 +12,11 @@ dist
 dist-ssr
 .output
 .vinxi
-.tanstack/**
+# `.tanstack/**` here would only ever match the repo root: a pattern with a
+# slash in the middle is anchored to the directory holding the .gitignore, so
+# apps/web/.tanstack/tmp/ slipped through and got committed. A trailing slash
+# alone matches a directory of that name at any depth.
+.tanstack/
 .nitro
 *.local
 
