@@ -641,8 +641,13 @@ export function TemplatesPage() {
 
   const deleteTemplate = async (t: ProjectTemplate) => {
     if (
+      // Without confirmText the action button reads "Continue", which is a
+      // strange thing for a permanent delete to say.
       !(await confirm({
-        description: `Delete blueprint "${t.name}"? Projects it has already been applied to keep everything it created. This cannot be undone.`,
+        title: `Delete "${t.name}"?`,
+        description:
+          "Projects it has already been applied to keep everything it created. This cannot be undone.",
+        confirmText: "Delete blueprint",
         variant: "destructive",
       }))
     )

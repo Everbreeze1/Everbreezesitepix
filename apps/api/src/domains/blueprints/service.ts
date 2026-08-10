@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { ServiceContext } from "../../lib/user-context";
+import { createPageFromTemplateService } from "../projects/page-templates";
 
 export const applyProjectBlueprintInputSchema = z.object({
   blueprintId: z.string().uuid(),
@@ -162,18 +163,20 @@ export async function applyProjectBlueprintService(
         if (rows.length) await supabaseAdmin.from("project_checklist_items" as any).insert(rows);
         counts.checklists++;
       } else if (it.kind === "document") {
-        const { data: d } = await supabaseAdmin
-          .from("document_templates" as any)
-          .select("name, body")
-          .eq("id", it.ref_id)
-          .single();
-        if (!d) continue;
-        const html = fill(((d as any).body?.html as string) ?? "", values);
-        await (supabaseAdmin as any).from("project_site_logs").insert({
-          project_id: data.projectId,
-          title: `${(d as any).name} — ${new Date().toLocaleDateString()}`,
-          photo_ids: [],
-          notes: { __doc_html__: html, __doc_source_template__: (d as any).name },
+        // Create a real page, the same object "Save as template" round-trips
+        // out of. This used to write a `project_site_logs` row, whose only
+        // reader (ProjectSiteLogs) is mounted inside ProjectReports — a
+        // component nothing renders any more. The apply reported "1 document
+        // created" and the project's Documents tab stayed empty, because the
+        // row landed somewhere with no UI attached to it.
+        //
+        // createPageFromTemplateService also resolves the placeholder tokens
+        // against the project itself, so the copy here no longer has to guess
+        // at the project's name and address.
+        await createPageFromTemplateService(ctx, {
+          projectId: data.projectId,
+          templateId: it.ref_id,
+          resolveTokens: true,
         });
         counts.documents++;
       } else if (it.kind === "report") {

@@ -34,7 +34,13 @@ function groupByDestination(items: BlueprintPreviewItem[], labels: string[]): Gr
     else byKind.set(it.kind, [it.name]);
   }
 
-  const order: BlueprintDestination[] = ["checklists", "workflows", "documents", "labels"];
+  const order: BlueprintDestination[] = [
+    "checklists",
+    "workflows",
+    "documents",
+    "reports",
+    "labels",
+  ];
   const groups: Group[] = [];
   for (const destination of order) {
     const entries: Group["entries"] = [];
@@ -108,6 +114,9 @@ export function BlueprintOutcomePreview({
       {groups.map((group) => {
         const meta = DESTINATION[group.destination];
         const Icon = meta.icon;
+        // Reports collect on a workspace screen rather than a project tab, so
+        // naming the project on that row would point somewhere it isn't.
+        const origin = meta.scope === "workspace" ? "Your workspace" : projectName || "The project";
         return (
           <div
             key={group.destination}
@@ -120,7 +129,7 @@ export function BlueprintOutcomePreview({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm font-bold text-foreground">
                   <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate">{projectName || "The project"}</span>
+                  <span className="truncate">{origin}</span>
                   <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
                   <span>{meta.tab}</span>
                 </div>

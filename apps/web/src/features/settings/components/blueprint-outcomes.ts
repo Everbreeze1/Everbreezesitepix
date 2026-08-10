@@ -19,11 +19,22 @@ export type BlueprintItemKind = "checklist" | "document" | "report" | "label_set
  * PageTabStrip — Documents really is the tab keyed `reports`, so the mapping is
  * spelled out here once rather than guessed at each call site.
  */
-export type BlueprintDestination = "checklists" | "workflows" | "documents" | "labels";
+export type BlueprintDestination =
+  | "checklists"
+  | "workflows"
+  | "documents"
+  | "reports"
+  | "labels";
 
 export const DESTINATION: Record<
   BlueprintDestination,
-  { tab: string; icon: LucideIcon; blurb: string }
+  {
+    tab: string;
+    icon: LucideIcon;
+    blurb: string;
+    /** `workspace` surfaces are not a tab on the project. */
+    scope?: "project" | "workspace";
+  }
 > = {
   checklists: {
     tab: "Checklists",
@@ -38,7 +49,16 @@ export const DESTINATION: Record<
   documents: {
     tab: "Documents",
     icon: FileText,
-    blurb: "Drafts with the project's details already filled in, ready to export",
+    blurb: "Editable pages with the project's details already filled in, ready to export",
+  },
+  // Reports are workspace-level, not a project tab — they collect on the
+  // Reports screen. Saying "the project's Documents tab" here sent people to a
+  // tab that would never show them.
+  reports: {
+    tab: "Reports",
+    icon: Newspaper,
+    blurb: "Draft reports, listed on the workspace Reports screen and on the project",
+    scope: "workspace",
   },
   labels: {
     tab: "Project labels",
@@ -91,7 +111,8 @@ export const KIND_OUTCOME: Record<
     plural: "documents",
     icon: FileText,
     tint: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-    becomes: "A site log with project name, address, date and author already filled in",
+    becomes:
+      "An editable page in the project's Documents tab, project name, address, date and author already filled in",
     destination: "documents",
   },
   report: {
@@ -99,8 +120,8 @@ export const KIND_OUTCOME: Record<
     plural: "reports",
     icon: Newspaper,
     tint: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-    becomes: "A draft report under the project's Documents tab, ready to export",
-    destination: "documents",
+    becomes: "A draft report on the Reports screen, ready to edit and share",
+    destination: "reports",
   },
   label_set: {
     label: "Label set",
