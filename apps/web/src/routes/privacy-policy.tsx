@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { BrandLogo } from "@/components/BrandLogo";
 import { SiteFooter } from "@/components/SiteFooter";
+import { POLICY_LAST_UPDATED, PRIVACY_EMAIL, mailtoHref } from "@/lib/contact";
 
 export const Route = createFileRoute("/privacy-policy")({
   head: () => ({
@@ -17,15 +18,19 @@ export const Route = createFileRoute("/privacy-policy")({
         content:
           "Privacy Policy for Everbreeze SitePix. Learn how we collect, use, store, and protect your personal information, job site photos, and AI analysis data.",
       },
-      { property: "og:url", content: "https://everbreezesitepix.com/privacy-policy" },
+      { property: "og:url", content: "https://www.everbreezesitepix.com/privacy-policy" },
     ],
-    links: [{ rel: "canonical", href: "https://everbreezesitepix.com/privacy-policy" }],
+    links: [{ rel: "canonical", href: "https://www.everbreezesitepix.com/privacy-policy" }],
   }),
   component: PrivacyPolicyPage,
 });
 
 function PrivacyPolicyPage() {
-  const lastUpdated = "June 3, 2026";
+  // This revision materially expanded the third-party/AI disclosures, so the
+  // old "June 3, 2026" date would misstate when the current terms took effect.
+  // Set POLICY_LAST_UPDATED to the date this revision is published.
+  const lastUpdated = POLICY_LAST_UPDATED;
+  const privacyMailto = mailtoHref(PRIVACY_EMAIL);
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -78,6 +83,23 @@ function PrivacyPolicyPage() {
                   projects and job sites. This includes image metadata such as timestamps, GPS
                   location (if enabled), and device information.
                 </p>
+                <p className="mt-2">
+                  <strong className="text-foreground">EXIF and location data.</strong> When you add
+                  a photo, the app reads the EXIF metadata embedded in the file by your camera and
+                  extracts the original capture time and the GPS latitude and longitude, storing
+                  them alongside the photo so it can be placed on the project map and timeline. If a
+                  photo carries no GPS data we fall back to the coordinates of the project address.
+                  Because these coordinates identify the job site — usually a private property
+                  belonging to your client — treat them as location data and consider that before
+                  publishing a photo through a public share link. You can strip EXIF data from a
+                  file before uploading it if you do not want us to receive it.
+                </p>
+                <p className="mt-2">
+                  <strong className="text-foreground">Walkthrough recordings.</strong> Walkthrough
+                  video and audio you record in the app, including anything spoken on site, is
+                  uploaded, stored, and transcribed. Make sure everyone recorded has consented where
+                  the law requires it.
+                </p>
               </div>
               <div>
                 <h3 className="font-medium text-foreground">Usage Data</h3>
@@ -94,6 +116,17 @@ function PrivacyPolicyPage() {
                   queries to generate analysis, summaries, and recommendations. The content of your
                   conversations and uploaded images are sent to AI providers (such as Google Gemini)
                   for processing.
+                </p>
+                <p className="mt-2">
+                  Concretely: photo analysis, AI-assisted captions, site logs, project reports,
+                  walkthrough summaries, and the in-app assistant all send your photos and the
+                  associated captions, tags, and notes to{" "}
+                  <strong className="text-foreground">Google Gemini</strong>. Photos are shared as
+                  short-lived signed links to our storage that Google fetches to read the image.
+                  Walkthrough audio and video is uploaded to Gemini for speech-to-text
+                  transcription, so anything spoken during a recording is transmitted. Addresses you
+                  enter are sent to Google Maps for geocoding, and text you have read aloud is sent
+                  to Google Cloud Text-to-Speech. See section 4 for the full list of processors.
                 </p>
               </div>
             </div>
@@ -136,10 +169,50 @@ function PrivacyPolicyPage() {
                 governing AI data processing.
               </li>
               <li>
+                <strong className="text-foreground">Google Cloud Text-to-Speech</strong> — Text you
+                ask the app to read aloud is sent to Google to synthesise the audio.
+              </li>
+              <li>
+                <strong className="text-foreground">Google Maps Platform</strong> — Project and job
+                site addresses you enter are sent to Google&apos;s Geocoding and Maps APIs to
+                convert them to coordinates and render map views.
+              </li>
+              <li>
+                <strong className="text-foreground">Stripe</strong> — For subscription payments.
+                Stripe receives your billing details and card data directly; we store only a
+                customer and subscription reference, never your full card number.
+              </li>
+              <li>
+                <strong className="text-foreground">Resend</strong> — For transactional email such
+                as team invitations, share notifications, and account messages. Resend receives the
+                recipient address and message content.
+              </li>
+              <li>
+                <strong className="text-foreground">Vercel and Railway</strong> — For hosting the
+                website and the API. They process request data (including IP address and user agent)
+                and keep short-lived operational logs.
+              </li>
+              <li>
+                {/* No analytics SDK ships in the app today, so this stays as the
+                    forward-looking "may use" wording it has always had. Name the
+                    provider here the day one is added. */}
                 <strong className="text-foreground">Analytics Providers</strong> — We may use
                 anonymized analytics tools to understand app usage and performance.
               </li>
             </ul>
+            <p className="text-muted-foreground mt-3">
+              These providers act as our sub-processors and are permitted to use your data only to
+              provide their service to us. Each keeps its own privacy policy, and the AI, mapping,
+              email and hosting providers listed above may process data outside your country (see
+              section 10).
+            </p>
+            <p className="text-muted-foreground mt-2">
+              <strong className="text-foreground">Public share links.</strong> When you create a
+              share link, portfolio page, project page, or website embed, the photos, captions and
+              report content you include become viewable by anyone who has the URL — no sign-in
+              required — and published portfolio and project pages may be indexed by search engines.
+              You control what goes into a share link and you can revoke it from within the app.
+            </p>
             <p className="text-muted-foreground mt-3">
               We may also disclose information if required by law, to protect our rights, or in
               connection with a business transfer (merger, acquisition, or asset sale).
@@ -267,19 +340,30 @@ function PrivacyPolicyPage() {
             <h2 className="text-lg font-semibold text-foreground mb-3">12. Contact Us</h2>
             <p className="text-muted-foreground">
               If you have any questions, concerns, or requests regarding this Privacy Policy or our
-              data practices, please contact us at:
+              data practices, see our{" "}
+              <Link to="/contact" className="text-primary hover:underline">
+                contact page
+              </Link>{" "}
+              or write to us at:
             </p>
             <div className="mt-3 rounded-lg border border-border bg-muted/40 p-4">
               <p className="font-medium text-foreground">Everbreeze SitePix</p>
               <p className="text-muted-foreground">
                 Email:{" "}
-                <a href="mailto:privacy@everbreeze.io" className="text-primary hover:underline">
-                  privacy@everbreeze.io
-                </a>
+                {/* Was privacy@everbreeze.io — a domain that is not the product
+                    domain. Held as a placeholder until the owner confirms the
+                    real mailbox rather than publishing one that may bounce. */}
+                {privacyMailto ? (
+                  <a href={privacyMailto} className="text-primary hover:underline">
+                    {PRIVACY_EMAIL}
+                  </a>
+                ) : (
+                  <span className="text-foreground">{PRIVACY_EMAIL}</span>
+                )}
               </p>
               <p className="text-muted-foreground">
                 Website:{" "}
-                <a href="https://everbreezesitepix.com" className="text-primary hover:underline">
+                <a href="https://www.everbreezesitepix.com" className="text-primary hover:underline">
                   everbreezesitepix.com
                 </a>
               </p>

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
 import { sitepixApi } from "@/lib/sitepix-api";
 
-const BASE_URL = "https://everbreezesitepix.com";
+const BASE_URL = "https://www.everbreezesitepix.com";
 
 interface SitemapEntry {
   path: string;
@@ -66,8 +66,13 @@ export const Route = createFileRoute("/sitemap.xml")({
       GET: async () => {
         const entries: SitemapEntry[] = [
           { path: "/", changefreq: "weekly", priority: "1.0" },
+          { path: "/features", changefreq: "monthly", priority: "0.8" },
+          { path: "/how-it-works", changefreq: "monthly", priority: "0.8" },
+          { path: "/pricing", changefreq: "monthly", priority: "0.8" },
           { path: "/faq", changefreq: "monthly", priority: "0.7" },
+          { path: "/contact", changefreq: "yearly", priority: "0.4" },
           { path: "/privacy-policy", changefreq: "yearly", priority: "0.3" },
+          { path: "/terms-of-service", changefreq: "yearly", priority: "0.3" },
           ...(await portfolioEntries()),
         ];
 

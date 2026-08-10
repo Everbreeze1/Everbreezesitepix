@@ -27,9 +27,9 @@ export const Route = createFileRoute("/signup")({
         content:
           "Create your Everbreeze SitePix account. Capture, organize, and share construction job site photos with AI photo analysis. Plans start at $24/mo.",
       },
-      { property: "og:url", content: "https://everbreezesitepix.com/signup" },
+      { property: "og:url", content: "https://www.everbreezesitepix.com/signup" },
     ],
-    links: [{ rel: "canonical", href: "https://everbreezesitepix.com/signup" }],
+    links: [{ rel: "canonical", href: "https://www.everbreezesitepix.com/signup" }],
   }),
   component: SignupPage,
 });
@@ -232,7 +232,11 @@ function SignupPage() {
             </Link>
           </p>
           <p className="font-manrope mt-4 text-center text-xs leading-5 text-muted-foreground">
-            By continuing, you agree to our Terms of Service and{" "}
+            By continuing, you agree to our{" "}
+            <Link to="/terms-of-service" className="text-primary hover:underline">
+              Terms of Service
+            </Link>{" "}
+            and{" "}
             <Link to="/privacy-policy" className="text-primary hover:underline">
               Privacy Policy
             </Link>

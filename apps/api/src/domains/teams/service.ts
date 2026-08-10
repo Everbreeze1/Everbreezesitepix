@@ -1,7 +1,10 @@
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
+import { rateLimit } from "../../lib/rate-limit";
 import { PLAN_MEMBER_CAP } from "../../lib/team-plan";
 import { insertNotification } from "../notifications/service";
+
+type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>;
 
 type TeamPlan = "starter" | "pro" | "team";
 
@@ -67,6 +70,97 @@ async function sendInviteEmail(opts: {
     console.error("[teams] invite email error", e);
     return { sent: false };
   }
+}
+
+/*
+ * Ask GoTrue to mail the signup confirmation for an account created through
+ * the invite flow. `auth.admin.createUser` never sends anything, so without
+ * this an invitee would be left holding an unconfirmed account with no way to
+ * confirm it. Routed through Supabase — and therefore through the same Send
+ * Email hook the invite itself uses — rather than lib/send-email.ts, so it
+ * lands in the pipeline that is already known to deliver.
+ *
+ * Best effort: a mail failure must not roll back an account that now exists.
+ */
+async function sendSignupConfirmationEmail(email: string, origin: string) {
+  try {
+    const supabaseAdmin = getSupabaseAdmin();
+    const { error } = await supabaseAdmin.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: `${origin}/dashboard` },
+    });
+    if (error) {
+      console.error("[teams] signup confirmation email error", error);
+      return { sent: false };
+    }
+    return { sent: true };
+  } catch (e) {
+    console.error("[teams] signup confirmation email error", e);
+    return { sent: false };
+  }
+}
+
+/*
+ * Per-token rate limits for the two PUBLIC invite ops (`lookupInvite`,
+ * `acceptInviteSignup` — both registered with `pub()` in the RPC registry).
+ *
+ * Their only credential is the token, and the limiter in rpc/handle.ts is
+ * keyed on the caller's IP and shared across every op, so a caller rotating
+ * addresses gets an effectively unlimited budget against one invite. Keying on
+ * the token instead caps how hard a single invite can be hammered no matter
+ * where the requests come from — enough to make a scripted retry loop against
+ * a leaked or guessed token expensive.
+ */
+const INVITE_LOOKUP_RATE = { limit: 30, windowMs: 60_000 };
+const INVITE_SIGNUP_RATE = { limit: 5, windowMs: 15 * 60_000 };
+
+function limitInviteOp(scope: string, token: string, rate: { limit: number; windowMs: number }) {
+  const rl = rateLimit({ key: `invite:${scope}:${token}`, ...rate });
+  if (!rl.ok) {
+    throw Object.assign(
+      new Error("Too many attempts on this invite. Please try again in a few minutes."),
+      { status: 429 },
+    );
+  }
+}
+
+/*
+ * Claim an invite atomically.
+ *
+ * Both accept paths used to read the row, check `accepted_at`, and only write
+ * it several awaits later — so two concurrent requests carrying the same token
+ * both passed the check and both went on to join a team. This conditional
+ * UPDATE is the whole guard: Postgres serialises it, exactly one caller gets a
+ * row back and everyone else gets null. Expiry is folded into the same
+ * statement so a token can't be claimed in the gap after it lapses.
+ *
+ * Claim BEFORE creating anything. If the work that follows fails, call
+ * `releaseInviteClaim` so the invite isn't burned.
+ */
+async function claimInvite(admin: SupabaseAdmin, token: string, acceptedBy: string | null) {
+  const now = new Date().toISOString();
+  const { data, error } = await admin
+    .from("team_invites" as any)
+    .update({ accepted_at: now, accepted_by: acceptedBy })
+    .eq("token", token)
+    .is("accepted_at", null)
+    .gt("expires_at", now)
+    .select("*")
+    .maybeSingle();
+  // A losing race and a broken statement both come back with no row, and the
+  // caller turns either into "already used". Log so the second one is findable.
+  if (error) console.error("[teams] failed to claim invite", error);
+  return data as any;
+}
+
+/** Undo a claim so a downstream failure doesn't spend a one-time invite. */
+async function releaseInviteClaim(admin: SupabaseAdmin, inviteId: string) {
+  const { error } = await admin
+    .from("team_invites" as any)
+    .update({ accepted_at: null, accepted_by: null })
+    .eq("id", inviteId);
+  if (error) console.error("[teams] failed to release invite claim", inviteId, error);
 }
 
 // ============================================================
@@ -467,6 +561,9 @@ export async function leaveTeamService(ctx: AuthedContext) {
 
 export async function lookupInviteService(data: any) {
   const supabaseAdmin = getSupabaseAdmin();
+
+  limitInviteOp("lookup", data.token, INVITE_LOOKUP_RATE);
+
   const { data: invite } = await supabaseAdmin
     .from("team_invites" as any)
     .select("id, team_id, email, role, expires_at, accepted_at")
@@ -524,17 +621,20 @@ export async function acceptInviteService(ctx: AuthedContext, data: any) {
     throw new Error("This team is full. Ask the owner to upgrade or free a seat.");
   }
 
+  // Spend the token before inserting the membership, so two concurrent accepts
+  // can't both add a seat (see claimInvite).
+  const claimed = await claimInvite(supabaseAdmin, data.token, userId);
+  if (!claimed) throw new Error("This invite has already been used.");
+
   const { error: insErr } = await supabaseAdmin.from("team_members" as any).insert({
     team_id: teamId,
     user_id: userId,
     role: (invite as any).role,
   });
-  if (insErr) throw new Error(insErr.message);
-
-  await supabaseAdmin
-    .from("team_invites" as any)
-    .update({ accepted_at: new Date().toISOString(), accepted_by: userId })
-    .eq("id", (invite as any).id);
+  if (insErr) {
+    await releaseInviteClaim(supabaseAdmin, (claimed as any).id);
+    throw new Error(insErr.message);
+  }
 
   await insertNotification(supabaseAdmin, {
     recipientId: (invite as any).invited_by,
@@ -551,6 +651,8 @@ export async function acceptInviteService(ctx: AuthedContext, data: any) {
 
 export async function acceptInviteSignupService(data: any) {
   const supabaseAdmin = getSupabaseAdmin();
+
+  limitInviteOp("signup", data.token, INVITE_SIGNUP_RATE);
 
   const { data: invite } = await supabaseAdmin
     .from("team_invites" as any)
@@ -624,60 +726,112 @@ export async function acceptInviteSignupService(data: any) {
     );
   }
 
-  const { data: created, error: createErr } = await (supabaseAdmin as any).auth.admin.createUser({
-    email: inviteEmail,
-    password: data.password,
-    email_confirm: true,
-    user_metadata: { full_name: data.fullName },
-  });
-  if (createErr || !created?.user) {
-    throw new Error(createErr?.message ?? "Failed to create account");
-  }
-  userId = created.user.id as string;
+  /*
+   * Spend the token now, before an account exists.
+   *
+   * The `accepted_at` check above is a courtesy that produces a good error
+   * message; it is not the guard. Everything between that read and this write
+   * is an await, so two requests carrying the same token both got here and both
+   * created an account. `claimInvite` is the guard — one winner, everyone else
+   * gets null. Any failure below releases the claim so a legitimate invitee
+   * isn't left with a burned link.
+   */
+  const claimed = await claimInvite(supabaseAdmin, data.token, null);
+  if (!claimed) throw new Error("This invite has already been used.");
 
-  if (!userId) throw new Error("Failed to resolve user");
-
-  // Upsert profile
-  await supabaseAdmin
-    .from("profiles" as any)
-    .upsert({ id: userId, email: inviteEmail, full_name: data.fullName }, { onConflict: "id" });
-
-  // Ensure they're not already in another team
-  const { data: existingMembership } = await supabaseAdmin
-    .from("team_members" as any)
-    .select("team_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (existingMembership && (existingMembership as any).team_id !== teamId) {
-    throw new Error("You already belong to a team. Leave it first.");
-  }
-
-  if (!existingMembership) {
-    const { error: insErr } = await supabaseAdmin.from("team_members" as any).insert({
-      team_id: teamId,
-      user_id: userId,
-      role: (invite as any).role,
+  try {
+    /*
+     * SECURITY — do NOT pre-confirm this address.
+     *
+     * This op is public and the invite token is its only credential, so the
+     * caller has proven they hold a token, not that they can read the invited
+     * inbox. Those were the same thing right up until the token turned out to
+     * be readable from the client (team_invites was SELECTable by the anon
+     * key), at which point `email_confirm: true` handed anyone who scraped a
+     * token a pre-confirmed, immediately usable account under someone else's
+     * address with a password of their choosing.
+     *
+     * Creating the user unconfirmed puts the invite path on exactly the same
+     * footing as the ordinary /signup path: the account is inert until whoever
+     * actually receives the mail clicks the confirmation link. A scraped token
+     * then buys a squatted, unusable login rather than a live account — and the
+     * confirmation mail lands in the victim's inbox, so they find out.
+     */
+    const { data: created, error: createErr } = await (supabaseAdmin as any).auth.admin.createUser({
+      email: inviteEmail,
+      password: data.password,
+      user_metadata: { full_name: data.fullName },
     });
-    if (insErr) throw new Error(insErr.message);
+    if (createErr || !created?.user) {
+      throw new Error(createErr?.message ?? "Failed to create account");
+    }
+    userId = created.user.id as string;
 
-    await insertNotification(supabaseAdmin, {
-      recipientId: (invite as any).invited_by,
-      actorId: userId,
-      type: "team_invite_accepted",
-      title: `${data.fullName ?? inviteEmail} joined your team`,
-      linkPath: "/teams",
-      entityType: "team_invite",
-      entityId: (invite as any).id,
-    });
+    if (!userId) throw new Error("Failed to resolve user");
+
+    // Upsert profile
+    await supabaseAdmin
+      .from("profiles" as any)
+      .upsert({ id: userId, email: inviteEmail, full_name: data.fullName }, { onConflict: "id" });
+
+    // Ensure they're not already in another team
+    const { data: existingMembership } = await supabaseAdmin
+      .from("team_members" as any)
+      .select("team_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (existingMembership && (existingMembership as any).team_id !== teamId) {
+      throw new Error("You already belong to a team. Leave it first.");
+    }
+
+    if (!existingMembership) {
+      const { error: insErr } = await supabaseAdmin.from("team_members" as any).insert({
+        team_id: teamId,
+        user_id: userId,
+        role: (invite as any).role,
+      });
+      if (insErr) throw new Error(insErr.message);
+    }
+  } catch (err) {
+    /*
+     * Nothing durable survives a failure here except possibly the auth user,
+     * and the 409 branch above tells that person to sign in and reopen the
+     * link — which needs the invite to still be open. So release it.
+     */
+    await releaseInviteClaim(supabaseAdmin, (claimed as any).id);
+    throw err;
   }
 
+  // Record who spent the token (claimInvite has no user id to write yet).
   await supabaseAdmin
     .from("team_invites" as any)
-    .update({ accepted_at: new Date().toISOString(), accepted_by: userId })
-    .eq("id", (invite as any).id);
+    .update({ accepted_by: userId })
+    .eq("id", (claimed as any).id);
 
-  return { ok: true, email: inviteEmail, teamId };
+  const origin = data.origin?.replace(/\/+$/, "") || "https://everbreezesitepix.com";
+  const confirmRes = await sendSignupConfirmationEmail(inviteEmail, origin);
+
+  await insertNotification(supabaseAdmin, {
+    recipientId: (invite as any).invited_by,
+    actorId: userId,
+    type: "team_invite_accepted",
+    title: `${data.fullName ?? inviteEmail} joined your team`,
+    linkPath: "/teams",
+    entityType: "team_invite",
+    entityId: (invite as any).id,
+  });
+
+  // `emailConfirmationRequired` tells the client not to expect
+  // signInWithPassword to succeed yet — same state /signup reaches when
+  // `signUp` comes back without a session.
+  return {
+    ok: true,
+    email: inviteEmail,
+    teamId,
+    emailConfirmationRequired: true,
+    confirmationEmailSent: confirmRes.sent,
+  };
 }
 
 export async function resendInviteService(ctx: AuthedContext, data: any) {

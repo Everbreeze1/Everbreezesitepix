@@ -127,7 +127,7 @@ export function CollaboratorsPage() {
   const activity = useQuery({
     queryKey: ["team-activity"],
     enabled: teamReady,
-    queryFn: async () => (await fetchActivity()) as { members: any[]; recent: TeamActivityItem[] },
+    queryFn: () => fetchActivity(),
     staleTime: 15_000,
   });
 

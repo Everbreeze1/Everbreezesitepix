@@ -122,6 +122,7 @@ import { BusyOverlay } from "@/components/BusyOverlay";
 import { EmptyState } from "@/components/EmptyState";
 import { UpgradeDialog } from "@/components/UpgradeDialog";
 import { extractPhotoMeta, mergePhotoMeta, formatPhotoDateGroup } from "@/lib/photo-exif";
+import { devLog } from "@/lib/dev-log";
 import { LabelPicker } from "@/features/photos/components/LabelPicker";
 import { useLabelCatalog, ensureLabel } from "@/hooks/use-label-catalog";
 import {
@@ -531,7 +532,7 @@ export function ProjectDetailPage() {
         } catch (wtErr: any) {
           console.error("[walkthrough] load failed", wtErr, { projectId });
           try {
-            console.log("[walkthrough] trying direct walkthrough list fallback", { projectId });
+            devLog("[walkthrough] trying direct walkthrough list fallback", { projectId });
             const directWalkthroughs = await loadWalkthroughsDirect();
             setWalkthroughs(directWalkthroughs as any);
           } catch (directWtErr: any) {
@@ -1130,7 +1131,7 @@ export function ProjectDetailPage() {
         createdAt: (fallback as any).created_at as string | null,
       };
     };
-    console.log("[walkthrough] Creating DB record", { projectId, userId: user.id, reason });
+    devLog("[walkthrough] Creating DB record", { projectId, userId: user.id, reason });
     try {
       let created = await createWalkSession({ data: { projectId, title } });
       if (!created?.id) {
@@ -1139,8 +1140,8 @@ export function ProjectDetailPage() {
       }
       if (!created?.id) throw new Error("No walkthrough id returned");
       commitCreated({ id: created.id, createdAt: (created as any).createdAt });
-      console.log(`[walkthrough] Creating DB record - Success - ID: ${created.id}`);
-      console.log("[walkthrough] row created", { wid: created.id, projectId, reason });
+      devLog(`[walkthrough] Creating DB record - Success - ID: ${created.id}`);
+      devLog("[walkthrough] row created", { wid: created.id, projectId, reason });
       return created.id;
     } catch (error: any) {
       console.error("[walkthrough] row insert failed", error, {
@@ -1151,8 +1152,8 @@ export function ProjectDetailPage() {
       try {
         const created = await createDirectly();
         commitCreated(created);
-        console.log(`[walkthrough] Creating DB record - Success - ID: ${created.id}`);
-        console.log("[walkthrough] row created", {
+        devLog(`[walkthrough] Creating DB record - Success - ID: ${created.id}`);
+        devLog("[walkthrough] row created", {
           wid: created.id,
           projectId,
           reason,
@@ -1177,9 +1178,9 @@ export function ProjectDetailPage() {
 
   const startWalkthrough = async () => {
     if (!user) return;
-    console.log("[walkthrough] Starting...");
+    devLog("[walkthrough] Starting...");
     if (walkRef.current?.id) {
-      console.log("[walkthrough] reopening active recorder", { wid: walkRef.current.id });
+      devLog("[walkthrough] reopening active recorder", { wid: walkRef.current.id });
       setWalkthroughOpen(true);
       setPanel("walkthroughs");
       return;
@@ -1208,7 +1209,7 @@ export function ProjectDetailPage() {
     }
     const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
     const path = `${user.id}/${projectId}/walkthroughs/${wid}/${crypto.randomUUID()}.${ext}`;
-    console.log("[walkthrough] uploading captured photo", {
+    devLog("[walkthrough] uploading captured photo", {
       wid,
       offsetSeconds: meta.offsetSeconds,
       position: meta.position,
@@ -1224,7 +1225,7 @@ export function ProjectDetailPage() {
     }
     let photoId: string | null = null;
     try {
-      console.log("[walkthrough] Linking photos", {
+      devLog("[walkthrough] Linking photos", {
         wid,
         position: meta.position,
         offsetSeconds: meta.offsetSeconds,
@@ -1306,7 +1307,7 @@ export function ProjectDetailPage() {
       return null;
     }
 
-    console.log("[walkthrough] captured photo linked", {
+    devLog("[walkthrough] captured photo linked", {
       wid,
       photoId,
       offsetSeconds: meta.offsetSeconds,
@@ -1351,8 +1352,8 @@ export function ProjectDetailPage() {
     }
     const liveTranscript = (data.liveTranscript ?? "").trim();
     const durationSeconds = Math.max(1, Math.round(data.durationSeconds || 1));
-    console.log("[walkthrough] Recording stopped", { wid });
-    console.log("[walkthrough] finishing", {
+    devLog("[walkthrough] Recording stopped", { wid });
+    devLog("[walkthrough] finishing", {
       wid,
       duration: durationSeconds,
       photos: data.photos.length,
@@ -1446,7 +1447,7 @@ export function ProjectDetailPage() {
     // any RLS / network failure surfaces instead of being silently swallowed
     // while the dialog disappears.
     if (data.photos.length) {
-      console.log("[walkthrough] Linking photos", {
+      devLog("[walkthrough] Linking photos", {
         wid,
         photos: data.photos.length,
         stage: "pre-finish",
@@ -1462,7 +1463,7 @@ export function ProjectDetailPage() {
         console.error("[walkthrough] pre-finish photo link verification failed", linkErr);
         try {
           const linkedCount = await directLinkPhotos();
-          console.log("[walkthrough] direct pre-finish photo links saved", { wid, linkedCount });
+          devLog("[walkthrough] direct pre-finish photo links saved", { wid, linkedCount });
         } catch (directLinkErr: any) {
           console.error(
             "[walkthrough] direct pre-finish photo link fallback failed",
@@ -1474,7 +1475,7 @@ export function ProjectDetailPage() {
         }
       }
     } else {
-      console.log("[walkthrough] Linking photos", {
+      devLog("[walkthrough] Linking photos", {
         wid,
         photos: 0,
         skipped: true,
@@ -1484,7 +1485,7 @@ export function ProjectDetailPage() {
 
     try {
       await finishWalkSession({ data: { walkthroughId: wid, durationSeconds, liveTranscript } });
-      console.log("[walkthrough] finish row update acknowledged", { wid });
+      devLog("[walkthrough] finish row update acknowledged", { wid });
       setWalkthroughs((prev) =>
         prev.map((w) =>
           w.id === wid
@@ -1514,7 +1515,7 @@ export function ProjectDetailPage() {
           } as any)
           .eq("id", wid);
         if (directErr) throw directErr;
-        console.log("[walkthrough] direct finish fallback saved", { wid });
+        devLog("[walkthrough] direct finish fallback saved", { wid });
         setWalkthroughs((prev) =>
           prev.map((w) =>
             w.id === wid
@@ -1553,7 +1554,7 @@ export function ProjectDetailPage() {
     let signedVideoUrl: string | null = null;
     if (data.mediaBlob && data.mediaMimeType) {
       try {
-        console.log("[walkthrough] Uploading video", {
+        devLog("[walkthrough] Uploading video", {
           wid,
           stage: "before-close",
           bytes: data.mediaBlob.size,
@@ -1609,7 +1610,7 @@ export function ProjectDetailPage() {
               : w,
           ),
         );
-        console.log("[walkthrough] video uploaded and linked", {
+        devLog("[walkthrough] video uploaded and linked", {
           wid,
           videoPath,
           hasSignedUrl: !!signedVideoUrl,
@@ -1623,7 +1624,7 @@ export function ProjectDetailPage() {
         signedVideoUrl = null;
       }
     } else {
-      console.log("[walkthrough] Uploading video", {
+      devLog("[walkthrough] Uploading video", {
         wid,
         skipped: true,
         reason: "no media blob",
@@ -1632,7 +1633,7 @@ export function ProjectDetailPage() {
     }
 
     if (data.photos.length) {
-      console.log("[walkthrough] Linking photos", {
+      devLog("[walkthrough] Linking photos", {
         wid,
         photos: data.photos.length,
         stage: "post-finish",
@@ -1648,7 +1649,7 @@ export function ProjectDetailPage() {
         console.error("[walkthrough] final photo link verification failed", linkErr);
         try {
           const linkedCount = await directLinkPhotos();
-          console.log("[walkthrough] direct final photo links saved", { wid, linkedCount });
+          devLog("[walkthrough] direct final photo links saved", { wid, linkedCount });
         } catch (directLinkErr: any) {
           console.error("[walkthrough] direct final photo link fallback failed", directLinkErr);
           toast.warning(
@@ -1679,7 +1680,7 @@ export function ProjectDetailPage() {
         transcriptionBlob.size <= 12_500_000
       ) {
         try {
-          console.log("[walkthrough] Transcribing recording", {
+          devLog("[walkthrough] Transcribing recording", {
             wid,
             bytes: transcriptionBlob.size,
             mime: transcriptionMime,
@@ -1689,7 +1690,7 @@ export function ProjectDetailPage() {
           const transcription = await transcribeWalk({
             data: { walkthroughId: wid, audioBase64, mimeType: transcriptionMime },
           });
-          console.log("[walkthrough] Transcribing recording complete", {
+          devLog("[walkthrough] Transcribing recording complete", {
             wid,
             transcriptChars: transcription?.transcript?.length ?? 0,
           });
@@ -1700,7 +1701,7 @@ export function ProjectDetailPage() {
             data.mediaMimeType &&
             data.mediaBlob.size <= 12_500_000
           ) {
-            console.log(
+            devLog(
               "[walkthrough] Audio sidecar had no transcript; retrying transcription from saved video",
               { wid, bytes: data.mediaBlob.size, mime: data.mediaMimeType },
             );
@@ -1708,7 +1709,7 @@ export function ProjectDetailPage() {
             const videoTranscription = await transcribeWalk({
               data: { walkthroughId: wid, audioBase64: videoBase64, mimeType: data.mediaMimeType },
             });
-            console.log("[walkthrough] Video transcription fallback complete", {
+            devLog("[walkthrough] Video transcription fallback complete", {
               wid,
               transcriptChars: videoTranscription?.transcript?.length ?? 0,
             });
@@ -1727,7 +1728,7 @@ export function ProjectDetailPage() {
             data.mediaBlob.size <= 12_500_000
           ) {
             try {
-              console.log(
+              devLog(
                 "[walkthrough] Retrying transcription from saved video after audio sidecar failure",
                 { wid, bytes: data.mediaBlob.size, mime: data.mediaMimeType },
               );
@@ -1739,7 +1740,7 @@ export function ProjectDetailPage() {
                   mimeType: data.mediaMimeType,
                 },
               });
-              console.log("[walkthrough] Video transcription retry complete", {
+              devLog("[walkthrough] Video transcription retry complete", {
                 wid,
                 transcriptChars: videoTranscription?.transcript?.length ?? 0,
               });
@@ -1750,7 +1751,7 @@ export function ProjectDetailPage() {
           void load({ silent: true });
         }
       } else {
-        console.log("[walkthrough] Transcribing recording", {
+        devLog("[walkthrough] Transcribing recording", {
           wid,
           skipped: true,
           reason:
@@ -1765,9 +1766,9 @@ export function ProjectDetailPage() {
       // before this point, so report generation can fail without hiding the
       // walkthrough card the user just created.
       try {
-        console.log("[walkthrough] Generating report", { wid });
+        devLog("[walkthrough] Generating report", { wid });
         await genReport({ data: { walkthroughId: wid } });
-        console.log(`[walkthrough] Success - ID: ${wid}`);
+        devLog(`[walkthrough] Success - ID: ${wid}`);
         toast.success("Walkthrough report is ready");
         void load({ silent: true });
       } catch (e: any) {
@@ -1781,7 +1782,7 @@ export function ProjectDetailPage() {
       // Reports section) from the transcript + photos, so the user gets a
       // client-ready, PDF-exportable report without opening the manual builder.
       try {
-        console.log("[walkthrough→report] Creating auto project report", { wid });
+        devLog("[walkthrough→report] Creating auto project report", { wid });
         const built = await buildReportFromWalk({ data: { walkthroughId: wid } });
         if (built?.reportId) {
           if (built.alreadyExisted) {
@@ -1829,7 +1830,7 @@ export function ProjectDetailPage() {
       if (!object) return { path: null, mime: null };
       const path = `${prefix}/${object.name}`;
       const mime = object.name.toLowerCase().endsWith(".mp4") ? "video/mp4" : "video/webm";
-      console.log("[walkthrough] recovered video path from storage", {
+      devLog("[walkthrough] recovered video path from storage", {
         wid: walkthroughId,
         path,
         mime,
@@ -1853,7 +1854,7 @@ export function ProjectDetailPage() {
   };
 
   const openWalkthroughVideo = async (w: (typeof walkthroughs)[number]) => {
-    console.log("[walkthrough] video thumbnail clicked", {
+    devLog("[walkthrough] video thumbnail clicked", {
       wid: w.id,
       hasSignedUrl: !!w.video_signed_url,
       hasVideoPath: !!w.video_path,
@@ -1864,7 +1865,7 @@ export function ProjectDetailPage() {
     // Fast path: we already have a signed URL cached.
     if (w.video_signed_url) {
       setPlayerVideo({ url: w.video_signed_url, title, mime: w.video_mime_type });
-      console.log("[walkthrough] video player opened", { wid: w.id, source: "signed-url" });
+      devLog("[walkthrough] video player opened", { wid: w.id, source: "signed-url" });
       return;
     }
 
@@ -1945,7 +1946,7 @@ export function ProjectDetailPage() {
         ),
       );
       setPlayerVideo({ url: signedVideo.signedUrl, title, mime: videoMime });
-      console.log("[walkthrough] video player opened", { wid: w.id, source: "fresh-sign" });
+      devLog("[walkthrough] video player opened", { wid: w.id, source: "fresh-sign" });
     } catch (e: any) {
       console.error("[walkthrough] video signing/open failed", e, { wid: w.id, videoPath });
       setPlayerVideo({
@@ -1964,7 +1965,7 @@ export function ProjectDetailPage() {
     const wid = walkRef.current?.id;
     setWalkthroughOpen(false);
     if (wid && user) {
-      console.log("[walkthrough] closing unfinished walkthrough", { wid });
+      devLog("[walkthrough] closing unfinished walkthrough", { wid });
       const { data: linked } = await supabase
         .from("walkthrough_photos" as any)
         .select("photo_id")
@@ -1986,13 +1987,13 @@ export function ProjectDetailPage() {
           taken_at: string | null;
         }> | null) ?? [];
       if (linkedPhotoIds.length || orphanRows.length) {
-        console.log("[walkthrough] close preserved walkthrough with captured photos", {
+        devLog("[walkthrough] close preserved walkthrough with captured photos", {
           wid,
           linked: linkedPhotoIds.length,
           orphaned: orphanRows.length,
         });
         if (orphanRows.length) {
-          console.log("[walkthrough] Linking photos", {
+          devLog("[walkthrough] Linking photos", {
             wid,
             photos: orphanRows.length,
             stage: "close-recovery",

@@ -35,9 +35,9 @@ export const Route = createFileRoute("/login")({
         content:
           "Sign in to Everbreeze SitePix to access your construction job site photos, projects, AI analyses, and Breeze assistant.",
       },
-      { property: "og:url", content: "https://everbreezesitepix.com/login" },
+      { property: "og:url", content: "https://www.everbreezesitepix.com/login" },
     ],
-    links: [{ rel: "canonical", href: "https://everbreezesitepix.com/login" }],
+    links: [{ rel: "canonical", href: "https://www.everbreezesitepix.com/login" }],
   }),
   component: LoginPage,
 });
@@ -304,7 +304,11 @@ function LoginPage() {
             </Link>
           </p>
           <p className="font-manrope mt-4 text-center text-xs leading-5 text-muted-foreground">
-            By continuing, you agree to our Terms of Service and{" "}
+            By continuing, you agree to our{" "}
+            <Link to="/terms-of-service" className="hover:underline">
+              Terms of Service
+            </Link>{" "}
+            and{" "}
             <Link to="/privacy-policy" className="hover:underline">
               Privacy Policy
             </Link>

@@ -38,7 +38,7 @@ ALTER TABLE public.issue_reports
   ADD COLUMN IF NOT EXISTS user_id     uuid,
   ADD COLUMN IF NOT EXISTS email       text,
   -- The text column is `description`. An earlier cut of this file said
-  -- `message`, which does not exist on the deployed table — see 20260803040000.
+  -- `message`, which does not exist on the deployed table — see 20260803040001.
   ADD COLUMN IF NOT EXISTS description text,
   ADD COLUMN IF NOT EXISTS url        text,
   ADD COLUMN IF NOT EXISTS user_agent text,

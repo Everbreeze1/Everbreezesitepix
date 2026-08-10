@@ -24,8 +24,7 @@ export function ProjectContributors({ projectId, compact = false }: Props) {
   const fetchContributors = getProjectContributors;
   const { data, isLoading } = useQuery({
     queryKey: ["project-contributors", projectId],
-    queryFn: async () =>
-      (await fetchContributors({ data: { projectId } })) as { contributors: ProjectContributor[] },
+    queryFn: () => fetchContributors({ data: { projectId } }),
     staleTime: 30_000,
   });
 

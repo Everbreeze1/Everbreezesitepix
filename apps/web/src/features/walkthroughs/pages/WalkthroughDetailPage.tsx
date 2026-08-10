@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/sitepix/client";
 import { sitepixApi } from "@/lib/sitepix-api";
+import { devLog } from "@/lib/dev-log";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useSubscription } from "@/hooks/use-subscription";
@@ -142,7 +143,7 @@ export function WalkthroughDetailPage() {
         if (object) {
           vPath = `${prefix}/${object.name}`;
           vMime = object.name.toLowerCase().endsWith(".mp4") ? "video/mp4" : "video/webm";
-          console.log("[walkthrough] detail recovered video path from storage", {
+          devLog("[walkthrough] detail recovered video path from storage", {
             wid: walkthroughId,
             path: vPath,
             mime: vMime,
@@ -538,7 +539,7 @@ export function WalkthroughDetailPage() {
             cacheKey={`walk-detail:${walk.id}`}
             videoUrl={videoUrl}
             onClick={() => {
-              console.log("[walkthrough] detail video thumbnail clicked", {
+              devLog("[walkthrough] detail video thumbnail clicked", {
                 wid: walk.id,
                 hasVideoUrl: !!videoUrl,
               });

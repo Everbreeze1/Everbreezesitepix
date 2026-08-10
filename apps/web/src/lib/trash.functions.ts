@@ -1,20 +1,51 @@
 import { rpcOp } from "./sitepix-api";
+import type {
+  listTrashedPhotosService,
+  restorePhotosService,
+  purgePhotosService,
+  listTrashedProjectsService,
+  softDeleteProjectService,
+  restoreProjectService,
+  purgeProjectService,
+  getTrashCountsService,
+} from "@sitepix/api";
 
 /** Must match apps/api trash service. */
 export const TRASH_RETENTION_DAYS = 60;
 
-export const listTrashedPhotos = rpcOp<{ projectId: string }, unknown>("listTrashedPhotos");
+/** See walkthroughs.functions.ts — result types are derived, not hand-written. */
+type Result<T extends (...args: never[]) => unknown> = Awaited<ReturnType<T>>;
 
-export const restorePhotos = rpcOp<{ photoIds: string[] }, unknown>("restorePhotos");
+export const listTrashedPhotos = rpcOp<
+  { projectId: string },
+  Result<typeof listTrashedPhotosService>
+>("listTrashedPhotos");
 
-export const purgePhotos = rpcOp<{ photoIds: string[] }, unknown>("purgePhotos");
+export const restorePhotos = rpcOp<{ photoIds: string[] }, Result<typeof restorePhotosService>>(
+  "restorePhotos",
+);
 
-export const listTrashedProjects = rpcOp<undefined, unknown>("listTrashedProjects");
+export const purgePhotos = rpcOp<{ photoIds: string[] }, Result<typeof purgePhotosService>>(
+  "purgePhotos",
+);
 
-export const softDeleteProject = rpcOp<{ projectId: string }, unknown>("softDeleteProject");
+export const listTrashedProjects = rpcOp<undefined, Result<typeof listTrashedProjectsService>>(
+  "listTrashedProjects",
+);
 
-export const restoreProject = rpcOp<{ projectId: string }, unknown>("restoreProject");
+export const softDeleteProject = rpcOp<
+  { projectId: string },
+  Result<typeof softDeleteProjectService>
+>("softDeleteProject");
 
-export const purgeProject = rpcOp<{ projectId: string }, unknown>("purgeProject");
+export const restoreProject = rpcOp<{ projectId: string }, Result<typeof restoreProjectService>>(
+  "restoreProject",
+);
 
-export const getTrashCounts = rpcOp<undefined, unknown>("getTrashCounts");
+export const purgeProject = rpcOp<{ projectId: string }, Result<typeof purgeProjectService>>(
+  "purgeProject",
+);
+
+export const getTrashCounts = rpcOp<undefined, Result<typeof getTrashCountsService>>(
+  "getTrashCounts",
+);

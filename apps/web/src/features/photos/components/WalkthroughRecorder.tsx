@@ -16,6 +16,7 @@ import {
   PictureInPicture2,
 } from "lucide-react";
 import { drawWatermark, type WatermarkContext } from "@/lib/watermark";
+import { devLog } from "@/lib/dev-log";
 import { compressImageFile } from "@/features/photos/components/CameraCapture";
 
 interface WalkthroughRecorderProps {
@@ -334,7 +335,7 @@ export function WalkthroughRecorder({
   const flipCamera = useCallback(async () => {
     const s = streamRef.current;
     if (!s || flipping) return;
-    console.log("[walkthrough] flip camera requested", { from: facingRef.current });
+    devLog("[walkthrough] flip camera requested", { from: facingRef.current });
     setFlipping(true);
     const target = facingRef.current === "environment" ? "user" : "environment";
     const audioTracks = s.getAudioTracks();
@@ -393,7 +394,7 @@ export function WalkthroughRecorder({
     const openVideoTrack = async (constraints: MediaTrackConstraints[]) => {
       for (const v of constraints) {
         try {
-          console.log("[walkthrough] trying camera constraint", v);
+          devLog("[walkthrough] trying camera constraint", v);
           const nextStream = await navigator.mediaDevices.getUserMedia({ video: v, audio: false });
           const track = nextStream.getVideoTracks()[0];
           if (track) return track;
@@ -472,7 +473,7 @@ export function WalkthroughRecorder({
     try {
       recorderRef.current?.resume?.();
     } catch {}
-    console.log("[walkthrough] camera flipped", {
+    devLog("[walkthrough] camera flipped", {
       to: target,
       deviceId: newTrack.getSettings?.().deviceId,
     });
@@ -514,8 +515,8 @@ export function WalkthroughRecorder({
 
   const start = async () => {
     if (!canRecord) return;
-    console.log("[walkthrough] Starting...");
-    console.log("[walkthrough] recorder start requested");
+    devLog("[walkthrough] Starting...");
+    devLog("[walkthrough] recorder start requested");
     setStarting(true);
 
     // Single getUserMedia call for both camera preview AND microphone capture.
@@ -545,7 +546,7 @@ export function WalkthroughRecorder({
               sampleRate: { ideal: 48_000 },
             },
           });
-          console.log("[walkthrough] media stream acquired", {
+          devLog("[walkthrough] media stream acquired", {
             video: stream.getVideoTracks()[0]?.getSettings?.(),
             audioTracks: stream.getAudioTracks().length,
             audio: stream.getAudioTracks()[0]?.getSettings?.(),
@@ -596,7 +597,7 @@ export function WalkthroughRecorder({
       rec.ondataavailable = (ev) => {
         if (ev.data && ev.data.size > 0) {
           mediaChunksRef.current.push(ev.data);
-          console.log("[walkthrough] media chunk", {
+          devLog("[walkthrough] media chunk", {
             bytes: ev.data.size,
             chunks: mediaChunksRef.current.length,
           });
@@ -620,7 +621,7 @@ export function WalkthroughRecorder({
       setLivePartial("");
       setLiveCommitted("");
       setPostRecordTranscriptionOnly(true);
-      console.log(
+      devLog(
         "[walkthrough] native live speech recognition disabled; stable WAV transcription will run after stop",
       );
     } catch (e: any) {
@@ -635,7 +636,7 @@ export function WalkthroughRecorder({
     startedAtRef.current = Date.now();
     setElapsed(0);
     setPhase("recording");
-    console.log("[walkthrough] recorder started", { mime, maxSeconds });
+    devLog("[walkthrough] recorder started", { mime, maxSeconds });
     timerRef.current = window.setInterval(() => {
       const sec = Math.floor((Date.now() - startedAtRef.current) / 1000);
       setElapsed(sec);
@@ -651,7 +652,7 @@ export function WalkthroughRecorder({
     if (!video || video.videoWidth === 0 || capturing) return;
     setCapturing(true);
     try {
-      console.log("[walkthrough] capture photo requested", {
+      devLog("[walkthrough] capture photo requested", {
         videoWidth: video.videoWidth,
         videoHeight: video.videoHeight,
       });
@@ -688,7 +689,7 @@ export function WalkthroughRecorder({
       const nextPhoto = { id, offsetSeconds: offset, thumbDataUrl };
       photosRef.current = [...photosRef.current, nextPhoto];
       setPhotos(photosRef.current);
-      console.log("[walkthrough] capture photo saved locally", {
+      devLog("[walkthrough] capture photo saved locally", {
         photoId: id,
         offsetSeconds: offset,
         position,
@@ -701,8 +702,8 @@ export function WalkthroughRecorder({
 
   const finish = async () => {
     if (phase === "finishing") return;
-    console.log("[walkthrough] Recording stopped");
-    console.log("[walkthrough] recorder finish requested", {
+    devLog("[walkthrough] Recording stopped");
+    devLog("[walkthrough] recorder finish requested", {
       photos: photosRef.current.length,
       chunks: mediaChunksRef.current.length,
     });
@@ -727,7 +728,7 @@ export function WalkthroughRecorder({
         // walkthrough card and linked photos are more important than video.
         const timeout = window.setTimeout(done, 2500);
         rec.onstop = () => {
-          console.log("[walkthrough] media recorder stopped");
+          devLog("[walkthrough] media recorder stopped");
           window.clearTimeout(timeout);
           done();
         };
@@ -759,13 +760,13 @@ export function WalkthroughRecorder({
     if (mediaBlob && mediaBlob.size > 0) {
       mediaMimeType = mediaMimeRef.current;
     }
-    console.log("[walkthrough] recorder media finalized", {
+    devLog("[walkthrough] recorder media finalized", {
       hasMedia: !!mediaBlob,
       bytes: mediaBlob?.size ?? 0,
       mime: mediaMimeType,
       mediaChunks: mediaChunksRef.current.length,
     });
-    console.log("[walkthrough] recorder audio finalized", {
+    devLog("[walkthrough] recorder audio finalized", {
       hasAudio: !!audioBlob,
       bytes: audioBlob?.size ?? 0,
       mime: audioBlob ? audioMimeRef.current : null,

@@ -45,6 +45,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { getMyTeam, createBillingPortalSession } from "@/features/settings/api";
 import { listReviewLinks, setReviewLinks, type ReviewLink } from "@/lib/review-links.functions";
 import { useStorageUsage, formatBytes } from "@/hooks/use-storage-usage";
+import { SUPPORT_EMAIL, mailtoHref } from "@/lib/contact";
 import { cn } from "@/lib/utils";
 
 type SectionId =
@@ -1556,14 +1557,14 @@ function HelpSection() {
           icon={HelpCircle}
           title="Browse help articles"
           desc="Step-by-step guides for every part of SitePix."
-          href="https://everbreezesitepix.com/help"
+          href="https://www.everbreezesitepix.com/help"
           cta="Open Help Center"
         />
         <SupportTile
           icon={Sparkles}
           title="What's new"
           desc="Recent features, improvements, and fixes."
-          href="https://everbreezesitepix.com/help"
+          href="https://www.everbreezesitepix.com/help"
           cta="See updates"
         />
         <SupportTile
@@ -1593,14 +1594,17 @@ function ChatSection() {
           icon={MessageCircle}
           title="Email support"
           desc="Send us a message and we'll get back to you fast."
-          href="mailto:support@everbreeze.io?subject=SitePix%20support"
+          // The support mailbox is a placeholder until the owner confirms it
+          // (see lib/contact.ts); until then these fall back to /contact rather
+          // than opening a mail client addressed to a domain that isn't ours.
+          href={mailtoHref(SUPPORT_EMAIL, "SitePix support") ?? "/contact"}
           cta="Start a conversation"
         />
         <SupportTile
           icon={LifeBuoy}
           title="Report an issue"
           desc="Something broken? Tell us what happened."
-          href="mailto:support@everbreeze.io?subject=SitePix%20issue"
+          href={mailtoHref(SUPPORT_EMAIL, "SitePix issue") ?? "/contact"}
           cta="Report issue"
         />
       </div>
@@ -1616,7 +1620,7 @@ function ChatSection() {
           </p>
         </div>
         <Button asChild variant="outline">
-          <a href="mailto:hello@everbreeze.io?subject=SitePix%20feature%20idea">Send idea</a>
+          <a href={mailtoHref(SUPPORT_EMAIL, "SitePix feature idea") ?? "/contact"}>Send idea</a>
         </Button>
       </Card>
     </SectionShell>

@@ -1,8 +1,24 @@
 import { rpcOp } from "./sitepix-api";
+import type {
+  listProjectGroupsService,
+  getProjectGroupService,
+  createProjectGroupService,
+  updateProjectGroupService,
+  deleteProjectGroupService,
+  setGroupProjectsService,
+  addProjectToGroupService,
+} from "@sitepix/api";
 
-export const listProjectGroups = rpcOp<undefined, unknown>("listProjectGroups");
+/** See walkthroughs.functions.ts — result types are derived, not hand-written. */
+type Result<T extends (...args: never[]) => unknown> = Awaited<ReturnType<T>>;
 
-export const getProjectGroup = rpcOp<{ groupId: string }, unknown>("getProjectGroup");
+export const listProjectGroups = rpcOp<undefined, Result<typeof listProjectGroupsService>>(
+  "listProjectGroups",
+);
+
+export const getProjectGroup = rpcOp<{ groupId: string }, Result<typeof getProjectGroupService>>(
+  "getProjectGroup",
+);
 
 export const createProjectGroup = rpcOp<
   {
@@ -10,7 +26,7 @@ export const createProjectGroup = rpcOp<
     description?: string | null;
     projectIds?: string[];
   },
-  unknown
+  Result<typeof createProjectGroupService>
 >("createProjectGroup");
 
 export const updateProjectGroup = rpcOp<
@@ -19,15 +35,19 @@ export const updateProjectGroup = rpcOp<
     name?: string;
     description?: string | null;
   },
-  unknown
+  Result<typeof updateProjectGroupService>
 >("updateProjectGroup");
 
-export const deleteProjectGroup = rpcOp<{ id: string }, unknown>("deleteProjectGroup");
-
-export const setGroupProjects = rpcOp<{ groupId: string; projectIds: string[] }, unknown>(
-  "setGroupProjects",
+export const deleteProjectGroup = rpcOp<{ id: string }, Result<typeof deleteProjectGroupService>>(
+  "deleteProjectGroup",
 );
 
-export const addProjectToGroup = rpcOp<{ groupId: string; projectId: string }, unknown>(
-  "addProjectToGroup",
-);
+export const setGroupProjects = rpcOp<
+  { groupId: string; projectIds: string[] },
+  Result<typeof setGroupProjectsService>
+>("setGroupProjects");
+
+export const addProjectToGroup = rpcOp<
+  { groupId: string; projectId: string },
+  Result<typeof addProjectToGroupService>
+>("addProjectToGroup");

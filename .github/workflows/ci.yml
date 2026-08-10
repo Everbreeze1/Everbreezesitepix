@@ -1,0 +1,83 @@
+# Runs exactly the checks that already pass locally — lint, both typechecks,
+# the vitest suite, and a real production build. Nothing new is introduced here;
+# the point is that a regression in any of them stops a PR instead of reaching
+# www.everbreezesitepix.com.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# A second push to the same branch makes the first run pointless — cancel it
+# rather than queueing behind it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    # Single job on purpose: `npm ci` for this workspace dominates the wall
+    # clock, so splitting the steps across jobs would pay that cost N times for
+    # no real speedup.
+    env:
+      # `vite.config.ts` inlines `import.meta.env.VITE_*` at build time via
+      # `loadEnv`, which also reads `process.env`. Real values are only needed
+      # by the deployed app (Vercel supplies its own), but the build is more
+      # deterministic when they are always defined — hence the placeholders.
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'placeholder-publishable-key' }}
+      VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://api.everbreezesitepix.com' }}
+      VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY || '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches production: Nitro's vercel preset pins the deployed function
+          # runtime to `nodejs24.x` (see the `functions.runtime` field written
+          # into `apps/web/.vercel/output/nitro.json` by `npm run build`), and
+          # local dev is on 24.x. Nothing in `package.json`/`railpack.json`
+          # declares this, so it is asserted here.
+          node-version: "24"
+          cache: npm
+
+      # `apps/api/railway.toml` warns off `npm ci` — that is a Railpack build
+      # cache problem on Railway (EBUSY against a warm, restored `node_modules`),
+      # not a property of npm. GitHub Actions starts from an empty workspace
+      # every run, so the lockfile-exact install is both safe and what CI wants.
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck (apps/api + packages)
+        run: npm run typecheck:api
+
+      # `apps/web` has no typecheck script of its own; its tsconfig is the one
+      # the editor uses, so run tsc against it directly.
+      #
+      # This was briefly non-blocking: the app carried 38 pre-existing errors,
+      # all tracing to RPC wrappers declared `rpcOp<Args, unknown>`, so every
+      # caller reading a field off a result was dereferencing `unknown`/`{}`.
+      # Those wrappers now derive their result type from the service function
+      # they call (`Awaited<ReturnType<typeof fooService>>`), which both cleared
+      # the errors and made a return-shape change in apps/api fail here instead
+      # of at runtime. It is blocking again — keep it that way.
+      - name: Typecheck (apps/web)
+        run: npx tsc --noEmit
+        working-directory: apps/web
+
+      - name: Test
+        run: npm test
+
+      # Last because it is the slowest and the least likely to fail alone.
+      - name: Build
+        run: npm run build

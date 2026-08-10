@@ -16,6 +16,16 @@
 -- no feedback is lost either way.
 --
 -- Apply via the SitePix Supabase SQL editor. Safe to re-run.
+--
+-- RENAMED 20260803040000 -> 20260803040001 (content unchanged). It shared the
+-- 040000 stamp with starter_project_sharing.sql, and a version is the key of the
+-- CLI's migration history — two files cannot hold the same one. This file is the
+-- one that moved because it repairs 20260803020000 and therefore has to sort
+-- after it, while starter_project_sharing only replaces are_teammates() and is
+-- ordered against nothing; it was also written first. Both are already applied
+-- in production, so this changes history only — 20260811001000 records the new
+-- version as applied so `supabase db push` will not re-run it, and every
+-- statement below is idempotent if it does.
 
 -- 1. Guarantee the column exists (fresh environments created by
 --    20260803020000 will not have it).

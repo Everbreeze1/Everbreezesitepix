@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { BrandLogo } from "@/components/BrandLogo";
+import { SUPPORT_EMAIL, mailtoHref } from "@/lib/contact";
 
 const footerColumns = [
   {
@@ -15,15 +16,21 @@ const footerColumns = [
     links: [
       { label: "FAQ", to: "/faq" },
       { label: "Privacy policy", to: "/privacy-policy" },
+      { label: "Terms of service", to: "/terms-of-service" },
     ],
   },
   {
     title: "Company",
-    links: [{ label: "Contact", href: "mailto:hello@sitepix.com" }],
+    // Points at the /contact page rather than a bare mailto: — the address
+    // itself is still a placeholder (see lib/contact.ts) and /help only exists
+    // behind the app shell, so this is the one route every visitor can reach.
+    links: [{ label: "Contact & support", to: "/contact" }],
   },
 ] as const;
 
 export function SiteFooter() {
+  const supportMailto = mailtoHref(SUPPORT_EMAIL);
+
   return (
     <footer className="bg-sidebar">
       <div className="mx-auto max-w-[1280px] px-4 py-16 sm:px-8 md:py-20">
@@ -39,12 +46,21 @@ export function SiteFooter() {
               SitePix helps construction teams capture the truth of every job — then puts it where
               the whole team can use it.
             </p>
-            <a
-              href="mailto:hello@sitepix.com"
-              className="font-manrope mt-6 inline-block text-sm font-bold text-sidebar-ring"
-            >
-              hello@sitepix.com
-            </a>
+            {/* Was mailto:hello@sitepix.com — a domain that isn't ours. Until a
+                real mailbox is confirmed the placeholder renders as inert text
+                rather than a link that bounces. */}
+            {supportMailto ? (
+              <a
+                href={supportMailto}
+                className="font-manrope mt-6 inline-block text-sm font-bold text-sidebar-ring"
+              >
+                {SUPPORT_EMAIL}
+              </a>
+            ) : (
+              <span className="font-manrope mt-6 inline-block text-sm font-bold text-sidebar-ring">
+                {SUPPORT_EMAIL}
+              </span>
+            )}
           </div>
 
           {footerColumns.map((col) => (
@@ -55,21 +71,12 @@ export function SiteFooter() {
               <ul className="mt-5 space-y-3">
                 {col.links.map((link) => (
                   <li key={link.label}>
-                    {"to" in link ? (
-                      <Link
-                        to={link.to}
-                        className="font-manrope text-sm font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground"
-                      >
-                        {link.label}
-                      </Link>
-                    ) : (
-                      <a
-                        href={link.href}
-                        className="font-manrope text-sm font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground"
-                      >
-                        {link.label}
-                      </a>
-                    )}
+                    <Link
+                      to={link.to}
+                      className="font-manrope text-sm font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                    >
+                      {link.label}
+                    </Link>
                   </li>
                 ))}
               </ul>

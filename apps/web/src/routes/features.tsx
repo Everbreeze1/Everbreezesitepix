@@ -20,9 +20,9 @@ export const Route = createFileRoute("/features")({
         content:
           "Capture, organize, share, and report on job site photos — everything a field crew needs to document a build, and nothing it doesn't.",
       },
-      { property: "og:url", content: "https://everbreezesitepix.com/features" },
+      { property: "og:url", content: "https://www.everbreezesitepix.com/features" },
     ],
-    links: [{ rel: "canonical", href: "https://everbreezesitepix.com/features" }],
+    links: [{ rel: "canonical", href: "https://www.everbreezesitepix.com/features" }],
   }),
 });
 
