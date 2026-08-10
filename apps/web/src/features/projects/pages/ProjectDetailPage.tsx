@@ -1415,13 +1415,17 @@ export function ProjectDetailPage() {
         .from("walkthrough_photos" as any)
         .upsert(rows as any, { onConflict: "walkthrough_id,photo_id", ignoreDuplicates: true });
       if (linkErr) throw linkErr;
-      await supabase
+      // Throws to match the link upsert directly above — without it a failure
+      // here leaks the walkthrough's frames into the main project grid, which
+      // filters on `phase !== "walkthrough"`.
+      const { error: phaseErr } = await supabase
         .from("photos")
         .update({ phase: "walkthrough" } as any)
         .in(
           "id",
           data.photos.map((p) => p.photoId),
         );
+      if (phaseErr) throw phaseErr;
       return rows.length;
     };
 
@@ -1993,7 +1997,10 @@ export function ProjectDetailPage() {
           const startMs = new Date(
             orphanRows[0]?.taken_at ?? orphanRows[0]?.created_at ?? Date.now(),
           ).getTime();
-          await supabase.from("walkthrough_photos" as any).upsert(
+          // Bail rather than mark the walkthrough ready without its photos —
+          // the summary below is built from these links, so a lost upsert would
+          // publish a walkthrough whose photos silently aren't in it.
+          const { error: linkErr } = await supabase.from("walkthrough_photos" as any).upsert(
             orphanRows.map((p, position) => ({
               walkthrough_id: wid,
               photo_id: p.id,
@@ -2007,13 +2014,22 @@ export function ProjectDetailPage() {
             })) as any,
             { onConflict: "walkthrough_id,photo_id", ignoreDuplicates: true },
           );
-          await supabase
+          if (linkErr) {
+            toast.error("Couldn't attach that walkthrough's photos");
+            await load();
+            return;
+          }
+          // Only cosmetic if it fails: the grid filters on `phase`, so these
+          // frames leak into the main project gallery rather than being lost.
+          const { error: phaseErr } = await supabase
             .from("photos")
             .update({ phase: "walkthrough" } as any)
             .in(
               "id",
               orphanRows.map((p) => p.id),
             );
+          if (phaseErr)
+            console.warn("[walkthrough] Could not set phase on recovered photos", phaseErr);
         }
         const allPhotoIds = [...linkedPhotoIds, ...orphanRows.map((p) => p.id)];
         const summary = allPhotoIds.length
@@ -2029,11 +2045,21 @@ export function ProjectDetailPage() {
               ]),
             ].join("\n")
           : null;
-        await supabase
+        // Retiring the walkthrough is the whole point of this function. Its
+        // error used to be discarded while `walkRef.current = null` ran anyway,
+        // so a refused update stranded the walkthrough at `recording` forever
+        // and threw away the only handle we had to retry it — reinstating the
+        // exact ghost tile this path exists to prevent.
+        const { error: readyErr } = await supabase
           .from("walkthroughs" as any)
           .update({ status: "ready", summary_markdown: summary } as any)
           .eq("id", wid)
           .eq("status", "recording");
+        if (readyErr) {
+          toast.error("Couldn't finish that walkthrough — it's still recording");
+          await load();
+          return;
+        }
         walkRef.current = null;
         await load();
         return;
@@ -2043,17 +2069,31 @@ export function ProjectDetailPage() {
           .from("photos")
           .select("id, storage_path")
           .in("id", linkedPhotoIds);
-        await supabase.from("photos").delete().in("id", linkedPhotoIds);
+        // Confirm the rows are gone before destroying their storage objects.
+        // This used to remove the blobs unconditionally, so a refused delete
+        // left the photo rows alive in the gallery pointing at files that no
+        // longer existed — permanently broken thumbnails, and no way back.
+        const { error: delErr } = await supabase.from("photos").delete().in("id", linkedPhotoIds);
+        if (delErr) {
+          toast.error("Couldn't discard that walkthrough's photos");
+          await load();
+          return;
+        }
         const paths = ((linkedPhotos as Array<{ storage_path: string }> | null) ?? [])
           .map((p) => p.storage_path)
           .filter(Boolean);
         if (paths.length) void supabase.storage.from("site-photos").remove(paths);
       }
-      await supabase
+      const { error: dropErr } = await supabase
         .from("walkthroughs" as any)
         .delete()
         .eq("id", wid)
         .eq("status", "recording");
+      if (dropErr) {
+        toast.error("Couldn't discard that walkthrough");
+        await load();
+        return;
+      }
       walkRef.current = null;
       await load();
     }

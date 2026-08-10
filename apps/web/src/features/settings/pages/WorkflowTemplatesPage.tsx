@@ -409,8 +409,15 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
     try {
       const id = await createTemplate(starter.name, starter.description);
       if (!id) return;
+      /*
+       * Both inserts below used to discard their error, and a dropped phase
+       * `continue`d in silence — so a starter could land as empty shells under
+       * an unconditional "Created" toast, and the author would go on to build
+       * real jobs on top of it. Stop at the first failure and say so.
+       */
+      let failure: string | null = null;
       for (const [pIdx, ph] of starter.phases.entries()) {
-        const { data: phRow } = await supabase
+        const { data: phRow, error: phErr } = await supabase
           .from(TABLES.phases as any)
           .insert({
             template_id: id,
@@ -422,8 +429,12 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
           .select("id")
           .single();
         const phId = (phRow as any)?.id as string | undefined;
-        if (!phId || !ph.items.length) continue;
-        await supabase.from(TABLES.items as any).insert(
+        if (phErr || !phId) {
+          failure = phErr?.message ?? "a phase couldn't be created";
+          break;
+        }
+        if (!ph.items.length) continue;
+        const { error: itErr } = await supabase.from(TABLES.items as any).insert(
           ph.items.map((it, idx) => ({
             phase_id: phId,
             position: idx,
@@ -432,8 +443,15 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
             required: !!it.required,
           })),
         );
+        if (itErr) {
+          failure = itErr.message ?? "a phase's steps couldn't be added";
+          break;
+        }
       }
-      toast.success(`Created “${starter.name}”`);
+      // Land the author on whatever did get built either way — a half-built
+      // starter they can see and repair beats a success toast over a shell.
+      if (failure) toast.error(`Created “${starter.name}”, but not completely — ${failure}`);
+      else toast.success(`Created “${starter.name}”`);
       setStartersOpen(false);
       setSelectedId(id);
       setPane("editor");
@@ -449,8 +467,11 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
     const tPhases = phases
       .filter((p) => p.template_id === t.id)
       .sort((a, b) => a.position - b.position);
+    // Same silent-partial-copy shape as `createFromStarter`: a 30-step workflow
+    // could come back as phases with no steps, reported as a success.
+    let failure: string | null = null;
     for (const [idx, ph] of tPhases.entries()) {
-      const { data: newPh } = await supabase
+      const { data: newPh, error: phErr } = await supabase
         .from(TABLES.phases as any)
         .insert({
           template_id: id,
@@ -462,10 +483,13 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
         .select("id")
         .single();
       const newPhId = (newPh as any)?.id as string | undefined;
-      if (!newPhId) continue;
+      if (phErr || !newPhId) {
+        failure = phErr?.message ?? "a phase couldn't be copied";
+        break;
+      }
       const phItems = itemsByPhase.get(ph.id) ?? [];
       if (phItems.length) {
-        await supabase.from(TABLES.items as any).insert(
+        const { error: itErr } = await supabase.from(TABLES.items as any).insert(
           phItems.map((it, i) => ({
             phase_id: newPhId,
             position: i,
@@ -474,9 +498,14 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
             required: it.required,
           })),
         );
+        if (itErr) {
+          failure = itErr.message ?? "a phase's steps couldn't be copied";
+          break;
+        }
       }
     }
-    toast.success("Workflow duplicated");
+    if (failure) toast.error(`Duplicated “${t.name}”, but not completely — ${failure}`);
+    else toast.success("Workflow duplicated");
     setSelectedId(id);
     await load();
   };

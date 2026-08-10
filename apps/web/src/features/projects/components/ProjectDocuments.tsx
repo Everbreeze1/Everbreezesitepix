@@ -119,7 +119,9 @@ function MoveToFolderSubmenu({
       </DropdownMenuSubTrigger>
       <DropdownMenuPortal>
         <DropdownMenuSubContent>
-          {currentFolderId && <DropdownMenuItem onClick={() => onMove(null)}>Top level</DropdownMenuItem>}
+          {currentFolderId && (
+            <DropdownMenuItem onClick={() => onMove(null)}>Top level</DropdownMenuItem>
+          )}
           {folders
             .filter((f) => f.id !== currentFolderId)
             .map((f) => (
@@ -385,7 +387,10 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
 
   async function handleDeletePage(pageId: string, title: string) {
     if (
-      !(await confirm({ description: `Delete "${title}"? This can't be undone.`, variant: "destructive" }))
+      !(await confirm({
+        description: `Delete "${title}"? This can't be undone.`,
+        variant: "destructive",
+      }))
     )
       return;
     try {
@@ -436,7 +441,16 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
       await Promise.all([
         ...pageIds.map((id) => deleteProjectPage({ data: { pageId: id } })),
         ...fileDocs.map(async (doc) => {
-          await (supabase as any).from("project_documents").delete().eq("id", doc.id);
+          // The row delete has to be confirmed before the blob is destroyed.
+          // The query builder resolves to `{ error }` rather than rejecting, so
+          // this used to fall straight through to `remove()` on a refused
+          // delete: the row survived, its file did not, and the user got a
+          // success toast over a document that now 404s forever.
+          const { error } = await (supabase as any)
+            .from("project_documents")
+            .delete()
+            .eq("id", doc.id);
+          if (error) throw error;
           void supabase.storage.from("site-documents").remove([doc.storage_path]);
         }),
       ]);
@@ -511,7 +525,12 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
     return [...filesInView].sort((a, b) => {
       if (sortKey === "name") return a.file_name.localeCompare(b.file_name) * dir;
       if (sortKey === "updated") return (a.created_at < b.created_at ? -1 : 1) * dir;
-      if (sortKey === "type") return fileTypeLabel(a.mime_type, a.file_name).localeCompare(fileTypeLabel(b.mime_type, b.file_name)) * dir;
+      if (sortKey === "type")
+        return (
+          fileTypeLabel(a.mime_type, a.file_name).localeCompare(
+            fileTypeLabel(b.mime_type, b.file_name),
+          ) * dir
+        );
       return 0;
     });
   }, [filesInView, sortKey, sortDir]);
@@ -530,7 +549,8 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
     visiblePages.every((p) => selectedPageIds.has(p.id)) &&
     visibleFiles.every((f) => selectedFileIds.has(f.id));
   const someVisibleSelected =
-    visiblePages.some((p) => selectedPageIds.has(p.id)) || visibleFiles.some((f) => selectedFileIds.has(f.id));
+    visiblePages.some((p) => selectedPageIds.has(p.id)) ||
+    visibleFiles.some((f) => selectedFileIds.has(f.id));
 
   function toggleSelectAll() {
     if (allVisibleSelected) {
@@ -558,7 +578,12 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
         className={`flex items-center gap-1 text-xs font-bold uppercase tracking-wide ${active ? "text-foreground" : "text-muted-foreground"}`}
       >
         {label}
-        {active && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+        {active &&
+          (sortDir === "asc" ? (
+            <ChevronUp className="h-3 w-3" />
+          ) : (
+            <ChevronDown className="h-3 w-3" />
+          ))}
       </button>
     );
   }
@@ -584,8 +609,8 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
           </h2>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
             Storage for every plan, permit, report, and delivery ticket. Generated summaries and
-            logs are filed here too — create them from <span className="font-bold">Create document</span>{" "}
-            at the top of the project.
+            logs are filed here too — create them from{" "}
+            <span className="font-bold">Create document</span> at the top of the project.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -606,7 +631,11 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                 disabled={creating}
                 className="h-8 gap-2 rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground hover:bg-primary/90"
               >
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus2 className="h-4 w-4" />}
+                {creating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FilePlus2 className="h-4 w-4" />
+                )}
                 Create
               </Button>
             }
@@ -679,7 +708,9 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
             </span>
             <p className="text-sm font-bold text-foreground">Nothing here yet</p>
             <p className="max-w-sm text-xs text-muted-foreground">
-              {q ? "No documents match your search." : "Create a page, add a folder, or upload plans, permits, and reports."}
+              {q
+                ? "No documents match your search."
+                : "Create a page, add a folder, or upload plans, permits, and reports."}
             </p>
           </div>
         ) : (
@@ -687,7 +718,9 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
             <div className="flex items-center gap-4 border-b border-border bg-muted/30 px-4 py-2.5">
               {selectableCount > 0 && (
                 <Checkbox
-                  checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                  checked={
+                    allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false
+                  }
                   onCheckedChange={toggleSelectAll}
                   aria-label="Select all"
                   className="shrink-0"
@@ -695,7 +728,9 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
               )}
               {selectedCount > 0 ? (
                 <>
-                  <span className="text-xs font-bold text-foreground">{selectedCount} selected</span>
+                  <span className="text-xs font-bold text-foreground">
+                    {selectedCount} selected
+                  </span>
                   <div className="ml-auto flex items-center gap-2">
                     {selectedFileIds.size === 0 && selectedPageIds.size > 0 && (
                       <Button
@@ -715,12 +750,18 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                     )}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs font-bold">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 gap-1.5 text-xs font-bold"
+                        >
                           <Move className="h-3.5 w-3.5" /> Move to…
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleBulkMove(null)}>Top level</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleBulkMove(null)}>
+                          Top level
+                        </DropdownMenuItem>
                         {(tree?.folders ?? []).map((f) => (
                           <DropdownMenuItem key={f.id} onClick={() => handleBulkMove(f.id)}>
                             {f.name}
@@ -736,7 +777,12 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                     >
                       <Trash2 className="h-3.5 w-3.5" /> Delete
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={clearSelection} className="h-8 text-xs font-bold">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={clearSelection}
+                      className="h-8 text-xs font-bold"
+                    >
                       Clear
                     </Button>
                   </div>
@@ -759,7 +805,10 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
 
             {!currentFolder &&
               folders.map((f) => (
-                <div key={f.id} className="flex items-center justify-between gap-4 border-b border-border p-4 transition-colors hover:bg-muted/60">
+                <div
+                  key={f.id}
+                  className="flex items-center justify-between gap-4 border-b border-border p-4 transition-colors hover:bg-muted/60"
+                >
                   <button
                     type="button"
                     onClick={() => setCurrentFolderId(f.id)}
@@ -786,7 +835,10 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
               ))}
 
             {visiblePages.map((p) => (
-              <div key={p.id} className="group flex items-center justify-between gap-4 border-b border-border p-4 transition-colors last:border-b-0 hover:bg-muted/60">
+              <div
+                key={p.id}
+                className="group flex items-center justify-between gap-4 border-b border-border p-4 transition-colors last:border-b-0 hover:bg-muted/60"
+              >
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <Checkbox
                     checked={selectedPageIds.has(p.id)}
@@ -797,7 +849,10 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                   <button
                     type="button"
                     onClick={() =>
-                      navigate({ to: "/projects/$projectId/pages/$pageId", params: { projectId, pageId: p.id } })
+                      navigate({
+                        to: "/projects/$projectId/pages/$pageId",
+                        params: { projectId, pageId: p.id },
+                      })
                     }
                     className="flex min-w-0 flex-1 items-center gap-3 text-left"
                   >
@@ -812,7 +867,9 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                     </div>
                   </button>
                 </div>
-                <span className="hidden w-28 shrink-0 text-xs text-muted-foreground transition-colors group-hover:text-foreground sm:inline">Page</span>
+                <span className="hidden w-28 shrink-0 text-xs text-muted-foreground transition-colors group-hover:text-foreground sm:inline">
+                  Page
+                </span>
                 <span className="hidden w-36 shrink-0 text-xs text-muted-foreground sm:inline">
                   {relativeTime(p.updatedAt)}
                 </span>
@@ -835,7 +892,10 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem
                       onClick={() =>
-                        navigate({ to: "/projects/$projectId/pages/$pageId", params: { projectId, pageId: p.id } })
+                        navigate({
+                          to: "/projects/$projectId/pages/$pageId",
+                          params: { projectId, pageId: p.id },
+                        })
                       }
                     >
                       <FileText className="mr-2 h-4 w-4" /> Open
@@ -870,7 +930,10 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
             ))}
 
             {visibleFiles.map((doc) => (
-              <div key={doc.id} className="group flex items-center justify-between gap-4 border-b border-border p-4 transition-colors last:border-b-0 hover:bg-muted/60">
+              <div
+                key={doc.id}
+                className="group flex items-center justify-between gap-4 border-b border-border p-4 transition-colors last:border-b-0 hover:bg-muted/60"
+              >
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <Checkbox
                     checked={selectedFileIds.has(doc.id)}
@@ -882,7 +945,9 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                     <FileText className="h-5 w-5 text-primary" />
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-extrabold text-foreground">{doc.file_name}</p>
+                    <p className="truncate text-sm font-extrabold text-foreground">
+                      {doc.file_name}
+                    </p>
                     <p className="mt-0.5 truncate text-xs text-muted-foreground sm:hidden">
                       {fileTypeLabel(doc.mime_type, doc.file_name)} · Created{" "}
                       {relativeTime(doc.created_at)}
@@ -961,7 +1026,9 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                       {shareRevoked ? "Link sharing off" : "Anyone with the link"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {shareRevoked ? "Only you can see this document" : "Viewers can read and download a PDF"}
+                      {shareRevoked
+                        ? "Only you can see this document"
+                        : "Viewers can read and download a PDF"}
                     </p>
                   </div>
                 </div>
@@ -989,7 +1056,6 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
           )}
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }

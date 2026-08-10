@@ -224,7 +224,13 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
 
   const deleteSet = async () => {
     if (!selected) return;
-    if (!(await confirm({ description: `Delete "${selected.name}"? This cannot be undone.`, variant: "destructive" }))) return;
+    if (
+      !(await confirm({
+        description: `Delete "${selected.name}"? This cannot be undone.`,
+        variant: "destructive",
+      }))
+    )
+      return;
     const { error } = await supabase
       .from("label_sets" as any)
       .delete()
@@ -245,7 +251,10 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
 
   const addItem = async () => {
     if (!selected) return;
-    const position = items.length;
+    // max+1, not `.length` — `deleteItem` doesn't renumber survivors, so length
+    // collided with a surviving label's position. It also drives the swatch
+    // below, so the collision handed the new label its twin's colour too.
+    const position = items.reduce((max, i) => Math.max(max, i.position), -1) + 1;
     const color = DEFAULT_COLORS[position % DEFAULT_COLORS.length];
     const { data, error } = await supabase
       .from("label_set_items" as any)
@@ -309,7 +318,13 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
         .eq("id", it.id),
     );
     const results = await Promise.all(updates);
-    if (results.some((r) => r.error)) toast.error("Failed to save order");
+    // Roll back too, not just toast: without this the list kept the new order
+    // on screen while the database kept the old one, so the order jumped again
+    // on the next reload with no explanation.
+    if (results.some((r) => r.error)) {
+      toast.error("Failed to save order");
+      setItemsBySet((m) => ({ ...m, [selected.id]: items }));
+    }
   };
 
   if (loading) {

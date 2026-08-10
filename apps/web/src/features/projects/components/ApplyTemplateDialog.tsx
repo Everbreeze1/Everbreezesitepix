@@ -183,7 +183,13 @@ export function ApplyTemplateDialog({
         description: it.description ?? null,
       }));
       if (rows.length) {
-        await supabase.from("project_checklist_items" as any).insert(rows);
+        // Throws into the catch below. Discarding this told the crew the
+        // inspection had been added to the job; they opened it on site and it
+        // had no items, with an orphan parent row left behind.
+        const { error: itemsErr } = await supabase
+          .from("project_checklist_items" as any)
+          .insert(rows);
+        if (itemsErr) throw itemsErr;
       }
       toast.success(`Added "${t.name}" checklist`);
       onApplied?.();

@@ -868,10 +868,16 @@ export function ProjectChecklists({
         })),
       );
       if (itErr) {
-        await supabase
+        // Compensating delete for the parent we just created. Logged rather
+        // than toasted: the user already has an accurate error, and this only
+        // matters in the compound case where the rollback fails too and leaves
+        // an empty phantom template behind.
+        const { error: cleanupErr } = await supabase
           .from("checklist_templates" as any)
           .delete()
           .eq("id", (tpl as any).id);
+        if (cleanupErr)
+          console.warn("Could not roll back empty checklist template", (tpl as any).id, cleanupErr);
         toast.error(friendlyError(itErr, "Couldn't save that template's items"));
         return;
       }

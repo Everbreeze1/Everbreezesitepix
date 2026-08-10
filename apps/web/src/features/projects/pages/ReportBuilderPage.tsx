@@ -145,7 +145,11 @@ export function ReportBuilderPage() {
       if (cancel) return;
       if (!rep.data) {
         toast.error("Report not found");
-        navigate({ to: "/projects/$projectId", params: { projectId }, search: { panel: "reports" } });
+        navigate({
+          to: "/projects/$projectId",
+          params: { projectId },
+          search: { panel: "reports" },
+        });
         return;
       }
       setReport(rep.data as ReportRow);
@@ -203,7 +207,10 @@ export function ReportBuilderPage() {
 
   // ----- section ops -----
   async function addSection() {
-    const position = sections.length;
+    // max+1, not `.length` — `deleteSection` doesn't renumber survivors, so
+    // length reused a position an existing section still held and the two then
+    // sorted arbitrarily in the builder and in the exported report.
+    const position = sections.reduce((max, s) => Math.max(max, s.position), -1) + 1;
     const { data, error } = await (supabase as any)
       .from("project_report_sections")
       .insert({ report_id: reportId, position, title: "New section", body: "", photos: [] })
@@ -232,8 +239,9 @@ export function ReportBuilderPage() {
     const next = [...sections];
     [next[idx], next[j]] = [next[j], next[idx]];
     const renumbered = next.map((s, i) => ({ ...s, position: i }));
+    const prev = sections;
     setSections(renumbered);
-    await Promise.all(
+    const results = await Promise.all(
       renumbered.map((s) =>
         (supabase as any)
           .from("project_report_sections")
@@ -241,6 +249,16 @@ export function ReportBuilderPage() {
           .eq("id", s.id),
       ),
     );
+    // The export is rendered from the database, not from this screen — so an
+    // unreported failure here shipped the customer a report whose sections are
+    // in a different order than the author was looking at. Both sibling writes
+    // in this file (`patchReport`, `patchSection`) already check; this didn't.
+    if (results.some((r: any) => r?.error)) {
+      toast.error("Couldn't save section order");
+      setSections(prev);
+      return;
+    }
+    flashSaved();
   }
   function addPhotosToSection(sectionId: string, ids: string[]) {
     const sec = sections.find((s) => s.id === sectionId);
@@ -384,7 +402,11 @@ export function ReportBuilderPage() {
             )}
           </Button>
           <Button asChild size="sm" variant="outline" disabled={!!report.revoked_at}>
-            <a href={sitepixApi.urls.reportPdf(report.share_token)} target="_blank" rel="noreferrer">
+            <a
+              href={sitepixApi.urls.reportPdf(report.share_token)}
+              target="_blank"
+              rel="noreferrer"
+            >
               <Download className="mr-1 h-4 w-4" /> PDF
             </a>
           </Button>

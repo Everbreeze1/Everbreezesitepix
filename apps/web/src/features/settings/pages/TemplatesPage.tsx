@@ -603,20 +603,25 @@ export function TemplatesPage() {
     const newId = (data as any).id as string;
     const links = attached.filter((a) => a.project_template_id === t.id);
     if (links.length) {
-      await supabase.from("project_template_checklists" as any).insert(
+      const { error: linksErr } = await supabase.from("project_template_checklists" as any).insert(
         links.map((l) => ({
           project_template_id: newId,
           checklist_template_id: l.checklist_template_id,
           position: l.position,
         })),
       );
+      if (linksErr) {
+        toast.error(linksErr.message ?? "Couldn't copy this blueprint's checklists");
+        void load();
+        return;
+      }
     }
     // Copying only the legacy checklist links silently dropped every document,
     // report, workflow and label set — a "duplicate" of a five-section
     // blueprint could come back with none of them.
     const items = tplItems.filter((i) => i.project_template_id === t.id);
     if (items.length) {
-      await supabase.from("project_template_items" as any).insert(
+      const { error: itemsErr } = await supabase.from("project_template_items" as any).insert(
         items.map((i) => ({
           project_template_id: newId,
           kind: i.kind,
@@ -624,6 +629,14 @@ export function TemplatesPage() {
           position: i.position,
         })),
       );
+      // Discarding this error reproduced the exact symptom the comment above
+      // describes: the rows are selected correctly now, but a failed insert
+      // still produced a "duplicated" blueprint with none of its sections.
+      if (itemsErr) {
+        toast.error(itemsErr.message ?? "Couldn't copy this blueprint's sections");
+        void load();
+        return;
+      }
     }
     toast.success("Blueprint duplicated");
     setSelectedId(newId);
@@ -677,7 +690,14 @@ export function TemplatesPage() {
       project_template_id: selectedId,
       kind: k,
       ref_id: refId,
-      position: sections.length,
+      // max+1 over this blueprint's rows, not `sections.length`. `removeSection`
+      // never renumbers survivors, and `sections` also counts legacy
+      // `project_template_checklists` rows — so length was both gap-blind and
+      // inflated, and could hand the new section a number a sibling held.
+      position:
+        tplItems
+          .filter((i) => i.project_template_id === selectedId)
+          .reduce((max, i) => Math.max(max, i.position), -1) + 1,
     });
     if (error) toast.error(error.message ?? "Failed to add");
     else void load();
@@ -749,7 +769,7 @@ export function TemplatesPage() {
         const idByRef = new Map(
           ((data as any[]) ?? []).map((r) => [`${r.kind}:${r.ref_id}`, r.id as string]),
         );
-        await Promise.all(
+        const migrated = await Promise.all(
           next.map((r, idx) => {
             const id = idByRef.get(`${r.kind}:${r.refId}`);
             if (!id) return Promise.resolve();
@@ -759,8 +779,14 @@ export function TemplatesPage() {
               .eq("id", id);
           }),
         );
+        // Must throw so the catch below reports it. Silence here is the worst
+        // case in this function: the legacy rows have already been migrated and
+        // deleted above, so a failed position pass leaves the blueprint
+        // permanently converted but still in the old order, saying nothing.
+        const badMigrated = migrated.find((r: any) => r?.error);
+        if (badMigrated) throw (badMigrated as any).error;
       } else {
-        await Promise.all(
+        const results = await Promise.all(
           next.map((r, idx) =>
             supabase
               .from("project_template_items" as any)
@@ -768,6 +794,10 @@ export function TemplatesPage() {
               .eq("id", r.id),
           ),
         );
+        // Without this the reorder is a silent no-op: the spinner runs, the row
+        // doesn't move, and the catch that would explain why never fires.
+        const bad = results.find((r: any) => r?.error);
+        if (bad) throw (bad as any).error;
       }
       await load();
     } catch (e: any) {
