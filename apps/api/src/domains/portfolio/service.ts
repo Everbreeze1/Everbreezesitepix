@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";
+import { requireTeamPlan } from "../../lib/team-plan";
 import { myTeamId, resolvePhotoUrls, SHOWCASE_PHOTO_WIDTH } from "../showcases/service";
 import {
   SHOWCASE_CARD_COLUMNS,
@@ -301,6 +302,10 @@ export async function updatePortfolioService(
   ctx: AuthedContext,
   data: z.infer<typeof updatePortfolioInputSchema>,
 ): Promise<{ ok: true; slug: string }> {
+  // The Portfolio site is sold as a Team-tier feature, but the only gate used
+  // to be the client-side `if (!isTeam)` on PortfolioPage. A hidden screen is
+  // not enforcement — this RPC was reachable on any plan.
+  await requireTeamPlan(ctx, "The Portfolio site");
   const teamId = await myTeamId(ctx);
   if (!teamId) badRequest("You need a team before you can publish a portfolio.");
   const db = ctx.supabase as any;
@@ -399,6 +404,7 @@ export async function checkPortfolioSlugService(
 export async function rotatePortfolioEmbedKeyService(
   ctx: AuthedContext,
 ): Promise<{ embedKey: string }> {
+  await requireTeamPlan(ctx, "The Portfolio site");
   const teamId = await myTeamId(ctx);
   if (!teamId) badRequest("You need a team before you can publish a portfolio.");
   const { data, error } = await (ctx.supabase as any)
@@ -443,6 +449,7 @@ export async function updateShowcaseSiteService(
   ctx: AuthedContext,
   data: z.infer<typeof updateShowcaseSiteInputSchema>,
 ): Promise<{ ok: true; slug: string | null }> {
+  await requireTeamPlan(ctx, "The Portfolio site");
   const teamId = await myTeamId(ctx);
   if (!teamId) badRequest("You need a team before you can publish a portfolio.");
   const db = ctx.supabase as any;
@@ -507,6 +514,7 @@ export async function reorderPortfolioShowcasesService(
   ctx: AuthedContext,
   data: z.infer<typeof reorderPortfolioShowcasesInputSchema>,
 ): Promise<{ ok: true }> {
+  await requireTeamPlan(ctx, "The Portfolio site");
   const db = ctx.supabase as any;
   for (const [index, id] of data.ids.entries()) {
     const { error } = await db.from("showcases").update({ position: index }).eq("id", id);

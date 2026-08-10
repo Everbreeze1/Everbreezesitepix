@@ -577,26 +577,46 @@ export async function acceptInviteSignupService(data: any) {
       .maybeSingle();
 
     if (existingProfile) {
-      userId = (existingProfile as any).id as string;
-      // Update password + name so they can log in with what they just typed.
-      const { error: updErr } = await (supabaseAdmin as any).auth.admin.updateUserById(userId, {
-        password: data.password,
-        email_confirm: true,
-        user_metadata: { full_name: data.fullName },
-      });
-      if (updErr) throw new Error(updErr.message);
-    } else {
-      const { data: created, error: createErr } = await (supabaseAdmin as any).auth.admin.createUser({
-        email: inviteEmail,
-        password: data.password,
-        email_confirm: true,
-        user_metadata: { full_name: data.fullName },
-      });
-      if (createErr || !created?.user) {
-        throw new Error(createErr?.message ?? "Failed to create account");
-      }
-      userId = created.user.id as string;
+      /*
+       * SECURITY — never modify an account that already exists.
+       *
+       * This operation is PUBLIC: it is registered with `pub()` in the RPC
+       * registry, so there is no Authorization header and the caller has
+       * proven nothing about who they are. It used to call
+       * `auth.admin.updateUserById(userId, { password, email_confirm: true })`
+       * right here, which turned a team invite into an unauthenticated
+       * password reset for the invited address.
+       *
+       * The invite token is not a secret from the inviter, either:
+       * `inviteMemberService` returns the inserted row with `select("*")` and
+       * `getMyTeamService` selects `token` explicitly. So anyone who could
+       * invite an address — which is any signed-up user, since `createTeam`
+       * is ungated and the only restriction is that the target isn't already
+       * on a team — could read the token out of their own response, POST it
+       * here with a password of their choosing, and take over that account
+       * along with every project, photo, report and share link on it. The
+       * victim received no notification, because the "joined your team"
+       * notification is sent to the inviter.
+       *
+       * Signing up is only ever for an address with no account. An existing
+       * user joins through the authenticated `acceptInvite` op, which proves
+       * they control the address by making them log in first.
+       */
+      throw new Error(
+        "An account already exists for this email. Please sign in first, then open the invite link again to join the team.",
+      );
     }
+
+    const { data: created, error: createErr } = await (supabaseAdmin as any).auth.admin.createUser({
+      email: inviteEmail,
+      password: data.password,
+      email_confirm: true,
+      user_metadata: { full_name: data.fullName },
+    });
+    if (createErr || !created?.user) {
+      throw new Error(createErr?.message ?? "Failed to create account");
+    }
+    userId = created.user.id as string;
 
     if (!userId) throw new Error("Failed to resolve user");
 

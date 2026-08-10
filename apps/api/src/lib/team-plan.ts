@@ -35,6 +35,24 @@ export interface CallerPlan {
  * as active Team tier regardless of its raw `plan` column, so complimentary
  * accounts get full access rather than merely bypassing the paywall.
  */
+/**
+ * Server-side gate for a Team-tier feature.
+ *
+ * The client hides these behind `useSubscription().isTeam`, but a hidden button
+ * is not enforcement — the RPC stays reachable with a hand-made request, so a
+ * Starter account could use a feature it never paid for. Any write that is
+ * *sold* as Team-only needs this on the server as well as in the UI.
+ */
+export async function requireTeamPlan(
+  ctx: { supabase: AuthedContext["supabase"]; userId: string },
+  feature: string,
+): Promise<void> {
+  const plan = await getCallerTeamPlan(ctx.supabase, ctx.userId);
+  if (!plan.isTeam) {
+    throw Object.assign(new Error(`${feature} requires the Team plan.`), { status: 403 });
+  }
+}
+
 export async function getCallerTeamPlan(
   supabase: AuthedContext["supabase"],
   userId: string,

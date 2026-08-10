@@ -720,6 +720,39 @@ export async function setShowcaseItemsService(
   ctx: AuthedContext,
   data: z.infer<typeof setShowcaseItemsInputSchema>,
 ): Promise<{ ok: true }> {
+  /*
+   * SECURITY — validate photo ownership BEFORE touching anything.
+   *
+   * `showcase_items.photo_id` has no foreign key, and the table's RLS only
+   * asserts that the parent showcase belongs to the caller's team. It never
+   * looks at the photo. `resolvePhotoUrls` then reads those ids with the
+   * SERVICE-ROLE client, which bypasses the `photos` RLS that would otherwise
+   * hide them — so an unvalidated id here let any authenticated user point
+   * their own showcase at somebody else's photo and mint a signed URL for it,
+   * renewable indefinitely. Photo ids are not secret: the public report and
+   * walkthrough endpoints hand them out.
+   *
+   * Reading through `ctx.supabase` IS the check — it is the caller's
+   * RLS-scoped client, so ids they cannot see simply do not come back.
+   *
+   * This runs before the delete on purpose: a rejected request must not wipe
+   * the showcase's existing items on its way out.
+   */
+  if (data.items.length) {
+    const requested = Array.from(new Set(data.items.map((it) => it.photoId)));
+    const { data: visible, error: visErr } = await (ctx.supabase as any)
+      .from("photos")
+      .select("id")
+      .in("id", requested);
+    if (visErr) throw Object.assign(new Error(visErr.message), { status: 400 });
+    const allowed = new Set(((visible as Array<{ id: string }>) ?? []).map((r) => r.id));
+    if (requested.some((id) => !allowed.has(id))) {
+      throw Object.assign(new Error("One or more of those photos aren't available to you."), {
+        status: 403,
+      });
+    }
+  }
+
   await (ctx.supabase as any).from("showcase_items").delete().eq("showcase_id", data.showcaseId);
   if (data.items.length) {
     const rows = data.items.map((it, i) => ({

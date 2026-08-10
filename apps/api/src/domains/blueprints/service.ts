@@ -58,6 +58,28 @@ export async function applyProjectBlueprintService(
   await requireOwnProject(ctx, data.projectId);
   await requireTeamPlan(ctx);
 
+  /*
+   * SECURITY — prove the caller can see this blueprint before dereferencing it.
+   *
+   * `requireOwnProject` validates the DESTINATION and `requireTeamPlan` the
+   * plan, but `blueprintId` itself was never checked, and every read below
+   * runs on the SERVICE-ROLE client, which bypasses RLS. A caller could pass
+   * another team's blueprint id and have its checklists, documents, reports,
+   * workflows and label sets copied wholesale into their own project — a full
+   * read of another team's template library through a write endpoint.
+   *
+   * Reading through `ctx.supabase` IS the check: RLS hides rows the caller has
+   * no access to, so a miss here means "not yours".
+   */
+  const { data: ownBlueprint } = await (ctx.supabase as any)
+    .from("project_templates")
+    .select("id")
+    .eq("id", data.blueprintId)
+    .maybeSingle();
+  if (!ownBlueprint) {
+    throw Object.assign(new Error("That blueprint isn't available to you."), { status: 403 });
+  }
+
   const supabaseAdmin = getSupabaseAdmin();
   const counts: Record<string, number> = {
     checklists: 0,

@@ -429,6 +429,23 @@ export async function saveWalkthroughPhotoService(ctx: AuthedContext, data: any)
       throw new Error("Walkthrough not found or access denied");
     }
 
+    /*
+     * SECURITY — the storage path is client-supplied and was written verbatim.
+     * Every reader signs `photos.storage_path` with the service role, so a row
+     * pointing at someone else's object becomes a permanent, renewable read
+     * handle for their file. Uploads always land under `{userId}/{projectId}/`
+     * (see the client's upload paths), so anything outside that prefix is not
+     * this caller's to reference.
+     */
+    const expectedPrefix = `${userId}/${data.projectId}/`;
+    if (!data.storagePath.startsWith(expectedPrefix) || data.storagePath.includes("..")) {
+      console.error("[walkthrough] rejected out-of-prefix storage path", {
+        walkthroughId: data.walkthroughId,
+        storagePath: data.storagePath,
+      });
+      throw new Error("Invalid storage path");
+    }
+
     const { data: photo, error: photoErr } = await supabaseAdmin
       .from("photos")
       .insert({
@@ -673,10 +690,25 @@ export async function updateWalkthroughVideoPathService(ctx: AuthedContext, data
     const supabaseAdmin = getSupabaseAdmin();
     const { data: walk } = await supabaseAdmin
       .from("walkthroughs" as any)
-      .select("id, created_by")
+      .select("id, created_by, project_id")
       .eq("id", data.walkthroughId)
       .maybeSingle();
     if (!walk || (walk as any).created_by !== userId) throw new Error("Walkthrough not found or access denied");
+    // Same client-supplied-path problem as `saveWalkthroughPhotoService`: the
+    // stored path is later signed with the service role, so it must be inside
+    // this caller's own upload prefix.
+    const expectedPrefix = `${userId}/${(walk as any).project_id}/`;
+    if (
+      typeof data.videoPath !== "string" ||
+      !data.videoPath.startsWith(expectedPrefix) ||
+      data.videoPath.includes("..")
+    ) {
+      console.error("[walkthrough] rejected out-of-prefix video path", {
+        walkthroughId: data.walkthroughId,
+        videoPath: data.videoPath,
+      });
+      throw new Error("Invalid video path");
+    }
     const { error } = await supabaseAdmin
       .from("walkthroughs" as any)
       .update({ video_path: data.videoPath, video_mime_type: data.videoMimeType } as any)

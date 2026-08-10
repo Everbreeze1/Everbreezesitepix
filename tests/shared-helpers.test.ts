@@ -75,6 +75,35 @@ describe("isFilenameLikeCaption", () => {
     expect(isFilenameLikeCaption("Cracked flashing on north elevation")).toBe(false);
     expect(isFilenameLikeCaption("Unit 3B")).toBe(false);
   });
+
+  /*
+   * The prefix rule used to fire on anything merely STARTING with one of the
+   * generated-name words plus a digit, so these real captions were discarded —
+   * and `sanitizeCaption` blanks them, with report sections persisting the
+   * blank. The digit run now has to reach the end of the string.
+   */
+  it("keeps captions that begin with a generated-looking word but continue in prose", () => {
+    expect(isFilenameLikeCaption("Photo 3 of the north wall crack")).toBe(false);
+    expect(isFilenameLikeCaption("Image 2 shows the damaged flashing")).toBe(false);
+    expect(isFilenameLikeCaption("Capture 1 — before repair")).toBe(false);
+    expect(isFilenameLikeCaption("IMG 4 taken from the roof")).toBe(false);
+  });
+
+  it("still discards bare generated names with no extension", () => {
+    expect(isFilenameLikeCaption("Photo 1781560897511")).toBe(true);
+    expect(isFilenameLikeCaption("IMG_1234")).toBe(true);
+    expect(isFilenameLikeCaption("photo-2025-01-02")).toBe(true);
+    expect(isFilenameLikeCaption("sitepix-1781560897511")).toBe(true);
+  });
+
+  it("a real caption survives sanitizeCaption end to end", () => {
+    expect(sanitizeCaption("Photo 3 of the north wall crack")).toBe(
+      "Photo 3 of the north wall crack",
+    );
+    expect(sanitizeCaption("<p>Photo 3 of the north wall crack</p>")).toBe(
+      "<p>Photo 3 of the north wall crack</p>",
+    );
+  });
 });
 
 describe("cleanCaption / displayCaption", () => {

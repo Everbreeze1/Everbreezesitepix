@@ -788,13 +788,17 @@ export async function getPublicProjectPagePdfService(
   if (error || !row || row.revoked_at) throw new Error("Page not available");
 
   const supa = admin as any;
+  // Scoped to this page's project: `supa` is the service-role client, and the
+  // `data-photo-id` values come from author-controlled HTML that is stored
+  // without validating them. Unscoped, a pasted foreign id would be signed
+  // into the public PDF regardless of who owns that photo.
   const [contentHtml, headerHtml, footerHtml] = await Promise.all([
-    resolvePageImages(row.content_html, supa),
+    resolvePageImages(row.content_html, supa, row.project_id),
     resolveHeaderFooterTokens(row.header_html, row.project_id, row.created_by).then((h) =>
-      h ? resolvePageImages(h, supa) : h,
+      h ? resolvePageImages(h, supa, row.project_id) : h,
     ),
     resolveHeaderFooterTokens(row.footer_html, row.project_id, row.created_by).then((h) =>
-      h ? resolvePageImages(h, supa) : h,
+      h ? resolvePageImages(h, supa, row.project_id) : h,
     ),
   ]);
   return renderPagePdf(row.title, contentHtml, headerHtml, footerHtml);

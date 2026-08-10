@@ -22,14 +22,25 @@ export function stripPhotoSlots(html: string): string {
 export async function resolvePageImages(
   html: string,
   supabase: SupabaseClient<any>,
+  /**
+   * Restricts resolution to one project's photos.
+   *
+   * REQUIRED on any path that passes the service-role client. The ids come
+   * from `data-photo-id` attributes inside author-controlled HTML, which is
+   * stored with no validation of those ids at all — so on the public share
+   * route the service role would happily sign any photo in the system whose
+   * id an author pasted into their document, bypassing the `photos` RLS
+   * entirely. Scoping to the page's own project makes a pasted foreign id
+   * resolve to nothing instead.
+   */
+  projectId?: string,
 ): Promise<string> {
   const ids = Array.from(new Set(Array.from(html.matchAll(IMG_TAG_RE), (m) => m[1])));
   if (!ids.length) return html;
 
-  const { data: rows } = await supabase
-    .from("photos")
-    .select("id, storage_path, image_url")
-    .in("id", ids);
+  let query = supabase.from("photos").select("id, storage_path, image_url").in("id", ids);
+  if (projectId) query = query.eq("project_id", projectId);
+  const { data: rows } = await query;
   const urlById = new Map<string, string>();
   await Promise.all(
     ((rows as Array<{ id: string; storage_path: string; image_url: string | null }>) ?? []).map(
@@ -595,13 +606,16 @@ export async function getPublicProjectPageService(
   if (row.revoked_at) return { status: "revoked", page: null };
 
   const supa = admin as unknown as SupabaseClient<any>;
+  // `supa` is the service-role client, so every resolution here is scoped to
+  // this page's own project — otherwise a `data-photo-id` the author pasted in
+  // by hand would be signed regardless of who owns the photo.
   const [contentHtml, headerHtml, footerHtml] = await Promise.all([
-    resolvePageImages(row.content_html, supa).then(stripPhotoSlots),
+    resolvePageImages(row.content_html, supa, row.project_id).then(stripPhotoSlots),
     resolveHeaderFooterTokens(row.header_html, row.project_id, row.created_by).then((h) =>
-      h ? resolvePageImages(h, supa).then(stripPhotoSlots) : h,
+      h ? resolvePageImages(h, supa, row.project_id).then(stripPhotoSlots) : h,
     ),
     resolveHeaderFooterTokens(row.footer_html, row.project_id, row.created_by).then((h) =>
-      h ? resolvePageImages(h, supa).then(stripPhotoSlots) : h,
+      h ? resolvePageImages(h, supa, row.project_id).then(stripPhotoSlots) : h,
     ),
   ]);
   /*
