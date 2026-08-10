@@ -320,6 +320,17 @@ export function GalleryPage() {
 
       if (insErr || !inserted) {
         toast.error(insErr?.message ?? "Insert failed");
+        /*
+         * Reclaim the blob we just uploaded. Without this a failed insert
+         * leaves a file in the bucket that no row references — and it is
+         * unreachable forever: `use-storage-usage` derives usage from
+         * SUM(photos.size_bytes) so it isn't even counted, and every delete
+         * path keys off `photos.storage_path`, so nothing in the product can
+         * ever find it. This is the mirror of the delete ordering fixed
+         * elsewhere: confirm the row before destroying the blob on the way
+         * out, discard the blob when the row fails on the way in.
+         */
+        void supabase.storage.from("site-photos").remove([path]);
         return;
       }
       toast.success("Photo saved");
@@ -578,7 +589,11 @@ export function GalleryPage() {
           caption: file.name,
           phase: tag ?? "untagged",
         });
-        if (insErr) toast.error(insErr.message);
+        if (insErr) {
+          toast.error(insErr.message);
+          // Reclaim the orphaned upload — nothing else can, see `saveCapture`.
+          void supabase.storage.from("site-photos").remove([path]);
+        }
       }
       toast.success("Photos uploaded");
       await invalidatePhotoCaches();

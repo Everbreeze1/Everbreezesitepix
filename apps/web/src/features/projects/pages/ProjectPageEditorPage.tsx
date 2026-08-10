@@ -258,15 +258,24 @@ export function ProjectPageEditorPage() {
         .order("created_at", { ascending: false })
         .limit(200);
       const rows = (data as any[]) ?? [];
+      // Batch signing, not one awaited request per row — at the 200-row limit
+      // above that was 200 sequential round trips before the picker showed
+      // anything. `ProjectChecklists.signPhotos` is the model.
+      const toSign = rows
+        .filter((r) => !r.image_url && r.storage_path)
+        .map((r) => r.storage_path as string);
+      const signedByPath: Record<string, string> = {};
+      if (toSign.length) {
+        const { data: signed } = await supabase.storage
+          .from("site-photos")
+          .createSignedUrls(toSign, 3600);
+        signed?.forEach((s, i) => {
+          if (s.signedUrl) signedByPath[toSign[i]] = s.signedUrl;
+        });
+      }
       const resolved: ProjectPhoto[] = [];
       for (const r of rows) {
-        let url = r.image_url as string | null;
-        if (!url) {
-          const { data: s } = await supabase.storage
-            .from("site-photos")
-            .createSignedUrl(r.storage_path, 3600);
-          url = s?.signedUrl ?? null;
-        }
+        const url = (r.image_url as string | null) ?? signedByPath[r.storage_path] ?? null;
         if (url) resolved.push({ id: r.id, url, caption: r.caption });
       }
       setPhotos(resolved);
@@ -279,6 +288,8 @@ export function ProjectPageEditorPage() {
   const debouncedHeaderHtml = useDebouncedValue(headerHtml, 1200);
   const debouncedFooterHtml = useDebouncedValue(footerHtml, 1200);
   const firstRun = useRef(true);
+  /** Serialises autosaves so two in-flight writes can't land out of order. */
+  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
     if (loading) return;
@@ -286,26 +297,35 @@ export function ProjectPageEditorPage() {
       firstRun.current = false;
       return;
     }
-    (async () => {
-      setSaving(true);
-      try {
-        await updateProjectPage({
-          data: {
-            pageId,
-            title: debouncedTitle,
-            contentHtml: debouncedHtml,
-            headerHtml: showHeader ? debouncedHeaderHtml : null,
-            footerHtml: showFooter ? debouncedFooterHtml : null,
-          },
-        });
-        setUpdatedAt(new Date().toISOString());
-        unsavedRef.current = false;
-      } catch (e: any) {
-        toast.error(e?.message ?? "Could not save");
-      } finally {
-        setSaving(false);
-      }
-    })();
+    /*
+     * Queued behind whatever is already saving. The four values debounce on
+     * two different schedules (800ms for the title, 1200ms for the bodies), so
+     * two writes could be in flight at once with nothing ordering them — and
+     * because each carries a full snapshot, an older one landing second
+     * silently reverted the newer content.
+     */
+    saveChain.current = saveChain.current
+      .catch(() => {})
+      .then(async () => {
+        setSaving(true);
+        try {
+          await updateProjectPage({
+            data: {
+              pageId,
+              title: debouncedTitle,
+              contentHtml: debouncedHtml,
+              headerHtml: showHeader ? debouncedHeaderHtml : null,
+              footerHtml: showFooter ? debouncedFooterHtml : null,
+            },
+          });
+          setUpdatedAt(new Date().toISOString());
+          unsavedRef.current = false;
+        } catch (e: any) {
+          toast.error(e?.message ?? "Could not save");
+        } finally {
+          setSaving(false);
+        }
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     debouncedTitle,

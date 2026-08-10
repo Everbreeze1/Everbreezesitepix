@@ -272,15 +272,20 @@ function SiteLogBuilder({
       if (cancelled) return;
       const list = (ps as Photo[]) ?? [];
       setPhotos(list);
+      // One batch request instead of up to 500 concurrent ones — the fan-out
+      // was enough to saturate the browser's connection pool and stall the
+      // rest of the page's requests behind it.
       const sig: Record<string, string> = {};
-      await Promise.all(
-        list.map(async (p) => {
-          const { data: s } = await supabase.storage
-            .from("site-photos")
-            .createSignedUrl(p.storage_path, 3600);
-          if (s) sig[p.id] = s.signedUrl;
-        }),
-      );
+      const signable = list.filter((p) => !!p.storage_path);
+      if (signable.length) {
+        const { data: signed } = await supabase.storage.from("site-photos").createSignedUrls(
+          signable.map((p) => p.storage_path),
+          3600,
+        );
+        signed?.forEach((s, i) => {
+          if (s.signedUrl) sig[signable[i].id] = s.signedUrl;
+        });
+      }
       if (!cancelled) {
         setSigned(sig);
         setLoading(false);

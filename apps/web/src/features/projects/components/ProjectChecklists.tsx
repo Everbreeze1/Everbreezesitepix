@@ -1992,7 +1992,12 @@ function AttachPhotosDialog({
             } as any)
             .select("id")
             .single();
-          if (insErr || !row) throw insErr ?? new Error("Upload failed");
+          if (insErr || !row) {
+            // Reclaim the orphaned upload — nothing references it, so no
+            // delete path can ever reach it and storage usage won't count it.
+            void supabase.storage.from("site-photos").remove([path]);
+            throw insErr ?? new Error("Upload failed");
+          }
           newPhotoIds.push(row.id);
         } catch (e: any) {
           toast.error(e?.message ?? "Upload failed");

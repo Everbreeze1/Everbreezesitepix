@@ -665,7 +665,12 @@ export function ProjectWorkflows({
         } as any)
         .select("id, storage_path, image_url")
         .single();
-      if (insErr || !row) throw insErr ?? new Error("Couldn't save that photo");
+      if (insErr || !row) {
+        // Reclaim the orphaned upload before bailing — no row will reference
+        // it, so no delete path can ever find it again.
+        void supabase.storage.from("site-photos").remove([path]);
+        throw insErr ?? new Error("Couldn't save that photo");
+      }
 
       const photoId = (row as any).id as string;
       const patch = {

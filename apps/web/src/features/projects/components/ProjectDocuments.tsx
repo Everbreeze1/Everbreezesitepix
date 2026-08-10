@@ -218,7 +218,13 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
           size_bytes: file.size,
           folder_id: currentFolderId,
         });
-        if (insErr) toast.error(`${file.name}: ${insErr.message}`);
+        if (insErr) {
+          toast.error(`${file.name}: ${insErr.message}`);
+          // Reclaim the orphaned upload: with no `project_documents` row
+          // pointing at it, every delete path in this file — which all key off
+          // `storage_path` — is permanently unable to find it.
+          void supabase.storage.from("site-documents").remove([path]);
+        }
       }
       toast.success(list.length > 1 ? `${list.length} documents added` : "Document added");
       await load();

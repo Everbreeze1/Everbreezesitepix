@@ -921,6 +921,9 @@ export function ProjectDetailPage() {
       .single();
     if (insErr || !row) {
       toast.error(insErr?.message ?? "Upload failed");
+      // Reclaim the blob: with no row referencing it, nothing in the product
+      // can ever reach it again and storage usage won't even count it.
+      void supabase.storage.from("site-photos").remove([path]);
       return null;
     }
     return row.id;

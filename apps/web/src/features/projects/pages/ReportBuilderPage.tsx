@@ -167,39 +167,99 @@ export function ReportBuilderPage() {
     };
   }, [reportId, projectId, navigate]);
 
+  /*
+   * Autosave for this screen coalesces pending patches instead of replacing
+   * them. Both timers below used to close over a single `patch` object, so
+   * re-arming inside the debounce window discarded the earlier patch outright:
+   * choose cover photos, type one character within 600ms, and the cover write
+   * was cancelled and never re-issued — local state kept showing the covers
+   * that the database, and therefore the exported and shared PDF, never got.
+   * It is invisible when testing one field at a time, because each keystroke in
+   * a single input carries that whole field's current value.
+   *
+   * `components/builder/use-autosave.ts` merges the same way for the screens
+   * that use it; this file predates it and hand-rolls the debounce.
+   */
+
   // ----- autosave: report meta -----
   const reportSaveTimer = useRef<number | null>(null);
+  const reportPending = useRef<Partial<ReportRow>>({});
   function patchReport(patch: Partial<ReportRow>) {
     setReport((r) => (r ? { ...r, ...patch } : r));
+    reportPending.current = { ...reportPending.current, ...patch };
     if (reportSaveTimer.current) window.clearTimeout(reportSaveTimer.current);
     reportSaveTimer.current = window.setTimeout(async () => {
+      const payload = reportPending.current;
+      reportPending.current = {};
+      if (!Object.keys(payload).length) return;
       setSavingFlash("saving");
       const { error } = await (supabase as any)
         .from("project_reports")
-        .update(patch)
+        .update(payload)
         .eq("id", reportId);
-      if (error) toast.error("Save failed", { description: error.message });
+      if (error) {
+        // Put the fields back so the next edit retries them rather than
+        // dropping them. Anything queued since wins the merge.
+        reportPending.current = { ...payload, ...reportPending.current };
+        toast.error("Save failed", { description: error.message });
+        setSavingFlash("idle");
+        return;
+      }
       flashSaved();
     }, 600);
   }
 
   // ----- autosave: section -----
   const sectionTimers = useRef<Map<string, number>>(new Map());
+  const sectionPending = useRef<Map<string, Partial<SectionRow>>>(new Map());
   function patchSection(id: string, patch: Partial<SectionRow>) {
     setSections((rows) => rows.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    sectionPending.current.set(id, { ...(sectionPending.current.get(id) ?? {}), ...patch });
     const existing = sectionTimers.current.get(id);
     if (existing) window.clearTimeout(existing);
     const t = window.setTimeout(async () => {
+      const payload = sectionPending.current.get(id) ?? {};
+      sectionPending.current.delete(id);
+      if (!Object.keys(payload).length) return;
       setSavingFlash("saving");
       const { error } = await (supabase as any)
         .from("project_report_sections")
-        .update(patch)
+        .update(payload)
         .eq("id", id);
-      if (error) toast.error("Section save failed", { description: error.message });
+      if (error) {
+        sectionPending.current.set(id, { ...payload, ...(sectionPending.current.get(id) ?? {}) });
+        toast.error("Section save failed", { description: error.message });
+        setSavingFlash("idle");
+        return;
+      }
       flashSaved();
     }, 600);
     sectionTimers.current.set(id, t);
   }
+
+  /*
+   * Flush whatever is still debounced when the editor unmounts. Navigating away
+   * inside the 600ms window otherwise dropped the last edit with no signal —
+   * the timers were never cleared either, so they also fired into a dead
+   * component. Fire-and-forget is deliberate: unmount can't await, and a
+   * best-effort write beats a guaranteed loss.
+   */
+  useEffect(() => {
+    return () => {
+      if (reportSaveTimer.current) window.clearTimeout(reportSaveTimer.current);
+      const pendingReport = reportPending.current;
+      reportPending.current = {};
+      if (Object.keys(pendingReport).length)
+        void (supabase as any).from("project_reports").update(pendingReport).eq("id", reportId);
+      for (const t of sectionTimers.current.values()) window.clearTimeout(t);
+      const pendingSections = new Map(sectionPending.current);
+      sectionPending.current.clear();
+      for (const [sid, payload] of pendingSections) {
+        if (Object.keys(payload).length)
+          void (supabase as any).from("project_report_sections").update(payload).eq("id", sid);
+      }
+    };
+  }, [reportId]);
   function flashSaved() {
     setSavingFlash("saved");
     window.setTimeout(() => setSavingFlash("idle"), 1200);
@@ -946,27 +1006,28 @@ async function loadProjectPhotos(projectId: string): Promise<PhotoRef[]> {
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
   const rows = (data as any[]) ?? [];
-  const out: PhotoRef[] = [];
-  await Promise.all(
-    rows.map(async (r) => {
-      let url = r.image_url as string | null;
-      if (!url && r.storage_path) {
-        const { data: s } = await supabase.storage
-          .from("site-photos")
-          .createSignedUrl(r.storage_path, 60 * 60);
-        url = s?.signedUrl ?? "";
-      }
-      out.push({
-        id: r.id,
-        url: url ?? "",
-        caption: sanitizeCaption(r.caption) || null,
-        taken_at: r.taken_at ?? null,
-        tags: r.tags ?? [],
-        phase: r.phase ?? null,
-      });
-    }),
-  );
-  const order = new Map(rows.map((r, i) => [r.id, i]));
-  out.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-  return out;
+  // One batch signing request rather than one per row. This query has no
+  // `.limit()` at all, so on a long-running project the old fan-out issued a
+  // signing request for every unsigned photo in the project at once.
+  const toSign = rows
+    .filter((r) => !r.image_url && r.storage_path)
+    .map((r) => r.storage_path as string);
+  const signedByPath: Record<string, string> = {};
+  if (toSign.length) {
+    const { data: signed } = await supabase.storage
+      .from("site-photos")
+      .createSignedUrls(toSign, 60 * 60);
+    signed?.forEach((s, i) => {
+      if (s.signedUrl) signedByPath[toSign[i]] = s.signedUrl;
+    });
+  }
+  // Built in query order, so the re-sort the fan-out needed is gone with it.
+  return rows.map((r) => ({
+    id: r.id,
+    url: (r.image_url as string | null) ?? signedByPath[r.storage_path] ?? "",
+    caption: sanitizeCaption(r.caption) || null,
+    taken_at: r.taken_at ?? null,
+    tags: r.tags ?? [],
+    phase: r.phase ?? null,
+  }));
 }

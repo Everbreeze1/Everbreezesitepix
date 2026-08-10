@@ -67,15 +67,29 @@ export function SelectPhotosForPageDialog({
         if (error) throw error;
 
         const rows = (data as any[]) ?? [];
+        /*
+         * One batch signing request rather than one per row inside an awaited
+         * loop. At the 300-row limit above that was 300 sequential round trips
+         * — tens of seconds on a field connection before a single thumbnail
+         * appeared, and invisible in dev where a project has five photos.
+         * `createSignedUrls` (plural) signs the whole array at once;
+         * `ProjectChecklists.signPhotos` is the model implementation.
+         */
+        const toSign = rows
+          .filter((r) => !r.image_url && r.storage_path)
+          .map((r) => r.storage_path as string);
+        const signedByPath: Record<string, string> = {};
+        if (toSign.length) {
+          const { data: signed } = await supabase.storage
+            .from("site-photos")
+            .createSignedUrls(toSign, 3600);
+          signed?.forEach((s, i) => {
+            if (s.signedUrl) signedByPath[toSign[i]] = s.signedUrl;
+          });
+        }
         const resolved: PickerPhoto[] = [];
         for (const r of rows) {
-          let url = r.image_url as string | null;
-          if (!url) {
-            const { data: s } = await supabase.storage
-              .from("site-photos")
-              .createSignedUrl(r.storage_path, 3600);
-            url = s?.signedUrl ?? null;
-          }
+          const url = (r.image_url as string | null) ?? signedByPath[r.storage_path] ?? null;
           if (url) {
             resolved.push({
               id: r.id,
