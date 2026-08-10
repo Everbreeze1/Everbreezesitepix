@@ -190,7 +190,7 @@ export function SettingsPage() {
   const initial = (profile?.full_name || user?.email || "?")[0]?.toUpperCase();
 
   return (
-    <div className="mx-auto max-w-[1192px] px-6 py-10 md:px-10">
+    <div className="mx-auto max-w-[1192px] px-6 pb-24 pt-10 md:px-10">
       <PageHeader
         eyebrow="Workspace settings"
         title="Your account, in focus."
@@ -1472,12 +1472,17 @@ function ReviewLinksSection({ isTeam }: { isTeam: boolean }) {
       </p>
 
       {links.map((l, i) => (
-        <div key={i} className="flex flex-col gap-2 rounded-xl border border-border p-4 sm:flex-row sm:items-center">
+        <div
+          key={i}
+          className="flex flex-col gap-2 rounded-xl border border-border p-4 sm:flex-row sm:items-center"
+        >
           <select
             value={l.platform}
             onChange={(e) =>
               setLinks((prev) =>
-                prev.map((x, xi) => (xi === i ? { ...x, platform: e.target.value as ReviewLink["platform"] } : x)),
+                prev.map((x, xi) =>
+                  xi === i ? { ...x, platform: e.target.value as ReviewLink["platform"] } : x,
+                ),
               )
             }
             className={cn(inputClass, "sm:w-56")}
@@ -1492,7 +1497,9 @@ function ReviewLinksSection({ isTeam }: { isTeam: boolean }) {
             <Input
               value={l.label}
               onChange={(e) =>
-                setLinks((prev) => prev.map((x, xi) => (xi === i ? { ...x, label: e.target.value } : x)))
+                setLinks((prev) =>
+                  prev.map((x, xi) => (xi === i ? { ...x, label: e.target.value } : x)),
+                )
               }
               placeholder="Label (e.g. Yelp)"
               className={cn(inputClass, "sm:w-40")}
@@ -1501,7 +1508,9 @@ function ReviewLinksSection({ isTeam }: { isTeam: boolean }) {
           <Input
             value={l.url}
             onChange={(e) =>
-              setLinks((prev) => prev.map((x, xi) => (xi === i ? { ...x, url: e.target.value } : x)))
+              setLinks((prev) =>
+                prev.map((x, xi) => (xi === i ? { ...x, url: e.target.value } : x)),
+              )
             }
             placeholder="https://..."
             className={inputClass}

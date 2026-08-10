@@ -406,7 +406,7 @@ export function MapPage() {
   };
 
   return (
-    <div className="min-h-full bg-background p-6 sm:p-10">
+    <div className="min-h-full bg-background px-6 pb-24 pt-6 sm:px-10 sm:pt-10">
       <PageHeader
         eyebrow="Field overview"
         title="Project map"

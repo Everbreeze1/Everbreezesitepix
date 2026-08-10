@@ -146,7 +146,7 @@ export function PortfolioPage() {
     typeof window !== "undefined" ? `${window.location.origin}/p/${p.slug}` : `/p/${p.slug}`;
 
   return (
-    <div className="p-6 sm:p-10">
+    <div className="px-6 pb-24 pt-6 sm:px-10 sm:pt-10">
       <PageHeader
         title="Portfolio"
         description="A shareable mini-site of your best work — one page per project, plus embeds for your own website."

@@ -1,6 +1,14 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, ShieldAlert, LayoutDashboard, Users, Bell, Building2, ScrollText } from "lucide-react";
+import {
+  Loader2,
+  ShieldAlert,
+  LayoutDashboard,
+  Users,
+  Bell,
+  Building2,
+  ScrollText,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { checkIsPlatformAdmin } from "@/lib/admin.functions";
 
@@ -35,22 +43,25 @@ export function AdminLayout() {
         <ShieldAlert className="h-10 w-10 text-muted-foreground" />
         <h1 className="text-lg font-extrabold text-foreground">Admin access required</h1>
         <p className="max-w-sm text-sm text-muted-foreground">
-          This page is restricted to platform admins. Contact whoever manages the SitePix
-          Supabase project if you believe you should have access.
+          This page is restricted to platform admins. Contact whoever manages the SitePix Supabase
+          project if you believe you should have access.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-full bg-background p-6 sm:p-10">
+    <div className="min-h-full bg-background px-6 pb-24 pt-6 sm:px-10 sm:pt-10">
       <h1 className="text-xl font-extrabold text-foreground">Admin dashboard</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Platform-wide tools, restricted to admins.</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Platform-wide tools, restricted to admins.
+      </p>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[220px_1fr]">
         <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
           {ADMIN_NAV.map((item) => {
-            const isActive = item.to === "/admin" ? pathname === "/admin" : pathname.startsWith(item.to);
+            const isActive =
+              item.to === "/admin" ? pathname === "/admin" : pathname.startsWith(item.to);
             return (
               <Link
                 key={item.to}

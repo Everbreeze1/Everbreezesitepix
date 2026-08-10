@@ -346,7 +346,7 @@ export function DashboardPage() {
   );
 
   return (
-    <div className="min-h-full bg-background p-6 sm:p-10">
+    <div className="min-h-full bg-background px-6 pb-24 pt-6 sm:px-10 sm:pt-10">
       {/* Greeting hero */}
       <div className="relative overflow-hidden rounded-[32px] border border-border bg-card p-8 sm:p-10">
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary/10 blur-[64px]" />
@@ -368,9 +368,7 @@ export function DashboardPage() {
             onClick={() =>
               guard(
                 () =>
-                  projects.length === 0
-                    ? navigate({ to: "/projects/new" })
-                    : setCaptureOpen(true),
+                  projects.length === 0 ? navigate({ to: "/projects/new" }) : setCaptureOpen(true),
                 "Subscribe to capture new field updates.",
               )
             }

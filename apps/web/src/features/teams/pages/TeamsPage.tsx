@@ -103,7 +103,7 @@ export function TeamsPage() {
   // Members/admins were invited — they shouldn't see plan, seats, or invites.
   if (data.myRole !== "owner") {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-16 text-center">
+      <div className="mx-auto max-w-2xl px-4 pb-24 pt-16 text-center">
         <h1 className="font-display text-2xl font-bold text-foreground">
           Team settings are owner-only
         </h1>
@@ -147,7 +147,7 @@ const DESIGN_PREVIEW_MEMBERS = [
 
 function TeamDesignPreview() {
   return (
-    <div className="mx-auto max-w-[1192px] px-6 py-10 md:px-10">
+    <div className="mx-auto max-w-[1192px] px-6 pb-24 pt-10 md:px-10">
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
           <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
@@ -224,7 +224,7 @@ function CreateTeamView({ onCreated }: { onCreated: () => void }) {
   });
 
   return (
-    <div className="mx-auto max-w-[1192px] px-6 py-10 md:px-10">
+    <div className="mx-auto max-w-[1192px] px-6 pb-24 pt-10 md:px-10">
       <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
         Stay aligned
       </p>
@@ -324,7 +324,7 @@ function TeamDashboard({
   const [inviteOpen, setInviteOpen] = useState(false);
 
   return (
-    <div className="mx-auto max-w-[1192px] px-6 py-10 md:px-10">
+    <div className="mx-auto max-w-[1192px] px-6 pb-24 pt-10 md:px-10">
       <PageHeader
         eyebrow="Stay aligned"
         title={team.name || "Teams"}
