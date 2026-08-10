@@ -423,7 +423,9 @@ export function ReportTemplatesManager({ teamId, canManage }: Props) {
             onDelete={() => void remove(selected)}
           />
         ) : (
-          <Card className={`${SURFACE_CARD} flex flex-col items-center justify-center gap-2 p-16 text-center`}>
+          <Card
+            className={`${SURFACE_CARD} flex flex-col items-center justify-center gap-2 p-16 text-center`}
+          >
             <Sparkles className="h-6 w-6 text-muted-foreground/70" />
             <p className="text-sm font-medium">Select a template</p>
           </Card>
@@ -873,10 +875,19 @@ function SortableSection({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.6 : 1,
+    // Lifts the section over its siblings while dragging — these rows are tall,
+    // so without it the following sections' opaque fill painted straight
+    // through the one being dragged for most of the drag. Needs the `relative`
+    // below: z-index does nothing on a static box.
+    zIndex: isDragging ? 5 : undefined,
   };
 
   return (
-    <li ref={setNodeRef} style={style} className="rounded-lg border border-border/60 bg-card p-3">
+    <li
+      ref={setNodeRef}
+      style={style}
+      className="relative rounded-lg border border-border/60 bg-card p-3"
+    >
       <div className="flex items-start gap-2">
         <button
           type="button"

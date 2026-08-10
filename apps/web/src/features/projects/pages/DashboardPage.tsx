@@ -138,13 +138,18 @@ export function DashboardPage() {
       recentReportsResult,
     ] = await Promise.all([
       loadActiveCards(topActive),
+      // Every `photos` read excludes the trash by hand — the soft delete has no
+      // database-level enforcement. Without it these stats counted photos the
+      // crew had already deleted, and the activity feed listed them.
       supabase
         .from("photos")
         .select("id", { count: "exact", head: true })
+        .is("deleted_at", null)
         .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
       supabase
         .from("photos")
         .select("created_at")
+        .is("deleted_at", null)
         .gte("created_at", new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString()),
       activeProjects.length
         ? (supabase as any)
@@ -154,11 +159,13 @@ export function DashboardPage() {
               "project_id",
               activeProjects.map((p) => p.id),
             )
+            .is("deleted_at", null)
             .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
         : Promise.resolve({ data: [] }),
       (supabase as any)
         .from("photos")
         .select("project_id, uploaded_by, created_at")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(30),
       (supabase as any)
@@ -210,6 +217,9 @@ export function DashboardPage() {
       .from("photos")
       .select("project_id, storage_path, image_url, created_at")
       .in("project_id", ids)
+      // Excludes the trash: without it the newest deleted photo became the
+      // project's cover image on the dashboard.
+      .is("deleted_at", null)
       .or("phase.is.null,phase.neq.walkthrough")
       .not("storage_path", "like", "%/walkthroughs/%")
       .order("created_at", { ascending: false });

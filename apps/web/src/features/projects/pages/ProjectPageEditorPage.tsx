@@ -63,7 +63,13 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -188,7 +194,10 @@ export function ProjectPageEditorPage() {
       // photo (hover reveals a "Change photo" overlay — see ProjectImage's
       // NodeView) opens the picker and swaps in the chosen photo at that spot.
       handleClickOn: (_view, _pos, node, nodePos) => {
-        if (node.type.name === "image" && (isPhotoSlot(node.attrs) || node.attrs["data-photo-id"])) {
+        if (
+          node.type.name === "image" &&
+          (isPhotoSlot(node.attrs) || node.attrs["data-photo-id"])
+        ) {
           slotPosRef.current = nodePos;
           setImagePickerOpen(true);
           return true;
@@ -242,6 +251,10 @@ export function ProjectPageEditorPage() {
         .from("photos")
         .select("id, image_url, storage_path, caption")
         .eq("project_id", projectId)
+        // Excludes trashed photos, which nothing filters at the database level.
+        // `SelectPhotosForPageDialog` — the other picker on this same screen —
+        // already does this, so the two disagreed about which photos exist.
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(200);
       const rows = (data as any[]) ?? [];
@@ -249,7 +262,9 @@ export function ProjectPageEditorPage() {
       for (const r of rows) {
         let url = r.image_url as string | null;
         if (!url) {
-          const { data: s } = await supabase.storage.from("site-photos").createSignedUrl(r.storage_path, 3600);
+          const { data: s } = await supabase.storage
+            .from("site-photos")
+            .createSignedUrl(r.storage_path, 3600);
           url = s?.signedUrl ?? null;
         }
         if (url) resolved.push({ id: r.id, url, caption: r.caption });
@@ -292,7 +307,15 @@ export function ProjectPageEditorPage() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedTitle, debouncedHtml, debouncedHeaderHtml, debouncedFooterHtml, showHeader, showFooter, loading]);
+  }, [
+    debouncedTitle,
+    debouncedHtml,
+    debouncedHeaderHtml,
+    debouncedFooterHtml,
+    showHeader,
+    showFooter,
+    loading,
+  ]);
 
   useBlocker({
     shouldBlockFn: async () => {
@@ -375,7 +398,11 @@ export function ProjectPageEditorPage() {
   }
 
   function insertImage(photo: ProjectPhoto) {
-    const attrs: Record<string, unknown> = { src: photo.url, alt: photo.caption ?? "", "data-photo-id": photo.id };
+    const attrs: Record<string, unknown> = {
+      src: photo.url,
+      alt: photo.caption ?? "",
+      "data-photo-id": photo.id,
+    };
     const slotPos = slotPosRef.current;
     slotPosRef.current = null;
     if (slotPos !== null && editor) {
@@ -387,9 +414,18 @@ export function ProjectPageEditorPage() {
       if (slotNode?.attrs.height) attrs.height = slotNode.attrs.height;
       // setImage() inserts over the current selection, so selecting the slot
       // node first makes this a replace rather than an insert.
-      editor.chain().focus().setNodeSelection(slotPos).setImage(attrs as any).run();
+      editor
+        .chain()
+        .focus()
+        .setNodeSelection(slotPos)
+        .setImage(attrs as any)
+        .run();
     } else {
-      editor?.chain().focus().setImage(attrs as any).run();
+      editor
+        ?.chain()
+        .focus()
+        .setImage(attrs as any)
+        .run();
     }
     setImagePickerOpen(false);
   }
@@ -416,7 +452,8 @@ export function ProjectPageEditorPage() {
     const q = snippetSearch.trim().toLowerCase();
     if (!q) return snippets;
     return snippets.filter(
-      (s) => s.title.toLowerCase().includes(q) || stripHtml(s.content_html).toLowerCase().includes(q),
+      (s) =>
+        s.title.toLowerCase().includes(q) || stripHtml(s.content_html).toLowerCase().includes(q),
     );
   }, [snippets, snippetSearch]);
 
@@ -471,7 +508,11 @@ export function ProjectPageEditorPage() {
               size="icon"
               className="shrink-0"
               onClick={() =>
-                navigate({ to: "/projects/$projectId", params: { projectId }, search: { panel: "reports" } })
+                navigate({
+                  to: "/projects/$projectId",
+                  params: { projectId },
+                  search: { panel: "reports" },
+                })
               }
             >
               <ArrowLeft className="h-4 w-4" />
@@ -497,10 +538,18 @@ export function ProjectPageEditorPage() {
               </span>
             ) : null}
             <Button size="sm" variant="outline" onClick={handleExport} disabled={exporting}>
-              {exporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileDown className="mr-1.5 h-3.5 w-3.5" />}
+              {exporting ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileDown className="mr-1.5 h-3.5 w-3.5" />
+              )}
               Export PDF
             </Button>
-            <Button size="sm" variant={revoked ? "outline" : "default"} onClick={() => setShareOpen(true)}>
+            <Button
+              size="sm"
+              variant={revoked ? "outline" : "default"}
+              onClick={() => setShareOpen(true)}
+            >
               <Share2 className="mr-1.5 h-3.5 w-3.5" />
               {revoked ? "Share" : "Shared"}
             </Button>
@@ -596,7 +645,9 @@ export function ProjectPageEditorPage() {
             </DialogHeader>
             <div className="flex-1 overflow-y-auto p-4">
               {photos.length === 0 ? (
-                <p className="py-10 text-center text-sm text-muted-foreground">No photos in this project yet.</p>
+                <p className="py-10 text-center text-sm text-muted-foreground">
+                  No photos in this project yet.
+                </p>
               ) : (
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                   {photos.map((p) => (
@@ -606,7 +657,11 @@ export function ProjectPageEditorPage() {
                       onClick={() => insertImage(p)}
                       className="aspect-square overflow-hidden rounded-md border border-border hover:ring-2 hover:ring-primary"
                     >
-                      <img src={p.url} alt={p.caption ?? ""} className="h-full w-full object-cover" />
+                      <img
+                        src={p.url}
+                        alt={p.caption ?? ""}
+                        className="h-full w-full object-cover"
+                      />
                     </button>
                   ))}
                 </div>
@@ -633,7 +688,9 @@ export function ProjectPageEditorPage() {
                   {revoked ? "Link sharing off" : "Anyone with the link"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {revoked ? "Only you can see this document" : "Viewers can read and download a PDF"}
+                  {revoked
+                    ? "Only you can see this document"
+                    : "Viewers can read and download a PDF"}
                 </p>
               </div>
             </div>
@@ -753,7 +810,11 @@ const FIELD_TOKENS = [
 export type TokenValues = Record<string, { label: string; empty: boolean }>;
 
 function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 /**
@@ -804,10 +865,7 @@ function RunningBlock({
   if (!enabled) {
     return (
       <div
-        className={cn(
-          "group/add flex h-8 items-center justify-center",
-          isHeader ? "mb-2" : "mt-2",
-        )}
+        className={cn("group/add flex h-8 items-center justify-center", isHeader ? "mb-2" : "mt-2")}
       >
         <button
           type="button"
@@ -824,7 +882,9 @@ function RunningBlock({
     <div
       className={cn(
         "group/hf relative",
-        isHeader ? "mb-4 border-b border-dashed border-border pb-3" : "mt-6 border-t border-dashed border-border pt-3",
+        isHeader
+          ? "mb-4 border-b border-dashed border-border pb-3"
+          : "mt-6 border-t border-dashed border-border pt-3",
       )}
     >
       <div className="flex items-start gap-2">
@@ -868,7 +928,11 @@ function FieldTokenMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-7 shrink-0 gap-1 px-2 text-xs font-bold text-muted-foreground">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 shrink-0 gap-1 px-2 text-xs font-bold text-muted-foreground"
+        >
           Insert field
         </Button>
       </DropdownMenuTrigger>
@@ -892,4 +956,3 @@ function FieldTokenMenu({
     </DropdownMenu>
   );
 }
-

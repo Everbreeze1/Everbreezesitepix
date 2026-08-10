@@ -105,7 +105,10 @@ export function ProjectSiteLogs({ projectId, projectName }: Props) {
   };
 
   const handleDelete = async (log: SiteLogRow) => {
-    if (!(await confirm({ description: `Delete site log "${log.title}"?`, variant: "destructive" }))) return;
+    if (
+      !(await confirm({ description: `Delete site log "${log.title}"?`, variant: "destructive" }))
+    )
+      return;
     const { error } = await (supabase as any).from("project_site_logs").delete().eq("id", log.id);
     if (error) {
       toast.error("Couldn't delete", { description: error.message });
@@ -262,6 +265,8 @@ function SiteLogBuilder({
         .from("photos")
         .select("id, caption, project_id, storage_path, taken_at")
         .eq("project_id", projectId)
+        // Trashed photos are soft-deleted with no database-level enforcement.
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(500);
       if (cancelled) return;

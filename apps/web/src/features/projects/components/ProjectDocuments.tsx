@@ -441,16 +441,24 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
       await Promise.all([
         ...pageIds.map((id) => deleteProjectPage({ data: { pageId: id } })),
         ...fileDocs.map(async (doc) => {
-          // The row delete has to be confirmed before the blob is destroyed.
-          // The query builder resolves to `{ error }` rather than rejecting, so
-          // this used to fall straight through to `remove()` on a refused
-          // delete: the row survived, its file did not, and the user got a
-          // success toast over a document that now 404s forever.
-          const { error } = await (supabase as any)
+          /*
+           * The row delete has to be CONFIRMED before the blob is destroyed,
+           * and `error === null` is not that confirmation. A delete with no
+           * trailing `.select()` comes back 204 with an empty body, so an RLS
+           * policy that filters every row away is indistinguishable from a
+           * successful delete. `.select("id")` asks for the affected rows, so
+           * an empty array means nothing was deleted and the file must be left
+           * where it is — otherwise the row survives, its blob doesn't, and the
+           * document 404s forever behind a success toast.
+           */
+          const { data: deleted, error } = await (supabase as any)
             .from("project_documents")
             .delete()
-            .eq("id", doc.id);
+            .eq("id", doc.id)
+            .select("id");
           if (error) throw error;
+          if (!((deleted as unknown[] | null) ?? []).length)
+            throw new Error(`You don't have permission to delete “${doc.file_name}”`);
           void supabase.storage.from("site-documents").remove([doc.storage_path]);
         }),
       ]);
@@ -460,6 +468,12 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
       onChanged?.();
     } catch (e: any) {
       toast.error(e?.message ?? "Could not delete the selected items");
+      // A rejected batch is a PARTIAL batch — `Promise.all` abandons the other
+      // deletes' results, and some will have succeeded. Resync rather than
+      // leaving the list showing rows that are already gone.
+      clearSelection();
+      await load();
+      onChanged?.();
     }
   }
 

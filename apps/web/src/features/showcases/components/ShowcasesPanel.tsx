@@ -455,7 +455,10 @@ function SortableShowcaseCard({
         transform: CSS.Transform.toString(transform),
         transition,
         // Lifted above its neighbours so it isn't clipped while crossing rows.
-        zIndex: isDragging ? 30 : undefined,
+        // Must stay under AppHeader (sticky, z-20): the Card is `relative`, so
+        // this z-index is live, and nothing between here and the root creates a
+        // stacking context — at 30 the dragged card painted over the app header.
+        zIndex: isDragging ? 5 : undefined,
       }}
       className={cn(
         "group relative overflow-hidden transition hover:border-primary/40 hover:shadow-lg",

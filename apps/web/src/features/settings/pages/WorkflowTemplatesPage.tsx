@@ -653,7 +653,13 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
     });
     // Refetch rather than roll back: these are independent requests, so a
     // failure can be partial and no local undo is right for both halves.
-    if (!ok) await load();
+    if (!ok) {
+      // Flush first — `load()` replaces state from the database but leaves the
+      // autosave queue holding its pending patch, which then lands afterwards
+      // with no re-render, so a label mid-edit would vanish and still be saved.
+      await save.flush();
+      await load();
+    }
   };
 
   const duplicatePhase = async (ph: Phase) => {
@@ -679,7 +685,10 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
     const source = itemsByPhase.get(ph.id) ?? [];
     let newItems: Item[] = [];
     if (source.length) {
-      const { data: its } = await supabase
+      // The last silent write in this file: a refused copy left an empty
+      // "(copy)" phase with no toast at all, so the author assumed the steps
+      // were still loading and built real jobs on a template that has none.
+      const { data: its, error: itsErr } = await supabase
         .from(TABLES.items as any)
         .insert(
           source.map((it, i) => ({
@@ -691,6 +700,11 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
           })),
         )
         .select("id, phase_id, position, kind, label, required");
+      if (itsErr) {
+        toast.error(itsErr.message ?? "Couldn't copy that phase's steps");
+        await load();
+        return;
+      }
       newItems = ((its as any[]) ?? []) as Item[];
     }
     setPhases((xs) => [...xs, newPhase]);
@@ -705,7 +719,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
       const others = xs.filter((x) => x.template_id !== selectedId);
       return [...others, ...reordered.map((p, idx) => ({ ...p, position: idx }))];
     });
-    await save.runImmediate(async () => {
+    const ok = await save.runImmediate(async () => {
       const results = await Promise.all(
         reordered.map((p, idx) =>
           supabase
@@ -717,6 +731,13 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
       const bad = results.find((r: any) => r?.error);
       if (bad) throw (bad as any).error;
     });
+    // `runImmediate` returns a boolean precisely so callers can reconcile.
+    // Discarding it left the list showing the new order after a failed write,
+    // and every later load snapped it back with no explanation.
+    if (!ok) {
+      await save.flush();
+      await load();
+    }
   };
 
   /* -------------------------------------------------------------- items */
@@ -778,7 +799,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
       const others = xs.filter((x) => x.phase_id !== phaseId);
       return [...others, ...reordered.map((it, idx) => ({ ...it, position: idx }))];
     });
-    await save.runImmediate(async () => {
+    const ok = await save.runImmediate(async () => {
       const results = await Promise.all(
         reordered.map((it, idx) =>
           supabase
@@ -790,6 +811,10 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
       const bad = results.find((r: any) => r?.error);
       if (bad) throw (bad as any).error;
     });
+    if (!ok) {
+      await save.flush();
+      await load();
+    }
   };
 
   /* ---------------------------------------------------------------- dnd */

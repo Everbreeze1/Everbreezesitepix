@@ -153,11 +153,14 @@ export function ApplyTemplateDialog({
     if (!user) return;
     setApplying(t.id);
     try {
-      const { data: items } = await supabase
+      const { data: items, error: readErr } = await supabase
         .from("checklist_template_items" as any)
         .select("position, label, required, item_type, description")
         .eq("template_id", t.id)
         .order("position", { ascending: true });
+      // Without this a failed read looked like an empty template, and the crew
+      // got a success toast over a checklist with nothing in it.
+      if (readErr) throw readErr;
       const { data: created, error } = await supabase
         .from("project_checklists" as any)
         .insert({
@@ -189,7 +192,24 @@ export function ApplyTemplateDialog({
         const { error: itemsErr } = await supabase
           .from("project_checklist_items" as any)
           .insert(rows);
-        if (itemsErr) throw itemsErr;
+        if (itemsErr) {
+          // Compensating delete for the parent created just above. Throwing
+          // without it leaves an item-less checklist on the project AND keeps
+          // the dialog open, so the user's natural retry stacks another one on
+          // every click. `ProjectChecklists.applyTemplate` rolls back the same
+          // pair of tables for exactly this reason.
+          const { error: cleanupErr } = await supabase
+            .from("project_checklists" as any)
+            .delete()
+            .eq("id", (created as any).id);
+          if (cleanupErr)
+            console.warn(
+              "Could not roll back empty project checklist",
+              (created as any).id,
+              cleanupErr,
+            );
+          throw itemsErr;
+        }
       }
       toast.success(`Added "${t.name}" checklist`);
       onApplied?.();

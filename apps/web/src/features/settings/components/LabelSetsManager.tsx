@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -85,6 +85,8 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
   const [loading, setLoading] = useState(true);
   const [sets, setSets] = useState<LabelSet[]>([]);
   const [itemsBySet, setItemsBySet] = useState<Record<string, LabelSetItem[]>>({});
+  /** Guards `addItem` against overlapping inserts — see the note there. */
+  const addingRef = useRef(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
 
@@ -250,23 +252,33 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
   };
 
   const addItem = async () => {
-    if (!selected) return;
-    // max+1, not `.length` — `deleteItem` doesn't renumber survivors, so length
-    // collided with a surviving label's position. It also drives the swatch
-    // below, so the collision handed the new label its twin's colour too.
-    const position = items.reduce((max, i) => Math.max(max, i.position), -1) + 1;
-    const color = DEFAULT_COLORS[position % DEFAULT_COLORS.length];
-    const { data, error } = await supabase
-      .from("label_set_items" as any)
-      .insert({ label_set_id: selected.id, name: "New label", color, position })
-      .select("id, label_set_id, name, color, position")
-      .single();
-    if (error) {
-      toast.error(error.message ?? "Failed");
-      return;
+    // One insert at a time: `position` is read from the render closure, so two
+    // clicks inside a single round trip both compute the same number and
+    // recreate the collision the max+1 change exists to remove.
+    if (!selected || addingRef.current) return;
+    addingRef.current = true;
+    try {
+      // max+1, not `.length` — `deleteItem` doesn't renumber survivors, so length
+      // collided with a surviving label's position. It also drives the swatch
+      // below, so the collision handed the new label its twin's colour too.
+      const position = items.reduce((max, i) => Math.max(max, i.position), -1) + 1;
+      const color = DEFAULT_COLORS[position % DEFAULT_COLORS.length];
+      const { data, error } = await supabase
+        .from("label_set_items" as any)
+        .insert({ label_set_id: selected.id, name: "New label", color, position })
+        .select("id, label_set_id, name, color, position")
+        .single();
+      if (error) {
+        toast.error(error.message ?? "Failed");
+        return;
+      }
+      const created = data as unknown as LabelSetItem;
+      // Append onto the CURRENT list, not the closure's — `[...items, created]`
+      // dropped any row added during the round trip.
+      setItemsBySet((m) => ({ ...m, [selected.id]: [...(m[selected.id] ?? []), created] }));
+    } finally {
+      addingRef.current = false;
     }
-    const created = data as unknown as LabelSetItem;
-    setItemsBySet((m) => ({ ...m, [selected.id]: [...items, created] }));
   };
 
   const updateItem = async (id: string, patch: Partial<Pick<LabelSetItem, "name" | "color">>) => {
@@ -323,7 +335,17 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
     // on the next reload with no explanation.
     if (results.some((r) => r.error)) {
       toast.error("Failed to save order");
-      setItemsBySet((m) => ({ ...m, [selected.id]: items }));
+      // Restore the previous ORDER only. The functional form isn't enough on
+      // its own here — only `m` was fresh, the `items` payload was the pre-drag
+      // closure, so replaying it wholesale reverted any rename or colour change
+      // made during the round trip (which had already been written on its own).
+      const before = new Map(items.map((it, i) => [it.id, { i, position: it.position }]));
+      setItemsBySet((m) => ({
+        ...m,
+        [selected.id]: [...(m[selected.id] ?? [])]
+          .sort((a, b) => (before.get(a.id)?.i ?? 0) - (before.get(b.id)?.i ?? 0))
+          .map((it) => ({ ...it, position: before.get(it.id)?.position ?? it.position })),
+      }));
     }
   };
 
@@ -645,6 +667,11 @@ function SortableItem({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.6 : 1,
+    // Lifts the row over its siblings while dragging. Without it every later
+    // row's opaque `bg-card` painted across the row being dragged, which at 0.6
+    // opacity read as the row sinking behind the list. `position` comes from
+    // the `relative` class below — z-index is inert on a static box.
+    zIndex: isDragging ? 5 : undefined,
   };
   const [name, setName] = useState(item.name);
   const [color, setColor] = useState(item.color);
@@ -659,7 +686,7 @@ function SortableItem({
     <li
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-2 rounded-lg border border-border/60 bg-card px-2.5 py-2"
+      className="relative flex items-center gap-2 rounded-lg border border-border/60 bg-card px-2.5 py-2"
     >
       {canManage && (
         <button

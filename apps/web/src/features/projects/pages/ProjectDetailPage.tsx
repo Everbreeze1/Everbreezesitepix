@@ -2069,17 +2069,29 @@ export function ProjectDetailPage() {
           .from("photos")
           .select("id, storage_path")
           .in("id", linkedPhotoIds);
-        // Confirm the rows are gone before destroying their storage objects.
-        // This used to remove the blobs unconditionally, so a refused delete
-        // left the photo rows alive in the gallery pointing at files that no
-        // longer existed — permanently broken thumbnails, and no way back.
-        const { error: delErr } = await supabase.from("photos").delete().in("id", linkedPhotoIds);
-        if (delErr) {
+        /*
+         * Destroy only the blobs whose rows actually went. `error === null`
+         * doesn't prove a row was affected: a delete without a trailing
+         * `.select()` returns 204 with an empty body, so an RLS policy that
+         * filters the rows away reads exactly like success. Selecting the
+         * deleted ids back makes a refusal — total or partial — visible, and
+         * keeps every surviving row's file intact instead of stranding it as a
+         * broken thumbnail in the gallery.
+         */
+        const { data: deleted, error: delErr } = await supabase
+          .from("photos")
+          .delete()
+          .in("id", linkedPhotoIds)
+          .select("id");
+        const deletedRows = (deleted as Array<{ id: string }> | null) ?? [];
+        if (delErr || !deletedRows.length) {
           toast.error("Couldn't discard that walkthrough's photos");
           await load();
           return;
         }
-        const paths = ((linkedPhotos as Array<{ storage_path: string }> | null) ?? [])
+        const deletedIds = new Set(deletedRows.map((d) => d.id));
+        const paths = ((linkedPhotos as Array<{ id: string; storage_path: string }> | null) ?? [])
+          .filter((p) => deletedIds.has(p.id))
           .map((p) => p.storage_path)
           .filter(Boolean);
         if (paths.length) void supabase.storage.from("site-photos").remove(paths);

@@ -15,15 +15,17 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Loader2, Plus, X } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/ui/popover";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/use-confirm";
 import {
@@ -158,7 +160,11 @@ export function BoardSettingsSheet({
               No stages yet — add a tag below.
             </p>
           ) : (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleReorder}>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleReorder}
+            >
               <SortableContext items={tagIds} strategy={verticalListSortingStrategy}>
                 <div className="space-y-1.5">
                   {columns.map((tag) => (
@@ -175,7 +181,12 @@ export function BoardSettingsSheet({
 
           <Popover open={addOpen} onOpenChange={setAddOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="mt-3" disabled={available.length === 0}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                disabled={available.length === 0}
+              >
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 {available.length === 0 ? "All tags added" : "Add stage"}
               </Button>
@@ -191,7 +202,10 @@ export function BoardSettingsSheet({
                   }}
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
                 >
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: t.color }} />
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ background: t.color }}
+                  />
                   <span className="truncate">{t.name}</span>
                 </button>
               ))}
@@ -200,7 +214,11 @@ export function BoardSettingsSheet({
         </div>
 
         <div className="flex items-center justify-between gap-2 border-t px-6 py-4">
-          <Button variant="outline" onClick={handleDelete} className="text-destructive hover:text-destructive">
+          <Button
+            variant="outline"
+            onClick={handleDelete}
+            className="text-destructive hover:text-destructive"
+          >
             Delete Board
           </Button>
           <Button onClick={handleSave} disabled={saving}>
@@ -222,8 +240,12 @@ function SortableColumnRow({ tag, onRemove }: { tag: TagRow; onRemove: () => voi
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
+      // `relative` is required for the z-index to apply at all: this row is a
+      // flex *container*, not a flex item, and its parent is a plain block — so
+      // a bare `z-10` was dropped and the dragged row was painted in DOM order,
+      // letting later siblings' opaque backgrounds cut across it.
       className={`flex items-center gap-2 rounded-lg border border-border bg-card px-2 py-2 ${
-        isDragging ? "z-10 opacity-80 shadow-md" : ""
+        isDragging ? "relative z-[5] opacity-80 shadow-md" : ""
       }`}
     >
       <button

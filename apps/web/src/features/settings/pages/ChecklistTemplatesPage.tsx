@@ -449,49 +449,71 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
     // Refetch rather than roll back: these are independent requests, so a
     // failure can be partial — some rows moved, some didn't — and no local undo
     // is right for both. `runImmediate` has already surfaced the error.
-    if (!ok) await load();
+    if (!ok) {
+      // Flush before refetching. `load()` replaces `items` from the database
+      // but leaves the autosave queue holding its pending patch, which then
+      // lands afterwards with no re-render — so a label the user was mid-way
+      // through typing would disappear from the screen and still be saved.
+      // `selectTemplate` flushes ahead of a swap for the same reason.
+      await save.flush();
+      await load();
+    }
   };
+
+  /**
+   * One insert at a time. `addItem` computes the new position from the render
+   * closure, so two invocations inside a single round trip — Enter key
+   * auto-repeat, or an impatient double-press — both read the same `items` and
+   * both land on `after.position + 1`, reintroducing exactly the duplicate
+   * positions the rest of this file works to prevent.
+   */
+  const addingRef = useRef(false);
 
   const addItem = async (
     type: ItemType = "checkbox",
     { templateId, after }: { templateId?: string; after?: TemplateItem } = {},
   ) => {
     const tplId = templateId ?? after?.template_id ?? selectedId;
-    if (!tplId) return;
-    /*
-     * Appends by default; `after` drops the new row directly below a specific
-     * one, which is the only thing Enter on a mid-list row can honestly mean.
-     * This used to append unconditionally, so Enter on item 3 of 20 built item
-     * 21 and then dragged the caret down there with it.
-     *
-     * `displaced` is snapshotted before the await, while `items` still excludes
-     * the row being inserted.
-     */
-    const displaced = after
-      ? items.filter((i) => i.template_id === tplId && i.position > after.position)
-      : [];
-    const position = after ? after.position + 1 : nextPosition(tplId);
-    const { data, error } = await supabase
-      .from(TABLES.items as any)
-      .insert({
-        template_id: tplId,
-        label: "",
-        required: false,
-        position,
-        item_type: type,
-      })
-      .select("id, template_id, label, description, required, position, item_type")
-      .single();
-    if (error || !data) {
-      toast.error("Couldn't add that item");
-      return;
+    if (!tplId || addingRef.current) return;
+    addingRef.current = true;
+    try {
+      /*
+       * Appends by default; `after` drops the new row directly below a specific
+       * one, which is the only thing Enter on a mid-list row can honestly mean.
+       * This used to append unconditionally, so Enter on item 3 of 20 built item
+       * 21 and then dragged the caret down there with it.
+       *
+       * `displaced` is snapshotted before the await, while `items` still excludes
+       * the row being inserted.
+       */
+      const displaced = after
+        ? items.filter((i) => i.template_id === tplId && i.position > after.position)
+        : [];
+      const position = after ? after.position + 1 : nextPosition(tplId);
+      const { data, error } = await supabase
+        .from(TABLES.items as any)
+        .insert({
+          template_id: tplId,
+          label: "",
+          required: false,
+          position,
+          item_type: type,
+        })
+        .select("id, template_id, label, description, required, position, item_type")
+        .single();
+      if (error || !data) {
+        toast.error("Couldn't add that item");
+        return;
+      }
+      const item = data as unknown as TemplateItem;
+      setItems((xs) => [...xs, item]);
+      setFocusItemId(item.id);
+      // Not awaited: the order is already right locally, and making the caret
+      // wait on one round trip per displaced row would buy nothing.
+      void shiftDown(displaced);
+    } finally {
+      addingRef.current = false;
     }
-    const item = data as unknown as TemplateItem;
-    setItems((xs) => [...xs, item]);
-    setFocusItemId(item.id);
-    // Not awaited: the order is already right locally, and making the caret
-    // wait on one round trip per displaced row would buy nothing.
-    void shiftDown(displaced);
   };
 
   /** One insert for the whole pasted list rather than a round trip per line. */
@@ -574,7 +596,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
       const others = xs.filter((x) => x.template_id !== selectedId);
       return [...others, ...reordered.map((r, idx) => ({ ...r, position: idx }))];
     });
-    await save.runImmediate(async () => {
+    const ok = await save.runImmediate(async () => {
       const results = await Promise.all(
         reordered.map((r, idx) =>
           supabase
@@ -586,6 +608,13 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
       const bad = results.find((r: any) => r?.error);
       if (bad) throw (bad as any).error;
     });
+    // `runImmediate` returns a boolean precisely so callers can reconcile.
+    // Discarding it left the list showing the dropped order after a failed
+    // write, and every later load snapped it back with no explanation.
+    if (!ok) {
+      await save.flush();
+      await load();
+    }
   };
 
   /* --------------------------------------------------------------- view */

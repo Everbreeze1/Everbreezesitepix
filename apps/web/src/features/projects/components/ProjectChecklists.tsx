@@ -1919,6 +1919,8 @@ function AttachPhotosDialog({
       .from("photos")
       .select("id, storage_path, image_url, caption")
       .eq("project_id", projectId)
+      // Trashed photos are soft-deleted with no database-level enforcement.
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(60);
     const rows = ((data as any[]) ?? []) as ProjectPhoto[];

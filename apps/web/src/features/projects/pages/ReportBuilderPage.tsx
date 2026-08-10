@@ -255,7 +255,20 @@ export function ReportBuilderPage() {
     // in this file (`patchReport`, `patchSection`) already check; this didn't.
     if (results.some((r: any) => r?.error)) {
       toast.error("Couldn't save section order");
-      setSections(prev);
+      /*
+       * Restore the previous ORDER only, keyed by id and computed inside the
+       * updater. Replaying the whole `prev` snapshot would also revert any
+       * title or body edit made during the round trip — and `patchSection`
+       * has already queued that edit for the database on its own debounce, so
+       * the text would disappear from the editor and still be saved, leaving
+       * the screen and the exported report disagreeing.
+       */
+      const before = new Map(prev.map((s, i) => [s.id, { i, position: s.position }]));
+      setSections((rows) =>
+        [...rows]
+          .sort((a, b) => (before.get(a.id)?.i ?? 0) - (before.get(b.id)?.i ?? 0))
+          .map((s) => ({ ...s, position: before.get(s.id)?.position ?? s.position })),
+      );
       return;
     }
     flashSaved();
@@ -925,6 +938,12 @@ async function loadProjectPhotos(projectId: string): Promise<PhotoRef[]> {
     .from("photos")
     .select("id, storage_path, image_url, caption, taken_at, tags, phase")
     .eq("project_id", projectId)
+    // Trashed photos are soft-deleted and nothing enforces the filter at the
+    // database level, so every read has to exclude them by hand. Without this
+    // a deleted photo stayed selectable here, got written into
+    // `project_report_sections.photos`, and was rendered to the customer on
+    // /share/reports/$token — until the 60-day purge blanked the slot.
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
   const rows = (data as any[]) ?? [];
   const out: PhotoRef[] = [];

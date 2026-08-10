@@ -62,7 +62,9 @@ export function MobileAppBanner() {
   if (hidden) return null;
 
   return (
-    <div className="relative z-50 w-full border-b border-border bg-background">
+    // z-10, not z-50: this banner is in normal flow inside <main>, below the
+    // sticky AppHeader (z-20). At z-50 it slid over the header on scroll.
+    <div className="relative z-10 w-full border-b border-border bg-background">
       <div className="flex items-start gap-3 px-4 py-3">
         <div className="mt-0.5 shrink-0">
           <BrandLogo size={40} />
