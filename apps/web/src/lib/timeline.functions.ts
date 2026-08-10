@@ -12,13 +12,21 @@ export interface TimelineDay {
 export interface TimelineActivity {
   days: TimelineDay[];
   totalPhotos: number;
+  /** The range hit the server's row ceiling — counts are a floor, not a total. */
+  capped: boolean;
 }
 
+/**
+ * Photo counts bucketed by local calendar day. Powers the gallery calendar's
+ * day cells and its year heatmap; the day panel loads actual photos separately,
+ * so this stays an aggregate no matter how large the range is.
+ */
 export const listTimelineActivity = rpcOp<
   {
     from: string;
     to: string;
-    projectId?: string;
+    projectIds?: string[];
+    tags?: string[];
     tzOffsetMinutes?: number;
     withThumbnails?: boolean;
   },

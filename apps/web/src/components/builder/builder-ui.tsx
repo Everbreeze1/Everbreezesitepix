@@ -26,6 +26,12 @@ const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : us
  * and add it again in the right place". These primitives give both screens the
  * same, deliberately physical editing surface — fields that announce
  * themselves, rows you can grab, and one status line that tells the truth.
+ *
+ * This lives outside `features/` because the in-project *runners*
+ * (`features/projects/components/runner`) share the honest-save half of it —
+ * `useAutosave` and `SaveStatus`, plus the quiet fields. Authoring a template
+ * and filling one in should not look like two different products, and the two
+ * halves importing across a feature boundary is how they drifted apart before.
  */
 
 /* ------------------------------------------------------------------ layout */
@@ -46,7 +52,8 @@ export function BuilderLayout({
 }) {
   return (
     <div className="mt-6 gap-5 md:grid md:grid-cols-[minmax(0,272px)_minmax(0,1fr)] md:items-start">
-      <div className={cn("md:sticky md:top-4 md:block", pane === "list" ? "block" : "hidden")}>
+      {/* Same 82px app-header offset as the title bar. */}
+      <div className={cn("md:sticky md:top-[98px] md:block", pane === "list" ? "block" : "hidden")}>
         {rail}
       </div>
       <div className={cn("min-w-0 md:block", pane === "editor" ? "block" : "hidden")}>{canvas}</div>
@@ -212,7 +219,10 @@ export function BuilderTitleBar({
   banner?: ReactNode;
 }) {
   return (
-    <div className="sticky top-0 z-20 border-b border-border/60 bg-gradient-to-b from-card via-card to-card/95 px-4 pb-3 pt-4 backdrop-blur sm:px-6 sm:pt-5">
+    // top-[82px], not top-0: the page is the scroll container and AppHeader is
+    // `sticky top-0 h-[82px]`, so top-0 parked this bar underneath it — the
+    // save status it exists to keep in view was hidden behind the app chrome.
+    <div className="sticky top-[82px] z-10 border-b border-border/60 bg-gradient-to-b from-card via-card to-card/95 px-4 pb-3 pt-4 backdrop-blur sm:px-6 sm:pt-5">
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
           {icon}

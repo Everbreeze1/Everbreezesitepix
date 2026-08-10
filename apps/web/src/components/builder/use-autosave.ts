@@ -47,6 +47,19 @@ export function useAutosave(
       setState("saved");
       return true;
     } catch (e) {
+      // Put the unsent patches back rather than dropping them. They used to be
+      // gone the moment a write failed — the status line said "Not saved" and
+      // that was the end of it, so a crew filling a checklist through a bad
+      // signal could lose an answer with no way to get it back. Now the next
+      // flush (the next edit, or the one on unmount) retries them.
+      //
+      // Anything queued while the write was in flight is newer, so it wins.
+      for (const [table, rows] of Object.entries(pending)) {
+        const bucket = (queue.current[table] ??= {});
+        for (const [id, patch] of Object.entries(rows)) {
+          bucket[id] = { ...patch, ...(bucket[id] ?? {}) };
+        }
+      }
       setState("error");
       errorRef.current?.(e);
       return false;

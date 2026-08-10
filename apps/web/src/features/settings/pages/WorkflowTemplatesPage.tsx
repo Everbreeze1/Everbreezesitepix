@@ -80,11 +80,10 @@ import {
   QuietTextarea,
   RequiredToggle,
   StatChip,
-} from "@/features/settings/components/template-builder/builder-ui";
-import { restrictToVerticalAxis } from "@/features/settings/components/template-builder/builder-tokens";
-import { useAutosave } from "@/features/settings/components/template-builder/use-autosave";
-
-type ItemKind = "check" | "photo" | "note";
+} from "@/components/builder/builder-ui";
+import { restrictToVerticalAxis } from "@/components/builder/builder-tokens";
+import { useAutosave } from "@/components/builder/use-autosave";
+import { KIND_META, KIND_ORDER, type ItemKind } from "@/lib/workflow-items";
 
 interface Template {
   id: string;
@@ -109,45 +108,6 @@ interface Item {
   label: string;
   required: boolean;
 }
-
-const KIND_META: Record<
-  ItemKind,
-  {
-    icon: typeof CheckSquare;
-    label: string;
-    short: string;
-    hint: string;
-    tint: string;
-    placeholder: string;
-  }
-> = {
-  check: {
-    icon: CheckSquare,
-    label: "Checklist item",
-    short: "Check",
-    hint: "Crew ticks it off on site",
-    tint: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-    placeholder: "e.g. Verify breaker labeled",
-  },
-  photo: {
-    icon: Camera,
-    label: "Photo prompt",
-    short: "Photo",
-    hint: "Crew must capture a photo",
-    tint: "border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300",
-    placeholder: "e.g. Before photo — front elevation",
-  },
-  note: {
-    icon: StickyNote,
-    label: "Note field",
-    short: "Note",
-    hint: "Crew types a short answer",
-    tint: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-    placeholder: "e.g. Customer concerns raised on site",
-  },
-};
-
-const KIND_ORDER: ItemKind[] = ["check", "photo", "note"];
 
 /**
  * Blank-canvas templates are where this builder used to lose people: you got a

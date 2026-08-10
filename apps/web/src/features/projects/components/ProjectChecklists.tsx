@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ClipboardList,
   Plus,
   Trash2,
   Loader2,
   CheckCircle2,
-  FileText,
   ImagePlus,
   X,
   AlertCircle,
@@ -20,9 +19,7 @@ import {
   ChevronUp,
   ChevronDown,
   ListPlus,
-  Type as TypeIcon,
-  Hash,
-  ToggleLeft,
+  MoreHorizontal,
 } from "lucide-react";
 import { compressImageFile } from "@/features/photos/components/CameraCapture";
 import { BulkAddItemsDialog } from "@/components/BulkAddItemsDialog";
@@ -38,7 +35,6 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -46,10 +42,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -57,70 +53,30 @@ import {
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
+import { usePrompt } from "@/hooks/use-prompt";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
+import { ErrorState } from "@/components/ErrorState";
+import { SaveStatus } from "@/components/builder/builder-ui";
+import { useAutosave } from "@/components/builder/use-autosave";
+import { SURFACE_BUTTON } from "@/components/ui/surface";
+import { TYPE_META, TYPE_ORDER, hasResponse, type ItemType } from "@/lib/checklist-items";
+import { friendlyError } from "@/lib/supabase-errors";
+import {
+  RunnerCard,
+  RunnerCardSkeleton,
+  RunnerGrid,
+  RunnerPanelHeader,
+  RunnerProgress,
+  RunnerStatusPill,
+} from "./runner/runner-ui";
+import { toneForProgress } from "./runner/runner-tokens";
 
 interface Template {
   id: string;
   name: string;
   description: string | null;
 }
-type ItemType = "checkbox" | "rating" | "text" | "pass_fail" | "numeric" | "yes_no";
-
-/**
- * Answer types, sharing the colour language of the template designer so the
- * same concept doesn't look like two different things depending on whether
- * you're authoring a checklist or filling one in.
- */
-const RUNTIME_TYPE_META: Record<
-  ItemType,
-  { label: string; short: string; icon: typeof CheckSquare; tint: string }
-> = {
-  checkbox: {
-    label: "Checkbox",
-    short: "Check",
-    icon: CheckSquare,
-    tint: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-  },
-  pass_fail: {
-    label: "Pass / Fail",
-    short: "Pass/Fail",
-    icon: CheckCircle2,
-    tint: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  },
-  yes_no: {
-    label: "Yes / No",
-    short: "Yes/No",
-    icon: ToggleLeft,
-    tint: "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300",
-  },
-  rating: {
-    label: "Rating (1–5)",
-    short: "Rating",
-    icon: Star,
-    tint: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  },
-  numeric: {
-    label: "Numeric",
-    short: "Number",
-    icon: Hash,
-    tint: "border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
-  },
-  text: {
-    label: "Text / Notes",
-    short: "Text",
-    icon: TypeIcon,
-    tint: "border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300",
-  },
-};
-const RUNTIME_TYPE_ORDER: ItemType[] = [
-  "checkbox",
-  "pass_fail",
-  "yes_no",
-  "rating",
-  "numeric",
-  "text",
-];
 interface ChecklistItem {
   id: string;
   checklist_id: string;
@@ -160,34 +116,65 @@ interface Member {
   email: string | null;
 }
 
-function checklistStatus(cl: Checklist, done: number) {
-  if (cl.completed_at) return { label: "Complete", tone: "complete" as const };
-  if (done > 0) return { label: "In progress", tone: "progress" as const };
-  return { label: "Not started", tone: "none" as const };
-}
-
-export function ProjectChecklists({ projectId }: { projectId: string }) {
+export function ProjectChecklists({
+  projectId,
+  onChanged,
+}: {
+  projectId: string;
+  /** Lets the host refresh its tab counts without remounting this panel. */
+  onChanged?: () => void;
+}) {
   const { user } = useAuth();
   const confirm = useConfirm();
+  const promptFor = usePrompt();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [itemPhotos, setItemPhotos] = useState<ItemPhoto[]>([]);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [applyingTemplate, setApplyingTemplate] = useState<string>("");
+  const [newTemplateId, setNewTemplateId] = useState<string>("");
   const [newName, setNewName] = useState("");
   const [newAssignee, setNewAssignee] = useState<string>("__unassigned");
   const [creating, setCreating] = useState(false);
+  /** Template currently being applied, so only the pressed card spins. */
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [completing, setCompleting] = useState(false);
   const [adding, setAdding] = useState<Record<string, { label: string; type: ItemType }>>({});
-  const [attachFor, setAttachFor] = useState<ChecklistItem | null>(null);
+  const [attachForId, setAttachForId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [tab, setTab] = useState<"all" | "active" | "completed" | "templates">("active");
   const [createOpen, setCreateOpen] = useState(false);
-  const [viewingCompleted, setViewingCompleted] = useState<Checklist | null>(null);
-  const [editingChecklist, setEditingChecklist] = useState<Checklist | null>(null);
+  /*
+   * Open dialogs are tracked by id, never by a copy of the row.
+   *
+   * Holding the object froze a snapshot taken when the dialog opened, so after
+   * a successful reassignment the Select visibly snapped back to the old value
+   * — the list behind had updated, the dialog was still rendering the stale
+   * copy it captured.
+   */
+  const [viewingCompletedId, setViewingCompletedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   /** Checklist id whose "paste a list" dialog is open. */
   const [bulkForChecklist, setBulkForChecklist] = useState<string | null>(null);
+  /** When this browser last wrote, so realtime can defer to in-progress typing. */
+  const lastLocalEdit = useRef(0);
+
+  const save = useAutosave(
+    (table, id, patch) =>
+      supabase
+        .from(table as any)
+        .update(patch)
+        .eq("id", id)
+        .then((r: any) => {
+          if (r.error) throw r.error;
+        }),
+    { onError: () => toast.error("Couldn't save that change — check your connection") },
+  );
+  const touch = () => {
+    lastLocalEdit.current = Date.now();
+  };
 
   const signPhotos = async (rows: ProjectPhoto[]) => {
     const map: Record<string, string> = {};
@@ -208,42 +195,73 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
     return map;
   };
 
-  const load = async () => {
-    setLoading(true);
-    const [{ data: cls }, { data: tpls }] = await Promise.all([
-      supabase
-        .from("project_checklists" as any)
-        .select("id, project_id, name, created_at, created_by, assigned_to, completed_at, snapshot")
-        .eq("project_id", projectId)
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("checklist_templates" as any)
-        .select("id, name, description")
-        .eq("archived", false)
-        .order("name", { ascending: true }),
-    ]);
-    const clList = ((cls as any[]) ?? []) as Checklist[];
-    setChecklists(clList);
-    setTemplates(((tpls as any[]) ?? []) as Template[]);
+  /**
+   * `silent` keeps the panel on screen while it refreshes.
+   *
+   * Every refetch used to flip the whole panel back to a spinner, and three
+   * unfiltered realtime handlers called it — so ticking a box made the list
+   * you were reading disappear and come back.
+   */
+  const load = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (!silent) setLoading(true);
+      try {
+        const [clRes, tplRes] = await Promise.all([
+          supabase
+            .from("project_checklists" as any)
+            .select(
+              "id, project_id, name, created_at, created_by, assigned_to, completed_at, snapshot",
+            )
+            .eq("project_id", projectId)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("checklist_templates" as any)
+            .select("id, name, description")
+            .eq("archived", false)
+            .order("name", { ascending: true }),
+        ]);
+        if (clRes.error) throw clRes.error;
 
-    if (clList.length) {
-      const ids = clList.map((c) => c.id);
-      const { data: its } = await supabase
-        .from("project_checklist_items" as any)
-        .select(
-          "id, checklist_id, position, label, required, completed_at, notes, item_type, description, response_value",
-        )
-        .in("checklist_id", ids)
-        .order("position", { ascending: true });
-      const itList = ((its as any[]) ?? []) as ChecklistItem[];
-      setItems(itList);
+        const clList = ((clRes.data as any[]) ?? []) as Checklist[];
+        setChecklists(clList);
+        setTemplates(((tplRes.data as any[]) ?? []) as Template[]);
 
-      if (itList.length) {
-        const itemIds = itList.map((i) => i.id);
+        if (!clList.length) {
+          setItems([]);
+          setItemPhotos([]);
+          setPhotoUrls({});
+          setLoadError(false);
+          return;
+        }
+
+        const itRes = await supabase
+          .from("project_checklist_items" as any)
+          .select(
+            "id, checklist_id, position, label, required, completed_at, notes, item_type, description, response_value",
+          )
+          .in(
+            "checklist_id",
+            clList.map((c) => c.id),
+          )
+          .order("position", { ascending: true });
+        if (itRes.error) throw itRes.error;
+        const itList = ((itRes.data as any[]) ?? []) as ChecklistItem[];
+        setItems(itList);
+
+        if (!itList.length) {
+          setItemPhotos([]);
+          setPhotoUrls({});
+          setLoadError(false);
+          return;
+        }
+
         const { data: ips } = await supabase
           .from("checklist_item_photos" as any)
           .select("id, item_id, photo_id")
-          .in("item_id", itemIds);
+          .in(
+            "item_id",
+            itList.map((i) => i.id),
+          );
         const ipList = ((ips as any[]) ?? []) as ItemPhoto[];
         setItemPhotos(ipList);
 
@@ -253,31 +271,44 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
             .from("photos")
             .select("id, storage_path, image_url, caption")
             .in("id", photoIds);
-          const rows = ((phs as any[]) ?? []) as ProjectPhoto[];
-          setPhotoUrls(await signPhotos(rows));
+          setPhotoUrls(await signPhotos(((phs as any[]) ?? []) as ProjectPhoto[]));
         } else {
           setPhotoUrls({});
         }
-      } else {
-        setItemPhotos([]);
-        setPhotoUrls({});
+        setLoadError(false);
+      } catch {
+        setLoadError(true);
+      } finally {
+        if (!silent) setLoading(false);
       }
-    } else {
-      setItems([]);
-      setItemPhotos([]);
-      setPhotoUrls({});
-    }
-    setLoading(false);
-  };
+    },
+    [projectId],
+  );
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const refresh = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        // Our own writes echo back here. Refetching mid-sentence would replace
+        // what the user is typing with the older server copy.
+        if (Date.now() - lastLocalEdit.current < 2000) {
+          refresh();
+          return;
+        }
+        void load({ silent: true });
+      }, 400);
+    };
     const ch = supabase
       .channel(`project-checklists:${projectId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "project_checklist_items" },
-        () => void load(),
+        refresh,
       )
       .on(
         "postgres_changes",
@@ -287,19 +318,19 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
           table: "project_checklists",
           filter: `project_id=eq.${projectId}`,
         },
-        () => void load(),
+        refresh,
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "checklist_item_photos" },
-        () => void load(),
+        refresh,
       )
       .subscribe();
     return () => {
+      if (timer) clearTimeout(timer);
       void supabase.removeChannel(ch);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [projectId, load]);
 
   useEffect(() => {
     if (!user) return;
@@ -342,6 +373,11 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
       arr.push(it);
       map.set(it.checklist_id, arr);
     }
+    // Order by `position`, not by whatever order the rows arrived in.
+    // `moveItem` swaps the two rows' position values in place, so without this
+    // the optimistic update changed nothing on screen — the row only appeared
+    // to move once a refetch happened to return it in a new order.
+    for (const arr of map.values()) arr.sort((a, b) => a.position - b.position);
     return map;
   }, [items]);
 
@@ -355,34 +391,48 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
     return map;
   }, [itemPhotos]);
 
-  const applyTemplate = async () => {
-    if (!applyingTemplate || !user) return;
-    setCreating(true);
+  /**
+   * Materialise a template onto this project.
+   *
+   * Takes the id as an argument rather than reading it from state: the
+   * Templates tab used to call `setApplyingTemplate(id)` and then invoke this
+   * immediately, which read the *previous* render's value — so the first tap
+   * did nothing and the second applied whichever template you pressed before.
+   */
+  const applyTemplate = async (templateId: string, assignedTo: string | null = null) => {
+    if (!templateId || !user) return false;
+    setApplyingId(templateId);
+    let createdId: string | null = null;
     try {
-      const tpl = templates.find((t) => t.id === applyingTemplate);
-      if (!tpl) return;
-      const { data: tplItems } = await supabase
+      const tpl = templates.find((t) => t.id === templateId);
+      if (!tpl) throw new Error("That template is no longer available");
+
+      const { data: tplItems, error: tplErr } = await supabase
         .from("checklist_template_items" as any)
         .select("position, label, required, item_type, description")
-        .eq("template_id", applyingTemplate)
+        .eq("template_id", templateId)
         .order("position", { ascending: true });
+      if (tplErr) throw tplErr;
 
       const { data: created, error } = await supabase
         .from("project_checklists" as any)
         .insert({
           project_id: projectId,
-          template_id: applyingTemplate,
+          template_id: templateId,
           name: tpl.name,
           created_by: user.id,
-          assigned_to: newAssignee === "__unassigned" ? null : newAssignee,
+          assigned_to: assignedTo,
         })
         .select("id")
         .single();
-      if (error || !created) throw error ?? new Error("Failed to create checklist");
+      if (error || !created) throw error ?? new Error("Couldn't create that checklist");
+      createdId = (created as any).id as string;
 
+      // Renumber from zero rather than trusting the template's stored
+      // positions, so a template with gaps or duplicates still lands in order.
       const rows = ((tplItems as any[]) ?? []).map((it: any, idx: number) => ({
-        checklist_id: (created as any).id,
-        position: it.position ?? idx,
+        checklist_id: createdId,
+        position: idx,
         label: it.label,
         required: it.required ?? false,
         item_type: it.item_type ?? "checkbox",
@@ -392,49 +442,67 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
         const { error: itErr } = await supabase.from("project_checklist_items" as any).insert(rows);
         if (itErr) throw itErr;
       }
-      toast.success(`Added “${tpl.name}”`);
-      setApplyingTemplate("");
-      await load();
+      toast.success(`“${tpl.name}” added to this project`);
+      await load({ silent: true });
+      onChanged?.();
+      setEditingId(createdId);
+      return true;
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to apply template");
+      // Cascades to items, so a partial apply never survives.
+      if (createdId) {
+        await supabase
+          .from("project_checklists" as any)
+          .delete()
+          .eq("id", createdId);
+      }
+      toast.error(friendlyError(e, "Couldn't add that checklist"));
+      return false;
     } finally {
-      setCreating(false);
+      setApplyingId(null);
     }
   };
 
   const createBlank = async () => {
-    if (!newName.trim() || !user) return;
+    if (!newName.trim() || !user) return false;
     setCreating(true);
     try {
-      const { error } = await supabase.from("project_checklists" as any).insert({
-        project_id: projectId,
-        name: newName.trim(),
-        created_by: user.id,
-        assigned_to: newAssignee === "__unassigned" ? null : newAssignee,
-      });
-      if (error) throw error;
+      const { data, error } = await supabase
+        .from("project_checklists" as any)
+        .insert({
+          project_id: projectId,
+          name: newName.trim(),
+          created_by: user.id,
+          assigned_to: newAssignee === "__unassigned" ? null : newAssignee,
+        })
+        .select("id")
+        .single();
+      if (error || !data) throw error ?? new Error("Couldn't create that checklist");
       setNewName("");
       setNewAssignee("__unassigned");
-      await load();
+      await load({ silent: true });
+      onChanged?.();
+      setEditingId((data as any).id as string);
+      return true;
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to create checklist");
+      toast.error(friendlyError(e, "Couldn't create that checklist"));
+      return false;
     } finally {
       setCreating(false);
     }
   };
 
   const updateAssignee = async (checklistId: string, value: string) => {
+    touch();
     const next = value === "__unassigned" ? null : value;
     const prev = checklists;
     setChecklists((xs) => xs.map((x) => (x.id === checklistId ? { ...x, assigned_to: next } : x)));
-    const { error } = await supabase
-      .from("project_checklists" as any)
-      .update({ assigned_to: next })
-      .eq("id", checklistId);
-    if (error) {
-      toast.error("Failed to update assignee");
-      setChecklists(prev);
-    }
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from("project_checklists" as any)
+        .update({ assigned_to: next })
+        .eq("id", checklistId),
+    );
+    if (!ok) setChecklists(prev);
   };
 
   const memberLabel = (id: string | null) => {
@@ -444,17 +512,16 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
   };
 
   const toggleItem = async (item: ChecklistItem) => {
+    touch();
     const next = item.completed_at ? null : new Date().toISOString();
     setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, completed_at: next } : x)));
-    const { error } = await supabase
-      .from("project_checklist_items" as any)
-      .update({
-        completed_at: next,
-        completed_by: next ? (user?.id ?? null) : null,
-      })
-      .eq("id", item.id);
-    if (error) {
-      toast.error("Failed to update");
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from("project_checklist_items" as any)
+        .update({ completed_at: next, completed_by: next ? (user?.id ?? null) : null })
+        .eq("id", item.id),
+    );
+    if (!ok) {
       setItems((prev) =>
         prev.map((x) => (x.id === item.id ? { ...x, completed_at: item.completed_at } : x)),
       );
@@ -470,6 +537,7 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
    * keyboard and screen-reader support for free. Optimistic, with rollback.
    */
   const moveItem = async (item: ChecklistItem, dir: -1 | 1) => {
+    touch();
     const siblings = items
       .filter((x) => x.checklist_id === item.checklist_id)
       .sort((a, b) => a.position - b.position);
@@ -490,70 +558,80 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
       ),
     );
 
-    const [r1, r2] = await Promise.all([
-      supabase
-        .from("project_checklist_items" as any)
-        .update({ position: b.position })
-        .eq("id", a.id),
-      supabase
-        .from("project_checklist_items" as any)
-        .update({ position: a.position })
-        .eq("id", b.id),
-    ]);
-    if (r1.error || r2.error) {
-      toast.error("Couldn't reorder");
-      setItems((prev) => prev.map((x) => (x.id === a.id ? a : x.id === b.id ? b : x)));
-    }
+    const ok = await save.runImmediate(async () => {
+      const [r1, r2] = await Promise.all([
+        supabase
+          .from("project_checklist_items" as any)
+          .update({ position: b.position })
+          .eq("id", a.id),
+        supabase
+          .from("project_checklist_items" as any)
+          .update({ position: a.position })
+          .eq("id", b.id),
+      ]);
+      if (r1.error) throw r1.error;
+      if (r2.error) throw r2.error;
+    });
+    if (!ok) setItems((prev) => prev.map((x) => (x.id === a.id ? a : x.id === b.id ? b : x)));
   };
 
-  const setResponse = async (item: ChecklistItem, value: any) => {
-    const hasValue = value !== null && value !== undefined && value !== "";
-    const next = hasValue ? new Date().toISOString() : null;
-    setItems((prev) =>
-      prev.map((x) => (x.id === item.id ? { ...x, response_value: value, completed_at: next } : x)),
+  /**
+   * Record an answer.
+   *
+   * `immediate` separates a tap from a keystroke: stars and Pass/Fail buttons
+   * write straight away, while typed text and numbers go through the debounced
+   * queue. The number field used to fire a write per character, and the text
+   * field only saved on blur — dismissing the dialog with Escape threw the
+   * answer away.
+   */
+  const setResponse = async (
+    item: ChecklistItem,
+    value: any,
+    { immediate = true }: { immediate?: boolean } = {},
+  ) => {
+    touch();
+    const next = hasResponse(value) ? new Date().toISOString() : null;
+    const patch = {
+      response_value: value,
+      completed_at: next,
+      completed_by: next ? (user?.id ?? null) : null,
+    };
+    setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, ...patch } : x)));
+    if (!immediate) {
+      save.queueSave("project_checklist_items", item.id, patch);
+      return;
+    }
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from("project_checklist_items" as any)
+        .update(patch)
+        .eq("id", item.id),
     );
-    const { error } = await supabase
-      .from("project_checklist_items" as any)
-      .update({
-        response_value: value,
-        completed_at: next,
-        completed_by: next ? (user?.id ?? null) : null,
-      })
-      .eq("id", item.id);
-    if (error) {
-      toast.error("Failed to update");
-      void load();
-    }
-  };
-
-  const toggleRequired = async (item: ChecklistItem) => {
-    const next = !item.required;
-    setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, required: next } : x)));
-    const { error } = await supabase
-      .from("project_checklist_items" as any)
-      .update({ required: next })
-      .eq("id", item.id);
-    if (error) {
-      toast.error("Failed to update");
+    if (!ok) {
       setItems((prev) =>
-        prev.map((x) => (x.id === item.id ? { ...x, required: item.required } : x)),
+        prev.map((x) =>
+          x.id === item.id
+            ? { ...x, response_value: item.response_value, completed_at: item.completed_at }
+            : x,
+        ),
       );
     }
   };
 
-  const updateItemType = async (item: ChecklistItem, type: ItemType) => {
-    setItems((prev) =>
-      prev.map((x) =>
-        x.id === item.id ? { ...x, item_type: type, response_value: null, completed_at: null } : x,
-      ),
+  const toggleRequired = async (item: ChecklistItem) => {
+    touch();
+    const next = !item.required;
+    setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, required: next } : x)));
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from("project_checklist_items" as any)
+        .update({ required: next })
+        .eq("id", item.id),
     );
-    const { error } = await supabase
-      .from("project_checklist_items" as any)
-      .update({ item_type: type, response_value: null, completed_at: null, completed_by: null })
-      .eq("id", item.id);
-    if (error) {
-      toast.error("Failed to change type");
-      void load();
+    if (!ok) {
+      setItems((prev) =>
+        prev.map((x) => (x.id === item.id ? { ...x, required: item.required } : x)),
+      );
     }
   };
 
@@ -561,17 +639,16 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
     const entry = adding[checklistId] ?? { label: "", type: "checkbox" as ItemType };
     const label = entry.label.trim();
     if (!label) return;
-    const existing = itemsByChecklist.get(checklistId) ?? [];
-    const position = existing.length;
-    const { error } = await supabase
-      .from("project_checklist_items" as any)
-      .insert({ checklist_id: checklistId, label, position, item_type: entry.type });
-    if (error) {
-      toast.error("Failed to add item");
-      return;
-    }
+    touch();
+    const position = (itemsByChecklist.get(checklistId) ?? []).length;
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from("project_checklist_items" as any)
+        .insert({ checklist_id: checklistId, label, position, item_type: entry.type }),
+    );
+    if (!ok) return;
     setAdding((s) => ({ ...s, [checklistId]: { label: "", type: entry.type } }));
-    void load();
+    void load({ silent: true });
   };
 
   /**
@@ -583,54 +660,67 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
    */
   const addItemsBulk = async (checklistId: string, labels: string[], type: ItemType) => {
     if (!labels.length) return;
+    touch();
     const start = (itemsByChecklist.get(checklistId) ?? []).length;
-    const { error } = await supabase.from("project_checklist_items" as any).insert(
-      labels.map((label, idx) => ({
-        checklist_id: checklistId,
-        label,
-        position: start + idx,
-        item_type: type,
-      })),
+    const ok = await save.runImmediate(() =>
+      supabase.from("project_checklist_items" as any).insert(
+        labels.map((label, idx) => ({
+          checklist_id: checklistId,
+          label,
+          position: start + idx,
+          item_type: type,
+        })),
+      ),
     );
-    if (error) {
-      toast.error(error.message ?? "Couldn't add those items");
-      return;
-    }
+    if (!ok) return;
     toast.success(`${labels.length} item${labels.length === 1 ? "" : "s"} added`);
-    void load();
+    void load({ silent: true });
   };
 
   const deleteItem = async (itemId: string) => {
+    touch();
     const prev = items;
     setItems((xs) => xs.filter((x) => x.id !== itemId));
-    const { error } = await supabase
-      .from("project_checklist_items" as any)
-      .delete()
-      .eq("id", itemId);
-    if (error) {
-      toast.error("Failed to delete");
-      setItems(prev);
-    }
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from("project_checklist_items" as any)
+        .delete()
+        .eq("id", itemId),
+    );
+    if (!ok) setItems(prev);
   };
 
-  const deleteChecklist = async (id: string) => {
+  /**
+   * Returns whether the delete actually happened, so callers can close their
+   * dialog *after* the fact. The editor used to close itself and then start
+   * the confirmation, which unmounted the dialog before the question appeared.
+   */
+  const deleteChecklist = async (cl: Checklist) => {
+    const count = (itemsByChecklist.get(cl.id) ?? []).length;
     if (
       !(await confirm({
-        description: "Delete this checklist and all its items?",
+        title: "Delete this checklist?",
+        description: `“${cl.name}” and its ${count} item${count === 1 ? "" : "s"} will be permanently removed from this project. Photos attached to it stay in the project gallery.`,
+        confirmText: "Delete checklist",
         variant: "destructive",
       }))
     )
-      return;
+      return false;
+    touch();
     const prev = checklists;
-    setChecklists((xs) => xs.filter((x) => x.id !== id));
-    const { error } = await supabase
-      .from("project_checklists" as any)
-      .delete()
-      .eq("id", id);
-    if (error) {
-      toast.error("Failed to delete");
+    setChecklists((xs) => xs.filter((x) => x.id !== cl.id));
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from("project_checklists" as any)
+        .delete()
+        .eq("id", cl.id),
+    );
+    if (!ok) {
       setChecklists(prev);
+      return false;
     }
+    onChanged?.();
+    return true;
   };
 
   const detachPhoto = async (itemPhotoId: string) => {
@@ -649,16 +739,22 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
   const canEdit = (cl: Checklist) => !!user && cl.created_by === user.id;
 
   const completeChecklist = async (cl: Checklist) => {
-    if (!user) return;
+    if (!user) return false;
+    // The snapshot is an immutable record of what was answered, so anything
+    // still sitting in the debounce queue has to land in the database first —
+    // otherwise "Mark as complete" freezes the value from before the last
+    // thing the user typed.
+    await save.flush();
     const its = itemsByChecklist.get(cl.id) ?? [];
     const requiredOpen = its.filter((x) => x.required && !x.completed_at).length;
     if (requiredOpen > 0) {
       toast.error(`${requiredOpen} required item${requiredOpen === 1 ? "" : "s"} still open`);
-      return;
+      return false;
     }
+    const now = new Date().toISOString();
     const snapshot = {
       name: cl.name,
-      completed_at: new Date().toISOString(),
+      completed_at: now,
       items: its.map((it) => ({
         label: it.label,
         required: it.required,
@@ -667,83 +763,107 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
         completed_at: it.completed_at,
         response_value: it.response_value,
         notes: it.notes,
+        photo_ids: (photosByItem.get(it.id) ?? []).map((p) => p.photo_id),
       })),
     };
-    const { error } = await supabase
-      .from("project_checklists" as any)
-      .update({
-        completed_at: new Date().toISOString(),
-        completed_by: user.id,
-        snapshot,
-      })
-      .eq("id", cl.id);
-    if (error) {
-      toast.error(error.message ?? "Failed to complete");
-      return;
-    }
+    touch();
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from("project_checklists" as any)
+        .update({ completed_at: now, completed_by: user.id, snapshot })
+        .eq("id", cl.id),
+    );
+    if (!ok) return false;
     toast.success("Checklist marked complete");
     setTab("completed");
-    void load();
+    void load({ silent: true });
+    onChanged?.();
+    return true;
   };
 
   const saveAsTemplate = async (cl: Checklist) => {
     if (!user) return;
     const its = itemsByChecklist.get(cl.id) ?? [];
-    const name = prompt("Template name:", cl.name);
+    // App-styled prompt, not `window.prompt` — the native dialog is unstyled,
+    // unthemed, and blocks the whole tab.
+    const name = await promptFor({
+      title: "Save as template",
+      description: "Reuse this checklist's items on other projects.",
+      label: "Template name",
+      defaultValue: cl.name,
+      confirmText: "Save template",
+    });
     if (!name?.trim()) return;
+
     const { data: tpl, error } = await supabase
       .from("checklist_templates" as any)
       .insert({ created_by: user.id, name: name.trim() })
       .select("id")
       .single();
     if (error || !tpl) {
-      toast.error(error?.message ?? "Failed to save template");
+      toast.error(friendlyError(error, "Couldn't save that template"));
       return;
     }
     if (its.length) {
-      const rows = its.map((it, idx) => ({
-        template_id: (tpl as any).id,
-        position: idx,
-        label: it.label,
-        required: it.required,
-        item_type: it.item_type ?? "checkbox",
-        description: it.description,
-      }));
-      const { error: itErr } = await supabase.from("checklist_template_items" as any).insert(rows);
+      const { error: itErr } = await supabase.from("checklist_template_items" as any).insert(
+        its.map((it, idx) => ({
+          template_id: (tpl as any).id,
+          position: idx,
+          label: it.label,
+          required: it.required,
+          item_type: it.item_type ?? "checkbox",
+          description: it.description,
+        })),
+      );
       if (itErr) {
-        toast.error(itErr.message ?? "Failed to save template items");
+        await supabase
+          .from("checklist_templates" as any)
+          .delete()
+          .eq("id", (tpl as any).id);
+        toast.error(friendlyError(itErr, "Couldn't save that template's items"));
         return;
       }
     }
-    toast.success(`Saved "${name.trim()}" as a template`);
+    toast.success(`Saved “${name.trim()}” as a template`);
+    // The Templates tab reads from the same list, so refresh it — otherwise the
+    // count and the grid stay stale and people save the same template twice.
+    void load({ silent: true });
   };
 
-  return (
-    <div className="mt-8">
-      <div className="flex flex-wrap items-end justify-between gap-5">
-        <div>
-          <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.52px] text-muted-foreground">
-            Reusable field templates
-          </p>
-          <h2 className="font-display mt-3 text-[40px] font-bold leading-none tracking-[-1.4px] text-foreground">
-            Checks that move with the work
-          </h2>
-          <p className="font-manrope mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-            {checklists.length === 0
-              ? "Simple task lists for this project. For multi-phase processes with sign-off, use Workflows."
-              : `${checklists.length} checklist${checklists.length === 1 ? "" : "s"} attached to this project record.`}
-          </p>
-        </div>
-        <Button
-          onClick={() => setCreateOpen(true)}
-          className="h-8 rounded-lg bg-primary px-4 font-manrope text-xs font-bold text-primary-foreground hover:bg-primary/90"
-        >
-          <LayoutTemplate className="mr-1.5 h-4 w-4" />
-          Use template
-        </Button>
-      </div>
+  const activeCount = checklists.filter((c) => !c.completed_at).length;
 
-      {/* Tabs */}
+  // Derived from the live list, never from a copy captured when the dialog
+  // opened — that is what kept the assignee Select snapping back.
+  const editingChecklist = editingId ? (checklists.find((c) => c.id === editingId) ?? null) : null;
+  const viewingCompleted = viewingCompletedId
+    ? (checklists.find((c) => c.id === viewingCompletedId) ?? null)
+    : null;
+  const attachFor = attachForId ? (items.find((i) => i.id === attachForId) ?? null) : null;
+
+  return (
+    <div>
+      <RunnerPanelHeader
+        eyebrow="Checks that travel with the job"
+        title="Checks that move with the work"
+        description={
+          checklists.length === 0
+            ? "Simple task lists for this project. For multi-phase processes with sign-off, use Workflows."
+            : activeCount === 0
+              ? `All ${checklists.length} checklist${checklists.length === 1 ? "" : "s"} on this job are complete.`
+              : `${activeCount} active · ${checklists.length} attached to this project record.`
+        }
+        actions={
+          <Button onClick={() => setCreateOpen(true)} className={cn(SURFACE_BUTTON, "bg-primary")}>
+            <LayoutTemplate className="h-4 w-4" />
+            Use template
+          </Button>
+        }
+      />
+
+      {/* Filter strip. Deliberately plain toggle buttons rather than
+          role="tablist"/role="tab": half-implemented tab semantics are worse
+          than none — a screen reader would promise arrow-key navigation and an
+          associated tabpanel that don't exist here. */}
       <div className="mt-6 flex flex-wrap gap-1 border-b border-border">
         {(
           [
@@ -765,8 +885,10 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
           return (
             <button
               key={t.key}
+              type="button"
+              aria-pressed={active}
               onClick={() => setTab(t.key)}
-              className={`font-manrope relative px-3 py-2 text-sm font-bold transition-colors ${
+              className={`font-manrope relative min-h-11 px-3 py-2 text-sm font-bold transition-colors ${
                 active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -781,9 +903,18 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
       </div>
 
       {loading ? (
-        <Card className="mt-4 flex items-center justify-center p-8">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </Card>
+        <RunnerGrid>
+          <RunnerCardSkeleton />
+          <RunnerCardSkeleton />
+          <RunnerCardSkeleton />
+        </RunnerGrid>
+      ) : loadError ? (
+        <ErrorState
+          className="mt-6"
+          title="Couldn't load checklists"
+          description="You may be offline. Nothing has been lost — try again once you have a connection."
+          onRetry={() => void load()}
+        />
       ) : tab === "templates" ? (
         <div className="mt-6">
           {templates.length === 0 ? (
@@ -813,14 +944,15 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-8"
-                      onClick={() => {
-                        setApplyingTemplate(t.id);
-                        void applyTemplate();
-                      }}
-                      disabled={creating}
+                      className="min-h-9 shrink-0"
+                      onClick={() => void applyTemplate(t.id)}
+                      disabled={applyingId !== null}
                     >
-                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      {applyingId === t.id ? (
+                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Plus className="mr-1 h-3.5 w-3.5" />
+                      )}
                       Apply
                     </Button>
                   </Card>
@@ -843,47 +975,28 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
               }
             />
           ) : (
-            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <RunnerGrid>
               {checklists
                 .filter((c) => c.completed_at)
                 .map((c) => {
                   const snapItems = Array.isArray(c.snapshot?.items) ? c.snapshot.items : [];
                   const done = snapItems.filter((it: any) => it.completed_at).length;
-                  const pct = snapItems.length ? Math.round((done / snapItems.length) * 100) : 100;
                   return (
-                    <li key={c.id}>
-                      <button
-                        type="button"
-                        onClick={() => setViewingCompleted(c)}
-                        className="flex w-full flex-col rounded-[24px] border border-border bg-card/70 p-6 text-left shadow-sm transition hover:bg-card"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10">
-                            <ClipboardList className="h-5 w-5 text-primary" strokeWidth={1.75} />
-                          </span>
-                          <span className="rounded-full bg-[#D1FAE5] px-2.5 py-1 font-manrope text-[10px] font-extrabold text-[#047857]">
-                            Complete
-                          </span>
-                        </div>
-                        <div className="mt-10">
-                          <p className="font-manrope truncate text-base font-extrabold text-foreground">
-                            {c.name}
-                          </p>
-                          <p className="mt-2 font-manrope text-xs text-muted-foreground">
-                            {done} of {snapItems.length} items complete
-                          </p>
-                        </div>
-                        <div className="mt-6 h-2 w-full overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full bg-[#10B981]"
-                            style={{ width: `${Math.max(2, pct)}%` }}
-                          />
-                        </div>
-                      </button>
-                    </li>
+                    <RunnerCard
+                      key={c.id}
+                      icon={ClipboardList}
+                      tone="complete"
+                      title={c.name}
+                      statusLabel="Complete"
+                      meta={`${done} of ${snapItems.length} items complete`}
+                      done={done}
+                      total={snapItems.length}
+                      progressLabel={`${c.name} progress`}
+                      onOpen={() => setViewingCompletedId(c.id)}
+                    />
                   );
                 })}
-            </ul>
+            </RunnerGrid>
           )}
         </div>
       ) : (
@@ -912,76 +1025,58 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
             );
           }
           return (
-            <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <RunnerGrid>
               {visible.map((cl) => {
                 const its = itemsByChecklist.get(cl.id) ?? [];
                 const done = its.filter((x) => x.completed_at).length;
-                const pct = its.length ? Math.round((done / its.length) * 100) : 0;
-                const status = checklistStatus(cl, done);
-                const isComplete = status.tone === "complete";
+                const requiredOpen = its.filter((x) => x.required && !x.completed_at).length;
+                const isComplete = !!cl.completed_at;
+                const tone = toneForProgress(done, its.length, isComplete);
                 return (
-                  <li key={cl.id}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        cl.completed_at ? setViewingCompleted(cl) : setEditingChecklist(cl)
-                      }
-                      className="flex w-full flex-col rounded-[24px] border-[0.8px] border-border bg-card/65 p-6 text-left transition hover:bg-card"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <span
-                          className={`flex h-11 w-11 items-center justify-center rounded-2xl ${
-                            isComplete ? "bg-[#D1FAE5]" : "bg-primary/10"
-                          }`}
-                        >
-                          <ClipboardList
-                            className={`h-5 w-5 ${isComplete ? "text-[#047857]" : "text-primary"}`}
-                            strokeWidth={1.75}
-                          />
-                        </span>
-                        <span
-                          className={`font-manrope rounded-full px-2.5 py-1 text-[10px] font-extrabold ${
-                            status.tone === "complete"
-                              ? "bg-[#D1FAE5] text-[#047857]"
-                              : status.tone === "progress"
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          {status.label}
-                        </span>
-                      </div>
-                      <div className="mt-10">
-                        <p className="font-manrope truncate text-base font-extrabold text-foreground">
-                          {cl.name}
-                        </p>
-                        <p className="mt-2 font-manrope text-xs text-muted-foreground">
-                          {done} of {its.length} items complete
-                        </p>
-                      </div>
-                      <div className="mt-6 h-2 w-full overflow-hidden rounded-full bg-muted">
-                        <div
-                          className={`h-full rounded-full ${isComplete ? "bg-[#10B981]" : "bg-primary"}`}
-                          style={{ width: `${Math.max(2, pct)}%` }}
-                        />
-                      </div>
-                    </button>
-                  </li>
+                  <RunnerCard
+                    key={cl.id}
+                    icon={ClipboardList}
+                    tone={tone}
+                    title={cl.name}
+                    statusLabel={isComplete ? "Complete" : done > 0 ? "In progress" : "Not started"}
+                    meta={
+                      its.length === 0 ? "No items yet" : `${done} of ${its.length} items complete`
+                    }
+                    detail={
+                      requiredOpen > 0 ? (
+                        <RunnerStatusPill tone="blocked" icon={AlertCircle}>
+                          {requiredOpen} required open
+                        </RunnerStatusPill>
+                      ) : undefined
+                    }
+                    done={done}
+                    total={its.length}
+                    progressLabel={`${cl.name} progress`}
+                    onOpen={() =>
+                      cl.completed_at ? setViewingCompletedId(cl.id) : setEditingId(cl.id)
+                    }
+                  />
                 );
               })}
-            </ul>
+            </RunnerGrid>
           );
         })()
       )}
 
-      {/* Active checklist editor */}
+      {/* Active checklist editor. Keyed on the resolved row, not the id, so a
+          checklist deleted on another device closes the dialog instead of
+          leaving an empty shell open. */}
       <Dialog
         open={!!editingChecklist}
         onOpenChange={(o) => {
-          if (!o) setEditingChecklist(null);
+          if (!o) setEditingId(null);
         }}
       >
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto p-6 sm:p-8">
+        {/* Flex column with its own scroll region: the header (identity, progress,
+            save state) and the footer (add-item, complete) stay put while a long
+            list scrolls between them. It used to be one long scroll with the
+            actions stranded at the bottom. */}
+        <DialogContent className="flex max-h-[88vh] max-w-3xl flex-col gap-0 overflow-hidden p-0">
           {editingChecklist &&
             (() => {
               const cl = editingChecklist;
@@ -990,386 +1085,421 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
               const requiredItems = its.filter((x) => x.required);
               const requiredOpen = requiredItems.filter((x) => !x.completed_at).length;
               const editable = canEdit(cl);
+              const tone = toneForProgress(done, its.length, !!cl.completed_at);
               return (
                 <>
-                  <DialogHeader>
-                    <div className="flex items-start justify-between gap-3 pr-6">
-                      <DialogTitle className="truncate">{cl.name}</DialogTitle>
+                  <DialogHeader className="space-y-0 border-b border-border/60 px-5 pb-3.5 pt-5 sm:px-6">
+                    {/* pr-12 clears the dialog's own absolutely-positioned close
+                        button; the delete action lives in the menu now rather
+                        than crowding against it. */}
+                    <div className="flex items-start justify-between gap-2 pr-12">
+                      <DialogTitle className="font-display truncate text-xl tracking-[-0.4px]">
+                        {cl.name}
+                      </DialogTitle>
                       {editable && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                          onClick={() => {
-                            void deleteChecklist(cl.id);
-                            setEditingChecklist(null);
-                          }}
-                          aria-label="Delete checklist"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 text-muted-foreground"
+                              aria-label="Checklist actions"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuItem onClick={() => void saveAsTemplate(cl)}>
+                              <BookmarkPlus className="mr-2 h-4 w-4" />
+                              Save as template
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={async () => {
+                                // Close only once it actually happened —
+                                // unmounting first tore down the dialog before
+                                // the confirmation could even be answered.
+                                if (await deleteChecklist(cl)) setEditingId(null);
+                              }}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete checklist
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
+                    </div>
+
+                    <div className="flex items-center gap-2.5 pt-2.5">
+                      <RunnerProgress
+                        done={done}
+                        total={its.length}
+                        tone={tone}
+                        label={`${cl.name} progress`}
+                        className="h-1.5 flex-1"
+                      />
+                      <span className="shrink-0 text-[11.5px] font-semibold tabular-nums text-muted-foreground">
+                        {done}/{its.length}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-2.5">
+                      {requiredOpen > 0 && (
+                        <RunnerStatusPill tone="blocked" icon={AlertCircle}>
+                          {requiredOpen} required open
+                        </RunnerStatusPill>
+                      )}
+                      {!editable && (
+                        <RunnerStatusPill tone="idle" icon={Lock}>
+                          View / fill only
+                        </RunnerStatusPill>
+                      )}
+                      <SaveStatus state={save.state} />
+                      <Select
+                        value={cl.assigned_to ?? "__unassigned"}
+                        onValueChange={(v) => void updateAssignee(cl.id, v)}
+                        disabled={!editable}
+                      >
+                        <SelectTrigger className="ml-auto h-8 w-[160px] text-xs">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <UserCircle2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <span className="truncate">{memberLabel(cl.assigned_to)}</span>
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__unassigned" className="text-sm">
+                            Unassigned
+                          </SelectItem>
+                          {members.map((m) => (
+                            <SelectItem key={m.user_id} value={m.user_id} className="text-sm">
+                              {m.full_name || m.email || m.user_id.slice(0, 8)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </DialogHeader>
 
-                  <div className="flex items-center gap-3">
-                    <Progress
-                      value={its.length ? Math.round((done / its.length) * 100) : 0}
-                      className="h-1.5 flex-1"
-                    />
-                    <span className="text-xs tabular-nums text-muted-foreground">
-                      {done}/{its.length} items
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {requiredOpen > 0 && (
-                      <Badge
-                        variant="outline"
-                        className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                      >
-                        <AlertCircle className="mr-1 h-3 w-3" />
-                        {requiredOpen} required open
-                      </Badge>
+                  <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3 sm:px-6">
+                    {its.length === 0 && (
+                      <p className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                        Nothing on this checklist yet — add the first item below.
+                      </p>
                     )}
-                    {!editable && (
-                      <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                        <Lock className="mr-1 h-3 w-3" />
-                        View / fill only
-                      </Badge>
-                    )}
-                    <Select
-                      value={cl.assigned_to ?? "__unassigned"}
-                      onValueChange={(v) => void updateAssignee(cl.id, v)}
-                      disabled={!editable}
-                    >
-                      <SelectTrigger className="ml-auto h-8 w-[160px] text-xs">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <UserCircle2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <span className="truncate">{memberLabel(cl.assigned_to)}</span>
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__unassigned" className="text-sm">
-                          Unassigned
-                        </SelectItem>
-                        {members.map((m) => (
-                          <SelectItem key={m.user_id} value={m.user_id} className="text-sm">
-                            {m.full_name || m.email || m.user_id.slice(0, 8)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {its.length > 0 && (
-                    <ul className="mt-2 space-y-2.5">
-                      {its.map((it, itIdx) => {
-                        const photos = photosByItem.get(it.id) ?? [];
-                        return (
-                          <li
-                            key={it.id}
-                            className="group rounded-xl border-[0.8px] border-transparent px-3 py-2.5 transition-colors hover:border-border/60 hover:bg-muted/40"
-                          >
-                            {/* Reorder controls — revealed on hover/focus so a
-                                filled-in checklist stays calm to read. */}
-                            <div className="float-right ml-2 flex shrink-0 flex-col opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-                              <button
-                                type="button"
-                                aria-label={`Move “${it.label}” up`}
-                                disabled={itIdx === 0}
-                                onClick={() => void moveItem(it, -1)}
-                                className="rounded p-0.5 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
-                              >
-                                <ChevronUp className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={`Move “${it.label}” down`}
-                                disabled={itIdx === its.length - 1}
-                                onClick={() => void moveItem(it, 1)}
-                                className="rounded p-0.5 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
-                              >
-                                <ChevronDown className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                            <div className="flex items-start gap-2.5">
-                              {it.item_type === "checkbox" || !it.item_type ? (
-                                <Checkbox
-                                  checked={!!it.completed_at}
-                                  onCheckedChange={() => void toggleItem(it)}
-                                  className="mt-0.5"
-                                  aria-label={it.label}
-                                />
-                              ) : (
-                                <div
-                                  className={`mt-1 h-4 w-4 shrink-0 rounded-full border ${
-                                    it.completed_at
-                                      ? "border-emerald-500 bg-emerald-500/20"
-                                      : "border-border"
-                                  }`}
-                                  aria-hidden
-                                />
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span
-                                    className={
-                                      it.completed_at && it.item_type === "checkbox"
-                                        ? "text-sm text-muted-foreground line-through"
-                                        : "text-sm font-medium"
-                                    }
-                                  >
-                                    {it.label}
-                                  </span>
-                                  {editable ? (
-                                    <button
-                                      onClick={() => void toggleRequired(it)}
-                                      className={`text-[11px] rounded-md border px-2 py-1 transition-colors ${
-                                        it.required
-                                          ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                                          : "border-border text-muted-foreground hover:text-foreground"
-                                      }`}
-                                      aria-label={it.required ? "Mark optional" : "Mark required"}
+                    {its.length > 0 && (
+                      <ul className="space-y-2.5">
+                        {its.map((it, itIdx) => {
+                          const photos = photosByItem.get(it.id) ?? [];
+                          return (
+                            <li
+                              key={it.id}
+                              className="group rounded-xl border border-transparent px-3 py-2.5 transition-colors hover:border-border/60 hover:bg-muted/40"
+                            >
+                              {/* Reorder controls. Quiet on a mouse, but always
+                                present on touch — there is no hover on a phone,
+                                which is exactly where these buttons exist to be
+                                used, and they were invisible there. */}
+                              <div className="float-right ml-2 flex shrink-0 flex-col opacity-100 transition-opacity sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover:opacity-100">
+                                <button
+                                  type="button"
+                                  aria-label={`Move “${it.label}” up`}
+                                  disabled={itIdx === 0}
+                                  onClick={() => void moveItem(it, -1)}
+                                  className="-mr-1 rounded p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+                                >
+                                  <ChevronUp className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label={`Move “${it.label}” down`}
+                                  disabled={itIdx === its.length - 1}
+                                  onClick={() => void moveItem(it, 1)}
+                                  className="-mr-1 rounded p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </button>
+                              </div>
+                              <div className="flex items-start gap-2.5">
+                                {it.item_type === "checkbox" || !it.item_type ? (
+                                  <Checkbox
+                                    checked={!!it.completed_at}
+                                    onCheckedChange={() => void toggleItem(it)}
+                                    className="mt-1 h-5 w-5"
+                                    aria-label={it.label}
+                                  />
+                                ) : (
+                                  <div
+                                    className={`mt-1.5 h-4 w-4 shrink-0 rounded-full border ${
+                                      it.completed_at
+                                        ? "border-emerald-500 bg-emerald-500/20"
+                                        : "border-border"
+                                    }`}
+                                    aria-hidden
+                                  />
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span
+                                      className={
+                                        it.completed_at && it.item_type === "checkbox"
+                                          ? "text-sm text-muted-foreground line-through"
+                                          : "text-sm font-medium"
+                                      }
                                     >
-                                      {it.required ? "Required" : "Optional"}
-                                    </button>
-                                  ) : it.required ? (
-                                    <span className="text-[11px] rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-amber-700 dark:text-amber-400">
-                                      Required
+                                      {it.label}
                                     </span>
-                                  ) : null}
-                                  {editable && (
-                                    <Select
-                                      value={it.item_type ?? "checkbox"}
-                                      onValueChange={(v) => void updateItemType(it, v as ItemType)}
-                                    >
-                                      <SelectTrigger className="h-6 w-[120px] text-[11px]">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="checkbox" className="text-sm">
-                                          Checkbox
-                                        </SelectItem>
-                                        <SelectItem value="pass_fail" className="text-sm">
-                                          Pass / Fail
-                                        </SelectItem>
-                                        <SelectItem value="yes_no" className="text-sm">
-                                          Yes / No
-                                        </SelectItem>
-                                        <SelectItem value="rating" className="text-sm">
-                                          Rating (1–5)
-                                        </SelectItem>
-                                        <SelectItem value="numeric" className="text-sm">
-                                          Numeric
-                                        </SelectItem>
-                                        <SelectItem value="text" className="text-sm">
-                                          Text / Notes
-                                        </SelectItem>
-                                      </SelectContent>
-                                    </Select>
+                                    {editable ? (
+                                      <button
+                                        onClick={() => void toggleRequired(it)}
+                                        aria-pressed={it.required}
+                                        className={cn(
+                                          "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide transition-colors",
+                                          it.required
+                                            ? "border-amber-500/40 bg-amber-500/12 text-amber-700 dark:text-amber-300"
+                                            : "border-border text-muted-foreground/70 hover:border-amber-500/40 hover:text-amber-600 dark:hover:text-amber-300",
+                                        )}
+                                        title={
+                                          it.required
+                                            ? "Required — the checklist can't be completed without it"
+                                            : "Optional"
+                                        }
+                                      >
+                                        {it.required ? "Required" : "Optional"}
+                                      </button>
+                                    ) : it.required ? (
+                                      <span className="shrink-0 rounded-full border border-amber-500/40 bg-amber-500/12 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                                        Required
+                                      </span>
+                                    ) : null}
+                                    {/* Read-only. Switching the answer type wipes
+                                      the recorded response, and offering that as
+                                      a bare dropdown next to every filled-in row
+                                      is a trap — answer types are chosen in the
+                                      template designer. */}
+                                    {it.item_type && it.item_type !== "checkbox" && (
+                                      <span
+                                        className={cn(
+                                          "inline-flex shrink-0 items-center gap-1 rounded-lg border px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide",
+                                          TYPE_META[it.item_type].tint,
+                                        )}
+                                      >
+                                        {TYPE_META[it.item_type].short}
+                                      </span>
+                                    )}
+                                    {photos.length > 0 && (
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {photos.length} photo{photos.length === 1 ? "" : "s"}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {it.description && (
+                                    <p className="mt-0.5 text-xs text-muted-foreground">
+                                      {it.description}
+                                    </p>
                                   )}
-                                  {photos.length > 0 && (
-                                    <span className="text-[10px] text-muted-foreground">
-                                      {photos.length} photo{photos.length === 1 ? "" : "s"}
-                                    </span>
+                                  {it.item_type && it.item_type !== "checkbox" && (
+                                    <div className="mt-2">
+                                      <ItemResponse
+                                        item={it}
+                                        onChange={(v, opts) => void setResponse(it, v, opts)}
+                                      />
+                                    </div>
                                   )}
                                 </div>
-                                {it.description && (
-                                  <p className="mt-0.5 text-xs text-muted-foreground">
-                                    {it.description}
-                                  </p>
-                                )}
-                                {it.item_type && it.item_type !== "checkbox" && (
-                                  <div className="mt-2">
-                                    <ItemResponse
-                                      item={it}
-                                      onChange={(v) => void setResponse(it, v)}
-                                    />
-                                  </div>
-                                )}
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                                onClick={() => setAttachFor(it)}
-                                aria-label="Attach photos"
-                                title="Attach photos"
-                              >
-                                <ImagePlus className="h-3.5 w-3.5" />
-                              </Button>
-                              {editable && (
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8 text-muted-foreground opacity-100 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
-                                  onClick={() => void deleteItem(it.id)}
-                                  aria-label="Delete item"
+                                  className="h-9 w-9 text-muted-foreground hover:text-foreground"
+                                  onClick={() => setAttachForId(it.id)}
+                                  aria-label={`Attach photos to “${it.label}”`}
+                                  title="Attach photos"
                                 >
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <ImagePlus className="h-4 w-4" />
                                 </Button>
-                              )}
-                            </div>
-                            {photos.length > 0 && (
-                              <div className="mt-2 ml-7 flex flex-wrap gap-1.5">
-                                {photos.map((ip) => {
-                                  const url = photoUrls[ip.photo_id];
-                                  if (!url) return null;
-                                  return (
-                                    <div
-                                      key={ip.id}
-                                      className="group/img relative h-14 w-14 overflow-hidden rounded border border-border"
-                                    >
-                                      <img
-                                        src={url}
-                                        alt=""
-                                        className="h-full w-full object-cover"
-                                      />
-                                      <button
-                                        onClick={() => void detachPhoto(ip.id)}
-                                        className="absolute right-0.5 top-0.5 rounded-full bg-background/80 p-0.5 opacity-0 transition-opacity group-hover/img:opacity-100"
-                                        aria-label="Remove photo"
-                                      >
-                                        <X className="h-3 w-3" />
-                                      </button>
-                                    </div>
-                                  );
-                                })}
+                                {editable && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-9 w-9 text-muted-foreground opacity-100 hover:text-destructive sm:opacity-0 sm:focus-visible:opacity-100 sm:group-hover:opacity-100"
+                                    onClick={() => void deleteItem(it.id)}
+                                    aria-label={`Delete “${it.label}”`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </div>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
+                              {photos.length > 0 && (
+                                <div className="mt-2 ml-7 flex flex-wrap gap-1.5">
+                                  {photos.map((ip) => {
+                                    const url = photoUrls[ip.photo_id];
+                                    if (!url) return null;
+                                    return (
+                                      <div
+                                        key={ip.id}
+                                        className="group/img relative h-14 w-14 overflow-hidden rounded border border-border"
+                                      >
+                                        <img
+                                          src={url}
+                                          alt=""
+                                          className="h-full w-full object-cover"
+                                        />
+                                        {/* Visible on touch and reachable by
+                                          keyboard — it was hover-only, so on a
+                                          phone there was no way to detach a
+                                          photo at all. */}
+                                        <button
+                                          onClick={() => void detachPhoto(ip.id)}
+                                          className="absolute right-0.5 top-0.5 rounded-full bg-background/85 p-1 opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover/img:opacity-100"
+                                          aria-label="Remove photo"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
 
-                  {editable && (
-                    // One row: type the label and press Enter. The answer type
-                    // is a compact chip menu rather than a 150px select
-                    // competing with the field you actually type in, and
-                    // "Paste a list" covers the case where the list already
-                    // exists somewhere else.
-                    <div className="mt-3 flex items-center gap-1.5 rounded-xl border border-border bg-card px-1.5 py-1.5">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            title={`${RUNTIME_TYPE_META[adding[cl.id]?.type ?? "checkbox"].label} — click to change`}
-                            className={cn(
-                              "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[10.5px] font-extrabold uppercase tracking-wide transition-opacity hover:opacity-80",
-                              RUNTIME_TYPE_META[adding[cl.id]?.type ?? "checkbox"].tint,
-                            )}
-                          >
-                            {(() => {
-                              const I = RUNTIME_TYPE_META[adding[cl.id]?.type ?? "checkbox"].icon;
-                              return <I className="h-3.5 w-3.5" />;
-                            })()}
-                            <span className="hidden sm:inline">
-                              {RUNTIME_TYPE_META[adding[cl.id]?.type ?? "checkbox"].short}
-                            </span>
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-56">
-                          {RUNTIME_TYPE_ORDER.map((t) => {
-                            const m = RUNTIME_TYPE_META[t];
-                            const I = m.icon;
-                            return (
-                              <DropdownMenuItem
-                                key={t}
-                                onClick={() =>
-                                  setAdding((s) => ({
-                                    ...s,
-                                    [cl.id]: { label: s[cl.id]?.label ?? "", type: t },
-                                  }))
-                                }
-                              >
-                                <I className="mr-2 h-4 w-4" />
-                                {m.label}
-                              </DropdownMenuItem>
-                            );
-                          })}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                  <div className="shrink-0 border-t border-border/60 px-5 py-3 sm:px-6">
+                    {editable && (
+                      // One row: type the label and press Enter. The answer type
+                      // is a compact chip menu rather than a 150px select
+                      // competing with the field you actually type in, and
+                      // "Paste a list" covers the case where the list already
+                      // exists somewhere else.
+                      <div className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-1.5 py-1.5">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              title={`${TYPE_META[adding[cl.id]?.type ?? "checkbox"].label} — click to change`}
+                              className={cn(
+                                "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[10.5px] font-extrabold uppercase tracking-wide transition-opacity hover:opacity-80",
+                                TYPE_META[adding[cl.id]?.type ?? "checkbox"].tint,
+                              )}
+                            >
+                              {(() => {
+                                const I = TYPE_META[adding[cl.id]?.type ?? "checkbox"].icon;
+                                return <I className="h-3.5 w-3.5" />;
+                              })()}
+                              <span className="hidden sm:inline">
+                                {TYPE_META[adding[cl.id]?.type ?? "checkbox"].short}
+                              </span>
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-56">
+                            {TYPE_ORDER.map((t) => {
+                              const m = TYPE_META[t];
+                              const I = m.icon;
+                              return (
+                                <DropdownMenuItem
+                                  key={t}
+                                  onClick={() =>
+                                    setAdding((s) => ({
+                                      ...s,
+                                      [cl.id]: { label: s[cl.id]?.label ?? "", type: t },
+                                    }))
+                                  }
+                                >
+                                  <I className="mr-2 h-4 w-4" />
+                                  {m.label}
+                                </DropdownMenuItem>
+                              );
+                            })}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
 
-                      <Input
-                        placeholder="Add an item and press Enter…"
-                        value={adding[cl.id]?.label ?? ""}
-                        onChange={(e) =>
-                          setAdding((s) => ({
-                            ...s,
-                            [cl.id]: { label: e.target.value, type: s[cl.id]?.type ?? "checkbox" },
-                          }))
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            void addItem(cl.id);
+                        {/* text-base on touch: anything under 16px makes iOS
+                            Safari zoom the whole viewport on focus. */}
+                        <Input
+                          placeholder="Add an item and press Enter…"
+                          aria-label="New checklist item"
+                          value={adding[cl.id]?.label ?? ""}
+                          onChange={(e) =>
+                            setAdding((s) => ({
+                              ...s,
+                              [cl.id]: {
+                                label: e.target.value,
+                                type: s[cl.id]?.type ?? "checkbox",
+                              },
+                            }))
                           }
-                        }}
-                        className="h-8 flex-1 border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0"
-                      />
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void addItem(cl.id);
+                            }
+                          }}
+                          className="h-9 flex-1 border-0 bg-transparent px-1 text-base shadow-none focus-visible:ring-0 sm:text-sm"
+                        />
 
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="min-h-9 shrink-0 px-2 text-xs font-bold text-muted-foreground"
+                          onClick={() => setBulkForChecklist(cl.id)}
+                        >
+                          <ListPlus className="mr-1 h-4 w-4" />
+                          <span className="hidden sm:inline">Paste a list</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="min-h-9 shrink-0"
+                          onClick={() => void addItem(cl.id)}
+                          disabled={!(adding[cl.id]?.label ?? "").trim()}
+                          aria-label="Add item"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+
+                    {/*
+                     * No Save button.
+                     *
+                     * There used to be one, and it wrote nothing — it fired a
+                     * "Saved" toast and refetched. Every edit on this screen
+                     * already persists on its own; the header's SaveStatus is
+                     * the honest report of whether it landed. A button that
+                     * claims credit for work it didn't do is worse than no
+                     * button, especially on a compliance record.
+                     */}
+                    <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                      {requiredOpen > 0 && (
+                        <span className="mr-auto text-[11.5px] font-semibold text-amber-700 dark:text-amber-400">
+                          {requiredOpen} required item{requiredOpen === 1 ? "" : "s"} still open
+                        </span>
+                      )}
+                      {its.length === 0 && (
+                        <span className="mr-auto text-[11.5px] font-semibold text-muted-foreground">
+                          Add at least one item to complete this checklist.
+                        </span>
+                      )}
                       <Button
                         size="sm"
-                        variant="ghost"
-                        className="h-8 shrink-0 px-2 text-xs font-bold text-muted-foreground"
-                        onClick={() => setBulkForChecklist(cl.id)}
+                        className="min-h-9"
+                        onClick={async () => {
+                          setCompleting(true);
+                          const ok = await completeChecklist(cl);
+                          setCompleting(false);
+                          if (ok) setEditingId(null);
+                        }}
+                        disabled={its.length === 0 || requiredOpen > 0 || completing}
                       >
-                        <ListPlus className="mr-1 h-4 w-4" />
-                        <span className="hidden sm:inline">Paste a list</span>
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="h-8 shrink-0"
-                        onClick={() => void addItem(cl.id)}
-                        disabled={!(adding[cl.id]?.label ?? "").trim()}
-                      >
-                        <Plus className="h-4 w-4" />
+                        {completing ? (
+                          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckSquare className="mr-1.5 h-4 w-4" />
+                        )}
+                        Mark as complete
                       </Button>
                     </div>
-                  )}
-
-                  <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-3">
-                    {editable && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8"
-                        onClick={() => void saveAsTemplate(cl)}
-                      >
-                        <BookmarkPlus className="mr-1.5 h-4 w-4" />
-                        Save as template
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8"
-                      onClick={() => {
-                        toast.success("Saved");
-                        void load();
-                      }}
-                    >
-                      Save
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="h-8"
-                      onClick={() => {
-                        void completeChecklist(cl);
-                        setEditingChecklist(null);
-                      }}
-                      disabled={its.length === 0 || requiredOpen > 0}
-                      title={
-                        requiredOpen > 0
-                          ? `${requiredOpen} required item${requiredOpen === 1 ? "" : "s"} still open`
-                          : undefined
-                      }
-                    >
-                      <CheckSquare className="mr-1.5 h-4 w-4" />
-                      Mark as complete
-                    </Button>
                   </div>
                 </>
               );
@@ -1386,11 +1516,11 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
           <div className="space-y-4 py-2">
             {templates.length > 0 && (
               <div>
-                <label className="text-xs uppercase text-muted-foreground">
+                <label htmlFor="cl-template" className="text-xs uppercase text-muted-foreground">
                   Start from template (optional)
                 </label>
-                <Select value={applyingTemplate} onValueChange={setApplyingTemplate}>
-                  <SelectTrigger className="mt-1 h-9 text-sm">
+                <Select value={newTemplateId} onValueChange={setNewTemplateId}>
+                  <SelectTrigger id="cl-template" className="mt-1 h-10 text-sm">
                     <SelectValue placeholder="Blank checklist" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1403,21 +1533,26 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
                 </Select>
               </div>
             )}
-            {!applyingTemplate && (
+            {!newTemplateId && (
               <div>
-                <label className="text-xs uppercase text-muted-foreground">Name</label>
+                <label htmlFor="cl-name" className="text-xs uppercase text-muted-foreground">
+                  Name
+                </label>
                 <Input
+                  id="cl-name"
                   placeholder="Checklist name…"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="mt-1 h-9 text-sm"
+                  className="mt-1 h-10 text-base sm:text-sm"
                 />
               </div>
             )}
             <div>
-              <label className="text-xs uppercase text-muted-foreground">Assign to</label>
+              <label htmlFor="cl-assignee" className="text-xs uppercase text-muted-foreground">
+                Assign to
+              </label>
               <Select value={newAssignee} onValueChange={setNewAssignee}>
-                <SelectTrigger className="mt-1 h-9 text-sm">
+                <SelectTrigger id="cl-assignee" className="mt-1 h-10 text-sm">
                   <div className="flex items-center gap-1.5 truncate">
                     <UserCircle2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <SelectValue />
@@ -1442,17 +1577,22 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
             </Button>
             <Button
               onClick={async () => {
-                if (applyingTemplate) {
-                  await applyTemplate();
-                } else {
-                  await createBlank();
-                }
+                const ok = newTemplateId
+                  ? await applyTemplate(
+                      newTemplateId,
+                      newAssignee === "__unassigned" ? null : newAssignee,
+                    )
+                  : await createBlank();
+                // Only dismiss on success, so a failed create leaves the form
+                // (and what was typed into it) intact.
+                if (!ok) return;
+                setNewTemplateId("");
                 setCreateOpen(false);
                 setTab("active");
               }}
-              disabled={creating || (!applyingTemplate && !newName.trim())}
+              disabled={creating || applyingId !== null || (!newTemplateId && !newName.trim())}
             >
-              {creating ? (
+              {creating || applyingId ? (
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
               ) : (
                 <Plus className="mr-1.5 h-4 w-4" />
@@ -1467,21 +1607,23 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
       <Dialog
         open={!!viewingCompleted}
         onOpenChange={(o) => {
-          if (!o) setViewingCompleted(null);
+          if (!o) setViewingCompletedId(null);
         }}
       >
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto p-6 sm:p-8">
+        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto p-6 sm:p-8">
           <DialogHeader>
             <DialogTitle>{viewingCompleted?.name}</DialogTitle>
+            <DialogDescription>
+              {viewingCompleted?.completed_at
+                ? `Completed ${new Date(viewingCompleted.completed_at).toLocaleString()} — this is the sealed record.`
+                : "A read-only record of what was answered."}
+            </DialogDescription>
           </DialogHeader>
           {viewingCompleted && (
             <>
-              <p className="text-xs text-muted-foreground">
-                Completed {new Date(viewingCompleted.completed_at!).toLocaleString()}
-              </p>
-              <ul className="mt-3 space-y-2">
+              <ul className="mt-1 space-y-2">
                 {(viewingCompleted.snapshot?.items ?? []).map((it: any, idx: number) => (
-                  <li key={idx} className="rounded-xl border-[0.8px] border-border bg-card/60 p-3">
+                  <li key={idx} className="rounded-xl border border-border bg-card/60 p-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <div
                         className={`h-4 w-4 shrink-0 rounded-sm border ${
@@ -1490,12 +1632,9 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
                       />
                       <span className="text-sm font-medium">{it.label}</span>
                       {it.required && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] border-amber-500/40 text-amber-700 dark:text-amber-400"
-                        >
+                        <span className="rounded-full border border-amber-500/40 bg-amber-500/12 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-700 dark:text-amber-300">
                           Required
-                        </Badge>
+                        </span>
                       )}
                     </div>
                     {it.description && (
@@ -1526,8 +1665,8 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
         alreadyAttached={
           attachFor ? (photosByItem.get(attachFor.id) ?? []).map((p) => p.photo_id) : []
         }
-        onClose={() => setAttachFor(null)}
-        onAttached={() => void load()}
+        onClose={() => setAttachForId(null)}
+        onAttached={() => void load({ silent: true })}
       />
 
       <BulkAddItemsDialog<ItemType>
@@ -1536,10 +1675,10 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
         onAdd={async (labels, type) => {
           if (bulkForChecklist) await addItemsBulk(bulkForChecklist, labels, type);
         }}
-        types={RUNTIME_TYPE_ORDER.map((t) => ({
+        types={TYPE_ORDER.map((t) => ({
           value: t,
-          label: RUNTIME_TYPE_META[t].short,
-          icon: RUNTIME_TYPE_META[t].icon,
+          label: TYPE_META[t].short,
+          icon: TYPE_META[t].icon,
         }))}
         defaultType="checkbox"
         description="One per line — they'll be appended to this checklist. Bullets and numbering are stripped automatically."
@@ -1548,20 +1687,36 @@ export function ProjectChecklists({ projectId }: { projectId: string }) {
   );
 }
 
-function ItemResponse({ item, onChange }: { item: ChecklistItem; onChange: (value: any) => void }) {
+/**
+ * The answer widget for a non-checkbox item.
+ *
+ * `immediate: false` marks the inputs that are typed rather than tapped, so
+ * they ride the debounced autosave queue instead of firing a write per
+ * keystroke. Both are controlled: the text field used to be uncontrolled and
+ * save only on blur, which silently discarded the answer if the dialog was
+ * dismissed with Escape or by clicking the overlay.
+ */
+function ItemResponse({
+  item,
+  onChange,
+}: {
+  item: ChecklistItem;
+  onChange: (value: any, opts?: { immediate?: boolean }) => void;
+}) {
   const value = item.response_value;
   switch (item.item_type) {
     case "rating": {
       const n = typeof value === "number" ? value : 0;
       return (
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5" role="group" aria-label="Rating out of 5">
           {[1, 2, 3, 4, 5].map((v) => (
             <button
               key={v}
               type="button"
               onClick={() => onChange(v === n ? null : v)}
-              className="p-0.5"
-              aria-label={`Rate ${v}`}
+              aria-pressed={v <= n}
+              className="p-1.5"
+              aria-label={`Rate ${v} out of 5`}
             >
               <Star
                 className={`h-5 w-5 ${
@@ -1588,13 +1743,14 @@ function ItemResponse({ item, onChange }: { item: ChecklistItem; onChange: (valu
               "bg-muted border-border",
             ];
       return (
-        <div className="flex gap-2">
+        <div className="flex gap-2" role="group" aria-label={item.label}>
           {opts.map((o, i) => (
             <button
               key={o}
               type="button"
               onClick={() => onChange(value === o ? null : o)}
-              className={`min-w-[72px] rounded-lg border px-4 py-2 text-sm font-bold transition-colors ${
+              aria-pressed={value === o}
+              className={`min-h-11 min-w-[76px] rounded-lg border px-4 py-2 text-sm font-bold transition-colors ${
                 value === o ? colors[i] : "border-border text-muted-foreground hover:bg-muted/60"
               }`}
             >
@@ -1608,26 +1764,34 @@ function ItemResponse({ item, onChange }: { item: ChecklistItem; onChange: (valu
       return (
         <Input
           type="number"
+          inputMode="decimal"
           value={value ?? ""}
+          aria-label={item.label}
           onChange={(e) => {
-            const v = e.target.value;
-            onChange(v === "" ? null : Number(v));
+            const raw = e.target.value;
+            if (raw === "") {
+              onChange(null, { immediate: false });
+              return;
+            }
+            // A partial entry like "1e" or "-" parses to NaN, which used to be
+            // written straight to the record.
+            const n = Number(raw);
+            if (Number.isNaN(n)) return;
+            onChange(n, { immediate: false });
           }}
           placeholder="Enter a value"
-          className="h-8 max-w-[180px] text-sm"
+          className="h-10 max-w-[180px] text-base sm:text-sm"
         />
       );
     case "text":
       return (
         <Textarea
-          defaultValue={typeof value === "string" ? value : ""}
-          onBlur={(e) => {
-            const v = e.target.value;
-            if (v !== (typeof value === "string" ? value : "")) onChange(v || null);
-          }}
+          value={typeof value === "string" ? value : ""}
+          aria-label={item.label}
+          onChange={(e) => onChange(e.target.value || null, { immediate: false })}
           placeholder="Type a response…"
           rows={2}
-          className="text-sm"
+          className="text-base sm:text-sm"
         />
       );
     default:
@@ -1688,12 +1852,16 @@ function AttachPhotosDialog({
     setLoading(false);
   };
 
+  // Keyed on the item *id*, not the row. The row is now looked up from live
+  // state each render, so depending on the object would re-fetch the gallery
+  // and clear the user's selection every time anything about the item changed.
+  const itemId = item?.id ?? null;
   useEffect(() => {
-    if (!item) return;
+    if (!itemId) return;
     setPicked(new Set());
     void loadPhotos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item, projectId]);
+  }, [itemId, projectId]);
 
   const togglePick = (photoId: string) => {
     setPicked((prev) => {

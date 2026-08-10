@@ -43,7 +43,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { EditProjectDialog } from "@/features/projects/components/EditProjectDialog";
 import { ProjectActionsMenu } from "@/features/projects/components/ProjectActionsMenu";
 import { ProjectChecklists } from "@/features/projects/components/ProjectChecklists";
-import { TimelineCalendar } from "@/features/timeline/components/TimelineCalendar";
+import { startOfMonth } from "date-fns";
+import {
+  PhotoCalendar,
+  type CalendarPhoto,
+} from "@/features/gallery/components/PhotoCalendar";
 import { PhotoThumb } from "@/components/PhotoThumb";
 import { ProjectWorkflows } from "@/features/projects/components/ProjectWorkflows";
 import { ProjectTasks, type ProjectTasksHandle } from "@/features/projects/components/ProjectTasks";
@@ -116,6 +120,7 @@ import { CameraCapture, compressImageFile } from "@/features/photos/components/C
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { toast } from "sonner";
 import { BusyOverlay } from "@/components/BusyOverlay";
+import { EmptyState } from "@/components/EmptyState";
 import { UpgradeDialog } from "@/components/UpgradeDialog";
 import { extractPhotoMeta, mergePhotoMeta, formatPhotoDateGroup } from "@/lib/photo-exif";
 import { LabelPicker } from "@/features/photos/components/LabelPicker";
@@ -137,7 +142,7 @@ const WALKTHROUGH_MAX_SECONDS: Record<string, number> = { pro: 600, team: 1200 }
 export type ProjectDetailSearch = {
   camera?: 1;
   walkthrough?: 1;
-  panel?: "tasks" | "checklists" | "walkthroughs" | "reports" | "workflows" | "trash" | "timeline";
+  panel?: "tasks" | "checklists" | "walkthroughs" | "reports" | "workflows" | "trash" | "calendar";
 };
 
 import type { Project, Photo, Report } from "../types";
@@ -181,6 +186,15 @@ export function ProjectDetailPage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [signed, setSigned] = useState<Record<string, string>>({});
+  // Calendar tab. Its photos are a day at a time and loaded by the calendar
+  // itself, so they get their own lightbox rather than being forced into the
+  // Photos tab's list — that one is paged and filtered and would not always
+  // contain the day you just opened.
+  const [calendarMonth, setCalendarMonth] = useState<Date>(() => startOfMonth(new Date()));
+  const [calendarDay, setCalendarDay] = useState<string | null>(null);
+  const [calendarPhotos, setCalendarPhotos] = useState<CalendarPhoto[]>([]);
+  const [calendarSigned, setCalendarSigned] = useState<Record<string, string>>({});
+  const [calendarLightbox, setCalendarLightbox] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -2062,7 +2076,7 @@ export function ProjectDetailPage() {
   // (AI report generation lives in the global sidebar, not this page.)
 
   // Full-page panel view — replaces the project page when a tab is opened.
-  // Walkthroughs, Checklists, Documents, Workflows, Tasks and Timeline render
+  // Walkthroughs, Checklists, Documents, Workflows, Tasks and Calendar render
   // inline instead (alongside the hero + tab nav), see below. Anything missing
   // from this list falls through to the full-page branch, which only knows how
   // to draw Trash — so it would render as an empty page.
@@ -2073,7 +2087,7 @@ export function ProjectDetailPage() {
     panel !== "reports" &&
     panel !== "workflows" &&
     panel !== "tasks" &&
-    panel !== "timeline"
+    panel !== "calendar"
   ) {
     const panelTitle = panel === "trash" ? "Trash" : "";
     return (
@@ -2330,9 +2344,10 @@ export function ProjectDetailPage() {
               },
               { key: "workflows", label: "Workflows", count: counts.workflows, icon: Workflow },
               { key: "tasks", label: "Tasks", count: counts.tasksOpen, icon: CheckSquare },
-              // No count: a timeline is a view of the photos already counted on
-              // the Photos tab, so a number here would double-count the same work.
-              { key: "timeline", label: "Timeline", count: null, icon: CalendarDays },
+              // No count: the calendar is a view of the photos already counted
+              // on the Photos tab, so a number here would double-count the
+              // same work.
+              { key: "calendar", label: "Calendar", count: null, icon: CalendarDays },
             ] as const
           ).map((tab) => {
             const active = (tab.key === "photos" && panel === null) || panel === tab.key;
@@ -2471,11 +2486,39 @@ export function ProjectDetailPage() {
         </>
       )}
 
-      {panel === "checklists" && <ProjectChecklists projectId={project.id} />}
-      {/* Free on every plan — the company-wide view at /timeline is the paid one. */}
-      {panel === "timeline" && (
+      {panel === "checklists" && (
         <div className="mt-9">
-          <TimelineCalendar projectId={project.id} />
+          <ProjectChecklists
+            projectId={project.id}
+            onChanged={() => void load({ silent: true })}
+          />
+        </div>
+      )}
+      {/* The same calendar the gallery uses, scoped to this job — one
+          implementation, so the two can't drift. */}
+      {panel === "calendar" && (
+        <div className="mt-9">
+          <PhotoCalendar
+            month={calendarMonth}
+            onMonthChange={(next) => {
+              setCalendarMonth(next);
+              setCalendarDay(null);
+            }}
+            projectIds={[project.id]}
+            projects={[{ id: project.id, name: project.name }]}
+            selectedDay={calendarDay}
+            onSelectDay={setCalendarDay}
+            // A project breakdown says the same thing on every row when the
+            // whole view is already one project.
+            showProjectBreakdown={false}
+            onDayPhotosChange={(dayPhotos, dayUrls) => {
+              setCalendarPhotos(dayPhotos);
+              setCalendarSigned(dayUrls);
+            }}
+            onOpenPhoto={(p, dayPhotos) =>
+              setCalendarLightbox(dayPhotos.findIndex((x) => x.id === p.id))
+            }
+          />
         </div>
       )}
       {panel === "reports" && (
@@ -2495,7 +2538,25 @@ export function ProjectDetailPage() {
       )}
       {panel === "workflows" && (
         <div className="mt-9">
-          <ProjectWorkflows projectId={project.id} />
+          {/* The Team check used to live only in the tab's click handler, but
+              `panel` comes from the URL — a bookmark or a back-nav rendered the
+              whole runner for a Starter user, who then hit the RLS policy as an
+              unexplained failure. Gate the render, not just the click. */}
+          {isTeam ? (
+            <ProjectWorkflows
+              projectId={project.id}
+              onChanged={() => void load({ silent: true })}
+            />
+          ) : (
+            <EmptyState
+              icon={Workflow}
+              title="Workflows are a Team plan feature"
+              description="Multi-phase workflows with checklists, photo prompts, and sign-offs per phase are available on the Team plan."
+              action={
+                <Button onClick={() => setWorkflowsUpgradeOpen(true)}>See Team plan</Button>
+              }
+            />
+          )}
         </div>
       )}
       {panel === "tasks" && (
@@ -3071,6 +3132,31 @@ export function ProjectDetailPage() {
         mimeType={playerVideo?.mime ?? null}
         emptyMessage={playerVideo?.emptyMessage}
       />
+
+      {/* Calendar tab: a plain viewer over the selected day. The Photos tab's
+          lightbox below carries per-photo tooling that is keyed to its own
+          filtered list, so the two stay separate. */}
+      {calendarLightbox !== null && calendarPhotos.length > 0 && (
+        <PhotoLightbox
+          photos={calendarPhotos.map((p) => ({
+            id: p.id,
+            url: p.image_url ?? calendarSigned[p.id] ?? "",
+            caption: p.caption,
+            takenAt: p.taken_at ?? p.created_at,
+          }))}
+          index={Math.min(calendarLightbox, calendarPhotos.length - 1)}
+          onClose={() => setCalendarLightbox(null)}
+          onIndexChange={(i) => setCalendarLightbox(i)}
+          onSharePhoto={(lp) => {
+            const ph = calendarPhotos.find((x) => x.id === lp.id);
+            if (!ph) return;
+            void sharePhotoNative({
+              url: ph.image_url ?? calendarSigned[ph.id] ?? "",
+              title: ph.caption ?? "Photo",
+            });
+          }}
+        />
+      )}
 
       {lightboxIndex !== null && filteredPhotos.length > 0 && (
         <PhotoLightbox

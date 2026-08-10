@@ -4,8 +4,33 @@ import { signPhotoUrls } from "../../lib/photo-urls";
 
 /** Month-view day cells show one representative photo each. */
 const DAY_THUMB_WIDTH = 400;
-/** Ceiling on rows pulled for a range — a year of heavy use stays under this. */
-const MAX_ROWS = 6000;
+/**
+ * Ceiling on rows pulled for a range. The count-only mode (the year heatmap)
+ * gets the higher one: its rows are three small columns rather than six, and a
+ * whole year of heavy use has to fit in a single request or the shading lies.
+ */
+const MAX_ROWS_WITH_THUMBS = 6000;
+const MAX_ROWS_COUNT_ONLY = 20000;
+/**
+ * Days of slack added to each end of the `created_at` window.
+ *
+ * Buckets key off `taken_at` but the range filter has to run against
+ * `created_at` (the only column with an index that suits it). A photo shot at
+ * 6pm on the 31st and synced the next morning would otherwise fall outside a
+ * window that ends at the month boundary, and the last day of every month would
+ * read light. Fetch a little wider, then trim by local date.
+ */
+const SYNC_DRIFT_DAYS = 3;
+const DAY_MS = 86_400_000;
+
+/**
+ * A PostgREST array literal with every element quoted.
+ *
+ * `.overlaps()` joins the values on commas and quotes nothing, so a tag that
+ * contains a comma would silently split into two and match the wrong photos.
+ */
+const pgArray = (values: string[]) =>
+  `{${values.map((v) => `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
 
 export interface TimelineDay {
   /** Local calendar date, YYYY-MM-DD. */
@@ -20,6 +45,11 @@ export interface TimelineDay {
 export interface TimelineActivity {
   days: TimelineDay[];
   totalPhotos: number;
+  /**
+   * The range hit the row ceiling, so counts are a floor rather than a total.
+   * Callers should say so instead of presenting short numbers as fact.
+   */
+  capped: boolean;
 }
 
 export const listTimelineActivityInputSchema = z.object({
@@ -27,7 +57,10 @@ export const listTimelineActivityInputSchema = z.object({
   from: z.string().datetime(),
   /** Exclusive ISO instant for the end of the range. */
   to: z.string().datetime(),
-  projectId: z.string().uuid().optional(),
+  /** Empty/omitted means every project the caller can see. */
+  projectIds: z.array(z.string().uuid()).max(200).optional(),
+  /** Any-of tag filter, matching how the gallery's tag pills combine. */
+  tags: z.array(z.string().min(1).max(128)).max(64).optional(),
   /**
    * Minutes to subtract from UTC to reach the viewer's local time, i.e. exactly
    * what `new Date().getTimezoneOffset()` returns. Without this a photo taken
@@ -41,6 +74,11 @@ export const listTimelineActivityInputSchema = z.object({
 /**
  * Photo activity bucketed by local calendar day.
  *
+ * This is what the gallery's calendar draws its day cells from. It exists as an
+ * aggregate rather than the page counting a downloaded slice of photos, because
+ * a busy month overruns any sane row limit and counts that quietly come up
+ * short are worse than no counts at all.
+ *
  * Reads through the caller's client rather than the admin one, so RLS scopes
  * this to projects they can actually see and no extra permission check is
  * needed here.
@@ -49,36 +87,56 @@ export async function listTimelineActivityService(
   ctx: AuthedContext,
   data: z.infer<typeof listTimelineActivityInputSchema>,
 ): Promise<TimelineActivity> {
+  const maxRows = data.withThumbnails ? MAX_ROWS_WITH_THUMBS : MAX_ROWS_COUNT_ONLY;
+  const fromMs = Date.parse(data.from);
+  const toMs = Date.parse(data.to);
+  const slack = SYNC_DRIFT_DAYS * DAY_MS;
+
   let query = (ctx.supabase as any)
     .from("photos")
-    .select("id, project_id, storage_path, image_url, taken_at, created_at")
+    // The heatmap never renders a pixel, so it does not pay for the columns
+    // that would let it. At 20k rows those three columns are the difference
+    // between a small response and a few megabytes.
+    .select(
+      data.withThumbnails
+        ? "id, project_id, storage_path, image_url, taken_at, created_at"
+        : "project_id, taken_at, created_at",
+    )
     .eq("archived", false)
+    .is("deleted_at", null)
     // Walkthrough frames are capture artefacts, not a record of a day's work.
     .or("phase.is.null,phase.neq.walkthrough")
-    .gte("created_at", data.from)
-    .lt("created_at", data.to)
+    .not("storage_path", "like", "%/walkthroughs/%")
+    .gte("created_at", new Date(fromMs - slack).toISOString())
+    .lt("created_at", new Date(toMs + slack).toISOString())
     .order("created_at", { ascending: false })
-    .limit(MAX_ROWS);
-  if (data.projectId) query = query.eq("project_id", data.projectId);
+    .limit(maxRows);
+  if (data.projectIds?.length) query = query.in("project_id", data.projectIds);
+  if (data.tags?.length) query = query.filter("tags", "ov", pgArray(data.tags));
 
   const { data: rows, error } = await query;
   if (error) throw Object.assign(new Error(error.message), { status: 400 });
   const photos = (rows as any[]) ?? [];
-  if (!photos.length) return { days: [], totalPhotos: 0 };
+  const capped = photos.length >= maxRows;
+  if (!photos.length) return { days: [], totalPhotos: 0, capped: false };
 
   const offsetMs = data.tzOffsetMinutes * 60_000;
   /** Shift into the viewer's local frame, then take the calendar date. */
-  const localDate = (iso: string) => new Date(new Date(iso).getTime() - offsetMs).toISOString().slice(0, 10);
+  const localDate = (iso: string) =>
+    new Date(new Date(iso).getTime() - offsetMs).toISOString().slice(0, 10);
+  // taken_at is when the shutter fired; created_at is when it synced. Prefer
+  // the former so photos uploaded the next morning land on the day they were
+  // actually shot.
+  const shotAt = (p: any): string => p.taken_at ?? p.created_at;
 
-  const byDay = new Map<
-    string,
-    { photos: any[]; projectIds: Set<string> }
-  >();
+  // The slack above deliberately over-fetches; these bound what we keep.
+  const firstDate = localDate(data.from);
+  const lastDate = localDate(new Date(toMs - 1).toISOString());
+
+  const byDay = new Map<string, { photos: any[]; projectIds: Set<string> }>();
   for (const p of photos) {
-    // taken_at is when the shutter fired; created_at is when it synced. Prefer
-    // the former so photos uploaded the next morning land on the day they were
-    // actually shot.
-    const key = localDate(p.taken_at ?? p.created_at);
+    const key = localDate(shotAt(p));
+    if (key < firstDate || key > lastDate) continue;
     const bucket = byDay.get(key);
     if (bucket) {
       bucket.photos.push(p);
@@ -88,11 +146,16 @@ export async function listTimelineActivityService(
     }
   }
 
-  // Cover photo per day, resolved only when the caller will render them.
+  // Cover photo per day, resolved only when the caller will render them. Rows
+  // arrive in created_at order but buckets key off taken_at, so pick the newest
+  // by the same clock the day cell was built from — otherwise the cover is
+  // whichever photo happened to sync last.
   const covers = new Map<string, any>();
   if (data.withThumbnails) {
     for (const [date, bucket] of byDay) {
-      const cover = bucket.photos.find((p) => p.image_url || p.storage_path);
+      const cover = bucket.photos
+        .filter((p) => p.image_url || p.storage_path)
+        .sort((a, b) => +new Date(shotAt(b)) - +new Date(shotAt(a)))[0];
       if (cover) covers.set(date, cover);
     }
   }
@@ -118,9 +181,11 @@ export async function listTimelineActivityService(
     ((projectRows as any[]) ?? []).forEach((p) => projectNames.set(p.id, p.name ?? ""));
   }
 
+  let totalPhotos = 0;
   const days: TimelineDay[] = Array.from(byDay.entries())
     .map(([date, bucket]) => {
       const cover = covers.get(date);
+      totalPhotos += bucket.photos.length;
       return {
         date,
         photoCount: bucket.photos.length,
@@ -133,5 +198,5 @@ export async function listTimelineActivityService(
     })
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  return { days, totalPhotos: photos.length };
+  return { days, totalPhotos, capped };
 }

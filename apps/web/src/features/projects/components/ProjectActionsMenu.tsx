@@ -4,14 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   MoreVertical,
-  Pencil,
-  Merge,
+  SquarePen,
+  GitMerge,
   FolderPlus,
   Trash2,
-  MapPin,
+  Navigation,
   Archive,
+  ArchiveRestore,
   QrCode,
-  Download,
+  FileArchive,
+  History,
   AlertTriangle,
   Loader2,
   Check,
@@ -77,6 +79,9 @@ interface ProjectActionsMenuProps {
   triggerClassName?: string;
 }
 
+/** Matches the section headings in GenerateDocumentMenu, the menu's neighbour in the header. */
+const sectionLabel = "text-[10px] uppercase tracking-wide text-muted-foreground";
+
 function projectAddress(project: ProjectActionsMenuProps["project"]) {
   return (
     [project.street, project.city, project.state, project.zip].filter(Boolean).join(", ") ||
@@ -93,6 +98,31 @@ function googleMapsUrl(project: ProjectActionsMenuProps["project"]) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
 }
 
+/**
+ * Title + one-line explanation, the same shape GenerateDocumentMenu uses for its
+ * items. The two menus sit next to each other in the project header, so they
+ * read as one system instead of two different products.
+ */
+function MenuText({ title, hint }: { title: string; hint: string }) {
+  return (
+    <span className="min-w-0">
+      <span className="block font-bold">{title}</span>
+      <span className="block text-xs font-normal leading-snug text-muted-foreground">{hint}</span>
+    </span>
+  );
+}
+
+/**
+ * The project header's overflow menu.
+ *
+ * Deliberately *not* modelled on the reference app's version. Same practical
+ * jobs — because those are what field crews actually need — but grouped by
+ * intent (this project / organize / share / recovery) rather than one long
+ * list plus a "danger zone", worded in our own vocabulary, and rendered with
+ * this app's two-line item style. Trash and Delete live together under
+ * "Recovery" because both are the same 60-day soft-delete lifecycle; splitting
+ * them across the menu was the reference app's arrangement, not ours.
+ */
 export function ProjectActionsMenu({
   project,
   photos,
@@ -234,7 +264,7 @@ export function ProjectActionsMenu({
     if (!target) return;
     if (
       !(await confirm({
-        description: `Combine “${project.name}” into “${target.name}”?\n\nAll photos, videos, tasks, documents, checklists, workflows, and walkthroughs will be moved to the target project. This project will be removed. This cannot be undone.`,
+        description: `Merge “${project.name}” into “${target.name}”?\n\nAll photos, videos, tasks, documents, checklists, workflows, and walkthroughs will be moved to the target project. This project will be removed. This cannot be undone.`,
         variant: "destructive",
       }))
     )
@@ -242,7 +272,7 @@ export function ProjectActionsMenu({
     setBusy(true);
     try {
       const res = await doCombine({ data: { sourceId: project.id, targetId: combineTarget } });
-      toast.success("Projects combined");
+      toast.success("Projects merged");
       setCombineOpen(false);
       navigate({ to: "/projects/$projectId", params: { projectId: (res as any).targetId } });
     } catch (e: any) {
@@ -379,10 +409,8 @@ export function ProjectActionsMenu({
             <MoreVertical className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-60">
-          <DropdownMenuLabel className="px-2 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Project
-          </DropdownMenuLabel>
+        <DropdownMenuContent align="end" className="w-[19rem] max-w-[calc(100vw-2rem)]">
+          <DropdownMenuLabel className={sectionLabel}>This project</DropdownMenuLabel>
 
           <DropdownMenuItem
             onClick={() => {
@@ -390,19 +418,33 @@ export function ProjectActionsMenu({
               onEdit();
             }}
           >
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit Project
+            <SquarePen className="mr-2 h-4 w-4 text-primary" />
+            <MenuText title="Edit details" hint="Name, address, status and description" />
           </DropdownMenuItem>
 
           <DropdownMenuItem
             onClick={() => {
               setOpen(false);
-              setCombineOpen(true);
+              void handleArchive();
             }}
           >
-            <Merge className="mr-2 h-4 w-4" />
-            Combine Projects
+            {isArchived ? (
+              <ArchiveRestore className="mr-2 h-4 w-4 text-primary" />
+            ) : (
+              <Archive className="mr-2 h-4 w-4 text-primary" />
+            )}
+            <MenuText
+              title={isArchived ? "Move back to active" : "Move to archive"}
+              hint={
+                isArchived
+                  ? "Show it in the active project list again"
+                  : "Keeps everything, just clears it off the active list"
+              }
+            />
           </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className={sectionLabel}>Organize</DropdownMenuLabel>
 
           <DropdownMenuItem
             onClick={() => {
@@ -411,19 +453,24 @@ export function ProjectActionsMenu({
             }}
           >
             <FolderPlus className="mr-2 h-4 w-4" />
-            Add to Project Group
+            <MenuText title="File under a group" hint="Keep related job sites together" />
           </DropdownMenuItem>
 
           <DropdownMenuItem
             onClick={() => {
               setOpen(false);
-              onTrash();
+              setCombineOpen(true);
             }}
-            className="text-amber-600 focus:text-amber-600 focus:bg-amber-500/10 dark:text-amber-400 dark:focus:text-amber-400"
           >
-            <Trash2 className="mr-2 h-4 w-4" />
-            View Project Trash
+            <GitMerge className="mr-2 h-4 w-4" />
+            <MenuText
+              title="Merge into another project"
+              hint="Moves every photo, task and document across"
+            />
           </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className={sectionLabel}>Share &amp; export</DropdownMenuLabel>
 
           {mapUrl && (
             <DropdownMenuItem asChild>
@@ -433,22 +480,16 @@ export function ProjectActionsMenu({
                 rel="noopener noreferrer"
                 className="flex cursor-pointer items-center"
               >
-                <MapPin className="mr-2 h-4 w-4" />
-                View Google Map
-                <ExternalLink className="ml-auto h-3 w-3 opacity-50" />
+                <Navigation className="mr-2 h-4 w-4" />
+                {/* Pin-only projects have no address string, so fall back to a generic hint. */}
+                <MenuText
+                  title="Open location in Maps"
+                  hint={projectAddress(project) || "Directions to this site"}
+                />
+                <ExternalLink className="ml-2 h-3 w-3 shrink-0 opacity-50" />
               </a>
             </DropdownMenuItem>
           )}
-
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(false);
-              void handleArchive();
-            }}
-          >
-            <Archive className="mr-2 h-4 w-4" />
-            {isArchived ? "Unarchive Project" : "Archive Project"}
-          </DropdownMenuItem>
 
           <DropdownMenuItem
             onClick={() => {
@@ -457,7 +498,7 @@ export function ProjectActionsMenu({
             }}
           >
             <QrCode className="mr-2 h-4 w-4" />
-            Download QR Code
+            <MenuText title="Save QR code" hint="Print it on site — a scan opens this project" />
           </DropdownMenuItem>
 
           <DropdownMenuItem
@@ -467,37 +508,65 @@ export function ProjectActionsMenu({
             }}
             disabled={photos.length === 0}
           >
-            <Download className="mr-2 h-4 w-4" />
-            Download All Photos
+            <FileArchive className="mr-2 h-4 w-4" />
+            <MenuText
+              title="Export photos as ZIP"
+              hint={
+                photos.length === 0
+                  ? "No field captures yet"
+                  : `${photos.length} field capture${photos.length === 1 ? "" : "s"}, original quality`
+              }
+            />
           </DropdownMenuItem>
 
           {/* Google Calendar integration is not implemented yet; hidden per user request. */}
 
           <DropdownMenuSeparator />
-          <DropdownMenuLabel className="px-2 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Danger Zone
-          </DropdownMenuLabel>
+          {/*
+            Trash and Delete belong to the same 60-day soft-delete lifecycle, so
+            they sit together instead of being split between the main list and a
+            separate "danger zone" at the bottom.
+          */}
+          <DropdownMenuLabel className={sectionLabel}>Recovery</DropdownMenuLabel>
+
+          <DropdownMenuItem
+            onClick={() => {
+              setOpen(false);
+              onTrash();
+            }}
+          >
+            <History className="mr-2 h-4 w-4" />
+            <MenuText
+              title="Recently deleted"
+              hint="Restore anything removed in the last 60 days"
+            />
+          </DropdownMenuItem>
 
           <DropdownMenuItem
             onClick={() => {
               setOpen(false);
               setDeleteOpen(true);
             }}
-            className="text-destructive focus:text-destructive focus:bg-destructive/10"
+            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
           >
             <Trash2 className="mr-2 h-4 w-4" />
-            Delete Project
+            <span className="min-w-0">
+              <span className="block font-bold">Delete this project</span>
+              <span className="block text-xs font-normal leading-snug text-destructive/70">
+                Goes to Trash — recoverable for 60 days
+              </span>
+            </span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Add to Project Group dialog */}
+      {/* File under a group dialog */}
       <Dialog open={groupOpen} onOpenChange={setGroupOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Add to Project Group</DialogTitle>
+            <DialogTitle>File under a group</DialogTitle>
             <DialogDescription>
-              Add “{project.name}” to an existing group. You can create new groups from the
+              File “{project.name}” under an existing group. You can create new groups from the
               dashboard.
             </DialogDescription>
           </DialogHeader>
@@ -566,11 +635,11 @@ export function ProjectActionsMenu({
         </DialogContent>
       </Dialog>
 
-      {/* Combine Projects dialog */}
+      {/* Merge into another project dialog */}
       <Dialog open={combineOpen} onOpenChange={setCombineOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Combine Projects</DialogTitle>
+            <DialogTitle>Merge into another project</DialogTitle>
             <DialogDescription>
               Move all data from “{project.name}” into another project. The source project will be
               removed.
@@ -640,7 +709,7 @@ export function ProjectActionsMenu({
               onClick={() => void handleCombine()}
             >
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Combine into selected project
+              Merge into selected project
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -652,7 +721,7 @@ export function ProjectActionsMenu({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5" />
-              Delete Project
+              Delete this project
             </DialogTitle>
             <DialogDescription>
               Move “{project.name}” to Trash? All photos, reports, tasks, and checklists will be
@@ -667,7 +736,7 @@ export function ProjectActionsMenu({
             </Button>
             <Button variant="destructive" disabled={busy} onClick={() => void handleDelete()}>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Delete Project
+              Move to Trash
             </Button>
           </DialogFooter>
         </DialogContent>

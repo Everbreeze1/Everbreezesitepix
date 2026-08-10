@@ -12,7 +12,6 @@ import {
   HelpCircle,
   ChevronRight,
   Layers,
-  CalendarDays,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import {
@@ -43,7 +42,8 @@ const baseItems = [
 const teamItem = { title: "Teams", url: "/teams", icon: Users } as const;
 const collabItem = { title: "Collaborators", url: "/collaborators", icon: Users } as const;
 const templatesItem = { title: "Templates", url: "/templates", icon: LayoutTemplate } as const;
-const timelineItem = { title: "Timeline", url: "/timeline", icon: CalendarDays } as const;
+// No Timeline item: the company-wide timeline was the gallery's calendar with
+// fewer controls behind a Pro gate, so it lives at /gallery (Calendar) now.
 // The page behind /showcases is now the whole portfolio mini-site (site +
 // project pages + website embeds), so "Portfolio" is what it actually is.
 const showcasesItem = { title: "Portfolio", url: "/showcases", icon: Layers } as const;
@@ -95,7 +95,7 @@ export function AppSidebar() {
   const showShowcases = !!teamData?.isInternal || (!!teamData?.isActive && plan === "team");
   const navItems = [
     ...baseItems,
-    ...(showTemplates ? [timelineItem, templatesItem] : []),
+    ...(showTemplates ? [templatesItem] : []),
     ...(showShowcases ? [showcasesItem] : []),
     ...(showOwnerNav ? [teamItem] : [collabItem]),
   ];

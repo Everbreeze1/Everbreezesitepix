@@ -10,10 +10,6 @@ import {
   Sparkles,
   CheckSquare,
   Star,
-  Type,
-  CheckCircle2,
-  Hash,
-  ToggleLeft,
   MoreHorizontal,
   Eye,
   MessageSquareText,
@@ -81,11 +77,10 @@ import {
   QuietTextarea,
   RequiredToggle,
   StatChip,
-} from "@/features/settings/components/template-builder/builder-ui";
-import { restrictToVerticalAxis } from "@/features/settings/components/template-builder/builder-tokens";
-import { useAutosave } from "@/features/settings/components/template-builder/use-autosave";
-
-type ItemType = "checkbox" | "rating" | "text" | "pass_fail" | "numeric" | "yes_no";
+} from "@/components/builder/builder-ui";
+import { restrictToVerticalAxis } from "@/components/builder/builder-tokens";
+import { useAutosave } from "@/components/builder/use-autosave";
+import { TYPE_META, TYPE_ORDER, type ItemType } from "@/lib/checklist-items";
 
 interface Template {
   id: string;
@@ -103,56 +98,6 @@ interface TemplateItem {
   item_type: ItemType;
   description: string | null;
 }
-
-const TYPE_META: Record<
-  ItemType,
-  { label: string; short: string; icon: typeof CheckSquare; hint: string; tint: string }
-> = {
-  checkbox: {
-    label: "Checkbox",
-    short: "Check",
-    icon: CheckSquare,
-    hint: "Simple done / not done",
-    tint: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-  },
-  rating: {
-    label: "Rating (1–5)",
-    short: "Rating",
-    icon: Star,
-    hint: "Star scale for assessments",
-    tint: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  },
-  text: {
-    label: "Text field",
-    short: "Text",
-    icon: Type,
-    hint: "Free-form note",
-    tint: "border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300",
-  },
-  pass_fail: {
-    label: "Pass / Fail",
-    short: "Pass/Fail",
-    icon: CheckCircle2,
-    hint: "Inspection result",
-    tint: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  },
-  numeric: {
-    label: "Numeric",
-    short: "Number",
-    icon: Hash,
-    hint: "Measurement or count",
-    tint: "border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
-  },
-  yes_no: {
-    label: "Yes / No",
-    short: "Yes/No",
-    icon: ToggleLeft,
-    hint: "Quick binary answer",
-    tint: "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300",
-  },
-};
-
-const TYPE_ORDER: ItemType[] = ["checkbox", "pass_fail", "yes_no", "rating", "numeric", "text"];
 
 const STARTER_TEMPLATES: {
   name: string;

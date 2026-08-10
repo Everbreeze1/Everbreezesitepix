@@ -16,12 +16,24 @@ export const qk = {
   projectBoards: (userId: string) => ["project-boards", userId] as const,
   /** Omit `filters` to get the base key — invalidating the base key clears
    * every filter variant for that user, since React Query matches by key prefix. */
-  galleryPhotos: (userId: string, filters?: { projectFilter: string[]; dateFrom: string; dateTo: string }) =>
+  galleryPhotos: (
+    userId: string,
+    filters?: { projectFilter: string[]; dateFrom: string; dateTo: string },
+  ) =>
     filters
       ? (["gallery", "photos", userId, filters] as const)
       : (["gallery", "photos", userId] as const),
   galleryProjects: (userId: string) => ["gallery", "projects", userId] as const,
   galleryTotalPhotos: (userId: string) => ["gallery", "total-photos", userId] as const,
+  /** Day-bucketed photo counts behind the calendar's cells and heatmap. */
+  photoActivity: (
+    userId: string,
+    scope?: { from: string; to: string; projectIds: string[]; tags: string[]; thumbs: boolean },
+  ) =>
+    scope ? (["photo-activity", userId, scope] as const) : (["photo-activity", userId] as const),
+  /** The photos behind one selected calendar day. */
+  photoDay: (userId: string, scope?: { day: string; projectIds: string[]; tags: string[] }) =>
+    scope ? (["photo-day", userId, scope] as const) : (["photo-day", userId] as const),
   mapProjects: (userId: string) => ["map", "projects", userId] as const,
   notificationsUnread: (userId: string) => ["notifications", "unread", userId] as const,
   notificationsList: (userId: string) => ["notifications", "list", userId] as const,

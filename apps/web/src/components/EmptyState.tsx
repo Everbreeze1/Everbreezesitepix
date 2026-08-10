@@ -21,7 +21,7 @@ export function EmptyState({
   variant = "card",
 }: EmptyStateProps) {
   const inner = (
-    <div className={cn("flex flex-col items-center text-center", className)}>
+    <div className="flex flex-col items-center text-center">
       {Icon && (
         <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-muted text-muted-foreground">
           <Icon className="h-6 w-6" />
@@ -33,7 +33,14 @@ export function EmptyState({
     </div>
   );
 
-  if (variant === "plain") return inner;
+  // `className` belongs on whatever the caller actually sees. It used to land
+  // on the inner stack even in card mode, so every `className="mt-6"` call site
+  // was padding the inside of the card instead of spacing it from what's above.
+  if (variant === "plain") return <div className={className}>{inner}</div>;
 
-  return <Card className="flex flex-col items-center border-dashed p-10 md:p-12">{inner}</Card>;
+  return (
+    <Card className={cn("flex flex-col items-center border-dashed p-10 md:p-12", className)}>
+      {inner}
+    </Card>
+  );
 }

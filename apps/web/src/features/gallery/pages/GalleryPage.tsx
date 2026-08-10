@@ -27,7 +27,7 @@ import {
   LayoutGrid,
   CalendarDays,
 } from "lucide-react";
-import { endOfMonth, format, startOfMonth } from "date-fns";
+import { startOfMonth } from "date-fns";
 import { PhotoCalendar } from "@/features/gallery/components/PhotoCalendar";
 import {
   PhotoCommentsPanel,
@@ -168,16 +168,22 @@ export function GalleryPage() {
    * field-photo archive. In calendar mode the visible month *is* the date
    * range — the separate Date pill would be a second, contradictory way to say
    * the same thing, so it steps aside.
+   *
+   * The two views also load differently. The grid pages photos; the calendar
+   * asks the server for day-bucketed counts and fetches only the day you open.
+   * So the photo query below is switched off entirely in calendar mode, and
+   * `photos` is instead filled from whatever day the calendar has loaded —
+   * which keeps the lightbox, tag filter and per-photo panels working off the
+   * same list in both views.
    */
-  const [view, setView] = useState<"grid" | "calendar">("grid");
+  const [view, setView] = useState<"grid" | "calendar">(
+    search.view === "calendar" ? "calendar" : "grid",
+  );
   const [month, setMonth] = useState<Date>(() => startOfMonth(new Date()));
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const calendarView = view === "calendar";
-  const rangeFrom = calendarView ? format(startOfMonth(month), "yyyy-MM-dd") : dateFrom;
-  const rangeTo = calendarView ? format(endOfMonth(month), "yyyy-MM-dd") : dateTo;
-  /** A single month is a much smaller slice than "everything recent". */
-  const photoLimit = calendarView ? 600 : 200;
+  const photoLimit = 200;
   const [tagSearch, setTagSearch] = useState<string>("");
   // Company-wide tag library (not just tags already applied to loaded
   // photos) so the filter picker matches the project label picker, which
@@ -253,12 +259,24 @@ export function GalleryPage() {
         : null,
   });
 
+  /**
+   * Everything that changes after photos are added, edited or removed. The
+   * calendar reads its own two caches, so a mutation that only busted
+   * `galleryPhotos` used to leave the day counts stale.
+   */
+  const invalidatePhotoCaches = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: qk.galleryPhotos(user?.id ?? "") }),
+      qc.invalidateQueries({ queryKey: qk.galleryTotalPhotos(user?.id ?? "") }),
+      qc.invalidateQueries({ queryKey: qk.photoActivity(user?.id ?? "") }),
+      qc.invalidateQueries({ queryKey: qk.photoDay(user?.id ?? "") }),
+    ]);
+
   const { pull, refreshing, indicatorStyle, progress } = usePullToRefresh({
     onRefresh: async () => {
       await Promise.all([
         qc.invalidateQueries({ queryKey: qk.galleryProjects(user?.id ?? "") }),
-        qc.invalidateQueries({ queryKey: qk.galleryPhotos(user?.id ?? "") }),
-        qc.invalidateQueries({ queryKey: qk.galleryTotalPhotos(user?.id ?? "") }),
+        invalidatePhotoCaches(),
       ]);
     },
   });
@@ -305,10 +323,7 @@ export function GalleryPage() {
         return;
       }
       toast.success("Photo saved");
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: qk.galleryPhotos(user?.id ?? "") }),
-        qc.invalidateQueries({ queryKey: qk.galleryTotalPhotos(user?.id ?? "") }),
-      ]);
+      await invalidatePhotoCaches();
       setCameraOpen(false);
       if (opts.analyze) {
         await openPhoto(inserted as Photo);
@@ -333,6 +348,8 @@ export function GalleryPage() {
       .from("photos")
       .select("id", { count: "exact", head: true })
       .eq("uploaded_by", user.id)
+      .eq("archived", false)
+      .is("deleted_at", null)
       .or("phase.is.null,phase.neq.walkthrough")
       .not("storage_path", "like", "%/walkthroughs/%");
     return count ?? 0;
@@ -342,17 +359,18 @@ export function GalleryPage() {
     let q = supabase
       .from("photos")
       .select("*")
+      .eq("archived", false)
+      .is("deleted_at", null)
       .or("phase.is.null,phase.neq.walkthrough")
       .not("storage_path", "like", "%/walkthroughs/%")
       .order("created_at", { ascending: false })
       .limit(photoLimit);
     if (projectFilter.length > 0) q = q.in("project_id", projectFilter);
-    if (rangeFrom) q = q.gte("created_at", new Date(rangeFrom).toISOString());
-    if (rangeTo) {
-      const end = new Date(rangeTo);
-      end.setHours(23, 59, 59, 999);
-      q = q.lte("created_at", end.toISOString());
-    }
+    // `new Date("2026-08-31")` is UTC midnight, not local — west of Greenwich
+    // that lands on the 30th, so the last day the user picked was being cut
+    // off the range entirely. Pin both ends to local time explicitly.
+    if (dateFrom) q = q.gte("created_at", new Date(`${dateFrom}T00:00:00`).toISOString());
+    if (dateTo) q = q.lte("created_at", new Date(`${dateTo}T23:59:59.999`).toISOString());
     const { data } = await q;
     const ps = ((data as Photo[]) ?? []).filter(
       (p) => p.phase !== "walkthrough" && !p.storage_path.includes("/walkthroughs/"),
@@ -394,11 +412,14 @@ export function GalleryPage() {
     // combo within staleTime serves from cache.
     queryKey: qk.galleryPhotos(user?.id ?? "", {
       projectFilter,
-      dateFrom: rangeFrom,
-      dateTo: rangeTo,
+      dateFrom,
+      dateTo,
     }),
     queryFn: loadPhotos,
-    enabled: !!user,
+    // Calendar mode has no use for a page of recent photos — it loads a day at
+    // a time — and running this anyway was the single biggest cost of opening
+    // the calendar.
+    enabled: !!user && !calendarView,
     staleTime: 60_000,
   });
 
@@ -415,7 +436,9 @@ export function GalleryPage() {
     }
   }, [photosQuery.data]);
 
-  const loading = photosQuery.isPending;
+  // A disabled query stays `pending` forever, so calendar mode must not read
+  // it as "still loading".
+  const loading = !calendarView && photosQuery.isPending;
 
   useEffect(() => {
     if (search.project) setProjectFilter([search.project]);
@@ -544,10 +567,7 @@ export function GalleryPage() {
         if (insErr) toast.error(insErr.message);
       }
       toast.success("Photos uploaded");
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: qk.galleryPhotos(user?.id ?? "") }),
-        qc.invalidateQueries({ queryKey: qk.galleryTotalPhotos(user?.id ?? "") }),
-      ]);
+      await invalidatePhotoCaches();
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
@@ -964,10 +984,7 @@ export function GalleryPage() {
       if (insErr) throw insErr;
       toast.success("Annotated photo saved");
       setAnnotating(false);
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: qk.galleryPhotos(user?.id ?? "") }),
-        qc.invalidateQueries({ queryKey: qk.galleryTotalPhotos(user?.id ?? "") }),
-      ]);
+      await invalidatePhotoCaches();
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to save annotated photo");
     }
@@ -1090,6 +1107,11 @@ export function GalleryPage() {
                       // A day picked in a previous session would otherwise sit
                       // selected in a month it doesn't belong to.
                       setSelectedDay(null);
+                      // The two views fill `photos` from different sources, so
+                      // hand over empty rather than letting one view's list
+                      // flash inside the other.
+                      setPhotos([]);
+                      setSigned({});
                     }}
                     aria-pressed={on}
                     className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 font-manrope text-xs font-bold transition ${
@@ -1311,11 +1333,12 @@ export function GalleryPage() {
               </Button>
             )}
 
-            <div className="ml-auto font-manrope text-xs font-bold text-muted-foreground">
-              {calendarView
-                ? `${visiblePhotos.length} this month`
-                : `${visiblePhotos.length} of ${photos.length} photo${photos.length === 1 ? "" : "s"}`}
-            </div>
+            {!calendarView && (
+              <div className="ml-auto font-manrope text-xs font-bold text-muted-foreground">
+                {visiblePhotos.length} of {photos.length} photo
+                {photos.length === 1 ? "" : "s"}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1327,14 +1350,19 @@ export function GalleryPage() {
             setMonth(next);
             setSelectedDay(null);
           }}
-          photos={visiblePhotos}
-          signed={signed}
+          projectIds={projectFilter}
+          tags={tagFilter}
           projects={projects}
           selectedDay={selectedDay}
           onSelectDay={setSelectedDay}
-          onOpenPhoto={(p) => void openPhoto(p)}
-          loading={loading}
-          capped={photos.length >= photoLimit}
+          // The calendar owns the fetch; mirroring the day's photos into the
+          // page's own list is what lets the lightbox, comments and AI panels
+          // keep working unchanged from here.
+          onDayPhotosChange={(dayPhotos, daySigned) => {
+            setPhotos(dayPhotos as Photo[]);
+            setSigned(daySigned);
+          }}
+          onOpenPhoto={(p) => void openPhoto(p as Photo)}
         />
       )}
 
