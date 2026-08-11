@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { parseReportTemplateStructure } from "@sitepix/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
-import { isMissingTable } from "../../lib/postgrest";
+import { isMissingColumn, isMissingTable } from "../../lib/postgrest";
 import type { ServiceContext } from "../../lib/user-context";
 import { createPageFromTemplateService } from "../projects/page-templates";
 
@@ -275,13 +275,16 @@ export async function applyProjectBlueprintService(
          *
          * Mirrors the working walkthrough→report path in walkthroughs/service.ts.
          */
-        const { data: createdReport, error: reportErr } = await supabaseAdmin
+        const reportBase = {
+          project_id: data.projectId,
+          created_by: ctx.userId,
+          title: (r as any).name,
+          subtitle: (r as any).subtitle ?? null,
+        };
+        let { data: createdReport, error: reportErr } = await supabaseAdmin
           .from("project_reports" as any)
           .insert({
-            project_id: data.projectId,
-            created_by: ctx.userId,
-            title: (r as any).name,
-            subtitle: (r as any).subtitle ?? null,
+            ...reportBase,
             // Per-item provenance, so a report can carry a "from <blueprint>"
             // badge like its siblings. project_checklists.template_id and
             // project_workflows.template_id have recorded this since they were
@@ -291,6 +294,17 @@ export async function applyProjectBlueprintService(
           } as any)
           .select("id")
           .single();
+        if (reportErr && isMissingColumn(reportErr)) {
+          // Migration pending. The badge is a nicety; creating the report at all
+          // is the fix. Failing the item here would have reintroduced the very
+          // breakage this branch was rewritten to remove.
+          console.warn("blueprint report: retrying without source_template", reportErr.message);
+          ({ data: createdReport, error: reportErr } = await supabaseAdmin
+            .from("project_reports" as any)
+            .insert(reportBase as any)
+            .select("id")
+            .single());
+        }
         if (reportErr || !createdReport) {
           throw new Error(reportErr?.message ?? "Failed to create report");
         }
@@ -425,21 +439,37 @@ export async function applyProjectBlueprintService(
   // an environment where 20260810000000 has not been run yet).
   // postgrest-js resolves rather than throws, so the error is checked, not
   // caught — a missing table comes back as `error`, not an exception.
-  const { error: ledgerErr } = await supabaseAdmin
+  const ledgerBase = {
+    blueprint_id: data.blueprintId,
+    project_id: data.projectId,
+    applied_by: ctx.userId,
+    counts,
+    failed_count: failed.length,
+  };
+  let { error: ledgerErr } = await supabaseAdmin
     .from("project_blueprint_applications" as any)
     .insert({
-      blueprint_id: data.blueprintId,
+      ...ledgerBase,
       // Denormalised so the history survives the blueprint being deleted.
       blueprint_name: blueprintName,
-      project_id: data.projectId,
-      applied_by: ctx.userId,
-      counts,
-      failed_count: failed.length,
       // Distinguishes a real apply from a row reconstructed by the backfill in
       // 20260812000100, which the project header labels differently because an
       // inference must not be presented as an observation.
       origin: "applied",
     } as any);
+  if (ledgerErr && isMissingColumn(ledgerErr)) {
+    /*
+     * 20260812000000 has not been applied here yet. PostgREST rejects the whole
+     * row over one unknown column, so without this retry adding those two
+     * columns to the insert would have STOPPED provenance being recorded on any
+     * database still waiting for the migration — breaking something that worked.
+     * Write what this database can hold; the origin still gets recorded.
+     */
+    console.warn("blueprint ledger: retrying without blueprint_name/origin", ledgerErr.message);
+    ({ error: ledgerErr } = await supabaseAdmin
+      .from("project_blueprint_applications" as any)
+      .insert(ledgerBase as any));
+  }
   if (ledgerErr) console.error("record blueprint application failed", ledgerErr);
 
   /*
@@ -517,11 +547,25 @@ export async function getProjectBlueprintOriginService(
   if (!proj) throw Object.assign(new Error("Project not found"), { status: 404 });
 
   const supabaseAdmin = getSupabaseAdmin();
-  const { data: rows, error } = await supabaseAdmin
+  // `blueprint_name` and `origin` arrive with 20260812000000. PostgREST rejects
+  // the whole select over an unknown column, so a database still waiting for
+  // that migration falls back to the original column list — the names then come
+  // from the lookup below and every row reads as a real apply, which is exactly
+  // what it was before `origin` existed.
+  const LEDGER_BASE = "blueprint_id, counts, failed_count, created_at";
+  let { data: rows, error } = await supabaseAdmin
     .from("project_blueprint_applications" as any)
-    .select("blueprint_id, blueprint_name, counts, failed_count, created_at, origin")
+    .select(`${LEDGER_BASE}, blueprint_name, origin`)
     .eq("project_id", data.projectId)
     .order("created_at", { ascending: true });
+  if (error && isMissingColumn(error)) {
+    console.warn("blueprint origin: reading without blueprint_name/origin", error.message);
+    ({ data: rows, error } = await supabaseAdmin
+      .from("project_blueprint_applications" as any)
+      .select(LEDGER_BASE)
+      .eq("project_id", data.projectId)
+      .order("created_at", { ascending: true }));
+  }
 
   if (error) {
     // Not provisioned is a different answer from "no blueprint", and the caller
@@ -659,10 +703,17 @@ export async function listBlueprintItemSourcesService(
   if (!allowed.length) return { status: "ok", byProject: {} };
 
   const supabaseAdmin = getSupabaseAdmin();
-  const { data: rows, error } = await supabaseAdmin
+  // Same pending-migration fallback as getProjectBlueprintOriginService.
+  let { data: rows, error } = await supabaseAdmin
     .from("project_blueprint_applications" as any)
     .select("project_id, blueprint_id, blueprint_name")
     .in("project_id", allowed);
+  if (error && isMissingColumn(error)) {
+    ({ data: rows, error } = await supabaseAdmin
+      .from("project_blueprint_applications" as any)
+      .select("project_id, blueprint_id")
+      .in("project_id", allowed));
+  }
   if (error) {
     if (isMissingTable(error)) return { status: "unavailable", byProject: {} };
     throw new Error(error.message);

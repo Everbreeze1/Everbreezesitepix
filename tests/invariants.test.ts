@@ -471,3 +471,46 @@ describe("family: per-item blueprint badges must not key off template_id being s
     expect(src).toMatch(/if\s*\(!source\)\s*return null;/);
   });
 });
+
+describe("family: a new column must not be able to break a shipped screen", () => {
+  /*
+   * Code and migrations do not deploy atomically here — the whole reason
+   * 20260811001000_schema_drift_repair.sql exists is that production was found
+   * running behind this folder. PostgREST rejects an ENTIRE statement over one
+   * unknown column (PGRST204), so naming a brand-new column in a select list
+   * takes down the whole query, and naming one in an insert loses the whole row.
+   *
+   * Adding `project_reports.source_template` to the Reports screen would have
+   * blanked that screen on every database still waiting for the migration; and
+   * adding blueprint_name/origin to the ledger insert would have STOPPED
+   * provenance being recorded where bare rows were being written fine. Both are
+   * regressions caused purely by deploy ordering, in features that already
+   * worked.
+   *
+   * The rule: anything touching a column introduced in 20260812000000 has to
+   * degrade to the pre-migration shape rather than fail.
+   */
+  it("the Reports screen falls back to the pre-migration column list", () => {
+    const src = read("apps/web/src/features/projects/pages/ReportsIndexPage.tsx");
+    expect(src).toMatch(/BASE_COLUMNS/);
+    // The fallback select must not name the new column.
+    const fallback = src.slice(src.indexOf("const BASE_COLUMNS"));
+    expect(fallback).toMatch(/select\(BASE_COLUMNS\)/);
+  });
+
+  it("the blueprint service retries without the columns 20260812000000 adds", () => {
+    const src = read("apps/api/src/domains/blueprints/service.ts");
+    expect(src).toMatch(/isMissingColumn/);
+    // Ledger insert, report insert and the origin read all need the guard.
+    const guards = src.match(/isMissingColumn\(/g) ?? [];
+    expect(guards.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("isMissingColumn matches what PostgREST actually returns", () => {
+    const src = read("apps/api/src/lib/postgrest.ts");
+    // PGRST204 is the schema-cache answer; 42703 is Postgres itself. Matching on
+    // message text alone is the mistake isMissingTable was born from.
+    expect(src).toMatch(/PGRST204/);
+    expect(src).toMatch(/42703/);
+  });
+});

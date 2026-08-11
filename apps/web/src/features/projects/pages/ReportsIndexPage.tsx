@@ -42,8 +42,11 @@ interface ReportRow {
   revoked_at: string | null;
   created_at: string;
   cover_photo_ids: string[] | null;
-  /** Report template this was generated from, for the blueprint badge. */
-  source_template: string | null;
+  /**
+   * Report template this was generated from, for the blueprint badge. Optional:
+   * absent on a database that has not yet run 20260812000000.
+   */
+  source_template?: string | null;
 }
 interface ProjRow {
   id: string;
@@ -65,13 +68,34 @@ export function ReportsIndexPage() {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const [{ data: rs }, { data: ps }] = await Promise.all([
-        (supabase as any)
+      /*
+       * `source_template` is added by migration 20260812000000. Code and
+       * migrations do not deploy atomically here, and PostgREST rejects the
+       * ENTIRE select over one unknown column — so naming it unconditionally
+       * would have taken the whole Reports screen down on any database still
+       * waiting for that migration. Ask for it, and fall back to the column list
+       * that has always existed if it is not there yet; the only thing lost is
+       * the blueprint badge.
+       */
+      const BASE_COLUMNS =
+        "id, project_id, title, summary, share_token, revoked_at, created_at, cover_photo_ids";
+      const loadReports = async () => {
+        const withSource = await (supabase as any)
           .from("project_reports")
-          .select(
-            "id, project_id, title, summary, share_token, revoked_at, created_at, cover_photo_ids, source_template",
-          )
-          .order("created_at", { ascending: false }),
+          .select(`${BASE_COLUMNS}, source_template`)
+          .order("created_at", { ascending: false });
+        if (!withSource.error) return withSource;
+        console.warn("[reports] source_template unavailable, loading without it", {
+          code: withSource.error?.code,
+        });
+        return await (supabase as any)
+          .from("project_reports")
+          .select(BASE_COLUMNS)
+          .order("created_at", { ascending: false });
+      };
+
+      const [{ data: rs }, { data: ps }] = await Promise.all([
+        loadReports(),
         (supabase as any).from("projects").select("id, name"),
       ]);
       if (cancelled) return;

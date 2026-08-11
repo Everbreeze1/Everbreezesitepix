@@ -21,3 +21,26 @@ export function isMissingTable(error: { code?: string; message?: string } | null
     /could not find the table|does not exist/i.test(error.message ?? "")
   );
 }
+
+/**
+ * True when a PostgREST failure means "this COLUMN isn't in this database".
+ *
+ * The sibling of `isMissingTable`, and it matters for the same reason: code and
+ * migrations do not deploy atomically here, so a build can reach production
+ * before the SQL that its new columns depend on. PostgREST answers PGRST204
+ * ("Could not find the 'x' column of 'y' in the schema cache") and rejects the
+ * WHOLE statement, so one new column in a select list takes the entire query
+ * down, and one new column in an insert loses the whole row.
+ *
+ * Callers use this to retry without the not-yet-existing column, so a feature
+ * that depends on a pending migration degrades to its old behaviour instead of
+ * breaking a screen that already worked.
+ */
+export function isMissingColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "PGRST204" ||
+    error.code === "42703" ||
+    /could not find the .* column|column .* does not exist/i.test(error.message ?? "")
+  );
+}
