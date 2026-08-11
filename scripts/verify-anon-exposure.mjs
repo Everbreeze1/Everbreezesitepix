@@ -65,6 +65,10 @@ const TABLES = [
   "showcase_items", "showcase_sections", "showcases", "tasks", "team_invites",
   "team_members", "team_review_links", "teams", "text_snippets", "walkthrough_photos",
   "walkthroughs", "workflow_template_items", "workflow_template_phases", "workflow_templates",
+  // Restored by 20260811003000. They hold private chat history and, in
+  // photo_shares, the share `token` itself — exactly the shape of data that
+  // leaked from `walkthroughs`, so they are the most important rows here.
+  "conversations", "messages", "photo_shares",
 ];
 
 const leaks = [];

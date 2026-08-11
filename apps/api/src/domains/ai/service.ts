@@ -1,5 +1,6 @@
 import { cleanCaption } from "@sitepix/shared";
 import { chatEndpoint } from "../../lib/ai-provider";
+import { inlineImageAsDataUrl } from "../../lib/inline-image";
 import { getCallerTeamPlan } from "../../lib/team-plan";
 import type { AuthedContext } from "../../lib/user-context";
 
@@ -96,7 +97,7 @@ export async function analyzePhotoService(ctx: AuthedContext, data: { photoId: s
             role: "user",
             content: [
               { type: "text", text: "Analyze this job site photo. Extract brand/model/serial, list defects, and recommend next steps." },
-              { type: "image_url", image_url: { url: signed.signedUrl } },
+              { type: "image_url", image_url: { url: await inlineImageAsDataUrl(signed.signedUrl) } },
             ],
           },
         ],
@@ -224,7 +225,7 @@ export async function chatWithAssistantService(
   const lastUserContent: unknown = imageUrl
     ? [
         { type: "text", text: data.message + ocrContext },
-        { type: "image_url", image_url: { url: imageUrl } },
+        { type: "image_url", image_url: { url: await inlineImageAsDataUrl(imageUrl) } },
       ]
     : data.message + ocrContext;
 
@@ -591,7 +592,7 @@ export async function describeSiteLogPhotosService(ctx: AuthedContext, data: { p
             { role: "system", content: "You write a concise site-log note for a construction/trades photo, grounded ONLY in the user-provided context (caption, tags, voice notes). Reply with 2-3 short factual sentences that restate/expand the provided context and describe what is plainly visible. Neutral tone. Do NOT invent defects, risks, code issues, or recommendations the user did not mention. No headings, no bullets, no markdown, no disclaimers." },
             { role: "user", content: [
               { type: "text", text: `Photo ${i + 1} — user context: ${contextBits.join(" | ")}. Write the site-log note.` },
-              { type: "image_url", image_url: { url: item.url } },
+              { type: "image_url", image_url: { url: await inlineImageAsDataUrl(item.url) } },
             ] },
           ],
         }),
@@ -699,7 +700,7 @@ export async function extractPhotoTextService(ctx: AuthedContext, data: { photoI
           role: "user",
           content: [
             { type: "text", text: "Extract every readable piece of text from this photo." },
-            { type: "image_url", image_url: { url: signed.signedUrl } },
+            { type: "image_url", image_url: { url: await inlineImageAsDataUrl(signed.signedUrl) } },
           ],
         },
       ],
