@@ -46,3 +46,19 @@ export interface ProjectBlueprintOrigin {
 export const getProjectBlueprintOrigin = rpcOp<{ projectId: string }, ProjectBlueprintOrigin>(
   "getProjectBlueprintOrigin",
 );
+
+export type BlueprintSourceMap = Record<
+  string,
+  { blueprintId: string | null; blueprintName: string | null }
+>;
+
+/**
+ * `itemSources` for several projects at once, keyed by project id.
+ *
+ * The workspace Reports screen lists reports from every project together, so
+ * the per-project endpoint would mean one round trip per group.
+ */
+export const listBlueprintItemSources = rpcOp<
+  { projectIds: string[] },
+  { status: "ok" | "unavailable"; byProject: Record<string, BlueprintSourceMap> }
+>("listBlueprintItemSources");

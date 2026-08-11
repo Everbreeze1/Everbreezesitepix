@@ -279,6 +279,13 @@ export function NewProjectPage() {
             description: res.failed.map((f) => `${f.kind}: ${f.reason}`).join("; "),
           });
         }
+        // The items landed but nothing recorded which blueprint made them, so
+        // the project will not be able to show its origin. Silent before this.
+        if (res && res.ledgerRecorded === false) {
+          toast.warning("Project created, but its blueprint origin wasn’t recorded", {
+            description: "The items were created; the project just won’t show where they came from.",
+          });
+        }
       } catch (e) {
         // Non-fatal: project is created either way
         console.error("Failed to apply template", e);

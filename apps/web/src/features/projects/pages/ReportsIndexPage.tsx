@@ -30,6 +30,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
+import { BlueprintItemBadge } from "@/features/projects/components/BlueprintItemBadge";
+import { listBlueprintItemSources, type BlueprintSourceMap } from "@/lib/blueprint.functions";
 
 interface ReportRow {
   id: string;
@@ -40,6 +42,8 @@ interface ReportRow {
   revoked_at: string | null;
   created_at: string;
   cover_photo_ids: string[] | null;
+  /** Report template this was generated from, for the blueprint badge. */
+  source_template: string | null;
 }
 interface ProjRow {
   id: string;
@@ -53,6 +57,8 @@ export function ReportsIndexPage() {
   const [thumbs, setThumbs] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  /** projectId → (source template id → blueprint), for the per-report badge. */
+  const [blueprintSources, setBlueprintSources] = useState<Record<string, BlueprintSourceMap>>({});
 
   useEffect(() => {
     if (!user) return;
@@ -63,7 +69,7 @@ export function ReportsIndexPage() {
         (supabase as any)
           .from("project_reports")
           .select(
-            "id, project_id, title, summary, share_token, revoked_at, created_at, cover_photo_ids",
+            "id, project_id, title, summary, share_token, revoked_at, created_at, cover_photo_ids, source_template",
           )
           .order("created_at", { ascending: false }),
         (supabase as any).from("projects").select("id, name"),
@@ -74,6 +80,22 @@ export function ReportsIndexPage() {
       const map = new Map<string, ProjRow>();
       ((ps as ProjRow[]) ?? []).forEach((p) => map.set(p.id, p));
       setProjects(map);
+
+      /*
+       * Which blueprint produced each report. Batched across every project on
+       * screen — one call, not one per project — and best-effort: a report that
+       * cannot be attributed simply carries no badge, which is also the correct
+       * rendering for a report someone built by hand.
+       */
+      const projectIds = Array.from(new Set(rows.map((r) => r.project_id))).slice(0, 200);
+      if (projectIds.length) {
+        try {
+          const res = await listBlueprintItemSources({ data: { projectIds } });
+          if (!cancelled && res.status === "ok") setBlueprintSources(res.byProject ?? {});
+        } catch (e: any) {
+          console.warn("[reports] blueprint sources unavailable", { message: e?.message });
+        }
+      }
 
       // Resolve a thumbnail per report: cover photo first, else first section photo
       const reportToPhotoId = new Map<string, string>();
@@ -250,6 +272,13 @@ export function ReportsIndexPage() {
                               Disabled
                             </Badge>
                           )}
+                          <BlueprintItemBadge
+                            source={
+                              r.source_template
+                                ? blueprintSources[r.project_id]?.[r.source_template]
+                                : null
+                            }
+                          />
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                           {proj ? (

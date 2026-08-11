@@ -84,6 +84,8 @@ import {
   applyProjectBlueprintService,
   getProjectBlueprintOriginInputSchema,
   getProjectBlueprintOriginService,
+  listBlueprintItemSourcesInputSchema,
+  listBlueprintItemSourcesService,
 } from "../blueprints/service";
 import {
   addProjectToGroupService,
@@ -450,6 +452,10 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   getProjectBlueprintOrigin: authed(
     (d) => getProjectBlueprintOriginInputSchema.parse(d),
     getProjectBlueprintOriginService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  listBlueprintItemSources: authed(
+    (d) => listBlueprintItemSourcesInputSchema.parse(d),
+    listBlueprintItemSourcesService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   inviteMember: authed(
     (d) =>

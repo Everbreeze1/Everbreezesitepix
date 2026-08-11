@@ -1085,7 +1085,9 @@ export function ProjectChecklists({
                     statusLabel={isComplete ? "Complete" : undefined}
                     meta={
                       <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                        <span>{its.length === 0 ? "No items yet" : `${done}/${its.length} done`}</span>
+                        <span>
+                          {its.length === 0 ? "No items yet" : `${done}/${its.length} done`}
+                        </span>
                         <BlueprintItemBadge
                           source={cl.template_id ? blueprintSources?.[cl.template_id] : null}
                         />

@@ -41,6 +41,12 @@ interface ApplyResult {
   projectName: string;
   counts: Record<string, number>;
   failed: Array<{ kind: string; reason: string }>;
+  /**
+   * False when the items were created but nothing recorded which blueprint made
+   * them, so the project cannot show its origin. The server treats that write as
+   * best-effort and does not throw, so this flag is the only signal.
+   */
+  ledgerRecorded?: boolean;
   error?: string;
 }
 
@@ -155,6 +161,7 @@ export function ApplyBlueprintDialog({
           projectName: target.name,
           counts: res.counts ?? {},
           failed: res.failed ?? [],
+          ledgerRecorded: res.ledgerRecorded,
         });
       } catch (e: any) {
         collected.push({
@@ -283,6 +290,14 @@ export function ApplyBlueprintDialog({
                       </Button>
                     )}
                   </div>
+
+                  {r.ledgerRecorded === false && !r.error && (
+                    <p className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11.5px] text-muted-foreground">
+                      <span className="font-bold text-amber-600 dark:text-amber-400">Note</span> —
+                      applied, but we couldn’t record which blueprint did it, so this project won’t
+                      show its origin.
+                    </p>
+                  )}
 
                   {r.failed.length > 0 && (
                     <ul className="mt-2 space-y-0.5 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2">

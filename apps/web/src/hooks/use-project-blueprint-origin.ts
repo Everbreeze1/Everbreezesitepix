@@ -58,7 +58,9 @@ export function useProjectBlueprintOrigin(projectId: string): ProjectBlueprintOr
         }
         setItemSources(res.itemSources ?? {});
         setState(
-          res.applications.length ? { kind: "ok", applications: res.applications } : { kind: "none" },
+          res.applications.length
+            ? { kind: "ok", applications: res.applications }
+            : { kind: "none" },
         );
       } catch (e: any) {
         if (cancelled) return;

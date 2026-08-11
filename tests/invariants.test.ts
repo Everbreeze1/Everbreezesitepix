@@ -396,3 +396,78 @@ describe("family: a new public table must revoke anon", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("family: a read must not collapse failure into an empty result", () => {
+  /*
+   * `null`/`[]` from a Supabase read means three different things — no rows, RLS
+   * filtered everything, or the table is not in this database — and postgrest-js
+   * RESOLVES rather than throws, so a missing table arrives as
+   * `{ data: null, error: { code: "PGRST205" } }`.
+   *
+   * A reader that returns early on `error` therefore renders "there is nothing"
+   * for all three. That is how blueprint provenance disappeared: the ledger read
+   * failed, the component rendered nothing, and a project set up from a blueprint
+   * looked exactly like one that never had one — with no console line anywhere.
+   *
+   * The rule these enforce: every ledger reader has to SAY something when it
+   * cannot read, rather than silently returning.
+   */
+  const LEDGER_READERS = [
+    "apps/web/src/hooks/use-project-blueprint-origin.ts",
+    "apps/web/src/features/settings/pages/TemplatesPage.tsx",
+  ];
+
+  it.each(LEDGER_READERS)("%s reports a failed read instead of swallowing it", (rel) => {
+    const src = read(rel);
+    // The exact shape that caused the bug: bail out of the effect on `error`
+    // without setting any state or logging anything.
+    expect(src).not.toMatch(/if\s*\(\s*cancelled\s*\|\|\s*error\s*\)\s*return;/);
+    expect(src).toMatch(/console\.(warn|error)\(/);
+  });
+
+  it("the blueprint origin component distinguishes 'none' from 'unavailable'", () => {
+    const src = read("apps/web/src/features/projects/components/ProjectBlueprintOrigin.tsx");
+    expect(src).toMatch(/unavailable/);
+    // Badge it, never hide it — an unreadable ledger must still render something.
+    expect(src).toMatch(/Blueprint origin unavailable/);
+  });
+
+  it("the blueprint apply tells the caller whether provenance was recorded", () => {
+    const service = read("apps/api/src/domains/blueprints/service.ts");
+    expect(service).toMatch(/ledgerRecorded/);
+    // And the two callers have to look at it, or it is decoration.
+    expect(read("apps/web/src/features/settings/components/ApplyBlueprintDialog.tsx")).toMatch(
+      /ledgerRecorded/,
+    );
+    expect(read("apps/web/src/features/projects/pages/NewProjectPage.tsx")).toMatch(
+      /ledgerRecorded/,
+    );
+  });
+});
+
+describe("family: per-item blueprint badges must not key off template_id being set", () => {
+  /*
+   * `project_checklists.template_id` and `project_workflows.template_id` are also
+   * written when a template is applied DIRECTLY, outside any blueprint. Badging
+   * on `template_id !== null` would therefore label hand-applied items as
+   * blueprint output — a confident, wrong attribution.
+   *
+   * The badge is driven by the ledger's `itemSources` lookup instead, so it fires
+   * only for templates a blueprint applied to this project actually contains.
+   */
+  const BADGED = [
+    "apps/web/src/features/projects/components/ProjectChecklists.tsx",
+    "apps/web/src/features/projects/components/ProjectWorkflows.tsx",
+  ];
+
+  it.each(BADGED)("%s resolves the badge through blueprintSources", (rel) => {
+    const src = read(rel);
+    expect(src).toMatch(/BlueprintItemBadge/);
+    expect(src).toMatch(/blueprintSources\?\.\[/);
+  });
+
+  it("the badge renders nothing without a resolved source", () => {
+    const src = read("apps/web/src/features/projects/components/BlueprintItemBadge.tsx");
+    expect(src).toMatch(/if\s*\(!source\)\s*return null;/);
+  });
+});
