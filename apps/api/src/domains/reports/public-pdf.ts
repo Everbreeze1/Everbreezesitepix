@@ -680,11 +680,35 @@ function extractPlainText(html: string): string {
     .trim();
 }
 
+/**
+ * Per-image budget. Storage normally answers in well under a second, so this is
+ * an upper bound on pathology, not a performance tuning knob.
+ *
+ * Without it a single stalled connection hangs the whole PDF request forever,
+ * and this API runs as ONE Railway instance — so one wedged public share link
+ * can occupy the process while every other customer waits behind it. `fetch`
+ * has no default timeout in Node.
+ */
+const IMAGE_FETCH_TIMEOUT_MS = 15_000;
+
+/**
+ * Ceiling on a single embedded image.
+ *
+ * Every photo is embedded at full resolution and held in memory until the PDF
+ * is serialised, so a report over a few hundred photos is an OOM waiting to
+ * happen on a small instance. Skipping an absurdly large image loses one photo;
+ * not skipping it loses the whole report.
+ */
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+
 async function tryEmbedImage(pdf: PDFDocument, url: string): Promise<PDFImage | null> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS) });
     if (!res.ok) return null;
+    const declared = Number(res.headers.get("content-length") ?? 0);
+    if (declared && declared > MAX_IMAGE_BYTES) return null;
     const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength > MAX_IMAGE_BYTES) return null;
     if (buf.length < 8) return null;
     if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return await pdf.embedPng(buf);
     if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return await pdf.embedJpg(buf);

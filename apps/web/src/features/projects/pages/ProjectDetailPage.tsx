@@ -942,8 +942,30 @@ export function ProjectDetailPage() {
     if (!incoming || !user) return;
     setUploading(true);
     try {
-      for (const file of incoming) await uploadOne(file, tag, extraTags);
-      toast.success(incoming.length > 1 ? `${incoming.length} photos added` : "Photo added");
+      /*
+       * Count what actually landed. `uploadOne` returns null on failure (and
+       * has already shown its own error toast), so the old
+       * `${incoming.length} photos added` was a straight lie whenever any file
+       * failed — including when ALL of them did. A field worker who uploads 20
+       * photos, sees "20 photos added" and drives off site has lost the job
+       * evidence and has no way to know.
+       */
+      const ids = [];
+      for (const file of incoming) ids.push(await uploadOne(file, tag, extraTags));
+      const added = ids.filter(Boolean).length;
+      const failed = incoming.length - added;
+
+      if (added === 0) {
+        toast.error(
+          incoming.length > 1 ? `None of the ${incoming.length} photos could be added` : "Photo could not be added",
+        );
+      } else if (failed > 0) {
+        toast.warning(`${added} of ${incoming.length} photos added — ${failed} failed`, {
+          description: "Check your connection and try the missing ones again.",
+        });
+      } else {
+        toast.success(incoming.length > 1 ? `${incoming.length} photos added` : "Photo added");
+      }
       await load();
       invalidatePhotoCaches();
     } finally {
@@ -1010,6 +1032,9 @@ export function ProjectDetailPage() {
           .single();
         if (insErr || !row) {
           toast.error(insErr?.message ?? "Upload failed");
+          // Reclaim the blob — the camera-capture path was missed by the
+          // original orphan fix, which only covered the file picker.
+          void supabase.storage.from("site-photos").remove([path]);
           return null;
         }
         return row.id;
@@ -1059,6 +1084,11 @@ export function ProjectDetailPage() {
       } as any);
       if (insErr) {
         toast.error(insErr.message);
+        // Reclaim the blob, same as the photo paths. A video the DB never
+        // recorded is unreachable forever — every delete path keys off
+        // `videos.storage_path` — and videos are the largest objects the app
+        // stores, so a leaked one is the most expensive kind to strand.
+        void supabase.storage.from("site-videos").remove([path]);
         return;
       }
       toast.success("Video saved to project");

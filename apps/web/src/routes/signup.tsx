@@ -82,11 +82,19 @@ function SignupPage() {
     <div className="min-h-screen w-full bg-background lg:grid lg:grid-cols-2">
       {/* LEFT — marketing panel (desktop only) */}
       <aside className="relative hidden overflow-hidden bg-sidebar text-sidebar-foreground lg:flex lg:flex-col lg:justify-between">
-        <img
-          src={heroImg}
-          alt=""
+        {/*
+          A CSS background, not an <img>, and deliberately so.
+          The panel is `hidden lg:flex`, but display:none does NOT stop a browser
+          downloading an <img src> — so every phone visitor paid 1.9 MB for a
+          decorative image they never see, on the signup page, before they have
+          any reason to trust us with the wait. Background images inside a
+          display:none subtree are never fetched, so this costs mobile nothing
+          and looks identical on desktop.
+        */}
+        <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-35"
+          className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-35"
+          style={{ backgroundImage: `url(${heroImg})` }}
         />
         <div aria-hidden className="pointer-events-none absolute inset-0 bg-sidebar/75" />
 

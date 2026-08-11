@@ -71,6 +71,7 @@ import { PhotoThumb } from "@/components/PhotoThumb";
 import { CameraCapture, compressImageFile } from "@/features/photos/components/CameraCapture";
 import { TagPhotoDialog } from "@/features/photos/components/TagPhotoDialog";
 import { applyWatermarkToFile, type BeforeAfterTag, type WatermarkContext } from "@/lib/watermark";
+import { extractPhotoMeta, mergePhotoMeta } from "@/lib/photo-exif";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { PhotoLightbox } from "@/features/photos/components/PhotoLightbox";
@@ -98,6 +99,9 @@ interface Project {
   city?: string | null;
   state?: string | null;
   zip?: string | null;
+  /** Fallback coordinates for uploads whose EXIF carries no GPS. */
+  latitude?: number | null;
+  longitude?: number | null;
 }
 interface Analysis {
   id: string;
@@ -294,6 +298,24 @@ export function GalleryPage() {
 
     setUploading(true);
     try {
+      /*
+       * Read EXIF from the ORIGINAL file, before compressImageFile re-encodes it
+       * through a canvas and drops every metadata block.
+       *
+       * This upload path wrote no `taken_at`, `latitude` or `longitude` at all,
+       * so the same photo kept its capture time and GPS when added from a
+       * project page and lost both — permanently, since the stripped copy is
+       * what gets stored — when added from the Gallery. For a product whose
+       * value is proving what a site looked like and when, that is the data
+       * that matters most: it drives the map, the timeline and the date
+       * grouping. Mirrors ProjectDetailPage.tsx:891.
+       */
+      const exif = await extractPhotoMeta(file);
+      const project = projects.find((p) => p.id === projectId);
+      const meta = mergePhotoMeta(exif, {
+        latitude: project?.latitude ?? null,
+        longitude: project?.longitude ?? null,
+      });
       const compressed = await compressImageFile(file);
       const path = `${user.id}/${projectId}/${crypto.randomUUID()}.jpg`;
       const { error: upErr } = await supabase.storage
@@ -314,6 +336,9 @@ export function GalleryPage() {
           caption: desc && desc.length ? desc : `Photo ${new Date().toLocaleString()}`,
           phase: opts.tag ?? "untagged",
           tags: opts.tags && opts.tags.length ? opts.tags : undefined,
+          taken_at: meta.taken_at,
+          latitude: meta.latitude,
+          longitude: meta.longitude,
         } as any)
         .select("*")
         .single();
@@ -348,7 +373,8 @@ export function GalleryPage() {
   const loadProjects = async (): Promise<Project[]> => {
     const { data } = await supabase
       .from("projects")
-      .select("id, name, street, city, state, zip")
+      // lat/lng are the fallback when an uploaded photo carries no GPS EXIF.
+      .select("id, name, street, city, state, zip, latitude, longitude")
       .order("created_at", { ascending: false });
     return (data as Project[]) ?? [];
   };

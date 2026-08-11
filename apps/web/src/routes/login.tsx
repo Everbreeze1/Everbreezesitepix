@@ -125,10 +125,13 @@ function LoginPage() {
     <div className="min-h-screen w-full bg-background lg:grid lg:grid-cols-2">
       {/* LEFT — marketing panel (desktop only) */}
       <aside className="relative hidden overflow-hidden bg-sidebar lg:flex lg:flex-col lg:justify-between">
-        <img
-          src={loginImg}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover opacity-35"
+        {/* Background rather than <img> — see signup.tsx. `hidden lg:flex` does
+            not stop an <img src> downloading, so this 606 KB decoration was
+            being fetched on every phone that opened the login page. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-35"
+          style={{ backgroundImage: `url(${loginImg})` }}
         />
         <div className="absolute inset-0 bg-sidebar/75" />
 

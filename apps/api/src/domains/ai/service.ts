@@ -260,13 +260,39 @@ export async function chatWithAssistantService(
   return { conversationId: convId, reply };
 }
 
-async function requireActiveSub(supabase: AuthedContext["supabase"], userId: string) {
+/**
+ * Every AI entry point must pass through here.
+ *
+ * These calls cost real money on our Gemini key, and the RPC endpoint is
+ * reachable with nothing but a valid session — so a hidden button is not a
+ * control. Three services (`summarizePhotosReport`, `draftReportNarrative`,
+ * `extractPhotoText`) had no check at all, which let a cancelled account keep
+ * generating reports and running OCR indefinitely.
+ *
+ * `isActive` rather than `isPro`: it is the same bar `analyzePhoto` uses, and it
+ * now covers `trialing` and `past_due` (see lib/team-plan.ts), so trials and
+ * cards in their retry window are not locked out. Only genuinely inactive
+ * accounts are refused.
+ *
+ * @param feature Named in the error the user sees — "Auto-reports require…"
+ *   was previously shown for OCR and site-log notes too.
+ */
+async function requireActiveSub(
+  supabase: AuthedContext["supabase"],
+  userId: string,
+  feature = "This AI feature",
+) {
   const { data: isAdmin } = await supabase
     .rpc("has_role" as never, { _user_id: userId, _role: "admin" } as never);
   if (isAdmin) return;
 
   const { isActive } = await getCallerTeamPlan(supabase, userId);
-  if (!isActive) throw new Error("Auto-reports require a paid plan. Upgrade to Pro or Team.");
+  if (!isActive) {
+    throw Object.assign(
+      new Error(`${feature} requires an active plan. Upgrade to Pro or Team.`),
+      { status: 403 },
+    );
+  }
 }
 
 /** Groups timestamps into a human timeline: how many visits, over what span. */
@@ -314,7 +340,7 @@ async function buildPhotoContext(
 ) {
   const { supabase, userId } = ctx;
   if (!aiKeyConfigured()) throw new Error("AI is not configured");
-  await requireActiveSub(supabase, userId);
+  await requireActiveSub(supabase, userId, "The AI assistant");
 
   const { data: photos } = await supabase
     .from("photos")
@@ -487,6 +513,7 @@ export async function summarizePhotosReportService(
   ctx: AuthedContext,
   data: { photoIds: string[]; title?: string; mode?: "daily_log" | "summary" },
 ) {
+  await requireActiveSub(ctx.supabase, ctx.userId, "Photo report summaries");
   // Site Log is the technician's own internal record, so team photo comments
   // are fair game here. They are deliberately NOT fed to the client-facing
   // Report — internal @mention discussion must not leak into a deliverable.
@@ -513,6 +540,7 @@ export async function draftReportNarrativeService(
   ctx: AuthedContext,
   data: { photoIds: string[]; title?: string },
 ): Promise<{ summary: string; conclusion: string }> {
+  await requireActiveSub(ctx.supabase, ctx.userId, "Report drafting");
   const { photoSummaries } = await buildPhotoContext(ctx, data.photoIds);
   const markdown = await chatComplete(
     REPORT_SYSTEM,
@@ -542,7 +570,7 @@ function extractSection(markdown: string, heading: string): string {
 export async function describeSiteLogPhotosService(ctx: AuthedContext, data: { photoIds: string[] }) {
   const { supabase, userId } = ctx;
   if (!aiKeyConfigured()) throw new Error("AI is not configured");
-  await requireActiveSub(supabase, userId);
+  await requireActiveSub(supabase, userId, "Site log descriptions");
 
   const { data: photos } = await supabase
     .from("photos")
@@ -617,7 +645,7 @@ export async function summarizeWalkthroughsReportService(
 ) {
   const { supabase, userId } = ctx;
   if (!aiKeyConfigured()) throw new Error("AI is not configured");
-  await requireActiveSub(supabase, userId);
+  await requireActiveSub(supabase, userId, "Walkthrough reports");
 
   const { data: walks } = await supabase
     .from("walkthroughs" as never)
@@ -669,8 +697,9 @@ export async function summarizeWalkthroughsReportService(
 }
 
 export async function extractPhotoTextService(ctx: AuthedContext, data: { photoId: string }) {
-  const { supabase } = ctx;
+  const { supabase, userId } = ctx;
   if (!aiKeyConfigured()) throw new Error("AI is not configured");
+  await requireActiveSub(supabase, userId, "Text extraction");
 
   const { data: photo, error: photoErr } = await supabase
     .from("photos")
