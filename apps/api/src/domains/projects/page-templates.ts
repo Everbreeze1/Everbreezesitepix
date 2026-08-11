@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 import { resolvePageTokens, bracketsToFillFields } from "./pages";
+import { sanitizePageHtml } from "./sanitize-page-html";
 
 const REAL_PHOTO_IMG_RE = /<img\b[^>]*\bdata-photo-id="[0-9a-fA-F-]{36}"[^>]*>/g;
 
@@ -122,7 +123,22 @@ export async function getDocumentTemplateService(
   return {
     id: row.id,
     name: row.name,
-    html: parseBody(row.body).html,
+    /*
+     * Sanitized on READ, not just on write.
+     *
+     * A template body is authored HTML that came from a project page, and page
+     * HTML is stored raw — sanitizePageHtml was only ever applied on the public
+     * share path (pages.ts:632). So a team member could save a page containing
+     * script-bearing markup as a template, and every teammate who opened the
+     * "Use template" preview would execute it: ChoosePageTemplateDialog.tsx:133
+     * renders this exact string with dangerouslySetInnerHTML, and templates are
+     * shared team-wide.
+     *
+     * Sanitizing here rather than only at the insert also disarms rows that are
+     * already in the table — a write-side fix alone would leave any existing
+     * payload live forever.
+     */
+    html: sanitizePageHtml(parseBody(row.body).html),
     fields: (row.fields as string[]) ?? [],
   };
 }
@@ -189,7 +205,10 @@ export async function savePageAsTemplateService(
 
   // Keep the layout (photo rows, section structure) but never carry this
   // project's actual photos into a reusable template.
-  const html = stripPhotosToSlots(page.content_html as string);
+  // Sanitize on the way in as well, so the stored template is clean rather than
+  // merely rendered clean. Read-side sanitizing (getDocumentTemplateService)
+  // covers rows written before this; this stops new ones being written at all.
+  const html = sanitizePageHtml(stripPhotosToSlots(page.content_html as string));
   const fields = Array.from(
     new Set(Array.from(html.matchAll(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi), (m) => m[1].toLowerCase())),
   ).sort();

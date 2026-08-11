@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ServiceContext } from "../../lib/user-context";
+import { chunk, mutateIn, selectIn } from "../../lib/chunked-in";
 
 export const TRASH_RETENTION_DAYS = 60;
 
@@ -71,11 +72,13 @@ export async function restorePhotosService(
   ctx: ServiceContext,
   data: z.infer<typeof restorePhotosInputSchema>,
 ) {
-  const { error } = await (ctx.supabase as any)
-    .from("photos")
-    .update({ deleted_at: null })
-    .in("id", data.photoIds);
-  if (error) throw new Error(error.message);
+  // Chunked: a single `.in()` over ~398+ ids dies on PostgREST's echoed
+  // Content-Location header, which made "Select all" in Trash a guaranteed 500.
+  await mutateIn(
+    data.photoIds,
+    (idChunk) => (ctx.supabase as any).from("photos").update({ deleted_at: null }).in("id", idChunk),
+    "restore photos",
+  );
   return { restored: data.photoIds.length };
 }
 
@@ -83,24 +86,28 @@ export async function purgePhotosService(
   ctx: ServiceContext,
   data: z.infer<typeof purgePhotosInputSchema>,
 ) {
-  const { data: rows, error: selErr } = await (ctx.supabase as any)
-    .from("photos")
-    .select("id, storage_path")
-    .in("id", data.photoIds);
-  if (selErr) throw new Error(selErr.message);
-  const paths = ((rows as Array<{ id: string; storage_path: string }>) ?? []).map(
-    (r) => r.storage_path,
+  // Chunked for the same reason as restore. RLS still scopes both statements to
+  // what the caller may touch — this runs on ctx.supabase, not the service role.
+  const rows = await selectIn<{ id: string; storage_path: string }>(
+    data.photoIds,
+    (idChunk) => (ctx.supabase as any).from("photos").select("id, storage_path").in("id", idChunk),
+    "purge photos lookup",
   );
-  const ids = ((rows as Array<{ id: string }>) ?? []).map((r) => r.id);
+  const paths = rows.map((r) => r.storage_path);
+  const ids = rows.map((r) => r.id);
   if (!ids.length) return { purged: 0 };
 
-  const { error: delErr } = await (ctx.supabase as any)
-    .from("photos")
-    .delete()
-    .in("id", ids);
-  if (delErr) throw new Error(delErr.message);
-  if (paths.length) {
-    await ctx.supabase.storage.from("site-photos").remove(paths).catch(() => {});
+  await mutateIn(
+    ids,
+    (idChunk) => (ctx.supabase as any).from("photos").delete().in("id", idChunk),
+    "purge photos",
+  );
+  // Storage removal is best-effort and also batched: `remove()` takes the whole
+  // path list in one request body, but a few thousand paths is a large payload,
+  // and a rejection here would otherwise strand the blobs with no DB row left to
+  // find them by.
+  for (const pathChunk of chunk(paths)) {
+    await ctx.supabase.storage.from("site-photos").remove(pathChunk).catch(() => {});
   }
   return { purged: ids.length };
 }
@@ -191,17 +198,50 @@ export async function purgeProjectService(
     throw new Error("Project not found");
   }
 
-  const { data: photos } = await (ctx.supabase as any)
-    .from("photos")
-    .select("storage_path")
-    .eq("project_id", data.projectId);
-  const paths = ((photos as Array<{ storage_path: string }>) ?? []).map((p) => p.storage_path);
-  if (paths.length) {
-    for (let i = 0; i < paths.length; i += 500) {
+  /*
+   * Delete the children explicitly instead of trusting ON DELETE CASCADE.
+   *
+   * `photos`, `videos` and `ai_analyses` predate the migrations folder — nothing
+   * in supabase/migrations creates them — and in this database they carry no
+   * foreign key to `projects`. So the project row went away, the cascade never
+   * ran, and their rows survived with their blobs already deleted: permanent
+   * dead tiles in the Gallery that no UI can remove, because the project they
+   * point at no longer exists.
+   *
+   * Doing this explicitly is correct whether or not the FK is there — with a
+   * cascade it is a harmless no-op that runs microseconds earlier.
+   *
+   * Videos were worse than photos: their blobs were never removed at all, so
+   * every purge leaked the entire `site-videos` object for that project.
+   */
+  const [{ data: photos }, { data: videos }] = await Promise.all([
+    (ctx.supabase as any).from("photos").select("storage_path").eq("project_id", data.projectId),
+    (ctx.supabase as any).from("videos").select("storage_path").eq("project_id", data.projectId),
+  ]);
+
+  const removeAll = async (bucket: string, rows: Array<{ storage_path: string }> | null) => {
+    const paths = (rows ?? []).map((r) => r.storage_path).filter(Boolean);
+    for (const pathChunk of chunk(paths, 500)) {
       await ctx.supabase.storage
-        .from("site-photos")
-        .remove(paths.slice(i, i + 500))
+        .from(bucket)
+        .remove(pathChunk)
         .catch(() => {});
+    }
+  };
+  await removeAll("site-photos", photos);
+  await removeAll("site-videos", videos);
+
+  // Rows before the parent, so a failure here leaves the project in Trash to be
+  // retried rather than an unreachable project id scattered across three tables.
+  for (const table of ["photos", "videos", "ai_analyses"]) {
+    const { error: childErr } = await (ctx.supabase as any)
+      .from(table)
+      .delete()
+      .eq("project_id", data.projectId);
+    // `ai_analyses` may not be project-scoped in every database; a missing table
+    // or column must not block the purge.
+    if (childErr && !/PGRST20[45]|42P01|42703/.test(childErr.code ?? "")) {
+      throw new Error(`${table}: ${childErr.message}`);
     }
   }
 

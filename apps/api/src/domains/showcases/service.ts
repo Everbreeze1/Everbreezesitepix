@@ -846,6 +846,7 @@ export async function getPublicShowcaseService(
     : firstPhoto;
 
   const p = profile as any;
+  const showContact = row.show_contact ?? true;
   return {
     status: "ok",
     showcase: {
@@ -855,18 +856,32 @@ export async function getPublicShowcaseService(
       intro_html: row.intro_html ?? null,
       outro_html: row.outro_html ?? null,
       accent_color: row.accent_color ?? null,
-      show_contact: row.show_contact ?? true,
+      show_contact: showContact,
       show_reviews: row.show_reviews ?? true,
       cover_image_url: coverImageUrl,
       sections,
     },
+    /*
+     * `show_contact` is honoured HERE, not just in the renderer.
+     *
+     * This is an anonymous endpoint: whatever it returns is public, whether or
+     * not the page draws it. Switching contact display off still shipped the
+     * owner's phone, postal address and email in the JSON to anyone who opened
+     * devtools or curled the share link.
+     *
+     * The email is the worst of the three: `profiles.email` is the **account
+     * login address**, not a business contact — there is no separate field for
+     * one — so publishing it hands an attacker half of every credential-stuffing
+     * attempt against this tenant. Name and logo stay regardless: they are the
+     * branding on the showcase itself, and hiding them would blank the page.
+     */
     company: p
       ? {
           name: p.company ?? null,
           logo_url: p.company_logo_url ?? null,
-          phone: p.company_phone ?? null,
-          address: p.company_address ?? null,
-          email: p.email ?? null,
+          phone: showContact ? (p.company_phone ?? null) : null,
+          address: showContact ? (p.company_address ?? null) : null,
+          email: showContact ? (p.email ?? null) : null,
         }
       : null,
     reviewLinks: ((reviewRows as any[]) ?? []).map((r) => ({

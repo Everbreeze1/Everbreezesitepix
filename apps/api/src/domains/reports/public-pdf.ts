@@ -2,6 +2,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFP
 import { parseRich, type RichBlock, type InlineRun, richIsEmpty } from "@sitepix/shared";
 import { sanitizeCaption } from "@sitepix/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
+import { selectIn } from "../../lib/chunked-in";
 
 export async function handleReportPdf(token: string): Promise<Response> {
         if (!token || !/^[0-9a-f-]{36}$/i.test(token)) {
@@ -37,11 +38,19 @@ export async function handleReportPdf(token: string): Promise<Response> {
         const urlById = new Map<string, string>();
         const metaById = new Map<string, any>();
         if (allPhotoIds.size) {
-          const { data: rows } = await supabaseAdmin
-            .from("photos")
-            .select("id, storage_path, image_url, caption, phase, tags, taken_at")
-            .in("id", Array.from(allPhotoIds));
-          const list = (rows as any[]) ?? [];
+          // Chunked and error-throwing on purpose: this used to be a single
+          // `.in()` whose error was dropped by destructuring only `data`, so a
+          // report referencing ~398+ photos silently produced a PDF with NO
+          // photos and still returned 200. See lib/chunked-in.ts.
+          const list = await selectIn<any>(
+            Array.from(allPhotoIds),
+            (idChunk) =>
+              supabaseAdmin
+                .from("photos")
+                .select("id, storage_path, image_url, caption, phase, tags, taken_at")
+                .in("id", idChunk) as any,
+            "report photos",
+          );
           for (const r of list) metaById.set(r.id, { ...r, caption: sanitizeCaption(r.caption) });
           await Promise.all(list.map(async (r) => {
             if (r.image_url) { urlById.set(r.id, r.image_url); return; }

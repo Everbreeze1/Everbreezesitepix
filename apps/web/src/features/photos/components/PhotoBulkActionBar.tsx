@@ -39,6 +39,7 @@ import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/sitepix/client";
 import { sharePhotoNative } from "@/lib/native-share";
+import { mutateByIds } from "@/lib/chunked-ids";
 import { ensureGlobalTag } from "@/hooks/use-tag-colors";
 import { useConfirm } from "@/hooks/use-confirm";
 import { sanitizeCaption } from "@sitepix/shared";
@@ -141,7 +142,8 @@ export function PhotoBulkActionBar(props: Props) {
       for (const p of selectedPhotos) {
         if (!p.url) continue;
         const name =
-          (p.caption?.replace(/[^\w.\-]+/g, "_") || `photo_${p.id.slice(0, 8)}`) + ".jpg";
+          // `-` is last in the class, so it is a literal and needs no escape.
+          (p.caption?.replace(/[^\w.-]+/g, "_") || `photo_${p.id.slice(0, 8)}`) + ".jpg";
         await downloadOne(p.url, name);
       }
       toast.success(`${count} photo${count > 1 ? "s" : ""} downloaded`);
@@ -173,11 +175,11 @@ export function PhotoBulkActionBar(props: Props) {
   const doHideToggle = () =>
     withBusy("hide", async () => {
       const next = !allHidden;
-      const { error } = await (supabase as any)
-        .from("photos")
-        .update({ hidden: next })
-        .in("id", selectedIds);
-      if (error) throw error;
+      // Batched — "Select all" is unbounded and a single `.in()` past ~670 ids
+      // is rejected by the gateway on URI length. See lib/chunked-ids.ts.
+      await mutateByIds(selectedIds, (idChunk) =>
+        (supabase as any).from("photos").update({ hidden: next }).in("id", idChunk),
+      );
       toast.success(next ? `${count} hidden from timeline` : `${count} restored to timeline`);
       onRefresh();
     });
@@ -191,11 +193,12 @@ export function PhotoBulkActionBar(props: Props) {
         }))
       )
         return;
-      const { error } = await (supabase as any)
-        .from("photos")
-        .update({ deleted_at: new Date().toISOString() })
-        .in("id", selectedIds);
-      if (error) throw error;
+      await mutateByIds(selectedIds, (idChunk) =>
+        (supabase as any)
+          .from("photos")
+          .update({ deleted_at: new Date().toISOString() })
+          .in("id", idChunk),
+      );
       toast.success(`${count} moved to Trash`);
       onClear();
       onRefresh();
@@ -540,15 +543,16 @@ function MoveDialog({
   const submit = async () => {
     if (!target) return;
     setSaving(true);
-    const { error } = await (supabase as any)
-      .from("photos")
-      .update({ project_id: target })
-      .in("id", selectedIds);
-    setSaving(false);
-    if (error) {
-      toast.error(error.message);
+    try {
+      await mutateByIds(selectedIds, (idChunk) =>
+        (supabase as any).from("photos").update({ project_id: target }).in("id", idChunk),
+      );
+    } catch (error: any) {
+      setSaving(false);
+      toast.error(error?.message ?? "Could not move photos");
       return;
     }
+    setSaving(false);
     toast.success(`Moved ${selectedIds.length} photo${selectedIds.length > 1 ? "s" : ""}`);
     onDone();
   };

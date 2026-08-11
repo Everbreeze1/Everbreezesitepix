@@ -1327,9 +1327,33 @@ export async function getPublicWalkthroughService(data: { token: string }) {
 
     const { data: project } = await supabaseAdmin
       .from("projects")
-      .select("name, location, street, city, state")
+      .select("name, location, street, city, state, deleted_at")
       .eq("id", (walk as any).project_id)
       .maybeSingle();
+
+    /*
+     * Trashing the project revokes its shared walkthrough. Nothing on any public
+     * path filtered `deleted_at`, so a walkthrough — audio, transcript, every
+     * captured photo — kept serving after the job was deleted. Returned as the
+     * same empty shape as an unknown token so the share page renders its normal
+     * "not available" state rather than a half-populated one.
+     */
+    if ((project as any)?.deleted_at) {
+      return {
+        walkthrough: null,
+        project: null,
+        photoUrls: {} as Record<string, string>,
+        photoSteps: [] as Array<{
+          photo_id: string;
+          offset_seconds: number;
+          spoken_note: string | null;
+          position: number;
+          caption: string | null;
+          taken_at: string | null;
+          image_url: string;
+        }>,
+      };
+    }
 
     const { data: links } = await supabaseAdmin
       .from("walkthrough_photos" as any)

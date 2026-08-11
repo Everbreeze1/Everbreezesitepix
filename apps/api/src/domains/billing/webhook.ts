@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { getStripe, priceIdToPlan, requireStripeWebhookSecret } from "../../lib/stripe";
+import { PLAN_MEMBER_CAP, type BillingTier } from "../../lib/team-plan";
 import { insertNotification } from "../notifications/service";
 
 type TeamLookup = { column: "stripe_subscription_id" | "stripe_customer_id"; value: string };
@@ -113,6 +114,39 @@ async function notifyOwnerOnce(team: BillingTeam, title: string, body: string, w
   });
 }
 
+/**
+ * Seats the customer actually bought, clamped to the plan's hard ceiling.
+ *
+ * Returns null when Stripe reports no usable quantity, which the caller treats
+ * as "leave the existing limit alone" — guessing a seat count is worse than
+ * keeping the previous one.
+ */
+function purchasedSeats(subscription: Stripe.Subscription, plan: string | null): number | null {
+  const qty = subscription.items?.data?.[0]?.quantity;
+  if (typeof qty !== "number" || qty < 1) return null;
+  const cap = PLAN_MEMBER_CAP[(plan as BillingTier) ?? "starter"] ?? PLAN_MEMBER_CAP.starter;
+  return Math.min(qty, cap);
+}
+
+/*
+ * Write the purchased seat count onto the team.
+ *
+ * MUST be its own statement, separate from the `plan` write. The
+ * `teams_sync_member_limit_trg` trigger (20260612193150_teams_plan.sql) is
+ * `BEFORE INSERT OR UPDATE OF plan` and unconditionally overwrites
+ * `NEW.member_limit` with the plan's ceiling — so setting both columns in one
+ * UPDATE silently discards the quantity every time. Updating `member_limit`
+ * alone does not name `plan`, so the trigger does not fire and this sticks.
+ *
+ * Without this the seat count was never read from Stripe at all: a 3-seat Pro
+ * subscription got `member_limit = 50`, because that is what the trigger writes
+ * for any Pro plan. Customers were paying for 3 and receiving 50.
+ */
+async function syncPurchasedSeats(lookup: TeamLookup, seats: number | null) {
+  if (seats == null) return;
+  await updateTeamByLookup(lookup, { member_limit: seats });
+}
+
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const teamId = session.metadata?.team_id;
   const plan = session.metadata?.plan;
@@ -121,15 +155,39 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
+  const subscriptionId = idOf(session.subscription);
+
   const { error } = await getSupabaseAdmin()
     .from("teams" as any)
     .update({
       plan,
-      stripe_subscription_id: session.subscription as string | null,
+      stripe_subscription_id: subscriptionId,
       subscription_status: "active",
     })
     .eq("id", teamId);
-  if (error) console.error("[billing webhook] failed to activate team", teamId, error);
+  if (error) {
+    console.error("[billing webhook] failed to activate team", teamId, error);
+    return;
+  }
+
+  /*
+   * The seat count has to come from the subscription, and the checkout session
+   * does not carry line-item quantities — so fetch it. Best effort: the plan is
+   * already active by this point, and failing the whole webhook (which makes
+   * Stripe retry, re-running the activation above) is worse than falling back to
+   * the plan ceiling. `customer.subscription.updated` fires for this
+   * subscription too and will correct the seats if this call fails.
+   */
+  if (!subscriptionId) return;
+  try {
+    const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+    await syncPurchasedSeats(
+      { column: "stripe_subscription_id", value: subscriptionId },
+      purchasedSeats(subscription, plan),
+    );
+  } catch (e) {
+    console.error("[billing webhook] could not read seat quantity for", subscriptionId, e);
+  }
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
@@ -138,7 +196,12 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   const patch: Record<string, unknown> = { subscription_status: subscription.status };
   if (plan) patch.plan = plan;
 
-  await updateTeamByLookup({ column: "stripe_subscription_id", value: subscription.id }, patch);
+  const lookup: TeamLookup = { column: "stripe_subscription_id", value: subscription.id };
+  await updateTeamByLookup(lookup, patch);
+  // After the plan write, never before — writing `plan` re-fires the trigger
+  // that resets member_limit to the plan ceiling. This is also the path that
+  // handles a customer adding or removing seats mid-cycle.
+  await syncPurchasedSeats(lookup, purchasedSeats(subscription, plan));
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {

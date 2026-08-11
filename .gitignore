@@ -32,6 +32,14 @@ apps/api/.env.local
 # Local-only project docs — not committed
 /docs/
 
+# Throwaway files from local probing/debugging scripts. These have already once
+# been left in the repo root holding a live Supabase access + refresh token, so
+# ignore the whole shape rather than relying on remembering to delete them.
+/scratch_*
+/artifacts/
+*.tok
+*.token
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -43,3 +51,4 @@ apps/api/.env.local
 *.sln
 *.sw?
 /CLAUDE.md
+/LAUNCH.md

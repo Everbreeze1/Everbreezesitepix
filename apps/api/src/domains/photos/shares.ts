@@ -120,14 +120,32 @@ export async function getPublicPhotoShareService(
     return empty("expired");
   }
 
-  const { data: photo } = await supabaseAdmin
+  // `as any`: packages/db/src/database.ts is stale and does not know about
+  // `photos.deleted_at` / `projects.deleted_at`, though both columns are live
+  // (the trash flow writes them). Same escape hatch used elsewhere in the API.
+  const { data: photo } = await (supabaseAdmin as any)
     .from("photos")
     .select(
-      "id, project_id, storage_path, image_url, caption, phase, tags, taken_at, created_at, latitude, longitude",
+      "id, project_id, storage_path, image_url, caption, phase, tags, taken_at, created_at, latitude, longitude, deleted_at",
     )
     .eq("id", share.photo_id)
     .maybeSingle();
   if (!photo) return empty("not_found");
+  /*
+   * Trashing must take the public link down with it.
+   *
+   * Deleting a photo did not touch its shares, and nothing here filtered
+   * `deleted_at`, so a contractor who removed a photo — often precisely because
+   * a client asked them to, or because it showed something it shouldn't — kept
+   * serving it in full to anyone holding the link. Trash is a 60-day window, and
+   * with no scheduler running the purge hook (see LAUNCH.md §4.4) it is
+   * effectively forever.
+   *
+   * Reported as "revoked" rather than "not_found": the share genuinely did exist
+   * and was withdrawn, and that is the more useful thing for the recipient to
+   * see.
+   */
+  if (photo.deleted_at) return empty("revoked");
 
   let imageUrl = photo.image_url as string | null;
   if (!imageUrl) {
@@ -137,11 +155,13 @@ export async function getPublicPhotoShareService(
     imageUrl = signed?.signedUrl ?? "";
   }
 
-  const { data: project } = await supabaseAdmin
+  const { data: project } = await (supabaseAdmin as any)
     .from("projects")
-    .select("name, street, city, state, zip")
+    .select("name, street, city, state, zip, deleted_at")
     .eq("id", photo.project_id)
     .maybeSingle();
+  // Trashing the whole project has to revoke its photos' links too.
+  if (project?.deleted_at) return empty("revoked");
 
   const { data: profile } = await supabaseAdmin
     .from("profiles")

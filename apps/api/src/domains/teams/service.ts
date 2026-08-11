@@ -1,7 +1,7 @@
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
 import { rateLimit } from "../../lib/rate-limit";
-import { PLAN_MEMBER_CAP } from "../../lib/team-plan";
+import { ACTIVE_SUBSCRIPTION_STATUSES, PLAN_MEMBER_CAP } from "../../lib/team-plan";
 import { insertNotification } from "../notifications/service";
 
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>;
@@ -310,7 +310,9 @@ export async function getMyTeamService(ctx: AuthedContext) {
     memberLimit,
     subscriptionStatus: (team?.subscription_status as string) ?? "inactive",
     isInternal,
-    isActive: isInternal || team?.subscription_status === "active",
+    // Same rule as getCallerTeamPlan — this is what `useSubscription` on the
+    // web reads, so the two must agree or the UI hides what the server serves.
+    isActive: isInternal || ACTIVE_SUBSCRIPTION_STATUSES.has(team?.subscription_status as string),
     // Every plan shares the project record now, including Starter — small
     // crews are the point of Starter's second seat, and a seat that can't see
     // the shared work is not a seat. Plans differ by seat count (Starter 2,

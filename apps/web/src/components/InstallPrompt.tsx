@@ -10,6 +10,22 @@ type BIPEvent = Event & {
 const DISMISS_KEY = "sitepix-install-dismissed-at";
 const DISMISS_DAYS = 14;
 
+/*
+ * How long the banner stays up before retiring itself.
+ *
+ * It is a fixed overlay pinned above the mobile tab bar, so on a phone it sits
+ * directly over whatever the page puts at the bottom of the screen — which on
+ * every form in the app is the primary submit button. Nothing about the layout
+ * reserves space for it, and there is no route where it is suppressed, so a
+ * user who ignores it is left tapping through it until they think to dismiss it.
+ *
+ * Retiring after a short window bounds that without removing the feature: the
+ * prompt is an upsell, and an upsell must never outlive the user's patience with
+ * it. It does NOT write DISMISS_KEY on timeout, so it can come back on a later
+ * visit rather than being suppressed for the full 14 days.
+ */
+const AUTO_RETIRE_MS = 15_000;
+
 function isInIframe() {
   try {
     return window.self !== window.top;
@@ -58,6 +74,14 @@ export function InstallPrompt() {
     return () => window.removeEventListener("beforeinstallprompt", onBIP);
   }, []);
 
+  // Retire the banner once it has had its say, so it stops covering whatever is
+  // underneath it. Starts only once something is actually on screen.
+  useEffect(() => {
+    if (hidden || (!deferred && !showIOS)) return;
+    const t = window.setTimeout(() => setHidden(true), AUTO_RETIRE_MS);
+    return () => window.clearTimeout(t);
+  }, [hidden, deferred, showIOS]);
+
   const dismiss = () => {
     localStorage.setItem(DISMISS_KEY, String(Date.now()));
     setDeferred(null);
@@ -77,7 +101,11 @@ export function InstallPrompt() {
   if (!deferred && !showIOS) return null;
 
   return (
-    <div className="fixed inset-x-3 bottom-24 z-50 mx-auto max-w-md rounded-xl border border-border bg-background/95 p-3 shadow-lg backdrop-blur md:bottom-6 md:right-6 md:left-auto md:mx-0">
+    <div
+      className="fixed inset-x-3 bottom-24 z-50 mx-auto max-w-md rounded-xl border border-border bg-background/95 p-3 shadow-lg backdrop-blur md:bottom-6 md:right-6 md:left-auto md:mx-0"
+      role="dialog"
+      aria-label="Install SitePix"
+    >
       <div className="flex items-start gap-3">
         <div className="rounded-lg bg-primary/10 p-2">
           <Download className="h-5 w-5 text-primary" />

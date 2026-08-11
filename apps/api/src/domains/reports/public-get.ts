@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { sanitizeCaption } from "@sitepix/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
+import { selectIn } from "../../lib/chunked-in";
 
 export const publicProjectReportInputSchema = z.object({ token: z.string().uuid() });
 
@@ -91,9 +92,12 @@ export async function getPublicProjectReportService(
 
   const [{ data: project }, { data: profile }, { data: sectionRows }, { data: teamMembership }] =
     await Promise.all([
-      supabaseAdmin
+      // `as any`: packages/db/src/database.ts is stale and does not know about
+      // `projects.deleted_at`, though the column is live (the trash flow writes
+      // it). Same escape hatch the rest of this codebase uses for that gap.
+      (supabaseAdmin as any)
         .from("projects")
-        .select("name, description, street, city, state, zip, status")
+        .select("name, description, street, city, state, zip, status, deleted_at")
         .eq("id", report.project_id)
         .maybeSingle(),
       supabaseAdmin
@@ -112,6 +116,15 @@ export async function getPublicProjectReportService(
         .eq("user_id", report.created_by)
         .maybeSingle(),
     ]);
+
+  /*
+   * Trashing the project has to take its public report link down with it.
+   * Nothing here filtered `deleted_at`, so a report shared with a client kept
+   * serving in full after the job was deleted — including every photo in it.
+   * Trash is a 60-day window, and nothing schedules the purge hook, so in
+   * practice it never stopped.
+   */
+  if ((project as { deleted_at?: string | null } | null)?.deleted_at) return empty("revoked");
 
   let reviewLinks: PublicProjectReport["reviewLinks"] = [];
   const team = (teamMembership as any)?.team as { id: string; plan: string; is_internal: boolean } | undefined;
@@ -156,13 +169,11 @@ export async function getPublicProjectReportService(
     image_url: string | null;
   }>();
   if (photoIdSet.size) {
-    const { data: rows } = await supabaseAdmin
-      .from("photos")
-      .select(
-        "id, storage_path, image_url, caption, phase, tags, taken_at, created_at, latitude, longitude",
-      )
-      .in("id", Array.from(photoIdSet));
-    const list = (rows as Array<{
+    // Chunked, and errors throw rather than being dropped by destructuring only
+    // `data` — above ~398 ids the single `.in()` this replaced failed on
+    // PostgREST's echoed Content-Location header and the page rendered with no
+    // photos at all. See lib/chunked-in.ts.
+    const list = await selectIn<{
       id: string;
       storage_path: string;
       image_url: string | null;
@@ -173,7 +184,17 @@ export async function getPublicProjectReportService(
       created_at: string;
       latitude: number | null;
       longitude: number | null;
-    }>) ?? [];
+    }>(
+      Array.from(photoIdSet),
+      (idChunk) =>
+        supabaseAdmin
+          .from("photos")
+          .select(
+            "id, storage_path, image_url, caption, phase, tags, taken_at, created_at, latitude, longitude",
+          )
+          .in("id", idChunk) as any,
+      "public report photos",
+    );
     for (const r of list) metaById.set(r.id, { ...r, caption: sanitizeCaption(r.caption) });
     await Promise.all(
       list.map(async (r) => {

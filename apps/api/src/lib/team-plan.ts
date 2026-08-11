@@ -16,6 +16,40 @@ export const PLAN_MEMBER_CAP: Record<BillingTier, number> = {
   team: 50,
 };
 
+/**
+ * `teams.subscription_status` values that grant paid access.
+ *
+ * This is the single definition of "is this team allowed in", and getting the
+ * set wrong is expensive in both directions — too narrow locks out paying
+ * customers, too wide gives the product away.
+ *
+ * - `active`   — paid and current.
+ * - `trialing` — **every** checkout starts a trial (see TRIAL_DAYS in
+ *   billing/service.ts), so this is the status of every new customer for their
+ *   first days. Omitting it locked out each one for the whole trial they had
+ *   just signed up for.
+ * - `past_due` — a renewal charge failed and Stripe is still retrying on its
+ *   own schedule. That retry window *is* the grace period: Stripe fires
+ *   `customer.subscription.deleted` only once it gives up, and that is what
+ *   ends access. Treating `past_due` as inactive turned an expired card into an
+ *   instant total lockout, which is the opposite of the dunning flow in
+ *   billing/webhook.ts.
+ *
+ * Everything else is denied, including Stripe's `unpaid`, `canceled`,
+ * `incomplete`, `incomplete_expired`, `paused`, and this column's own default
+ * of `inactive`. Deny is the safe default here: an unrecognised status must
+ * never fall through to access.
+ *
+ * Mirrored client-side by `useSubscription` in
+ * apps/web/src/hooks/use-subscription.tsx — keep the two in sync, or the UI
+ * hides features the server would happily serve.
+ */
+export const ACTIVE_SUBSCRIPTION_STATUSES: ReadonlySet<string> = new Set([
+  "active",
+  "trialing",
+  "past_due",
+]);
+
 export interface CallerPlan {
   /** Subscription is live (or the team is flagged internal/complimentary). */
   isActive: boolean;
@@ -71,7 +105,8 @@ export async function getCallerTeamPlan(
     .maybeSingle();
 
   const isInternal = !!(team as any)?.is_internal;
-  const isActive = isInternal || (team as any)?.subscription_status === "active";
+  const isActive =
+    isInternal || ACTIVE_SUBSCRIPTION_STATUSES.has((team as any)?.subscription_status);
   const rawPlan = (team as any)?.plan as string | undefined;
   const tier: BillingTier = isInternal
     ? "team"

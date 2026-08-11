@@ -605,6 +605,22 @@ export async function getPublicProjectPageService(
   if (!row) return { status: "not_found", page: null };
   if (row.revoked_at) return { status: "revoked", page: null };
 
+  /*
+   * Trashing the project revokes its shared pages too.
+   *
+   * `project_pages` has no `deleted_at` of its own — a page dies with its
+   * project, via the ON DELETE CASCADE — but soft-deleting the project only
+   * sets `projects.deleted_at`, and nothing on this path looked at it. So a
+   * document shared with a client kept serving in full after the job was
+   * deleted.
+   */
+  const { data: proj } = await (admin as any)
+    .from("projects")
+    .select("deleted_at")
+    .eq("id", row.project_id)
+    .maybeSingle();
+  if (proj?.deleted_at) return { status: "revoked", page: null };
+
   const supa = admin as unknown as SupabaseClient<any>;
   // `supa` is the service-role client, so every resolution here is scoped to
   // this page's own project — otherwise a `data-photo-id` the author pasted in

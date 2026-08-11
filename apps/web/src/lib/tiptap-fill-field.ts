@@ -105,7 +105,8 @@ export function bracketsToFillFields(html: string): string {
   if (!html || !html.includes("[")) return html;
   return html.replace(/>([^<]+)</g, (whole, text: string) => {
     if (!text.includes("[")) return whole;
-    const replaced = text.replace(/\[([^\[\]<>]{1,60})\]/g, (_m, label: string) => {
+    // `[` needs no escape inside a character class.
+    const replaced = text.replace(/\[([^[\]<>]{1,60})\]/g, (_m, label: string) => {
       const clean = label.trim();
       if (!clean) return _m;
       return `<span ${FILL_FIELD_ATTR} data-label="${escapeAttr(clean)}"></span>`;
