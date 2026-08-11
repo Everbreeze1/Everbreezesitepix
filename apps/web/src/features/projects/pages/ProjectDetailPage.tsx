@@ -2289,6 +2289,16 @@ export function ProjectDetailPage() {
                     />
                     {(STATUS_DOT[project.status] ?? STATUS_DOT.active).label}
                   </span>
+                  {/*
+                   * Origin is identity, not a statistic. This used to sit at the
+                   * end of the metadata strip below, in 12px at 60% opacity
+                   * behind three numeric stats, where it read as a footnote about
+                   * counts and wrapped onto its own line on a narrow viewport —
+                   * "it's not readily apparent which blueprint has been applied"
+                   * was a fair description of it. Renders nothing unless a
+                   * blueprint really was applied.
+                   */}
+                  <ProjectBlueprintOrigin projectId={project.id} onOpenPanel={setPanel} />
                 </div>
                 <h1 className="font-display mt-3 truncate text-2xl font-bold leading-tight tracking-tight text-sidebar-foreground sm:text-3xl">
                   {project.name}
@@ -2404,8 +2414,6 @@ export function ProjectDetailPage() {
                 <Calendar className="h-4 w-4 text-sidebar-ring" />
                 Updated {relativeTime(project.updated_at)}
               </span>
-              {/* Only renders if a blueprint was actually applied here. */}
-              <ProjectBlueprintOrigin projectId={project.id} />
             </div>
           </div>
         </div>

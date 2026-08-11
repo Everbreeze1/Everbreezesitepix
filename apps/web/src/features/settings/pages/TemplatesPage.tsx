@@ -278,6 +278,13 @@ export function TemplatesPage() {
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) {
+      // Reported, not swallowed. Without this line the usage panel simply
+      // vanishes and there is nothing anywhere — console, UI or network tab
+      // summary — saying the ledger could not be read.
+      console.warn("[blueprint-applications] ledger read failed", {
+        code: (error as { code?: string }).code,
+        message: error.message,
+      });
       setApplications(null);
       return;
     }
@@ -1796,59 +1803,69 @@ function BlueprintsTab(props: {
             )}
           </div>
 
-          {/* Where it has been used */}
-          {applicationsAvailable && (
-            <div className={cn(SURFACE_CARD, "p-5")}>
-              <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
-                Track record
+          {/*
+           * Where it has been used.
+           *
+           * The card stays mounted when the ledger is unreadable and says so,
+           * rather than deleting itself. Hiding it meant the one screen that
+           * answers "where has this blueprint been used" silently ceased to
+           * exist, and nothing distinguished that from a blueprint that had
+           * genuinely never been applied.
+           */}
+          <div className={cn(SURFACE_CARD, "p-5")}>
+            <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+              Track record
+            </p>
+            <h3 className="font-display mt-1.5 text-lg font-bold tracking-tight">
+              Where this blueprint has been used
+            </h3>
+            {!applicationsAvailable ? (
+              <p className="mt-3 rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                Usage history isn’t available on this environment yet, so we can’t show where this
+                blueprint has been applied.
               </p>
-              <h3 className="font-display mt-1.5 text-lg font-bold tracking-tight">
-                Where this blueprint has been used
-              </h3>
-              {selectedApplications.length === 0 ? (
-                <p className="mt-3 rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-                  Not applied to any project yet. Every apply is recorded here, with what it
-                  created.
-                </p>
-              ) : (
-                <ul className="mt-3 space-y-1.5">
-                  {selectedApplications.slice(0, 12).map((a) => {
-                    const total = Object.values(a.counts ?? {}).reduce((x, y) => x + y, 0);
-                    return (
-                      <li key={a.id}>
-                        <Link
-                          to="/projects/$projectId"
-                          params={{ projectId: a.project_id }}
-                          className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2 transition-colors hover:border-primary/30"
-                        >
-                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-                            <FolderOpen className="h-3.5 w-3.5" />
+            ) : selectedApplications.length === 0 ? (
+              <p className="mt-3 rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                Not applied to any project yet. Every apply is recorded here, with what it created.
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-1.5">
+                {selectedApplications.slice(0, 12).map((a) => {
+                  const total = Object.values(a.counts ?? {}).reduce((x, y) => x + y, 0);
+                  return (
+                    <li key={a.id}>
+                      <Link
+                        to="/projects/$projectId"
+                        params={{ projectId: a.project_id }}
+                        className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2 transition-colors hover:border-primary/30"
+                      >
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                          <FolderOpen className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold">
+                            {a.project_name ?? "Project"}
                           </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold">
-                              {a.project_name ?? "Project"}
-                            </span>
-                            <span className="block truncate text-[11px] text-muted-foreground">
-                              {total} item{total === 1 ? "" : "s"} created
-                              {a.failed_count > 0 ? ` · ${a.failed_count} failed` : ""} ·{" "}
-                              {timeAgo(a.created_at)}
-                            </span>
+                          <span className="block truncate text-[11px] text-muted-foreground">
+                            {total} item{total === 1 ? "" : "s"} created
+                            {a.failed_count > 0 ? ` · ${a.failed_count} failed` : ""} ·{" "}
+                            {timeAgo(a.created_at)}
                           </span>
-                          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                        </Link>
-                      </li>
-                    );
-                  })}
-                  {selectedApplications.length > 12 && (
-                    <li className="px-3 pt-1 text-[11px] text-muted-foreground">
-                      <History className="mr-1 inline h-3 w-3" />
-                      and {selectedApplications.length - 12} more
+                        </span>
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      </Link>
                     </li>
-                  )}
-                </ul>
-              )}
-            </div>
-          )}
+                  );
+                })}
+                {selectedApplications.length > 12 && (
+                  <li className="px-3 pt-1 text-[11px] text-muted-foreground">
+                    <History className="mr-1 inline h-3 w-3" />
+                    and {selectedApplications.length - 12} more
+                  </li>
+                )}
+              </ul>
+            )}
+          </div>
         </div>
       )}
     </div>
