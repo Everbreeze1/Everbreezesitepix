@@ -12,6 +12,8 @@ import TaskItem from "@tiptap/extension-task-item";
 import LinkExtension from "@tiptap/extension-link";
 import TextAlign from "@tiptap/extension-text-align";
 import { Table, TableRow, TableCell, TableHeader } from "@tiptap/extension-table";
+import { NodeSelection } from "@tiptap/pm/state";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import {
   ArrowLeft,
   Bold,
@@ -92,6 +94,7 @@ import {
   type TextSnippet,
 } from "@/lib/text-snippets.functions";
 import { ProjectImage, isPhotoSlot } from "@/lib/tiptap-project-image";
+import { findImagePos, emptySlotNearSelection } from "@/lib/tiptap-photo-fill";
 import { DocumentToolbar } from "@/features/projects/components/DocumentToolbar";
 import { Spacer } from "@/lib/tiptap-spacer";
 import { InfoPanel } from "@/lib/tiptap-info-panel";
@@ -157,8 +160,15 @@ export function ProjectPageEditorPage() {
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState<ProjectPhoto[]>([]);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
-  /** Doc position of the template photo slot being filled, if the picker was opened by clicking one. */
-  const slotPosRef = useRef<number | null>(null);
+  /**
+   * The photo slot the picker was opened from, if it was opened by clicking one.
+   *
+   * Both the position *and* the node: a bare position that has drifted (an undo,
+   * a reload, an edit elsewhere in the document) still points at *something*, so
+   * filling it blindly would put the photo in the wrong place. Keeping the node
+   * lets the target be recovered by identity, or the fill refused outright.
+   */
+  const slotTargetRef = useRef<{ pos: number; node: ProseMirrorNode } | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareUpdating, setShareUpdating] = useState(false);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
@@ -205,19 +215,40 @@ export function ProjectPageEditorPage() {
     ],
     content: "",
     editorProps: {
-      // Clicking an unfilled template photo slot OR an already-inserted project
-      // photo (hover reveals a "Change photo" overlay — see ProjectImage's
-      // NodeView) opens the picker and swaps in the chosen photo at that spot.
-      handleClickOn: (_view, _pos, node, nodePos) => {
-        if (
-          node.type.name === "image" &&
-          (isPhotoSlot(node.attrs) || node.attrs["data-photo-id"])
-        ) {
-          slotPosRef.current = nodePos;
+      /*
+       * Clicking an unfilled template photo slot OR an already-inserted project
+       * photo (hover reveals a "Change photo" overlay — see ProjectImage's
+       * NodeView) opens the picker and swaps in the chosen photo at that spot.
+       *
+       * A real DOM `click`, deliberately not ProseMirror's `handleClickOn`.
+       * ProseMirror abandons its own click handling the moment the pointer
+       * travels more than 4px between press and release
+       * (`MouseDown.updateAllowDefault`, prosemirror-view), and a 280px-tall
+       * dashed box that ProseMirror also turns into a drag handle collects
+       * exactly that kind of imprecise click. When it was abandoned the slot
+       * simply did not react — and the caret was left parked right beside it,
+       * so the next thing the user reached for (the toolbar's "Add photo")
+       * dropped the photo next to the empty box instead of into it. That is
+       * the "photo inserted separately and detached" report. A DOM click
+       * tolerates the travel, and fires for taps too.
+       */
+      handleDOMEvents: {
+        click: (view, event) => {
+          // Dragging a text selection that happens to end on a photo is not a
+          // click on that photo. A click leaves either a collapsed caret or a
+          // NodeSelection on the image itself; a range of text means the user
+          // was selecting, so leave their selection alone.
+          const selection = view.state.selection;
+          if (!selection.empty && !(selection instanceof NodeSelection)) return false;
+          const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+          if (!at || at.inside < 0) return false;
+          const node = view.state.doc.nodeAt(at.inside);
+          if (!node || node.type.name !== "image") return false;
+          if (!isPhotoSlot(node.attrs) && !node.attrs["data-photo-id"]) return false;
+          slotTargetRef.current = { pos: at.inside, node };
           setImagePickerOpen(true);
           return true;
-        }
-        return false;
+        },
       },
       attributes: {
         class:
@@ -461,14 +492,19 @@ export function ProjectPageEditorPage() {
   }
 
   /**
-   * Work queued to run once a modal has closed.
+   * Focus handed back to the editor once a modal has closed.
    *
    * Radix marks everything outside an open modal `aria-hidden`, and the editor
-   * lives outside these dialogs. Calling `editor.chain().focus()` from inside
+   * lives outside these dialogs. Calling `editor.commands.focus()` from inside
    * one therefore moved focus into an aria-hidden subtree, which the browser
    * refuses: "Blocked aria-hidden on an element because its descendant retained
-   * focus." Queue the edit instead and run it from `onCloseAutoFocus`, which
-   * fires after the dialog has closed and the attribute is gone.
+   * focus." So the *focus* waits for `onCloseAutoFocus`, which fires after the
+   * dialog has gone and the attribute with it.
+   *
+   * Only the focus waits. Document edits are applied immediately, while the
+   * dialog is still up: a transaction queued here is lost outright if this
+   * never fires, and a photo that silently never arrives is indistinguishable
+   * from one inserted in the wrong place.
    */
   const afterDialogClose = useRef<(() => void) | null>(null);
   function runAfterDialogClose(e: Event) {
@@ -476,44 +512,85 @@ export function ProjectPageEditorPage() {
     afterDialogClose.current = null;
     if (!fn) return;
     // Radix would otherwise return focus to the trigger, undoing the caret
-    // placement the insert just made.
+    // placement the edit just made.
     e.preventDefault();
     fn();
   }
+  /** Put the caret back in the document once the dialog has closed. */
+  function queueRefocus() {
+    afterDialogClose.current = () => editor?.commands.focus();
+  }
+
+  /**
+   * Swap the image at `pos` for one carrying `attrs`, as a single transaction
+   * over that exact range.
+   *
+   * Deliberately not `chain().focus().setNodeSelection(pos).setImage(attrs)`:
+   * that spelling inserts *at the current selection*, so anything that leaves
+   * the selection where the caret happened to be — a stale position, the focus
+   * hand-off as the picker closes, an editor re-created mid-flight — quietly
+   * turns the replace into an insert, and the photo lands beside the empty slot
+   * it was meant to become instead of inside it. A `replaceWith` over an
+   * explicit range cannot degrade that way, and needs no focus, so it is safe
+   * to run while the dialog is still up.
+   */
+  function replaceImageAt(pos: number, attrs: Record<string, unknown>): boolean {
+    if (!editor) return false;
+    const node = editor.state.doc.nodeAt(pos);
+    if (!node || node.type.name !== "image") return false;
+    // The slot's own attrs go on first so its fixed width/height carry onto the
+    // photo (styles.css then crops it to fit via object-fit) and the template's
+    // layout never reflows just because a real photo's aspect ratio differs.
+    //
+    // An unfilled slot's `alt` is the template's authored label for that box
+    // ("Wide shot — whole area", "Before", "After"), so an uncaptioned photo
+    // inherits it rather than blanking it: the labelling is not recoverable
+    // once gone, and it is also what tells two otherwise identical images apart
+    // when the slot has to be re-found by identity.
+    const alt =
+      attrs.alt || (isPhotoSlot(node.attrs) ? (node.attrs.alt as string | null) : null) || "";
+    const filled = editor.state.schema.nodes.image.create({ ...node.attrs, ...attrs, alt });
+    editor.view.dispatch(editor.state.tr.replaceWith(pos, pos + node.nodeSize, filled));
+    return true;
+  }
 
   function insertImage(photo: ProjectPhoto) {
+    const target = slotTargetRef.current;
+    slotTargetRef.current = null;
+    setImagePickerOpen(false);
+    if (!editor) return;
+
     const attrs: Record<string, unknown> = {
       src: photo.url,
       alt: photo.caption ?? "",
       "data-photo-id": photo.id,
     };
-    const slotPos = slotPosRef.current;
-    slotPosRef.current = null;
-    if (slotPos !== null && editor) {
-      // Carry the slot's fixed width/height onto the replacement photo (styles.css
-      // then crops it to fit via object-fit) so the template's layout never
-      // reflows just because a real photo's aspect ratio differs from the slot's.
-      const slotNode = editor.state.doc.nodeAt(slotPos);
-      if (slotNode?.attrs.width) attrs.width = slotNode.attrs.width;
-      if (slotNode?.attrs.height) attrs.height = slotNode.attrs.height;
-      // setImage() inserts over the current selection, so selecting the slot
-      // node first makes this a replace rather than an insert.
-      afterDialogClose.current = () =>
-        editor
-          .chain()
-          .focus()
-          .setNodeSelection(slotPos)
-          .setImage(attrs as any)
-          .run();
-    } else {
-      afterDialogClose.current = () =>
-        editor
-          ?.chain()
-          .focus()
-          .setImage(attrs as any)
-          .run();
+
+    // Opened by clicking a slot (or an already-filled photo): that node is the
+    // only place this photo may go.
+    if (target) {
+      const pos = findImagePos(editor.state.doc, target);
+      if (pos === null || !replaceImageAt(pos, attrs)) {
+        // Never fall back to inserting at the caret. A photo landing anywhere
+        // other than the box that was clicked is precisely the bug this path
+        // exists to prevent — say so instead of doing it quietly.
+        toast.error("That photo slot is no longer in the document");
+        return;
+      }
+      queueRefocus();
+      return;
     }
-    setImagePickerOpen(false);
+
+    // Opened from the toolbar: fill a touching empty slot if there is one,
+    // otherwise drop the photo at the caret.
+    const nearbySlot = emptySlotNearSelection(editor.state.doc, editor.state.selection);
+    if (nearbySlot !== null && replaceImageAt(nearbySlot, attrs)) {
+      queueRefocus();
+      return;
+    }
+    const { from, to } = editor.state.selection;
+    editor.commands.insertContentAt({ from, to }, { type: "image", attrs });
+    queueRefocus();
   }
 
   async function loadSnippets() {
@@ -661,7 +738,13 @@ export function ProjectPageEditorPage() {
 
         <DocumentToolbar
           editor={editor}
-          onAddImage={() => setImagePickerOpen(true)}
+          onAddImage={() => {
+            // Explicitly "put a photo here", not "fill that slot": drop any
+            // target left over from an earlier click so this can't silently
+            // fill a box the user is no longer looking at.
+            slotTargetRef.current = null;
+            setImagePickerOpen(true);
+          }}
           onOpenSnippets={openSnippets}
           onAddHeader={() => {
             markDirty();
@@ -723,7 +806,7 @@ export function ProjectPageEditorPage() {
       <Dialog
         open={imagePickerOpen}
         onOpenChange={(v) => {
-          if (!v) slotPosRef.current = null;
+          if (!v) slotTargetRef.current = null;
           setImagePickerOpen(v);
         }}
       >
@@ -734,7 +817,7 @@ export function ProjectPageEditorPage() {
           <div className="flex max-h-[80vh] flex-col">
             <DialogHeader className="border-b px-6 pb-4 pt-5">
               <DialogTitle>
-                {slotPosRef.current !== null ? "Fill this photo slot" : "Insert a project photo"}
+                {slotTargetRef.current !== null ? "Fill this photo slot" : "Insert a project photo"}
               </DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-y-auto p-4">
@@ -869,10 +952,12 @@ export function ProjectPageEditorPage() {
                           size="sm"
                           className="font-bold"
                           onClick={() => {
-                            // Queued, not run here — see afterDialogClose.
-                            const html = s.content_html;
-                            afterDialogClose.current = () =>
-                              editor?.chain().focus().insertContent(html).run();
+                            // Inserted now at the caret the editor still holds;
+                            // only the focus waits for the dialog to close (see
+                            // afterDialogClose).
+                            const { from, to } = editor.state.selection;
+                            editor.commands.insertContentAt({ from, to }, s.content_html);
+                            queueRefocus();
                             setSnippetsOpen(false);
                           }}
                         >

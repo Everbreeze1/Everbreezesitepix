@@ -9,7 +9,8 @@
  * indistinguishable from a slot that came out of a seeded template — same SVG,
  * same width/height attrs — and therefore flows through the identical
  * click-to-fill path in ProjectPageEditorPage (`isPhotoSlot` → picker →
- * `setImage` carrying the slot's dimensions).
+ * `replaceImageAt`, which swaps the slot node for the photo and carries the
+ * slot's dimensions across).
  */
 
 /** Matches the slot art in the seeded templates: dashed rounded rect, caption, hint. */

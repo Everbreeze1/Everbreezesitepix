@@ -38,10 +38,10 @@ export const ProjectImage = Image.extend({
   },
 
   // A plain `renderHTML` <img> can't host a hover overlay (browsers don't
-  // paint generated content on replaced elements), so a real inserted photo
-  // — anything with data-photo-id — gets wrapped in a span with a "Change
-  // photo" overlay that CSS reveals on hover. An empty template slot skips
-  // the wrapper: it already has its own click-to-add affordance.
+  // paint generated content on replaced elements), so every image is wrapped
+  // in a span. Only a real inserted photo — anything with data-photo-id —
+  // gets the "Change photo" overlay inside that wrapper; an empty template
+  // slot has its own click-to-add art and takes the wrapper without one.
   addNodeView() {
     if (typeof document === "undefined") return null;
 

@@ -1248,6 +1248,23 @@ function ChipStyles() {
         height: 0;
         pointer-events: none;
       }
+      /* Photo slots get the same box model the project page editor gives them
+         (styles.css:256-279). Those rules are all scoped to .tiptap, a class
+         this surface deliberately does not use — it has its own typography
+         above — so without restating them here a "2 photos per page" slot row
+         previews STACKED and full-width, while the project page it is authored
+         for renders it as a side-by-side pair. Scoped to .doc-page, which
+         wraps both the editor and the preview pane.
+         The .tiptap-photo selector covers the editor (ProjectImage's NodeView
+         wraps each image in that span); the bare img covers the preview, which
+         renders the stored HTML directly. Tailwind's preflight sets images to
+         display:block, which is what stacks them. */
+      .doc-page img { max-width: 100%; border-radius: 6px; }
+      .doc-page img[width][height] { object-fit: cover; }
+      .doc-page p > img,
+      .doc-page p > .tiptap-photo { display: inline-block; vertical-align: top; margin-right: 6px; }
+      .doc-page p > img:last-child,
+      .doc-page p > .tiptap-photo:last-child { margin-right: 0; }
     `}</style>
   );
 }
