@@ -460,6 +460,27 @@ export function ProjectPageEditorPage() {
     }
   }
 
+  /**
+   * Work queued to run once a modal has closed.
+   *
+   * Radix marks everything outside an open modal `aria-hidden`, and the editor
+   * lives outside these dialogs. Calling `editor.chain().focus()` from inside
+   * one therefore moved focus into an aria-hidden subtree, which the browser
+   * refuses: "Blocked aria-hidden on an element because its descendant retained
+   * focus." Queue the edit instead and run it from `onCloseAutoFocus`, which
+   * fires after the dialog has closed and the attribute is gone.
+   */
+  const afterDialogClose = useRef<(() => void) | null>(null);
+  function runAfterDialogClose(e: Event) {
+    const fn = afterDialogClose.current;
+    afterDialogClose.current = null;
+    if (!fn) return;
+    // Radix would otherwise return focus to the trigger, undoing the caret
+    // placement the insert just made.
+    e.preventDefault();
+    fn();
+  }
+
   function insertImage(photo: ProjectPhoto) {
     const attrs: Record<string, unknown> = {
       src: photo.url,
@@ -477,18 +498,20 @@ export function ProjectPageEditorPage() {
       if (slotNode?.attrs.height) attrs.height = slotNode.attrs.height;
       // setImage() inserts over the current selection, so selecting the slot
       // node first makes this a replace rather than an insert.
-      editor
-        .chain()
-        .focus()
-        .setNodeSelection(slotPos)
-        .setImage(attrs as any)
-        .run();
+      afterDialogClose.current = () =>
+        editor
+          .chain()
+          .focus()
+          .setNodeSelection(slotPos)
+          .setImage(attrs as any)
+          .run();
     } else {
-      editor
-        ?.chain()
-        .focus()
-        .setImage(attrs as any)
-        .run();
+      afterDialogClose.current = () =>
+        editor
+          ?.chain()
+          .focus()
+          .setImage(attrs as any)
+          .run();
     }
     setImagePickerOpen(false);
   }
@@ -704,7 +727,10 @@ export function ProjectPageEditorPage() {
           setImagePickerOpen(v);
         }}
       >
-        <DialogContent className="max-h-[80vh] max-w-2xl overflow-hidden p-0">
+        <DialogContent
+          className="max-h-[80vh] max-w-2xl overflow-hidden p-0"
+          onCloseAutoFocus={runAfterDialogClose}
+        >
           <div className="flex max-h-[80vh] flex-col">
             <DialogHeader className="border-b px-6 pb-4 pt-5">
               <DialogTitle>
@@ -786,7 +812,10 @@ export function ProjectPageEditorPage() {
       </Dialog>
 
       <Dialog open={snippetsOpen} onOpenChange={setSnippetsOpen}>
-        <DialogContent className="max-h-[80vh] max-w-lg overflow-hidden p-0">
+        <DialogContent
+          className="max-h-[80vh] max-w-lg overflow-hidden p-0"
+          onCloseAutoFocus={runAfterDialogClose}
+        >
           <div className="flex max-h-[80vh] flex-col">
             <DialogHeader className="border-b px-6 pb-4 pt-5">
               <DialogTitle>Text snippets</DialogTitle>
@@ -840,7 +869,10 @@ export function ProjectPageEditorPage() {
                           size="sm"
                           className="font-bold"
                           onClick={() => {
-                            editor?.chain().focus().insertContent(s.content_html).run();
+                            // Queued, not run here — see afterDialogClose.
+                            const html = s.content_html;
+                            afterDialogClose.current = () =>
+                              editor?.chain().focus().insertContent(html).run();
                             setSnippetsOpen(false);
                           }}
                         >
