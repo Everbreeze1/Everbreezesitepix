@@ -514,3 +514,100 @@ describe("family: a new column must not be able to break a shipped screen", () =
     expect(src).toMatch(/42703/);
   });
 });
+
+describe("family: people-lists must not read profiles from the browser", () => {
+  /*
+   * public.profiles has exactly ONE SELECT policy — "Users can view own profile"
+   * USING (auth.uid() = id), 20260618045310_profiles_company_fix.sql. Any
+   * browser-side `.from("profiles").select(...).in("id", …)` therefore returns a
+   * single row: the caller's own. It never errors and never renders an empty
+   * state, so the failure is silent — the assignee dropdown quietly contained
+   * one person, avatar stacks filled with "?", and the activity feed said
+   * "Someone" for the whole crew. That is the "I can never assign anything to
+   * Jackson" report.
+   *
+   * Teammate names come from the getMyTeam RPC, which resolves them server-side
+   * with the service-role client. Widening the RLS policy was rejected: a policy
+   * is row-level, not column-level, and profiles also carries company_address,
+   * company_phone and company_logo_url — a teammate-scoped policy would hand
+   * every crew member the owner's business details to fix a dropdown.
+   */
+  /** Comments explain this very bug in several files — scan code only. */
+  const stripComments = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+  it("no component resolves a list of OTHER users through profiles", () => {
+    const offenders: string[] = [];
+    for (const file of walk(WEB)) {
+      const src = stripComments(readFileSync(file, "utf8"));
+      // `.in("id", …)` on profiles is the tell: selecting many ids only makes
+      // sense for other people, and only ever returns yourself.
+      if (/from\(\s*["']profiles["']\s*\)[\s\S]{0,200}?\.in\(\s*["']id["']/.test(src)) {
+        offenders.push(
+          file
+            .slice(ROOT.length + 1)
+            .split("\\")
+            .join("/"),
+        );
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("the shared roster hook goes through the team RPC, not the table", () => {
+    const src = read("apps/web/src/hooks/use-team-members.ts");
+    expect(src).toMatch(/getMyTeam/);
+    expect(src).not.toMatch(/from\(\s*["']profiles["']/);
+  });
+});
+
+describe("family: an email that did not send must not be reported as success", () => {
+  /*
+   * inviteMemberService delegated 100% to GoTrue's inviteUserByEmail, which
+   * refuses — and sends NOTHING — for an address that already has an account,
+   * for a rate-limited address, and for any error from the Send Email hook. All
+   * three returned { sent: false } with no second attempt, while the client
+   * wrapped both branches in toast.success. So the UI announced an invite it had
+   * not delivered, then rendered "Invite link (email not sent)" underneath.
+   */
+  it("the invite service falls back to Resend when GoTrue refuses", () => {
+    const src = read("apps/api/src/domains/teams/service.ts");
+    expect(src).toMatch(/sendTeamInviteEmail/);
+    // The old shape leaked "this address is already registered" to the caller,
+    // which is account enumeration; the fallback removes the need to say it.
+    expect(src).not.toMatch(/alreadyRegistered:\s*true/);
+  });
+
+  it("the invite UI does not claim success on a failed send", () => {
+    const src = read("apps/web/src/features/teams/pages/TeamsPage.tsx");
+    // Neither toast.success call may sit on the falsy side of an emailSent
+    // ternary — the old code did exactly that, twice.
+    expect(src).not.toMatch(/toast\.success\(\s*\n?\s*res\.emailSent\s*\?/);
+    expect(src).not.toMatch(/toast\.success\(\s*\n?\s*\(res as any\)\?\.emailSent\s*\?/);
+    expect(src).toMatch(/toast\.warning\(/);
+  });
+});
+
+describe("family: the seat ceiling is hidden on Team, shown on Starter and Pro", () => {
+  /*
+   * Team ships 50 seats — a number nobody approaches, which reads as a
+   * restriction on the one plan whose pitch is "add the crew". Starter (2) and
+   * Pro are different: there the remaining count is actionable. Hiding it is a
+   * display change only; PLAN_MEMBER_CAP still enforces the cap server-side.
+   */
+  it("every seat-count surface branches on the plan", () => {
+    const teams = read("apps/web/src/features/teams/pages/TeamsPage.tsx");
+    // The big "3 / 50" and the invite dialog sentence.
+    expect(teams).toMatch(/plan === "team" \? seatsUsed : `\$\{seatsUsed\} \/ \$\{memberLimit\}`/);
+    expect(teams).toMatch(/They'll join your workspace as soon as they accept\./);
+
+    const settings = read("apps/web/src/features/settings/pages/SettingsPage.tsx");
+    expect(settings).toMatch(/isTeam \? seatsUsed : `\$\{seatsUsed\} of \$\{seatsLimit\}`/);
+  });
+
+  it("hiding the number does not disable enforcement", () => {
+    const cap = read("apps/api/src/lib/team-plan.ts");
+    expect(cap).toMatch(/PLAN_MEMBER_CAP/);
+    expect(cap).toMatch(/team:\s*\d+/);
+  });
+});

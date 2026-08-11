@@ -1250,9 +1250,10 @@ function BillingSection({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-border bg-card/[0.55] p-5">
-          <p className={fieldLabelClass}>Seats</p>
+          {/* Team hides the ceiling — see WorkspaceCoverageCard in TeamsPage. */}
+          <p className={fieldLabelClass}>{isTeam ? "People" : "Seats"}</p>
           <p className="mt-3 font-manrope text-lg font-extrabold text-foreground">
-            {seatsUsed} of {seatsLimit}
+            {isTeam ? seatsUsed : `${seatsUsed} of ${seatsLimit}`}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card/[0.55] p-5">
@@ -1316,7 +1317,9 @@ function TeamSection({ isTeam, teamData }: { isTeam: boolean; teamData: any }) {
         <div>
           <div className="font-manrope text-base font-extrabold text-foreground">Your team</div>
           <p className="mt-0.5 font-manrope text-sm text-muted-foreground">
-            {seatsUsed} member{seatsUsed === 1 ? "" : "s"} · up to {seatsLimit} seats
+            {/* TeamSection is Team-only (it early-returns otherwise), so the
+                seat ceiling never belongs here. */}
+            {seatsUsed} member{seatsUsed === 1 ? "" : "s"}
           </p>
         </div>
         <Button

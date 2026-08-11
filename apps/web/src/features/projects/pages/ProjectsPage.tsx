@@ -54,6 +54,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { supabase } from "@/integrations/sitepix/client";
+import { getMyTeam } from "@/lib/teams.functions";
 import { MobileAppBanner } from "@/components/MobileAppBanner";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { EmptyState } from "@/components/EmptyState";
@@ -394,16 +395,21 @@ export function ProjectsPage() {
       // These two depend on different results from the wave above, but not on
       // each other — sign cover/sample paths and look up uploader profiles in
       // one round-trip instead of two.
-      const [signedCovers, profs] = await Promise.all([
+      /*
+       * Uploader names/avatars come from the team RPC, not from `profiles`.
+       *
+       * This used to be `.from("profiles").select(...).in("id", uploaderIds)`
+       * from the browser, and `profiles` lets you read only your OWN row — so
+       * the map held exactly one entry and every other uploader fell through to
+       * the `{ name: null, avatar: null }` default below. On screen that was
+       * your avatar plus a row of identical "?" bubbles, and a contributor
+       * filter listing "Unknown" once per teammate.
+       */
+      const [signedCovers, teamRes] = await Promise.all([
         pathsToSign.length
           ? supabase.storage.from("site-photos").createSignedUrls(pathsToSign, 60 * 60)
           : Promise.resolve({ data: null }),
-        uploaderIds.length
-          ? (supabase as any)
-              .from("profiles")
-              .select("id, full_name, avatar_url")
-              .in("id", uploaderIds)
-          : Promise.resolve({ data: null }),
+        uploaderIds.length ? getMyTeam().catch(() => null) : Promise.resolve(null),
       ]);
 
       signedCovers.data?.forEach((s, i) => {
@@ -415,14 +421,12 @@ export function ProjectsPage() {
 
       const profileMap: Record<string, { id: string; name: string | null; avatar: string | null }> =
         {};
-      (
-        (profs.data as Array<{
-          id: string;
-          full_name: string | null;
-          avatar_url: string | null;
-        }>) ?? []
-      ).forEach((p) => {
-        profileMap[p.id] = { id: p.id, name: p.full_name, avatar: p.avatar_url };
+      ((teamRes as any)?.members ?? []).forEach((m: any) => {
+        profileMap[m.user_id] = {
+          id: m.user_id,
+          name: m.profile?.full_name ?? null,
+          avatar: m.profile?.avatar_url ?? null,
+        };
       });
       const membersByProject: Record<
         string,

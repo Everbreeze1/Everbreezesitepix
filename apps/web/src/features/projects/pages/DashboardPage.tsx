@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { supabase } from "@/integrations/sitepix/client";
+import { getMyTeam } from "@/lib/teams.functions";
 import { CaptureUpdateDialog } from "@/components/CaptureUpdateDialog";
 import type { ProjectPickerRow } from "@/features/projects/components/CreateGroupDialog";
 import { qk } from "@/lib/query-keys";
@@ -306,15 +307,22 @@ export function DashboardPage() {
         ...reportRows.map((r) => r.created_by).filter((x): x is string => !!x),
       ]),
     );
+    /*
+     * Names come from the team RPC, not from `profiles`.
+     *
+     * Team photos genuinely reach this browser — the photos and projects RLS
+     * policies are teammate-scoped — so a teammate's upload arrived with their
+     * uuid attached. But resolving that uuid went through `profiles`, which
+     * lets you read only your OWN row, so `nameById` never held anyone else and
+     * every teammate's activity rendered as "Someone".
+     */
     const nameById: Record<string, string> = {};
     if (uploaderIds.length) {
-      const { data: profs } = await (supabase as any)
-        .from("profiles")
-        .select("id, full_name")
-        .in("id", uploaderIds);
-      ((profs as Array<{ id: string; full_name: string | null }>) ?? []).forEach((p) => {
-        if (p.full_name) nameById[p.id] = p.full_name.split(" ")[0];
-      });
+      const team = await getMyTeam().catch(() => null);
+      for (const m of ((team as any)?.members ?? []) as any[]) {
+        const full = m.profile?.full_name;
+        if (full) nameById[m.user_id] = String(full).split(" ")[0];
+      }
     }
 
     const photoItems: ActivityItem[] = Object.entries(photoGroups).map(([key, g]) => {

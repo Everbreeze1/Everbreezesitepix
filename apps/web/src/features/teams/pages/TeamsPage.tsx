@@ -358,13 +358,24 @@ function TeamDashboard({
               <Lock className="h-5 w-5" />
             </div>
             <div>
+              {/*
+               * Kept for Team too, unlike the coverage card. `memberLimit` here
+               * is not the 50 ceiling — it prefers `teams.member_limit`, which
+               * billing sets to the number of seats actually purchased. A Team
+               * customer who bought 6 is genuinely at cap at 6, and this banner
+               * is the only thing explaining why the Invite buttons vanished.
+               */}
               <h2 className="font-manrope text-sm font-bold text-foreground">
-                {memberLimit}-seat limit reached
+                {plan === "team"
+                  ? `All ${memberLimit} of your seats are in use`
+                  : `${memberLimit}-seat limit reached`}
               </h2>
               <p className="font-manrope text-xs text-muted-foreground">
                 {plan === "starter"
                   ? "Starter includes 2 users (you + 1), sharing the same projects. Upgrade to add more teammates."
-                  : "Remove a member or upgrade your plan to invite more."}
+                  : plan === "team"
+                    ? "Add seats from Settings → Billing, or remove a member to free one up."
+                    : "Remove a member or upgrade your plan to invite more."}
               </p>
             </div>
           </div>
@@ -419,15 +430,23 @@ function WorkspaceCoverageCard({
   return (
     <div className="flex flex-col rounded-3xl bg-sidebar p-6 text-sidebar-foreground">
       <Users className="h-7 w-7 text-sidebar-ring" />
+      {/*
+       * Team hides the ceiling. Starter and Pro ship a handful of seats, so the
+       * remaining count is genuinely useful there — on Team it is a 50 that
+       * nobody is approaching, and showing it reads as a restriction on a plan
+       * whose whole pitch is "add the crew". The cap still exists and is still
+       * enforced server-side (PLAN_MEMBER_CAP); it just isn't advertised.
+       */}
       <p className="mt-10 font-manrope text-xs font-extrabold uppercase tracking-[1.8px] text-sidebar-ring">
-        Workspace coverage
+        {plan === "team" ? "Your crew" : "Workspace coverage"}
       </p>
       <p className="font-display mt-3 text-5xl font-bold leading-none tracking-[-1.68px] text-sidebar-foreground">
-        {seatsUsed} / {memberLimit}
+        {plan === "team" ? seatsUsed : `${seatsUsed} / ${memberLimit}`}
       </p>
       <p className="mt-3 font-manrope text-sm leading-6 text-sidebar-foreground/60">
-        Seats used on the {PLAN_LABEL[plan]} plan. Bring in the rest of the crew when they are
-        ready.
+        {plan === "team"
+          ? "People in your workspace. Bring in the rest of the crew whenever they're ready."
+          : `Seats used on the ${PLAN_LABEL[plan]} plan. Bring in the rest of the crew when they are ready.`}
       </p>
       {canInvite && (
         <button
@@ -477,11 +496,11 @@ function InviteDialog({
       setLastLink(link);
       setLastEmailSent(!!res.emailSent);
       setEmail("");
-      toast.success(
-        res.emailSent
-          ? `Invite email sent to ${res.invite.email}`
-          : "Invite created — share the link below",
-      );
+      // A non-delivery is a warning, not a success. This used to be toast.success
+      // in both branches, so the screen said the invite had gone out while the
+      // panel underneath said "email not sent".
+      if (res.emailSent) toast.success(`Invite email sent to ${res.invite.email}`);
+      else toast.warning("Couldn't email the invite — share the link below");
       onInvited();
     },
     onError: (e: any) => toast.error(e?.message ?? "Failed to invite"),
@@ -525,8 +544,13 @@ function InviteDialog({
 
           <DialogDescription asChild>
             <p className="mt-5 font-manrope text-sm text-muted-foreground">
-              Send an invitation to capture updates and collaborate on your projects. {seatsLeft}{" "}
-              {seatsLeft === 1 ? "seat" : "seats"} left on the {PLAN_LABEL[plan]} plan.
+              Send an invitation to capture updates and collaborate on your projects.{" "}
+              {/* Replaced wholesale rather than just dropping {seatsLeft} — the
+                  count is fused into the sentence, so removing the number alone
+                  would leave "…on your projects. seats left on the Team plan." */}
+              {plan === "team"
+                ? "They'll join your workspace as soon as they accept."
+                : `${seatsLeft} ${seatsLeft === 1 ? "seat" : "seats"} left on the ${PLAN_LABEL[plan]} plan.`}
             </p>
           </DialogDescription>
 
@@ -537,7 +561,11 @@ function InviteDialog({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && email) m.mutate();
+                // Same guards the Send button carries. Without the isPending
+                // check, Enter twice fired two invites: rpcOp mints a fresh
+                // Idempotency-Key per call, so nothing downstream collapsed them
+                // and both cleared the duplicate probe.
+                if (e.key === "Enter" && email.trim() && !m.isPending) m.mutate();
               }}
               className="h-[48px] rounded-[14px] border-border bg-card/[0.92] font-manrope text-sm text-foreground shadow-[0_5px_12px_-12px_rgba(16,25,41,0.35)] placeholder:text-muted-foreground"
             />
@@ -547,7 +575,7 @@ function InviteDialog({
                 <p className="font-manrope text-xs font-semibold text-primary">
                   {lastEmailSent
                     ? "Email sent · backup invite link"
-                    : "Invite link (email not sent)"}
+                    : "Couldn't email this — send the link instead"}
                 </p>
                 <div className="mt-1 flex items-center gap-2">
                   <code className="flex-1 truncate rounded bg-muted px-2 py-1.5 font-manrope text-xs text-foreground">
@@ -665,11 +693,12 @@ function PendingInvites({
                               typeof window !== "undefined" ? window.location.origin : undefined,
                           },
                         });
-                        toast.success(
-                          (res as any)?.emailSent
-                            ? `Invite email re-sent to ${inv.email}`
-                            : "Couldn't email — share the link instead",
-                        );
+                        // Same reason as the invite dialog: a failed send is not
+                        // a success, and wrapping both branches in toast.success
+                        // is what made the UI claim delivery it hadn't achieved.
+                        if ((res as any)?.emailSent)
+                          toast.success(`Invite email re-sent to ${inv.email}`);
+                        else toast.warning("Couldn't email — share the link instead");
                       } catch (e: any) {
                         toast.error(e?.message ?? "Couldn't resend invite");
                       } finally {

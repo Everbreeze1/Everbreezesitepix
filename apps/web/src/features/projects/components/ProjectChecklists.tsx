@@ -72,6 +72,7 @@ import {
   RunnerStatusPill,
 } from "./runner/runner-ui";
 import { toneForProgress } from "./runner/runner-tokens";
+import { useTeamMembers } from "@/hooks/use-team-members";
 import { BlueprintItemBadge } from "./BlueprintItemBadge";
 
 interface Template {
@@ -161,7 +162,6 @@ export function ProjectChecklists({
   const [completing, setCompleting] = useState(false);
   const [adding, setAdding] = useState<Record<string, { label: string; type: ItemType }>>({});
   const [attachForId, setAttachForId] = useState<string | null>(null);
-  const [members, setMembers] = useState<Member[]>([]);
   const [tab, setTab] = useState<"active" | "completed">("active");
   const [createOpen, setCreateOpen] = useState(false);
   /*
@@ -348,39 +348,33 @@ export function ProjectChecklists({
     };
   }, [projectId, load]);
 
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      const { data: myTeams } = await supabase
-        .from("team_members" as any)
-        .select("team_id")
-        .eq("user_id", user.id);
-      const teamIds = Array.from(new Set(((myTeams as any[]) ?? []).map((m) => m.team_id)));
-      if (!teamIds.length) {
-        setMembers([{ user_id: user.id, full_name: null, email: user.email ?? null }]);
-        return;
-      }
-      const { data: tm } = await supabase
-        .from("team_members" as any)
-        .select("user_id")
-        .in("team_id", teamIds);
-      const userIds = Array.from(new Set(((tm as any[]) ?? []).map((m) => m.user_id)));
-      if (!userIds.length) return;
-      const { data: profs } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .in("id", userIds);
-      const list: Member[] = ((profs as any[]) ?? []).map((p) => ({
-        user_id: p.id,
-        full_name: p.full_name,
-        email: p.email,
-      }));
-      list.sort((a, b) =>
-        (a.full_name ?? a.email ?? "").localeCompare(b.full_name ?? b.email ?? ""),
-      );
-      setMembers(list);
-    })();
-  }, [user]);
+  /*
+   * The assignee roster.
+   *
+   * This used to end in `.from("profiles").select(...).in("id", userIds)` from
+   * the browser. The `team_members` hop before it was fine — it returned the
+   * whole roster — but `profiles` allows you to read only your OWN row, so the
+   * list collapsed to one entry and every teammate silently vanished. The
+   * dropdown offered "Unassigned" and you, forever, with no error and no empty
+   * state; a checklist already assigned to a teammate rendered "Unknown".
+   * That is the "I can never assign anything to Jackson" report.
+   */
+  const { members: teamMembers } = useTeamMembers();
+  const members: Member[] = useMemo(
+    () =>
+      teamMembers.length
+        ? teamMembers.map((m) => ({
+            user_id: m.user_id,
+            full_name: m.full_name,
+            email: m.email,
+          }))
+        : // Solo user with no team row: getMyTeam returns members: [], but you
+          // still have to be able to assign to yourself.
+          user
+          ? [{ user_id: user.id, full_name: null, email: user.email ?? null }]
+          : [],
+    [teamMembers, user],
+  );
 
   const itemsByChecklist = useMemo(() => {
     const map = new Map<string, ChecklistItem[]>();

@@ -3,6 +3,7 @@ import type { AuthedContext } from "../../lib/user-context";
 import { rateLimit } from "../../lib/rate-limit";
 import { ACTIVE_SUBSCRIPTION_STATUSES, PLAN_MEMBER_CAP } from "../../lib/team-plan";
 import { insertNotification } from "../notifications/service";
+import { sendTeamInviteEmail } from "../email/team-invite";
 
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>;
 
@@ -32,18 +33,41 @@ function generateToken() {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Mail a team invite, by whichever route works.
+ *
+ * This used to be GoTrue or nothing. `auth.admin.inviteUserByEmail` refuses —
+ * and sends nothing — for an address that ALREADY HAS AN ACCOUNT, for a
+ * rate-limited address, and for any error out of the Send Email hook. All three
+ * returned `{ sent: false }` with no second attempt, so the invitee got nothing
+ * and the owner was left copying a raw 48-character token out of a code block.
+ * That is exactly the "Invite link (email not sent)" the bug report shows, and
+ * the already-registered branch is the most common of the three: inviting anyone
+ * who has ever signed up hit it every single time.
+ *
+ * So GoTrue is now an optimisation, not the only path. When it declines for any
+ * reason we send the invite ourselves through Resend, which needs no GoTrue user
+ * because `/invite/<token>` handles both accept-as-existing-user and
+ * sign-up-in-place.
+ *
+ * `alreadyRegistered` is deliberately NOT returned any more. Telling the caller
+ * "that address already has a SitePix account" is account enumeration by anyone
+ * who can create a team and type an address — and now that the mail goes out
+ * regardless, there is nothing left to explain.
+ */
 async function sendInviteEmail(opts: {
   to: string;
   teamName: string;
   inviterName: string;
   acceptUrl: string;
   token: string;
-}) {
+}): Promise<{ sent: boolean; via: "gotrue" | "resend" | null; reason: string | null }> {
+  let reason: string | null = null;
+
   try {
     const supabaseAdmin = getSupabaseAdmin();
-
-    // Use Supabase auth invite — emails are sent via the configured
-    // Send Email hook (dreamlit.send_supabase_auth_email).
+    // Preferred when it works: GoTrue also provisions the auth user, so the
+    // invitee lands with a session already established.
     const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(opts.to, {
       redirectTo: opts.acceptUrl,
       data: {
@@ -53,22 +77,19 @@ async function sendInviteEmail(opts: {
         accept_url: opts.acceptUrl,
       },
     });
-
-    if (error) {
-      // If the user already exists, Supabase refuses to "invite" them.
-      // That's fine — they already have an account and can accept the
-      // invite by visiting acceptUrl directly. Log and continue.
-      const msg = (error.message ?? "").toLowerCase();
-      if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
-        return { sent: false, alreadyRegistered: true };
-      }
-      console.error("[teams] inviteUserByEmail error", error);
-      return { sent: false };
-    }
-    return { sent: true };
+    if (!error) return { sent: true, via: "gotrue", reason: null };
+    reason = error.message ?? "gotrue_error";
   } catch (e) {
-    console.error("[teams] invite email error", e);
-    return { sent: false };
+    reason = e instanceof Error ? e.message : "gotrue_threw";
+  }
+
+  try {
+    await sendTeamInviteEmail({ to: opts.to, acceptUrl: opts.acceptUrl });
+    console.warn("[teams] invite sent via resend fallback", { reason });
+    return { sent: true, via: "resend", reason };
+  } catch (e) {
+    console.error("[teams] invite email failed on both routes", { reason, error: e });
+    return { sent: false, via: null, reason };
   }
 }
 
@@ -352,6 +373,19 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
   const { userId } = ctx;
   const supabaseAdmin = getSupabaseAdmin();
 
+  /*
+   * Normalise once, here, and use `email` everywhere below.
+   *
+   * The duplicate probe matched on the raw string, so "Crew@x.com" and
+   * "crew@x.com" were two different open invites for the same person. Storing
+   * one canonical form lets the partial unique index in 20260813000000 be a
+   * plain (team_id, email) rather than an expression index that a
+   * case-sensitive `.eq()` would silently fail to use.
+   */
+  const email: string = String(data.email ?? "")
+    .trim()
+    .toLowerCase();
+
   // Caller must be owner/admin
   const { data: membership } = await supabaseAdmin
     .from("team_members" as any)
@@ -371,14 +405,26 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
     .single();
   if (!team) throw new Error("Team not found");
 
-  // If the invite already exists, resend the email instead of blocking the workflow.
-  const { data: dup } = await supabaseAdmin
+  /*
+   * If the invite already exists, resend the email instead of blocking.
+   *
+   * `.maybeSingle()` returns `{ data: null, error: PGRST116 }` when more than
+   * one row matches, and this destructured only `data` — so the moment a race
+   * produced two open invites for one address, `dup` was null forever and every
+   * later invite inserted yet another row instead of resending. `.limit(1)` with
+   * a deterministic order makes the probe answer correctly even mid-cleanup, and
+   * the error is no longer discarded.
+   */
+  const { data: dup, error: dupErr } = await supabaseAdmin
     .from("team_invites" as any)
     .select("*")
     .eq("team_id", teamId)
-    .eq("email", data.email)
+    .eq("email", email)
     .is("accepted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
+  if (dupErr) console.error("[teams] invite duplicate probe failed", dupErr);
 
   if (dup) {
     const { data: inviterProfile } = await supabaseAdmin
@@ -390,14 +436,14 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
       (inviterProfile as any)?.full_name || (inviterProfile as any)?.email || "A teammate";
     const origin = data.origin?.replace(/\/+$/, "") || "https://everbreezesitepix.com";
     const emailRes = await sendInviteEmail({
-      to: data.email,
+      to: email,
       teamName: (team as any).name,
       inviterName,
       acceptUrl: `${origin}/invite/${(dup as any).token}`,
       token: (dup as any).token,
     });
 
-    return { invite: dup, emailSent: emailRes.sent, resent: true };
+    return { invite: dup, emailSent: emailRes.sent, emailVia: emailRes.via, resent: true };
   }
 
   const plan = ((team as any).plan as TeamPlan) ?? "starter";
@@ -431,7 +477,7 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
   const { data: existingProfile } = await supabaseAdmin
     .from("profiles" as any)
     .select("id")
-    .eq("email", data.email)
+    .eq("email", email)
     .maybeSingle();
   if (existingProfile) {
     const { data: alreadyIn } = await supabaseAdmin
@@ -447,7 +493,7 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
     .from("team_invites" as any)
     .insert({
       team_id: teamId,
-      email: data.email,
+      email,
       role: data.role,
       token,
       invited_by: userId,
@@ -468,14 +514,14 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
   const acceptUrl = `${origin}/invite/${token}`;
 
   const emailRes = await sendInviteEmail({
-    to: data.email,
+    to: email,
     teamName: (team as any).name,
     inviterName,
     acceptUrl,
     token,
   });
 
-  return { invite, emailSent: emailRes.sent };
+  return { invite, emailSent: emailRes.sent, emailVia: emailRes.via };
 }
 
 export async function revokeInviteService(ctx: AuthedContext, data: any) {
@@ -936,7 +982,7 @@ export async function resendInviteService(ctx: AuthedContext, data: any) {
     token: (invite as any).token,
   });
 
-  return { ok: true, emailSent: emailRes.sent };
+  return { ok: true, emailSent: emailRes.sent, emailVia: emailRes.via };
 }
 
 export async function getTeamActivityService(ctx: AuthedContext) {
