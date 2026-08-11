@@ -118,6 +118,13 @@ CREATE INDEX IF NOT EXISTS issue_reports_kind_idx
 
 -- Feedback is written from the browser by a signed-in user; triage happens with
 -- the service role, which bypasses RLS.
+-- Revoke anon FIRST. Supabase's default privileges grant every new public
+-- table to `anon`, and `CREATE TABLE IF NOT EXISTS` above will have done so on
+-- any database where this table did not already exist. Feedback rows carry the
+-- submitter's email, so the publishable key must not reach them. RLS already
+-- restricts INSERT to `authenticated`, so this only closes the privilege layer
+-- behind the policy — nothing that works today stops working.
+REVOKE ALL ON public.issue_reports FROM anon, PUBLIC;
 GRANT SELECT, INSERT ON public.issue_reports TO authenticated;
 GRANT ALL ON public.issue_reports TO service_role;
 
@@ -161,6 +168,10 @@ ALTER TABLE public.showcase_items
 CREATE INDEX IF NOT EXISTS showcase_items_section_id_idx
   ON public.showcase_items(section_id, position);
 
+-- Same reasoning as issue_reports above. The public showcase page does not need
+-- anon access: getPublicShowcaseService runs on getSupabaseAdmin() (service
+-- role), which bypasses both RLS and these grants.
+REVOKE ALL ON public.showcase_sections FROM anon, PUBLIC;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.showcase_sections TO authenticated;
 GRANT ALL ON public.showcase_sections TO service_role;
 

@@ -263,3 +263,136 @@ describe("public share pages must not inject unsanitised user HTML", () => {
     }
   });
 });
+
+/*
+ * ---------------------------------------------------------------------------
+ * Families found by the production audit. Each one was a live customer-facing
+ * defect, and each is a PATTERN rather than a single line — which is why they
+ * belong here and not in a unit test.
+ * ---------------------------------------------------------------------------
+ */
+
+describe("family: `.in()` over an unbounded id list", () => {
+  /*
+   * PostgREST echoes the request filter back in the Content-Location RESPONSE
+   * header, ~37 bytes per uuid. Past ~398 ids that overflows Node's 16 KB
+   * header limit; past ~672 the gateway rejects the URI outright.
+   *
+   * This produced four separate customer-visible bugs at once — a public report
+   * PDF that rendered with ZERO photos and still returned 200, trash "Select
+   * all" 500ing, the cron purge silently deleting nothing, and browser bulk
+   * actions failing with a raw 400. The fix is to chunk; these files must keep
+   * doing so.
+   */
+  const MUST_CHUNK_API = [
+    "apps/api/src/domains/reports/public-pdf.ts",
+    "apps/api/src/domains/reports/public-get.ts",
+    "apps/api/src/domains/trash/service.ts",
+    "apps/api/src/domains/hooks/purge-trash.ts",
+  ];
+
+  it.each(MUST_CHUNK_API)("%s routes its `.in()` calls through chunked-in", (rel) => {
+    const src = read(rel);
+    expect(src).toMatch(/from "\.\.\/\.\.\/lib\/chunked-in"/);
+    expect(src).toMatch(/selectIn|mutateIn|chunk\(/);
+  });
+
+  it("PhotoBulkActionBar batches every bulk write", () => {
+    const src = read("apps/web/src/features/photos/components/PhotoBulkActionBar.tsx");
+    expect(src).toContain("mutateByIds");
+    // Any surviving raw `.in("id", selectedIds)` is the unbounded bug returning.
+    expect(src).not.toMatch(/\.in\("id",\s*selectedIds\)/);
+  });
+
+  it("the chunk size stays under the header/URI ceiling", async () => {
+    const { IN_CHUNK_SIZE, chunk } = await import("../apps/api/src/lib/chunked-in");
+    // ~37 bytes per uuid in the echoed filter; 16 KB is the hard limit.
+    expect(IN_CHUNK_SIZE * 37).toBeLessThan(16_000);
+    const ids = Array.from({ length: 1_000 }, (_, i) => String(i));
+    const batches = chunk(ids);
+    expect(batches.every((b) => b.length <= IN_CHUNK_SIZE)).toBe(true);
+    expect(batches.flat()).toHaveLength(1_000);
+    // No empty trailing batch, and an empty input yields no requests at all.
+    expect(chunk([])).toEqual([]);
+  });
+});
+
+describe("family: public share paths must honour the soft delete", () => {
+  /*
+   * Trashing a project left every share link serving it in full — photos,
+   * reports, documents, walkthrough audio and transcripts. Trash is a 60-day
+   * window and nothing schedules the purge hook, so in practice it never
+   * stopped. Each of these services resolves an object for an ANONYMOUS caller
+   * and must check `deleted_at` before returning it.
+   */
+  const PUBLIC_GETTERS = [
+    "apps/api/src/domains/photos/shares.ts",
+    "apps/api/src/domains/reports/public-get.ts",
+    "apps/api/src/domains/projects/pages.ts",
+    "apps/api/src/domains/walkthroughs/service.ts",
+  ];
+
+  it.each(PUBLIC_GETTERS)("%s checks deleted_at on the public path", (rel) => {
+    expect(read(rel)).toContain("deleted_at");
+  });
+});
+
+describe("family: Gemini vision calls must inline the image", () => {
+  /*
+   * Gemini's OpenAI-compatibility endpoint does not fetch remote images; it
+   * accepts inline base64 only. Passing a signed storage URL returned
+   * INVALID_ARGUMENT for every customer on every plan, taking photo analysis
+   * and OCR down entirely while text-only calls kept working.
+   */
+  it("no image_url in the AI service passes a bare URL", () => {
+    const src = read("apps/api/src/domains/ai/service.ts");
+    const sites = src.match(/image_url:\s*\{\s*url:[^}]*\}/g) ?? [];
+    expect(sites.length).toBeGreaterThan(0);
+    for (const site of sites) expect(site).toContain("inlineImageAsDataUrl");
+  });
+});
+
+describe("family: every AI entry point is plan-gated", () => {
+  /*
+   * These calls cost real money on our own Gemini key and /v1/rpc is reachable
+   * with nothing but a session, so a hidden button is not a control. Three
+   * services shipped with no check at all, letting a cancelled account generate
+   * reports and run OCR indefinitely.
+   */
+  it("no exported AI service skips the subscription check", () => {
+    const src = read("apps/api/src/domains/ai/service.ts");
+    const lines = src.split("\n");
+    const ungated: string[] = [];
+    lines.forEach((line, i) => {
+      const m = line.match(/^export async function (\w+Service)/);
+      if (!m) return;
+      const body = lines.slice(i, i + 20).join("\n");
+      if (!/requireActiveSub|getCallerTeamPlan/.test(body)) ungated.push(m[1]);
+    });
+    expect(ungated).toEqual([]);
+  });
+});
+
+describe("family: a new public table must revoke anon", () => {
+  /*
+   * Supabase ships `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON
+   * TABLES TO anon`, so a newly created public table is readable by the
+   * publishable key — which is in the browser bundle — the moment it exists.
+   * That is exactly how `walkthroughs`, `walkthrough_photos` and `team_invites`
+   * leaked, share tokens and invite tokens included.
+   */
+  it("every migration that creates a public table also revokes anon", () => {
+    const dir = join(ROOT, "supabase/migrations");
+    const offenders: string[] = [];
+    for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql"))) {
+      const sql = readFileSync(join(dir, file), "utf8");
+      if (!/CREATE TABLE IF NOT EXISTS public\.|CREATE TABLE public\./i.test(sql)) continue;
+      // Only the migrations written once the leak was understood are held to
+      // this — retrofitting it onto the historical ones is what 20260811000000
+      // already did, in one place, for the tables that were actually exposed.
+      if (file < "20260811") continue;
+      if (!/REVOKE\s+(ALL|SELECT)[\s\S]*?FROM\s+[^;]*anon/i.test(sql)) offenders.push(file);
+    }
+    expect(offenders).toEqual([]);
+  });
+});
