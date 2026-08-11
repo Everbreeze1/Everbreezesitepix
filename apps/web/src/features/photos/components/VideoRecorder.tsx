@@ -274,7 +274,7 @@ export function VideoRecorder({
                 Video recording requires an active subscription
               </h3>
               <p className="max-w-md text-sm text-white/70">
-                Record site videos — up to 5 minutes on Starter, 10 minutes on Team.
+                Record site videos — up to 5 minutes on Starter, 10 on Pro, 20 on Team.
               </p>
               <Button
                 onClick={onClose}

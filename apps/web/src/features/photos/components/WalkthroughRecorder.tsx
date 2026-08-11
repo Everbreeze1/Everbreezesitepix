@@ -22,7 +22,7 @@ import { compressImageFile } from "@/features/photos/components/CameraCapture";
 interface WalkthroughRecorderProps {
   open: boolean;
   onClose: () => void;
-  /** Per-walkthrough hard cap in seconds. Starter = 300, Team = 600. */
+  /** Per-walkthrough hard cap in seconds. Pro = 600, Team = 1200 (Pro-gated feature). */
   maxSeconds: number;
   canRecord: boolean;
   tierLabel: string;
@@ -813,13 +813,10 @@ export function WalkthroughRecorder({
           {!canRecord ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
               <Lock className="h-10 w-10 text-white/70" />
-              <h3 className="text-lg font-semibold">
-                Walkthrough Notes require an active subscription
-              </h3>
+              <h3 className="text-lg font-semibold">Walkthrough Notes are a Pro feature</h3>
               <p className="max-w-md text-sm text-white/70">
                 Walk the job, speak naturally, snap photos as you go — our AI turns it all into a
-                polished, client-ready report. Up to 5 minutes per note on Starter, 10 minutes on
-                Team.
+                polished, client-ready report. Up to 10 minutes per note on Pro, 20 minutes on Team.
               </p>
               <Button
                 onClick={onClose}
