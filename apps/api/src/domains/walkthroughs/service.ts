@@ -2,6 +2,7 @@ import { z } from "zod";
 import { chatEndpoint, transcriptionEndpoint } from "../../lib/ai-provider";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
+import { summarizePhotosReportService } from "../ai/service";
 import { releaseAutoReport, reserveAutoReport } from "./auto-report-quota";
 
 
@@ -60,6 +61,27 @@ const statusSchema = z.object({
   status: z.enum(["recording", "generating", "ready", "failed"]),
 });
 
+/**
+ * A Summary is a walkthrough with no walk: the AI writes a short recap from
+ * photos the user picks out of the gallery. Bounds mirror the picker
+ * (SelectPhotosForPageDialog's MAX_PHOTOS = 50) and the recorded-session title
+ * bound (160).
+ *
+ * Unlike the schemas above — which are vestigial, since validation for the
+ * recorded-walkthrough ops lives inline in registry.ts — these two are
+ * exported and parsed by the registry, matching the projects/pages and
+ * blueprints convention rather than perpetuating the duplicated one.
+ */
+export const generateWalkthroughSummaryInputSchema = z.object({
+  projectId: z.string().uuid(),
+  photoIds: z.array(z.string().uuid()).min(1).max(50),
+  title: z.string().trim().min(1).max(160).optional(),
+});
+
+export const regenerateWalkthroughSummaryInputSchema = z.object({
+  walkthroughId: z.string().uuid(),
+});
+
 function fmtDuration(s: number) {
   const m = Math.floor(Math.max(0, s) / 60);
   const r = Math.max(0, s) % 60;
@@ -116,6 +138,53 @@ function buildFallbackWalkthroughMarkdown(args: {
 
   lines.push("", `_Duration: ${fmtDuration(args.durationSeconds)}._`);
   return lines.join("\n").trim();
+}
+
+/**
+ * Draft the markdown body for a Summary walkthrough.
+ *
+ * The AI call is best-effort in exactly one direction: a transport or model
+ * failure degrades to a deterministic photo gallery, but a plan refusal is
+ * rethrown. generateProjectPageService swallows both and hands an unentitled
+ * user an empty page; here that would mean writing a row into a table the user
+ * could not otherwise write to, so it is refused instead.
+ */
+async function composeSummaryMarkdown(
+  ctx: AuthedContext,
+  args: { title: string; photos: Array<{ id: string; caption: string | null }> },
+): Promise<{ markdown: string; aiFailed: string | null }> {
+  let body = "";
+  let aiFailed: string | null = null;
+  try {
+    const res = await summarizePhotosReportService(ctx, {
+      photoIds: args.photos.map((p) => p.id),
+      title: args.title,
+      mode: "summary",
+    });
+    // SUMMARY_SYSTEM is told not to emit a title; strip one defensively, since
+    // the H1 below is the one the rest of the app reads.
+    body = (res.markdown ?? "").replace(/^#\s+.*$/m, "").trim();
+  } catch (e: any) {
+    // 403 is requireActiveSub refusing an inactive plan — that must not
+    // silently produce a walkthrough row.
+    if (e?.status === 403) throw e;
+    aiFailed = e?.message ?? "AI unavailable";
+  }
+
+  const lines: string[] = [`# ${args.title}`];
+  lines.push("", body || "## Overview\n\nSummary of the selected site photos.");
+
+  // `photo:<id>` refs are how WalkthroughMarkdown resolves images and how the
+  // public PDF finds them. cleanWalkthroughMarkdown strips this trailing
+  // section on the detail and share pages so WalkthroughPhotoSteps owns the
+  // gallery there — it exists for the PDF and for raw-markdown consumers.
+  lines.push("", "## Photos");
+  args.photos.forEach((p, i) => {
+    lines.push("", `### Photo ${i + 1}`, "", `![Photo ${i + 1}](photo:${p.id})`);
+    if (p.caption?.trim()) lines.push("", `*${p.caption.trim()}*`);
+  });
+
+  return { markdown: lines.join("\n").trim(), aiFailed };
 }
 
 async function readWalkthroughLinks(supabaseAdmin: any, walkthroughId: string) {
@@ -403,6 +472,183 @@ export async function createWalkthroughSessionService(ctx: AuthedContext, data: 
     return { id: (row as any).id as string, createdAt: (row as any).created_at as string };
   }
 
+/**
+ * Create a SUMMARY walkthrough: no video, no narration, no transcript,
+ * duration 0, an AI recap in summary_markdown, and the user's chosen photos
+ * linked as walkthrough photos.
+ *
+ * !! DO NOT set photos.phase = "walkthrough" here. !!
+ * Every other linker in this file does, because a frame captured *during* a
+ * recording is a recording artefact that must stay out of the gallery. A
+ * Summary links photos that are ALREADY IN THE GALLERY and that the user still
+ * expects to find there. Flipping phase would erase them from the project
+ * grid, the global gallery, the calendar, the timeline, dashboards, group
+ * cards, showcases and the mobile app — permanently, because nothing in this
+ * codebase ever writes phase back.
+ */
+export async function generateWalkthroughSummaryService(
+  ctx: AuthedContext,
+  data: z.infer<typeof generateWalkthroughSummaryInputSchema>,
+) {
+    const { supabase, userId } = ctx;
+    console.log("[walkthrough] server summary requested", {
+      projectId: data.projectId,
+      userId,
+      photos: data.photoIds.length,
+    });
+
+    // Access check on the caller's RLS client, same shape as
+    // createWalkthroughSessionService.
+    const { data: project, error: projectErr } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", data.projectId)
+      .maybeSingle();
+    if (projectErr || !project) {
+      console.error("[walkthrough] server summary project access failed", projectErr, { projectId: data.projectId, userId });
+      throw new Error("Project not found or access denied");
+    }
+
+    const supabaseAdmin = getSupabaseAdmin();
+
+    // Only photos that really belong to this project and are not trashed.
+    // Deliberately NOT filtered by uploaded_by, unlike
+    // ensureWalkthroughPhotoLinksService — the picker shows every project
+    // photo, so filtering to the caller would silently drop teammates' photos
+    // from a summary the user watched themselves select. The project access
+    // check above is the authorization.
+    const { data: photoRows, error: photoErr } = await supabaseAdmin
+      .from("photos")
+      .select("id, caption")
+      .eq("project_id", data.projectId)
+      .is("deleted_at", null)
+      .in("id", data.photoIds);
+    if (photoErr) {
+      console.error("[walkthrough] server summary photo read failed", photoErr, { projectId: data.projectId, userId });
+      throw new Error(photoErr.message);
+    }
+    const byId = new Map(((photoRows as any[]) ?? []).map((p) => [p.id, p]));
+    // Preserve the order the user picked them in.
+    const photos = data.photoIds
+      .map((id) => byId.get(id))
+      .filter(Boolean) as Array<{ id: string; caption: string | null }>;
+    if (!photos.length) throw new Error("No photos found for this summary");
+
+    const title =
+      data.title?.trim() ||
+      `Summary — ${new Date().toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })}`;
+
+    const { markdown, aiFailed } = await composeSummaryMarkdown(ctx, { title, photos });
+
+    const nowIso = new Date().toISOString();
+    const { data: row, error } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .insert({
+        project_id: data.projectId,
+        created_by: userId,
+        title,
+        status: "ready",
+        source: "summary",
+        duration_seconds: 0,
+        started_at: nowIso,
+        ended_at: nowIso,
+        transcript: null,
+        summary_markdown: markdown,
+        video_path: null,
+        video_mime_type: null,
+      } as any)
+      .select("id, created_at")
+      .single();
+    if (error || !row) {
+      console.error("[walkthrough] server summary insert failed", error, { projectId: data.projectId, userId });
+      throw new Error(error?.message ?? "Could not create summary");
+    }
+    const walkthroughId = (row as any).id as string;
+
+    const linkRows = photos.map((p, i) => ({
+      walkthrough_id: walkthroughId,
+      photo_id: p.id,
+      created_by: userId,
+      offset_seconds: 0, // no recording, so no timeline position
+      spoken_note: null, // nothing was spoken
+      position: i,
+    }));
+    const { error: linkErr } = await supabaseAdmin
+      .from("walkthrough_photos" as any)
+      .upsert(linkRows as any, { onConflict: "walkthrough_id,photo_id", ignoreDuplicates: true });
+    if (linkErr) {
+      // A summary without its photos is a broken object and nothing recovers
+      // it — orphan recovery only sweeps phase/path-marked capture frames,
+      // which these deliberately are not. Roll the row back rather than leave
+      // a husk sitting in the tab.
+      console.error("[walkthrough] server summary link failed", linkErr, { walkthroughId, userId });
+      await supabaseAdmin.from("walkthroughs" as any).delete().eq("id", walkthroughId);
+      throw new Error(linkErr.message);
+    }
+
+    console.log("[walkthrough] server summary saved", { walkthroughId, userId, photos: photos.length });
+    return { walkthroughId, markdown, aiFailed, photoCount: photos.length };
+  }
+
+/**
+ * Re-draft an existing summary from the photos already linked to it. Shares
+ * composeSummaryMarkdown with creation, and like creation it spends no Auto
+ * Report quota — a summary never reserved one.
+ */
+export async function regenerateWalkthroughSummaryService(
+  ctx: AuthedContext,
+  data: z.infer<typeof regenerateWalkthroughSummaryInputSchema>,
+) {
+    const { userId } = ctx;
+    const supabaseAdmin = getSupabaseAdmin();
+
+    const { data: walk, error: walkErr } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .select("id, title, created_by, source")
+      .eq("id", data.walkthroughId)
+      .maybeSingle();
+    if (walkErr || !walk) throw new Error("Walkthrough not found");
+    if ((walk as any).created_by !== userId) throw new Error("Not authorized");
+    if ((walk as any).source !== "summary") {
+      throw new Error("This walkthrough was recorded — use Regenerate report instead.");
+    }
+
+    const { data: links } = await supabaseAdmin
+      .from("walkthrough_photos" as any)
+      .select("photo_id, position")
+      .eq("walkthrough_id", data.walkthroughId)
+      .order("position", { ascending: true });
+    const ids = ((links as any[]) ?? []).map((l) => l.photo_id as string).filter(Boolean);
+    if (!ids.length) throw new Error("This summary has no photos");
+
+    const { data: photoRows } = await supabaseAdmin
+      .from("photos")
+      .select("id, caption")
+      .is("deleted_at", null)
+      .in("id", ids);
+    const byId = new Map(((photoRows as any[]) ?? []).map((p) => [p.id, p]));
+    const photos = ids
+      .map((id) => byId.get(id))
+      .filter(Boolean) as Array<{ id: string; caption: string | null }>;
+    if (!photos.length) throw new Error("This summary's photos are no longer available");
+
+    const title = ((walk as any).title as string) || "Summary";
+    const { markdown, aiFailed } = await composeSummaryMarkdown(ctx, { title, photos });
+
+    const { error } = await supabaseAdmin
+      .from("walkthroughs" as any)
+      .update({ summary_markdown: markdown, status: "ready" } as any)
+      .eq("id", data.walkthroughId);
+    if (error) throw new Error(error.message);
+
+    console.log("[walkthrough] server summary regenerated", { walkthroughId: data.walkthroughId, userId });
+    return { markdown, aiFailed };
+  }
+
 export async function saveWalkthroughPhotoService(ctx: AuthedContext, data: any) {
     const { userId } = ctx;
     const supabaseAdmin = getSupabaseAdmin();
@@ -417,7 +663,7 @@ export async function saveWalkthroughPhotoService(ctx: AuthedContext, data: any)
 
     const { data: walk, error: walkErr } = await supabaseAdmin
       .from("walkthroughs" as any)
-      .select("id, project_id, created_by")
+      .select("id, project_id, created_by, source")
       .eq("id", data.walkthroughId)
       .maybeSingle();
     if (walkErr || !walk || (walk as any).project_id !== data.projectId || (walk as any).created_by !== userId) {
@@ -427,6 +673,12 @@ export async function saveWalkthroughPhotoService(ctx: AuthedContext, data: any)
         userId,
       });
       throw new Error("Walkthrough not found or access denied");
+    }
+    // Capture frames belong to a recording. Accepting one here would attach a
+    // phase="walkthrough" photo — hidden from the gallery — to a summary built
+    // out of gallery photos.
+    if ((walk as any).source !== "recorded") {
+      throw new Error("This walkthrough is a summary and cannot accept captures");
     }
 
     /*
@@ -504,12 +756,17 @@ export async function finishWalkthroughSessionService(ctx: AuthedContext, data: 
 
     const { data: walk, error: walkErr } = await supabaseAdmin
       .from("walkthroughs" as any)
-      .select("id, project_id, created_by, started_at, title, summary_markdown")
+      .select("id, project_id, created_by, started_at, title, summary_markdown, source")
       .eq("id", data.walkthroughId)
       .maybeSingle();
     if (walkErr || !walk || (walk as any).created_by !== userId) {
       console.error("[walkthrough] server finish unauthorized", walkErr, { walkthroughId: data.walkthroughId, userId });
       throw new Error("Walkthrough not found or access denied");
+    }
+    // There is no session to finish on a summary, and doing so would overwrite
+    // its AI body with a transcript fallback built from a null transcript.
+    if ((walk as any).source !== "recorded") {
+      throw new Error("This walkthrough is a summary and has no recording session");
     }
 
     const endedAt = new Date();
@@ -690,10 +947,11 @@ export async function updateWalkthroughVideoPathService(ctx: AuthedContext, data
     const supabaseAdmin = getSupabaseAdmin();
     const { data: walk } = await supabaseAdmin
       .from("walkthroughs" as any)
-      .select("id, created_by, project_id")
+      .select("id, created_by, project_id, source")
       .eq("id", data.walkthroughId)
       .maybeSingle();
     if (!walk || (walk as any).created_by !== userId) throw new Error("Walkthrough not found or access denied");
+    if ((walk as any).source !== "recorded") throw new Error("A summary has no video");
     // Same client-supplied-path problem as `saveWalkthroughPhotoService`: the
     // stored path is later signed with the service role, so it must be inside
     // this caller's own upload prefix.
@@ -763,10 +1021,13 @@ export async function listProjectWalkthroughsService(ctx: AuthedContext, data: {
 
     const { data: wt, error: wtErr } = await supabaseAdmin
       .from("walkthroughs" as any)
-      .select("id, title, created_at, duration_seconds, status, summary_markdown, share_token, video_path, video_mime_type")
+      .select("id, title, created_at, duration_seconds, status, source, summary_markdown, share_token, video_path, video_mime_type")
       .eq("project_id", data.projectId)
       .order("created_at", { ascending: false })
-      .limit(10);
+      // Recordings and AI summaries share this one list. At 10, a handful of
+      // summaries would push real recordings off the tab entirely and cap the
+      // tab's badge at a number that is simply wrong.
+      .limit(50);
     if (wtErr) {
       console.error("[walkthrough] server list walkthroughs failed", wtErr, { projectId: data.projectId, userId });
       throw new Error(wtErr.message);
@@ -1021,11 +1282,18 @@ export async function generateWalkthroughReportService(ctx: AuthedContext, data:
     console.log("[walkthrough] server report generation requested", { walkthroughId: data.walkthroughId, userId });
     const { data: walk, error: wErr } = await supabaseAdmin
       .from("walkthroughs" as any)
-      .select("id, project_id, title, transcript, duration_seconds, started_at, created_by, share_token")
+      .select("id, project_id, title, transcript, duration_seconds, started_at, created_by, share_token, source")
       .eq("id", data.walkthroughId)
       .single();
     if (wErr || !walk) throw new Error("Walkthrough not found");
     if ((walk as any).created_by !== userId) throw new Error("Not authorized");
+    // Before reserveAutoReport, deliberately: a summary must never burn an Auto
+    // Report slot. It has no transcript to report on, and it is available on
+    // plans that have no Auto Report allowance at all — reserving here would
+    // throw the Pro paywall at a user for regenerating something they own.
+    if ((walk as any).source === "summary") {
+      throw new Error("This is a summary — use Regenerate summary instead.");
+    }
 
     // Auto Reports are Pro/Team only and metered per user per month (Pro 100,
     // Team unlimited). Checked before any LLM work so an over-quota caller
@@ -1321,7 +1589,7 @@ export async function getPublicWalkthroughService(data: { token: string }) {
 
     const { data: walk } = await supabaseAdmin
       .from("walkthroughs" as any)
-      .select("id, title, summary_markdown, transcript, duration_seconds, started_at, project_id, status")
+      .select("id, title, summary_markdown, transcript, duration_seconds, started_at, project_id, status, source")
       .eq("share_token", data.token)
       .maybeSingle();
     if (!walk) {
@@ -1416,6 +1684,9 @@ export async function getPublicWalkthroughService(data: { token: string }) {
       started_at: (walk as any).started_at,
       project_id: (walk as any).project_id,
       status: (walk as any).status,
+      // The share page needs this to suppress a "0:00" duration and the
+      // "Walkthrough Note" label on something that was never walked.
+      source: ((walk as any).source ?? "recorded") as string,
     };
 
     const rawTranscript = ((walk as any).transcript ?? "").trim();
@@ -1456,11 +1727,16 @@ export async function createReportFromWalkthroughService(ctx: AuthedContext, dat
 
     const { data: walk, error: wErr } = await supabaseAdmin
       .from("walkthroughs" as any)
-      .select("id, project_id, created_by, title, transcript, duration_seconds, started_at")
+      .select("id, project_id, created_by, title, transcript, duration_seconds, started_at, source")
       .eq("id", data.walkthroughId)
       .single();
     if (wErr || !walk) throw new Error("Walkthrough not found");
     if ((walk as any).created_by !== userId) throw new Error("Not authorized");
+    // A summary has no transcript, so this would build a document out of an
+    // empty string and present it as a walkthrough report.
+    if ((walk as any).source === "summary") {
+      throw new Error("A summary has no recording to build a report from");
+    }
 
     const projectId = (walk as any).project_id as string;
     const walkTitle = (walk as any).title as string | null;

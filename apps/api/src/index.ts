@@ -143,6 +143,8 @@ export {
   setWalkthroughShareService,
   getPublicWalkthroughService,
   createReportFromWalkthroughService,
+  generateWalkthroughSummaryService,
+  regenerateWalkthroughSummaryService,
 } from "./domains/walkthroughs/service";
 
 export {

@@ -42,6 +42,7 @@ export {
   updateWalkthroughVideoPath,
   transcribeWalkthrough,
   generateWalkthroughReport,
+  generateWalkthroughSummary,
   createReportFromWalkthrough,
 } from "@/lib/walkthroughs.functions";
 export { getProjectContributors } from "@/lib/teams.functions";

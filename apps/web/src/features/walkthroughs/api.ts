@@ -3,6 +3,8 @@
  */
 export {
   generateWalkthroughReport,
+  generateWalkthroughSummary,
+  regenerateWalkthroughSummary,
   setWalkthroughShare,
   updateWalkthroughVideoPath,
 } from "@/lib/walkthroughs.functions";

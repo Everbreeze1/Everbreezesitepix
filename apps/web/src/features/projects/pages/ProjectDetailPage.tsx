@@ -115,11 +115,13 @@ import {
   ensureWalkthroughPhotoLinks,
   finishWalkthroughSession,
   generateWalkthroughReport,
+  generateWalkthroughSummary,
   listProjectWalkthroughs,
   saveWalkthroughPhoto,
   transcribeWalkthrough,
   updateWalkthroughVideoPath,
 } from "@/lib/walkthroughs.functions";
+import { SelectPhotosForPageDialog } from "@/features/projects/components/SelectPhotosForPageDialog";
 
 import { CameraCapture, compressImageFile } from "@/features/photos/components/CameraCapture";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
@@ -226,6 +228,8 @@ export function ProjectDetailPage() {
       created_at: string;
       duration_seconds: number;
       status: string;
+      /** 'recorded' | 'summary' — see 20260814000000_walkthrough_source.sql. */
+      source: string;
       summary_markdown: string | null;
       share_token: string | null;
       thumb_url: string | null;
@@ -249,6 +253,8 @@ export function ProjectDetailPage() {
   const [retryingVideo, setRetryingVideo] = useState(false);
   /** 0-100 while a walkthrough video is transferring, null when idle. */
   const [videoUploadProgress, setVideoUploadProgress] = useState<number | null>(null);
+  const [summaryPickerOpen, setSummaryPickerOpen] = useState(false);
+  const [generatingSummary, setGeneratingSummary] = useState(false);
   const [videos, setVideos] = useState<
     Array<{
       id: string;
@@ -399,11 +405,13 @@ export function ProjectDetailPage() {
     const { data: wt, error: wtErr } = await supabase
       .from("walkthroughs" as any)
       .select(
-        "id, title, created_at, duration_seconds, status, summary_markdown, share_token, video_path, video_mime_type",
+        "id, title, created_at, duration_seconds, status, source, summary_markdown, share_token, video_path, video_mime_type",
       )
       .eq("project_id", projectId)
       .order("created_at", { ascending: false })
-      .limit(10);
+      // Kept in step with listProjectWalkthroughsService's limit — this RLS
+      // fallback disagreeing with the server path would be a confusing bug.
+      .limit(50);
     if (wtErr) throw wtErr;
     const wtList = ((wt as any[]) ?? []) as Array<any>;
     if (!wtList.length) return [] as Array<any>;
@@ -1189,6 +1197,7 @@ export function ProjectDetailPage() {
                 created_at: created.createdAt ?? new Date().toISOString(),
                 duration_seconds: 0,
                 status: "recording",
+                source: "recorded",
                 summary_markdown: null,
                 share_token: null,
                 thumb_url: null,
@@ -1272,6 +1281,34 @@ export function ProjectDetailPage() {
     if (!wid) return;
     setWalkthroughOpen(true);
     setPanel("walkthroughs");
+  };
+
+  /**
+   * A Summary is a walkthrough with no walk — the AI's notes on photos the user
+   * already has. It lands in this tab, counts toward this tab's badge, and
+   * opens at /walkthroughs/$id.
+   *
+   * Note the gate: Summary keeps the plan gate it has always had (any active
+   * subscription, enforced server-side by requireActiveSub) rather than the
+   * Pro-only canUseWalkthroughs that guards recording. Moving where the output
+   * is filed must not quietly take the feature away from Starter.
+   */
+  const generateSummaryWalkthrough = async (photoIds: string[]) => {
+    setGeneratingSummary(true);
+    try {
+      const res = await generateWalkthroughSummary({ data: { projectId, photoIds } });
+      if (res.aiFailed) toast.warning("Saved without AI text", { description: res.aiFailed });
+      else toast.success("Summary saved under Walkthroughs");
+      setSummaryPickerOpen(false);
+      navigate({
+        to: "/walkthroughs/$walkthroughId",
+        params: { walkthroughId: res.walkthroughId },
+      });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not generate summary");
+    } finally {
+      setGeneratingSummary(false);
+    }
   };
 
   const onWalkthroughCapture = async (
@@ -2290,10 +2327,15 @@ export function ProjectDetailPage() {
           .filter(Boolean);
         if (paths.length) void supabase.storage.from("site-photos").remove(paths);
       }
+      // `status = recording` already excludes a summary, which is inserted
+      // ready — but this branch has just hard-deleted photo rows AND their
+      // storage blobs, and a summary's linked photos are the user's own gallery
+      // photos. Belt and braces on the one path where being wrong is permanent.
       const { error: dropErr } = await supabase
         .from("walkthroughs" as any)
         .delete()
         .eq("id", wid)
+        .eq("source", "recorded")
         .eq("status", "recording");
       if (dropErr) {
         toast.error("Couldn't discard that walkthrough");
@@ -2623,19 +2665,43 @@ export function ProjectDetailPage() {
                 Walk the site from anywhere
               </h2>
               <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
-                Recorded walkthroughs preserve field context beyond the photo.
+                Recorded walkthroughs and AI summaries both preserve field context beyond the
+                photo.
               </p>
             </div>
-            <Button
-              size="sm"
-              className="h-8 rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground hover:bg-primary/90"
-              onClick={() =>
-                canUseWalkthroughs ? void startWalkthrough() : setWalkthroughUpgradeOpen(true)
-              }
-            >
-              <Footprints className="mr-1.5 h-3.5 w-3.5" />
-              Record walkthrough
-            </Button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {/*
+                Summary keeps its original gate — any active plan — so filing it
+                here does not take it away from Starter. Recording stays Pro-only
+                via canUseWalkthroughs.
+              */}
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={generatingSummary}
+                onClick={() =>
+                  guard(() => setSummaryPickerOpen(true), "Subscribe to generate summaries.")
+                }
+                className="h-8 rounded-lg px-4 text-xs font-bold"
+              >
+                {generatingSummary ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Generate summary
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground hover:bg-primary/90"
+                onClick={() =>
+                  canUseWalkthroughs ? void startWalkthrough() : setWalkthroughUpgradeOpen(true)
+                }
+              >
+                <Footprints className="mr-1.5 h-3.5 w-3.5" />
+                Record walkthrough
+              </Button>
+            </div>
           </div>
 
           {pendingVideoUpload && (
@@ -2706,22 +2772,42 @@ export function ProjectDetailPage() {
             <div className="mt-6 flex flex-col items-center rounded-3xl border border-dashed border-border bg-card/60 p-12 text-center">
               <Mic className="h-10 w-10 text-muted-foreground" />
               <p className="mt-3 max-w-sm text-sm text-muted-foreground">
-                No walkthroughs yet. Start one to capture photos + narration and get an AI report.
+                No walkthroughs yet. Record one to capture photos + narration, or generate an AI
+                summary from photos you already have.
               </p>
-              <Button
-                size="sm"
-                className="mt-4 rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground hover:bg-primary/90"
-                onClick={() =>
-                  canUseWalkthroughs ? void startWalkthrough() : setWalkthroughUpgradeOpen(true)
-                }
-              >
-                <Footprints className="mr-1.5 h-3.5 w-3.5" />
-                Start Walkthrough Note
-              </Button>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                <Button
+                  size="sm"
+                  className="rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground hover:bg-primary/90"
+                  onClick={() =>
+                    canUseWalkthroughs ? void startWalkthrough() : setWalkthroughUpgradeOpen(true)
+                  }
+                >
+                  <Footprints className="mr-1.5 h-3.5 w-3.5" />
+                  Start Walkthrough Note
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={generatingSummary}
+                  onClick={() =>
+                    guard(() => setSummaryPickerOpen(true), "Subscribe to generate summaries.")
+                  }
+                  className="rounded-lg px-4 text-xs font-bold"
+                >
+                  {generatingSummary ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  Generate summary
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               {walkthroughs.map((w) => {
+                const isSummary = w.source === "summary";
                 const mins = Math.floor((w.duration_seconds || 0) / 60);
                 const secs = (w.duration_seconds || 0) % 60;
                 return (
@@ -2731,14 +2817,28 @@ export function ProjectDetailPage() {
                   >
                     <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full border-[18px] border-primary/10" />
                     <div className="relative flex min-h-[172px] flex-col justify-between gap-6">
-                      <button
-                        type="button"
-                        onClick={() => void openWalkthroughVideo(w)}
-                        aria-label="Play walkthrough video"
-                        className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary transition hover:bg-primary/20"
-                      >
-                        <PlayCircle className="h-5 w-5" />
-                      </button>
+                      {isSummary ? (
+                        /*
+                          No recording exists, so there is no play affordance. A
+                          static mark keeps the card's visual rhythm without
+                          promising playback the row cannot deliver.
+                        */
+                        <span
+                          aria-hidden
+                          className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary"
+                        >
+                          <Sparkles className="h-5 w-5" />
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void openWalkthroughVideo(w)}
+                          aria-label="Play walkthrough video"
+                          className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary transition hover:bg-primary/20"
+                        >
+                          <PlayCircle className="h-5 w-5" />
+                        </button>
+                      )}
                       <div>
                         <p className="font-display truncate text-3xl font-bold leading-tight tracking-tight text-foreground">
                           {w.title}
@@ -2749,14 +2849,16 @@ export function ProjectDetailPage() {
                             day: "numeric",
                           })}
                           {" · "}
-                          {mins}:{secs.toString().padStart(2, "0")}
+                          {isSummary
+                            ? `AI summary · ${w.photo_count} ${w.photo_count === 1 ? "photo" : "photos"}`
+                            : `${mins}:${secs.toString().padStart(2, "0")}`}
                         </p>
                         <Link
                           to="/walkthroughs/$walkthroughId"
                           params={{ walkthroughId: w.id }}
                           className="mt-3 inline-flex items-center gap-2 text-xs font-extrabold text-primary hover:underline"
                         >
-                          Open walkthrough <span aria-hidden>→</span>
+                          {isSummary ? "Open summary" : "Open walkthrough"} <span aria-hidden>→</span>
                         </Link>
                       </div>
                     </div>
@@ -2765,6 +2867,15 @@ export function ProjectDetailPage() {
               })}
             </div>
           )}
+
+          <SelectPhotosForPageDialog
+            open={summaryPickerOpen}
+            projectId={projectId}
+            templateLabel="Summary"
+            generating={generatingSummary}
+            onCancel={() => setSummaryPickerOpen(false)}
+            onGenerate={(ids) => void generateSummaryWalkthrough(ids)}
+          />
         </>
       )}
 

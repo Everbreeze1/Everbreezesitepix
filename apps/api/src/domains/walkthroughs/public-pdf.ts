@@ -14,7 +14,7 @@ export async function handleWalkthroughPdf(token: string): Promise<Response> {
 
         const { data: walk } = await (supabaseAdmin as any)
           .from("walkthroughs")
-          .select("id, project_id, created_by, title, summary_markdown, transcript, duration_seconds, started_at, status, share_token")
+          .select("id, project_id, created_by, title, summary_markdown, transcript, duration_seconds, started_at, status, share_token, source")
           .eq("share_token", token)
           .maybeSingle();
         if (!walk) return new Response("Not found", { status: 404 });
@@ -93,14 +93,18 @@ export async function handleWalkthroughPdf(token: string): Promise<Response> {
         page.drawLine({ start: { x: MARGIN, y: y - 6 }, end: { x: PAGE_W - MARGIN, y: y - 6 }, thickness: 0.5, color: BORDER });
         y -= 34;
 
-        page.drawText(sanitize("WALKTHROUGH REPORT"), { x: MARGIN, y, size: 9, font: fonts.bold, color: ACCENT });
+        // A summary was never walked, so neither the "WALKTHROUGH REPORT"
+        // stamp nor a "Duration 0:00" line is true of it. This PDF is the
+        // customer-facing deliverable, so both are branched rather than left.
+        const isSummary = (walk as any).source === "summary";
+        page.drawText(sanitize(isSummary ? "PHOTO SUMMARY" : "WALKTHROUGH REPORT"), { x: MARGIN, y, size: 9, font: fonts.bold, color: ACCENT });
         y -= 22;
         y = drawWrapped(page, safeTitle, { x: MARGIN, y, maxWidth: CONTENT_W, size: 26, font: fonts.bold, color: TEXT, lineGap: 6 });
         y -= 6;
 
         const metaParts = [
           new Date(walk.started_at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }),
-          `Duration ${fmtDur(walk.duration_seconds ?? 0)}`,
+          ...(isSummary ? [] : [`Duration ${fmtDur(walk.duration_seconds ?? 0)}`]),
           `${links.length} ${links.length === 1 ? "photo" : "photos"}`,
         ];
         const author = (profile as any)?.full_name;

@@ -750,3 +750,102 @@ describe("family: report photo order is editable, because it decides page layout
     expect(src).toMatch(/label:\s*["']Undo["']/);
   });
 });
+
+describe("family: only capture paths may hide a photo from the gallery", () => {
+  /*
+   * `photos.phase = "walkthrough"` removes a photo from the project grid, the
+   * global gallery, the calendar, the timeline, dashboards, group cards,
+   * showcases and the mobile app — and NOTHING in this codebase ever writes it
+   * back. That is correct for a frame captured *during* a recording, which is a
+   * recording artefact and was never in the gallery to begin with.
+   *
+   * A Summary is the opposite case: it LINKS photos the user already has and
+   * still expects to find in the gallery. Reusing the recorded-walkthrough
+   * linker there — the obvious "simplification", since the link rows are
+   * otherwise identical — would erase real photos from the customer's product
+   * everywhere but the summary itself, permanently and with no undo path.
+   *
+   * Hence the summary services write `walkthrough_photos` directly. This guard
+   * is the enforcement point for that, because nothing else is.
+   */
+  const SERVICE = "apps/api/src/domains/walkthroughs/service.ts";
+
+  const summaryServiceSource = () => {
+    const src = read(SERVICE);
+    const start = src.indexOf("export async function generateWalkthroughSummaryService");
+    const end = src.indexOf("export async function saveWalkthroughPhotoService");
+    expect(start, "generateWalkthroughSummaryService not found").toBeGreaterThan(-1);
+    expect(end, "saveWalkthroughPhotoService not found").toBeGreaterThan(start);
+    return src.slice(start, end);
+  };
+
+  it("the summary services never set photos.phase", () => {
+    expect(stripComments(summaryServiceSource())).not.toMatch(/phase:\s*["']walkthrough["']/);
+  });
+
+  it("the summary services never call the recorded-walkthrough photo linker", () => {
+    // That helper sets phase="walkthrough" on every id handed to it.
+    expect(stripComments(summaryServiceSource())).not.toMatch(
+      /ensureWalkthroughPhotoLinksService\s*\(/,
+    );
+  });
+
+  it("a summary can never burn an Auto Report slot", () => {
+    /*
+     * Summary is available on any active plan; Auto Reports are Pro/Team and
+     * metered. reserveAutoReport throws for a non-Pro caller, so reaching it
+     * from a summary row would paywall a user for regenerating something they
+     * already own. The guard must sit BEFORE the reservation, not after.
+     */
+    const src = stripComments(read(SERVICE));
+    const guard = src.indexOf('(walk as any).source === "summary"');
+    const reserve = src.indexOf("await reserveAutoReport(");
+    expect(guard, "summary guard missing from generateWalkthroughReportService").toBeGreaterThan(-1);
+    expect(reserve).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(reserve);
+  });
+
+  it("recorded-only operations refuse a summary row", () => {
+    // Each of these would corrupt a summary: a capture frame attached to it, a
+    // video path on something with no video, or a finish-session overwriting
+    // its AI body with a transcript fallback built from a null transcript.
+    const src = stripComments(read(SERVICE));
+    const refusals = src.match(/\(walk as any\)\.source !== "recorded"/g) ?? [];
+    expect(refusals.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("family: rpcOp names are strings the compiler cannot check", () => {
+  /*
+   * A client op is declared as rpcOp<In, Out>("someName"). The generic argument
+   * is type-checked against the service, but the NAME is a bare string matched
+   * against registry.ts at runtime. Mistype it — or rename the registry key and
+   * miss a call site — and everything compiles, the build passes, the tests
+   * pass, and the feature 404s the first time a user clicks the button.
+   *
+   * There is no shared constant to import and no codegen step, so this scan is
+   * the only thing standing between a one-character typo and a dead feature.
+   */
+  const CLIENT_DIR = join(ROOT, "apps/web/src/lib");
+
+  it("every rpcOp name exists as a key in the RPC registry", () => {
+    const registry = read("apps/api/src/domains/rpc/registry.ts");
+    // Keys are declared at two-space indent, wrapped in authed(, pub(, or a
+    // bare object literal — so match the key itself, not the wrapper.
+    const keys = new Set([...registry.matchAll(/^ {2}([a-zA-Z0-9_]+):/gm)].map((m) => m[1]));
+    expect(keys.size).toBeGreaterThan(100);
+
+    const orphans: string[] = [];
+    let total = 0;
+    for (const file of readdirSync(CLIENT_DIR).filter((f) => f.endsWith(".functions.ts"))) {
+      const src = readFileSync(join(CLIENT_DIR, file), "utf8");
+      for (const m of src.matchAll(/>\(\s*["']([a-zA-Z0-9_]+)["']/g)) {
+        total++;
+        if (!keys.has(m[1])) orphans.push(`${file} -> ${m[1]}`);
+      }
+    }
+    // Guard against the scan silently matching nothing and passing vacuously.
+    expect(total).toBeGreaterThan(100);
+    expect(orphans).toEqual([]);
+  });
+});

@@ -640,6 +640,7 @@ export type Database = {
           id: string
           project_id: string
           share_token: string | null
+          source: string
           started_at: string
           status: string
           summary_markdown: string | null
@@ -657,6 +658,7 @@ export type Database = {
           id?: string
           project_id: string
           share_token?: string | null
+          source?: string
           started_at?: string
           status?: string
           summary_markdown?: string | null
@@ -674,6 +676,7 @@ export type Database = {
           id?: string
           project_id?: string
           share_token?: string | null
+          source?: string
           started_at?: string
           status?: string
           summary_markdown?: string | null

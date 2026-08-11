@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Sparkles,
   Clock,
+  Images,
   ImageOff,
   Check,
   Copy,
@@ -37,6 +38,7 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { UpgradeDialog } from "@/components/UpgradeDialog";
 import {
   generateWalkthroughReport,
+  regenerateWalkthroughSummary,
   setWalkthroughShare,
   updateWalkthroughVideoPath,
 } from "@/features/walkthroughs/api";
@@ -56,6 +58,8 @@ interface Walkthrough {
   project_id: string;
   title: string;
   status: string;
+  /** 'recorded' | 'summary' — see 20260814000000_walkthrough_source.sql. */
+  source: string;
   started_at: string;
   duration_seconds: number;
   transcript: string | null;
@@ -101,7 +105,7 @@ export function WalkthroughDetailPage() {
     const { data: w } = await supabase
       .from("walkthroughs" as any)
       .select(
-        "id, project_id, title, status, started_at, duration_seconds, transcript, summary_markdown, share_token, video_path, video_mime_type",
+        "id, project_id, title, status, source, started_at, duration_seconds, transcript, summary_markdown, share_token, video_path, video_mime_type",
       )
       .eq("id", walkthroughId)
       .maybeSingle();
@@ -123,7 +127,9 @@ export function WalkthroughDetailPage() {
     // Sign the recorded video URL (if present) for inline playback.
     let vPath = (w as any).video_path as string | null;
     let vMime = (w as any).video_mime_type as string | null;
-    if (!vPath && user?.id) {
+    // A summary has no recording, so the storage sweep below can only ever come
+    // back empty — skip it rather than issue a doomed list() on every load.
+    if (!vPath && user?.id && (w as any).source !== "summary") {
       const prefix = `${user.id}/${(w as any).project_id}/walkthroughs`;
       const { data: objects, error: listErr } = await supabase.storage
         .from("site-videos")
@@ -248,7 +254,10 @@ export function WalkthroughDetailPage() {
   // poll the row so the page flips to the finished report automatically
   // without the user needing to refresh.
   useEffect(() => {
-    if (!walk || walk.status === "ready" || walk.status === "failed") return;
+    // A summary is written `ready` in one shot — there is no background
+    // pipeline behind it, so there is nothing to poll for.
+    if (!walk || walk.source === "summary" || walk.status === "ready" || walk.status === "failed")
+      return;
     const id = window.setInterval(() => {
       void load();
     }, 4000);
@@ -275,6 +284,29 @@ export function WalkthroughDetailPage() {
 
   const onRegenerate = async () => {
     if (!walk) return;
+    /*
+     * A summary redraws from its linked photos and spends no Auto Report quota,
+     * so it must not pass through the quota gate below — that gate would show a
+     * Pro paywall to a Starter user for regenerating something they own and
+     * created on their current plan.
+     */
+    if (walk.source === "summary") {
+      setRegenerating(true);
+      try {
+        const { markdown: md, aiFailed } = await regenerateWalkthroughSummary({
+          data: { walkthroughId: walk.id },
+        });
+        setMarkdown(md);
+        if (aiFailed) toast.warning("Rebuilt without AI text", { description: aiFailed });
+        else toast.success("Summary regenerated");
+        void load();
+      } catch (e: any) {
+        toast.error(e?.message ?? "Failed to regenerate");
+      } finally {
+        setRegenerating(false);
+      }
+      return;
+    }
     // Client-side check is only for a fast, friendly upgrade prompt — the
     // server (assertAutoReportAllowed) is the actual enforcing authority.
     if (!canUseAutoReports || autoReportsRemaining <= 0) {
@@ -354,6 +386,9 @@ export function WalkthroughDetailPage() {
   }
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+
+  /** No recording behind this row: no video, no narration, no duration. */
+  const isSummary = walk.source === "summary";
 
   const displayTitle = (() => {
     const t = (walk.title ?? "").trim();
@@ -450,13 +485,20 @@ export function WalkthroughDetailPage() {
               <h1 className="text-2xl font-bold tracking-tight">{displayTitle}</h1>
             )}
             <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {fmt(walk.duration_seconds)}
-              </span>
+              {isSummary ? (
+                <span className="inline-flex items-center gap-1">
+                  <Images className="h-3 w-3" />
+                  {photoSteps.length} {photoSteps.length === 1 ? "photo" : "photos"}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {fmt(walk.duration_seconds)}
+                </span>
+              )}
               <span>{new Date(walk.started_at).toLocaleString()}</span>
               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary capitalize">
-                {walk.status}
+                {isSummary ? "AI summary" : walk.status}
               </span>
             </div>
           </div>
@@ -515,7 +557,11 @@ export function WalkthroughDetailPage() {
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => void onRegenerate()} disabled={regenerating}>
                       <Sparkles className="mr-2 h-3.5 w-3.5" />
-                      {regenerating ? "Regenerating\u2026" : "Regenerate report"}
+                      {regenerating
+                        ? "Regenerating\u2026"
+                        : isSummary
+                          ? "Regenerate summary"
+                          : "Regenerate report"}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -533,7 +579,7 @@ export function WalkthroughDetailPage() {
         </div>
       </Card>
 
-      {videoUrl && (
+      {!isSummary && videoUrl && (
         <Card className="mt-4 overflow-hidden p-0">
           <VideoThumbnail
             cacheKey={`walk-detail:${walk.id}`}
@@ -556,13 +602,15 @@ export function WalkthroughDetailPage() {
         </Card>
       )}
 
-      <VideoPlayerDialog
-        open={videoOpen}
-        onClose={() => setVideoOpen(false)}
-        videoUrl={videoUrl}
-        title={displayTitle}
-        mimeType={walk.video_mime_type}
-      />
+      {!isSummary && (
+        <VideoPlayerDialog
+          open={videoOpen}
+          onClose={() => setVideoOpen(false)}
+          videoUrl={videoUrl}
+          title={displayTitle}
+          mimeType={walk.video_mime_type}
+        />
+      )}
 
       {walk.summary_markdown ? (
         <Card className="mt-4 p-5">
@@ -576,7 +624,10 @@ export function WalkthroughDetailPage() {
             />
           ) : (
             <>
-              <WalkthroughPhotoSteps steps={photoSteps} />
+              <WalkthroughPhotoSteps
+                steps={photoSteps}
+                variant={isSummary ? "summary" : "recorded"}
+              />
               <WalkthroughMarkdown markdown={renderedMarkdown} photoUrls={photoUrls} />
             </>
           )}
@@ -600,10 +651,13 @@ export function WalkthroughDetailPage() {
           <div className="grid h-10 w-10 place-items-center rounded-full bg-destructive/10 text-destructive">
             <ImageOff className="h-5 w-5" />
           </div>
-          <h2 className="text-lg font-semibold">We couldn't generate this report</h2>
+          <h2 className="text-lg font-semibold">
+            We couldn't generate this {isSummary ? "summary" : "report"}
+          </h2>
           <p className="max-w-md text-sm text-muted-foreground">
-            Something went wrong while creating your report. Your photos and narration are safe —
-            try generating again.
+            {isSummary
+              ? "Something went wrong while writing your summary. Your photos are safe — try generating again."
+              : "Something went wrong while creating your report. Your photos and narration are safe — try generating again."}
           </p>
           <Button size="sm" onClick={onRegenerate} disabled={regenerating}>
             {regenerating ? (
@@ -617,8 +671,13 @@ export function WalkthroughDetailPage() {
       ) : (
         <Card className="mt-4 flex items-center justify-between gap-3 p-4">
           <div>
-            <p className="text-sm text-muted-foreground">No report yet.</p>
-            {canUseAutoReports && (
+            <p className="text-sm text-muted-foreground">
+              No {isSummary ? "summary" : "report"} yet.
+            </p>
+            {/* A summary spends no Auto Report quota, so quoting the meter here
+                would tell the user a cost that does not exist — and quote a
+                Pro-only allowance to a Starter user who can still do this. */}
+            {!isSummary && canUseAutoReports && (
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {autoReportsLimit === Infinity
                   ? "Unlimited Auto Reports on Team"
@@ -632,7 +691,7 @@ export function WalkthroughDetailPage() {
             ) : (
               <Sparkles className="mr-1.5 h-3.5 w-3.5" />
             )}
-            Generate report
+            {isSummary ? "Generate summary" : "Generate report"}
           </Button>
         </Card>
       )}

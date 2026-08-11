@@ -12,6 +12,8 @@ import type {
   setWalkthroughShareService,
   getPublicWalkthroughService,
   createReportFromWalkthroughService,
+  generateWalkthroughSummaryService,
+  regenerateWalkthroughSummaryService,
 } from "@sitepix/api";
 
 /**
@@ -117,3 +119,19 @@ export const createReportFromWalkthrough = rpcOp<
   { walkthroughId: string },
   Result<typeof createReportFromWalkthroughService>
 >("createReportFromWalkthrough");
+
+/**
+ * Creates a WALKTHROUGH row, not a project page — a Summary is the AI's notes
+ * on a set of photos, which is a walkthrough with no walk. It lands in the
+ * Walkthroughs tab and opens at /walkthroughs/$id. See
+ * supabase/migrations/20260814000000_walkthrough_source.sql.
+ */
+export const generateWalkthroughSummary = rpcOp<
+  { projectId: string; photoIds: string[]; title?: string },
+  Result<typeof generateWalkthroughSummaryService>
+>("generateWalkthroughSummary", { idempotent: true });
+
+export const regenerateWalkthroughSummary = rpcOp<
+  { walkthroughId: string },
+  Result<typeof regenerateWalkthroughSummaryService>
+>("regenerateWalkthroughSummary", { idempotent: true });

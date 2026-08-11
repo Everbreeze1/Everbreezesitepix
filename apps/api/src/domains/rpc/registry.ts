@@ -102,8 +102,12 @@ import {
   ensureWalkthroughPhotoLinksService,
   finishWalkthroughSessionService,
   generateWalkthroughReportService,
+  generateWalkthroughSummaryInputSchema,
+  generateWalkthroughSummaryService,
   getPublicWalkthroughService,
   listProjectWalkthroughsService,
+  regenerateWalkthroughSummaryInputSchema,
+  regenerateWalkthroughSummaryService,
   saveWalkthroughPhotoService,
   setWalkthroughShareService,
   setWalkthroughStatusService,
@@ -706,6 +710,19 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   createReportFromWalkthrough: authed(
     (d) => z.object({ walkthroughId: z.string().uuid() }).parse(d),
     createReportFromWalkthroughService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  // A Summary is a walkthrough, not a document — it writes a walkthroughs row
+  // with source='summary'. Marked idempotent like every other LLM-spending op
+  // so a retry can't bill twice.
+  generateWalkthroughSummary: authed(
+    (d) => generateWalkthroughSummaryInputSchema.parse(d),
+    generateWalkthroughSummaryService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  regenerateWalkthroughSummary: authed(
+    (d) => regenerateWalkthroughSummaryInputSchema.parse(d),
+    regenerateWalkthroughSummaryService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
   ),
   listNotifications: authed(
     (d) => listNotificationsInputSchema.parse(d),

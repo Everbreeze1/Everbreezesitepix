@@ -70,16 +70,33 @@ export function estimateWalkthroughNote(
   return words.slice(start, end).join(" ").trim() || null;
 }
 
-export function WalkthroughPhotoSteps({ steps }: { steps: WalkthroughPhotoStep[] }) {
+export function WalkthroughPhotoSteps({
+  steps,
+  variant = "recorded",
+}: {
+  steps: WalkthroughPhotoStep[];
+  /**
+   * "summary": no recording behind these photos, so there are no offsets to
+   * show and no narration that could be missing. The default keeps the
+   * recorded rendering byte-identical — this component is also the public
+   * share page's gallery.
+   */
+  variant?: "recorded" | "summary";
+}) {
   if (!steps.length) return null;
+  const isSummary = variant === "summary";
 
   return (
     <section className="mb-8">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight">Photo walkthrough</h2>
+          <h2 className="text-xl font-semibold tracking-tight">
+            {isSummary ? "Photos in this summary" : "Photo walkthrough"}
+          </h2>
           <p className="text-xs text-muted-foreground">
-            Narration mapped to the moment each photo was taken.
+            {isSummary
+              ? "The photos this summary was written from."
+              : "Narration mapped to the moment each photo was taken."}
           </p>
         </div>
         <span className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-muted-foreground">
@@ -114,21 +131,32 @@ export function WalkthroughPhotoSteps({ steps }: { steps: WalkthroughPhotoStep[]
                     <ImageOff className="h-6 w-6" />
                   </div>
                 )}
-                <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 font-mono text-[11px] font-medium text-white backdrop-blur-sm">
-                  {formatOffset(step.offset_seconds)}
-                </span>
+                {/* Every summary link carries offset 0, so the badge would
+                    stamp a meaningless "0:00" on each tile. */}
+                {!isSummary && (
+                  <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 font-mono text-[11px] font-medium text-white backdrop-blur-sm">
+                    {formatOffset(step.offset_seconds)}
+                  </span>
+                )}
               </div>
 
-              <div className="border-t border-amber-200 bg-amber-50 px-3.5 py-2.5 dark:border-amber-900/40 dark:bg-amber-950/30">
-                {note ? (
-                  <p className="text-sm italic leading-relaxed text-foreground">&ldquo;{note}&rdquo;</p>
-                ) : (
-                  <p className="text-sm italic leading-relaxed text-muted-foreground">
-                    No narration captured near this photo.
-                  </p>
-                )}
-                {caption && <p className="mt-1 text-xs text-muted-foreground">{caption}</p>}
-              </div>
+              {/* Nothing was spoken over a summary, so the "no narration"
+                  apology would repeat under every single photo. Show the strip
+                  only when it has something to say. */}
+              {(!isSummary || caption) && (
+                <div className="border-t border-amber-200 bg-amber-50 px-3.5 py-2.5 dark:border-amber-900/40 dark:bg-amber-950/30">
+                  {note ? (
+                    <p className="text-sm italic leading-relaxed text-foreground">
+                      &ldquo;{note}&rdquo;
+                    </p>
+                  ) : isSummary ? null : (
+                    <p className="text-sm italic leading-relaxed text-muted-foreground">
+                      No narration captured near this photo.
+                    </p>
+                  )}
+                  {caption && <p className="mt-1 text-xs text-muted-foreground">{caption}</p>}
+                </div>
+              )}
             </li>
           );
         })}

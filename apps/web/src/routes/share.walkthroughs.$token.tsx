@@ -105,6 +105,8 @@ function PublicWalkthroughPage() {
 
   const w = data.walkthrough;
   const p = data.project;
+  /** No recording behind this one — it is the AI's notes on a set of photos. */
+  const isSummary = (w as { source?: string }).source === "summary";
   const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
   const addr = p
     ? (p.location ?? ([p.street, p.city, p.state].filter(Boolean).join(", ") || null))
@@ -126,7 +128,7 @@ function PublicWalkthroughPage() {
       <Card className="p-6">
         <div className="border-b border-border pb-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Walkthrough Note
+            {isSummary ? "Photo Summary" : "Walkthrough Note"}
           </p>
           <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
@@ -138,7 +140,10 @@ function PublicWalkthroughPage() {
                     {addr ? ` · ${addr}` : ""} ·{" "}
                   </>
                 ) : null}
-                {new Date(w.started_at).toLocaleDateString()} · {fmt(w.duration_seconds)}
+                {new Date(w.started_at).toLocaleDateString()}
+                {/* A summary was never recorded, so its duration is 0 — printing
+                    "0:00" on a customer-facing page reads as a broken link. */}
+                {isSummary ? null : ` · ${fmt(w.duration_seconds)}`}
               </p>
             </div>
             <WalkthroughShareButtons
@@ -152,7 +157,10 @@ function PublicWalkthroughPage() {
         <div className="pt-5">
           {w.summary_markdown ? (
             <>
-              <WalkthroughPhotoSteps steps={data.photoSteps ?? []} />
+              <WalkthroughPhotoSteps
+                steps={data.photoSteps ?? []}
+                variant={isSummary ? "summary" : "recorded"}
+              />
               <WalkthroughMarkdown
                 markdown={cleanWalkthroughMarkdown(w.summary_markdown)}
                 photoUrls={data.photoUrls}
@@ -162,7 +170,7 @@ function PublicWalkthroughPage() {
             <div className="flex flex-col items-center gap-2 py-10 text-center">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                Report is still being generated. Refresh in a moment.
+                {isSummary ? "Summary" : "Report"} is still being generated. Refresh in a moment.
               </p>
               <Button size="sm" variant="outline" onClick={() => void load()}>
                 <RefreshCw className="mr-1.5 h-3.5 w-3.5" />

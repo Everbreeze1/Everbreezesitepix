@@ -102,7 +102,10 @@ export const generateProjectPage = rpcOp<
   {
     projectId: string;
     folderId?: string | null;
-    template: "daily_log" | "summary" | "report";
+    // "summary" is intentionally absent: a Summary is filed under Walkthroughs
+    // now (generateWalkthroughSummary), not as a project page. The server enum
+    // still accepts it so existing pages and any direct RPC caller keep working.
+    template: "daily_log" | "report";
     photoIds: string[];
     title?: string;
   },

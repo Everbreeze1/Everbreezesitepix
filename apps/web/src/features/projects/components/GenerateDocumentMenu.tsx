@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { FileText, ClipboardList, Sparkles, Layers } from "lucide-react";
+import { FileText, ClipboardList, Sparkles, Layers, Footprints } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -15,13 +15,18 @@ import {
   generateProjectPage,
   createPageFromTemplate,
 } from "@/lib/project-pages.functions";
+import { generateWalkthroughSummary } from "@/lib/walkthroughs.functions";
 import { SelectPhotosForPageDialog } from "@/features/projects/components/SelectPhotosForPageDialog";
 import { ChoosePageTemplateDialog } from "@/features/projects/components/ChoosePageTemplateDialog";
 
-type AiTemplate = "daily_log" | "summary" | "report";
+/**
+ * Summary is deliberately absent: it is not a document. It writes a
+ * walkthroughs row and is tracked by its own state below.
+ */
+type AiTemplate = "daily_log" | "report";
 
 /**
- * The single place a project document gets generated — Daily Log, Summary,
+ * The single place a project artefact gets generated — Summary, Daily Log,
  * Report, a saved template, or a blank page.
  *
  * This used to live only inside the Documents tab's "Create" dropdown, which
@@ -29,6 +34,11 @@ type AiTemplate = "daily_log" | "summary" | "report";
  * find. Documents is where finished work is filed; generating it is a primary
  * project action, so the same menu is now mounted in the project header too.
  * Both entry points share this component so the two can never drift apart.
+ *
+ * Not everything here lands in Documents. A Summary is the AI's notes on a set
+ * of photos — the same object a walkthrough produces, minus the walk — so it is
+ * filed under Walkthroughs. The menu says so at the point of click rather than
+ * surprising the user with a document that isn't in Documents.
  */
 export function GenerateDocumentMenu({
   projectId,
@@ -49,6 +59,8 @@ export function GenerateDocumentMenu({
   const [generating, setGenerating] = useState(false);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [summaryPickerOpen, setSummaryPickerOpen] = useState(false);
+  const [generatingSummary, setGeneratingSummary] = useState(false);
 
   const openPage = (pageId: string) => {
     onCreated?.();
@@ -87,6 +99,29 @@ export function GenerateDocumentMenu({
     }
   }
 
+  /**
+   * Summary lands in the Walkthroughs tab, so this navigates there rather than
+   * to the page editor — `folderId` is meaningless for it.
+   */
+  async function handleGenerateSummary(photoIds: string[]) {
+    setGeneratingSummary(true);
+    try {
+      const res = await generateWalkthroughSummary({ data: { projectId, photoIds } });
+      if (res.aiFailed) toast.warning("Saved without AI text", { description: res.aiFailed });
+      else toast.success("Summary saved under Walkthroughs");
+      setSummaryPickerOpen(false);
+      onCreated?.();
+      navigate({
+        to: "/walkthroughs/$walkthroughId",
+        params: { walkthroughId: res.walkthroughId },
+      });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not generate summary");
+    } finally {
+      setGeneratingSummary(false);
+    }
+  }
+
   async function handleUseTemplate(templateId: string) {
     setApplyingTemplate(true);
     try {
@@ -106,10 +141,10 @@ export function GenerateDocumentMenu({
         <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
         <DropdownMenuContent align={align} className="w-72">
           <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            Generate from this project
+            Saved under Walkthroughs
           </DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => setAiTemplate("summary")}>
-            <Sparkles className="mr-2 h-4 w-4 text-primary" />
+          <DropdownMenuItem onClick={() => setSummaryPickerOpen(true)}>
+            <Footprints className="mr-2 h-4 w-4 text-primary" />
             <span>
               <span className="block font-bold">Summary</span>
               <span className="block text-xs text-muted-foreground">
@@ -117,6 +152,11 @@ export function GenerateDocumentMenu({
               </span>
             </span>
           </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Saved under Documents
+          </DropdownMenuLabel>
           {/* Label stays "Daily Log": the project already has a separate
               "Site Logs" feature (project_site_logs), so reusing that name
               here would point at the wrong thing. */}
@@ -162,12 +202,19 @@ export function GenerateDocumentMenu({
       <SelectPhotosForPageDialog
         open={!!aiTemplate}
         projectId={projectId}
-        templateLabel={
-          aiTemplate === "daily_log" ? "Daily Log" : aiTemplate === "summary" ? "Summary" : "Report"
-        }
+        templateLabel={aiTemplate === "daily_log" ? "Daily Log" : "Report"}
         generating={generating}
         onCancel={() => setAiTemplate(null)}
         onGenerate={handleGenerate}
+      />
+
+      <SelectPhotosForPageDialog
+        open={summaryPickerOpen}
+        projectId={projectId}
+        templateLabel="Summary"
+        generating={generatingSummary}
+        onCancel={() => setSummaryPickerOpen(false)}
+        onGenerate={handleGenerateSummary}
       />
 
       <ChoosePageTemplateDialog

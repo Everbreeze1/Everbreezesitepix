@@ -694,9 +694,10 @@ export function ProjectDocuments({
             Project documents
           </h2>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
-            Storage for every plan, permit, report, and delivery ticket. Generated summaries and
-            logs are filed here too — create them from{" "}
-            <span className="font-bold">Create document</span> at the top of the project.
+            Storage for every plan, permit, report, and delivery ticket. Generated logs and reports
+            are filed here too — create them from{" "}
+            <span className="font-bold">Create document</span> at the top of the project. Summaries
+            are filed under <span className="font-bold">Walkthroughs</span>.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
