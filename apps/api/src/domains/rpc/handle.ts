@@ -4,7 +4,7 @@ import {
   requestIdFrom,
   writeAuditLog,
 } from "../../lib/audit";
-import { jsonError, jsonFromUnknownError } from "../../lib/errors";
+import { jsonError, jsonFromUnknownError, validationMessage } from "../../lib/errors";
 import {
   beginIdempotency,
   completeIdempotency,
@@ -180,7 +180,14 @@ export async function handleRpc(request: Request): Promise<Response> {
         errorCode: "validation_error",
       });
       return Response.json(
-        { code: "validation_error", message: err.message },
+        // NOT `err.message` — that is the raw issue array as JSON, and the web
+        // client renders `message` directly in a toast. The structured form
+        // stays available under `details` for debugging.
+        {
+          code: "validation_error",
+          message: validationMessage(err),
+          details: err.flatten(),
+        },
         {
           status: 400,
           headers: mergeHeaders(rlHeaders, { "X-Request-Id": requestId }),

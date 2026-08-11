@@ -125,6 +125,15 @@ export function ProjectPageEditorPage() {
   const dirtyRef = useRef(false);
   /** True while there are edits not yet confirmed saved to the server. */
   const unsavedRef = useRef(false);
+  /**
+   * The title the server is known to hold. Renaming on a phone means tapping the
+   * box, clearing it, then waiting for the keyboard — so the field sits empty far
+   * longer than the 800ms autosave debounce, and an empty box has to mean "rename
+   * in progress", never "blank the title". Autosave omits the field while it is
+   * empty and blur restores this value, so the header can't show a name the page
+   * doesn't have.
+   */
+  const savedTitleRef = useRef("Untitled");
   function markDirty() {
     dirtyRef.current = true;
     unsavedRef.current = true;
@@ -229,6 +238,7 @@ export function ProjectPageEditorPage() {
           sessionStorage.removeItem(freshKey);
         }
         setTitle(res.page.title);
+        savedTitleRef.current = res.page.title;
         setTokenValues((res as { tokens?: TokenValues }).tokens ?? {});
         setHeaderHtml(res.page.header_html ?? "");
         setFooterHtml(res.page.footer_html ?? "");
@@ -315,11 +325,21 @@ export function ProjectPageEditorPage() {
       .catch(() => {})
       .then(async () => {
         setSaving(true);
+        /*
+         * An empty box is a rename in progress, not a request to blank the
+         * title. `title` is optional server-side and the service only patches
+         * it when present, so omitting it saves the body and leaves the stored
+         * title alone. Sending "" instead failed the schema's `min(1)` and took
+         * the *whole* write down with it — including the content typed in the
+         * same window, which was never retried because the next autosave only
+         * fires on the next change.
+         */
+        const titleToSave = debouncedTitle.trim();
         try {
           const res = await updateProjectPage({
             data: {
               pageId,
-              title: debouncedTitle,
+              title: titleToSave || undefined,
               contentHtml: debouncedHtml,
               headerHtml: showHeader ? debouncedHeaderHtml : null,
               footerHtml: showFooter ? debouncedFooterHtml : null,
@@ -341,6 +361,7 @@ export function ProjectPageEditorPage() {
             versionRef.current = res.updatedAt;
             setUpdatedAt(res.updatedAt);
           }
+          if (titleToSave) savedTitleRef.current = titleToSave;
           unsavedRef.current = false;
         } catch (e: any) {
           toast.error(e?.message ?? "Could not save");
@@ -565,6 +586,11 @@ export function ProjectPageEditorPage() {
               onChange={(e) => {
                 markDirty();
                 setTitle(e.target.value);
+              }}
+              onBlur={() => {
+                // Leaving the box empty keeps the stored title, so put it back
+                // rather than showing a blank header for a page that has a name.
+                if (!title.trim()) setTitle(savedTitleRef.current);
               }}
               className="h-8 max-w-xs border-none bg-transparent px-1 text-base font-extrabold shadow-none focus-visible:ring-1"
             />
