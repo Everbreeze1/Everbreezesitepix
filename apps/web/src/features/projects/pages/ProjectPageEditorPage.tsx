@@ -139,6 +139,12 @@ export function ProjectPageEditorPage() {
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [revoked, setRevoked] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  /**
+   * Optimistic-concurrency token: the row version this editor is working from.
+   * A ref, not state, because the autosave chain reads it outside React's
+   * render cycle and must always see the newest value.
+   */
+  const versionRef = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState<ProjectPhoto[]>([]);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
@@ -231,6 +237,7 @@ export function ProjectPageEditorPage() {
         setShareToken(res.page.share_token);
         setRevoked(!!res.page.revoked_at);
         setUpdatedAt(res.page.updated_at);
+        versionRef.current = res.page.updated_at;
         editor?.commands.setContent(res.page.content_html || "", { emitUpdate: false });
       } catch (e: any) {
         toast.error(e?.message ?? "Could not load page");
@@ -309,16 +316,31 @@ export function ProjectPageEditorPage() {
       .then(async () => {
         setSaving(true);
         try {
-          await updateProjectPage({
+          const res = await updateProjectPage({
             data: {
               pageId,
               title: debouncedTitle,
               contentHtml: debouncedHtml,
               headerHtml: showHeader ? debouncedHeaderHtml : null,
               footerHtml: showFooter ? debouncedFooterHtml : null,
+              /*
+               * The version this editor loaded (or last successfully wrote).
+               * Without it, two people with this page open each write their
+               * whole document over the other's on every autosave and the
+               * loser's work vanishes with no error. The server rejects a
+               * stale write with a 409 instead, which surfaces in the catch
+               * below as a toast telling them to reload.
+               */
+              expectedUpdatedAt: versionRef.current ?? undefined,
             },
           });
-          setUpdatedAt(new Date().toISOString());
+          // Track the server's value, not a locally-generated timestamp — a
+          // guessed one would never match the row and every save after the
+          // first would 409.
+          if (res?.updatedAt) {
+            versionRef.current = res.updatedAt;
+            setUpdatedAt(res.updatedAt);
+          }
           unsavedRef.current = false;
         } catch (e: any) {
           toast.error(e?.message ?? "Could not save");

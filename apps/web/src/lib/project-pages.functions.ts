@@ -79,8 +79,14 @@ export const updateProjectPage = rpcOp<
     contentHtml?: string;
     headerHtml?: string | null;
     footerHtml?: string | null;
+    /**
+     * The `updated_at` this client last saw. Send it and a save that would
+     * overwrite someone else's concurrent edit is rejected with a 409 instead of
+     * silently winning. Omit it to keep last-write-wins.
+     */
+    expectedUpdatedAt?: string;
   },
-  { ok: true }
+  { ok: true; updatedAt?: string }
 >("updateProjectPage");
 
 export const deleteProjectPage = rpcOp<{ pageId: string }, { ok: true }>("deleteProjectPage");

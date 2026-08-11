@@ -494,6 +494,16 @@ export const updateProjectPageInputSchema = z.object({
   contentHtml: z.string().max(2_000_000).optional(),
   headerHtml: z.string().max(50_000).nullable().optional(),
   footerHtml: z.string().max(50_000).nullable().optional(),
+  /**
+   * The `updated_at` the client last saw, used as an optimistic-concurrency
+   * token. When supplied, the write only lands if the row has not moved since.
+   *
+   * Optional on purpose: older clients (and the mobile app) omit it and keep the
+   * previous last-write-wins behaviour rather than breaking. `updated_at` is
+   * safe to use as a version because a trigger maintains it —
+   * `trg_project_pages_updated_at` in 20260729010000_project_pages.sql.
+   */
+  expectedUpdatedAt: z.string().optional(),
 });
 export async function updateProjectPageService(
   ctx: AuthedContext,
@@ -509,12 +519,39 @@ export async function updateProjectPageService(
   if (data.footerHtml !== undefined) patch.footer_html = pillsToTokens(data.footerHtml);
   if (Object.keys(patch).length === 0) return { ok: true };
 
-  const { error } = await (ctx.supabase as any)
-    .from("project_pages")
-    .update(patch)
-    .eq("id", data.pageId);
+  /*
+   * Optimistic concurrency.
+   *
+   * These pages are team-shared documents and the editor autosaves, so two
+   * people with the same page open would each write their whole document back
+   * over the other's — no error, no conflict, the loser's paragraphs simply
+   * gone at the next autosave. Nobody finds out until a client asks where a
+   * section went.
+   *
+   * Scoping the UPDATE by the `updated_at` the client loaded means a stale
+   * write matches zero rows instead of clobbering. Returning the row lets us
+   * tell "you were stale" apart from "that page is gone" and hand the caller a
+   * fresh token for the next save.
+   */
+  let q = (ctx.supabase as any).from("project_pages").update(patch).eq("id", data.pageId);
+  if (data.expectedUpdatedAt) q = q.eq("updated_at", data.expectedUpdatedAt);
+
+  const { data: rows, error } = await q.select("id, updated_at");
   if (error) throw new Error(error.message);
-  return { ok: true };
+
+  const updated = (rows as Array<{ id: string; updated_at: string }> | null) ?? [];
+  if (updated.length === 0) {
+    if (!data.expectedUpdatedAt) throw new Error("Page not found");
+    // The row exists but has moved on — someone else saved first.
+    throw Object.assign(
+      new Error(
+        "This page was changed by someone else while you were editing. Reload to get their changes before saving again.",
+      ),
+      { status: 409 },
+    );
+  }
+
+  return { ok: true, updatedAt: updated[0].updated_at };
 }
 
 export const deleteProjectPageInputSchema = z.object({ pageId: z.string().uuid() });
