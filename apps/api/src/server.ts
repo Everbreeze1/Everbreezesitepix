@@ -38,11 +38,19 @@ const REQUIRED_ENV = [
   "STRIPE_WEBHOOK_SECRET",
 ] as const;
 
-/** Single-feature keys — the rest of the API works without them, so warn only. */
+/**
+ * Single-feature keys — the rest of the API works without them, so warn only.
+ *
+ * GOOGLE_CLOUD_API_KEY (Google Cloud Text-to-Speech, domains/tts/synthesize.ts)
+ * is deliberately not listed: the synthesizeBreezeSpeech RPC has no caller in
+ * the web app yet, and without the key it returns { error: "not_configured" }
+ * rather than throwing. Warning about it on every boot is noise that trains
+ * people to ignore this line. Add it back when narration playback ships.
+ * Walkthrough speech-to-text runs through GEMINI_API_KEY, not this key.
+ */
 const OPTIONAL_ENV = [
-  "GEMINI_API_KEY", // photo + walkthrough AI
+  "GEMINI_API_KEY", // photo + walkthrough AI, incl. speech-to-text
   "GOOGLE_MAPS_API_KEY", // server-side geocoding
-  "GOOGLE_CLOUD_API_KEY", // walkthrough TTS/STT
 ] as const;
 
 function checkEnv(): void {

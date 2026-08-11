@@ -5,7 +5,6 @@ import {
   Users,
   Trash2,
   Copy,
-  Check,
   Crown,
   Shield,
   User as UserIcon,
@@ -477,9 +476,6 @@ function InviteDialog({
 }) {
   const [email, setEmail] = useState("");
   const role: "admin" | "member" = "member";
-  const [lastLink, setLastLink] = useState<string | null>(null);
-  const [lastEmailSent, setLastEmailSent] = useState<boolean>(false);
-  const [copied, setCopied] = useState(false);
   const invite = inviteMember;
 
   const m = useMutation({
@@ -492,16 +488,25 @@ function InviteDialog({
         },
       }),
     onSuccess: (res: any) => {
-      const link = `${window.location.origin}/invite/${res.invite.token}`;
-      setLastLink(link);
-      setLastEmailSent(!!res.emailSent);
       setEmail("");
-      // A non-delivery is a warning, not a success. This used to be toast.success
-      // in both branches, so the screen said the invite had gone out while the
-      // panel underneath said "email not sent".
+      /*
+       * Close on success, and say what happened in the toast.
+       *
+       * The dialog used to stay open with the email field reset to its
+       * placeholder AND a panel showing the raw invite URL — which read as a
+       * second modal appearing on top of the first. The link it showed is also
+       * redundant: the invite now appears in Pending invites immediately, with
+       * its own Copy link and Resend built from the same
+       * `${origin}/invite/${token}`. A non-delivery is still a warning, not a
+       * success, so the toast distinguishes the two.
+       */
       if (res.emailSent) toast.success(`Invite email sent to ${res.invite.email}`);
-      else toast.warning("Couldn't email the invite — share the link below");
+      else
+        toast.warning("Invite created, but the email couldn't be sent", {
+          description: "Use Copy link next to the pending invite to share it directly.",
+        });
       onInvited();
+      onOpenChange(false);
     },
     onError: (e: any) => toast.error(e?.message ?? "Failed to invite"),
   });
@@ -511,11 +516,7 @@ function InviteDialog({
       open={open}
       onOpenChange={(o) => {
         onOpenChange(o);
-        if (!o) {
-          setLastLink(null);
-          setLastEmailSent(false);
-          setEmail("");
-        }
+        if (!o) setEmail("");
       }}
     >
       <DialogContent className="w-[448px] max-w-[448px] gap-0 rounded-[28px] border border-border bg-background p-6 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] [&>button]:hidden">
@@ -569,36 +570,6 @@ function InviteDialog({
               }}
               className="h-[48px] rounded-[14px] border-border bg-card/[0.92] font-manrope text-sm text-foreground shadow-[0_5px_12px_-12px_rgba(16,25,41,0.35)] placeholder:text-muted-foreground"
             />
-
-            {lastLink && (
-              <div className="mt-3 rounded-xl border border-border bg-card/70 p-3">
-                <p className="font-manrope text-xs font-semibold text-primary">
-                  {lastEmailSent
-                    ? "Email sent · backup invite link"
-                    : "Couldn't email this — send the link instead"}
-                </p>
-                <div className="mt-1 flex items-center gap-2">
-                  <code className="flex-1 truncate rounded bg-muted px-2 py-1.5 font-manrope text-xs text-foreground">
-                    {lastLink}
-                  </code>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      navigator.clipboard.writeText(lastLink);
-                      setCopied(true);
-                      toast.success("Link copied");
-                      setTimeout(() => setCopied(false), 1500);
-                    }}
-                  >
-                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </Button>
-                </div>
-                <p className="mt-2 font-manrope text-[11px] text-muted-foreground">
-                  Expires in 14 days.
-                </p>
-              </div>
-            )}
 
             <button
               type="button"
