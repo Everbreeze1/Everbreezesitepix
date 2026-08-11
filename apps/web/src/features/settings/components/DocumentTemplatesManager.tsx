@@ -75,7 +75,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { createPageFromTemplate } from "@/lib/project-pages.functions";
+import { createPageFromTemplate, getDocumentTemplate } from "@/lib/project-pages.functions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -738,6 +738,41 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     });
   }
 
+  /*
+   * Open an EXISTING template through the API rather than from the row we
+   * already hold.
+   *
+   * `load()` reads `document_templates` straight from the browser with
+   * `select("*")`, and the editor renders `editor.body.html` through
+   * `dangerouslySetInnerHTML`. Template bodies are authored HTML that came from
+   * a project page, they are shared across the whole team, and a teammate can
+   * write one directly via PostgREST — so rendering the raw column is stored
+   * XSS against every other member of the team.
+   *
+   * `getDocumentTemplate` runs the same sanitiser the public page share uses
+   * (apps/api sanitize-page-html.ts, covered by tests/sanitize-page-html.test.ts)
+   * and returns cleaned HTML. Reusing it beats adding a second, unproven
+   * sanitiser to the client — and it disarms rows that are already poisoned,
+   * which a write-side fix alone would not.
+   *
+   * `style` and `description` still come from the local row: they are plain
+   * strings the API does not return, and neither is ever rendered as HTML.
+   */
+  async function openForEdit(t: DocumentTemplate) {
+    const local = parseBody(t.body);
+    try {
+      const fresh = await getDocumentTemplate({ data: { templateId: t.id } });
+      setEditor({
+        template: t,
+        name: t.name,
+        body: { ...local, html: (fresh as { html?: string })?.html ?? "" },
+      });
+    } catch (e: any) {
+      // Never fall back to the unsanitised local copy — that is the bug.
+      toast.error(e?.message ?? "Could not open this template");
+    }
+  }
+
   async function loadSampleSiteLogs() {
     const sampleKeys: DocStyle[] = ["sitelog_basic", "sitelog_walkthrough", "sitelog_hvac"];
     const rows = sampleKeys
@@ -943,13 +978,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() =>
-                        setEditor({
-                          template: t,
-                          name: t.name,
-                          body: parseBody(t.body),
-                        })
-                      }
+                      onClick={() => void openForEdit(t)}
                     >
                       <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
                     </Button>

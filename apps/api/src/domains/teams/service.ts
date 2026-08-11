@@ -628,14 +628,50 @@ export async function acceptInviteService(ctx: AuthedContext, data: any) {
   const claimed = await claimInvite(supabaseAdmin, data.token, userId);
   if (!claimed) throw new Error("This invite has already been used.");
 
-  const { error: insErr } = await supabaseAdmin.from("team_members" as any).insert({
-    team_id: teamId,
-    user_id: userId,
-    role: (invite as any).role,
-  });
-  if (insErr) {
+  const { data: inserted, error: insErr } = await supabaseAdmin
+    .from("team_members" as any)
+    .insert({
+      team_id: teamId,
+      user_id: userId,
+      role: (invite as any).role,
+    })
+    .select("id")
+    .single();
+  if (insErr || !inserted) {
     await releaseInviteClaim(supabaseAdmin, (claimed as any).id);
-    throw new Error(insErr.message);
+    throw new Error(insErr?.message ?? "Could not join the team.");
+  }
+
+  /*
+   * Confirm the seat AFTER taking it.
+   *
+   * The cap check above is check-then-act: two people accepting two different
+   * invites at the same moment both read `memberCount` before either inserts,
+   * so both pass and the team ends up over its paid seat count. `claimInvite`
+   * only makes a single *token* single-use; it does nothing about two distinct
+   * tokens racing.
+   *
+   * Re-counting after the insert closes that: whoever ends up beyond the cap
+   * sees it and gives the seat back. Concurrent accepts can both observe an
+   * over-cap count and both roll back — which errs toward refusing a seat
+   * rather than selling one that wasn't paid for, and the invite is released so
+   * either can simply try again.
+   *
+   * The real fix is a database constraint (an exclusion constraint, or a
+   * trigger counting rows per team); this is what is available without a
+   * migration.
+   */
+  const { count: finalCount } = await supabaseAdmin
+    .from("team_members" as any)
+    .select("id", { count: "exact", head: true })
+    .eq("team_id", teamId);
+  if ((finalCount ?? 0) > cap) {
+    await supabaseAdmin
+      .from("team_members" as any)
+      .delete()
+      .eq("id", (inserted as any).id);
+    await releaseInviteClaim(supabaseAdmin, (claimed as any).id);
+    throw new Error("This team is full. Ask the owner to upgrade or free a seat.");
   }
 
   await insertNotification(supabaseAdmin, {
@@ -788,12 +824,32 @@ export async function acceptInviteSignupService(data: any) {
     }
 
     if (!existingMembership) {
-      const { error: insErr } = await supabaseAdmin.from("team_members" as any).insert({
-        team_id: teamId,
-        user_id: userId,
-        role: (invite as any).role,
-      });
-      if (insErr) throw new Error(insErr.message);
+      const { data: inserted, error: insErr } = await supabaseAdmin
+        .from("team_members" as any)
+        .insert({
+          team_id: teamId,
+          user_id: userId,
+          role: (invite as any).role,
+        })
+        .select("id")
+        .single();
+      if (insErr || !inserted) throw new Error(insErr?.message ?? "Could not join the team.");
+
+      // Confirm the seat after taking it — same check-then-act race as
+      // acceptInviteService, and the same compensating rollback. Throwing here
+      // lands in the catch below, which releases the invite so the person can
+      // retry once a seat frees up.
+      const { count: finalCount } = await supabaseAdmin
+        .from("team_members" as any)
+        .select("id", { count: "exact", head: true })
+        .eq("team_id", teamId);
+      if ((finalCount ?? 0) > cap) {
+        await supabaseAdmin
+          .from("team_members" as any)
+          .delete()
+          .eq("id", (inserted as any).id);
+        throw new Error("This team is full. Ask the owner to upgrade or free a seat.");
+      }
     }
   } catch (err) {
     /*

@@ -138,24 +138,52 @@ export function MapPage() {
       .select("id, name, status, street, city, state, zip, latitude, longitude");
     const all = ((data as ProjectPin[]) ?? []).filter(hasAddress);
 
-    // Load per-project stats (photo count, latest activity, first thumbnail)
-    const { data: photoRows } = await supabase
-      .from("photos")
-      .select("project_id, image_url, created_at, archived")
-      .eq("archived", false)
-      .order("created_at", { ascending: false });
+    /*
+     * Per-project stats, WITHOUT downloading the tenant's photo table.
+     *
+     * This used to be a single unbounded `select("project_id, image_url,
+     * created_at, archived")` over every non-archived photo, on every visit to
+     * the map, purely to derive three numbers per project. On a real contractor
+     * account — thousands of photos — that is megabytes of JSON transferred and
+     * parsed to render a handful of pins.
+     *
+     * Two bounded queries per project instead: the first returns the exact count
+     * in the Content-Range header plus the newest row (for last activity), the
+     * second the newest row that actually has a thumbnail. Both transfer at most
+     * one row, so the payload is now O(projects) rather than O(photos) — and
+     * projects are what the map is already bounded by.
+     *
+     * A single GROUP BY would be better still, but PostgREST cannot aggregate
+     * without a database view, and that needs a migration.
+     */
     const agg: Record<string, ProjectStats> = {};
-    for (const row of (photoRows ?? []) as Array<{
-      project_id: string;
-      image_url: string | null;
-      created_at: string;
-    }>) {
-      const cur = agg[row.project_id] ?? { photoCount: 0, lastActivity: null, thumbUrl: null };
-      cur.photoCount += 1;
-      if (!cur.lastActivity || row.created_at > cur.lastActivity) cur.lastActivity = row.created_at;
-      if (!cur.thumbUrl && row.image_url) cur.thumbUrl = row.image_url;
-      agg[row.project_id] = cur;
-    }
+    await Promise.all(
+      all.map(async (p) => {
+        const [latest, thumb] = await Promise.all([
+          supabase
+            .from("photos")
+            .select("created_at", { count: "exact" })
+            .eq("project_id", p.id)
+            .eq("archived", false)
+            .order("created_at", { ascending: false })
+            .limit(1),
+          supabase
+            .from("photos")
+            .select("image_url")
+            .eq("project_id", p.id)
+            .eq("archived", false)
+            .not("image_url", "is", null)
+            .order("created_at", { ascending: false })
+            .limit(1),
+        ]);
+        agg[p.id] = {
+          photoCount: latest.count ?? 0,
+          lastActivity:
+            (latest.data as Array<{ created_at: string }> | null)?.[0]?.created_at ?? null,
+          thumbUrl: (thumb.data as Array<{ image_url: string | null }> | null)?.[0]?.image_url ?? null,
+        };
+      }),
+    );
 
     const missing = all.filter((p) => p.latitude == null || p.longitude == null);
     let resolved = all;

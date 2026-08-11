@@ -2,7 +2,7 @@ import { z } from "zod";
 import { chatEndpoint, transcriptionEndpoint } from "../../lib/ai-provider";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
-import { assertAutoReportAllowed, recordAutoReportGeneration } from "./auto-report-quota";
+import { releaseAutoReport, reserveAutoReport } from "./auto-report-quota";
 
 
 const MODEL = "google/gemini-2.5-flash";
@@ -1031,7 +1031,17 @@ export async function generateWalkthroughReportService(ctx: AuthedContext, data:
     // Team unlimited). Checked before any LLM work so an over-quota caller
     // never burns a request, and after the ownership check so the error can't
     // be used to probe for walkthroughs the caller doesn't own.
-    const quota = await assertAutoReportAllowed(ctx.supabase, userId);
+    //
+    // The slot is RESERVED here rather than recorded at the end: the model call
+    // below takes tens of seconds, and a plain check-then-record let concurrent
+    // requests all pass the same count. Released in the catch if generation
+    // fails, so a failed run still costs nothing.
+    const { quota, reservationId } = await reserveAutoReport(
+      ctx.supabase,
+      data.walkthroughId,
+      userId,
+    );
+    try {
 
       const { data: links } = await supabaseAdmin
       .from("walkthrough_photos" as any)
@@ -1256,16 +1266,22 @@ ${hasSpeech
       })
       .eq("id", data.walkthroughId);
 
-    // Meter only once the report is actually saved, so a failed run never
-    // costs the user quota. Note this counts deterministic-fallback reports
-    // too (AI unavailable / key missing): the user still received a generated
-    // report, and not charging for it would let a degraded provider hand out
-    // unlimited free generations.
-    await recordAutoReportGeneration(data.walkthroughId, userId, quota.tier);
+      // The reservation taken above IS the meter — nothing more to record. It
+      // deliberately counts deterministic-fallback reports too (AI unavailable
+      // / key missing): the user still received a generated report, and not
+      // charging for it would let a degraded provider hand out unlimited free
+      // generations.
+      void quota;
 
-    console.log(`[walkthrough] Success - ID: ${data.walkthroughId}`);
-    console.log("[walkthrough] server report generation saved", { walkthroughId: data.walkthroughId, userId });
-    return { markdown };
+      console.log(`[walkthrough] Success - ID: ${data.walkthroughId}`);
+      console.log("[walkthrough] server report generation saved", { walkthroughId: data.walkthroughId, userId });
+      return { markdown };
+    } catch (err) {
+      // Generation failed, so the slot was never consumed — hand it back rather
+      // than charging for a report the user never received.
+      await releaseAutoReport(reservationId);
+      throw err;
+    }
 }
 
 const tokenSchema = z.object({

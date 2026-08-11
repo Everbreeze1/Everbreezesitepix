@@ -75,23 +75,71 @@ export async function assertAutoReportAllowed(
 }
 
 /**
- * Records one consumed Auto Report. Best-effort: a ledger write failure must
- * never discard a report the user already waited for and that is already saved
- * to the walkthrough — the cost of under-counting one generation is far lower
- * than handing back an error for work that actually succeeded.
+ * Take the slot BEFORE spending the LLM request, then confirm it was really
+ * available.
+ *
+ * `assertAutoReportAllowed` on its own is check-then-act with a 10-60 second
+ * model call in the middle, so N concurrent requests all counted the same
+ * `used` value, all passed, and all generated — a Pro account capped at 100
+ * could run well past it just by clicking twice. Writing the ledger row first
+ * and re-counting afterwards makes the row itself the reservation: whoever ends
+ * up beyond the limit releases theirs and is refused.
+ *
+ * Returns the reservation id so the caller can release it if generation fails —
+ * nobody should burn quota on a report they never received.
  */
-export async function recordAutoReportGeneration(
+export async function reserveAutoReport(
+  supabase: AuthedContext["supabase"],
   walkthroughId: string,
   userId: string,
-  tier: BillingTier,
-): Promise<void> {
-  const { error } = await getSupabaseAdmin()
+): Promise<{ quota: AutoReportQuota; reservationId: string | null }> {
+  const quota = await assertAutoReportAllowed(supabase, userId);
+
+  const { data: row, error } = await getSupabaseAdmin()
     .from("auto_report_generations" as any)
-    .insert({ walkthrough_id: walkthroughId, created_by: userId, plan: tier });
-  if (error) {
-    console.warn("[walkthrough] failed to record Auto Report usage", {
+    .insert({ walkthrough_id: walkthroughId, created_by: userId, plan: quota.tier })
+    .select("id")
+    .single();
+
+  // Ledger unavailable: let the generation through rather than block paid work
+  // on a bookkeeping table. Under-counting one report beats refusing a report
+  // the customer is entitled to — the same trade-off the old code made.
+  if (error || !row) {
+    console.warn("[walkthrough] failed to reserve Auto Report usage", {
       walkthroughId,
       userId,
+      error: error?.message,
+    });
+    return { quota, reservationId: null };
+  }
+
+  // `auto_report_generations` is absent from the generated types, so the row
+  // shape has to be asserted through `unknown` — same gap as elsewhere.
+  const reservationId = (row as unknown as { id: string }).id;
+  if (quota.limit !== Number.POSITIVE_INFINITY) {
+    const after = await getAutoReportQuota(supabase, userId);
+    if (after.used > quota.limit) {
+      await releaseAutoReport(reservationId);
+      throw new Error(
+        `You've used all ${PRO_AUTO_REPORTS_PER_MONTH} Auto Reports included with Pro this month. ` +
+          "Upgrade to Team for unlimited Auto Reports, or wait until your quota resets next month.",
+      );
+    }
+  }
+
+  return { quota, reservationId };
+}
+
+/** Hand a reserved slot back — generation failed, so it was never consumed. */
+export async function releaseAutoReport(reservationId: string | null): Promise<void> {
+  if (!reservationId) return;
+  const { error } = await getSupabaseAdmin()
+    .from("auto_report_generations" as any)
+    .delete()
+    .eq("id", reservationId);
+  if (error) {
+    console.warn("[walkthrough] failed to release Auto Report reservation", {
+      reservationId,
       error: error.message,
     });
   }
