@@ -72,7 +72,14 @@ async function sendInviteEmail(opts: {
   token: string;
 }): Promise<{ sent: boolean; via: "resend" | null; reason: string | null }> {
   try {
-    await sendTeamInviteEmail({ to: opts.to, acceptUrl: opts.acceptUrl });
+    await sendTeamInviteEmail({
+      to: opts.to,
+      acceptUrl: opts.acceptUrl,
+      teamName: opts.teamName,
+      inviterName: opts.inviterName,
+      // Matches the 14-day expiry `inviteMemberService` stamps on the row.
+      expiresInDays: 14,
+    });
     return { sent: true, via: "resend", reason: null };
   } catch (e) {
     const reason = e instanceof Error ? e.message : "send_failed";

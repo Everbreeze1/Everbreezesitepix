@@ -37,7 +37,11 @@ import {
   Type as TypeIcon,
   Copy as CopyIcon,
   Users,
+  Download,
 } from "lucide-react";
+import { formatBytes } from "@/hooks/use-storage-usage";
+import { downloadBlobFile } from "@/lib/download-file";
+import { isOverUploadLimit, overUploadLimitMessage } from "@/lib/upload-limits";
 import { relativeTime, cleanCaption } from "@sitepix/shared";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EditProjectDialog } from "@/features/projects/components/EditProjectDialog";
@@ -140,6 +144,19 @@ const TIER_LABEL: Record<string, string> = {
 const VIDEO_MAX_SECONDS: Record<string, number> = { starter: 300, pro: 600, team: 1200 };
 const WALKTHROUGH_MAX_SECONDS: Record<string, number> = { pro: 600, team: 1200 };
 
+/**
+ * Ceiling on a recording sent for transcription. The blob is base64-encoded
+ * into a JSON body, which inflates it by 4/3, so 12.5 MB arrives as ~16.7 MB —
+ * already close to the model's inline-data request limit. Raising this number
+ * does not buy longer transcripts; it just moves the failure to the provider.
+ *
+ * The audio sidecar is 8 kHz 16-bit mono PCM (~16 KB/s), so it fits for about
+ * 13 minutes — enough for a 600s walkthrough but not the 1200s Team cap. Those
+ * get no transcript, and the caller now says so instead of leaving the report
+ * mysteriously empty.
+ */
+const MAX_TRANSCRIPTION_BYTES = 12_500_000;
+
 export type ProjectDetailSearch = {
   camera?: 1;
   walkthrough?: 1;
@@ -217,6 +234,18 @@ export function ProjectDetailPage() {
       video_signed_url: string | null;
     }>
   >([]);
+  /**
+   * A walkthrough recording whose upload failed, held so it can be retried or
+   * downloaded. Memory-only and deliberately so — persisting tens of megabytes
+   * to IndexedDB is a bigger change than this needs — which is why the card and
+   * the unload prompt both push the user to act before navigating away.
+   */
+  const [pendingVideoUpload, setPendingVideoUpload] = useState<{
+    walkthroughId: string;
+    blob: Blob;
+    mimeType: string;
+  } | null>(null);
+  const [retryingVideo, setRetryingVideo] = useState(false);
   const [videos, setVideos] = useState<
     Array<{
       id: string;
@@ -1079,10 +1108,14 @@ export function ProjectDetailPage() {
       const { error: upErr } = await supabase.storage
         .from("site-videos")
         .upload(path, file, { contentType: file.type, upsert: false });
-      if (upErr) {
-        toast.error(upErr.message);
-        return;
-      }
+      /*
+       * Throw instead of swallowing. VideoRecorder catches a rejected onSave
+       * and returns to its preview with the blob intact, so the user gets a
+       * retry and a download; returning quietly let it call onClose() and drop
+       * the only copy of the footage. Size is the usual cause — a full-length
+       * recording clears the storage upload limit on every tier.
+       */
+      if (upErr) throw new Error(upErr.message);
       const { error: insErr } = await supabase.from("videos").insert({
         project_id: projectId,
         uploaded_by: user.id,
@@ -1094,13 +1127,12 @@ export function ProjectDetailPage() {
         mime_type: file.type,
       } as any);
       if (insErr) {
-        toast.error(insErr.message);
         // Reclaim the blob, same as the photo paths. A video the DB never
         // recorded is unreachable forever — every delete path keys off
         // `videos.storage_path` — and videos are the largest objects the app
         // stores, so a leaked one is the most expensive kind to strand.
         void supabase.storage.from("site-videos").remove([path]);
-        return;
+        throw new Error(insErr.message);
       }
       toast.success("Video saved to project");
       await load();
@@ -1368,6 +1400,125 @@ export function ProjectDetailPage() {
     return photoId;
   };
 
+  /**
+   * Upload a walkthrough recording and point its row at the stored object.
+   *
+   * Throws on failure so both callers — the initial save and the manual retry —
+   * can hold onto the blob. That matters more here than anywhere else in the
+   * app: the recording only ever exists in memory, so a swallowed error is an
+   * unrecoverable loss of someone's site visit.
+   */
+  const uploadWalkthroughVideo = async (
+    walkthroughId: string,
+    blob: Blob,
+    mimeType: string,
+  ): Promise<{ videoPath: string; signedUrl: string | null }> => {
+    if (!user) throw new Error("Not signed in");
+    const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+    const videoPath = `${user.id}/${projectId}/walkthroughs/${walkthroughId}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("site-videos")
+      .upload(videoPath, blob, { contentType: mimeType, upsert: true });
+    if (upErr) throw upErr;
+
+    const { error: directVideoErr } = await supabase
+      .from("walkthroughs" as any)
+      .update({ video_path: videoPath, video_mime_type: mimeType } as any)
+      .eq("id", walkthroughId);
+    if (directVideoErr)
+      console.warn("[walkthrough] direct video_path update failed; trying server update", directVideoErr, {
+        wid: walkthroughId,
+        videoPath,
+      });
+    let serverVideoSaved = false;
+    try {
+      await updateWalkVideo({
+        data: { walkthroughId, videoPath, videoMimeType: mimeType },
+      });
+      serverVideoSaved = true;
+    } catch (serverVideoErr) {
+      console.warn("[walkthrough] video_path server update failed after direct save", serverVideoErr, {
+        wid: walkthroughId,
+        videoPath,
+      });
+    }
+    if (directVideoErr && !serverVideoSaved) throw directVideoErr;
+
+    const { data: signedVideo, error: signErr } = await supabase.storage
+      .from("site-videos")
+      .createSignedUrl(videoPath, 60 * 60);
+    if (signErr)
+      console.warn("[walkthrough] immediate video signing failed", signErr, {
+        wid: walkthroughId,
+        videoPath,
+      });
+    const signedUrl = signedVideo?.signedUrl ?? null;
+    setWalkthroughs((prev) =>
+      prev.map((w) =>
+        w.id === walkthroughId
+          ? { ...w, video_path: videoPath, video_mime_type: mimeType, video_signed_url: signedUrl }
+          : w,
+      ),
+    );
+    return { videoPath, signedUrl };
+  };
+
+  const pendingVideoName = () =>
+    `walkthrough-${pendingVideoUpload?.walkthroughId ?? "recording"}.${
+      pendingVideoUpload?.mimeType.includes("mp4") ? "mp4" : "webm"
+    }`;
+
+  const retryPendingVideoUpload = async () => {
+    if (!pendingVideoUpload || retryingVideo) return;
+    const { walkthroughId, blob, mimeType } = pendingVideoUpload;
+    setRetryingVideo(true);
+    try {
+      await uploadWalkthroughVideo(walkthroughId, blob, mimeType);
+      setPendingVideoUpload(null);
+      toast.success("Video uploaded");
+      void load({ silent: true });
+    } catch (e: any) {
+      console.error("[walkthrough] video upload retry failed", e, { wid: walkthroughId });
+      toast.error(
+        `Still couldn't upload: ${e?.message ?? "unknown error"}. Download the recording so it isn't lost.`,
+      );
+    } finally {
+      setRetryingVideo(false);
+    }
+  };
+
+  const downloadPendingVideo = () => {
+    if (!pendingVideoUpload) return;
+    downloadBlobFile(pendingVideoUpload.blob, pendingVideoName());
+  };
+
+  const discardPendingVideo = async () => {
+    if (!pendingVideoUpload) return;
+    const ok = await confirm({
+      title: "Discard this recording?",
+      description:
+        "This video was never uploaded and isn't saved anywhere else. Discarding it can't be undone.",
+      confirmText: "Discard",
+      variant: "destructive",
+    });
+    if (ok) setPendingVideoUpload(null);
+  };
+
+  /*
+   * A held recording lives in memory only, so a reload or a closed tab loses
+   * it. Browsers show their own generic wording here, but the prompt is the
+   * last chance to go back and hit retry or download.
+   */
+  useEffect(() => {
+    if (!pendingVideoUpload) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [pendingVideoUpload]);
+
   const onWalkthroughFinish = async (data: {
     mediaBlob: Blob | null;
     mediaMimeType: string | null;
@@ -1591,78 +1742,44 @@ export function ProjectDetailPage() {
       }
     }
 
-    let videoPath: string | null = null;
-    let signedVideoUrl: string | null = null;
     if (data.mediaBlob && data.mediaMimeType) {
+      const blob = data.mediaBlob;
+      const mimeType = data.mediaMimeType;
+      // Advisory only: the storage limit is an assumption until a deploy sets
+      // VITE_MAX_UPLOAD_MB, so say something and still make the attempt.
+      if (isOverUploadLimit(blob.size)) toast.warning(overUploadLimitMessage(blob.size));
       try {
         devLog("[walkthrough] Uploading video", {
           wid,
           stage: "before-close",
-          bytes: data.mediaBlob.size,
-          mime: data.mediaMimeType,
+          bytes: blob.size,
+          mime: mimeType,
         });
-        const ext = data.mediaMimeType.includes("mp4") ? "mp4" : "webm";
-        videoPath = `${user.id}/${projectId}/walkthroughs/${wid}.${ext}`;
-        const { error: upErr } = await supabase.storage
-          .from("site-videos")
-          .upload(videoPath, data.mediaBlob, { contentType: data.mediaMimeType, upsert: true });
-        if (upErr) throw upErr;
-
-        const { error: directVideoErr } = await supabase
-          .from("walkthroughs" as any)
-          .update({ video_path: videoPath, video_mime_type: data.mediaMimeType } as any)
-          .eq("id", wid);
-        if (directVideoErr)
-          console.warn(
-            "[walkthrough] direct video_path update failed; trying server update",
-            directVideoErr,
-            { wid, videoPath },
-          );
-        let serverVideoSaved = false;
-        try {
-          await updateWalkVideo({
-            data: { walkthroughId: wid, videoPath, videoMimeType: data.mediaMimeType },
-          });
-          serverVideoSaved = true;
-        } catch (serverVideoErr) {
-          console.warn(
-            "[walkthrough] video_path server update failed after direct save",
-            serverVideoErr,
-            { wid, videoPath },
-          );
-        }
-        if (directVideoErr && !serverVideoSaved) throw directVideoErr;
-
-        const { data: signedVideo, error: signErr } = await supabase.storage
-          .from("site-videos")
-          .createSignedUrl(videoPath, 60 * 60);
-        if (signErr)
-          console.warn("[walkthrough] immediate video signing failed", signErr, { wid, videoPath });
-        signedVideoUrl = signedVideo?.signedUrl ?? null;
-        setWalkthroughs((prev) =>
-          prev.map((w) =>
-            w.id === wid
-              ? {
-                  ...w,
-                  video_path: videoPath,
-                  video_mime_type: data.mediaMimeType,
-                  video_signed_url: signedVideoUrl,
-                }
-              : w,
-          ),
-        );
+        const { videoPath, signedUrl } = await uploadWalkthroughVideo(wid, blob, mimeType);
+        setPendingVideoUpload((p) => (p?.walkthroughId === wid ? null : p));
         devLog("[walkthrough] video uploaded and linked", {
           wid,
           videoPath,
-          hasSignedUrl: !!signedVideoUrl,
+          hasSignedUrl: !!signedUrl,
         });
       } catch (videoErr: any) {
         console.error("[walkthrough] video upload/link failed before close", videoErr, { wid });
-        toast.warning(
-          `Walkthrough card is saved, but video upload failed: ${videoErr?.message ?? "unknown error"}`,
+        /*
+         * Hold the blob instead of dropping it. The recorder is about to close
+         * and this footage exists nowhere else, so the Walkthroughs tab renders
+         * a retry + download card for it. Previously this path just warned and
+         * the recording was gone.
+         */
+        setPendingVideoUpload({ walkthroughId: wid, blob, mimeType });
+        toast.error(
+          "Walkthrough saved, but the video didn't upload. It's still held in this tab — retry or download it before you leave.",
+          {
+            // Never auto-dismiss: this is the only prompt standing between the
+            // user and a silently discarded recording.
+            duration: Infinity,
+            action: { label: "Show", onClick: () => setPanel("walkthroughs") },
+          },
         );
-        videoPath = null;
-        signedVideoUrl = null;
       }
     } else {
       devLog("[walkthrough] Uploading video", {
@@ -1714,11 +1831,24 @@ export function ProjectDetailPage() {
         data.audioBlob && data.audioMimeType ? data.audioBlob : data.mediaBlob;
       const transcriptionMime =
         data.audioBlob && data.audioMimeType ? data.audioMimeType : data.mediaMimeType;
-      if (
+      if (transcriptionBlob && transcriptionBlob.size > MAX_TRANSCRIPTION_BYTES) {
+        // Previously silent: the walkthrough saved with an empty transcript and
+        // nothing anywhere told the user why.
+        console.warn("[walkthrough] recording too large to transcribe", {
+          wid,
+          bytes: transcriptionBlob.size,
+          max: MAX_TRANSCRIPTION_BYTES,
+        });
+        toast.warning(
+          `This walkthrough is too long to transcribe automatically (${formatBytes(
+            transcriptionBlob.size,
+          )} of audio). The recording and its photos are saved, but the written summary will be missing.`,
+        );
+      } else if (
         transcriptionBlob &&
         transcriptionMime &&
         transcriptionBlob.size > 0 &&
-        transcriptionBlob.size <= 12_500_000
+        transcriptionBlob.size <= MAX_TRANSCRIPTION_BYTES
       ) {
         try {
           devLog("[walkthrough] Transcribing recording", {
@@ -1740,7 +1870,7 @@ export function ProjectDetailPage() {
             data.audioBlob &&
             data.mediaBlob &&
             data.mediaMimeType &&
-            data.mediaBlob.size <= 12_500_000
+            data.mediaBlob.size <= MAX_TRANSCRIPTION_BYTES
           ) {
             devLog(
               "[walkthrough] Audio sidecar had no transcript; retrying transcription from saved video",
@@ -1766,7 +1896,7 @@ export function ProjectDetailPage() {
             data.audioBlob &&
             data.mediaBlob &&
             data.mediaMimeType &&
-            data.mediaBlob.size <= 12_500_000
+            data.mediaBlob.size <= MAX_TRANSCRIPTION_BYTES
           ) {
             try {
               devLog(
@@ -2488,6 +2618,66 @@ export function ProjectDetailPage() {
               Record walkthrough
             </Button>
           </div>
+
+          {pendingVideoUpload && (
+            <div
+              role="alert"
+              className="mt-6 flex flex-wrap items-start justify-between gap-4 rounded-3xl border border-amber-500/40 bg-amber-500/10 p-5"
+            >
+              <div className="min-w-[16rem] flex-1">
+                <p className="flex items-center gap-2 text-sm font-bold text-foreground">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                  Video didn&apos;t upload
+                </p>
+                <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
+                  The {formatBytes(pendingVideoUpload.blob.size)} recording for{" "}
+                  <span className="font-semibold text-foreground">
+                    {walkthroughs.find((w) => w.id === pendingVideoUpload.walkthroughId)?.title ??
+                      "this walkthrough"}
+                  </span>{" "}
+                  is held in this browser tab and nowhere else.{" "}
+                  {isOverUploadLimit(pendingVideoUpload.blob.size)
+                    ? "It is over the storage upload limit, so a retry will probably fail again — download it to keep a copy."
+                    : "Retry the upload, or download it to keep a copy."}{" "}
+                  Leaving this page discards it.
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => void retryPendingVideoUpload()}
+                  disabled={retryingVideo}
+                  className="h-8 rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground hover:bg-primary/90"
+                >
+                  {retryingVideo ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {retryingVideo ? "Uploading…" : "Retry upload"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={downloadPendingVideo}
+                  className="h-8 rounded-lg px-4 text-xs font-bold"
+                >
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Download
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => void discardPendingVideo()}
+                  disabled={retryingVideo}
+                  className="h-8 rounded-lg px-3 text-xs font-bold text-muted-foreground"
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  Discard
+                </Button>
+              </div>
+            </div>
+          )}
 
           {walkthroughs.length === 0 ? (
             <div className="mt-6 flex flex-col items-center rounded-3xl border border-dashed border-border bg-card/60 p-12 text-center">

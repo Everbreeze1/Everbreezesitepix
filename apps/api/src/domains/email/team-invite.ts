@@ -23,18 +23,27 @@ const ROOT_DOMAIN = "everbreezesitepix.com";
  * (apps/web/src/routes/invite.$token.tsx). So this mail is a complete path on
  * its own, not a degraded one.
  */
-export async function sendTeamInviteEmail(opts: { to: string; acceptUrl: string }): Promise<void> {
+export async function sendTeamInviteEmail(opts: {
+  to: string;
+  acceptUrl: string;
+  teamName?: string;
+  inviterName?: string;
+  expiresInDays?: number;
+}): Promise<void> {
   const element = React.createElement(InviteEmail, {
     siteName: SITE_NAME,
     siteUrl: `https://${ROOT_DOMAIN}`,
     confirmationUrl: opts.acceptUrl,
+    teamName: opts.teamName,
+    inviterName: opts.inviterName,
+    expiresInDays: opts.expiresInDays,
   });
   const html = await render(element);
   const text = await render(element, { plainText: true });
-  await sendEmail({
-    to: opts.to,
-    subject: `You've been invited to ${SITE_NAME}`,
-    html,
-    text,
-  });
+  // Naming the team in the subject is what makes this read as a real invitation
+  // rather than a generic system mail in a crowded inbox.
+  const subject = opts.teamName
+    ? `You've been invited to join ${opts.teamName} on ${SITE_NAME}`
+    : `You've been invited to ${SITE_NAME}`;
+  await sendEmail({ to: opts.to, subject, html, text });
 }

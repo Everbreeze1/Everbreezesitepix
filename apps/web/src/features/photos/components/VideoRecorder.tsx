@@ -2,12 +2,25 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Loader2, Square, Video, X, Save, RefreshCw, Lock } from "lucide-react";
+import {
+  AlertTriangle,
+  Download,
+  Loader2,
+  Square,
+  Video,
+  X,
+  Save,
+  RefreshCw,
+  Lock,
+} from "lucide-react";
+import { formatBytes } from "@/hooks/use-storage-usage";
+import { downloadBlobFile } from "@/lib/download-file";
+import { isOverUploadLimit, overUploadLimitMessage } from "@/lib/upload-limits";
 
 interface VideoRecorderProps {
   open: boolean;
   onClose: () => void;
-  /** Max video length in seconds (Starter: 300, Team: 600). */
+  /** Max video length in seconds (Starter: 300, Pro: 600, Team: 1200). */
   maxSeconds: number;
   /** Whether the user has access (active sub/trial). */
   canRecord: boolean;
@@ -44,6 +57,12 @@ export function VideoRecorder({
   const [recorded, setRecorded] = useState<{ blob: Blob; url: string; duration: number } | null>(
     null,
   );
+  /**
+   * Set when `onSave` rejects. The preview stays open with the blob intact, so
+   * the recording survives a failed upload and can be retried or downloaded —
+   * it exists nowhere else.
+   */
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const stopAll = useCallback(() => {
     if (timerRef.current) window.clearInterval(timerRef.current);
@@ -67,6 +86,7 @@ export function VideoRecorder({
         if (r?.url) URL.revokeObjectURL(r.url);
         return null;
       });
+      setSaveError(null);
     }
     return () => {
       if (!open) stopAll();
@@ -201,22 +221,33 @@ export function VideoRecorder({
   const retake = () => {
     if (recorded?.url) URL.revokeObjectURL(recorded.url);
     setRecorded(null);
+    setSaveError(null);
     setElapsed(0);
     setPhase("idle");
+  };
+
+  const recordingFilename = () =>
+    `sitepix-video-${Date.now()}.${recorded?.blob.type.includes("mp4") ? "mp4" : "webm"}`;
+
+  const downloadRecording = () => {
+    if (!recorded) return;
+    downloadBlobFile(recorded.blob, recordingFilename());
   };
 
   const saveRecording = async () => {
     if (!recorded) return;
     setPhase("saving");
+    setSaveError(null);
     try {
-      const ext = recorded.blob.type.includes("mp4") ? "mp4" : "webm";
-      const file = new File([recorded.blob], `sitepix-video-${Date.now()}.${ext}`, {
-        type: recorded.blob.type,
-      });
+      const file = new File([recorded.blob], recordingFilename(), { type: recorded.blob.type });
       await onSave(file, { durationSeconds: recorded.duration, transcript: "" });
       onClose();
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to save video");
+      const message = e?.message ?? "Failed to save video";
+      toast.error(message);
+      // Back to preview rather than closing: `recorded` is the only copy of
+      // this footage, so the user keeps a retry and a download.
+      setSaveError(message);
       setPhase("preview");
     }
   };
@@ -335,6 +366,21 @@ export function VideoRecorder({
             )}
             {phase === "preview" && recorded && (
               <div className="flex flex-col items-center gap-3">
+                {(saveError || isOverUploadLimit(recorded.blob.size)) && (
+                  <div
+                    className={`flex w-full max-w-md items-start gap-2 rounded-xl p-3 text-left text-[11px] leading-relaxed ${
+                      saveError ? "bg-red-500/25 text-red-50" : "bg-amber-500/20 text-amber-50"
+                    }`}
+                    role="alert"
+                  >
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      {saveError
+                        ? `Upload failed: ${saveError} Your recording is still here — retry, or download it before closing.`
+                        : overUploadLimitMessage(recorded.blob.size)}
+                    </span>
+                  </div>
+                )}
                 <div className="flex w-full max-w-md gap-2">
                   <Button
                     variant="secondary"
@@ -344,14 +390,24 @@ export function VideoRecorder({
                     <RefreshCw className="mr-2 h-4 w-4" /> Re-record
                   </Button>
                   <Button
+                    variant="secondary"
+                    onClick={downloadRecording}
+                    aria-label="Download recording"
+                    title="Download recording"
+                    className="bg-white/10 px-3 text-white hover:bg-white/20"
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button
                     onClick={saveRecording}
                     className="flex-1 bg-white text-black hover:bg-white/90"
                   >
-                    <Save className="mr-2 h-4 w-4" /> Save to project
+                    <Save className="mr-2 h-4 w-4" />{" "}
+                    {saveError ? "Retry upload" : "Save to project"}
                   </Button>
                 </div>
                 <div className="text-[11px] text-white/60">
-                  {Math.round(recorded.blob.size / 1024 / 1024)} MB · {fmtTime(recorded.duration)}
+                  {formatBytes(recorded.blob.size)} · {fmtTime(recorded.duration)}
                 </div>
               </div>
             )}
