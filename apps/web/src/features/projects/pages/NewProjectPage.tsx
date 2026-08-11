@@ -226,7 +226,10 @@ export function NewProjectPage() {
   };
 
   const applyTemplate = async (projectId: string, templateId: string) => {
-    await applyProjectBlueprint({
+    // Returned, not discarded: a per-item failure comes back 200 with a `failed`
+    // list rather than throwing, so dropping the result meant a blueprint could
+    // half-apply under an unqualified "Project created".
+    return await applyProjectBlueprint({
       data: {
         blueprintId: templateId,
         projectId,
@@ -265,7 +268,17 @@ export function NewProjectPage() {
     const projectId = (data as any).id as string;
     if (selectedTemplateId && selectedTemplateId !== "__none") {
       try {
-        await applyTemplate(projectId, selectedTemplateId);
+        const res = await applyTemplate(projectId, selectedTemplateId);
+        // The catch below only fires for transport/HTTP throws (plan gate,
+        // ownership). Per-item failures resolve successfully with a `failed`
+        // list, so they have to be inspected here or they are invisible — the
+        // page has just shown the user a preview promising these very items.
+        if (res?.failed?.length) {
+          const n = res.failed.length;
+          toast.warning(`Project created, but ${n} item${n === 1 ? "" : "s"} couldn’t be applied`, {
+            description: res.failed.map((f) => `${f.kind}: ${f.reason}`).join("; "),
+          });
+        }
       } catch (e) {
         // Non-fatal: project is created either way
         console.error("Failed to apply template", e);

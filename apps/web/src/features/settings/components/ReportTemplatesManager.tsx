@@ -51,22 +51,25 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import {
+  parseReportTemplateStructure,
+  type ReportCoverStyle,
+  type ReportSectionLayout,
+  type ReportTemplateSection,
+  type ReportTemplateStructure,
+} from "@sitepix/shared";
 
-type CoverStyle = "minimal" | "centered" | "hero" | "photo";
-type SectionLayout = "text" | "text-photos" | "photo-grid" | "checklist";
-
-interface Section {
-  id: string;
-  heading: string;
-  body: string;
-  layout: SectionLayout;
-}
-
-interface TemplateStructure {
-  coverStyle: CoverStyle;
-  placeholders: string[];
-  items: Section[];
-}
+/*
+ * The shape of `report_templates.sections` now lives in @sitepix/shared, because
+ * the API needs the identical reading: `applyProjectBlueprintService` had its own
+ * array-only reading of this column and threw "sections.map is not a function" on
+ * every template this editor saves. Local aliases keep the rest of this file
+ * unchanged.
+ */
+type CoverStyle = ReportCoverStyle;
+type SectionLayout = ReportSectionLayout;
+type Section = ReportTemplateSection;
+type TemplateStructure = ReportTemplateStructure;
 
 interface ReportTemplate {
   id: string;
@@ -134,34 +137,7 @@ const STARTER_SECTIONS: Section[] = [
   { id: crypto.randomUUID(), heading: "Next steps", body: "", layout: "checklist" },
 ];
 
-function parseStructure(raw: any): TemplateStructure {
-  // Backward compat: if `sections` is a plain array, treat as items list.
-  if (Array.isArray(raw)) {
-    return {
-      coverStyle: "centered",
-      placeholders: [],
-      items: raw.map((s: any, idx: number) => ({
-        id: s?.id ?? crypto.randomUUID(),
-        heading: s?.heading ?? `Section ${idx + 1}`,
-        body: s?.body ?? "",
-        layout: (s?.layout as SectionLayout) ?? "text",
-      })),
-    };
-  }
-  const obj = raw ?? {};
-  return {
-    coverStyle: (obj.coverStyle as CoverStyle) ?? "centered",
-    placeholders: Array.isArray(obj.placeholders) ? obj.placeholders : [],
-    items: Array.isArray(obj.items)
-      ? obj.items.map((s: any, idx: number) => ({
-          id: s?.id ?? crypto.randomUUID(),
-          heading: s?.heading ?? `Section ${idx + 1}`,
-          body: s?.body ?? "",
-          layout: (s?.layout as SectionLayout) ?? "text",
-        }))
-      : [],
-  };
-}
+const parseStructure = parseReportTemplateStructure;
 
 interface Props {
   teamId: string | null;

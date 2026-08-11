@@ -185,15 +185,36 @@ export function ApplyBlueprintDialog({
       );
   };
 
+  /*
+   * The header used to read "Blueprint applied — Everything below now exists on
+   * the projects listed." whenever `results` was set, including when every item
+   * had failed. The red per-item panel was right there underneath contradicting
+   * it. A summary that can be false is worse than no summary.
+   */
+  const anyDegraded = !!results?.some((r) => r.error || r.failed.length > 0);
+  const allErrored = !!results?.length && results.every((r) => r.error);
+
   return (
     <Dialog open={open} onOpenChange={(v) => (applying ? null : onOpenChange(v))}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-hidden p-0">
         <DialogHeader className="border-b border-border px-5 py-4">
-          <DialogTitle>{results ? "Blueprint applied" : `Apply “${blueprintName}”`}</DialogTitle>
+          <DialogTitle>
+            {!results
+              ? `Apply “${blueprintName}”`
+              : allErrored
+                ? "Couldn’t apply"
+                : anyDegraded
+                  ? "Applied with problems"
+                  : "Blueprint applied"}
+          </DialogTitle>
           <DialogDescription>
-            {results
-              ? "Everything below now exists on the projects listed."
-              : "Nothing is created until you pick the projects and confirm."}
+            {!results
+              ? "Nothing is created until you pick the projects and confirm."
+              : allErrored
+                ? "Nothing was created."
+                : anyDegraded
+                  ? "Some items couldn’t be created — they’re listed in red below."
+                  : "Everything below now exists on the projects listed."}
           </DialogDescription>
         </DialogHeader>
 
@@ -201,6 +222,10 @@ export function ApplyBlueprintDialog({
           <div className="max-h-[60vh] space-y-2 overflow-y-auto px-5 py-4">
             {results.map((r) => {
               const created = Object.entries(r.counts).filter(([, n]) => n > 0);
+              // A row that partly failed has no `r.error` but a non-empty
+              // `r.failed`, so it used to take the all-clear styling and show
+              // the same primary-tinted folder as a clean apply.
+              const degraded = !!r.error || r.failed.length > 0;
               return (
                 <div
                   key={r.projectId}
@@ -210,12 +235,12 @@ export function ApplyBlueprintDialog({
                     <span
                       className={cn(
                         "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
-                        r.error
+                        degraded
                           ? "bg-destructive/10 text-destructive"
                           : "bg-primary/10 text-primary",
                       )}
                     >
-                      {r.error ? (
+                      {degraded ? (
                         <TriangleAlert className="h-4 w-4" />
                       ) : (
                         <FolderOpen className="h-4 w-4" />
@@ -230,11 +255,21 @@ export function ApplyBlueprintDialog({
                             ? "Nothing to create"
                             : created
                                 .map(([key, n]) => {
+                                  // Matched on `countsKey`, not `plural` — the
+                                  // display plural "label sets" never equalled
+                                  // the wire key `label_sets`, so this lookup
+                                  // missed and the raw key was printed instead.
                                   const kind = (
                                     Object.keys(KIND_OUTCOME) as BlueprintItemKind[]
-                                  ).find((k) => KIND_OUTCOME[k].plural === key);
-                                  const label = kind ? KIND_OUTCOME[kind] : null;
-                                  return `${n} ${n === 1 ? (label?.label.toLowerCase() ?? key) : key}`;
+                                  ).find((k) => KIND_OUTCOME[k].countsKey === key);
+                                  const meta = kind ? KIND_OUTCOME[kind] : null;
+                                  // Both branches go through `meta` now. The
+                                  // plural branch used to echo the wire key
+                                  // unconditionally, which only read as English
+                                  // by luck — every key but `label_sets` happens
+                                  // to be a word.
+                                  if (!meta) return `${n} ${key}`;
+                                  return `${n} ${n === 1 ? meta.label.toLowerCase() : meta.plural}`;
                                 })
                                 .join(" · ")}
                       </p>

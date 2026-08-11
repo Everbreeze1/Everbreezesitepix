@@ -23,6 +23,10 @@
     "./label-colors": {
       "types": "./src/label-colors.ts",
       "default": "./src/label-colors.ts"
+    },
+    "./report-template-structure": {
+      "types": "./src/report-template-structure.ts",
+      "default": "./src/report-template-structure.ts"
     }
   },
   "types": "./src/index.ts",

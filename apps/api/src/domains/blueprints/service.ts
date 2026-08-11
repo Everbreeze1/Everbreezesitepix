@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseReportTemplateStructure } from "@sitepix/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { ServiceContext } from "../../lib/user-context";
 import { createPageFromTemplateService } from "../projects/page-templates";
@@ -100,18 +101,26 @@ export async function applyProjectBlueprintService(
     .single();
   const tplLabels: string[] = ((tpl as any)?.labels as string[] | null) ?? [];
   if (tplLabels.length) {
-    const { data: pr } = await supabaseAdmin
+    // This is a merge implemented as an overwrite, so the READ has to be
+    // trusted before the write. postgrest-js resolves rather than throws: a
+    // timeout or 5xx here came back as `{ data: null, error }`, `?? []` turned
+    // that into "the project has no labels", and the update below then REPLACED
+    // the project's real labels with only the blueprint's. Binding the error
+    // turns a transient failure into a failed apply instead of silent data loss.
+    const { data: pr, error: prErr } = await supabaseAdmin
       .from("projects")
       .select("labels")
       .eq("id", data.projectId)
       .single();
+    if (prErr) throw new Error(prErr.message);
     const merged = Array.from(
       new Set([...(((pr as any)?.labels as string[] | null) ?? []), ...tplLabels]),
     );
-    await supabaseAdmin
+    const { error: labelsErr } = await supabaseAdmin
       .from("projects")
       .update({ labels: merged } as any)
       .eq("id", data.projectId);
+    if (labelsErr) throw new Error(labelsErr.message);
   }
 
   // Legacy checklist attachments
@@ -139,16 +148,28 @@ export async function applyProjectBlueprintService(
     })),
   ];
 
+  const today = new Date().toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
   const values: Record<string, string> = {
     project_name: data.projectName,
     project_address: data.projectAddress ?? "",
-    date: new Date().toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    }),
+    date: today,
     prepared_by: data.preparedBy ?? "",
     company_name: data.companyName ?? "",
+    /*
+     * Aliases for the vocabulary the report-template wizard advertises
+     * (ReportTemplatesManager's DEFAULT_PLACEHOLDERS) — its starter sections ship
+     * "{{report_date}}" in the body. `fill` leaves an unknown token as literal
+     * source, so without these a blueprint-applied report reads
+     * "Overview of the site visit for Acme on {{report_date}}". Harmless while
+     * the report branch was writing to a column nothing read; visible the moment
+     * these reports actually render.
+     */
+    report_date: today,
+    author_name: data.preparedBy ?? "",
   };
 
   for (const it of allItems) {
@@ -213,39 +234,104 @@ export async function applyProjectBlueprintService(
           .eq("id", it.ref_id)
           .single();
         if (!r) continue;
-        const sections = ((r as any).sections as any[]) ?? [];
-        const body = sections
-          .map((s: any) => `<h2>${s.heading ?? ""}</h2>${fill(s.body ?? "", values)}`)
-          .join("\n");
-        await supabaseAdmin.from("project_reports" as any).insert({
-          project_id: data.projectId,
-          title: (r as any).name,
-          subtitle: (r as any).subtitle ?? null,
-          body: { html: body },
-          created_by: ctx.userId,
-        } as any);
+        /*
+         * `report_templates.sections` is jsonb holding one of TWO shapes: the
+         * legacy `[{heading, body}]` array, or the editor's
+         * `{coverStyle, placeholders, items}` object. Nothing migrated the old
+         * rows, so both are live.
+         *
+         * This used to be `((r as any).sections as any[]) ?? []` — a cast plus a
+         * null-only guard, which is no guard at all against the object shape. So
+         * every report template saved by the current editor threw
+         * "sections.map is not a function", the item was pushed onto `failed`,
+         * and the dialog still announced the blueprint as applied.
+         *
+         * `parseReportTemplateStructure` is the single shared reading of that
+         * column — the same one the editor uses — so the two cannot drift again.
+         */
+        const structure = parseReportTemplateStructure((r as any).sections);
+
+        /*
+         * A report's content lives in `project_report_sections`, one row per
+         * section — that is what the builder, the public share page and the PDF
+         * all read.
+         *
+         * This used to concatenate every section into one HTML string and store
+         * it as `project_reports.body`. There is no `body` column on that table
+         * (20260618230000 creates it; the only ALTERs add cover flags,
+         * photos_per_page and subtitle) — `{ html }` is the shape of
+         * `document_templates.body`, copy-pasted onto the wrong table. PostgREST
+         * rejects an insert naming an unknown column, and because the result was
+         * never destructured that rejection was discarded and `counts.reports++`
+         * ran anyway. Fixing only the crash above would therefore have swapped a
+         * loud error for a silent one: "1 report" with nothing created.
+         *
+         * Mirrors the working walkthrough→report path in walkthroughs/service.ts.
+         */
+        const { data: createdReport, error: reportErr } = await supabaseAdmin
+          .from("project_reports" as any)
+          .insert({
+            project_id: data.projectId,
+            created_by: ctx.userId,
+            title: (r as any).name,
+            subtitle: (r as any).subtitle ?? null,
+          } as any)
+          .select("id")
+          .single();
+        if (reportErr || !createdReport) {
+          throw new Error(reportErr?.message ?? "Failed to create report");
+        }
+
+        if (structure.items.length) {
+          const sectionRows = structure.items.map((s, idx) => ({
+            report_id: (createdReport as any).id,
+            position: idx,
+            // `title` renders as plain text and `body` as rich HTML, so only the
+            // body is markup. Both get `fill`: headings carry merge fields too,
+            // and filling only the body left a literal "{{project_name}}" in the
+            // heading of every report a blueprint produced.
+            title: fill(s.heading, values),
+            body: fill(s.body, values),
+            photos: [],
+          }));
+          const { error: sectionsErr } = await supabaseAdmin
+            .from("project_report_sections" as any)
+            .insert(sectionRows);
+          // Thrown, not warned — same as the workflow branch below. An empty
+          // report counted as a success is the exact miscount this branch is
+          // being fixed for.
+          if (sectionsErr) throw sectionsErr;
+        }
         counts.reports++;
       } else if (it.kind === "label_set") {
-        const { data: lsItems } = await supabaseAdmin
+        const { data: lsItems, error: lsErr } = await supabaseAdmin
           .from("label_set_items" as any)
           .select("name, color, position")
           .eq("label_set_id", it.ref_id)
           .order("position", { ascending: true });
+        if (lsErr) throw new Error(lsErr.message);
         const names = ((lsItems as any[]) ?? []).map((x: any) => x.name);
-        if (names.length) {
-          const { data: pr } = await supabaseAdmin
-            .from("projects")
-            .select("labels")
-            .eq("id", data.projectId)
-            .single();
-          const merged = Array.from(
-            new Set([...(((pr as any)?.labels as string[] | null) ?? []), ...names]),
-          );
-          await supabaseAdmin
-            .from("projects")
-            .update({ labels: merged } as any)
-            .eq("id", data.projectId);
-        }
+        // A deleted or empty label set writes nothing, so it must not be
+        // counted. `counts.label_sets++` used to sit outside this guard and
+        // reported "1 label set" while `projects.labels` was untouched.
+        if (!names.length) continue;
+        // Same overwrite-shaped merge as the blueprint-level labels above, and
+        // the same reason for binding the read's error: a failed read here
+        // replaced the project's labels with only this set's.
+        const { data: pr, error: prErr } = await supabaseAdmin
+          .from("projects")
+          .select("labels")
+          .eq("id", data.projectId)
+          .single();
+        if (prErr) throw new Error(prErr.message);
+        const merged = Array.from(
+          new Set([...(((pr as any)?.labels as string[] | null) ?? []), ...names]),
+        );
+        const { error: mergeErr } = await supabaseAdmin
+          .from("projects")
+          .update({ labels: merged } as any)
+          .eq("id", data.projectId);
+        if (mergeErr) throw new Error(mergeErr.message);
         counts.label_sets++;
       } else if (it.kind === "workflow") {
         const { data: wt } = await supabaseAdmin

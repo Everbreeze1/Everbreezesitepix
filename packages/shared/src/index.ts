@@ -14,3 +14,10 @@ export {
   type RichBlock,
 } from "./report-rich";
 export { labelColor, labelChipClass } from "./label-colors";
+export {
+  parseReportTemplateStructure,
+  type ReportCoverStyle,
+  type ReportSectionLayout,
+  type ReportTemplateSection,
+  type ReportTemplateStructure,
+} from "./report-template-structure";

@@ -76,14 +76,25 @@ export const DESTINATION: Record<
  * through, or that a document becomes a site log with the project's details
  * already filled in.
  *
- * `plural` doubles as the key the apply service reports counts under, so the
- * result screen can map a count back to the thing it describes.
+ * `plural` used to double as the key the apply service reports counts under.
+ * That contract broke the one time the two could differ: the service counts
+ * label sets under `label_sets`, the display plural is "label sets", the lookup
+ * matched on `plural` and missed, and the result screen fell back to printing
+ * the raw key — the "1 label_sets" in the bug report. They are now separate
+ * fields, because a display string and a wire key have no reason to agree.
+ *
+ * `countsKey` must stay in step with `counts` in applyProjectBlueprintService.
+ * It is also the key persisted into `project_blueprint_applications.counts`, so
+ * it is not free to rename — historical ledger rows carry the old keys.
  */
 export const KIND_OUTCOME: Record<
   BlueprintItemKind,
   {
     label: string;
+    /** Display-only. Never compared against a server payload. */
     plural: string;
+    /** The key `applyProjectBlueprintService` reports this kind's count under. */
+    countsKey: string;
     icon: LucideIcon;
     tint: string;
     becomes: string;
@@ -93,6 +104,7 @@ export const KIND_OUTCOME: Record<
   checklist: {
     label: "Checklist",
     plural: "checklists",
+    countsKey: "checklists",
     icon: ClipboardList,
     tint: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
     becomes: "A checklist the crew ticks off under the project's Checklists tab",
@@ -101,6 +113,7 @@ export const KIND_OUTCOME: Record<
   workflow: {
     label: "Workflow",
     plural: "workflows",
+    countsKey: "workflows",
     icon: WorkflowIcon,
     tint: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
     becomes: "A live run of phases, photo prompts and sign-off gates on the project",
@@ -109,6 +122,7 @@ export const KIND_OUTCOME: Record<
   document: {
     label: "Document",
     plural: "documents",
+    countsKey: "documents",
     icon: FileText,
     tint: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
     becomes:
@@ -118,6 +132,7 @@ export const KIND_OUTCOME: Record<
   report: {
     label: "Report",
     plural: "reports",
+    countsKey: "reports",
     icon: Newspaper,
     tint: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
     becomes: "A draft report on the Reports screen, ready to edit and share",
@@ -126,6 +141,7 @@ export const KIND_OUTCOME: Record<
   label_set: {
     label: "Label set",
     plural: "label sets",
+    countsKey: "label_sets",
     icon: Tag,
     tint: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
     becomes: "Its labels merged onto the project so it sorts and filters correctly",
