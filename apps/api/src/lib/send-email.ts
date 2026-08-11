@@ -4,11 +4,45 @@ export type SendEmailInput = {
   html: string;
   text?: string;
   from?: string;
+  /**
+   * Display name for this one message, overriding both `SENDER_NAME` and any
+   * display name already baked into `EMAIL_FROM`. The address itself never
+   * changes — only a verified domain can send, and this must not become a way
+   * to forge one.
+   *
+   * Used for the "Someone (via Everbreeze SitePix)" pattern on person-to-person
+   * mail like team invites: a human name in the From line is what separates a
+   * message from a broadcast, both to the reader and to Gmail's tab classifier.
+   */
+  fromName?: string;
   replyTo?: string;
 };
 
 /** The name recipients should see in their inbox, not the mailbox it came from. */
 const SENDER_NAME = "Everbreeze SitePix";
+
+/**
+ * Make a caller-supplied display name safe to put in a header.
+ *
+ * `fromName` comes from `profiles.full_name`, which any user can type. CR/LF
+ * would let them append headers of their own; `"` `<` `>` would let them break
+ * out of the quoted phrase; a bare `@` lets them write a name that renders as
+ * somebody else's address ("security@paypal.com") in every inbox preview.
+ */
+function sanitizeDisplayName(name: string): string {
+  return name
+    .replace(/[\r\n]+/g, " ")
+    .replace(/["<>@]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 64);
+}
+
+/** The bare `addr@host` out of either `addr@host` or `Name <addr@host>`. */
+function addressOf(from: string): string {
+  const angled = from.match(/^[^<>]*<([^<>]+)>$/);
+  return (angled ? angled[1] : from).trim();
+}
 
 /**
  * Guarantee the From header carries a display name.
@@ -20,14 +54,33 @@ const SENDER_NAME = "Everbreeze SitePix";
  * ever set back to a bare address.
  *
  * An `EMAIL_FROM` that already has a display name (`Name <addr>`) is passed
- * through untouched, so the env stays authoritative when it says something.
+ * through untouched, so the env stays authoritative when it says something —
+ * unless this call asked for a specific `fromName`, which is more specific than
+ * either default and wins over both.
  */
-function withSenderName(from: string): string {
+function withSenderName(from: string, fromName?: string): string {
   const trimmed = from.trim();
+  const override = fromName ? sanitizeDisplayName(fromName) : "";
+  // Per-message name. Rebuild around the env's address, never the caller's.
+  if (override) return `"${override}" <${addressOf(trimmed)}>`;
   // Already `Something <addr@host>` — respect it.
   if (/^[^<>]*<[^<>]+>$/.test(trimmed)) return trimmed;
   // Bare address. Quote the name so punctuation can never break the header.
   return `"${SENDER_NAME.replace(/"/g, "")}" <${trimmed}>`;
+}
+
+/**
+ * Reply-To is likewise user-adjacent (a teammate's own address on invites), so
+ * it is reduced to a bare `addr@host` — `Name <addr@host>` is unwrapped rather
+ * than rejected, since that is a perfectly ordinary `EMAIL_REPLY_TO` — and
+ * anything that still does not look like one address is dropped rather than
+ * forwarded to Resend. A malformed reply address is worth losing; a smuggled
+ * header is not.
+ */
+function safeReplyTo(replyTo: string | undefined): string | undefined {
+  if (!replyTo) return undefined;
+  const address = addressOf(replyTo.replace(/[\r\n]+/g, " "));
+  return /^[^\s<>",;@]+@[^\s<>",;@]+\.[^\s<>",;@]+$/.test(address) ? address : undefined;
 }
 
 export async function sendEmail(input: SendEmailInput): Promise<{ id: string }> {
@@ -40,9 +93,9 @@ export async function sendEmail(input: SendEmailInput): Promise<{ id: string }> 
   if (!configuredFrom) {
     throw new Error("EMAIL_FROM is not configured");
   }
-  const from = withSenderName(configuredFrom);
+  const from = withSenderName(configuredFrom, input.fromName);
 
-  const replyTo = input.replyTo ?? process.env.EMAIL_REPLY_TO;
+  const replyTo = safeReplyTo(input.replyTo ?? process.env.EMAIL_REPLY_TO);
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",

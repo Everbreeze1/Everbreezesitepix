@@ -5,7 +5,7 @@
 // photos-per-page grid, captions beside / below depending on density).
 import { FileText, ImageOff, MapPin, Calendar } from "lucide-react";
 import { RichText } from "@/components/RichText";
-import { richIsEmpty } from "@sitepix/shared";
+import { richIsEmpty, planSectionPages, type RichBlock } from "@sitepix/shared";
 import { cn } from "@/lib/utils";
 
 export interface ReportDocCompany {
@@ -157,7 +157,14 @@ export function ReportDocument({ doc }: { doc: ReportDocModel }) {
         </ReportPage>
       )}
 
-      {/* SECTION PAGES */}
+      {/*
+        SECTION PAGES
+
+        Built from `planSectionPages`, the same function public-pdf.ts uses, so
+        the preview and the downloaded file break in the same places. This used
+        to be one page per section with no way to split a long one, which is
+        what "I should be able to insert a page break" was about.
+      */}
       {doc.sections.length === 0 ? (
         <ReportPage>
           <CompanyHeader company={doc.company} small />
@@ -166,17 +173,28 @@ export function ReportDocument({ doc }: { doc: ReportDocModel }) {
           </div>
         </ReportPage>
       ) : (
-        doc.sections.map((sec, idx) => (
-          <SectionPage
-            key={sec.id}
-            section={sec}
-            index={idx}
-            total={doc.sections.length}
-            reportTitle={doc.title}
-            company={doc.company}
-            photosPerPage={doc.photosPerPage}
-          />
-        ))
+        doc.sections.flatMap((sec, idx) =>
+          planSectionPages<ReportDocPhoto>({
+            body: sec.body,
+            photos: sec.photos,
+            photosPerPage: doc.photosPerPage,
+          }).map((plan, pageIdx) => (
+            <SectionPage
+              key={`${sec.id}:${pageIdx}`}
+              section={sec}
+              blocks={plan.blocks}
+              photos={plan.photos}
+              // Only the first page of a section repeats its title; a heading
+              // stamped on every continuation reads as a new section each time.
+              showTitle={pageIdx === 0}
+              index={idx}
+              total={doc.sections.length}
+              reportTitle={doc.title}
+              company={doc.company}
+              photosPerPage={doc.photosPerPage}
+            />
+          )),
+        )
       )}
     </div>
   );
@@ -279,6 +297,9 @@ function countPhotos(doc: ReportDocModel): number {
 
 function SectionPage({
   section,
+  blocks,
+  photos,
+  showTitle,
   index,
   total,
   reportTitle,
@@ -286,6 +307,11 @@ function SectionPage({
   photosPerPage,
 }: {
   section: ReportDocSection;
+  /** This page's slice of the body, already split on page breaks. */
+  blocks: RichBlock[];
+  /** This page's slice of the section's photos. */
+  photos: ReportDocPhoto[];
+  showTitle: boolean;
   index: number;
   total: number;
   reportTitle: string;
@@ -302,7 +328,7 @@ function SectionPage({
       </div>
       <div className="mb-6 h-px w-full bg-neutral-200" />
 
-      {section.title && (
+      {showTitle && section.title && (
         <div className="mb-5">
           {section.title.startsWith("<") ? (
             <RichText html={section.title} />
@@ -313,13 +339,14 @@ function SectionPage({
           )}
         </div>
       )}
-      {!richIsEmpty(section.body) && (
+      {blocks.length > 0 && (
         <div className="mb-7 text-neutral-800">
-          <RichText html={section.body} />
+          {/* Pre-split blocks, not the raw body — this page holds one group. */}
+          <RichText blocks={blocks} />
         </div>
       )}
 
-      {section.photos.length > 0 && <PhotoGrid photos={section.photos} perPage={photosPerPage} />}
+      {photos.length > 0 && <PhotoGrid photos={photos} perPage={photosPerPage} />}
 
       <PageFooter company={company?.name ?? null} />
     </ReportPage>

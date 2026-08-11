@@ -56,6 +56,12 @@ interface WalkthroughRecorderProps {
    * deleting the in-flight walkthrough. Falls back to onClose if omitted.
    */
   onContinueInBackground?: () => void;
+  /**
+   * 0-100 while the recording is transferring, null otherwise. A full-length
+   * walkthrough is a few hundred MB, so the processing overlay reports real
+   * progress instead of an indefinite spinner.
+   */
+  uploadProgress?: number | null;
 }
 
 type Phase = "idle" | "recording" | "finishing";
@@ -147,6 +153,7 @@ export function WalkthroughRecorder({
   onCapturePhoto,
   onFinish,
   onContinueInBackground,
+  uploadProgress = null,
 }: WalkthroughRecorderProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const selfVideoRef = useRef<HTMLVideoElement>(null);
@@ -1046,11 +1053,34 @@ export function WalkthroughRecorder({
               ) : (
                 <>
                   <Sparkles className="h-10 w-10 animate-pulse text-primary" />
-                  <p className="text-base font-semibold">Creating your report…</p>
-                  <p className="max-w-sm text-center text-sm text-white/60">
-                    This usually takes under a minute. You can leave this screen — we'll keep
-                    working in the background and your report will be waiting for you.
+                  <p className="text-base font-semibold">
+                    {uploadProgress != null ? "Uploading your recording…" : "Creating your report…"}
                   </p>
+                  {uploadProgress != null ? (
+                    <>
+                      <div
+                        className="h-1.5 w-56 overflow-hidden rounded-full bg-white/15"
+                        role="progressbar"
+                        aria-valuenow={uploadProgress}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                      >
+                        <div
+                          className="h-full rounded-full bg-primary transition-[width] duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                      <p className="max-w-sm text-center text-sm text-white/60">
+                        {uploadProgress}% uploaded. Long recordings go up in chunks and pick up
+                        where they left off if the signal drops.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="max-w-sm text-center text-sm text-white/60">
+                      This usually takes under a minute. You can leave this screen — we'll keep
+                      working in the background and your report will be waiting for you.
+                    </p>
+                  )}
                   <Button
                     variant="secondary"
                     size="sm"

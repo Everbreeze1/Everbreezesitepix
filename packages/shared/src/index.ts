@@ -13,6 +13,12 @@ export {
   type InlineRun,
   type RichBlock,
 } from "./report-rich";
+export {
+  REPORT_PAGE,
+  splitOnPageBreak,
+  planSectionPages,
+  type SectionPagePlan,
+} from "./report-pagination";
 export { labelColor, labelChipClass } from "./label-colors";
 export {
   parseReportTemplateStructure,

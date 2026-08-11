@@ -1,7 +1,16 @@
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import { Bold, Italic, List, ListOrdered, Heading1, Heading2, Heading3 } from "lucide-react";
+import {
+  Bold,
+  Italic,
+  List,
+  ListOrdered,
+  Heading1,
+  Heading2,
+  Heading3,
+  SeparatorHorizontal,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { MergeToken } from "@/lib/tiptap-fill-field";
@@ -20,6 +29,14 @@ interface Props {
   // inside a page's visual surface (e.g. a document header/footer), where a
   // permanently visible toolbar is distracting.
   toolbarOnFocus?: boolean;
+  /**
+   * Offer an "insert page break" control, and let <hr> through.
+   *
+   * Opt-in because this editor is shared with showcases, portfolio panels and
+   * project pages, where a page is not a concept. In a report body an <hr> IS
+   * the page break (see report-rich.ts).
+   */
+  pageBreaks?: boolean;
 }
 
 export function RichTextEditor({
@@ -31,6 +48,7 @@ export function RichTextEditor({
   compact = false,
   singleLine = false,
   toolbarOnFocus = false,
+  pageBreaks = false,
 }: Props) {
   const [focused, setFocused] = useState(false);
   const editor = useEditor({
@@ -41,7 +59,7 @@ export function RichTextEditor({
         orderedList: singleLine ? false : {},
         codeBlock: false,
         blockquote: false,
-        horizontalRule: false,
+        horizontalRule: pageBreaks ? {} : false,
       }),
       Placeholder.configure({ placeholder: placeholder ?? "" }),
       // Header/footer merge fields render as a pill showing the resolved
@@ -82,7 +100,14 @@ export function RichTextEditor({
 
   return (
     <div className={cn("rounded-md border border-input bg-background", className)}>
-      {showToolbar && <Toolbar editor={editor} compact={compact} singleLine={singleLine} />}
+      {showToolbar && (
+        <Toolbar
+          editor={editor}
+          compact={compact}
+          singleLine={singleLine}
+          pageBreaks={pageBreaks}
+        />
+      )}
       <div className={cn(toolbarOnFocus ? "px-1 py-0.5" : "px-3 py-2")}>
         <EditorContent editor={editor} />
       </div>
@@ -94,10 +119,12 @@ function Toolbar({
   editor,
   compact,
   singleLine,
+  pageBreaks,
 }: {
   editor: Editor | null;
   compact: boolean;
   singleLine: boolean;
+  pageBreaks: boolean;
 }) {
   if (!editor) return null;
   const btnCls =
@@ -171,6 +198,20 @@ function Toolbar({
           >
             <ListOrdered className="h-3.5 w-3.5" />
           </button>
+          {pageBreaks && (
+            <>
+              <span className="mx-1 h-4 w-px bg-border" />
+              <button
+                type="button"
+                className={btnCls}
+                onClick={() => editor.chain().focus().setHorizontalRule().run()}
+                aria-label="Insert page break"
+                title="Insert page break — the rest of this section starts on a new page"
+              >
+                <SeparatorHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
         </>
       )}
     </div>

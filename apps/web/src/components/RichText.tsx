@@ -6,14 +6,21 @@ import { parseRich, type RichBlock, type InlineRun } from "@sitepix/shared";
 import { cn } from "@/lib/utils";
 
 interface Props {
-  html: string | null | undefined;
+  /** Optional when `blocks` is supplied — one of the two must be. */
+  html?: string | null | undefined;
   className?: string;
   // Optional: render headings smaller (for captions / cover summary)
   size?: "default" | "sm";
+  /**
+   * Pre-parsed blocks, when the caller has already split the body somewhere
+   * (ReportDocument splits on page breaks and renders one group per page).
+   * Takes precedence over `html` so there is still exactly one inline renderer.
+   */
+  blocks?: RichBlock[];
 }
 
-export function RichText({ html, className, size = "default" }: Props) {
-  const blocks = parseRich(html);
+export function RichText({ html, className, size = "default", blocks: given }: Props) {
+  const blocks = given ?? parseRich(html);
   if (blocks.length === 0) return null;
   const small = size === "sm";
   return (
@@ -26,6 +33,14 @@ export function RichText({ html, className, size = "default" }: Props) {
 }
 
 function BlockRender({ block, small }: { block: RichBlock; small: boolean }) {
+  /*
+   * In a report, ReportDocument splits on page breaks before calling this, so a
+   * break never reaches here. It does on the surfaces that have no pages at all
+   * — showcases, portfolio, project pages — where the right rendering is
+   * nothing. Drawing a stray rule there would leak a report concept into
+   * documents that have no concept of a page.
+   */
+  if (block.type === "pageBreak") return null;
   if (block.type === "heading") {
     const cls = small
       ? block.level === 1

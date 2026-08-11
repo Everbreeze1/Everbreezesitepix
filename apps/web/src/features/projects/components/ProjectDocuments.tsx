@@ -49,6 +49,8 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { usePrompt } from "@/hooks/use-prompt";
 import { toast } from "sonner";
 import { formatBytes } from "@/hooks/use-storage-usage";
+import { MAX_UPLOAD_BYTES, isOverUploadLimit } from "@/lib/upload-limits";
+import { uploadWithResume } from "@/lib/resumable-upload";
 import { relativeTime } from "@sitepix/shared";
 import { BlueprintItemBadge } from "./BlueprintItemBadge";
 import { downloadBase64File } from "@/lib/download-file";
@@ -157,6 +159,12 @@ export function ProjectDocuments({
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  /** Which file of the batch is transferring, and how far along. Null when idle. */
+  const [uploadStatus, setUploadStatus] = useState<{
+    index: number;
+    total: number;
+    percent: number;
+  } | null>(null);
   const [creating, setCreating] = useState(false);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -210,16 +218,51 @@ export function ProjectDocuments({
     if (!user) return;
     const list = Array.from(files);
     if (!list.length) return;
+
+    /*
+     * Sort before uploading anything. The picker hands over whatever the OS will
+     * give it — this is the only input in the app not restricted to images, so a
+     * multi-GB video from the camera roll can land here. Splitting up front
+     * means oversized files are reported immediately instead of interrupting
+     * progress on the others, and the counter below reflects what will actually
+     * be attempted.
+     */
+    const queue: File[] = [];
+    for (const file of list) {
+      if (isOverUploadLimit(file.size)) {
+        toast.error(
+          `${file.name} is ${formatBytes(file.size)}, over the ${formatBytes(
+            MAX_UPLOAD_BYTES,
+          )} upload limit — skipped.`,
+        );
+        continue;
+      }
+      queue.push(file);
+    }
+    if (!queue.length) {
+      if (fileInput.current) fileInput.current.value = "";
+      return;
+    }
+
     setUploading(true);
+    let added = 0;
     try {
-      for (const file of list) {
+      for (const [index, file] of queue.entries()) {
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
         const path = `${user.id}/${projectId}/${crypto.randomUUID()}-${safeName}`;
-        const { error: upErr } = await supabase.storage
-          .from("site-documents")
-          .upload(path, file, { contentType: file.type || undefined });
-        if (upErr) {
-          toast.error(`${file.name}: ${upErr.message}`);
+        try {
+          // Resumable above one chunk: a big blueprint PDF over site LTE has the
+          // same failure mode as a walkthrough video, and the same fix.
+          await uploadWithResume({
+            bucket: "site-documents",
+            path,
+            blob: file,
+            contentType: file.type || "application/octet-stream",
+            onProgress: (p) =>
+              setUploadStatus({ index: index + 1, total: queue.length, percent: p.percent }),
+          });
+        } catch (upErr: any) {
+          toast.error(`${file.name}: ${upErr?.message ?? "upload failed"}`);
           continue;
         }
         const { error: insErr } = await (supabase as any).from("project_documents").insert({
@@ -237,13 +280,18 @@ export function ProjectDocuments({
           // pointing at it, every delete path in this file — which all key off
           // `storage_path` — is permanently unable to find it.
           void supabase.storage.from("site-documents").remove([path]);
+          continue;
         }
+        added++;
       }
-      toast.success(list.length > 1 ? `${list.length} documents added` : "Document added");
+      // Count what actually landed. Reporting `list.length` claimed success for
+      // files that were skipped for size or failed to upload.
+      if (added) toast.success(added > 1 ? `${added} documents added` : "Document added");
       await load();
       onChanged?.();
     } finally {
       setUploading(false);
+      setUploadStatus(null);
       if (fileInput.current) fileInput.current.value = "";
     }
   }
@@ -623,10 +671,15 @@ export function ProjectDocuments({
 
   return (
     <div>
+      {/* `accept` steers the picker toward paperwork and away from the camera
+          roll, which is where the multi-GB files come from. It is a hint, not a
+          guard — every platform lets you switch back to "All files" — so the
+          real limit is the size check in `uploadFiles`. */}
       <input
         ref={fileInput}
         type="file"
         multiple
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.zip,.dwg,.dxf,application/pdf,image/*"
         className="hidden"
         onChange={(e) => e.target.files && void uploadFiles(e.target.files)}
       />
@@ -684,7 +737,11 @@ export function ProjectDocuments({
             ) : (
               <Upload className="h-4 w-4" />
             )}
-            Add document
+            {uploadStatus
+              ? uploadStatus.total > 1
+                ? `Uploading ${uploadStatus.index}/${uploadStatus.total} — ${uploadStatus.percent}%`
+                : `Uploading ${uploadStatus.percent}%`
+              : "Add document"}
           </Button>
         </div>
       </div>

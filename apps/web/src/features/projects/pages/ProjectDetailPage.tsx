@@ -42,6 +42,7 @@ import {
 import { formatBytes } from "@/hooks/use-storage-usage";
 import { downloadBlobFile } from "@/lib/download-file";
 import { isOverUploadLimit, overUploadLimitMessage } from "@/lib/upload-limits";
+import { uploadWithResume } from "@/lib/resumable-upload";
 import { relativeTime, cleanCaption } from "@sitepix/shared";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EditProjectDialog } from "@/features/projects/components/EditProjectDialog";
@@ -246,6 +247,8 @@ export function ProjectDetailPage() {
     mimeType: string;
   } | null>(null);
   const [retryingVideo, setRetryingVideo] = useState(false);
+  /** 0-100 while a walkthrough video is transferring, null when idle. */
+  const [videoUploadProgress, setVideoUploadProgress] = useState<number | null>(null);
   const [videos, setVideos] = useState<
     Array<{
       id: string;
@@ -1105,17 +1108,24 @@ export function ProjectDetailPage() {
     try {
       const ext = file.type.includes("mp4") ? "mp4" : "webm";
       const path = `${user.id}/${projectId}/${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("site-videos")
-        .upload(path, file, { contentType: file.type, upsert: false });
       /*
-       * Throw instead of swallowing. VideoRecorder catches a rejected onSave
-       * and returns to its preview with the blob intact, so the user gets a
-       * retry and a download; returning quietly let it call onClose() and drop
-       * the only copy of the footage. Size is the usual cause — a full-length
-       * recording clears the storage upload limit on every tier.
+       * Let this reject. VideoRecorder catches a rejected onSave and returns to
+       * its preview with the blob intact, so the user gets a retry and a
+       * download; swallowing the error let it call onClose() and drop the only
+       * copy of the footage.
        */
-      if (upErr) throw new Error(upErr.message);
+      setVideoUploadProgress(0);
+      try {
+        await uploadWithResume({
+          bucket: "site-videos",
+          path,
+          blob: file,
+          contentType: file.type,
+          onProgress: (p) => setVideoUploadProgress(p.percent),
+        });
+      } finally {
+        setVideoUploadProgress(null);
+      }
       const { error: insErr } = await supabase.from("videos").insert({
         project_id: projectId,
         uploaded_by: user.id,
@@ -1416,10 +1426,19 @@ export function ProjectDetailPage() {
     if (!user) throw new Error("Not signed in");
     const ext = mimeType.includes("mp4") ? "mp4" : "webm";
     const videoPath = `${user.id}/${projectId}/walkthroughs/${walkthroughId}.${ext}`;
-    const { error: upErr } = await supabase.storage
-      .from("site-videos")
-      .upload(videoPath, blob, { contentType: mimeType, upsert: true });
-    if (upErr) throw upErr;
+    setVideoUploadProgress(0);
+    try {
+      await uploadWithResume({
+        bucket: "site-videos",
+        path: videoPath,
+        blob,
+        contentType: mimeType,
+        upsert: true,
+        onProgress: (p) => setVideoUploadProgress(p.percent),
+      });
+    } finally {
+      setVideoUploadProgress(null);
+    }
 
     const { error: directVideoErr } = await supabase
       .from("walkthroughs" as any)
@@ -2654,7 +2673,11 @@ export function ProjectDetailPage() {
                   ) : (
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                   )}
-                  {retryingVideo ? "Uploading…" : "Retry upload"}
+                  {retryingVideo
+                    ? videoUploadProgress != null
+                      ? `Uploading ${videoUploadProgress}%`
+                      : "Uploading…"
+                    : "Retry upload"}
                 </Button>
                 <Button
                   size="sm"
@@ -3346,6 +3369,7 @@ export function ProjectDetailPage() {
         tierLabel={TIER_LABEL[tier] ?? TIER_LABEL.starter}
         maxSeconds={VIDEO_MAX_SECONDS[tier] ?? VIDEO_MAX_SECONDS.starter}
         onSave={onVideoSave}
+        uploadProgress={videoUploadProgress}
       />
 
       <WalkthroughRecorder
@@ -3357,6 +3381,7 @@ export function ProjectDetailPage() {
         watermark={watermarkCtx(project)}
         onCapturePhoto={onWalkthroughCapture}
         onFinish={onWalkthroughFinish}
+        uploadProgress={videoUploadProgress}
         onContinueInBackground={() => {
           // The user can safely leave the processing overlay — the upload and
           // report generation continue in the background. We just close the

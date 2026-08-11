@@ -10,7 +10,14 @@
 //   <strong>, <b>           → bold inline
 //   <em>, <i>               → italic inline
 //   <br>                    → hard line break
+//   <hr>                    → PAGE BREAK (report bodies)
 // Everything else is treated as a paragraph wrapper.
+//
+// `<hr>` means "start a new page", not "draw a rule". The editor disables
+// horizontalRule everywhere except the report builder (RichTextEditor's
+// `pageBreaks` prop), so no existing body can contain one and there is nothing
+// to reinterpret. It rides in the body HTML, which is why the feature needs no
+// migration and no custom Tiptap node.
 
 export interface InlineRun {
   text: string;
@@ -21,7 +28,9 @@ export interface InlineRun {
 export type RichBlock =
   | { type: "heading"; level: 1 | 2 | 3; runs: InlineRun[] }
   | { type: "paragraph"; runs: InlineRun[] }
-  | { type: "list"; ordered: boolean; items: InlineRun[][] };
+  | { type: "list"; ordered: boolean; items: InlineRun[][] }
+  /** An explicit page boundary. Carries no content — see splitOnPageBreak. */
+  | { type: "pageBreak" };
 
 // ---------------- tokenizer ----------------
 interface Token {
@@ -145,7 +154,6 @@ export function parseRich(html: string | null | undefined): RichBlock[] {
     }
   }
 
-
   for (const t of tokens) {
     if (t.kind === "text") {
       // Collapse whitespace-only between block tags
@@ -157,6 +165,14 @@ export function parseRich(html: string | null | undefined): RichBlock[] {
     const name = t.name!;
     if (t.kind === "self") {
       if (name === "br") pushText("\n");
+      else if (name === "hr") {
+        // Close every open block first so the break always lands BETWEEN
+        // blocks. Tiptap emits <hr> at the top level, but pasted markup can
+        // nest it inside a <p>, and a break stranded mid-paragraph would split
+        // a run rather than a page.
+        while (ctxStack.length) flushTopBlock();
+        blocks.push({ type: "pageBreak" });
+      }
       continue;
     }
     if (t.kind === "open") {
@@ -226,6 +242,11 @@ export function richIsEmpty(html: string | null | undefined): boolean {
   if (!html) return true;
   const blocks = parseRich(html);
   return blocks.every((b) => {
+    // A page break IS content: it changes the output. Treating it as empty made
+    // the render gates at public-pdf.ts and ReportDocument skip the body
+    // entirely, so a section holding only a break produced nothing and the
+    // toolbar button looked broken.
+    if (b.type === "pageBreak") return false;
     if (b.type === "list") return b.items.every((it) => it.every((r) => !r.text.trim()));
     return b.runs.every((r) => !r.text.trim());
   });
@@ -236,6 +257,8 @@ export function richToPlainText(html: string | null | undefined): string {
   const blocks = parseRich(html);
   const out: string[] = [];
   for (const b of blocks) {
+    // No text, and `b.runs` does not exist on it — reading it would throw.
+    if (b.type === "pageBreak") continue;
     if (b.type === "list") {
       for (const it of b.items) out.push(it.map((r) => r.text).join(""));
     } else {

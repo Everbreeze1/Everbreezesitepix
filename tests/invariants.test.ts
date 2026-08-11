@@ -626,3 +626,127 @@ describe("family: the seat ceiling is hidden on Team, shown on Starter and Pro",
     expect(cap).toMatch(/team:\s*\d+/);
   });
 });
+
+describe("family: the PDF text renderer must be able to start a new page", () => {
+  /*
+   * `drawRuns` used to take a bare `PDFPage`, which made it structurally
+   * incapable of adding one: it decremented `y` with no comparison to the
+   * bottom margin and kept calling `drawText` at ever-smaller coordinates. Past
+   * roughly 600 words in a section body, lines were emitted at NEGATIVE y —
+   * which pdf-lib writes happily and every viewer clips away. The prose was
+   * gone from the client's PDF while the preview still showed all of it, and
+   * the page count never grew to hint that anything was missing.
+   *
+   * The fix is the `Surface` indirection: it owns the page, so it can swap in a
+   * fresh one mid-paragraph. Captions keep a non-paginating `fixedSurface`
+   * because they draw into fixed-size photo cells.
+   */
+  const PDF = "apps/api/src/domains/reports/public-pdf.ts";
+
+  it("drawRuns and drawRichBlocks take a Surface, not a PDFPage", () => {
+    const src = read(PDF);
+    expect(src).toMatch(/function drawRuns\(surface: Surface/);
+    expect(src).toMatch(/function drawRichBlocks\(surface: Surface/);
+    expect(src).not.toMatch(/function drawRuns\(page: PDFPage/);
+    expect(src).not.toMatch(/function drawRichBlocks\(page: PDFPage/);
+  });
+
+  it("every line asks for room before it is drawn", () => {
+    const src = stripComments(read(PDF));
+    // The guard lives in drawRuns' flush(); without it the renderer silently
+    // draws off-page again.
+    expect(src).toMatch(/surface\.ensure\(/);
+    expect(src).toMatch(/const at = surface\.ensure\(y, lineHeight\)/);
+  });
+
+  it("the block chain is total, so a pageBreak can never be silently skipped", () => {
+    expect(stripComments(read(PDF))).toMatch(/b\.type === "pageBreak"/);
+  });
+
+  it("photo captions keep a non-paginating surface", () => {
+    // Paginating mid-cell would tear a photo grid across sheets.
+    const src = read(PDF);
+    expect(src).toMatch(/function fixedSurface/);
+    expect(src).toMatch(/drawRichBlocks\(fixedSurface\(page\)/);
+  });
+});
+
+describe("family: preview, share and PDF must agree on page boundaries", () => {
+  /*
+   * The PDF's old rule was `!(i === 0 && py > PAGE_H * 0.55)` — a font-metrics
+   * cursor test that no DOM renderer can reproduce, so the preview's page count
+   * and the downloaded file's could differ, and the PDF's would change when you
+   * added a sentence. `planSectionPages` is data-only and both execute it.
+   */
+  it("both renderers call planSectionPages", () => {
+    expect(read("apps/api/src/domains/reports/public-pdf.ts")).toMatch(/planSectionPages/);
+    expect(read("apps/web/src/components/ReportDocument.tsx")).toMatch(/planSectionPages/);
+  });
+
+  it("the cursor heuristic is gone from the PDF", () => {
+    expect(stripComments(read("apps/api/src/domains/reports/public-pdf.ts"))).not.toMatch(
+      /PAGE_H \* 0\.55/,
+    );
+  });
+
+  it("the page rule uses no font metrics, so it is reproducible in a browser", () => {
+    const src = read("packages/shared/src/report-pagination.ts");
+    expect(src).not.toMatch(/widthOfTextAtSize|measureText|getBoundingClientRect/);
+  });
+});
+
+describe("family: a drag handle must actually drag", () => {
+  /*
+   * The report builder rendered a `GripVertical` icon on every section card for
+   * as long as the screen existed, with no DndContext, no useSortable and no
+   * listeners anywhere in the file. It advertised a drag that did nothing,
+   * while the only working reorder was a pair of chevrons in the opposite
+   * corner of the same card. Seven other screens already used dnd-kit; this one
+   * was the outlier.
+   *
+   * The rule: if a file renders a grip icon, it must also wire the drag.
+   */
+  it("every screen showing a grip icon has real sortable wiring", () => {
+    const offenders: string[] = [];
+    for (const file of ALL_WEB_FILES) {
+      const src = stripComments(readFileSync(file, "utf8"));
+      if (!/<GripVertical\b/.test(src)) continue;
+      const wired = /useSortable\s*\(/.test(src) && /\{\s*\.\.\.listeners\s*\}/.test(src);
+      /*
+       * Two legitimate shapes that are not dnd-kit call sites:
+       *  - a presentational handle that spreads `{...props}` onto the element,
+       *    so whoever renders it supplies the listeners (builder-ui's Handle);
+       *  - react-resizable-panels, whose <Separator> is itself the drag target
+       *    (the shadcn ResizableHandle).
+       */
+      const viaProps =
+        /listeners\s*[?:]/.test(src) || /dragHandleProps/.test(src) || /\{\s*\.\.\.props\s*\}/.test(src);
+      const viaResizablePanels = /react-resizable-panels/.test(src);
+      if (!wired && !viaProps && !viaResizablePanels) {
+        offenders.push(file.slice(ROOT.length + 1).split("\\").join("/"));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("family: report photo order is editable, because it decides page layout", () => {
+  /*
+   * Every renderer consumes `section.photos` positionally and batches it
+   * `photosPerPage` at a time, so the sequence decides which photos share a
+   * page. The builder could append, caption and remove — but never reorder, so
+   * moving photo 5 ahead of photo 2 meant deleting everything after it and
+   * re-adding, which also discarded the captions.
+   */
+  const BUILDER = "apps/web/src/features/projects/pages/ReportBuilderPage.tsx";
+
+  it("the builder can reorder photos within a section", () => {
+    expect(stripComments(read(BUILDER))).toMatch(/function movePhoto\(/);
+  });
+
+  it("removing a photo offers its caption back", () => {
+    // Removal used to destroy typed prose with no undo and no confirmation.
+    const src = stripComments(read(BUILDER));
+    expect(src).toMatch(/label:\s*["']Undo["']/);
+  });
+});

@@ -30,6 +30,12 @@ interface VideoRecorderProps {
     file: File,
     opts: { durationSeconds: number; transcript: string },
   ) => Promise<void> | void;
+  /**
+   * 0-100 while the recording is transferring, null otherwise. A full-length
+   * video runs to a few hundred MB, so the saving state reports real progress
+   * rather than an indefinite spinner.
+   */
+  uploadProgress?: number | null;
 }
 
 type Phase = "idle" | "recording" | "preview" | "saving";
@@ -41,6 +47,7 @@ export function VideoRecorder({
   canRecord,
   tierLabel,
   onSave,
+  uploadProgress = null,
 }: VideoRecorderProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
@@ -414,7 +421,23 @@ export function VideoRecorder({
             {phase === "saving" && (
               <div className="flex flex-col items-center gap-2 text-white/80">
                 <Loader2 className="h-5 w-5 animate-spin" />
-                <span className="text-sm">Uploading video…</span>
+                <span className="text-sm">
+                  Uploading video{uploadProgress != null ? ` — ${uploadProgress}%` : "…"}
+                </span>
+                {uploadProgress != null && (
+                  <div
+                    className="h-1.5 w-48 overflow-hidden rounded-full bg-white/15"
+                    role="progressbar"
+                    aria-valuenow={uploadProgress}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  >
+                    <div
+                      className="h-full rounded-full bg-white transition-[width] duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>

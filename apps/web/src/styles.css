@@ -419,4 +419,29 @@
   padding-left: 0.875rem;
   color: var(--muted-foreground);
 }
-.tiptap hr { border: 0; border-top: 1px solid var(--border); margin: 1.25rem 0; }
+/*
+ * In a report body an <hr> IS the page break, not a decorative rule, so it is
+ * labelled as one while authoring. `horizontalRule` is disabled in every other
+ * RichTextEditor instance (the `pageBreaks` prop), so this only ever renders in
+ * the report builder.
+ */
+.tiptap hr {
+  border: 0;
+  border-top: 2px dashed var(--primary);
+  margin: 1.5rem 0;
+  position: relative;
+}
+.tiptap hr::after {
+  content: "Page break";
+  position: absolute;
+  left: 50%;
+  top: -0.7em;
+  transform: translateX(-50%);
+  padding: 0 0.5rem;
+  background: var(--background);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+}

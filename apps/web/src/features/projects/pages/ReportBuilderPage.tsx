@@ -1,4 +1,20 @@
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -122,6 +138,9 @@ export function ReportBuilderPage() {
     photos.forEach((p) => m.set(p.id, p));
     return m;
   }, [photos]);
+
+  // A small distance threshold so a click on the handle is not read as a drag.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   // ----- initial load -----
   useEffect(() => {
@@ -298,6 +317,28 @@ export function ReportBuilderPage() {
     if (idx < 0 || j < 0 || j >= sections.length) return;
     const next = [...sections];
     [next[idx], next[j]] = [next[j], next[idx]];
+    await persistSectionOrder(next);
+  }
+
+  /**
+   * Drop handler for dragging a section.
+   *
+   * The card has always shown a grip handle, but nothing was wired to it — no
+   * DndContext, no listeners — so grabbing it did nothing and the only way to
+   * reorder was the chevrons in the opposite corner of the card. Both paths now
+   * end in `persistSectionOrder`, so they cannot drift.
+   */
+  async function onSectionDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const from = sections.findIndex((s) => s.id === active.id);
+    const to = sections.findIndex((s) => s.id === over.id);
+    if (from < 0 || to < 0) return;
+    await persistSectionOrder(arrayMove(sections, from, to));
+  }
+
+  /** Renumber from zero and write every position, with rollback on failure. */
+  async function persistSectionOrder(next: SectionRow[]) {
     const renumbered = next.map((s, i) => ({ ...s, position: i }));
     const prev = sections;
     setSections(renumbered);
@@ -346,7 +387,50 @@ export function ReportBuilderPage() {
   function removePhoto(sectionId: string, photoId: string) {
     const sec = sections.find((s) => s.id === sectionId);
     if (!sec) return;
+    const removed = sec.photos.find((p) => p.photo_id === photoId);
     patchSection(sectionId, { photos: sec.photos.filter((p) => p.photo_id !== photoId) });
+    /*
+     * Offer the caption back. Removing a photo used to silently destroy whatever
+     * had been typed about it, and re-adding it returns an empty caption — so a
+     * misclick cost real writing with no way back. The undo restores the entry
+     * at its original index, because photo order decides which photos share a
+     * page in the export.
+     */
+    const index = sec.photos.findIndex((p) => p.photo_id === photoId);
+    toast("Photo removed", {
+      description: removed?.caption ? "Its caption was removed too." : undefined,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const now = sections.find((s) => s.id === sectionId);
+          if (!now || !removed) return;
+          if (now.photos.some((p) => p.photo_id === photoId)) return;
+          const next = [...now.photos];
+          next.splice(Math.min(index, next.length), 0, removed);
+          patchSection(sectionId, { photos: next });
+        },
+      },
+    });
+  }
+
+  /**
+   * Reorder photos inside a section.
+   *
+   * Order is load-bearing, not cosmetic: every renderer consumes `photos`
+   * positionally and batches them `photosPerPage` at a time, so the sequence
+   * decides which photos share a page. Until now the only way to move photo 5
+   * ahead of photo 2 was to remove everything after it and re-add it — which
+   * also discarded the captions.
+   */
+  function movePhoto(sectionId: string, from: number, to: number) {
+    const sec = sections.find((s) => s.id === sectionId);
+    if (!sec) return;
+    if (from === to || from < 0 || to < 0 || from >= sec.photos.length || to >= sec.photos.length)
+      return;
+    const next = [...sec.photos];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    patchSection(sectionId, { photos: next });
   }
   function setPhotoCaption(sectionId: string, photoId: string, caption: string) {
     const sec = sections.find((s) => s.id === sectionId);
@@ -674,22 +758,36 @@ export function ReportBuilderPage() {
 
           {/* Sections */}
           <div className="space-y-3">
-            {sections.map((s, i) => (
-              <SectionEditor
-                key={s.id}
-                section={s}
-                index={i}
-                total={sections.length}
-                photoMap={photoMap}
-                onChange={(patch) => patchSection(s.id, patch)}
-                onMoveUp={() => moveSection(s.id, -1)}
-                onMoveDown={() => moveSection(s.id, 1)}
-                onDelete={() => deleteSection(s.id)}
-                onAddPhotos={() => setPicker({ kind: "section", sectionId: s.id })}
-                onRemovePhoto={(pid) => removePhoto(s.id, pid)}
-                onSetCaption={(pid, cap) => setPhotoCaption(s.id, pid, cap)}
-              />
-            ))}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={onSectionDragEnd}
+            >
+              <SortableContext
+                items={sections.map((s) => s.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-3">
+                  {sections.map((s, i) => (
+                    <SectionEditor
+                      key={s.id}
+                      section={s}
+                      index={i}
+                      total={sections.length}
+                      photoMap={photoMap}
+                      onChange={(patch) => patchSection(s.id, patch)}
+                      onMoveUp={() => moveSection(s.id, -1)}
+                      onMoveDown={() => moveSection(s.id, 1)}
+                      onDelete={() => deleteSection(s.id)}
+                      onAddPhotos={() => setPicker({ kind: "section", sectionId: s.id })}
+                      onRemovePhoto={(pid) => removePhoto(s.id, pid)}
+                      onSetCaption={(pid, cap) => setPhotoCaption(s.id, pid, cap)}
+                      onMovePhoto={(from, to) => movePhoto(s.id, from, to)}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
 
             <Button onClick={addSection} variant="outline" className="w-full border-dashed">
               <Plus className="mr-1 h-4 w-4" /> Add section
@@ -753,12 +851,52 @@ interface SectionEditorProps {
   onAddPhotos: () => void;
   onRemovePhoto: (id: string) => void;
   onSetCaption: (id: string, caption: string) => void;
+  onMovePhoto: (from: number, to: number) => void;
 }
 function SectionEditor(p: SectionEditorProps) {
+  // The tile itself is the drag surface, so it needs a slightly longer travel
+  // before a drag starts — otherwise tapping the remove button can register as
+  // a drag on a touchscreen.
+  const photoSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: p.section.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+    // Lift the card over its siblings while dragging; without it the next
+    // card's opaque background paints across the one being moved. `position`
+    // comes from `relative` below — z-index is inert on a static box, and
+    // stays under AppHeader's z-20.
+    zIndex: isDragging ? 5 : undefined,
+  };
   return (
-    <Card className="p-4">
+    <Card ref={setNodeRef} style={style} className="relative p-4">
       <div className="flex items-start gap-2">
-        <GripVertical className="mt-2 h-4 w-4 text-muted-foreground" />
+        {/*
+          A real handle. This was a bare icon with no listeners for as long as
+          the screen has existed — it advertised a drag that did nothing, while
+          the only working reorder was the chevrons in the opposite corner.
+        */}
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          {...attributes}
+          {...listeners}
+          aria-label={`Reorder section ${p.index + 1}`}
+          className="mt-2 cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
         <div className="min-w-0 flex-1 space-y-3">
           <div>
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">
@@ -779,56 +917,63 @@ function SectionEditor(p: SectionEditorProps) {
                 onChange={(html) => p.onChange({ body: html })}
                 placeholder="Describe what's in this section…"
                 minHeight={100}
+                pageBreaks
               />
             </div>
+            {/*
+              The page model was never stated anywhere, which is most of why
+              "I should be able to insert a page break — I don't see that
+              option" was a fair complaint: sections have always been pages,
+              and nothing said so.
+            */}
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Each section starts a new page. Use the page-break button to split a long section
+              across pages.
+            </p>
           </div>
 
           {/* Photos */}
           {p.section.photos.length > 0 && (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {p.section.photos.map((sp) => {
-                const ph = p.photoMap.get(sp.photo_id);
-                return (
-                  <div
-                    key={sp.photo_id}
-                    className="overflow-hidden rounded-md border border-border"
-                  >
-                    <div className="relative aspect-[4/3] bg-muted">
-                      {ph?.url ? (
-                        <img
-                          src={ph.url}
-                          alt=""
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                          <ImageOff className="h-6 w-6" />
-                        </div>
-                      )}
-                      <Button
-                        size="icon"
-                        variant="secondary"
-                        className="absolute right-1 top-1 h-7 w-7"
-                        onClick={() => p.onRemovePhoto(sp.photo_id)}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                    <div className="border-t">
-                      <RichTextEditor
-                        value={sp.caption}
-                        onChange={(html) => p.onSetCaption(sp.photo_id, html)}
-                        placeholder="Photo caption…"
-                        minHeight={56}
-                        compact
-                        className="rounded-none border-0"
+            <>
+              {/*
+                Photo order is load-bearing, not cosmetic: every renderer
+                consumes this array positionally and batches it photosPerPage at
+                a time, so the sequence decides which photos share a page. Before
+                this the only way to move one was to delete everything after it
+                and re-add — which also discarded the captions.
+              */}
+              <p className="text-[11px] text-muted-foreground">
+                Drag a photo to reorder. Order decides which photos share a page.
+              </p>
+              <DndContext
+                sensors={photoSensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(e) => {
+                  const { active, over } = e;
+                  if (!over || active.id === over.id) return;
+                  const from = p.section.photos.findIndex((x) => x.photo_id === active.id);
+                  const to = p.section.photos.findIndex((x) => x.photo_id === over.id);
+                  if (from >= 0 && to >= 0) p.onMovePhoto(from, to);
+                }}
+              >
+                <SortableContext
+                  items={p.section.photos.map((x) => x.photo_id)}
+                  strategy={rectSortingStrategy}
+                >
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {p.section.photos.map((sp) => (
+                      <SectionPhotoTile
+                        key={sp.photo_id}
+                        sp={sp}
+                        photo={p.photoMap.get(sp.photo_id)}
+                        onRemove={() => p.onRemovePhoto(sp.photo_id)}
+                        onSetCaption={(cap) => p.onSetCaption(sp.photo_id, cap)}
                       />
-                    </div>
+                    ))}
                   </div>
-                );
-              })}
-            </div>
+                </SortableContext>
+              </DndContext>
+            </>
           )}
 
           <div className="flex flex-wrap items-center gap-2">
@@ -855,6 +1000,81 @@ function SectionEditor(p: SectionEditorProps) {
         </div>
       </div>
     </Card>
+  );
+}
+
+/**
+ * One draggable photo in a section.
+ *
+ * The whole tile is the drag handle rather than a separate grip: the tiles are
+ * small, and a grip would compete for space with the remove button and the
+ * caption editor. The caption editor and the remove button stop propagation so
+ * typing and clicking still work.
+ */
+function SectionPhotoTile({
+  sp,
+  photo,
+  onRemove,
+  onSetCaption,
+}: {
+  sp: { photo_id: string; caption: string };
+  photo: PhotoRef | undefined;
+  onRemove: () => void;
+  onSetCaption: (caption: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: sp.photo_id,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.6 : 1,
+        zIndex: isDragging ? 5 : undefined,
+      }}
+      className="relative overflow-hidden rounded-md border border-border bg-card"
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="relative aspect-[4/3] cursor-grab touch-none bg-muted active:cursor-grabbing"
+      >
+        {photo?.url ? (
+          <img src={photo.url} alt="" className="h-full w-full object-cover" loading="lazy" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+            <ImageOff className="h-6 w-6" />
+          </div>
+        )}
+        <Button
+          size="icon"
+          variant="secondary"
+          className="absolute right-1 top-1 h-7 w-7"
+          aria-label="Remove photo"
+          // The tile is the drag surface, so the button has to opt out of it or
+          // a click reads as the start of a drag.
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      <div className="border-t" onPointerDown={(e) => e.stopPropagation()}>
+        <RichTextEditor
+          value={sp.caption}
+          onChange={onSetCaption}
+          placeholder="Photo caption…"
+          minHeight={56}
+          compact
+          className="rounded-none border-0"
+        />
+      </div>
+    </div>
   );
 }
 

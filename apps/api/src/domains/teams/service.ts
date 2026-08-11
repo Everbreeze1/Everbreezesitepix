@@ -64,10 +64,30 @@ function generateToken() {
  * Nothing here reports whether the address was already registered: that would be
  * account enumeration by anyone who can create a team and type an address.
  */
+/**
+ * Who the invite is from.
+ *
+ * `label` is what the body copy says and keeps the old behaviour exactly —
+ * name, else email, else "A teammate". `fullName` and `email` are handed on
+ * separately because they end up in the From and Reply-To headers, where an
+ * email address standing in for a missing name would read as a forgery rather
+ * than a fallback (see `sendTeamInviteEmail`).
+ */
+async function loadInviter(supabaseAdmin: SupabaseAdmin, userId: string) {
+  const { data: profile } = await supabaseAdmin
+    .from("profiles" as any)
+    .select("full_name, email")
+    .eq("id", userId)
+    .maybeSingle();
+  const fullName = ((profile as any)?.full_name as string | null) ?? null;
+  const email = ((profile as any)?.email as string | null) ?? null;
+  return { label: fullName || email || "A teammate", fullName, email };
+}
+
 async function sendInviteEmail(opts: {
   to: string;
   teamName: string;
-  inviterName: string;
+  inviter: { label: string; fullName: string | null; email: string | null };
   acceptUrl: string;
   token: string;
 }): Promise<{ sent: boolean; via: "resend" | null; reason: string | null }> {
@@ -76,7 +96,9 @@ async function sendInviteEmail(opts: {
       to: opts.to,
       acceptUrl: opts.acceptUrl,
       teamName: opts.teamName,
-      inviterName: opts.inviterName,
+      inviterName: opts.inviter.label,
+      inviterFullName: opts.inviter.fullName,
+      inviterEmail: opts.inviter.email,
       // Matches the 14-day expiry `inviteMemberService` stamps on the row.
       expiresInDays: 14,
     });
@@ -422,18 +444,12 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
   if (dupErr) console.error("[teams] invite duplicate probe failed", dupErr);
 
   if (dup) {
-    const { data: inviterProfile } = await supabaseAdmin
-      .from("profiles" as any)
-      .select("full_name, email")
-      .eq("id", userId)
-      .maybeSingle();
-    const inviterName =
-      (inviterProfile as any)?.full_name || (inviterProfile as any)?.email || "A teammate";
+    const inviter = await loadInviter(supabaseAdmin, userId);
     const origin = data.origin?.replace(/\/+$/, "") || "https://everbreezesitepix.com";
     const emailRes = await sendInviteEmail({
       to: email,
       teamName: (team as any).name,
-      inviterName,
+      inviter,
       acceptUrl: `${origin}/invite/${(dup as any).token}`,
       token: (dup as any).token,
     });
@@ -498,20 +514,14 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
   if (error || !invite) throw new Error(error?.message ?? "Failed to create invite");
 
   // Send the email (best effort)
-  const { data: inviterProfile } = await supabaseAdmin
-    .from("profiles" as any)
-    .select("full_name, email")
-    .eq("id", userId)
-    .maybeSingle();
-  const inviterName =
-    (inviterProfile as any)?.full_name || (inviterProfile as any)?.email || "A teammate";
+  const inviter = await loadInviter(supabaseAdmin, userId);
   const origin = data.origin?.replace(/\/+$/, "") || "https://everbreezesitepix.com";
   const acceptUrl = `${origin}/invite/${token}`;
 
   const emailRes = await sendInviteEmail({
     to: email,
     teamName: (team as any).name,
-    inviterName,
+    inviter,
     acceptUrl,
     token,
   });
@@ -967,19 +977,13 @@ export async function resendInviteService(ctx: AuthedContext, data: any) {
     .eq("id", (invite as any).team_id)
     .single();
 
-  const { data: inviterProfile } = await supabaseAdmin
-    .from("profiles" as any)
-    .select("full_name, email")
-    .eq("id", userId)
-    .maybeSingle();
-  const inviterName =
-    (inviterProfile as any)?.full_name || (inviterProfile as any)?.email || "A teammate";
+  const inviter = await loadInviter(supabaseAdmin, userId);
 
   const origin = data.origin?.replace(/\/+$/, "") || "https://everbreezesitepix.com";
   const emailRes = await sendInviteEmail({
     to: (invite as any).email,
     teamName: (team as any).name,
-    inviterName,
+    inviter,
     acceptUrl: `${origin}/invite/${(invite as any).token}`,
     token: (invite as any).token,
   });
