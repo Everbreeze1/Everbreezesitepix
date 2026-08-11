@@ -34,26 +34,35 @@ function generateToken() {
 }
 
 /**
- * Mail a team invite, by whichever route works.
+ * Mail a team invite.
  *
- * This used to be GoTrue or nothing. `auth.admin.inviteUserByEmail` refuses —
- * and sends nothing — for an address that ALREADY HAS AN ACCOUNT, for a
- * rate-limited address, and for any error out of the Send Email hook. All three
- * returned `{ sent: false }` with no second attempt, so the invitee got nothing
- * and the owner was left copying a raw 48-character token out of a code block.
- * That is exactly the "Invite link (email not sent)" the bug report shows, and
- * the already-registered branch is the most common of the three: inviting anyone
- * who has ever signed up hit it every single time.
+ * We send this ourselves. It deliberately does NOT go through
+ * `auth.admin.inviteUserByEmail`, which this used to depend on entirely, because
+ * GoTrue was wrong for this job in both directions:
  *
- * So GoTrue is now an optimisation, not the only path. When it declines for any
- * reason we send the invite ourselves through Resend, which needs no GoTrue user
- * because `/invite/<token>` handles both accept-as-existing-user and
- * sign-up-in-place.
+ *   ALREADY-REGISTERED ADDRESS — GoTrue refuses outright and sends nothing. Any
+ *   address that had ever signed up hit this every single time, and the old code
+ *   gave up there, so the invitee received nothing and the owner was left
+ *   copying a raw 48-character token out of a code block. That is the "Invite
+ *   link (email not sent)" box in the bug report.
  *
- * `alreadyRegistered` is deliberately NOT returned any more. Telling the caller
- * "that address already has a SitePix account" is account enumeration by anyone
- * who can create a team and type an address — and now that the mail goes out
- * regardless, there is nothing left to explain.
+ *   BRAND-NEW ADDRESS — worse, and silent. GoTrue CREATES an auth user for the
+ *   invited address. That account has no password, so the invitee cannot sign
+ *   in; and when they follow the invite link and try to sign up,
+ *   `acceptInviteSignupService` either trips its "an account already exists for
+ *   this email — please sign in first" 409, or fails inside `createUser` with
+ *   "already registered". Either way inviting someone who does not yet have an
+ *   account created a ghost account that then blocked them from making a real
+ *   one. Exactly the case a team invite exists to serve.
+ *
+ * `/invite/<token>` needs no GoTrue user at all: an existing user signs in and
+ * accepts (`acceptInvite`), a new one sets a name and password in place
+ * (`acceptInviteSignup`, which creates the account itself — unconfirmed, so the
+ * ordinary confirmation mail still proves they own the inbox). One link, both
+ * cases, and no dependency on the Auth Send Email hook.
+ *
+ * Nothing here reports whether the address was already registered: that would be
+ * account enumeration by anyone who can create a team and type an address.
  */
 async function sendInviteEmail(opts: {
   to: string;
@@ -61,34 +70,13 @@ async function sendInviteEmail(opts: {
   inviterName: string;
   acceptUrl: string;
   token: string;
-}): Promise<{ sent: boolean; via: "gotrue" | "resend" | null; reason: string | null }> {
-  let reason: string | null = null;
-
-  try {
-    const supabaseAdmin = getSupabaseAdmin();
-    // Preferred when it works: GoTrue also provisions the auth user, so the
-    // invitee lands with a session already established.
-    const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(opts.to, {
-      redirectTo: opts.acceptUrl,
-      data: {
-        team_name: opts.teamName,
-        inviter_name: opts.inviterName,
-        invite_token: opts.token,
-        accept_url: opts.acceptUrl,
-      },
-    });
-    if (!error) return { sent: true, via: "gotrue", reason: null };
-    reason = error.message ?? "gotrue_error";
-  } catch (e) {
-    reason = e instanceof Error ? e.message : "gotrue_threw";
-  }
-
+}): Promise<{ sent: boolean; via: "resend" | null; reason: string | null }> {
   try {
     await sendTeamInviteEmail({ to: opts.to, acceptUrl: opts.acceptUrl });
-    console.warn("[teams] invite sent via resend fallback", { reason });
-    return { sent: true, via: "resend", reason };
+    return { sent: true, via: "resend", reason: null };
   } catch (e) {
-    console.error("[teams] invite email failed on both routes", { reason, error: e });
+    const reason = e instanceof Error ? e.message : "send_failed";
+    console.error("[teams] invite email failed", { to: opts.to, reason });
     return { sent: false, via: null, reason };
   }
 }
@@ -802,9 +790,16 @@ export async function acceptInviteSignupService(data: any) {
      * user joins through the authenticated `acceptInvite` op, which proves
      * they control the address by making them log in first.
      */
+    /*
+     * The "reset your password" half matters for anyone caught by the old
+     * invite path: `inviteUserByEmail` created a passwordless auth user for
+     * every brand-new invitee, so they land here unable to sign in to an
+     * account they never knowingly made. A reset is the way out, and they do
+     * own the inbox. New invites no longer create that account at all.
+     */
     throw Object.assign(
       new Error(
-        "An account already exists for this email. Please sign in first, then open the invite link again to join the team.",
+        "An account already exists for this email. Sign in first, then open this invite link again. If you've never set a password, use “Forgot password” to set one.",
       ),
       { status: 409 },
     );

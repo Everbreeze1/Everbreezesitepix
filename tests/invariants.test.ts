@@ -31,6 +31,16 @@ function walk(dir: string, out: string[] = []): string[] {
 
 const ALL_WEB_FILES = walk(WEB);
 
+/**
+ * Strip comments before pattern-matching source.
+ *
+ * Several of the guards below look for a banned call, and the files that used to
+ * make that call now carry a comment explaining why they no longer do — so a
+ * naive scan matches its own documentation and fails.
+ */
+const stripComments = (src: string) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
 describe("family: soft-delete leakage (photos.deleted_at)", () => {
   // `photos.deleted_at` has no view and no RLS predicate enforcing it, so every
   // read must exclude the trash by hand. These are the picker/stat surfaces
@@ -532,10 +542,6 @@ describe("family: people-lists must not read profiles from the browser", () => {
    * company_phone and company_logo_url — a teammate-scoped policy would hand
    * every crew member the owner's business details to fix a dropdown.
    */
-  /** Comments explain this very bug in several files — scan code only. */
-  const stripComments = (src: string) =>
-    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-
   it("no component resolves a list of OTHER users through profiles", () => {
     const offenders: string[] = [];
     for (const file of walk(WEB)) {
@@ -570,9 +576,18 @@ describe("family: an email that did not send must not be reported as success", (
    * wrapped both branches in toast.success. So the UI announced an invite it had
    * not delivered, then rendered "Invite link (email not sent)" underneath.
    */
-  it("the invite service falls back to Resend when GoTrue refuses", () => {
+  it("the invite service sends its own mail and never provisions a GoTrue user", () => {
     const src = read("apps/api/src/domains/teams/service.ts");
     expect(src).toMatch(/sendTeamInviteEmail/);
+    /*
+     * inviteUserByEmail CREATES an auth user for the invited address. That
+     * account has no password, so a brand-new invitee could not sign in — and
+     * when they followed the invite link, acceptInviteSignup either 409d with
+     * "an account already exists" or failed inside createUser. Inviting someone
+     * who had no account created a ghost that blocked them from making a real
+     * one, which is the exact case an invite exists to serve.
+     */
+    expect(stripComments(src)).not.toMatch(/inviteUserByEmail/);
     // The old shape leaked "this address is already registered" to the caller,
     // which is account enumeration; the fallback removes the need to say it.
     expect(src).not.toMatch(/alreadyRegistered:\s*true/);
