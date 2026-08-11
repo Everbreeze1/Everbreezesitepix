@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ServiceContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";
+import { isMissingTable } from "../../lib/postgrest";
 
 export const combineProjectsInputSchema = z.object({
   sourceId: z.string().uuid(),
@@ -56,23 +57,12 @@ export async function combineProjectsService(
     "project_blueprint_applications",
   ];
 
-  /**
-   * True when the failure is "this table isn't in this database".
-   *
+  /*
    * Several tables above exist in the migration folder but not in production
-   * (`project_label_events` is one), and skipping those is intended. The old
-   * check was `message.includes("does not exist")`, which never matched what
-   * PostgREST actually returns — a missing table comes back as PGRST205
-   * "Could not find the table 'public.x' in the schema cache". So the guard
-   * never fired, the loop threw on the first absent table, and because the
-   * tables before it had *already* been updated, every merge left the data
-   * half-moved and then reported failure. Match on the error codes instead:
-   * PGRST205 from the schema cache, 42P01 from Postgres itself.
+   * (`project_label_events` is one), and skipping those is intended. The guard
+   * itself now lives in lib/postgrest.ts — the blueprint-origin read needs the
+   * identical test, and this is the check that was silently wrong once already.
    */
-  const isMissingTable = (error: { code?: string; message?: string }) =>
-    error.code === "PGRST205" ||
-    error.code === "42P01" ||
-    /could not find the table|does not exist/i.test(error.message ?? "");
 
   /*
    * There is no transaction here: PostgREST gives us one statement per request,

@@ -1,39 +1,15 @@
-import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { LayoutTemplate } from "lucide-react";
 import { relativeTime } from "@sitepix/shared";
-import { supabase } from "@/integrations/sitepix/client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import type { BlueprintOriginApplication } from "@/lib/blueprint.functions";
+import type { BlueprintOriginState } from "@/hooks/use-project-blueprint-origin";
 import {
   DESTINATION,
   KIND_ORDER,
   KIND_OUTCOME,
   type BlueprintItemKind,
 } from "@/features/settings/components/blueprint-outcomes";
-
-interface Application {
-  blueprintId: string;
-  name: string;
-  appliedAt: string;
-  counts: Record<string, number>;
-  failedCount: number;
-}
-
-/*
- * `null` used to mean three different things at once — still loading, no
- * blueprint was applied, and the ledger could not be read — and all three
- * rendered as nothing. A project on an environment without migration
- * 20260810000000 looked exactly like a project nobody had applied a blueprint
- * to, with no console line and no UI anywhere saying otherwise.
- *
- * "I can't tell" is a different answer from "there isn't one", so it gets its
- * own state and its own chip. Badge it, never hide it.
- */
-type State =
-  | { kind: "loading" }
-  | { kind: "none" }
-  | { kind: "unavailable"; reason: "not-provisioned" | "read-failed" }
-  | { kind: "ok"; applications: Application[] };
 
 /** Panel keys on the project's own PageTabStrip. */
 export type ProjectPanel = "reports" | "checklists" | "workflows";
@@ -52,82 +28,22 @@ export type ProjectPanel = "reports" | "checklists" | "workflows";
  * appeared" is visible rather than inferred.
  */
 export function ProjectBlueprintOrigin({
-  projectId,
+  state,
   onOpenPanel,
 }: {
-  projectId: string;
+  /** From `useProjectBlueprintOrigin` — one reader shared with the per-item badges. */
+  state: BlueprintOriginState;
   onOpenPanel?: (panel: ProjectPanel) => void;
 }) {
-  const [state, setState] = useState<State>({ kind: "loading" });
-
-  useEffect(() => {
-    let cancelled = false;
-    setState({ kind: "loading" });
-    (async () => {
-      const { data, error } = await supabase
-        .from("project_blueprint_applications" as any)
-        .select("blueprint_id, created_at, counts, failed_count, project_templates(name)")
-        .eq("project_id", projectId)
-        .order("created_at", { ascending: true });
-      if (cancelled) return;
-      if (error) {
-        // Never silent. PGRST205 is "no such table in the schema cache", i.e.
-        // the ledger migration has not been run on this environment; anything
-        // else is a genuine read failure. Both are reported, neither is mistaken
-        // for "this project has no blueprint".
-        console.warn("[blueprint-origin] ledger read failed", {
-          projectId,
-          code: (error as { code?: string }).code,
-          message: error.message,
-        });
-        setState({
-          kind: "unavailable",
-          reason:
-            (error as { code?: string }).code === "PGRST205" ? "not-provisioned" : "read-failed",
-        });
-        return;
-      }
-      const rows = ((data as any[]) ?? []) as Array<{
-        blueprint_id: string;
-        created_at: string;
-        counts: Record<string, number> | null;
-        failed_count: number | null;
-        project_templates: { name: string } | null;
-      }>;
-      if (!rows.length) {
-        setState({ kind: "none" });
-        return;
-      }
-      setState({
-        kind: "ok",
-        applications: rows.map((r) => ({
-          blueprintId: r.blueprint_id,
-          // The embed resolves to null when the blueprint sits in another
-          // member's personal library and RLS hides it. The viewer still learns
-          // that a blueprint was applied, which is the point of the pill.
-          name: r.project_templates?.name ?? "a blueprint",
-          appliedAt: r.created_at,
-          counts: r.counts ?? {},
-          failedCount: r.failed_count ?? 0,
-        })),
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId]);
-
   if (state.kind === "loading" || state.kind === "none") return null;
 
   if (state.kind === "unavailable") {
+    // Badge, never hide. Rendering nothing here is what made "the ledger is not
+    // on this environment" look identical to "no blueprint was applied".
     return (
       <span
         className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-sidebar-foreground/20 px-3 py-1 text-[11px] font-bold text-sidebar-foreground/45"
-        title={
-          state.reason === "not-provisioned"
-            ? "Blueprint history isn't set up on this environment yet, so this project's origin can't be shown."
-            : "This project's blueprint history could not be read. Try reloading."
-        }
+        title="This project's blueprint history could not be read, so its origin can't be shown. It may not be set up on this environment yet."
       >
         <LayoutTemplate className="h-3.5 w-3.5" />
         Blueprint origin unavailable
@@ -150,7 +66,7 @@ export function ProjectBlueprintOrigin({
           title="See what this blueprint created"
         >
           <LayoutTemplate className="h-3.5 w-3.5 shrink-0 text-sidebar-ring" />
-          <span className="truncate">Blueprint · {first.name}</span>
+          <span className="truncate">Blueprint · {first.blueprintName ?? "a blueprint"}</span>
           {extra > 0 && <span className="shrink-0 opacity-70">+{extra}</span>}
         </button>
       </PopoverTrigger>
@@ -158,7 +74,7 @@ export function ProjectBlueprintOrigin({
         <div className="max-h-[60vh] overflow-y-auto">
           {applications.map((app, i) => (
             <ApplicationBlock
-              key={`${app.blueprintId}-${app.appliedAt}`}
+              key={`${app.blueprintId ?? "deleted"}-${app.appliedAt}-${i}`}
               app={app}
               first={i === 0}
               onOpenPanel={onOpenPanel}
@@ -175,7 +91,7 @@ function ApplicationBlock({
   first,
   onOpenPanel,
 }: {
-  app: Application;
+  app: BlueprintOriginApplication;
   first: boolean;
   onOpenPanel?: (panel: ProjectPanel) => void;
 }) {
@@ -199,21 +115,48 @@ function ApplicationBlock({
     <div className="border-b border-border p-3 last:border-b-0">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-foreground">{app.name}</p>
+          <p className="truncate text-sm font-bold text-foreground">
+            {app.blueprintName ?? "A deleted blueprint"}
+          </p>
           <p className="text-[11px] text-muted-foreground">
-            {first ? "Set up" : "Also applied"} {relativeTime(app.appliedAt)}
+            {/*
+             * A backfilled row is an inference from the project's checklists and
+             * workflows, not a recorded apply, and its counts are known to be
+             * partial. Saying "Set up" would assert something nobody observed.
+             */}
+            {app.inferred
+              ? "Detected from its checklists"
+              : `${first ? "Set up" : "Also applied"} ${relativeTime(app.appliedAt)}`}
             {app.failedCount > 0 && (
               <span className="font-bold text-destructive"> · {app.failedCount} failed</span>
             )}
           </p>
         </div>
-        <Link
-          to="/templates"
-          search={{ tab: "blueprints", blueprint: app.blueprintId }}
-          className="shrink-0 text-[11px] font-bold text-primary hover:underline"
-        >
-          Open →
-        </Link>
+        {/*
+         * Badge, never hide: a teammate who cannot open someone's personal
+         * blueprint still learns which blueprint made this project. Only the
+         * route in is withheld.
+         */}
+        {app.blueprintVisible && app.blueprintId ? (
+          <Link
+            to="/templates"
+            search={{ tab: "blueprints", blueprint: app.blueprintId }}
+            className="shrink-0 text-[11px] font-bold text-primary hover:underline"
+          >
+            Open →
+          </Link>
+        ) : (
+          <span
+            className="shrink-0 text-[11px] text-muted-foreground"
+            title={
+              app.blueprintId
+                ? "This blueprint is in another member's personal library."
+                : "This blueprint has since been deleted."
+            }
+          >
+            {app.blueprintId ? "Private" : "Deleted"}
+          </span>
+        )}
       </div>
 
       {rows.length === 0 ? (

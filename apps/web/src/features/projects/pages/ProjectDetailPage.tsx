@@ -44,6 +44,7 @@ import { EditProjectDialog } from "@/features/projects/components/EditProjectDia
 import { ProjectActionsMenu } from "@/features/projects/components/ProjectActionsMenu";
 import { ProjectChecklists } from "@/features/projects/components/ProjectChecklists";
 import { ProjectBlueprintOrigin } from "@/features/projects/components/ProjectBlueprintOrigin";
+import { useProjectBlueprintOrigin } from "@/hooks/use-project-blueprint-origin";
 import { startOfMonth } from "date-fns";
 import { PhotoCalendar, type CalendarPhoto } from "@/features/gallery/components/PhotoCalendar";
 import { PhotoThumb } from "@/components/PhotoThumb";
@@ -315,6 +316,16 @@ export function ProjectDetailPage() {
       replace: true,
     });
   }
+
+  /*
+   * One read of the blueprint ledger for the whole page: the hero pill names the
+   * blueprint, and `itemSources` lets each Checklists / Documents / Workflows row
+   * badge the blueprint it came from. Those items are otherwise indistinguishable
+   * from ones typed by hand, which is what made "which blueprint is applied to
+   * this project" unanswerable from the project.
+   */
+  const blueprintOrigin = useProjectBlueprintOrigin(projectId);
+
   const [creatingReport, setCreatingReport] = useState(false);
 
   async function generateReport() {
@@ -2298,7 +2309,7 @@ export function ProjectDetailPage() {
                    * was a fair description of it. Renders nothing unless a
                    * blueprint really was applied.
                    */}
-                  <ProjectBlueprintOrigin projectId={project.id} onOpenPanel={setPanel} />
+                  <ProjectBlueprintOrigin state={blueprintOrigin.state} onOpenPanel={setPanel} />
                 </div>
                 <h1 className="font-display mt-3 truncate text-2xl font-bold leading-tight tracking-tight text-sidebar-foreground sm:text-3xl">
                   {project.name}
@@ -2546,7 +2557,11 @@ export function ProjectDetailPage() {
 
       {panel === "checklists" && (
         <div className="mt-9">
-          <ProjectChecklists projectId={project.id} onChanged={() => void load({ silent: true })} />
+          <ProjectChecklists
+            projectId={project.id}
+            blueprintSources={blueprintOrigin.itemSources}
+            onChanged={() => void load({ silent: true })}
+          />
         </div>
       )}
       {/* The same calendar the gallery uses, scoped to this job — one
@@ -2581,6 +2596,7 @@ export function ProjectDetailPage() {
           <ProjectDocuments
             projectId={project.id}
             projectName={project.name}
+            blueprintSources={blueprintOrigin.itemSources}
             projectPhotos={photos.map((p) => ({
               id: p.id,
               url: p.image_url ?? signed[p.storage_path] ?? "",
@@ -2600,6 +2616,7 @@ export function ProjectDetailPage() {
           {isTeam ? (
             <ProjectWorkflows
               projectId={project.id}
+              blueprintSources={blueprintOrigin.itemSources}
               onChanged={() => void load({ silent: true })}
             />
           ) : (

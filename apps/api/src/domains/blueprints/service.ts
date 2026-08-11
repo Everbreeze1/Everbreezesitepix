@@ -1,8 +1,12 @@
 import { z } from "zod";
 import { parseReportTemplateStructure } from "@sitepix/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
+import { isMissingTable } from "../../lib/postgrest";
 import type { ServiceContext } from "../../lib/user-context";
 import { createPageFromTemplateService } from "../projects/page-templates";
+
+/** `.in()` rejects an empty list, and this can never match a real row. */
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 
 export const applyProjectBlueprintInputSchema = z.object({
   blueprintId: z.string().uuid(),
@@ -93,12 +97,15 @@ export async function applyProjectBlueprintService(
   };
   const failed: Array<{ kind: string; reason: string }> = [];
 
-  // Blueprint labels → merge onto project
+  // Blueprint labels → merge onto project. `name` is read here too and stored on
+  // the ledger row, so the history can still say which blueprint set a project up
+  // after that blueprint has been deleted (20260812000000).
   const { data: tpl } = await supabaseAdmin
     .from("project_templates" as any)
-    .select("labels")
+    .select("name, labels")
     .eq("id", data.blueprintId)
     .single();
+  const blueprintName: string | null = ((tpl as any)?.name as string | null) ?? null;
   const tplLabels: string[] = ((tpl as any)?.labels as string[] | null) ?? [];
   if (tplLabels.length) {
     // This is a merge implemented as an overwrite, so the READ has to be
@@ -275,6 +282,12 @@ export async function applyProjectBlueprintService(
             created_by: ctx.userId,
             title: (r as any).name,
             subtitle: (r as any).subtitle ?? null,
+            // Per-item provenance, so a report can carry a "from <blueprint>"
+            // badge like its siblings. project_checklists.template_id and
+            // project_workflows.template_id have recorded this since they were
+            // built; reports were the one blueprint output with no pointer back
+            // to what created them (20260812000000 adds the column).
+            source_template: it.ref_id,
           } as any)
           .select("id")
           .single();
@@ -416,12 +429,314 @@ export async function applyProjectBlueprintService(
     .from("project_blueprint_applications" as any)
     .insert({
       blueprint_id: data.blueprintId,
+      // Denormalised so the history survives the blueprint being deleted.
+      blueprint_name: blueprintName,
       project_id: data.projectId,
       applied_by: ctx.userId,
       counts,
       failed_count: failed.length,
+      // Distinguishes a real apply from a row reconstructed by the backfill in
+      // 20260812000100, which the project header labels differently because an
+      // inference must not be presented as an observation.
+      origin: "applied",
     } as any);
   if (ledgerErr) console.error("record blueprint application failed", ledgerErr);
 
-  return { counts, failed };
+  /*
+   * Best-effort stays non-throwing — the items really were created and that must
+   * not be reported as a failure. But it stops being SILENT: without this flag
+   * the caller could not tell that the project will never show its origin, so
+   * "which blueprint set this up?" became unanswerable with nothing anywhere
+   * having said so.
+   */
+  return { counts, failed, ledgerRecorded: !ledgerErr };
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Reading provenance back                                                    */
+/* -------------------------------------------------------------------------- */
+
+export const getProjectBlueprintOriginInputSchema = z.object({
+  projectId: z.string().uuid(),
+});
+
+export type BlueprintOriginApplication = {
+  /** null once the blueprint has been deleted; `blueprintName` still names it. */
+  blueprintId: string | null;
+  blueprintName: string | null;
+  /** May this caller open /templates for it? Teammates often cannot. */
+  blueprintVisible: boolean;
+  /** Reconstructed by the 20260812000100 backfill rather than observed. */
+  inferred: boolean;
+  appliedAt: string;
+  counts: Record<string, number>;
+  failedCount: number;
+};
+
+/**
+ * What blueprints made this project, and which item came from which.
+ *
+ * Read through the API rather than straight from the browser because the ledger
+ * and the blueprint library have different visibility rules. `projects` is
+ * visible to every teammate via are_teammates(), but `project_templates` (and
+ * therefore `project_template_items`) is visible only to its author when the
+ * blueprint carries no team_id — which is what the Templates screen writes for a
+ * user without a team. A teammate reading the ledger directly got zero rows and
+ * an empty item map, i.e. exactly what a project with no blueprint looks like.
+ *
+ * So: authorise on the PROJECT, then read with the service role.
+ * `blueprintVisible` carries the library-level permission separately, which lets
+ * a teammate learn *which* blueprint set the project up without gaining a route
+ * into someone else's personal library.
+ */
+export async function getProjectBlueprintOriginService(
+  ctx: ServiceContext,
+  data: z.infer<typeof getProjectBlueprintOriginInputSchema>,
+): Promise<{
+  status: "ok" | "unavailable";
+  applications: BlueprintOriginApplication[];
+  /**
+   * `template ref_id` → the blueprint that brought it in, for per-item badges.
+   * Keyed by ref_id alone: a checklist template appears at most once in a given
+   * blueprint, and if two applied blueprints share one, the later apply wins —
+   * which matches what the project actually ended up with.
+   */
+  itemSources: Record<string, { blueprintId: string | null; blueprintName: string | null }>;
+}> {
+  /*
+   * Authorisation is "can this person see the project", NOT "did they create
+   * it". `requireOwnProject` above is creator-only and would re-break the
+   * teammate case this function exists to fix. Reading through `ctx.supabase`
+   * IS the check — RLS on `projects` already unions owner + are_teammates.
+   */
+  const { data: proj } = await (ctx.supabase as any)
+    .from("projects")
+    .select("id")
+    .eq("id", data.projectId)
+    .maybeSingle();
+  if (!proj) throw Object.assign(new Error("Project not found"), { status: 404 });
+
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: rows, error } = await supabaseAdmin
+    .from("project_blueprint_applications" as any)
+    .select("blueprint_id, blueprint_name, counts, failed_count, created_at, origin")
+    .eq("project_id", data.projectId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    // Not provisioned is a different answer from "no blueprint", and the caller
+    // renders it differently. A genuine 5xx stays loud.
+    if (isMissingTable(error)) return { status: "unavailable", applications: [], itemSources: {} };
+    throw new Error(error.message);
+  }
+
+  const ledger = ((rows as any[]) ?? []) as Array<{
+    blueprint_id: string | null;
+    blueprint_name: string | null;
+    counts: Record<string, number> | null;
+    failed_count: number | null;
+    created_at: string;
+    origin: string | null;
+  }>;
+  if (!ledger.length) return { status: "ok", applications: [], itemSources: {} };
+
+  const blueprintIds = Array.from(
+    new Set(ledger.map((r) => r.blueprint_id).filter(Boolean) as string[]),
+  );
+
+  // Caller-scoped, so RLS decides. Membership here means "you may open it".
+  const { data: visibleRows } = await (ctx.supabase as any)
+    .from("project_templates")
+    .select("id, name")
+    .in("id", blueprintIds.length ? blueprintIds : [NIL_UUID]);
+  const visible = new Map<string, string>(
+    ((visibleRows as any[]) ?? []).map((t: any) => [t.id as string, t.name as string]),
+  );
+
+  // Names for rows written before `blueprint_name` existed, read with the admin
+  // client so a teammate still gets a name for a blueprint they cannot open.
+  const missingName = blueprintIds.filter(
+    (id) => !ledger.find((r) => r.blueprint_id === id)?.blueprint_name,
+  );
+  const nameFallback = new Map<string, string>();
+  if (missingName.length) {
+    const { data: named } = await supabaseAdmin
+      .from("project_templates" as any)
+      .select("id, name")
+      .in("id", missingName);
+    for (const t of ((named as any[]) ?? []) as Array<{ id: string; name: string }>) {
+      nameFallback.set(t.id, t.name);
+    }
+  }
+
+  const applications: BlueprintOriginApplication[] = ledger.map((r) => ({
+    blueprintId: r.blueprint_id,
+    blueprintName:
+      r.blueprint_name ?? (r.blueprint_id ? (nameFallback.get(r.blueprint_id) ?? null) : null),
+    blueprintVisible: !!r.blueprint_id && visible.has(r.blueprint_id),
+    inferred: r.origin === "inferred",
+    appliedAt: r.created_at,
+    counts: r.counts ?? {},
+    failedCount: r.failed_count ?? 0,
+  }));
+
+  /*
+   * The per-item map. Both sources are read, in the same order the apply
+   * processes them, because legacy `project_template_checklists` attachments are
+   * applied before `project_template_items` and a blueprint can hold both.
+   */
+  const itemSources: Record<string, { blueprintId: string | null; blueprintName: string | null }> =
+    {};
+  if (blueprintIds.length) {
+    const nameOf = (id: string) =>
+      ledger.find((r) => r.blueprint_id === id)?.blueprint_name ?? nameFallback.get(id) ?? null;
+
+    const [{ data: legacy }, { data: items }] = await Promise.all([
+      supabaseAdmin
+        .from("project_template_checklists" as any)
+        .select("project_template_id, checklist_template_id")
+        .in("project_template_id", blueprintIds),
+      supabaseAdmin
+        .from("project_template_items" as any)
+        .select("project_template_id, ref_id")
+        .in("project_template_id", blueprintIds),
+    ]);
+
+    for (const row of ((legacy as any[]) ?? []) as Array<{
+      project_template_id: string;
+      checklist_template_id: string;
+    }>) {
+      itemSources[row.checklist_template_id] = {
+        blueprintId: row.project_template_id,
+        blueprintName: nameOf(row.project_template_id),
+      };
+    }
+    for (const row of ((items as any[]) ?? []) as Array<{
+      project_template_id: string;
+      ref_id: string;
+    }>) {
+      itemSources[row.ref_id] = {
+        blueprintId: row.project_template_id,
+        blueprintName: nameOf(row.project_template_id),
+      };
+    }
+  }
+
+  return { status: "ok", applications, itemSources };
+}
+
+export const listBlueprintItemSourcesInputSchema = z.object({
+  projectIds: z.array(z.string().uuid()).max(200),
+});
+
+/**
+ * `itemSources`, batched across several projects.
+ *
+ * The workspace Reports screen lists reports from every project at once, so
+ * asking the per-project endpoint once per project would be one round trip per
+ * row group. Same authorisation rule — the caller's own RLS decides which of the
+ * requested projects they may see, and unseen ones are simply absent from the
+ * result rather than erroring.
+ */
+export async function listBlueprintItemSourcesService(
+  ctx: ServiceContext,
+  data: z.infer<typeof listBlueprintItemSourcesInputSchema>,
+): Promise<{
+  status: "ok" | "unavailable";
+  byProject: Record<
+    string,
+    Record<string, { blueprintId: string | null; blueprintName: string | null }>
+  >;
+}> {
+  if (!data.projectIds.length) return { status: "ok", byProject: {} };
+
+  // RLS is the filter: whatever comes back is what this caller may see.
+  const { data: visibleProjects } = await (ctx.supabase as any)
+    .from("projects")
+    .select("id")
+    .in("id", data.projectIds);
+  const allowed = ((visibleProjects as any[]) ?? []).map((p: any) => p.id as string);
+  if (!allowed.length) return { status: "ok", byProject: {} };
+
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: rows, error } = await supabaseAdmin
+    .from("project_blueprint_applications" as any)
+    .select("project_id, blueprint_id, blueprint_name")
+    .in("project_id", allowed);
+  if (error) {
+    if (isMissingTable(error)) return { status: "unavailable", byProject: {} };
+    throw new Error(error.message);
+  }
+
+  const ledger = ((rows as any[]) ?? []) as Array<{
+    project_id: string;
+    blueprint_id: string | null;
+    blueprint_name: string | null;
+  }>;
+  if (!ledger.length) return { status: "ok", byProject: {} };
+
+  const blueprintIds = Array.from(
+    new Set(ledger.map((r) => r.blueprint_id).filter(Boolean) as string[]),
+  );
+  const nameOf = new Map<string, string | null>();
+  for (const r of ledger) {
+    if (r.blueprint_id && !nameOf.get(r.blueprint_id)) nameOf.set(r.blueprint_id, r.blueprint_name);
+  }
+  const unnamed = blueprintIds.filter((id) => !nameOf.get(id));
+  if (unnamed.length) {
+    const { data: named } = await supabaseAdmin
+      .from("project_templates" as any)
+      .select("id, name")
+      .in("id", unnamed);
+    for (const t of ((named as any[]) ?? []) as Array<{ id: string; name: string }>) {
+      nameOf.set(t.id, t.name);
+    }
+  }
+
+  const [{ data: legacy }, { data: items }] = await Promise.all([
+    supabaseAdmin
+      .from("project_template_checklists" as any)
+      .select("project_template_id, checklist_template_id")
+      .in("project_template_id", blueprintIds.length ? blueprintIds : [NIL_UUID]),
+    supabaseAdmin
+      .from("project_template_items" as any)
+      .select("project_template_id, ref_id")
+      .in("project_template_id", blueprintIds.length ? blueprintIds : [NIL_UUID]),
+  ]);
+
+  // blueprint id → the ref_ids it contains
+  const refsByBlueprint = new Map<string, string[]>();
+  const push = (bp: string, ref: string) => {
+    const cur = refsByBlueprint.get(bp);
+    if (cur) cur.push(ref);
+    else refsByBlueprint.set(bp, [ref]);
+  };
+  for (const row of ((legacy as any[]) ?? []) as Array<{
+    project_template_id: string;
+    checklist_template_id: string;
+  }>) {
+    push(row.project_template_id, row.checklist_template_id);
+  }
+  for (const row of ((items as any[]) ?? []) as Array<{
+    project_template_id: string;
+    ref_id: string;
+  }>) {
+    push(row.project_template_id, row.ref_id);
+  }
+
+  const byProject: Record<
+    string,
+    Record<string, { blueprintId: string | null; blueprintName: string | null }>
+  > = {};
+  for (const r of ledger) {
+    if (!r.blueprint_id) continue;
+    const bucket = (byProject[r.project_id] ??= {});
+    for (const ref of refsByBlueprint.get(r.blueprint_id) ?? []) {
+      bucket[ref] = {
+        blueprintId: r.blueprint_id,
+        blueprintName: nameOf.get(r.blueprint_id) ?? null,
+      };
+    }
+  }
+  return { status: "ok", byProject };
 }

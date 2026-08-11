@@ -72,6 +72,7 @@ import {
   RunnerStatusPill,
 } from "./runner/runner-ui";
 import { toneForProgress } from "./runner/runner-tokens";
+import { BlueprintItemBadge } from "./BlueprintItemBadge";
 
 interface Template {
   id: string;
@@ -99,6 +100,8 @@ interface Checklist {
   assigned_to: string | null;
   completed_at: string | null;
   snapshot?: any;
+  /** The checklist template this was copied from, for the blueprint badge. */
+  template_id?: string | null;
 }
 /** Every column a `ChecklistItem` needs — shared so the refetch and the
  *  optimistic inserts can never select different shapes. */
@@ -124,9 +127,17 @@ interface Member {
 
 export function ProjectChecklists({
   projectId,
+  blueprintSources,
   onChanged,
 }: {
   projectId: string;
+  /**
+   * Source template id → the blueprint that brought it in. A lookup, not a
+   * `template_id !== null` test: applying a checklist template directly (below,
+   * and in ApplyTemplateDialog) also stamps `template_id`, so a null-check would
+   * badge hand-applied checklists as blueprint output.
+   */
+  blueprintSources?: Record<string, { blueprintId: string | null; blueprintName: string | null }>;
   /** Lets the host refresh its tab counts without remounting this panel. */
   onChanged?: () => void;
 }) {
@@ -217,7 +228,7 @@ export function ProjectChecklists({
           supabase
             .from("project_checklists" as any)
             .select(
-              "id, project_id, name, created_at, created_by, assigned_to, completed_at, snapshot",
+              "id, project_id, name, created_at, created_by, assigned_to, completed_at, snapshot, template_id",
             )
             .eq("project_id", projectId)
             .order("created_at", { ascending: true }),
@@ -1012,7 +1023,14 @@ export function ProjectChecklists({
                       tone="complete"
                       title={c.name}
                       statusLabel="Complete"
-                      meta={`${done}/${snapItems.length} answered`}
+                      meta={
+                        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                          <span>{`${done}/${snapItems.length} answered`}</span>
+                          <BlueprintItemBadge
+                            source={c.template_id ? blueprintSources?.[c.template_id] : null}
+                          />
+                        </span>
+                      }
                       done={done}
                       total={snapItems.length}
                       progressLabel={`${c.name} progress`}
@@ -1065,7 +1083,14 @@ export function ProjectChecklists({
                     // Only the terminal state earns a pill; "In progress" and
                     // "Not started" are already legible from the bar below.
                     statusLabel={isComplete ? "Complete" : undefined}
-                    meta={its.length === 0 ? "No items yet" : `${done}/${its.length} done`}
+                    meta={
+                      <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                        <span>{its.length === 0 ? "No items yet" : `${done}/${its.length} done`}</span>
+                        <BlueprintItemBadge
+                          source={cl.template_id ? blueprintSources?.[cl.template_id] : null}
+                        />
+                      </span>
+                    }
                     detail={
                       requiredOpen > 0 ? (
                         <RunnerStatusPill tone="blocked" icon={AlertCircle}>

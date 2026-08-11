@@ -82,6 +82,8 @@ import {
 import {
   applyProjectBlueprintInputSchema,
   applyProjectBlueprintService,
+  getProjectBlueprintOriginInputSchema,
+  getProjectBlueprintOriginService,
 } from "../blueprints/service";
 import {
   addProjectToGroupService,
@@ -442,6 +444,12 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   applyProjectBlueprint: authed(
     (d) => applyProjectBlueprintInputSchema.parse(d),
     applyProjectBlueprintService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  // A pure read — deliberately not `{ idempotent: true }`, which is the
+  // write-dedup path.
+  getProjectBlueprintOrigin: authed(
+    (d) => getProjectBlueprintOriginInputSchema.parse(d),
+    getProjectBlueprintOriginService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   inviteMember: authed(
     (d) =>

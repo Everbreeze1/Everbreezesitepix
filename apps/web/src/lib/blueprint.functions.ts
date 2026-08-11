@@ -13,5 +13,36 @@ export const applyProjectBlueprint = rpcOp<
     counts: Record<string, number>;
     /** Items that could not be created. Empty on a fully clean apply. */
     failed: Array<{ kind: string; reason: string }>;
+    /**
+     * False when the ledger row could not be written — the apply itself
+     * succeeded, but the project will not be able to show which blueprint made
+     * it. Best-effort on the server, so this is the only signal.
+     */
+    ledgerRecorded: boolean;
   }
 >("applyProjectBlueprint");
+
+export interface BlueprintOriginApplication {
+  /** null once the blueprint has been deleted; `blueprintName` still names it. */
+  blueprintId: string | null;
+  blueprintName: string | null;
+  /** May this viewer open the blueprint? Teammates often cannot. */
+  blueprintVisible: boolean;
+  /** Reconstructed by the backfill rather than observed at apply time. */
+  inferred: boolean;
+  appliedAt: string;
+  counts: Record<string, number>;
+  failedCount: number;
+}
+
+export interface ProjectBlueprintOrigin {
+  /** `unavailable` = the ledger could not be read, NOT "no blueprint applied". */
+  status: "ok" | "unavailable";
+  applications: BlueprintOriginApplication[];
+  /** Source template id → the blueprint that brought it in, for per-item badges. */
+  itemSources: Record<string, { blueprintId: string | null; blueprintName: string | null }>;
+}
+
+export const getProjectBlueprintOrigin = rpcOp<{ projectId: string }, ProjectBlueprintOrigin>(
+  "getProjectBlueprintOrigin",
+);

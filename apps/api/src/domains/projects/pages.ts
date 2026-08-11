@@ -149,6 +149,23 @@ export interface DocumentTreePage {
   folderId: string | null;
   title: string;
   updatedAt: string;
+  /**
+   * The document template this page was created from, bare uuid.
+   *
+   * `project_pages.source_template` stores either a template kind ("daily_log",
+   * "summary") or `document_template:<uuid>` (page-templates.ts:175). Only the
+   * latter can map back to a blueprint, so the prefix is stripped here and
+   * anything else becomes null — the client should never have to know that
+   * encoding.
+   */
+  sourceTemplateId: string | null;
+}
+
+/** `document_template:<uuid>` → `<uuid>`; every other encoding → null. */
+function documentTemplateId(sourceTemplate: string | null | undefined): string | null {
+  if (typeof sourceTemplate !== "string") return null;
+  const m = sourceTemplate.match(/^document_template:([0-9a-fA-F-]{36})$/);
+  return m ? m[1] : null;
 }
 export interface DocumentTreeFile {
   id: string;
@@ -181,7 +198,7 @@ export async function listProjectDocumentTreeService(
       .order("name", { ascending: true }),
     (ctx.supabase as any)
       .from("project_pages")
-      .select("id, folder_id, title, updated_at")
+      .select("id, folder_id, title, updated_at, source_template")
       .eq("project_id", data.projectId)
       .order("updated_at", { ascending: false }),
     (ctx.supabase as any)
@@ -206,6 +223,7 @@ export async function listProjectDocumentTreeService(
       folderId: p.folder_id,
       title: p.title,
       updatedAt: p.updated_at,
+      sourceTemplateId: documentTemplateId(p.source_template),
     })),
     files: ((fileRows as any[]) ?? []).map((f) => ({
       id: f.id,

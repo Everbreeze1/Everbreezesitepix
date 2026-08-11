@@ -11,6 +11,8 @@ export interface DocumentTreePage {
   folderId: string | null;
   title: string;
   updatedAt: string;
+  /** Document template this came from, for the blueprint badge. */
+  sourceTemplateId: string | null;
 }
 export interface DocumentTreeFile {
   id: string;

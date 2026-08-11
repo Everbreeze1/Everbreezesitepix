@@ -69,6 +69,7 @@ import {
   RunnerStatusPill,
 } from "./runner/runner-ui";
 import type { RunTone } from "./runner/runner-tokens";
+import { BlueprintItemBadge } from "./BlueprintItemBadge";
 
 interface Template {
   id: string;
@@ -267,9 +268,19 @@ function workflowState(wf: Workflow, allPhases: Phase[], allItems: Item[]): Work
 
 export function ProjectWorkflows({
   projectId,
+  blueprintSources,
   onChanged,
 }: {
   projectId: string;
+  /**
+   * Source template id → the blueprint that brought it in, from the project's
+   * blueprint ledger. Keyed on `template_id`, which this panel already selects.
+   *
+   * Deliberately a lookup rather than a `template_id !== null` test: applying a
+   * workflow template on its own also sets `template_id`, so testing for null
+   * would badge hand-applied workflows as blueprint output.
+   */
+  blueprintSources?: Record<string, { blueprintId: string | null; blueprintName: string | null }>;
   /** Lets the host refresh its tab counts without remounting this panel. */
   onChanged?: () => void;
 }) {
@@ -916,9 +927,16 @@ export function ProjectWorkflows({
                 title={w.name}
                 statusLabel={st.statusLabel}
                 meta={
-                  st.total === 0
-                    ? "No steps in this workflow"
-                    : `${st.done} of ${st.total} steps · ${st.phasesComplete}/${st.phases.length} phases`
+                  <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    <span>
+                      {st.total === 0
+                        ? "No steps in this workflow"
+                        : `${st.done} of ${st.total} steps · ${st.phasesComplete}/${st.phases.length} phases`}
+                    </span>
+                    <BlueprintItemBadge
+                      source={w.template_id ? blueprintSources?.[w.template_id] : null}
+                    />
+                  </span>
                 }
                 done={st.done}
                 total={st.total}

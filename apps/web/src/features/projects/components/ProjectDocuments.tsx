@@ -50,6 +50,7 @@ import { usePrompt } from "@/hooks/use-prompt";
 import { toast } from "sonner";
 import { formatBytes } from "@/hooks/use-storage-usage";
 import { relativeTime } from "@sitepix/shared";
+import { BlueprintItemBadge } from "./BlueprintItemBadge";
 import { downloadBase64File } from "@/lib/download-file";
 import { type ReportPhotoRef } from "@/features/projects/components/ProjectReports";
 import {
@@ -84,6 +85,12 @@ interface Props {
   projectId: string;
   projectName: string;
   projectPhotos: ReportPhotoRef[];
+  /**
+   * Source template id → the blueprint that brought it in. Keyed on a page's
+   * `sourceTemplateId`, so only pages created from a document template that a
+   * blueprint actually contains are badged.
+   */
+  blueprintSources?: Record<string, { blueprintId: string | null; blueprintName: string | null }>;
   onChanged?: () => void;
 }
 
@@ -135,7 +142,13 @@ function MoveToFolderSubmenu({
   );
 }
 
-export function ProjectDocuments({ projectId, projectName, projectPhotos, onChanged }: Props) {
+export function ProjectDocuments({
+  projectId,
+  projectName,
+  projectPhotos,
+  blueprintSources,
+  onChanged,
+}: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -880,7 +893,17 @@ export function ProjectDocuments({ projectId, projectName, projectPhotos, onChan
                       <FileText className="h-5 w-5 text-primary" />
                     </span>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-extrabold text-foreground">{p.title}</p>
+                      <p className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate text-sm font-extrabold text-foreground">
+                          {p.title}
+                        </span>
+                        <BlueprintItemBadge
+                          className="shrink-0"
+                          source={
+                            p.sourceTemplateId ? blueprintSources?.[p.sourceTemplateId] : null
+                          }
+                        />
+                      </p>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground sm:hidden">
                         Page · Updated {relativeTime(p.updatedAt)}
                       </p>
