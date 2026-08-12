@@ -14,6 +14,7 @@ import TextAlign from "@tiptap/extension-text-align";
 import { Table, TableRow, TableCell, TableHeader } from "@tiptap/extension-table";
 import { NodeSelection } from "@tiptap/pm/state";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { EditorView } from "@tiptap/pm/view";
 import {
   ArrowLeft,
   Bold,
@@ -137,9 +138,17 @@ export function ProjectPageEditorPage() {
    * doesn't have.
    */
   const savedTitleRef = useRef("Untitled");
+  /**
+   * Bumped on every edit, so a save can tell whether the document moved on
+   * while its request was in flight. Without it, a save that started before the
+   * user's last keystroke cleared `unsavedRef` on the way back and the
+   * leave-confirmation stopped guarding an edit that was never written.
+   */
+  const editCountRef = useRef(0);
   function markDirty() {
     dirtyRef.current = true;
     unsavedRef.current = true;
+    editCountRef.current += 1;
   }
 
   const [loading, setLoading] = useState(true);
@@ -159,16 +168,31 @@ export function ProjectPageEditorPage() {
   const versionRef = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState<ProjectPhoto[]>([]);
-  const [imagePickerOpen, setImagePickerOpen] = useState(false);
   /**
-   * The photo slot the picker was opened from, if it was opened by clicking one.
+   * The photo picker's open state and, when it was opened by clicking a slot
+   * (or an already-filled photo), the exact node that click landed on.
    *
-   * Both the position *and* the node: a bare position that has drifted (an undo,
-   * a reload, an edit elsewhere in the document) still points at *something*, so
-   * filling it blindly would put the photo in the wrong place. Keeping the node
-   * lets the target be recovered by identity, or the fill refused outright.
+   * One state object, not two: `open` and `target` used to live in a boolean
+   * `useState` plus a separate `useRef`, and the dialog's title read the ref
+   * during render to decide between "Fill this photo slot" and "Insert a
+   * project photo". A ref mutates without triggering a render, so that read
+   * only ever showed the *previous* render's value — right the instant the
+   * click handler happened to fire before the state update it triggered was
+   * committed, stale otherwise, and visibly wrong for the ~200ms the dialog
+   * spends fading out after `target` is cleared but before `open` catches up.
+   * Keeping both in one state value makes them change together, on the same
+   * render, every time.
+   *
+   * `target` carries the node itself, not just its position: a bare position
+   * that drifted (an undo, a reload, an edit elsewhere in the document) still
+   * points at *something*, so filling it blindly would put the photo in the
+   * wrong place. Keeping the node lets the target be recovered by identity —
+   * see `findImagePos` — or the fill refused outright.
    */
-  const slotTargetRef = useRef<{ pos: number; node: ProseMirrorNode } | null>(null);
+  const [picker, setPicker] = useState<{
+    open: boolean;
+    target: { pos: number; node: ProseMirrorNode } | null;
+  }>({ open: false, target: null });
   const [shareOpen, setShareOpen] = useState(false);
   const [shareUpdating, setShareUpdating] = useState(false);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
@@ -179,13 +203,27 @@ export function ProjectPageEditorPage() {
   const [tokenValues, setTokenValues] = useState<TokenValues>({});
   const [exporting, setExporting] = useState(false);
   const [, forceToolbarUpdate] = useState(0);
+  /**
+   * Bumped whenever the document itself changes, so the HTML is re-serialised
+   * then and not on every render. See `html` below.
+   */
+  const [docVersion, setDocVersion] = useState(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
-  const editor = useEditor({
-    onSelectionUpdate: () => forceToolbarUpdate((n) => n + 1),
-    onTransaction: () => forceToolbarUpdate((n) => n + 1),
-    onUpdate: () => markDirty(),
-    extensions: [
+  // Both built once, not on every render. `useEditor`'s default `deps: []`
+  // only skips *recreating* the editor instance — it does not stop
+  // `EditorInstanceManager.onRender` from diffing the options object on every
+  // single render (including the ones `onTransaction` below triggers just to
+  // repaint the toolbar) and calling `editor.setOptions(...)` whenever a key
+  // differs. `extensions` and `editorProps` were both fresh objects every
+  // render — `.configure()` returns a new instance each call, and the
+  // `editorProps` object literal is itself new — so that diff never once came
+  // back clean: every keystroke's toolbar repaint was also re-propping the
+  // whole ProseMirror view. Neither has anything to capture from render scope
+  // (the click handler below reads `view.state` live, and only closes over
+  // `setPicker`, which React guarantees stable), so building them once is safe.
+  const editorExtensions = useMemo(
+    () => [
       // Tiptap 3's StarterKit now bundles Link and Underline itself, which
       // duplicated the standalone Underline/LinkExtension below (console warning:
       // "Duplicate extension names found: ['link', 'underline']"). Disable
@@ -213,8 +251,11 @@ export function ProjectPageEditorPage() {
       TableHeader,
       TableCell,
     ],
-    content: "",
-    editorProps: {
+    [],
+  );
+
+  const editorProps = useMemo(
+    () => ({
       /*
        * Clicking an unfilled template photo slot OR an already-inserted project
        * photo (hover reveals a "Change photo" overlay — see ProjectImage's
@@ -233,7 +274,29 @@ export function ProjectPageEditorPage() {
        * tolerates the travel, and fires for taps too.
        */
       handleDOMEvents: {
-        click: (view, event) => {
+        /*
+         * An unfilled slot is a call to action, not cargo.
+         *
+         * ProseMirror marks every image node draggable and sets `draggable` on
+         * the NodeView wrapper, so Chromium turns press-and-twitch on one into
+         * a native HTML5 drag. A drag swallows `mouseup` and `click` outright —
+         * measured on the real page, a 9px wobble emits `mousedown, dragstart,
+         * dragend` and nothing else — so the box silently ignored anything but
+         * a perfectly still click, whichever handler was listening. Cancelling
+         * the drag restores the normal mouseup/click pair.
+         *
+         * Only unfilled slots. A real photo stays draggable, because reordering
+         * photos inside a document is a genuine thing to want.
+         */
+        dragstart: (view: EditorView, event: DragEvent) => {
+          const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+          if (!at || at.inside < 0) return false;
+          const node = view.state.doc.nodeAt(at.inside);
+          if (!node || node.type.name !== "image" || !isPhotoSlot(node.attrs)) return false;
+          event.preventDefault();
+          return true;
+        },
+        click: (view: EditorView, event: MouseEvent) => {
           // Dragging a text selection that happens to end on a photo is not a
           // click on that photo. A click leaves either a collapsed caret or a
           // NodeSelection on the image itself; a range of text means the user
@@ -245,8 +308,7 @@ export function ProjectPageEditorPage() {
           const node = view.state.doc.nodeAt(at.inside);
           if (!node || node.type.name !== "image") return false;
           if (!isPhotoSlot(node.attrs) && !node.attrs["data-photo-id"]) return false;
-          slotTargetRef.current = { pos: at.inside, node };
-          setImagePickerOpen(true);
+          setPicker({ open: true, target: { pos: at.inside, node } });
           return true;
         },
       },
@@ -254,7 +316,22 @@ export function ProjectPageEditorPage() {
         class:
           "tiptap prose prose-sm max-w-none focus:outline-none min-h-[60vh] prose-headings:font-bold prose-p:my-2 prose-ul:my-2 prose-ol:my-2",
       },
+    }),
+    [],
+  );
+
+  const editor = useEditor({
+    // `onTransaction` fires for every dispatched transaction, selection-only
+    // ones included, so it already covers `onSelectionUpdate` — registering
+    // both simply re-rendered the whole page twice per keystroke.
+    onTransaction: () => forceToolbarUpdate((n) => n + 1),
+    onUpdate: () => {
+      markDirty();
+      setDocVersion((n) => n + 1);
     },
+    extensions: editorExtensions,
+    content: "",
+    editorProps,
   });
 
   useEffect(() => {
@@ -280,6 +357,12 @@ export function ProjectPageEditorPage() {
         setUpdatedAt(res.page.updated_at);
         versionRef.current = res.page.updated_at;
         editor?.commands.setContent(res.page.content_html || "", { emitUpdate: false });
+        // `emitUpdate: false` keeps loading from counting as an edit, but it
+        // also means `onUpdate` does not fire — so the serialised `html` below
+        // has to be invalidated by hand. Without this it would still hold the
+        // empty string the editor mounted with, which is the exact value that
+        // used to get written back over the document.
+        setDocVersion((n) => n + 1);
       } catch (e: any) {
         toast.error(e?.message ?? "Could not load page");
       } finally {
@@ -330,32 +413,61 @@ export function ProjectPageEditorPage() {
     })();
   }, [projectId]);
 
-  const html = editor?.getHTML() ?? "";
+  /**
+   * The document as HTML, re-serialised only when the document changes.
+   *
+   * `getHTML()` walks and serialises the entire document, and this used to run
+   * on every render — while `onTransaction` re-renders the page on every
+   * keystroke and every caret movement. A long report was therefore fully
+   * serialised several times per character typed, for a string that only ever
+   * changes on `onUpdate`.
+   */
+  // `docVersion` looks unused to the linter because the editor's content is
+  // mutable state it cannot see through — it is precisely what makes this
+  // re-serialise, so it has to stay.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const html = useMemo(() => editor?.getHTML() ?? "", [editor, docVersion]);
   const debouncedTitle = useDebouncedValue(title, 800);
   const debouncedHtml = useDebouncedValue(html, 1200);
   const debouncedHeaderHtml = useDebouncedValue(headerHtml, 1200);
   const debouncedFooterHtml = useDebouncedValue(footerHtml, 1200);
-  const firstRun = useRef(true);
+  /**
+   * What a save writes, read at the moment it actually runs.
+   *
+   * The debounced values above decide *when* to save; they must never supply
+   * *what* is saved. They settle on two different clocks — 800ms for the title,
+   * 1200ms for the three bodies — and each one starts life holding the value
+   * from before the document loaded, so whichever fired first dragged its stale
+   * companions along with it. That was enough to lose a document just by
+   * opening it: roughly 800ms after load the title's tick fired a save carrying
+   * `debouncedHtml`, still the empty string the editor mounted with, and the
+   * stored `content_html` was blanked until the body's own tick put it back
+   * 400ms later. A closed tab, a dropped connection or a 409 inside that window
+   * made the blanking permanent, and a failed load — which also ends with an
+   * empty editor and `loading` false — blanked it with no window at all.
+   */
+  const latestRef = useRef({ title, html, headerHtml, footerHtml, showHeader, showFooter });
+  latestRef.current = { title, html, headerHtml, footerHtml, showHeader, showFooter };
   /** Serialises autosaves so two in-flight writes can't land out of order. */
   const saveChain = useRef<Promise<unknown>>(Promise.resolve());
 
-  useEffect(() => {
-    if (loading) return;
-    if (firstRun.current) {
-      firstRun.current = false;
-      return;
-    }
-    /*
-     * Queued behind whatever is already saving. The four values debounce on
-     * two different schedules (800ms for the title, 1200ms for the bodies), so
-     * two writes could be in flight at once with nothing ordering them — and
-     * because each carries a full snapshot, an older one landing second
-     * silently reverted the newer content.
-     */
-    saveChain.current = saveChain.current
+  /**
+   * Write the current values, queued behind whatever is already saving.
+   * Resolves true once the stored row matches what was sent.
+   *
+   * Queued because the four debounced values settle on two different schedules
+   * (800ms for the title, 1200ms for the bodies), so two writes could be in
+   * flight at once with nothing ordering them — and because each carries a full
+   * snapshot, an older one landing second silently reverted the newer content.
+   */
+  function queueSave(): Promise<boolean> {
+    const run = saveChain.current
       .catch(() => {})
       .then(async () => {
         setSaving(true);
+        // Read at request time, not from the debounced snapshots — see latestRef.
+        const latest = latestRef.current;
+        const savedAt = editCountRef.current;
         /*
          * An empty box is a rename in progress, not a request to blank the
          * title. `title` is optional server-side and the service only patches
@@ -365,15 +477,15 @@ export function ProjectPageEditorPage() {
          * same window, which was never retried because the next autosave only
          * fires on the next change.
          */
-        const titleToSave = debouncedTitle.trim();
+        const titleToSave = latest.title.trim();
         try {
           const res = await updateProjectPage({
             data: {
               pageId,
               title: titleToSave || undefined,
-              contentHtml: debouncedHtml,
-              headerHtml: showHeader ? debouncedHeaderHtml : null,
-              footerHtml: showFooter ? debouncedFooterHtml : null,
+              contentHtml: latest.html,
+              headerHtml: latest.showHeader ? latest.headerHtml : null,
+              footerHtml: latest.showFooter ? latest.footerHtml : null,
               /*
                * The version this editor loaded (or last successfully wrote).
                * Without it, two people with this page open each write their
@@ -393,13 +505,51 @@ export function ProjectPageEditorPage() {
             setUpdatedAt(res.updatedAt);
           }
           if (titleToSave) savedTitleRef.current = titleToSave;
-          unsavedRef.current = false;
+          // Only if nothing was typed while this request was in flight —
+          // otherwise the leave-confirmation would stop guarding an edit this
+          // save never carried.
+          if (editCountRef.current === savedAt) unsavedRef.current = false;
+          return true;
         } catch (e: any) {
           toast.error(e?.message ?? "Could not save");
+          return false;
         } finally {
           setSaving(false);
         }
       });
+    saveChain.current = run;
+    return run;
+  }
+
+  /**
+   * Write anything still sitting in the autosave debounce, and report whether
+   * the stored row now matches the editor.
+   *
+   * "Export PDF" and "Save as a New Template" both work from the *stored* row,
+   * not from what is on screen — so running either inside the 1.2s debounce
+   * window produced a PDF, or a template, of the document as it was before the
+   * last thing typed. Neither announced that; you simply got the wrong file.
+   */
+  async function flushPendingSave(): Promise<boolean> {
+    if (unsavedRef.current) return queueSave();
+    // Nothing outstanding, but a save may still be on the wire.
+    await saveChain.current.catch(() => {});
+    return !unsavedRef.current;
+  }
+
+  useEffect(() => {
+    if (loading) return;
+    /*
+     * Nothing to write until the user has actually changed something.
+     * Merely opening a document produces debounce ticks of its own, and acting
+     * on those meant every visit rewrote the row — burning a version, moving
+     * "Last updated", and writing whatever the debounced snapshots happened to
+     * hold at the time. `markDirty` runs on editor updates, title edits and
+     * header/footer changes, and `setContent` on load is deliberately
+     * `emitUpdate: false`, so this is true exactly when there are real edits.
+     */
+    if (!dirtyRef.current) return;
+    void queueSave();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     debouncedTitle,
@@ -452,8 +602,16 @@ export function ProjectPageEditorPage() {
   async function copyShareLink() {
     if (!shareToken) return;
     const url = `${window.location.origin}/share/pages/${shareToken}`;
-    await navigator.clipboard.writeText(url);
-    toast.success("Link copied to clipboard");
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied to clipboard");
+    } catch {
+      // The Clipboard API rejects outside a secure context, and in some
+      // browsers when the document isn't focused. Unhandled, that was a silent
+      // no-op plus a console rejection — the link sits right there, so say to
+      // copy it by hand.
+      toast.error("Couldn't copy automatically — select the link and copy it");
+    }
   }
 
   async function handleSaveAsTemplate() {
@@ -464,6 +622,12 @@ export function ProjectPageEditorPage() {
     });
     if (!name) return;
     try {
+      // The template is built from the stored row, so anything still in the
+      // autosave debounce would be missing from it.
+      if (!(await flushPendingSave())) {
+        toast.error("Couldn't save your latest changes — template not created");
+        return;
+      }
       await savePageAsTemplate({ data: { pageId, name } });
       // It lands in the document library — say so, and offer the route there.
       toast.success(`Saved "${name}" to your templates`, {
@@ -481,6 +645,14 @@ export function ProjectPageEditorPage() {
   async function handleExport() {
     setExporting(true);
     try {
+      // The PDF is rendered from the stored row, so exporting inside the
+      // autosave debounce handed the client a document missing whatever was
+      // typed in the last second or so. Better to fail loudly than to export
+      // a stale one.
+      if (!(await flushPendingSave())) {
+        toast.error("Couldn't save your latest changes — export cancelled");
+        return;
+      }
       const res = await generatePagePdf({ data: { pageId } });
       downloadBase64File(res.pdfBase64, res.filename);
       toast.success("Exported to PDF");
@@ -518,7 +690,9 @@ export function ProjectPageEditorPage() {
   }
   /** Put the caret back in the document once the dialog has closed. */
   function queueRefocus() {
-    afterDialogClose.current = () => editor?.commands.focus();
+    afterDialogClose.current = () => {
+      if (editor && !editor.isDestroyed) editor.commands.focus();
+    };
   }
 
   /**
@@ -555,9 +729,8 @@ export function ProjectPageEditorPage() {
   }
 
   function insertImage(photo: ProjectPhoto) {
-    const target = slotTargetRef.current;
-    slotTargetRef.current = null;
-    setImagePickerOpen(false);
+    const target = picker.target;
+    setPicker({ open: false, target: null });
     if (!editor) return;
 
     const attrs: Record<string, unknown> = {
@@ -640,7 +813,18 @@ export function ProjectPageEditorPage() {
     }
   }
 
-  async function handleDeleteSnippet(snippetId: string) {
+  async function handleDeleteSnippet(snippet: TextSnippet) {
+    // Snippets are a shared library with no trash and no undo, and the bin icon
+    // sits one row away from "Use" — a slip destroyed saved work outright.
+    const proceed = await confirm({
+      title: "Delete snippet?",
+      description: `"${snippet.title}" will be removed from your snippet library. This can't be undone.`,
+      confirmText: "Delete",
+      cancelText: "Keep",
+      variant: "destructive",
+    });
+    if (!proceed) return;
+    const snippetId = snippet.id;
     try {
       await deleteTextSnippet({ data: { snippetId } });
       setSnippets((prev) => prev.filter((s) => s.id !== snippetId));
@@ -738,13 +922,11 @@ export function ProjectPageEditorPage() {
 
         <DocumentToolbar
           editor={editor}
-          onAddImage={() => {
-            // Explicitly "put a photo here", not "fill that slot": drop any
-            // target left over from an earlier click so this can't silently
-            // fill a box the user is no longer looking at.
-            slotTargetRef.current = null;
-            setImagePickerOpen(true);
-          }}
+          onAddImage={() =>
+            // Explicitly "put a photo here", not "fill that slot" — no target,
+            // so this can't silently fill a box the user is no longer looking at.
+            setPicker({ open: true, target: null })
+          }
           onOpenSnippets={openSnippets}
           onAddHeader={() => {
             markDirty();
@@ -804,11 +986,8 @@ export function ProjectPageEditorPage() {
       </div>
 
       <Dialog
-        open={imagePickerOpen}
-        onOpenChange={(v) => {
-          if (!v) slotTargetRef.current = null;
-          setImagePickerOpen(v);
-        }}
+        open={picker.open}
+        onOpenChange={(open) => setPicker((p) => (open ? p : { open: false, target: null }))}
       >
         <DialogContent
           className="max-h-[80vh] max-w-2xl overflow-hidden p-0"
@@ -817,7 +996,7 @@ export function ProjectPageEditorPage() {
           <div className="flex max-h-[80vh] flex-col">
             <DialogHeader className="border-b px-6 pb-4 pt-5">
               <DialogTitle>
-                {slotTargetRef.current !== null ? "Fill this photo slot" : "Insert a project photo"}
+                {picker.target !== null ? "Fill this photo slot" : "Insert a project photo"}
               </DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-y-auto p-4">
@@ -967,7 +1146,7 @@ export function ProjectPageEditorPage() {
                           size="icon"
                           variant="ghost"
                           className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDeleteSnippet(s.id)}
+                          onClick={() => void handleDeleteSnippet(s)}
                           aria-label="Delete snippet"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -1016,10 +1195,18 @@ function tokenPillHtml(key: string, values: TokenValues): string {
   return `<span data-token="${escapeAttr(key)}" data-label="${escapeAttr(label)}"${empty}>${escapeAttr(label)}</span>`;
 }
 
-/** Appends a field into a header/footer's single `<p>`. */
+/**
+ * Appends a field into a header/footer's single `<p>`.
+ *
+ * The fallback appends rather than replaces. A running block is paragraphs-only
+ * today (`RunningBlock` passes `singleLine`, which disables headings, lists and
+ * blockquotes), so the regex always matches and the fallback is unreachable —
+ * but it used to return just the new token, which would have silently thrown
+ * away whatever the block already contained the moment that stopped being true.
+ */
 function appendToken(current: string, html: string): string {
   if (/<\/p>\s*$/.test(current)) return current.replace(/<\/p>\s*$/, ` ${html}</p>`);
-  return `<p>${html}</p>`;
+  return current ? `${current}<p>${html}</p>` : `<p>${html}</p>`;
 }
 
 /**

@@ -849,3 +849,168 @@ describe("family: rpcOp names are strings the compiler cannot check", () => {
     expect(orphans).toEqual([]);
   });
 });
+
+/*
+ * ---------------------------------------------------------------------------
+ * Autosave must never write a value it did not mean to write.
+ * ---------------------------------------------------------------------------
+ */
+
+describe("ProjectPageEditorPage autosave", () => {
+  const editor = () => read("apps/web/src/features/projects/pages/ProjectPageEditorPage.tsx");
+
+  /*
+   * `useDebouncedValue` seeds its state with the value from the FIRST render —
+   * for the document body that is the empty string the editor mounts with,
+   * before the fetched content is ever put into it. The title debounces at
+   * 800ms and the three bodies at 1200ms, so the title's tick fired a save
+   * 400ms before the body's tick had replaced that empty seed, and the save
+   * carried it: opening a document blanked its stored `content_html` until the
+   * next tick put it back. Anything that stopped the second write — a closed
+   * tab, a dropped connection, a 409 — made it permanent, and a failed load
+   * (which also ends with an empty editor and `loading` false) blanked it with
+   * no window at all.
+   *
+   * The debounced values are triggers. The payload is read at request time.
+   */
+  it("sends values read at request time, never the debounced snapshots", () => {
+    const src = editor();
+    expect(src).toMatch(/const latest = latestRef\.current/);
+    expect(src).toMatch(/contentHtml:\s*latest\.html/);
+    expect(src).toMatch(/headerHtml:\s*latest\.showHeader\s*\?\s*latest\.headerHtml\s*:\s*null/);
+    expect(src).toMatch(/footerHtml:\s*latest\.showFooter\s*\?\s*latest\.footerHtml\s*:\s*null/);
+    expect(src).toMatch(/title:\s*titleToSave\s*\|\|\s*undefined/);
+    expect(src).toMatch(/const titleToSave = latest\.title\.trim\(\)/);
+
+    // The debounced values may schedule a save, but must not be the payload.
+    for (const stale of [
+      "debouncedHtml",
+      "debouncedHeaderHtml",
+      "debouncedFooterHtml",
+      "debouncedTitle",
+    ]) {
+      expect(src).not.toMatch(
+        new RegExp(`(contentHtml|headerHtml|footerHtml|title):\\s*${stale}\\b`),
+      );
+      expect(src).not.toMatch(new RegExp(`${stale}\\.trim\\(\\)`));
+    }
+  });
+
+  /*
+   * Opening a document produces debounce ticks of its own. Acting on them
+   * rewrote the row on every visit — moving "Last updated" and burning an
+   * optimistic-concurrency version for a document nobody touched.
+   */
+  it("does not write until the user has actually edited something", () => {
+    expect(editor()).toMatch(/if \(!dirtyRef\.current\) return;/);
+  });
+
+  /*
+   * A save that started before the user's last keystroke used to clear
+   * `unsavedRef` on the way back, so the leave-confirmation and the
+   * beforeunload guard both stopped protecting an edit that was never written.
+   */
+  it("only clears the unsaved flag when no edit landed mid-flight", () => {
+    const src = editor();
+    expect(src).toMatch(/const savedAt = editCountRef\.current/);
+    expect(src).toMatch(/if \(editCountRef\.current === savedAt\) unsavedRef\.current = false/);
+    // The unconditional clear must be gone.
+    expect(src).not.toMatch(/^\s*unsavedRef\.current = false;\s*$/m);
+  });
+
+  /*
+   * The document HTML is serialised lazily now, keyed on `docVersion`, because
+   * `getHTML()` walks the whole document and used to run on every render.
+   *
+   * That makes the load path load-bearing: `setContent` passes
+   * `emitUpdate: false` so `onUpdate` — the thing that normally bumps
+   * `docVersion` — deliberately does NOT fire. If the manual bump beside it
+   * ever goes away, `html` keeps the empty string the editor mounted with and
+   * the blanking bug walks back in through a different door.
+   */
+  it("re-serialises the document after load, despite emitUpdate: false", () => {
+    const src = editor();
+    expect(src).toMatch(/useMemo\(\(\) => editor\?\.getHTML\(\) \?\? "", \[editor, docVersion\]\)/);
+    const fromSetContent = src.slice(src.indexOf("setContent(res.page.content_html"));
+    const beforeCatch = fromSetContent.slice(0, fromSetContent.indexOf("} catch"));
+    expect(beforeCatch).toMatch(/setDocVersion\(\(n\) => n \+ 1\)/);
+  });
+});
+
+describe("ProjectPageEditorPage photo slot click", () => {
+  const editor = () => read("apps/web/src/features/projects/pages/ProjectPageEditorPage.tsx");
+
+  /*
+   * Measured in Chromium against the running app: pressing on a photo slot and
+   * releasing 9px away emits `mousedown, dragstart, dragend` — no mouseup and
+   * no click at all — because ProseMirror marks image nodes draggable and sets
+   * `draggable` on the NodeView wrapper. The slot therefore ignored every
+   * gesture except a perfectly still click, and the photo the user reached for
+   * next (via the toolbar) landed beside the still-empty box. Cancelling the
+   * drag restores the mouseup/click pair; verified 3px/9px/25px wobbles all
+   * open the picker afterwards.
+   *
+   * Only unfilled slots are undraggable — real photos keep drag-to-reorder.
+   */
+  it("cancels the native drag on unfilled slots so the click survives", () => {
+    const src = editor();
+    const props = src.slice(src.indexOf("handleDOMEvents"), src.indexOf("attributes: {"));
+    expect(props).toMatch(/dragstart:/);
+    expect(props).toMatch(/isPhotoSlot\(node\.attrs\)/);
+    expect(props).toMatch(/event\.preventDefault\(\)/);
+  });
+
+  /*
+   * The click itself is a real DOM `click`, not ProseMirror's `handleClickOn`,
+   * which it abandons past 4px of pointer travel (MouseDown.updateAllowDefault).
+   */
+  it("opens the picker from a DOM click, not handleClickOn", () => {
+    const src = editor();
+    expect(src).toMatch(/click: \(view: EditorView, event: MouseEvent\)/);
+    expect(src).not.toMatch(/handleClickOn:/);
+  });
+});
+
+describe("ProjectPageEditorPage actions that read the stored row", () => {
+  const editor = () => read("apps/web/src/features/projects/pages/ProjectPageEditorPage.tsx");
+
+  /** Body of a component-scope `function name(` up to its closing 2-space brace. */
+  function fnBody(src: string, name: string): string {
+    const start = src.indexOf(`function ${name}(`);
+    expect(start).toBeGreaterThan(-1);
+    const end = src.indexOf("\n  }\n", start);
+    expect(end).toBeGreaterThan(start);
+    return src.slice(start, end);
+  }
+
+  /*
+   * Both build from `project_pages.content_html` server-side — page-pdf.ts
+   * re-reads the row, and savePageAsTemplateService reads `page.content_html`.
+   * The editor autosaves on a 1.2s debounce, so either one run straight after
+   * typing produced a PDF, or a template, of the document as it was BEFORE the
+   * last edit. Nothing said so; you just got the wrong file.
+   */
+  it.each(["handleExport", "handleSaveAsTemplate"])(
+    "%s flushes pending saves before reading the stored row",
+    (fn) => {
+      expect(fnBody(editor(), fn)).toMatch(/await flushPendingSave\(\)/);
+    },
+  );
+
+  /*
+   * The bin icon sits one row from "Use", snippets are a shared library, and
+   * there is no trash and no undo behind this call.
+   */
+  it("confirms before deleting a snippet", () => {
+    expect(fnBody(editor(), "handleDeleteSnippet")).toMatch(/await confirm\(/);
+  });
+
+  /*
+   * navigator.clipboard rejects outside a secure context and, in some browsers,
+   * when the document isn't focused. Unhandled that was a silent no-op plus an
+   * unhandled rejection.
+   */
+  it("handles clipboard failure when copying the share link", () => {
+    expect(fnBody(editor(), "copyShareLink")).toMatch(/catch\s*\{/);
+  });
+});
