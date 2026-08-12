@@ -3,7 +3,6 @@ import { photoObjectPaths } from "@sitepix/shared";
 import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import {
   Workflow as WorkflowIcon,
-  Plus,
   Loader2,
   Camera,
   Check,
@@ -17,18 +16,13 @@ import {
   ListTree,
   CircleDot,
   MoreHorizontal,
+  Printer,
+  Share2,
   Upload,
   Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -41,23 +35,28 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
+import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { compressImageFile } from "@/features/photos/components/CameraCapture";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { PhotoThumb } from "@/components/PhotoThumb";
+import { PendingMigrationState } from "@/components/PendingMigrationState";
+import { PrintDocument } from "@/components/PrintDocument";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { QuietTextarea } from "@/components/builder/builder-ui";
 import { useAutosave, type SaveState } from "@/components/builder/use-autosave";
 import { SURFACE_BUTTON } from "@/components/ui/surface";
 import { KIND_META, type ItemKind } from "@/lib/workflow-items";
-import { friendlyError } from "@/lib/supabase-errors";
+import { friendlyError, isPendingMigrationError } from "@/lib/supabase-errors";
 import { cn } from "@/lib/utils";
 import {
   RunnerCard,
@@ -72,6 +71,13 @@ import {
 } from "./runner/runner-ui";
 import type { RunTone } from "./runner/runner-tokens";
 import { BlueprintItemBadge } from "./BlueprintItemBadge";
+import { RecordDocument } from "./RecordDocument";
+import { ShareRecordDialog } from "./ShareRecordDialog";
+import {
+  RECORD_MIGRATION,
+  type FieldRecordBody,
+  type FieldRecordProject,
+} from "@/lib/field-records.functions";
 
 interface Template {
   id: string;
@@ -86,6 +92,10 @@ interface Workflow {
   description: string | null;
   started_at: string;
   completed_at: string | null;
+  /** The rich-text write-up that ships with the printed and shared record. */
+  notes_html: string | null;
+  share_token: string | null;
+  revoked_at: string | null;
 }
 interface Phase {
   id: string;
@@ -274,6 +284,7 @@ export function ProjectWorkflows({
   projectId,
   blueprintSources,
   onChanged,
+  focusWorkflowId = null,
 }: {
   projectId: string;
   /**
@@ -287,20 +298,39 @@ export function ProjectWorkflows({
   blueprintSources?: Record<string, { blueprintId: string | null; blueprintName: string | null }>;
   /** Lets the host refresh its tab counts without remounting this panel. */
   onChanged?: () => void;
+  /**
+   * Render one workflow's run instead of the list.
+   *
+   * Which run is open is now a *route*, not local state — `WorkflowDocumentPage`
+   * passes the id from the URL. A workflow was never literally a modal, but it
+   * had every other defect of one: no address, so it could not be linked to a
+   * crew member, the browser Back button walked off the project entirely, and a
+   * refresh dropped you back to the grid.
+   *
+   * The panel and the page deliberately share this component rather than each
+   * owning a data layer. Every mutation here — the optimistic tick, the phase
+   * sign-off, the reorder-and-renumber — is the kind of logic that quietly
+   * diverges once it exists twice.
+   */
+  focusWorkflowId?: string | null;
 }) {
   const { user } = useAuth();
   const confirm = useConfirm();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  /** The share/notes columns do not exist yet — see RECORD_MIGRATION. */
+  const [pendingMigration, setPendingMigration] = useState(false);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [photos, setPhotos] = useState<Record<string, PhotoRef>>({});
-  const [applyId, setApplyId] = useState<string>("");
   const [applying, setApplying] = useState(false);
-  const [applyOpen, setApplyOpen] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  /** Letterhead for the printed and shared record. */
+  const { profile } = useProfile();
+  const [project, setProject] = useState<FieldRecordProject | null>(null);
   /** When this browser last changed something, so realtime can defer to it. */
   const lastLocalEdit = useRef(0);
 
@@ -331,7 +361,9 @@ export function ProjectWorkflows({
         const [wfRes, tplRes] = await Promise.all([
           supabase
             .from(TABLES.workflows as any)
-            .select("id, project_id, template_id, name, description, started_at, completed_at")
+            .select(
+              "id, project_id, template_id, name, description, started_at, completed_at, notes_html, share_token, revoked_at",
+            )
             .eq("project_id", projectId)
             .order("started_at", { ascending: true }),
           supabase
@@ -439,8 +471,14 @@ export function ProjectWorkflows({
           setPhotos({});
         }
         setLoadError(false);
-      } catch {
-        setLoadError(true);
+        setPendingMigration(false);
+      } catch (e) {
+        // The workflow row now carries the share/notes columns, so before that
+        // migration lands this read fails and takes the whole panel with it.
+        // "You may be offline" would be a confident, wrong diagnosis of a
+        // one-minute fix.
+        if (isPendingMigrationError(e)) setPendingMigration(true);
+        else setLoadError(true);
       } finally {
         if (!silent) setLoading(false);
       }
@@ -497,23 +535,130 @@ export function ProjectWorkflows({
     return map;
   }, [workflows, phases, items]);
 
+  /*
+   * The open run, resolved from the route rather than from a copy of the row.
+   *
+   * A deleted workflow therefore disappears from this page on its own — holding
+   * the object would have left an empty shell rendering the run of something
+   * that no longer exists.
+   */
+  const openId = focusWorkflowId;
   const open = openId ? (workflows.find((w) => w.id === openId) ?? null) : null;
   const openState = open ? states.get(open.id)! : null;
 
+  const openWorkflow = (workflowId: string) =>
+    void navigate({
+      to: "/projects/$projectId/workflows/$workflowId",
+      params: { projectId, workflowId },
+    });
+  const backToPanel = () =>
+    void navigate({
+      to: "/projects/$projectId",
+      params: { projectId },
+      search: { panel: "workflows" },
+    });
+
+  /*
+   * Project identity for the letterhead. Loaded only once a workflow is opened —
+   * the collapsed grid never prints, so the list view should not pay for a query
+   * it cannot use.
+   */
+  useEffect(() => {
+    if (!openId || project) return;
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase
+        .from("projects")
+        .select("name, street, city, state, zip")
+        .eq("id", projectId)
+        .maybeSingle();
+      if (!cancelled) setProject((data as any as FieldRecordProject) ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [openId, projectId, project]);
+
+  /**
+   * The open workflow, in the same shape the public share route serves.
+   *
+   * Built from live state rather than refetched, so the print sheet shows the
+   * tick the crew just made instead of whatever the last save round-tripped.
+   * `RecordDocument` renders this identically here and on /share/workflows.
+   */
+  const printRecord: FieldRecordBody | null = useMemo(() => {
+    if (!open || !openState) return null;
+    return {
+      kind: "workflow",
+      title: open.name,
+      description: open.description,
+      createdAt: open.started_at,
+      completedAt: open.completed_at,
+      notesHtml: open.notes_html,
+      done: openState.done,
+      total: openState.total,
+      sections: openState.phases.map((ph) => ({
+        id: ph.id,
+        name: ph.name,
+        description: ph.description,
+        notes: ph.notes,
+        requiresSignoff: ph.requires_signoff,
+        signoff: ph.signed_off_at ? { name: ph.signoff_name, at: ph.signed_off_at } : null,
+        items: (openState.itemsByPhase.get(ph.id) ?? []).map((it) => ({
+          id: it.id,
+          label: it.label,
+          description: null,
+          type: it.kind,
+          required: it.required,
+          answered: isItemComplete(it),
+          answer: it.kind === "note" ? it.note_text?.trim() || null : null,
+          notes: null,
+          completedAt: it.completed_at,
+          photoUrls: it.photo_id
+            ? [photos[it.photo_id]?.image_url].filter((u): u is string => !!u)
+            : [],
+        })),
+      })),
+    };
+  }, [open, openState, photos]);
+
   /* ------------------------------------------------------------ mutations */
 
-  const applyTemplate = async () => {
-    if (!applyId || !user) return;
+  /**
+   * The workflow's rich-text write-up.
+   *
+   * Rides the debounced queue — it is prose, typed a character at a time — and
+   * lands on the printed sheet and the shared link alongside the phases. A
+   * workflow used to record what happened but never *why*, so the account that
+   * actually goes to the customer lived in an email somewhere.
+   */
+  const setWorkflowNotes = (wf: Workflow, html: string) => {
+    lastLocalEdit.current = Date.now();
+    setWorkflows((prev) => prev.map((x) => (x.id === wf.id ? { ...x, notes_html: html } : x)));
+    save.queueSave(TABLES.workflows, wf.id, { notes_html: html });
+  };
+
+  /**
+   * Start a workflow from a template.
+   *
+   * Takes the id as an argument rather than reading `applyId` from state. That
+   * indirection existed only to serve a modal whose whole content was one
+   * `<Select>` — picking a template, confirming it, and then hunting for the card
+   * it produced. The header menu now names every template directly, so starting
+   * one is a single click and this reads the id from that click.
+   */
+  const applyTemplate = async (templateId: string) => {
+    if (!templateId || !user) return;
     setApplying(true);
     let createdId: string | null = null;
     try {
-      const tpl = templates.find((t) => t.id === applyId);
+      const tpl = templates.find((t) => t.id === templateId);
       if (!tpl) throw new Error("That template is no longer available");
 
       const { data: tphs, error: tphErr } = await supabase
         .from("workflow_template_phases" as any)
         .select("id, position, name, description, requires_signoff")
-        .eq("template_id", applyId)
+        .eq("template_id", templateId)
         .order("position", { ascending: true });
       if (tphErr) throw tphErr;
       const tphList = ((tphs as any[]) ?? []) as {
@@ -546,7 +691,7 @@ export function ProjectWorkflows({
         .from(TABLES.workflows as any)
         .insert({
           project_id: projectId,
-          template_id: applyId,
+          template_id: templateId,
           name: tpl.name,
           description: tpl.description,
           created_by: user.id,
@@ -598,11 +743,11 @@ export function ProjectWorkflows({
       }
 
       toast.success(`“${tpl.name}” started on this project`);
-      setApplyId("");
-      setApplyOpen(false);
       await load({ silent: true });
-      setOpenId(createdId);
       onChanged?.();
+      // Straight into the run. Applying a template used to drop you back on the
+      // grid to hunt for the card it had just created.
+      openWorkflow(createdId);
     } catch (e: any) {
       // Cascades to phases and items, so the project is left exactly as it was.
       if (createdId) {
@@ -832,7 +977,9 @@ export function ProjectWorkflows({
 
     const before = workflows;
     setWorkflows((prev) => prev.filter((x) => x.id !== wf.id));
-    if (openId === wf.id) setOpenId(null);
+    // Leave the run's own URL before the row goes, or the page it addresses
+    // resolves to nothing and renders its "couldn't open" state on success.
+    if (openId === wf.id) backToPanel();
     const ok = await save.runImmediate(() =>
       supabase
         .from(TABLES.workflows as any)
@@ -849,11 +996,66 @@ export function ProjectWorkflows({
 
   /* ---------------------------------------------------------------- view */
 
+  /**
+   * Every template, named, one click from starting.
+   *
+   * This replaced a dialog whose entire body was a `<Select>` of the same list —
+   * open the modal, open the select, pick, confirm, close, find the card. The
+   * menu is the select, so the confirm step and the modal both go away.
+   */
   const headerAction = (
-    <Button onClick={() => setApplyOpen(true)} className={cn(SURFACE_BUTTON, "bg-primary")}>
-      <WorkflowIcon className="h-4 w-4" />
-      Add workflow
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button className={cn(SURFACE_BUTTON, "bg-primary")} disabled={applying}>
+          {applying ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <WorkflowIcon className="h-4 w-4" />
+          )}
+          Add workflow
+          <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-72">
+        {templates.length === 0 ? (
+          <div className="px-2 py-3 text-center">
+            <p className="text-xs text-muted-foreground">
+              You don&apos;t have any workflow templates yet.
+            </p>
+          </div>
+        ) : (
+          <>
+            <DropdownMenuLabel className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+              Start from a template
+            </DropdownMenuLabel>
+            {/* Scrolls rather than paginates: a company with 30 templates should
+                still reach any of them without leaving this menu. */}
+            <div className="max-h-64 overflow-y-auto">
+              {templates.map((t) => (
+                <DropdownMenuItem key={t.id} onClick={() => void applyTemplate(t.id)}>
+                  <WorkflowIcon className="mr-2 h-4 w-4" />
+                  <span className="flex-1 truncate">
+                    {t.name}
+                    {t.description && (
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {t.description}
+                      </span>
+                    )}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </div>
+          </>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link to="/settings/workflows">
+            <Settings2 className="mr-2 h-4 w-4" />
+            {templates.length === 0 ? "Design your first workflow" : "Manage templates"}
+          </Link>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 
   const summary = (() => {
@@ -870,21 +1072,65 @@ export function ProjectWorkflows({
       : `${running.length} workflow${running.length === 1 ? "" : "s"} in progress on this job.`;
   })();
 
+  /*
+   * On the run's own route the list chrome is wrong, not merely redundant: a
+   * panel header inviting you to add a *second* workflow, and a grid of the
+   * others, on a page whose URL addresses exactly one.
+   */
+  const focused = !!focusWorkflowId;
+
+  // A route pointing at a workflow that is gone — deleted on another device, or
+  // a stale link. Say so and offer the way back rather than rendering the grid
+  // under a URL that promises one run.
+  if (focused && !loading && !loadError && !open) {
+    return (
+      <div className="mx-auto max-w-xl py-12">
+        <ErrorState
+          title="Couldn't open this workflow"
+          description="It may have been deleted, or it belongs to another project."
+          onRetry={() => void load()}
+        />
+        <div className="mt-4 flex justify-center">
+          <Button variant="outline" onClick={backToPanel}>
+            All workflows
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
-      <RunnerPanelHeader
-        eyebrow="Standardize the record"
-        title="Workflows with a clear next step"
-        description={summary}
-        actions={headerAction}
-      />
+      {!focused && (
+        <RunnerPanelHeader
+          eyebrow="Standardize the record"
+          title="Workflows with a clear next step"
+          description={summary}
+          actions={headerAction}
+        />
+      )}
 
       {loading ? (
-        <RunnerGrid>
-          <RunnerCardSkeleton />
-          <RunnerCardSkeleton />
-          <RunnerCardSkeleton />
-        </RunnerGrid>
+        // A grid of three card skeletons is the right promise for the list and
+        // the wrong one for a page whose URL addresses a single run.
+        focused ? (
+          <div className="flex min-h-[50vh] items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <RunnerGrid>
+            <RunnerCardSkeleton />
+            <RunnerCardSkeleton />
+            <RunnerCardSkeleton />
+          </RunnerGrid>
+        )
+      ) : pendingMigration ? (
+        <PendingMigrationState
+          className="mt-6"
+          migration={RECORD_MIGRATION}
+          feature="Printing and sharing a workflow"
+          onRetry={() => void load()}
+        />
       ) : loadError ? (
         <ErrorState
           className="mt-6"
@@ -898,7 +1144,7 @@ export function ProjectWorkflows({
           state={openState}
           photos={photos}
           saveState={save.state}
-          onBack={() => setOpenId(null)}
+          onBack={backToPanel}
           onToggleItem={toggleItem}
           onItemNote={setItemNote}
           onPhaseNotes={setPhaseNotes}
@@ -908,19 +1154,16 @@ export function ProjectWorkflows({
           onRevokeSignoff={revokeSignoff}
           onSetComplete={(c) => void setWorkflowComplete(open, c)}
           onDelete={() => void deleteWorkflow(open)}
+          onNotesChange={(html) => setWorkflowNotes(open, html)}
+          onShare={() => setShareOpen(true)}
         />
       ) : workflows.length === 0 ? (
         <EmptyState
           icon={WorkflowIcon}
           className="mt-6"
           title="No workflow on this job yet"
-          description="Apply a template to track phases like Pre-Job, Install, Inspection and Handover — each with its own steps, photo prompts and sign-off."
-          action={
-            <Button onClick={() => setApplyOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              Add a workflow
-            </Button>
-          }
+          description="Apply a template to track phases like Pre-Job, Install, Inspection and Handover — each with its own steps, photo prompts and sign-off. Print it or share the link when it's done."
+          action={headerAction}
         />
       ) : (
         <RunnerGrid>
@@ -948,7 +1191,7 @@ export function ProjectWorkflows({
                 done={st.done}
                 total={st.total}
                 progressLabel={`${w.name} progress`}
-                onOpen={() => setOpenId(w.id)}
+                onOpen={() => openWorkflow(w.id)}
                 detail={st.upNext.length > 0 ? <CardUpNext state={st} /> : undefined}
               />
             );
@@ -956,60 +1199,44 @@ export function ProjectWorkflows({
         </RunnerGrid>
       )}
 
-      <Dialog open={applyOpen} onOpenChange={setApplyOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add a workflow</DialogTitle>
-            <DialogDescription>
-              Apply a workflow template to start tracking phases on this project.
-            </DialogDescription>
-          </DialogHeader>
-          {templates.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border bg-muted/25 p-5 text-center">
-              <p className="text-sm text-muted-foreground">
-                You don't have any workflow templates yet.
-              </p>
-              <Button asChild size="sm" variant="outline" className="mt-3">
-                <Link to="/settings/workflows">
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Design your first workflow
-                </Link>
-              </Button>
-            </div>
-          ) : (
-            <Select value={applyId} onValueChange={setApplyId}>
-              <SelectTrigger className="h-10">
-                <SelectValue placeholder="Choose a template…" />
-              </SelectTrigger>
-              <SelectContent>
-                {templates.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          <DialogFooter className="sm:justify-between">
-            <Button asChild size="sm" variant="ghost" className="text-xs text-muted-foreground">
-              <Link to="/settings/workflows">
-                <Settings2 className="mr-1 h-3.5 w-3.5" />
-                Manage templates
-              </Link>
-            </Button>
-            {templates.length > 0 && (
-              <Button onClick={() => void applyTemplate()} disabled={!applyId || applying}>
-                {applying ? (
-                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="mr-1.5 h-4 w-4" />
-                )}
-                Start workflow
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Paper, for whichever workflow is open. Mounted alongside the runner
+          rather than instead of it — see components/PrintDocument.tsx for why
+          print inverts the visibility instead of hiding chrome piece by piece. */}
+      {open && printRecord && (
+        <PrintDocument>
+          <RecordDocument
+            record={printRecord}
+            project={project}
+            company={
+              profile
+                ? {
+                    name: profile.company,
+                    logo_url: profile.company_logo_url,
+                    phone: profile.company_phone,
+                    address: profile.company_address,
+                  }
+                : null
+            }
+            author={{ name: profile?.full_name ?? null }}
+          />
+        </PrintDocument>
+      )}
+
+      {open && (
+        <ShareRecordDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          table="project_workflows"
+          recordId={open.id}
+          title={open.name}
+          shareToken={open.share_token}
+          revokedAt={open.revoked_at}
+          sharePath="/share/workflows"
+          onChanged={(patch) =>
+            setWorkflows((prev) => prev.map((w) => (w.id === open.id ? { ...w, ...patch } : w)))
+          }
+        />
+      )}
     </>
   );
 }
@@ -1057,6 +1284,8 @@ function WorkflowRunner({
   onRevokeSignoff,
   onSetComplete,
   onDelete,
+  onNotesChange,
+  onShare,
 }: {
   workflow: Workflow;
   state: WorkflowState;
@@ -1072,6 +1301,8 @@ function WorkflowRunner({
   onRevokeSignoff: (ph: Phase) => void;
   onSetComplete: (complete: boolean) => void;
   onDelete: () => void;
+  onNotesChange: (html: string) => void;
+  onShare: () => void;
 }) {
   /**
    * Auto-advance: open the phase the crew is working, fold away the one it
@@ -1155,6 +1386,31 @@ function WorkflowRunner({
           }
           actions={
             <>
+              {/* Print and Share sit in front of Mark complete on purpose: a
+                  workflow is handed over more often than it is closed, and both
+                  work at any stage of the run — the sheet prints with unticked
+                  boxes and blank sign-off rules, which is exactly what a crew
+                  carrying it around a site wants. Icon-only under `sm`, where
+                  four labelled buttons wrap the header onto three rows. */}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => window.print()}
+                aria-label="Print this workflow"
+                title="Print / Save as PDF"
+              >
+                <Printer className="h-4 w-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">Print</span>
+              </Button>
+              <Button
+                size="sm"
+                variant={workflow.revoked_at ? "outline" : "secondary"}
+                onClick={onShare}
+                aria-label="Share this workflow"
+              >
+                <Share2 className="h-4 w-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">{workflow.revoked_at ? "Share" : "Shared"}</span>
+              </Button>
               {state.isComplete ? (
                 <Button
                   size="sm"
@@ -1229,6 +1485,40 @@ function WorkflowRunner({
       </div>
 
       <div className="space-y-2.5 px-3 py-4 sm:px-5">
+        {/* The write-up that travels with the record. Rich text, because what
+            reaches the customer alongside a phase list is prose — what was
+            found, what was replaced, what to watch. A completed workflow shows
+            it read-only: the record is closed. */}
+        <section className="rounded-xl border border-border bg-background/60 p-3">
+          <h3 className="font-manrope mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+            Notes &amp; findings
+            <span className="ml-2 font-bold normal-case tracking-normal text-muted-foreground/80">
+              appears on the printout and the shared link
+            </span>
+          </h3>
+          {state.isComplete ? (
+            workflow.notes_html ? (
+              <div
+                className="tiptap text-sm"
+                // Read-only replay of the author's own saved editor output.
+                // Anonymous visitors get the server-sanitised copy instead —
+                // see apps/api/src/domains/projects/field-records.ts.
+                dangerouslySetInnerHTML={{ __html: workflow.notes_html }}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">No notes were recorded.</p>
+            )
+          ) : (
+            <RichTextEditor
+              value={workflow.notes_html ?? ""}
+              onChange={onNotesChange}
+              placeholder="What did the crew find? What was done? Anything the customer needs to know…"
+              minHeight={64}
+              toolbarOnFocus
+            />
+          )}
+        </section>
+
         {state.phases.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
             This workflow has no phases. Edit its template to add some.

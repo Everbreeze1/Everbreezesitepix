@@ -1224,14 +1224,35 @@ function ChipStyles() {
         font-size: 15px;
         line-height: 1.7;
       }
-      .doc-page .ProseMirror h1 { font-size: 1.85em; font-weight: 700; margin: 0.6em 0 0.35em; letter-spacing: -0.01em; }
-      .doc-page .ProseMirror h2 { font-size: 1.35em; font-weight: 700; margin: 1.1em 0 0.35em; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
-      .doc-page .ProseMirror h3 { font-size: 1.1em; font-weight: 600; margin: 0.9em 0 0.3em; }
-      .doc-page .ProseMirror p { margin: 0.5em 0; }
-      .doc-page .ProseMirror ul, .doc-page .ProseMirror ol { margin: 0.4em 0 0.6em 1.4em; }
-      .doc-page .ProseMirror li { margin: 0.2em 0; }
-      .doc-page .ProseMirror hr { border: 0; border-top: 1px solid #e5e7eb; margin: 1.4em 0; }
-      .doc-page .ProseMirror blockquote {
+      /* The preview pane is the same document, so it gets the same face and
+         measure — otherwise "preview" means "the same words in a different
+         typeface". */
+      .doc-page .doc-preview {
+        font-family: ui-serif, Georgia, "Times New Roman", serif;
+        font-size: 15px;
+        line-height: 1.7;
+        color: #111827;
+      }
+      /* Every rule below is shared with .doc-preview, the read-only pane the
+         Preview toggle shows. That pane's className leans on the prose
+         utilities, which are a no-op in this app — @tailwindcss/typography is
+         not installed, and the codebase declares typography per surface
+         instead (see the .tiptap and .wt-markdown blocks in styles.css).
+         Nobody ever declared it for this one, so Tailwind's preflight was left
+         in charge: headings rendered at body size, lists lost their markers and
+         every block lost its margins. An author previewing a template saw
+         something that looked nothing like the document it produces. */
+      .doc-page .ProseMirror h1, .doc-page .doc-preview h1 { font-size: 1.85em; font-weight: 700; margin: 0.6em 0 0.35em; letter-spacing: -0.01em; }
+      .doc-page .ProseMirror h2, .doc-page .doc-preview h2 { font-size: 1.35em; font-weight: 700; margin: 1.1em 0 0.35em; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+      .doc-page .ProseMirror h3, .doc-page .doc-preview h3 { font-size: 1.1em; font-weight: 600; margin: 0.9em 0 0.3em; }
+      .doc-page .ProseMirror p, .doc-page .doc-preview p { margin: 0.5em 0; }
+      .doc-page .ProseMirror ul, .doc-page .ProseMirror ol,
+      .doc-page .doc-preview ul, .doc-page .doc-preview ol { margin: 0.4em 0 0.6em 1.4em; }
+      .doc-page .doc-preview ul { list-style: disc; }
+      .doc-page .doc-preview ol { list-style: decimal; }
+      .doc-page .ProseMirror li, .doc-page .doc-preview li { margin: 0.2em 0; }
+      .doc-page .ProseMirror hr, .doc-page .doc-preview hr { border: 0; border-top: 1px solid #e5e7eb; margin: 1.4em 0; }
+      .doc-page .ProseMirror blockquote, .doc-page .doc-preview blockquote {
         margin: 0.8em 0;
         padding: 0.4em 1em;
         border-left: 3px solid #93c5fd;
@@ -1239,8 +1260,8 @@ function ChipStyles() {
         color: #334155;
         border-radius: 0 6px 6px 0;
       }
-      .doc-page .ProseMirror blockquote p { margin: 0.3em 0; }
-      .doc-page .ProseMirror strong { color: #0f172a; }
+      .doc-page .ProseMirror blockquote p, .doc-page .doc-preview blockquote p { margin: 0.3em 0; }
+      .doc-page .ProseMirror strong, .doc-page .doc-preview strong { color: #0f172a; }
       .doc-page .ProseMirror p.is-editor-empty:first-child::before {
         color: #9ca3af;
         content: attr(data-placeholder);
@@ -1506,7 +1527,7 @@ function DocumentEditorSurface({
                 </div>
                 <div className="doc-page px-14 py-16">
                   <div
-                    className="prose prose-neutral max-w-none prose-headings:font-semibold"
+                    className="doc-preview prose prose-neutral max-w-none prose-headings:font-semibold"
                     dangerouslySetInnerHTML={{
                       __html: fillPreview(editor.body.html, previewFill, sampleOverrides),
                     }}

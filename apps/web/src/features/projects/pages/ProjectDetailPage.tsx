@@ -2884,6 +2884,7 @@ export function ProjectDetailPage() {
             open={summaryPickerOpen}
             projectId={projectId}
             templateLabel="Summary"
+            outputNoun="summary"
             generating={generatingSummary}
             onCancel={() => setSummaryPickerOpen(false)}
             onGenerate={(ids) => void generateSummaryWalkthrough(ids)}

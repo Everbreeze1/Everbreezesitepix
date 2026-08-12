@@ -49,7 +49,10 @@ describe("family: soft-delete leakage (photos.deleted_at)", () => {
   const MUST_FILTER = [
     "apps/web/src/features/projects/pages/ReportBuilderPage.tsx",
     "apps/web/src/features/projects/pages/ProjectPageEditorPage.tsx",
-    "apps/web/src/features/projects/components/ProjectChecklists.tsx",
+    // The checklist photo picker, which used to live inside ProjectChecklists.tsx
+    // and moved here when the runner became its own page (ChecklistDocumentPage).
+    // The panel itself no longer reads `photos` at all.
+    "apps/web/src/features/projects/components/checklist/checklist-shared.tsx",
     "apps/web/src/features/projects/components/ProjectSiteLogs.tsx",
     "apps/web/src/features/projects/pages/DashboardPage.tsx",
     "apps/web/src/features/projects/components/SelectPhotosForPageDialog.tsx",
@@ -117,7 +120,9 @@ describe("family: uploads must not orphan their blob", () => {
     "apps/web/src/features/gallery/pages/GalleryPage.tsx",
     "apps/web/src/features/projects/pages/ProjectDetailPage.tsx",
     "apps/web/src/features/projects/components/ProjectWorkflows.tsx",
-    "apps/web/src/features/projects/components/ProjectChecklists.tsx",
+    // Same move as above: the checklist upload path is now in the shared module
+    // the record page and the panel both draw from.
+    "apps/web/src/features/projects/components/checklist/checklist-shared.tsx",
   ];
   // Documents have no derived companion object; one path is the whole upload.
   const SINGLE_OBJECT_CASES = ["apps/web/src/features/projects/components/ProjectDocuments.tsx"];
@@ -285,6 +290,46 @@ describe("public share pages must not inject unsanitised user HTML", () => {
     for (const field of ["contentHtml", "headerHtml", "footerHtml"]) {
       expect(svc).toMatch(new RegExp(`${field}:\\s*sanitizePageHtml\\(`));
     }
+  });
+
+  /*
+   * Same exception, same reason, for the two field records.
+   *
+   * `project_checklists.notes_html` and `project_workflows.notes_html` are
+   * written straight from the author's TipTap editor with no write-side
+   * validation at all, and `RecordDocument` injects them with
+   * dangerouslySetInnerHTML so the write-up can carry headings and lists onto
+   * the printed sheet. The share routes are anonymous, so the only thing
+   * standing between an author and their customer's browser is this call.
+   */
+  it("both public field-record services sanitise the notes HTML they return", () => {
+    const svc = read("apps/api/src/domains/projects/field-records.ts");
+    // One occurrence per service — checklist and workflow.
+    expect(svc.match(/notesHtml:\s*sanitizePageHtml\(/g) ?? []).toHaveLength(2);
+  });
+
+  /*
+   * And the payload must never grow a second HTML field that skips it. Any key
+   * ending in `Html` in that file has to be produced by the sanitiser.
+   */
+  it("no HTML field in the field-record payload bypasses the sanitiser", () => {
+    const svc = read("apps/api/src/domains/projects/field-records.ts");
+    const assignments = svc.match(/^\s*\w*[Hh]tml:\s*.+$/gm) ?? [];
+    const emitted = assignments.filter((line) => !line.includes("string | null"));
+    expect(emitted.length).toBeGreaterThan(0);
+    for (const line of emitted) expect(line).toContain("sanitizePageHtml(");
+  });
+
+  /*
+   * The share routes themselves render `RecordDocument`, which is also used
+   * inside the authenticated app. If it ever stopped being the single renderer,
+   * the sanitised public copy and the trusted in-app copy would diverge — and
+   * the public one is the copy that matters.
+   */
+  it("the public record view renders the shared RecordDocument", () => {
+    const view = read("apps/web/src/features/projects/components/PublicRecordView.tsx");
+    expect(view).toContain("RecordDocument");
+    expect(view).not.toContain("dangerouslySetInnerHTML");
   });
 });
 
@@ -734,10 +779,17 @@ describe("family: a drag handle must actually drag", () => {
        *    (the shadcn ResizableHandle).
        */
       const viaProps =
-        /listeners\s*[?:]/.test(src) || /dragHandleProps/.test(src) || /\{\s*\.\.\.props\s*\}/.test(src);
+        /listeners\s*[?:]/.test(src) ||
+        /dragHandleProps/.test(src) ||
+        /\{\s*\.\.\.props\s*\}/.test(src);
       const viaResizablePanels = /react-resizable-panels/.test(src);
       if (!wired && !viaProps && !viaResizablePanels) {
-        offenders.push(file.slice(ROOT.length + 1).split("\\").join("/"));
+        offenders.push(
+          file
+            .slice(ROOT.length + 1)
+            .split("\\")
+            .join("/"),
+        );
       }
     }
     expect(offenders).toEqual([]);
@@ -814,7 +866,9 @@ describe("family: only capture paths may hide a photo from the gallery", () => {
     const src = stripComments(read(SERVICE));
     const guard = src.indexOf('(walk as any).source === "summary"');
     const reserve = src.indexOf("await reserveAutoReport(");
-    expect(guard, "summary guard missing from generateWalkthroughReportService").toBeGreaterThan(-1);
+    expect(guard, "summary guard missing from generateWalkthroughReportService").toBeGreaterThan(
+      -1,
+    );
     expect(reserve).toBeGreaterThan(-1);
     expect(guard).toBeLessThan(reserve);
   });
@@ -951,6 +1005,34 @@ describe("ProjectPageEditorPage autosave", () => {
   });
 });
 
+describe("a photo slot's declared box survives out of the editor", () => {
+  /*
+   * The box is carried by TWO halves that must stay together:
+   *
+   *   size — an inline style from ProjectImage.renderHTML, because the HTML
+   *          width/height attributes lose to Tailwind's preflight
+   *          `img { height: auto }` wherever stored HTML is rendered directly.
+   *   crop — `object-fit: cover` from CSS.
+   *
+   * Keep only the size and photos STRETCH to fill the box. Keep only the crop
+   * and the box collapses to the photo's natural aspect, which is the bug this
+   * fixed: a slot declaring 280px rendered 127px on the shared page.
+   */
+  it("renderHTML serialises the size", () => {
+    const src = read("apps/web/src/lib/tiptap-project-image.ts");
+    expect(src).toMatch(/renderHTML\(\{\s*HTMLAttributes\s*\}\)/);
+    expect(src).toMatch(/style:\s*`width:\$\{w\};height:\$\{h\}`/);
+  });
+
+  it("every surface that renders stored HTML supplies the crop", () => {
+    const css = read("apps/web/src/styles.css");
+    expect(css).toMatch(/\.tiptap img\[width\]\[height\]\s*\{[^}]*object-fit:\s*cover/);
+    // The template designer opts out of `.tiptap` and restates the rules itself.
+    const designer = read("apps/web/src/features/settings/components/DocumentTemplatesManager.tsx");
+    expect(designer).toMatch(/\.doc-page img\[width\]\[height\]\s*\{[^}]*object-fit:\s*cover/);
+  });
+});
+
 describe("ProjectPageEditorPage photo slot click", () => {
   const editor = () => read("apps/web/src/features/projects/pages/ProjectPageEditorPage.tsx");
 
@@ -1074,7 +1156,10 @@ describe("family: a summary must not claim a recording it never had", () => {
    */
   const surfaces: Array<[string, string]> = [
     ["web photo steps + markdown", "apps/web/src/components/WalkthroughReport.tsx"],
-    ["walkthrough detail page", "apps/web/src/features/walkthroughs/pages/WalkthroughDetailPage.tsx"],
+    [
+      "walkthrough detail page",
+      "apps/web/src/features/walkthroughs/pages/WalkthroughDetailPage.tsx",
+    ],
     ["public share page", "apps/web/src/routes/share.walkthroughs.$token.tsx"],
     ["public PDF", "apps/api/src/domains/walkthroughs/public-pdf.ts"],
   ];
@@ -1082,7 +1167,9 @@ describe("family: a summary must not claim a recording it never had", () => {
   for (const [label, file] of surfaces) {
     it(`${label} branches on summary vs recorded`, () => {
       const src = stripComments(read(file));
-      expect(src).toMatch(/isSummary|variant\s*===\s*["']summary["']|source\s*===\s*["']summary["']/);
+      expect(src).toMatch(
+        /isSummary|variant\s*===\s*["']summary["']|source\s*===\s*["']summary["']/,
+      );
     });
   }
 
@@ -1127,7 +1214,9 @@ describe("family: summary copy and layout must not inherit recording assumptions
   it("the delete prompt tells a summary's owner their photos are safe", () => {
     // A summary links the user's real gallery photos; "cannot be undone" alone
     // reads as though deleting it destroys them too.
-    const src = stripComments(read("apps/web/src/features/walkthroughs/pages/WalkthroughDetailPage.tsx"));
+    const src = stripComments(
+      read("apps/web/src/features/walkthroughs/pages/WalkthroughDetailPage.tsx"),
+    );
     expect(src).toMatch(/isSummary[\s\S]{0,120}photos are not affected/);
   });
 

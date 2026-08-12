@@ -1,10 +1,7 @@
 import { z } from "zod";
 import { AuthError, type ServiceContext } from "../../lib/user-context";
 import { geocodeAddressInputSchema, geocodeAddressService } from "../maps/geocode";
-import {
-  synthesizeBreezeSpeechService,
-  synthesizeSpeechInputSchema,
-} from "../tts/synthesize";
+import { synthesizeBreezeSpeechService, synthesizeSpeechInputSchema } from "../tts/synthesize";
 import {
   createPhotoCommentInputSchema,
   createPhotoCommentService,
@@ -46,10 +43,7 @@ import {
   getPublicProjectReportService,
   publicProjectReportInputSchema,
 } from "../reports/public-get";
-import {
-  generateSiteLogPdfInputSchema,
-  generateSiteLogPdfService,
-} from "../reports/site-log-pdf";
+import { generateSiteLogPdfInputSchema, generateSiteLogPdfService } from "../reports/site-log-pdf";
 import {
   analyzePhotoService,
   chatWithAssistantService,
@@ -185,6 +179,11 @@ import {
   updateProjectPageService,
 } from "../projects/pages";
 import {
+  getPublicChecklistService,
+  getPublicWorkflowService,
+  publicFieldRecordInputSchema,
+} from "../projects/field-records";
+import {
   generatePagePdfInputSchema,
   generatePagePdfService,
   getPublicProjectPagePdfService,
@@ -233,10 +232,7 @@ import {
   updateShowcaseInputSchema,
   updateShowcaseService,
 } from "../showcases/service";
-import {
-  listTimelineActivityInputSchema,
-  listTimelineActivityService,
-} from "../timeline/service";
+import { listTimelineActivityInputSchema, listTimelineActivityService } from "../timeline/service";
 import {
   checkPortfolioSlugInputSchema,
   checkPortfolioSlugService,
@@ -280,7 +276,10 @@ function authed(
   };
 }
 
-function pub(parse: (data: unknown) => unknown, service: (data: never) => Promise<unknown>): RpcEntry {
+function pub(
+  parse: (data: unknown) => unknown,
+  service: (data: never) => Promise<unknown>,
+): RpcEntry {
   return {
     public: true,
     handle: async (_ctx, data) => service(parse(data) as never),
@@ -934,6 +933,16 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   getPublicProjectPage: pub(
     (d) => publicProjectPageInputSchema.parse(d),
     getPublicProjectPageService as (data: never) => Promise<unknown>,
+  ),
+  // Checklists and workflows share one payload shape and one browser-side
+  // document renderer; see domains/projects/field-records.ts.
+  getPublicChecklist: pub(
+    (d) => publicFieldRecordInputSchema.parse(d),
+    getPublicChecklistService as (data: never) => Promise<unknown>,
+  ),
+  getPublicWorkflow: pub(
+    (d) => publicFieldRecordInputSchema.parse(d),
+    getPublicWorkflowService as (data: never) => Promise<unknown>,
   ),
   generatePagePdf: authed(
     (d) => generatePagePdfInputSchema.parse(d),

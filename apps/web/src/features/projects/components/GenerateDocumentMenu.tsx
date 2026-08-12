@@ -212,6 +212,7 @@ export function GenerateDocumentMenu({
         open={summaryPickerOpen}
         projectId={projectId}
         templateLabel="Summary"
+        outputNoun="summary"
         generating={generatingSummary}
         onCancel={() => setSummaryPickerOpen(false)}
         onGenerate={handleGenerateSummary}

@@ -1,4 +1,5 @@
 import Image from "@tiptap/extension-image";
+import { mergeAttributes } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 /**
@@ -35,6 +36,29 @@ export const ProjectImage = Image.extend({
           attrs["data-photo-id"] ? { "data-photo-id": attrs["data-photo-id"] } : {},
       },
     };
+  },
+
+  /**
+   * Serialise the declared box as an inline style as well as width/height
+   * attributes.
+   *
+   * Every surface that renders stored HTML directly — the shared page, the
+   * template previews — sits under Tailwind's preflight, and its
+   * `img { height: auto }` outranks an HTML `height` attribute (presentational
+   * hints lose to any author rule). So the fixed box a template authored was
+   * silently dropped and the photo rendered at its natural aspect instead:
+   * measured on the shared page, a slot declaring 280px came out 127px. The
+   * editor escaped it only because the NodeView below writes the size inline.
+   *
+   * An inline style outranks preflight, so the box now survives everywhere.
+   * The crop itself still comes from `.tiptap img[width][height]`, which every
+   * one of those surfaces already carries — this only restores the size.
+   */
+  renderHTML({ HTMLAttributes }) {
+    const w = cssLength(HTMLAttributes.width);
+    const h = cssLength(HTMLAttributes.height);
+    const box = w && h ? { style: `width:${w};height:${h}` } : {};
+    return ["img", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, box)];
   },
 
   // A plain `renderHTML` <img> can't host a hover overlay (browsers don't

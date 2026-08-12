@@ -28,6 +28,15 @@ export {
   allPhotoObjectPaths,
 } from "./photo-thumbnails";
 export {
+  CHECKLIST_TYPE_LABELS,
+  WORKFLOW_KIND_LABELS,
+  hasFieldResponse,
+  formatChecklistAnswer,
+  formatProjectAddress,
+  type ChecklistItemType,
+  type WorkflowItemKind,
+} from "./field-records";
+export {
   parseReportTemplateStructure,
   type ReportCoverStyle,
   type ReportSectionLayout,

@@ -1,0 +1,454 @@
+/* ===========================================================================
+ * Printable field records — checklists and workflows on paper.
+ *
+ * A record is a compliance document: the customer, the inspector and the crew
+ * lead all end up wanting it as a sheet. Printing the app page directly cannot
+ * produce one, because the record renders inside the app shell, and the
+ * sidebar, the sticky header, the mobile tab bar, toasts and every Radix portal
+ * are body-level or position:fixed layers that print alongside it.
+ *
+ * So `PrintDocument` (components/PrintDocument.tsx) portals a purpose-built
+ * document into `#sitepix-print-root` and marks the body while it is mounted.
+ * These rules then invert the problem: on paper, everything except that one
+ * subtree is hidden. New chrome is hidden by default rather than having to
+ * remember to opt out.
+ *
+ * Written in plain CSS rather than Tailwind utilities because the same document
+ * has to hold up in three places — the app's print output, the public share
+ * link on screen, and that link printed by the recipient — and because print
+ * needs physical units and break control that utilities do not express.
+ * ======================================================================== */
+
+#sitepix-print-root {
+  display: none;
+}
+
+@media print {
+  body.has-print-document > *:not(#sitepix-print-root) {
+    display: none !important;
+  }
+  body.has-print-document #sitepix-print-root {
+    display: block !important;
+  }
+
+  /* Paper is white and the ink is dark, whatever theme the app is in. The
+     document declares its own colours, so this only neutralises the shell. */
+  body.has-print-document {
+    background: #fff !important;
+    padding-top: 0 !important;
+  }
+
+  /* The share page prints the same document without the portal — it has no app
+     shell to hide, only its own toolbar. */
+  .record-doc-print-hide {
+    display: none !important;
+  }
+}
+
+/*
+ * `@page` is global — CSS gives no way to scope it to one route — so this is
+ * deliberately 12.7mm (0.5in), the margin browsers already apply by default.
+ * The record gets a deterministic sheet without silently re-laying-out the
+ * report and document print paths that shipped before it.
+ */
+@page {
+  margin: 12.7mm;
+}
+
+.record-doc {
+  /* Explicit light palette: this is paper, not a themed surface. A dark-mode
+     user printing a checklist must not hand their customer white-on-black. */
+  --doc-ink: #111827;
+  --doc-muted: #5b6472;
+  --doc-line: #d8dce3;
+  --doc-line-soft: #eceef2;
+  --doc-accent: #0f766e;
+  color: var(--doc-ink);
+  background: #fff;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 210mm;
+  margin: 0 auto;
+  padding: 10mm 9mm;
+}
+
+/* On screen inside the share page the container supplies the paper, so the
+   document must not double up on padding or width. */
+.record-doc.record-doc--screen {
+  max-width: none;
+  padding: 0;
+}
+
+.record-doc__letterhead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 2px solid var(--doc-ink);
+  padding-bottom: 10px;
+}
+.record-doc__logo {
+  max-height: 56px;
+  max-width: 180px;
+  object-fit: contain;
+}
+.record-doc__company {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.record-doc__company-meta {
+  color: var(--doc-muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+.record-doc__kind {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--doc-muted);
+  text-align: right;
+  white-space: nowrap;
+}
+.record-doc__title {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 12px 0 0;
+  line-height: 1.2;
+}
+.record-doc__subtitle {
+  color: var(--doc-muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+/* Facts strip: project, dates, progress — the header a reader scans before
+   reading a single line item. */
+.record-doc__facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 0;
+  border: 1px solid var(--doc-line);
+  border-radius: 6px;
+  padding: 9px 11px;
+}
+.record-doc__fact-label {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--doc-muted);
+}
+.record-doc__fact-value {
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 1px;
+  overflow-wrap: anywhere;
+}
+
+.record-doc__notes {
+  margin-top: 14px;
+}
+.record-doc__notes > :first-child {
+  margin-top: 0;
+}
+.record-doc__notes p {
+  margin: 0.5em 0;
+}
+.record-doc__notes ul {
+  list-style: disc;
+  padding-left: 1.2em;
+  margin: 0.5em 0;
+}
+.record-doc__notes ol {
+  list-style: decimal;
+  padding-left: 1.2em;
+  margin: 0.5em 0;
+}
+.record-doc__notes li {
+  margin: 0.2em 0;
+}
+.record-doc__notes h1 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 1em 0 0.35em;
+}
+.record-doc__notes h2 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 1em 0 0.35em;
+}
+.record-doc__notes h3 {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 1em 0 0.35em;
+}
+.record-doc__notes strong {
+  font-weight: 700;
+}
+.record-doc__notes em {
+  font-style: italic;
+}
+.record-doc__notes hr {
+  border: 0;
+  border-top: 1px solid var(--doc-line);
+  margin: 0.9em 0;
+}
+
+.record-doc__section {
+  margin-top: 18px;
+}
+.record-doc__section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--doc-line);
+  padding-bottom: 4px;
+  /* A phase heading orphaned at the foot of a page is the classic printed-form
+     defect: the reader turns over and the steps have no owner. */
+  break-after: avoid;
+}
+.record-doc__section-name {
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.record-doc__section-meta {
+  font-size: 10.5px;
+  color: var(--doc-muted);
+  white-space: nowrap;
+}
+.record-doc__section-desc {
+  font-size: 11.5px;
+  color: var(--doc-muted);
+  margin-top: 3px;
+}
+.record-doc__section-notes {
+  font-size: 11.5px;
+  margin-top: 6px;
+  border-left: 2px solid var(--doc-line);
+  padding-left: 8px;
+  white-space: pre-wrap;
+  color: var(--doc-ink);
+}
+
+.record-doc__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.record-doc__item {
+  display: flex;
+  gap: 9px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--doc-line-soft);
+  /* Never split one line item across two sheets — half a check is unreadable
+     as a record of what was done. */
+  break-inside: avoid;
+}
+.record-doc__item:last-child {
+  border-bottom: 0;
+}
+.record-doc__num {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--doc-muted);
+  min-width: 15px;
+  padding-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+/* A drawn box rather than a glyph: an unticked box is a legible instruction to
+   whoever is holding the printout, and a ticked one survives photocopying. */
+.record-doc__box {
+  width: 12px;
+  height: 12px;
+  border: 1.4px solid var(--doc-ink);
+  border-radius: 2.5px;
+  margin-top: 3px;
+  flex: 0 0 auto;
+  position: relative;
+}
+.record-doc__box--done::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: -1px;
+  width: 6px;
+  height: 9px;
+  border-right: 2px solid var(--doc-accent);
+  border-bottom: 2px solid var(--doc-accent);
+  transform: rotate(40deg);
+}
+.record-doc__item-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.record-doc__label {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.record-doc__chip {
+  display: inline-block;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border: 1px solid var(--doc-line);
+  border-radius: 999px;
+  padding: 0 5px;
+  margin-left: 6px;
+  color: var(--doc-muted);
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.record-doc__chip--required {
+  border-color: #c2830a;
+  color: #8a5d00;
+}
+.record-doc__hint {
+  font-size: 11px;
+  color: var(--doc-muted);
+  margin-top: 1px;
+}
+.record-doc__answer {
+  font-size: 11.5px;
+  margin-top: 3px;
+}
+.record-doc__answer-label {
+  font-weight: 800;
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--doc-muted);
+  margin-right: 5px;
+}
+.record-doc__answer-value {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+/* An unanswered line still has to work as a form — the crew fills it in with a
+   pen. A blank rule says "write here"; nothing at all says nothing. */
+.record-doc__blank {
+  display: inline-block;
+  min-width: 120px;
+  border-bottom: 1px solid var(--doc-line);
+  height: 0.85em;
+  vertical-align: -0.15em;
+}
+.record-doc__photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+.record-doc__photos img {
+  width: 78px;
+  height: 78px;
+  object-fit: cover;
+  border: 1px solid var(--doc-line);
+  border-radius: 4px;
+  background: #f6f7f9;
+}
+.record-doc__signoff {
+  margin-top: 8px;
+  border: 1px solid var(--doc-line);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 11px;
+  break-inside: avoid;
+}
+.record-doc__signoff-name {
+  font-weight: 700;
+}
+/* Unsigned phases print an actual signature line, so the sheet works as the
+   thing that gets signed rather than only as a record that it was. */
+.record-doc__sign-line {
+  display: flex;
+  gap: 22px;
+  margin-top: 9px;
+  break-inside: avoid;
+}
+.record-doc__sign-line > div {
+  flex: 1 1 0;
+}
+.record-doc__sign-rule {
+  border-bottom: 1px solid var(--doc-ink);
+  height: 22px;
+}
+.record-doc__sign-caption {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--doc-muted);
+  margin-top: 3px;
+}
+.record-doc__footer {
+  margin-top: 20px;
+  border-top: 1px solid var(--doc-line);
+  padding-top: 7px;
+  font-size: 9.5px;
+  color: var(--doc-muted);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.record-doc__empty {
+  margin-top: 14px;
+  border: 1px dashed var(--doc-line);
+  border-radius: 6px;
+  padding: 16px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--doc-muted);
+}
+
+@media (max-width: 640px) {
+  .record-doc__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/*
+ * Print overrides for the document itself.
+ *
+ * Deliberately at the END of the file, after `.record-doc` and
+ * `.record-doc--screen`: these selectors are no more specific than the base
+ * rules they replace, so source order is the only thing that makes them win.
+ * Sitting them next to the body-visibility rules at the top read better and did
+ * nothing at all.
+ */
+@media print {
+  /* `@page` supplies the sheet margin, so the document drops the padding and
+     page width it carries for the on-screen preview. Without this the two stack
+     and a dense checklist loses a third of its usable column. */
+  .record-doc {
+    max-width: none;
+    padding: 0;
+  }
+
+  /* Photos are evidence. Let the browser keep the tones it was told to, instead
+     of the aggressive lightening print stylesheets apply by default. */
+  .record-doc__photos img,
+  .record-doc__logo {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Keep the letterhead with the title and facts that follow it, so a long
+     record never opens with a company logo alone on sheet one. It does not
+     repeat on later sheets — the footer carries the company name for that, since
+     the reliable ways to repeat a running header in paged media (fixed
+     positioning, table thead) each break in a different browser. */
+  .record-doc__letterhead {
+    break-after: avoid;
+  }
+}

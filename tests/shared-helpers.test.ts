@@ -5,6 +5,8 @@ import {
   isFilenameLikeCaption,
   cleanCaption,
   displayCaption,
+  formatChecklistAnswer,
+  formatProjectAddress,
 } from "../packages/shared/src/index";
 
 afterEach(() => {
@@ -147,5 +149,80 @@ describe("sanitizeCaption", () => {
 
     const script = "<script>alert(1)</script>Roof detail";
     expect(sanitizeCaption(script)).toContain("<script>");
+  });
+});
+
+/*
+ * The printed / shared field record.
+ *
+ * These two helpers live in `shared` because the SAME record is rendered from two
+ * sources — the web app maps live rows, the public share service maps rows read
+ * with the service role — and both must produce identical paper. A drift here is
+ * a customer receiving a checklist that disagrees with the one the crew printed,
+ * so the edge cases are pinned rather than left to each caller.
+ */
+describe("formatChecklistAnswer", () => {
+  it("returns null for every shape of no-answer", () => {
+    for (const t of ["checkbox", "text", "numeric", "rating", "pass_fail"]) {
+      expect(formatChecklistAnswer(t, null)).toBeNull();
+      expect(formatChecklistAnswer(t, undefined)).toBeNull();
+      expect(formatChecklistAnswer(t, "")).toBeNull();
+    }
+  });
+
+  it("keeps a recorded zero, which is an answer", () => {
+    // `0` and `false` are falsy but were genuinely entered. Printing a blank rule
+    // beside "Refrigerant added (lbs)" when the tech measured 0 misreports the job.
+    expect(formatChecklistAnswer("numeric", 0)).toBe("0");
+    expect(formatChecklistAnswer("yes_no", false)).toBe("No");
+  });
+
+  it("renders a rating out of five, not a bare number", () => {
+    expect(formatChecklistAnswer("rating", 4)).toBe("4 / 5");
+    // Ratings arrive as jsonb, so a stringified number has to land the same way.
+    expect(formatChecklistAnswer("rating", "3")).toBe("3 / 5");
+  });
+
+  it("never prints NaN or Infinity onto a record", () => {
+    expect(formatChecklistAnswer("numeric", Number.NaN)).toBeNull();
+    expect(formatChecklistAnswer("numeric", Number.POSITIVE_INFINITY)).toBeNull();
+    expect(formatChecklistAnswer("rating", "not a number")).toBeNull();
+  });
+
+  it("passes pass/fail and free text through verbatim", () => {
+    expect(formatChecklistAnswer("pass_fail", "Fail")).toBe("Fail");
+    expect(formatChecklistAnswer("text", "Compressor humming at start-up")).toBe(
+      "Compressor humming at start-up",
+    );
+  });
+
+  it("tolerates an unknown item_type rather than dropping the answer", () => {
+    // `item_type` is a text column with a CHECK constraint; a future type added
+    // to the database before this map must still print what was recorded.
+    expect(formatChecklistAnswer("some_future_type", "42")).toBe("42");
+    expect(formatChecklistAnswer(null, "recorded")).toBe("recorded");
+  });
+});
+
+describe("formatProjectAddress", () => {
+  it("returns null rather than an empty or comma-only string", () => {
+    expect(formatProjectAddress(null)).toBeNull();
+    expect(formatProjectAddress({})).toBeNull();
+    expect(formatProjectAddress({ street: null, city: null, state: null, zip: null })).toBeNull();
+  });
+
+  it("collapses a full address onto one letterhead line", () => {
+    expect(
+      formatProjectAddress({ street: "12 Oak St", city: "Austin", state: "TX", zip: "78701" }),
+    ).toBe("12 Oak St, Austin, TX 78701");
+  });
+
+  it("drops missing parts without leaving stray punctuation", () => {
+    // A project with only a city must not print "Austin, " or ", TX".
+    expect(formatProjectAddress({ city: "Austin" })).toBe("Austin");
+    expect(formatProjectAddress({ street: "12 Oak St" })).toBe("12 Oak St");
+    expect(formatProjectAddress({ city: "Austin", zip: "78701" })).toBe("Austin 78701");
+    expect(formatProjectAddress({ state: "TX", zip: "78701" })).toBe("TX 78701");
+    expect(formatProjectAddress({ street: "12 Oak St", zip: "78701" })).toBe("12 Oak St, 78701");
   });
 });

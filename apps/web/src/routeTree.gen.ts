@@ -41,11 +41,13 @@ import { Route as AppAdminRouteImport } from './routes/_app.admin'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app.settings.index'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app.projects.index'
 import { Route as AppAdminIndexRouteImport } from './routes/_app.admin.index'
+import { Route as ShareWorkflowsTokenRouteImport } from './routes/share.workflows.$token'
 import { Route as ShareWalkthroughsTokenRouteImport } from './routes/share.walkthroughs.$token'
 import { Route as ShareShowcasesTokenRouteImport } from './routes/share.showcases.$token'
 import { Route as ShareReportsTokenRouteImport } from './routes/share.reports.$token'
 import { Route as SharePhotosTokenRouteImport } from './routes/share.photos.$token'
 import { Route as SharePagesTokenRouteImport } from './routes/share.pages.$token'
+import { Route as ShareChecklistsTokenRouteImport } from './routes/share.checklists.$token'
 import { Route as PSlugShowcaseSlugRouteImport } from './routes/p.$slug_.$showcaseSlug'
 import { Route as EmbedMapKeyRouteImport } from './routes/embed.map.$key'
 import { Route as EmbedGalleryKeyRouteImport } from './routes/embed.gallery.$key'
@@ -62,8 +64,10 @@ import { Route as AppAdminTeamsRouteImport } from './routes/_app.admin.teams'
 import { Route as AppAdminNotificationsRouteImport } from './routes/_app.admin.notifications'
 import { Route as AppAdminAuditLogRouteImport } from './routes/_app.admin.audit-log'
 import { Route as AppAdminTeamsTeamIdRouteImport } from './routes/_app.admin.teams.$teamId'
+import { Route as AppProjectsProjectIdWorkflowsWorkflowIdRouteImport } from './routes/_app.projects.$projectId_.workflows.$workflowId'
 import { Route as AppProjectsProjectIdReportsReportIdRouteImport } from './routes/_app.projects.$projectId_.reports.$reportId'
 import { Route as AppProjectsProjectIdPagesPageIdRouteImport } from './routes/_app.projects.$projectId_.pages.$pageId'
+import { Route as AppProjectsProjectIdChecklistsChecklistIdRouteImport } from './routes/_app.projects.$projectId_.checklists.$checklistId'
 
 const TermsOfServiceRoute = TermsOfServiceRouteImport.update({
   id: '/terms-of-service',
@@ -224,6 +228,11 @@ const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppAdminRoute,
 } as any)
+const ShareWorkflowsTokenRoute = ShareWorkflowsTokenRouteImport.update({
+  id: '/share/workflows/$token',
+  path: '/share/workflows/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ShareWalkthroughsTokenRoute = ShareWalkthroughsTokenRouteImport.update({
   id: '/share/walkthroughs/$token',
   path: '/share/walkthroughs/$token',
@@ -247,6 +256,11 @@ const SharePhotosTokenRoute = SharePhotosTokenRouteImport.update({
 const SharePagesTokenRoute = SharePagesTokenRouteImport.update({
   id: '/share/pages/$token',
   path: '/share/pages/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareChecklistsTokenRoute = ShareChecklistsTokenRouteImport.update({
+  id: '/share/checklists/$token',
+  path: '/share/checklists/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PSlugShowcaseSlugRoute = PSlugShowcaseSlugRouteImport.update({
@@ -330,6 +344,12 @@ const AppAdminTeamsTeamIdRoute = AppAdminTeamsTeamIdRouteImport.update({
   path: '/$teamId',
   getParentRoute: () => AppAdminTeamsRoute,
 } as any)
+const AppProjectsProjectIdWorkflowsWorkflowIdRoute =
+  AppProjectsProjectIdWorkflowsWorkflowIdRouteImport.update({
+    id: '/projects/$projectId_/workflows/$workflowId',
+    path: '/projects/$projectId/workflows/$workflowId',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppProjectsProjectIdReportsReportIdRoute =
   AppProjectsProjectIdReportsReportIdRouteImport.update({
     id: '/projects/$projectId_/reports/$reportId',
@@ -340,6 +360,12 @@ const AppProjectsProjectIdPagesPageIdRoute =
   AppProjectsProjectIdPagesPageIdRouteImport.update({
     id: '/projects/$projectId_/pages/$pageId',
     path: '/projects/$projectId/pages/$pageId',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppProjectsProjectIdChecklistsChecklistIdRoute =
+  AppProjectsProjectIdChecklistsChecklistIdRouteImport.update({
+    id: '/projects/$projectId_/checklists/$checklistId',
+    path: '/projects/$projectId/checklists/$checklistId',
     getParentRoute: () => AppRoute,
   } as any)
 
@@ -387,17 +413,21 @@ export interface FileRoutesByFullPath {
   '/embed/gallery/$key': typeof EmbedGalleryKeyRoute
   '/embed/map/$key': typeof EmbedMapKeyRoute
   '/p/$slug/$showcaseSlug': typeof PSlugShowcaseSlugRoute
+  '/share/checklists/$token': typeof ShareChecklistsTokenRoute
   '/share/pages/$token': typeof SharePagesTokenRoute
   '/share/photos/$token': typeof SharePhotosTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
   '/share/showcases/$token': typeof ShareShowcasesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
+  '/share/workflows/$token': typeof ShareWorkflowsTokenRoute
   '/admin/': typeof AppAdminIndexRoute
   '/projects/': typeof AppProjectsIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
   '/admin/teams/$teamId': typeof AppAdminTeamsTeamIdRoute
+  '/projects/$projectId/checklists/$checklistId': typeof AppProjectsProjectIdChecklistsChecklistIdRoute
   '/projects/$projectId/pages/$pageId': typeof AppProjectsProjectIdPagesPageIdRoute
   '/projects/$projectId/reports/$reportId': typeof AppProjectsProjectIdReportsReportIdRoute
+  '/projects/$projectId/workflows/$workflowId': typeof AppProjectsProjectIdWorkflowsWorkflowIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -442,17 +472,21 @@ export interface FileRoutesByTo {
   '/embed/gallery/$key': typeof EmbedGalleryKeyRoute
   '/embed/map/$key': typeof EmbedMapKeyRoute
   '/p/$slug/$showcaseSlug': typeof PSlugShowcaseSlugRoute
+  '/share/checklists/$token': typeof ShareChecklistsTokenRoute
   '/share/pages/$token': typeof SharePagesTokenRoute
   '/share/photos/$token': typeof SharePhotosTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
   '/share/showcases/$token': typeof ShareShowcasesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
+  '/share/workflows/$token': typeof ShareWorkflowsTokenRoute
   '/admin': typeof AppAdminIndexRoute
   '/projects': typeof AppProjectsIndexRoute
   '/settings': typeof AppSettingsIndexRoute
   '/admin/teams/$teamId': typeof AppAdminTeamsTeamIdRoute
+  '/projects/$projectId/checklists/$checklistId': typeof AppProjectsProjectIdChecklistsChecklistIdRoute
   '/projects/$projectId/pages/$pageId': typeof AppProjectsProjectIdPagesPageIdRoute
   '/projects/$projectId/reports/$reportId': typeof AppProjectsProjectIdReportsReportIdRoute
+  '/projects/$projectId/workflows/$workflowId': typeof AppProjectsProjectIdWorkflowsWorkflowIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -500,17 +534,21 @@ export interface FileRoutesById {
   '/embed/gallery/$key': typeof EmbedGalleryKeyRoute
   '/embed/map/$key': typeof EmbedMapKeyRoute
   '/p/$slug_/$showcaseSlug': typeof PSlugShowcaseSlugRoute
+  '/share/checklists/$token': typeof ShareChecklistsTokenRoute
   '/share/pages/$token': typeof SharePagesTokenRoute
   '/share/photos/$token': typeof SharePhotosTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
   '/share/showcases/$token': typeof ShareShowcasesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
+  '/share/workflows/$token': typeof ShareWorkflowsTokenRoute
   '/_app/admin/': typeof AppAdminIndexRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
   '/_app/admin/teams/$teamId': typeof AppAdminTeamsTeamIdRoute
+  '/_app/projects/$projectId_/checklists/$checklistId': typeof AppProjectsProjectIdChecklistsChecklistIdRoute
   '/_app/projects/$projectId_/pages/$pageId': typeof AppProjectsProjectIdPagesPageIdRoute
   '/_app/projects/$projectId_/reports/$reportId': typeof AppProjectsProjectIdReportsReportIdRoute
+  '/_app/projects/$projectId_/workflows/$workflowId': typeof AppProjectsProjectIdWorkflowsWorkflowIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -558,17 +596,21 @@ export interface FileRouteTypes {
     | '/embed/gallery/$key'
     | '/embed/map/$key'
     | '/p/$slug/$showcaseSlug'
+    | '/share/checklists/$token'
     | '/share/pages/$token'
     | '/share/photos/$token'
     | '/share/reports/$token'
     | '/share/showcases/$token'
     | '/share/walkthroughs/$token'
+    | '/share/workflows/$token'
     | '/admin/'
     | '/projects/'
     | '/settings/'
     | '/admin/teams/$teamId'
+    | '/projects/$projectId/checklists/$checklistId'
     | '/projects/$projectId/pages/$pageId'
     | '/projects/$projectId/reports/$reportId'
+    | '/projects/$projectId/workflows/$workflowId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -613,17 +655,21 @@ export interface FileRouteTypes {
     | '/embed/gallery/$key'
     | '/embed/map/$key'
     | '/p/$slug/$showcaseSlug'
+    | '/share/checklists/$token'
     | '/share/pages/$token'
     | '/share/photos/$token'
     | '/share/reports/$token'
     | '/share/showcases/$token'
     | '/share/walkthroughs/$token'
+    | '/share/workflows/$token'
     | '/admin'
     | '/projects'
     | '/settings'
     | '/admin/teams/$teamId'
+    | '/projects/$projectId/checklists/$checklistId'
     | '/projects/$projectId/pages/$pageId'
     | '/projects/$projectId/reports/$reportId'
+    | '/projects/$projectId/workflows/$workflowId'
   id:
     | '__root__'
     | '/'
@@ -670,17 +716,21 @@ export interface FileRouteTypes {
     | '/embed/gallery/$key'
     | '/embed/map/$key'
     | '/p/$slug_/$showcaseSlug'
+    | '/share/checklists/$token'
     | '/share/pages/$token'
     | '/share/photos/$token'
     | '/share/reports/$token'
     | '/share/showcases/$token'
     | '/share/walkthroughs/$token'
+    | '/share/workflows/$token'
     | '/_app/admin/'
     | '/_app/projects/'
     | '/_app/settings/'
     | '/_app/admin/teams/$teamId'
+    | '/_app/projects/$projectId_/checklists/$checklistId'
     | '/_app/projects/$projectId_/pages/$pageId'
     | '/_app/projects/$projectId_/reports/$reportId'
+    | '/_app/projects/$projectId_/workflows/$workflowId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -703,11 +753,13 @@ export interface RootRouteChildren {
   EmbedGalleryKeyRoute: typeof EmbedGalleryKeyRoute
   EmbedMapKeyRoute: typeof EmbedMapKeyRoute
   PSlugShowcaseSlugRoute: typeof PSlugShowcaseSlugRoute
+  ShareChecklistsTokenRoute: typeof ShareChecklistsTokenRoute
   SharePagesTokenRoute: typeof SharePagesTokenRoute
   SharePhotosTokenRoute: typeof SharePhotosTokenRoute
   ShareReportsTokenRoute: typeof ShareReportsTokenRoute
   ShareShowcasesTokenRoute: typeof ShareShowcasesTokenRoute
   ShareWalkthroughsTokenRoute: typeof ShareWalkthroughsTokenRoute
+  ShareWorkflowsTokenRoute: typeof ShareWorkflowsTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -936,6 +988,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminIndexRouteImport
       parentRoute: typeof AppAdminRoute
     }
+    '/share/workflows/$token': {
+      id: '/share/workflows/$token'
+      path: '/share/workflows/$token'
+      fullPath: '/share/workflows/$token'
+      preLoaderRoute: typeof ShareWorkflowsTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/share/walkthroughs/$token': {
       id: '/share/walkthroughs/$token'
       path: '/share/walkthroughs/$token'
@@ -969,6 +1028,13 @@ declare module '@tanstack/react-router' {
       path: '/share/pages/$token'
       fullPath: '/share/pages/$token'
       preLoaderRoute: typeof SharePagesTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/checklists/$token': {
+      id: '/share/checklists/$token'
+      path: '/share/checklists/$token'
+      fullPath: '/share/checklists/$token'
+      preLoaderRoute: typeof ShareChecklistsTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/p/$slug_/$showcaseSlug': {
@@ -1083,6 +1149,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminTeamsTeamIdRouteImport
       parentRoute: typeof AppAdminTeamsRoute
     }
+    '/_app/projects/$projectId_/workflows/$workflowId': {
+      id: '/_app/projects/$projectId_/workflows/$workflowId'
+      path: '/projects/$projectId/workflows/$workflowId'
+      fullPath: '/projects/$projectId/workflows/$workflowId'
+      preLoaderRoute: typeof AppProjectsProjectIdWorkflowsWorkflowIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/projects/$projectId_/reports/$reportId': {
       id: '/_app/projects/$projectId_/reports/$reportId'
       path: '/projects/$projectId/reports/$reportId'
@@ -1095,6 +1168,13 @@ declare module '@tanstack/react-router' {
       path: '/projects/$projectId/pages/$pageId'
       fullPath: '/projects/$projectId/pages/$pageId'
       preLoaderRoute: typeof AppProjectsProjectIdPagesPageIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects/$projectId_/checklists/$checklistId': {
+      id: '/_app/projects/$projectId_/checklists/$checklistId'
+      path: '/projects/$projectId/checklists/$checklistId'
+      fullPath: '/projects/$projectId/checklists/$checklistId'
+      preLoaderRoute: typeof AppProjectsProjectIdChecklistsChecklistIdRouteImport
       parentRoute: typeof AppRoute
     }
   }
@@ -1156,8 +1236,10 @@ interface AppRouteChildren {
   AppWalkthroughsWalkthroughIdRoute: typeof AppWalkthroughsWalkthroughIdRoute
   AppProjectsIndexRoute: typeof AppProjectsIndexRoute
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
+  AppProjectsProjectIdChecklistsChecklistIdRoute: typeof AppProjectsProjectIdChecklistsChecklistIdRoute
   AppProjectsProjectIdPagesPageIdRoute: typeof AppProjectsProjectIdPagesPageIdRoute
   AppProjectsProjectIdReportsReportIdRoute: typeof AppProjectsProjectIdReportsReportIdRoute
+  AppProjectsProjectIdWorkflowsWorkflowIdRoute: typeof AppProjectsProjectIdWorkflowsWorkflowIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -1184,9 +1266,13 @@ const AppRouteChildren: AppRouteChildren = {
   AppWalkthroughsWalkthroughIdRoute: AppWalkthroughsWalkthroughIdRoute,
   AppProjectsIndexRoute: AppProjectsIndexRoute,
   AppSettingsIndexRoute: AppSettingsIndexRoute,
+  AppProjectsProjectIdChecklistsChecklistIdRoute:
+    AppProjectsProjectIdChecklistsChecklistIdRoute,
   AppProjectsProjectIdPagesPageIdRoute: AppProjectsProjectIdPagesPageIdRoute,
   AppProjectsProjectIdReportsReportIdRoute:
     AppProjectsProjectIdReportsReportIdRoute,
+  AppProjectsProjectIdWorkflowsWorkflowIdRoute:
+    AppProjectsProjectIdWorkflowsWorkflowIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -1211,11 +1297,13 @@ const rootRouteChildren: RootRouteChildren = {
   EmbedGalleryKeyRoute: EmbedGalleryKeyRoute,
   EmbedMapKeyRoute: EmbedMapKeyRoute,
   PSlugShowcaseSlugRoute: PSlugShowcaseSlugRoute,
+  ShareChecklistsTokenRoute: ShareChecklistsTokenRoute,
   SharePagesTokenRoute: SharePagesTokenRoute,
   SharePhotosTokenRoute: SharePhotosTokenRoute,
   ShareReportsTokenRoute: ShareReportsTokenRoute,
   ShareShowcasesTokenRoute: ShareShowcasesTokenRoute,
   ShareWalkthroughsTokenRoute: ShareWalkthroughsTokenRoute,
+  ShareWorkflowsTokenRoute: ShareWorkflowsTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

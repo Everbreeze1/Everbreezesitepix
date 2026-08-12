@@ -35,6 +35,7 @@ export function SelectPhotosForPageDialog({
   open,
   projectId,
   templateLabel,
+  outputNoun = "document",
   generating,
   onCancel,
   onGenerate,
@@ -42,6 +43,14 @@ export function SelectPhotosForPageDialog({
   open: boolean;
   projectId: string;
   templateLabel: string;
+  /**
+   * What the picker produces, for the no-photos copy. Defaults to "document"
+   * because most templates here file into Documents — but Summary writes a
+   * walkthrough, and telling its user to "generate a document" points them at
+   * the wrong tab. Passed explicitly rather than derived from `templateLabel`,
+   * which is display copy and free to change.
+   */
+  outputNoun?: string;
   generating: boolean;
   onCancel: () => void;
   onGenerate: (photoIds: string[]) => void;
@@ -168,7 +177,8 @@ export function SelectPhotosForPageDialog({
             </div>
           ) : photos.length === 0 ? (
             <p className="py-16 text-center text-sm text-muted-foreground">
-              This project has no photos yet. Add photos first, then generate a document from them.
+              This project has no photos yet. Add photos first, then generate a {outputNoun} from
+              them.
             </p>
           ) : (
             <div className="space-y-6">

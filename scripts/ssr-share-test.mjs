@@ -45,6 +45,11 @@ const ROUTES = [
   // rename without ever reading a byte the route actually rendered. This body
   // is streamed, so the head is the only server-rendered text there is.
   { path: `/share/showcases/${NIL_UUID}`, expect: ["<title>project"] },
+  // The two field records. Both fetch client-side, so the server renders only
+  // the shell — the assertion is that the shell renders at all. `RecordDocument`
+  // reads `window` nowhere, and this is what keeps it that way.
+  { path: `/share/checklists/${NIL_UUID}`, expect: ["<title>shared checklist"] },
+  { path: `/share/workflows/${NIL_UUID}`, expect: ["<title>shared workflow"] },
   { path: "/p/a-portfolio-that-does-not-exist", expect: ["portfolio"] },
   { path: "/p/a-portfolio-that-does-not-exist/some-project", expect: ["project"] },
   { path: `/embed/gallery/${NIL_UUID}`, expect: ["gallery"] },
