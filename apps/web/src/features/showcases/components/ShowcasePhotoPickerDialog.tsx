@@ -83,8 +83,8 @@ export function ShowcasePhotoPickerDialog({
         .from("photos")
         .select("id, project_id, storage_path, thumb_path, image_url, caption")
         .is("deleted_at", null)
-        .or("phase.is.null,phase.neq.walkthrough")
-        .not("storage_path", "like", "%/walkthroughs/%")
+        // A picker exists so the user can reach their photos; walkthrough
+        // captures are photos. See the note in ProjectDetailPage's `load`.
         .order("created_at", { ascending: false })
         .limit(300);
       if (error) throw error;

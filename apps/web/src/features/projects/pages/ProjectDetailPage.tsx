@@ -40,7 +40,7 @@ import {
   Download,
 } from "lucide-react";
 import { formatBytes } from "@/hooks/use-storage-usage";
-import { allPhotoObjectPaths, photoObjectPaths } from "@sitepix/shared";
+import { photoObjectPaths } from "@sitepix/shared";
 import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import { downloadBlobFile } from "@/lib/download-file";
 import { isOverUploadLimit, overUploadLimitMessage } from "@/lib/upload-limits";
@@ -513,8 +513,6 @@ export function ProjectDetailPage() {
         )
         .eq("project_id", projectId)
         .is("deleted_at", null)
-        .or("phase.is.null,phase.neq.walkthrough")
-        .not("storage_path", "like", "%/walkthroughs/%")
         .order("taken_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
         .limit(photoLimit),
@@ -522,9 +520,7 @@ export function ProjectDetailPage() {
         .from("photos")
         .select("id", { count: "exact", head: true })
         .eq("project_id", projectId)
-        .is("deleted_at", null)
-        .or("phase.is.null,phase.neq.walkthrough")
-        .not("storage_path", "like", "%/walkthroughs/%"),
+        .is("deleted_at", null),
     ]);
     if (pErr || !p) {
       toast.error("Project not found");
@@ -533,9 +529,16 @@ export function ProjectDetailPage() {
     }
     setProject(p as Project);
     setTotalPhotos(count ?? 0);
-    const photoList = ((ph as Photo[]) ?? []).filter(
-      (p) => p.phase !== "walkthrough" && !p.storage_path.includes("/walkthroughs/"),
-    );
+    /*
+     * Every photo the project owns, including frames captured during a
+     * walkthrough. Those used to be filtered out here (and in the two queries
+     * above) on `phase = "walkthrough"` / a `/walkthroughs/` storage path,
+     * which is what put a technician's site photos out of reach: they snapped
+     * them on a walkthrough, then couldn't find them in the project's photos or
+     * add them to a report. `phase` survives as a provenance label — the photo
+     * carousel badges it — it just no longer hides anything.
+     */
+    const photoList = (ph as Photo[]) ?? [];
     setPhotos(photoList);
 
     // The rest of this load is several independent tracks (AI analyses for
@@ -1676,9 +1679,12 @@ export function ProjectDetailPage() {
         .from("walkthrough_photos" as any)
         .upsert(rows as any, { onConflict: "walkthrough_id,photo_id", ignoreDuplicates: true });
       if (linkErr) throw linkErr;
-      // Throws to match the link upsert directly above — without it a failure
-      // here leaks the walkthrough's frames into the main project grid, which
-      // filters on `phase !== "walkthrough"`.
+      /*
+       * Warns rather than throws, unlike the link upsert above. `phase` is a
+       * provenance label now, not a visibility switch — the frames are in the
+       * project's photos either way — so losing it costs a badge, and failing
+       * the whole walkthrough over a badge would be the worse trade.
+       */
       const { error: phaseErr } = await supabase
         .from("photos")
         .update({ phase: "walkthrough" } as any)
@@ -1686,7 +1692,7 @@ export function ProjectDetailPage() {
           "id",
           data.photos.map((p) => p.photoId),
         );
-      if (phaseErr) throw phaseErr;
+      if (phaseErr) console.warn("[walkthrough] Could not label linked photos", phaseErr);
       return rows.length;
     };
 
@@ -2259,8 +2265,8 @@ export function ProjectDetailPage() {
             await load();
             return;
           }
-          // Only cosmetic if it fails: the grid filters on `phase`, so these
-          // frames leak into the main project gallery rather than being lost.
+          // Cosmetic if it fails: `phase` labels these frames as walkthrough
+          // captures, it does not decide whether the gallery shows them.
           const { error: phaseErr } = await supabase
             .from("photos")
             .update({ phase: "walkthrough" } as any)
@@ -2304,45 +2310,21 @@ export function ProjectDetailPage() {
         await load();
         return;
       }
-      if (linkedPhotoIds.length) {
-        const { data: linkedPhotos } = await supabase
-          .from("photos")
-          .select("id, storage_path, thumb_path")
-          .in("id", linkedPhotoIds);
-        /*
-         * Destroy only the blobs whose rows actually went. `error === null`
-         * doesn't prove a row was affected: a delete without a trailing
-         * `.select()` returns 204 with an empty body, so an RLS policy that
-         * filters the rows away reads exactly like success. Selecting the
-         * deleted ids back makes a refusal — total or partial — visible, and
-         * keeps every surviving row's file intact instead of stranding it as a
-         * broken thumbnail in the gallery.
-         */
-        const { data: deleted, error: delErr } = await supabase
-          .from("photos")
-          .delete()
-          .in("id", linkedPhotoIds)
-          .select("id");
-        const deletedRows = (deleted as Array<{ id: string }> | null) ?? [];
-        if (delErr || !deletedRows.length) {
-          toast.error("Couldn't discard that walkthrough's photos");
-          await load();
-          return;
-        }
-        const deletedIds = new Set(deletedRows.map((d) => d.id));
-        const paths = allPhotoObjectPaths(
-          ((linkedPhotos as Array<{
-            id: string;
-            storage_path: string;
-            thumb_path: string | null;
-          }> | null) ?? []).filter((p) => deletedIds.has(p.id)),
-        );
-        if (paths.length) void supabase.storage.from("site-photos").remove(paths);
-      }
-      // `status = recording` already excludes a summary, which is inserted
-      // ready — but this branch has just hard-deleted photo rows AND their
-      // storage blobs, and a summary's linked photos are the user's own gallery
-      // photos. Belt and braces on the one path where being wrong is permanent.
+      /*
+       * Reaching here means the walkthrough captured nothing: the branch above
+       * returns in every case where a photo exists, linked or orphaned. So
+       * there is only an empty `recording` row left to retire.
+       *
+       * This used to be followed by a branch that hard-deleted every linked
+       * photo row and its storage blob. It was already unreachable for the
+       * reason just stated, and it contradicted the rule this file now follows
+       * — a photo the user took is theirs, and closing a recorder is not a
+       * request to destroy it. Removed rather than left as a trap for whoever
+       * next adjusts the guard above.
+       *
+       * `status = recording` already excludes a summary, which is inserted
+       * ready. `source = recorded` is belt and braces on a delete.
+       */
       const { error: dropErr } = await supabase
         .from("walkthroughs" as any)
         .delete()

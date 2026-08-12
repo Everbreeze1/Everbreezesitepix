@@ -233,14 +233,49 @@ function extractWalkthroughIdFromPath(path: string | null | undefined) {
   return match?.[1] ?? null;
 }
 
+/*
+ * Which photos the two recovery scans are allowed to adopt into a walkthrough.
+ *
+ * The SQL half is a coarse prefilter — PostgREST's `or` takes bare operators,
+ * so it cannot express the caption rule below and would need a third round trip
+ * to try. The JS half is the actual rule; run it on everything the scan returns.
+ *
+ * The `caption.like.walkthrough-%` arm is the dangerous one: caption is a
+ * user-editable field, an unedited upload's caption is its filename, and a
+ * prefix match therefore swept up a photo the user shot with the camera and
+ * named "walkthrough-front-door.jpg". That photo was adopted into a fabricated
+ * walkthrough and relabelled a capture frame, neither of which is reversible.
+ *
+ * The arm still earns its place — a capture uploaded before the
+ * `/walkthroughs/{id}/` path convention has no other signal — so it is narrowed
+ * to the exact name the recorder generates rather than dropped:
+ * `walkthrough-${Date.now()}.jpg`, from WalkthroughRecorder's capturePhoto.
+ */
+const WALKTHROUGH_CANDIDATE_SCAN =
+  "phase.eq.walkthrough,caption.like.walkthrough-%,storage_path.like.%/walkthroughs/%";
+
+const RECORDER_FILENAME_CAPTION = /^walkthrough-\d{10,}\.[a-z0-9]+$/i;
+
+function isWalkthroughCapture(photo: {
+  phase?: string | null;
+  storage_path?: string | null;
+  caption?: string | null;
+}) {
+  return (
+    photo.phase === "walkthrough" ||
+    (photo.storage_path ?? "").includes("/walkthroughs/") ||
+    RECORDER_FILENAME_CAPTION.test(photo.caption ?? "")
+  );
+}
+
 async function recoverOrphanWalkthroughPhotosForProject(supabaseAdmin: any, args: { projectId: string; userId: string }) {
   console.log("[walkthrough] server orphan recovery requested", args);
   const { data: candidates, error: candidateErr } = await supabaseAdmin
     .from("photos")
-    .select("id, created_at, taken_at, caption, storage_path")
+    .select("id, created_at, taken_at, caption, storage_path, phase")
     .eq("project_id", args.projectId)
     .eq("uploaded_by", args.userId)
-    .or("phase.eq.walkthrough,caption.like.walkthrough-%,storage_path.like.%/walkthroughs/%")
+    .or(WALKTHROUGH_CANDIDATE_SCAN)
     .order("created_at", { ascending: true })
     .limit(250);
 
@@ -249,13 +284,23 @@ async function recoverOrphanWalkthroughPhotosForProject(supabaseAdmin: any, args
     return { recoveredWalkthroughs: 0, recoveredPhotos: 0 };
   }
 
-  const candidateRows = ((candidates as any[]) ?? []) as Array<{
+  const allCandidateRows = ((candidates as any[]) ?? []) as Array<{
     id: string;
     created_at: string;
     taken_at: string | null;
     caption: string | null;
     storage_path: string | null;
+    phase: string | null;
   }>;
+
+  // See WALKTHROUGH_CANDIDATE_SCAN — the query is a prefilter, this is the rule.
+  const candidateRows = allCandidateRows.filter(isWalkthroughCapture);
+  if (candidateRows.length !== allCandidateRows.length) {
+    console.log("[walkthrough] server orphan recovery ignored non-capture matches", {
+      ...args,
+      ignored: allCandidateRows.length - candidateRows.length,
+    });
+  }
   if (!candidateRows.length) return { recoveredWalkthroughs: 0, recoveredPhotos: 0 };
 
   const candidateIds = candidateRows.map((p) => p.id);
@@ -507,12 +552,13 @@ export async function createWalkthroughSessionService(ctx: AuthedContext, data: 
  *
  * !! DO NOT set photos.phase = "walkthrough" here. !!
  * Every other linker in this file does, because a frame captured *during* a
- * recording is a recording artefact that must stay out of the gallery. A
- * Summary links photos that are ALREADY IN THE GALLERY and that the user still
- * expects to find there. Flipping phase would erase them from the project
- * grid, the global gallery, the calendar, the timeline, dashboards, group
- * cards, showcases and the mobile app — permanently, because nothing in this
- * codebase ever writes phase back.
+ * recording is provenance worth recording. A Summary links photos the user
+ * shot normally and picked out of the gallery; labelling those as walkthrough
+ * captures states something false about where they came from, and nothing in
+ * this codebase ever writes phase back, so it is not correctable.
+ *
+ * `phase` is a label only. It no longer hides a photo from any surface — see
+ * the note in ProjectDetailPage's `load`.
  */
 export async function generateWalkthroughSummaryService(
   ctx: AuthedContext,
@@ -703,8 +749,8 @@ export async function saveWalkthroughPhotoService(ctx: AuthedContext, data: any)
       throw new Error("Walkthrough not found or access denied");
     }
     // Capture frames belong to a recording. Accepting one here would attach a
-    // phase="walkthrough" photo — hidden from the gallery — to a summary built
-    // out of gallery photos.
+    // phase="walkthrough" photo to a summary, which by definition links photos
+    // that were shot outside any recording.
     if ((walk as any).source !== "recorded") {
       throw new Error("This walkthrough is a summary and cannot accept captures");
     }
@@ -777,8 +823,10 @@ export async function saveWalkthroughPhotoService(ctx: AuthedContext, data: any)
     if (linkErr) {
       console.error("[walkthrough] server photo link failed", linkErr, { walkthroughId: data.walkthroughId, photoId });
       await supabaseAdmin.from("photos").update({ phase: "walkthrough" } as any).eq("id", photoId);
-      // Keep the photo row and return it. Finish/list recovery will attach it
-      // to walkthrough_photos, and phase=walkthrough keeps it out of gallery.
+      // Keep the photo row and return it. Finish/list recovery finds it again
+      // by phase and attaches it to walkthrough_photos. Either way the photo is
+      // already in the project's gallery — an unlinked capture is a walkthrough
+      // that lost a frame, not a photo the user lost.
       return { photoId, linkPending: true };
     }
 
@@ -828,17 +876,22 @@ export async function finishWalkthroughSessionService(ctx: AuthedContext, data: 
       const lowerBound = new Date(recoveryStartMs).toISOString();
       const { data: candidates, error: candidateErr } = await supabaseAdmin
         .from("photos")
-        .select("id, created_at")
+        .select("id, created_at, caption, storage_path, phase")
         .eq("project_id", (walk as any).project_id)
         .eq("uploaded_by", userId)
-        .or("phase.eq.walkthrough,caption.like.walkthrough-%,storage_path.like.%/walkthroughs/%")
+        .or(WALKTHROUGH_CANDIDATE_SCAN)
         .gte("created_at", lowerBound)
         .lte("created_at", endedAtIso)
         .order("created_at", { ascending: true });
       if (candidateErr) {
         console.error("[walkthrough] server orphan photo scan failed", candidateErr, { walkthroughId: data.walkthroughId, userId });
       } else {
-        const candidateRows = ((candidates as any[]) ?? []).filter((p) => !existingPhotoIds.has(p.id));
+        // The time window bounds this scan but does not make it precise — a
+        // camera upload during the recording is exactly what it would catch.
+        // See WALKTHROUGH_CANDIDATE_SCAN.
+        const candidateRows = ((candidates as any[]) ?? [])
+          .filter(isWalkthroughCapture)
+          .filter((p) => !existingPhotoIds.has(p.id));
         if (candidateRows.length) {
           const candidateIds = candidateRows.map((p) => p.id);
           const { data: alreadyLinked } = await supabaseAdmin

@@ -423,13 +423,16 @@ export async function createShowcaseFromProjectService(
     .maybeSingle();
   if (!project) throw Object.assign(new Error("Project not found"), { status: 404 });
 
-  // Walkthrough frames are working footage, not portfolio material.
+  // Walkthrough frames were excluded here as "working footage". On a project
+  // documented entirely by walkthrough — the technician walked it and snapped
+  // as they went — that left the builder claiming the project has no photos at
+  // all. The user curates the result anyway, so offer everything.
   const { data: photoRows } = await (ctx.supabase as any)
     .from("photos")
     .select("id, caption, phase, taken_at, created_at")
     .eq("project_id", data.projectId)
-    .eq("archived", false)
-    .or("phase.is.null,phase.neq.walkthrough")
+    // No `archived` filter — that column is the compression job's bookkeeping,
+    // not a user's decision to hide a photo. See the note in GalleryPage.
     .order("taken_at", { ascending: true, nullsFirst: false })
     .limit(200);
 

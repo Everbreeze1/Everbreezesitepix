@@ -72,3 +72,31 @@ describe("buildConfirmationUrl", () => {
     expect(url.startsWith("https://everbreezesitepix.com/auth/v1/verify?")).toBe(true);
   });
 });
+
+describe("buildConfirmationUrl — email change action types", () => {
+  /*
+   * Supabase's secure email change fires `email_change_current` (to the old
+   * address) and `email_change_new` (to the new one). Those are hook action
+   * types; GoTrue's /verify endpoint only understands `email_change`, so
+   * passing them through unchanged builds a link the endpoint rejects.
+   */
+  const base = {
+    token_hash: "tok",
+    site_url: "https://x.supabase.co/auth/v1",
+    redirect_to: "https://www.everbreezesitepix.com/settings",
+  };
+
+  for (const action of ["email_change_current", "email_change_new", "email_change"]) {
+    it(`${action} verifies as type=email_change`, () => {
+      const url = new URL(buildConfirmationUrl({ ...base, email_action_type: action }));
+      expect(url.searchParams.get("type")).toBe("email_change");
+    });
+  }
+
+  it("leaves unrelated action types alone", () => {
+    for (const action of ["signup", "recovery", "magiclink", "invite", "reauthentication"]) {
+      const url = new URL(buildConfirmationUrl({ ...base, email_action_type: action }));
+      expect(url.searchParams.get("type")).toBe(action);
+    }
+  });
+});

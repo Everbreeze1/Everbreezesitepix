@@ -60,7 +60,6 @@ export async function listProjectGroupsService(ctx: AuthedContext) {
         .from("photos")
         .select("project_id, storage_path, image_url, created_at")
         .in("project_id", allProjectIds)
-        .or("phase.is.null,phase.neq.walkthrough")
         .order("created_at", { ascending: false });
       const seen = new Set<string>();
       const toSign: Array<{ pid: string; path: string }> = [];
@@ -134,10 +133,12 @@ export async function getProjectGroupService(ctx: AuthedContext, data: any) {
         .from("photos")
         .select("id, project_id, caption, storage_path, image_url, created_at")
         .in("project_id", projectIds)
-        .or("phase.is.null,phase.neq.walkthrough")
         .order("created_at", { ascending: false });
-      const photos = ((ph as Array<{ id: string; project_id: string; caption: string | null; storage_path: string; image_url: string | null; created_at: string }>) ?? [])
-        .filter((r) => !r.storage_path.includes("/walkthroughs/"));
+      // Includes walkthrough captures: a group card's photo count that
+      // disagrees with the project's own photo count is a bug report waiting
+      // to happen. See the note in ProjectDetailPage's `load`.
+      const photos =
+        (ph as Array<{ id: string; project_id: string; caption: string | null; storage_path: string; image_url: string | null; created_at: string }>) ?? [];
 
       photos.forEach((p) => {
         photoCounts[p.project_id] = (photoCounts[p.project_id] ?? 0) + 1;

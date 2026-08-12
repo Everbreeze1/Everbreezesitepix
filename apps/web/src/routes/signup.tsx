@@ -36,6 +36,9 @@ export const Route = createFileRoute("/signup")({
   component: SignupPage,
 });
 
+/** Supabase's per-address resend window is ~60s; match it rather than guess. */
+const RESEND_COOLDOWN_SECONDS = 60;
+
 function SignupPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -46,6 +49,14 @@ function SignupPage() {
   const [confirmEmailSent, setConfirmEmailSent] = useState(false);
   const [resending, setResending] = useState(false);
   const [oauthPending, setOauthPending] = useState<"google" | "apple" | null>(null);
+  /*
+   * Seconds until Supabase will accept another confirmation email for this
+   * address. It enforces roughly a minute per address, so a "Resend" button
+   * offered immediately after signup is a button that always fails — the user
+   * taps it and gets "you can only request this after 53 seconds", which reads
+   * like a fault rather than a wait.
+   */
+  const [cooldown, setCooldown] = useState(0);
   // Only offer social buttons the project has actually enabled — see the hook.
   const social = useAuthProviders();
 
@@ -61,6 +72,12 @@ function SignupPage() {
   useEffect(() => {
     if (user) navigate({ to: "/dashboard", replace: true });
   }, [user, navigate]);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = window.setInterval(() => setCooldown((s) => (s <= 1 ? 0 : s - 1)), 1000);
+    return () => window.clearInterval(t);
+  }, [cooldown > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,6 +106,10 @@ function SignupPage() {
        * confirmation panel below is what that state was always meant to show.
        */
       setConfirmEmailSent(true);
+      // Supabase has just sent the confirmation, and enforces a per-address
+      // cooldown before it will send another. Start the clock now so the
+      // button reflects that instead of inviting a click that always fails.
+      setCooldown(RESEND_COOLDOWN_SECONDS);
       return;
     }
     toast.success("Account created! Redirecting…");
@@ -96,17 +117,31 @@ function SignupPage() {
 
   const handleResend = async () => {
     setResending(true);
-    const { error } = await supabase.auth.resend({
-      type: "signup",
-      email: cleanEmail,
-      options: { emailRedirectTo: `${window.location.origin}/dashboard` },
-    });
-    setResending(false);
-    if (error) {
-      console.error("[signup] resend failed", error);
-      return toast.error(authErrorMessage(error));
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: cleanEmail,
+        options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+      });
+      if (error) {
+        console.error("[signup] resend failed", error);
+        // Supabase reports the remaining wait in the message ("...after 53
+        // seconds"). Re-arm the countdown from it so the button matches what
+        // the server will actually accept.
+        const secs = Number(/after (\d+) seconds/.exec(error.message ?? "")?.[1]);
+        if (Number.isFinite(secs) && secs > 0) setCooldown(secs);
+        return toast.error(authErrorMessage(error));
+      }
+      setCooldown(RESEND_COOLDOWN_SECONDS);
+      toast.success("Sent again — check your inbox.");
+    } catch (e) {
+      // Without this a thrown request (offline, DNS) left `resending` true and
+      // the button stuck on "Sending…" with no explanation.
+      console.error("[signup] resend threw", e);
+      toast.error(authErrorMessage(e));
+    } finally {
+      setResending(false);
     }
-    toast.success("Sent again — check your inbox.");
   };
 
   const handleOAuth = async (provider: "google" | "apple") => {
@@ -236,7 +271,7 @@ function SignupPage() {
                 <Button
                   type="button"
                   onClick={handleResend}
-                  disabled={resending}
+                  disabled={resending || cooldown > 0}
                   variant="outline"
                   className="h-11 w-full rounded-lg font-manrope text-sm font-bold"
                 >
@@ -245,6 +280,8 @@ function SignupPage() {
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Sending…
                     </>
+                  ) : cooldown > 0 ? (
+                    `Resend confirmation email (${cooldown}s)`
                   ) : (
                     "Resend confirmation email"
                   )}

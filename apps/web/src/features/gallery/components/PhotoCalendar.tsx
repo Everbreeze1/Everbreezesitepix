@@ -660,9 +660,9 @@ async function loadDayPhotos(
     .select(
       "id, project_id, storage_path, thumb_path, image_url, caption, phase, tags, taken_at, created_at",
     )
-    .eq("archived", false)
+    // No `archived` filter — that column is the compression job's bookkeeping,
+    // not a user's decision to hide a photo. See the note in GalleryPage.
     .is("deleted_at", null)
-    .not("storage_path", "like", "%/walkthroughs/%")
     .or(
       `and(taken_at.gte.${from},taken_at.lt.${to}),and(taken_at.is.null,created_at.gte.${from},created_at.lt.${to})`,
     )
@@ -675,9 +675,12 @@ async function loadDayPhotos(
   const { data, error } = await q;
   if (error) throw new Error(error.message);
 
-  const photos = ((data as CalendarPhoto[]) ?? [])
-    .filter((p) => p.phase !== "walkthrough" && !p.storage_path?.includes("/walkthroughs/"))
-    .sort((a, b) => +new Date(shotAt(b)) - +new Date(shotAt(a)));
+  // A walkthrough happened on a day like anything else, so its frames count
+  // toward that day. They used to be filtered out here on `phase` / storage
+  // path — see the note in ProjectDetailPage's `load`.
+  const photos = ((data as CalendarPhoto[]) ?? []).sort(
+    (a, b) => +new Date(shotAt(b)) - +new Date(shotAt(a)),
+  );
 
   const signed: Record<string, string> = {};
   if (photos.length) {

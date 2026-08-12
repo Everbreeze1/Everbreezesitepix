@@ -391,10 +391,7 @@ export function GalleryPage() {
       .from("photos")
       .select("id", { count: "exact", head: true })
       .eq("uploaded_by", user.id)
-      .eq("archived", false)
-      .is("deleted_at", null)
-      .or("phase.is.null,phase.neq.walkthrough")
-      .not("storage_path", "like", "%/walkthroughs/%");
+      .is("deleted_at", null);
     return count ?? 0;
   };
 
@@ -402,10 +399,17 @@ export function GalleryPage() {
     let q = supabase
       .from("photos")
       .select("*")
-      .eq("archived", false)
+      /*
+       * `photos.archived` is NOT the archive the template pages offer. It is
+       * set only by the archive-old-photos cron, which downscales a six-month
+       * -old original in place — same row, same path, fewer bytes. Nothing in
+       * the product sets it, and nothing offers a way to see an archived photo.
+       *
+       * So filtering it here meant: the day that job is enabled, a user's older
+       * photos start disappearing from their own gallery with no way to get
+       * them back. Same failure as the walkthrough captures, different column.
+       */
       .is("deleted_at", null)
-      .or("phase.is.null,phase.neq.walkthrough")
-      .not("storage_path", "like", "%/walkthroughs/%")
       .order("created_at", { ascending: false })
       .limit(photoLimit);
     if (projectFilter.length > 0) q = q.in("project_id", projectFilter);
@@ -415,9 +419,10 @@ export function GalleryPage() {
     if (dateFrom) q = q.gte("created_at", new Date(`${dateFrom}T00:00:00`).toISOString());
     if (dateTo) q = q.lte("created_at", new Date(`${dateTo}T23:59:59.999`).toISOString());
     const { data } = await q;
-    const ps = ((data as Photo[]) ?? []).filter(
-      (p) => p.phase !== "walkthrough" && !p.storage_path.includes("/walkthroughs/"),
-    );
+    // Walkthrough captures are ordinary photos and belong here. See the note in
+    // ProjectDetailPage's `load` for why the three exclusions that used to sit
+    // on this query are gone.
+    const ps = (data as Photo[]) ?? [];
     // Sign URLs in one batched request instead of one call per photo.
     const map: Record<string, string> = {};
     if (ps.length) {

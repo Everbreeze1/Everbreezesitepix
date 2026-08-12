@@ -15,6 +15,18 @@ import { getSupabaseAdmin, requireSitepixSupabaseUrl } from "../../lib/supabase"
  *
  * Kept rather than deleted: the logic is correct and will be worth running once
  * there is enough stored data to justify it.
+ *
+ * `photos.archived` IS NOT THE ARCHIVE THE TEMPLATE PAGES OFFER. There it is a
+ * user's decision, with a toggle and a "Show archived" filter. Here it means
+ * only "this original has already been downscaled" — same row, same
+ * storage_path, fewer bytes, nothing about it hidden. The scan below is the one
+ * correct use of the column: finding the photos this job has not processed yet.
+ *
+ * No READ may use it to exclude a photo from a user-facing surface. Five did —
+ * the gallery, its total count, the calendar, the activity heatmap and the
+ * showcase builder — which meant enabling this job would have quietly started
+ * emptying users' older photos out of their own gallery. Those are gone; see
+ * the note in GalleryPage's loadPhotos.
  */
 function archiveEnabled(): boolean {
   const raw = process.env.PHOTO_ARCHIVE_ENABLED?.trim().toLowerCase();

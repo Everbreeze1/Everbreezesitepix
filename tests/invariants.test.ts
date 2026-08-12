@@ -56,6 +56,10 @@ describe("family: soft-delete leakage (photos.deleted_at)", () => {
     "apps/web/src/features/projects/components/ProjectSiteLogs.tsx",
     "apps/web/src/features/projects/pages/DashboardPage.tsx",
     "apps/web/src/features/projects/components/SelectPhotosForPageDialog.tsx",
+    // The mobile project photo list. It filtered neither the trash nor
+    // anything else, so a photo the user deleted on the web kept showing on
+    // their phone until the 60-day purge.
+    "apps/mobile/src/lib/projects.ts",
   ];
 
   it.each(MUST_FILTER)("%s excludes trashed photos", (rel) => {
@@ -94,16 +98,31 @@ describe("family: a row delete must be confirmed before its blob is destroyed", 
       rel: "apps/web/src/features/projects/components/ProjectDocuments.tsx",
       bucket: "site-documents",
     },
-    {
-      rel: "apps/web/src/features/projects/pages/ProjectDetailPage.tsx",
-      bucket: "site-photos",
-    },
   ];
 
   it.each(CASES)("$rel proves rows were deleted before removing from $bucket", ({ rel }) => {
     const src = read(rel);
     // The delete that precedes a storage removal must ask for the affected rows.
     expect(src).toMatch(/\.delete\(\)[\s\S]{0,400}?\.select\(/);
+  });
+
+  it("ProjectDetailPage destroys no photo at all", () => {
+    /*
+     * This file used to be the second case above. Closing an unfinished
+     * recorder hard-deleted every linked photo row and its storage blob, and
+     * that delete needed the proof this family is about.
+     *
+     * The path is gone. It was unreachable — the branch above it returns
+     * whenever a capture exists — and it contradicted the rule the photo
+     * surfaces now follow: a photo the user took is theirs, and dismissing a
+     * recorder is not a request to destroy it. The trash is the only route out.
+     *
+     * So the stronger statement holds, and this asserts it instead: nothing
+     * here deletes a photo row, which means nothing here can destroy its blob.
+     */
+    const src = stripComments(read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx"));
+    const photoDeletes = src.match(/\.from\("photos"\)[\s\S]{0,120}?\.delete\(\)/g) ?? [];
+    expect(photoDeletes).toEqual([]);
   });
 });
 
@@ -817,22 +836,23 @@ describe("family: report photo order is editable, because it decides page layout
   });
 });
 
-describe("family: only capture paths may hide a photo from the gallery", () => {
+describe("family: only capture paths may label a photo a walkthrough frame", () => {
   /*
-   * `photos.phase = "walkthrough"` removes a photo from the project grid, the
-   * global gallery, the calendar, the timeline, dashboards, group cards,
-   * showcases and the mobile app — and NOTHING in this codebase ever writes it
-   * back. That is correct for a frame captured *during* a recording, which is a
-   * recording artefact and was never in the gallery to begin with.
+   * `photos.phase = "walkthrough"` records WHERE a photo came from: a frame
+   * captured during a recording. NOTHING in this codebase ever writes it back,
+   * so a wrong label is permanent.
    *
-   * A Summary is the opposite case: it LINKS photos the user already has and
-   * still expects to find in the gallery. Reusing the recorded-walkthrough
+   * A Summary is the case that gets it wrong: it LINKS photos the user shot
+   * normally and picked out of their gallery. Reusing the recorded-walkthrough
    * linker there — the obvious "simplification", since the link rows are
-   * otherwise identical — would erase real photos from the customer's product
-   * everywhere but the summary itself, permanently and with no undo path.
+   * otherwise identical — would relabel real gallery photos as capture frames
+   * with no undo path.
    *
    * Hence the summary services write `walkthrough_photos` directly. This guard
    * is the enforcement point for that, because nothing else is.
+   *
+   * This label used to also HIDE the photo from every photo surface in the
+   * product. It no longer does — see the sibling family below.
    */
   const SERVICE = "apps/api/src/domains/walkthroughs/service.ts";
 
@@ -880,6 +900,146 @@ describe("family: only capture paths may hide a photo from the gallery", () => {
     const src = stripComments(read(SERVICE));
     const refusals = src.match(/\(walk as any\)\.source !== "recorded"/g) ?? [];
     expect(refusals.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("both orphan-recovery scans narrow the caption prefilter before adopting", () => {
+    /*
+     * The scans find capture frames that lost their `walkthrough_photos` link.
+     * One of their three signals is `caption LIKE 'walkthrough-%'`, and caption
+     * is user-editable — an unedited upload's caption is its filename. A photo
+     * the user shot with the camera and named "walkthrough-front-door.jpg" was
+     * therefore adopted into a fabricated walkthrough and relabelled a capture,
+     * neither of which this codebase can undo.
+     *
+     * The SQL stays coarse because PostgREST's `or` cannot express the real
+     * rule; `isWalkthroughCapture` is that rule and must run on every scan.
+     */
+    const src = stripComments(read(SERVICE));
+    const scans = src.match(/\.or\(WALKTHROUGH_CANDIDATE_SCAN\)/g) ?? [];
+    expect(scans.length, "a recovery scan stopped using the shared prefilter").toBe(2);
+    // One definition plus one application per scan.
+    const applied = src.match(/isWalkthroughCapture\b/g) ?? [];
+    expect(applied.length, "a recovery scan skipped the narrowing").toBeGreaterThanOrEqual(3);
+    // The prefix must live in the shared constant only, never re-inlined.
+    const inlined = src.match(/caption\.like\.walkthrough-%/g) ?? [];
+    expect(inlined.length, "caption prefix scan re-inlined outside the constant").toBe(1);
+  });
+
+  it("the caption rule matches the filename the recorder actually generates", () => {
+    // RECORDER_FILENAME_CAPTION encodes WalkthroughRecorder's naming. The two
+    // files have no import between them, so a rename there silently stops
+    // pre-path-convention captures from ever being recovered.
+    const recorder = stripComments(
+      read("apps/web/src/features/photos/components/WalkthroughRecorder.tsx"),
+    );
+    expect(recorder, "recorder filename changed — update RECORDER_FILENAME_CAPTION").toMatch(
+      /`walkthrough-\$\{Date\.now\(\)\}\.jpg`/,
+    );
+    const rule = stripComments(read(SERVICE)).match(/RECORDER_FILENAME_CAPTION\s*=\s*(\/.+\/i?)/);
+    expect(rule, "RECORDER_FILENAME_CAPTION not found").not.toBeNull();
+    const pattern = new RegExp(rule![1].replace(/^\//, "").replace(/\/i?$/, ""), "i");
+    expect(pattern.test(`walkthrough-${1755000000000}.jpg`)).toBe(true);
+    // The shape that caused the bug must not match.
+    expect(pattern.test("walkthrough-front-door.jpg")).toBe(false);
+  });
+});
+
+describe("family: a photo the user took is a photo the user can find", () => {
+  /*
+   * Reported by the customer, in these words: "When I do a walkthrough and snap
+   * photos, those photos don't show up in the general project photos. They are
+   * hiding in each report."
+   *
+   * Eleven separate reads excluded walkthrough captures — some on
+   * `phase != "walkthrough"`, some on a `/walkthroughs/` storage path, most on
+   * both, and three of them a second time client-side after the query had
+   * already filtered. A technician who documented a site by walking it could
+   * not find a single one of those photos in the project's photos, the gallery,
+   * the calendar or the mobile app. The report builder never had the filter, so
+   * the frames existed but only inside reports — hence "hiding".
+   *
+   * The photos were never separate: `photos` has no walkthrough column, and a
+   * capture is an ordinary row with a `walkthrough_photos` link. Only these
+   * reads made them invisible. `phase` stays as a provenance label (PhotoCarousel
+   * badges it, and orphan recovery finds captures by it) — it must not be
+   * reintroduced as a visibility rule, on any surface, in either form.
+   */
+  const READS = [
+    "apps/web/src/features/projects/pages/ProjectDetailPage.tsx",
+    "apps/web/src/features/projects/pages/ProjectsPage.tsx",
+    "apps/web/src/features/projects/pages/DashboardPage.tsx",
+    "apps/web/src/features/gallery/pages/GalleryPage.tsx",
+    "apps/web/src/features/gallery/components/PhotoCalendar.tsx",
+    "apps/web/src/features/showcases/components/ShowcasePhotoPickerDialog.tsx",
+    "apps/web/src/features/projects/pages/ReportBuilderPage.tsx",
+    "apps/api/src/domains/timeline/service.ts",
+    "apps/api/src/domains/projects/groups.ts",
+    "apps/api/src/domains/showcases/service.ts",
+    "apps/mobile/src/lib/projects.ts",
+  ];
+
+  for (const file of READS) {
+    it(`${file.split("/").pop()} does not filter walkthrough captures out of a photo read`, () => {
+      const src = stripComments(read(file));
+      // The PostgREST form: .or("phase.is.null,phase.neq.walkthrough")
+      expect(src, "phase.neq.walkthrough exclusion is back").not.toMatch(
+        /phase\.neq\.walkthrough/,
+      );
+      // The storage-path form, query-side and in-memory.
+      expect(src, "/walkthroughs/ path exclusion is back").not.toMatch(
+        /["'`]%?\/walkthroughs\/%?["'`]/,
+      );
+      // The client-side re-filter that three of these applied on top.
+      expect(src, "client-side phase re-filter is back").not.toMatch(
+        /phase\s*!==\s*["']walkthrough["']/,
+      );
+    });
+  }
+
+  it("no photo read hides a photo because the compression job touched it", () => {
+    /*
+     * `photos.archived` is set by exactly one thing: archive-old-photos, which
+     * downscales a six-month-old original in place. Same row, same path, fewer
+     * bytes. No UI sets it and no UI shows an archived photo, so a read that
+     * filters it is a read that deletes the user's older photos from their own
+     * gallery the day PHOTO_ARCHIVE_ENABLED is turned on.
+     *
+     * It reads like the template pages' `archived`, which IS a user's choice
+     * with a "Show archived" toggle. Same word, unrelated meaning — which is
+     * why five reads picked it up. The job's own scan is the one legitimate
+     * use and is excluded here by path.
+     */
+    const offenders: string[] = [];
+    for (const rel of READS) {
+      const lines = stripComments(read(rel)).split("\n");
+      lines.forEach((line, i) => {
+        if (/\.eq\(\s*["']archived["']\s*,\s*false\s*\)/.test(line)) {
+          offenders.push(`${rel}:${i + 1}`);
+        }
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("the archive job still scans on the column it owns", () => {
+    // The counterpart to the guard above: excluding archived rows is correct
+    // in exactly one place, and if that scan loses its filter the job
+    // re-downscales already-downscaled photos on every run.
+    const src = stripComments(read("apps/api/src/domains/hooks/archive-old-photos.ts"));
+    expect(src).toMatch(/\.eq\("archived", false\)/);
+  });
+
+  it("the walkthrough capture path still leaves the photo in the project", () => {
+    /*
+     * The capture writes one `photos` row against the project, the same table
+     * and the same `project_id` a camera upload writes. If this ever becomes a
+     * private table or a null project_id, every read above goes quiet again
+     * without a single one of them changing.
+     */
+    const src = stripComments(read("apps/api/src/domains/walkthroughs/service.ts"));
+    const insert = src.indexOf('.from("photos")');
+    expect(insert, "walkthrough capture no longer inserts into photos").toBeGreaterThan(-1);
+    expect(src).toMatch(/\.insert\(\{[\s\S]{0,200}project_id:\s*data\.projectId/);
   });
 });
 
@@ -1621,5 +1781,57 @@ describe("family: nothing floats over an auth form", () => {
      */
     const src = stripComments(read(SRC));
     expect(src).toMatch(/if \(isSuppressedRoute\(\)\) return null;/);
+  });
+});
+
+describe("family: every GoTrue email action type must have a template", () => {
+  /*
+   * The Send Email hook answers 400 for an action type it does not know, and
+   * GoTrue treats that as a failed send — the mail simply never goes out. That
+   * is invisible until a user tries the flow: secure email change fires
+   * `email_change_current` and `email_change_new`, neither was mapped, so the
+   * second confirmation never arrived and the change could never complete.
+   * `new_email` stayed set, `email` stayed old, and the UI kept saying "check
+   * your inbox".
+   */
+  const REQUIRED_TYPES = [
+    "signup",
+    "invite",
+    "magiclink",
+    "recovery",
+    "email_change",
+    "email_change_current",
+    "email_change_new",
+    "reauthentication",
+  ];
+
+  /** Object-literal keys read straight off the source — no regex to mis-escape. */
+  const keysIn = (constName: string, endMarker: string) => {
+    const src = read("apps/api/src/domains/email/auth-send.ts");
+    const start = src.indexOf(`const ${constName}`);
+    expect(start, `${constName} not found`).toBeGreaterThan(-1);
+    const block = stripComments(src.slice(start, src.indexOf(endMarker, start)));
+    return new Set(
+      block
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.includes(":"))
+        .map((l) => l.slice(0, l.indexOf(":")).trim().replace(/["']/g, ""))
+        .filter(Boolean),
+    );
+  };
+
+  it("EMAIL_TEMPLATES covers every type GoTrue can send", () => {
+    const keys = keysIn("EMAIL_TEMPLATES", "const SITE_NAME");
+    for (const t of REQUIRED_TYPES) {
+      expect(keys.has(t), `EMAIL_TEMPLATES is missing "${t}"`).toBe(true);
+    }
+  });
+
+  it("every mapped type also has a subject", () => {
+    const keys = keysIn("EMAIL_SUBJECTS", "const EMAIL_TEMPLATES");
+    for (const t of REQUIRED_TYPES) {
+      expect(keys.has(t), `EMAIL_SUBJECTS is missing "${t}"`).toBe(true);
+    }
   });
 });

@@ -138,11 +138,12 @@ export async function listTimelineActivityService(
         ? "id, project_id, storage_path, thumb_path, image_url, taken_at, created_at"
         : "project_id, taken_at, created_at",
     )
-    .eq("archived", false)
+    // No `archived` filter — that column is the compression job's bookkeeping,
+    // not a user's decision to hide a photo. See the note in GalleryPage.
     .is("deleted_at", null)
-    // Walkthrough frames are capture artefacts, not a record of a day's work.
-    .or("phase.is.null,phase.neq.walkthrough")
-    .not("storage_path", "like", "%/walkthroughs/%")
+    // Walkthrough frames used to be excluded here as "capture artefacts". They
+    // are a record of a day's work — often the only one, on a day the crew
+    // walked the site instead of shooting stills — so the heatmap counts them.
     .gte("created_at", new Date(fromMs - slack).toISOString())
     .lt("created_at", new Date(toMs + slack).toISOString())
     .order("created_at", { ascending: false })

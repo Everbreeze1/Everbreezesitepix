@@ -221,8 +221,6 @@ export function DashboardPage() {
       // Excludes the trash: without it the newest deleted photo became the
       // project's cover image on the dashboard.
       .is("deleted_at", null)
-      .or("phase.is.null,phase.neq.walkthrough")
-      .not("storage_path", "like", "%/walkthroughs/%")
       .order("created_at", { ascending: false });
 
     const rows =

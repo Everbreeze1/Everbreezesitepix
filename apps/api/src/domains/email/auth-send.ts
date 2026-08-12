@@ -19,15 +19,35 @@ const EMAIL_SUBJECTS: Record<string, string> = {
   magiclink: "Your login link",
   recovery: "Reset your password",
   email_change: "Confirm your new email",
+  // Secure email change sends one to each address; they need different subjects
+  // because they are asking different people for different things.
+  email_change_current: "Approve the change of your email address",
+  email_change_new: "Confirm your new email",
   reauthentication: "Your verification code",
 };
 
+/**
+ * Every `email_action_type` GoTrue can send us.
+ *
+ * `email_change_current` / `email_change_new` were missing. With Supabase's
+ * secure email change turned on, changing an address fires BOTH of those — one
+ * asking the old address to approve, one asking the new address to confirm —
+ * and an unmapped type returns 400 from this handler, so that mail is never
+ * sent. The change then sits forever with `new_email` set and `email`
+ * unchanged: the user is told to check their inbox, and nothing they can do
+ * will ever complete it.
+ *
+ * Both reuse EmailChangeEmail; the subjects differ because the two messages ask
+ * different people for different things.
+ */
 const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
   signup: SignupEmail,
   invite: InviteEmail,
   magiclink: MagicLinkEmail,
   recovery: RecoveryEmail,
   email_change: EmailChangeEmail,
+  email_change_current: EmailChangeEmail,
+  email_change_new: EmailChangeEmail,
   reauthentication: ReauthenticationEmail,
 };
 
@@ -67,9 +87,16 @@ export function buildConfirmationUrl(emailData: {
   const base = (emailData.site_url ?? `https://${ROOT_DOMAIN}`)
     .replace(/\/+$/, "")
     .replace(/\/auth\/v1$/, "");
+  /*
+   * `email_change_current` / `email_change_new` are hook action types, not
+   * verify types — GoTrue's /verify only understands `email_change`. Passing
+   * the hook type straight through produced a link the endpoint rejects.
+   */
+  const action = emailData.email_action_type ?? "signup";
+  const verifyType = action.startsWith("email_change") ? "email_change" : action;
   const params = new URLSearchParams({
     token: emailData.token_hash ?? "",
-    type: emailData.email_action_type ?? "signup",
+    type: verifyType,
   });
   if (emailData.redirect_to) params.set("redirect_to", emailData.redirect_to);
   return `${base}/auth/v1/verify?${params.toString()}`;
