@@ -88,10 +88,20 @@ export function RecordDocument({
   const address = formatProjectAddress(project);
   const completed = docDate(record.completedAt, true);
   const started = docDate(record.createdAt);
-  const hasItems = record.sections.some((s) => s.items.length > 0);
+  /*
+   * The sections that will actually draw something: one with items, or a named
+   * phase (a phase heading with a 0/0 count is still the shape of the job).
+   *
+   * "Empty" has to be derived from this same list, not from `items.length > 0`.
+   * A workflow template whose phases carry no steps yet made the sheet print
+   * "Nothing has been added to this workflow yet" directly above Phase 1 and
+   * Phase 2 — two contradictory claims on a document going to a customer.
+   */
+  const sections = record.sections.filter((s) => s.items.length > 0 || !!s.name);
+  const isEmpty = sections.length === 0;
   /* A checklist is one unnamed section; naming it "Items" on the page would add
      a heading that says nothing. Workflow phases are genuinely named. */
-  const showSectionHeads = record.sections.some((s) => !!s.name);
+  const showSectionHeads = sections.some((s) => !!s.name);
 
   return (
     <article className={cn("record-doc", variant === "screen" && "record-doc--screen", className)}>
@@ -154,12 +164,11 @@ export function RecordDocument({
         <div className="record-doc__notes" dangerouslySetInnerHTML={{ __html: record.notesHtml }} />
       )}
 
-      {!hasItems && (
+      {isEmpty && (
         <div className="record-doc__empty">Nothing has been added to this {record.kind} yet.</div>
       )}
 
-      {record.sections.map((section) => {
-        if (!section.items.length && !section.name) return null;
+      {sections.map((section) => {
         const done = section.items.filter((i) => i.answered).length;
         return (
           <section className="record-doc__section" key={section.id}>

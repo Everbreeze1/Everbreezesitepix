@@ -1260,3 +1260,44 @@ describe("family: prose-* classes are inert in this app", () => {
     expect(css).toMatch(/\.wt-markdown ul \{[^}]*list-style: disc/);
   });
 });
+
+describe("family: a rich-text toolbar button must not steal focus from its editor", () => {
+  /*
+   * Pressing a toolbar button moves focus out of the contenteditable, which
+   * fires the editor's `onBlur`. `RichTextEditor` renders its toolbar only while
+   * focused when `toolbarOnFocus` is set, so React unmounted the toolbar BETWEEN
+   * mousedown and mouseup — no click event ever landed and the command never
+   * ran. Every control in the document header, the document footer and both
+   * field-record write-ups was inert: it highlighted on hover and did nothing.
+   *
+   * Invisible to types and to unit tests; found by clicking Bold in a real
+   * browser and counting zero `<strong>` elements afterwards. Suppressing the
+   * default mousedown is the fix, and funnelling every control through one
+   * component is what stops the next one from forgetting.
+   */
+  it("RichTextEditor suppresses the default mousedown on its toolbar controls", () => {
+    const src = read("apps/web/src/components/RichTextEditor.tsx");
+    expect(src).toMatch(/onMouseDown=\{\(e\) => e\.preventDefault\(\)\}/);
+  });
+
+  it("every toolbar control goes through the single guarded button", () => {
+    const src = read("apps/web/src/components/RichTextEditor.tsx");
+    // Exactly one raw <button> may exist — ToolButton's own. Any other is a
+    // control that bypassed the guard.
+    expect(src.match(/<button\b/g) ?? []).toHaveLength(1);
+    // And it is the one carrying the guard.
+    const btn = src.slice(src.indexOf("<button"), src.indexOf("</button>"));
+    expect(btn).toContain("onMouseDown");
+  });
+
+  it("the editors that render their toolbar on focus are the ones this protects", () => {
+    // If this list empties, the guard above is no longer load-bearing and the
+    // reasoning in its comment should be revisited rather than silently kept.
+    const users = [
+      "apps/web/src/features/projects/pages/ProjectPageEditorPage.tsx",
+      "apps/web/src/features/projects/pages/ChecklistDocumentPage.tsx",
+      "apps/web/src/features/projects/components/ProjectWorkflows.tsx",
+    ];
+    for (const rel of users) expect(read(rel)).toContain("toolbarOnFocus");
+  });
+});

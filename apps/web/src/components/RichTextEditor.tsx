@@ -11,7 +11,7 @@ import {
   Heading3,
   SeparatorHorizontal,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { MergeToken } from "@/lib/tiptap-fill-field";
 
@@ -115,6 +115,51 @@ export function RichTextEditor({
   );
 }
 
+/**
+ * One toolbar control.
+ *
+ * `onMouseDown` preventing default is the load-bearing line, not a nicety.
+ * Pressing a button moves focus out of the contenteditable, which fires the
+ * editor's `onBlur`. In `toolbarOnFocus` mode that sets `focused` to false and
+ * React unmounts the toolbar *between mousedown and mouseup* — so no click event
+ * ever lands and the command never runs. Every control in the document header,
+ * the document footer and the two field-record write-ups was inert: the button
+ * highlighted on hover, and did nothing.
+ *
+ * Found by clicking Bold in a browser and getting zero `<strong>` elements.
+ * Suppressing the default mousedown keeps the selection and the focus where they
+ * are, which is also why the always-visible toolbar now applies formatting to
+ * the text you had selected rather than to a collapsed cursor.
+ */
+function ToolButton({
+  active,
+  onRun,
+  label,
+  title,
+  children,
+}: {
+  active?: boolean;
+  onRun: () => void;
+  label: string;
+  title?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground"
+      data-active={active}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onRun}
+      aria-label={label}
+      aria-pressed={active}
+      title={title}
+    >
+      {children}
+    </button>
+  );
+}
+
 function Toolbar({
   editor,
   compact,
@@ -127,89 +172,71 @@ function Toolbar({
   pageBreaks: boolean;
 }) {
   if (!editor) return null;
-  const btnCls =
-    "rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground";
   return (
     <div className="flex flex-wrap items-center gap-0.5 border-b border-border px-2 py-1 text-xs">
-      <button
-        type="button"
-        className={btnCls}
-        data-active={editor.isActive("bold")}
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        aria-label="Bold"
+      <ToolButton
+        active={editor.isActive("bold")}
+        onRun={() => editor.chain().focus().toggleBold().run()}
+        label="Bold"
       >
         <Bold className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        className={btnCls}
-        data-active={editor.isActive("italic")}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        aria-label="Italic"
+      </ToolButton>
+      <ToolButton
+        active={editor.isActive("italic")}
+        onRun={() => editor.chain().focus().toggleItalic().run()}
+        label="Italic"
       >
         <Italic className="h-3.5 w-3.5" />
-      </button>
+      </ToolButton>
       {!singleLine && !compact && (
         <>
           <span className="mx-1 h-4 w-px bg-border" />
-          <button
-            type="button"
-            className={btnCls}
-            data-active={editor.isActive("heading", { level: 1 })}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-            aria-label="Heading 1"
+          <ToolButton
+            active={editor.isActive("heading", { level: 1 })}
+            onRun={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+            label="Heading 1"
           >
             <Heading1 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            className={btnCls}
-            data-active={editor.isActive("heading", { level: 2 })}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-            aria-label="Heading 2"
+          </ToolButton>
+          <ToolButton
+            active={editor.isActive("heading", { level: 2 })}
+            onRun={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            label="Heading 2"
           >
             <Heading2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            className={btnCls}
-            data-active={editor.isActive("heading", { level: 3 })}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-            aria-label="Heading 3"
+          </ToolButton>
+          <ToolButton
+            active={editor.isActive("heading", { level: 3 })}
+            onRun={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+            label="Heading 3"
           >
             <Heading3 className="h-3.5 w-3.5" />
-          </button>
+          </ToolButton>
           <span className="mx-1 h-4 w-px bg-border" />
-          <button
-            type="button"
-            className={btnCls}
-            data-active={editor.isActive("bulletList")}
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
-            aria-label="Bullet list"
+          <ToolButton
+            active={editor.isActive("bulletList")}
+            onRun={() => editor.chain().focus().toggleBulletList().run()}
+            label="Bullet list"
           >
             <List className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            className={btnCls}
-            data-active={editor.isActive("orderedList")}
-            onClick={() => editor.chain().focus().toggleOrderedList().run()}
-            aria-label="Numbered list"
+          </ToolButton>
+          <ToolButton
+            active={editor.isActive("orderedList")}
+            onRun={() => editor.chain().focus().toggleOrderedList().run()}
+            label="Numbered list"
           >
             <ListOrdered className="h-3.5 w-3.5" />
-          </button>
+          </ToolButton>
           {pageBreaks && (
             <>
               <span className="mx-1 h-4 w-px bg-border" />
-              <button
-                type="button"
-                className={btnCls}
-                onClick={() => editor.chain().focus().setHorizontalRule().run()}
-                aria-label="Insert page break"
+              <ToolButton
+                onRun={() => editor.chain().focus().setHorizontalRule().run()}
+                label="Insert page break"
                 title="Insert page break — the rest of this section starts on a new page"
               >
                 <SeparatorHorizontal className="h-3.5 w-3.5" />
-              </button>
+              </ToolButton>
             </>
           )}
         </>
