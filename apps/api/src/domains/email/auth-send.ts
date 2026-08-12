@@ -9,6 +9,7 @@ import {
   ReauthenticationEmail,
 } from "@sitepix/email-templates";
 import { verifyBearerSecret } from "../../lib/cron-auth";
+import { verifyStandardWebhook } from "../../lib/webhook-signature";
 import { jsonError, jsonOk } from "../../lib/errors";
 import { sendEmail } from "../../lib/send-email";
 
@@ -64,13 +65,31 @@ function buildConfirmationUrl(emailData: {
  * Secret env: AUTH_EMAIL_HOOK_SECRET
  */
 export async function handleAuthSendEmail(request: Request): Promise<Response> {
-  if (!verifyBearerSecret(request, "AUTH_EMAIL_HOOK_SECRET")) {
+  /*
+   * Two accepted auth schemes, because the caller differs by environment.
+   *
+   * Supabase Auth's HTTP hook signs the request per Standard Webhooks and
+   * sends `webhook-signature` — it never sends a bearer token. The secret it
+   * stores looks like `v1,whsec_<base64>`. Verifying only a bearer here meant
+   * a correctly configured hook still 401'd, and Supabase surfaced that to the
+   * user as a bare 500 on signup.
+   *
+   * The bearer path is kept for manual calls and smoke tests (documented in
+   * docs/api.md), which is also how this handler is exercised without going
+   * through Supabase.
+   *
+   * The raw text is read once and reused: the signature covers the exact bytes,
+   * so re-serializing parsed JSON would change them and break verification.
+   */
+  const rawBody = await request.text();
+  const signed = verifyStandardWebhook(request, rawBody, process.env.AUTH_EMAIL_HOOK_SECRET);
+  if (!signed && !verifyBearerSecret(request, "AUTH_EMAIL_HOOK_SECRET")) {
     return jsonError(401, "unauthorized", "Unauthorized");
   }
 
   let body: any;
   try {
-    body = await request.json();
+    body = JSON.parse(rawBody);
   } catch {
     return jsonError(400, "invalid_json", "Invalid JSON");
   }
