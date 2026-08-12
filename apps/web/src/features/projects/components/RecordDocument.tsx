@@ -204,7 +204,16 @@ export function RecordDocument({
       })}
 
       <footer className="record-doc__footer">
-        <span>{[company?.name, author?.name].filter(Boolean).join(" · ") || "SitePix"}</span>
+        {/*
+          No "SitePix" fallback.
+          This sheet goes to the contractor's customer under the contractor's
+          letterhead, so when neither a company name nor an author is on file the
+          honest footer is empty — printing OUR brand on THEIR compliance record
+          is worse than printing nothing. Caught by opening a real shared link:
+          the account has a logo but no company name, so the fallback fired and
+          the customer's copy was signed "SitePix".
+        */}
+        <span>{[company?.name, author?.name].filter(Boolean).join(" · ")}</span>
         <span>
           {record.completedAt
             ? `Record sealed ${docDate(record.completedAt, true)}`
