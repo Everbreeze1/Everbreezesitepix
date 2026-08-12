@@ -104,4 +104,25 @@ describe("sanitizePageHtml — preserves legitimate document content", () => {
     expect(sanitizePageHtml(null)).toBeNull();
     expect(sanitizePageHtml("")).toBe("");
   });
+
+  /*
+   * A photo slot declares a fixed box so a row of them lines up, and
+   * ProjectImage.renderHTML serialises that box as an inline style because the
+   * HTML `width`/`height` attributes lose to Tailwind's preflight
+   * `img { height: auto }` on every surface that renders stored HTML.
+   *
+   * The shared page is one of those surfaces, and it renders THIS function's
+   * output — so tightening `allowedStyles` would silently drop the box and put
+   * photos back to their natural aspect for the customer, with the editor still
+   * showing the authored layout. Measured before the fix: a slot declaring
+   * 280px rendered 127px on the shared page.
+   */
+  it("keeps the inline box a photo slot needs to hold its shape", () => {
+    const html =
+      '<img src="https://cdn.example.com/a.jpg" width="48%" height="260"' +
+      ' style="width:48%;height:260px" alt="Before">';
+    const out = sanitizePageHtml(html);
+    expect(out).toContain("width:48%");
+    expect(out).toContain("height:260px");
+  });
 });
