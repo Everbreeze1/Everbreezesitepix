@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CircleCheck, ArrowRight, MailCheck, Loader2 } from "lucide-react";
 import { authErrorMessage } from "@/lib/auth-errors";
+import { useAuthProviders } from "@/hooks/use-auth-providers";
 import { BrandLogo } from "@/components/BrandLogo";
 import { MobileAppBanner } from "@/components/MobileAppBanner";
 import { toast } from "sonner";
@@ -45,6 +46,8 @@ function SignupPage() {
   const [confirmEmailSent, setConfirmEmailSent] = useState(false);
   const [resending, setResending] = useState(false);
   const [oauthPending, setOauthPending] = useState<"google" | "apple" | null>(null);
+  // Only offer social buttons the project has actually enabled — see the hook.
+  const social = useAuthProviders();
 
   /*
    * Typed addresses arrive with stray whitespace far more often than you'd
@@ -211,6 +214,23 @@ function SignupPage() {
               <p className="font-manrope mt-3 text-sm leading-6 text-muted-foreground">
                 It usually arrives within a minute. Check your spam folder if you don&apos;t see it.
               </p>
+              {/*
+                Covers the duplicate-signup dead end. Supabase deliberately
+                answers a signup for an existing address with a success response
+                and a placeholder user, so that an attacker cannot use this form
+                to discover who has an account — which also means no email is
+                sent and the person sits here waiting for one. We must not say
+                "that address is taken" without undoing that protection, so the
+                copy is conditional: it reads as generic advice to anyone who
+                does have mail coming, and as the way out to anyone who doesn't.
+              */}
+              <p className="font-manrope mt-3 text-sm leading-6 text-muted-foreground">
+                Already have an account with this email?{" "}
+                <Link to="/login" className="font-bold text-primary hover:underline">
+                  Log in instead
+                </Link>{" "}
+                — no new link is sent for an existing account.
+              </p>
 
               <div className="mt-8 space-y-3">
                 <Button
@@ -266,6 +286,7 @@ function SignupPage() {
               <Input
                 id="name"
                 required
+                autoComplete="name"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Jordan Smith"
@@ -276,10 +297,22 @@ function SignupPage() {
               <Label htmlFor="email" className="font-manrope text-sm font-bold text-foreground">
                 Work email
               </Label>
+              {/*
+                autoComplete/inputMode/autoCapitalize are what let a password
+                manager save the credential and what gives a phone the email
+                keyboard. Without autoCapitalize="none" iOS capitalises the
+                first letter, which is one of the ways " A@B.com" gets typed in
+                the first place.
+              */}
               <Input
                 id="email"
                 type="email"
                 required
+                autoComplete="email"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
@@ -290,10 +323,14 @@ function SignupPage() {
               <Label htmlFor="password" className="font-manrope text-sm font-bold text-foreground">
                 Password
               </Label>
+              {/* "new-password" is what prompts a manager to offer to generate
+                  and save one; "current-password" here would make it autofill
+                  an existing credential instead. */}
               <PasswordInput
                 id="password"
                 required
                 minLength={8}
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="At least 8 characters"
@@ -310,42 +347,50 @@ function SignupPage() {
             </Button>
           </form>
 
-          <div className="mt-7 flex items-center gap-3">
-            <div className="h-px flex-1 bg-border" />
-            <span className="font-manrope text-xs text-muted-foreground">or continue with</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
+          {social.any && (
+            <>
+              <div className="mt-7 flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="font-manrope text-xs text-muted-foreground">or continue with</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
 
-          <div className="mt-7 grid gap-2.5">
-            <Button
-              type="button"
-              onClick={() => handleOAuth("google")}
-              disabled={!!oauthPending}
-              variant="outline"
-              className="h-10 w-full rounded-lg border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F5FB]"
-            >
-              {oauthPending === "google" ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <GoogleIcon />
-              )}
-              Continue with Google
-            </Button>
-            <Button
-              type="button"
-              onClick={() => handleOAuth("apple")}
-              disabled={!!oauthPending}
-              variant="outline"
-              className="h-10 w-full rounded-lg border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F5FB]"
-            >
-              {oauthPending === "apple" ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <AppleIcon />
-              )}
-              Continue with Apple
-            </Button>
-          </div>
+              <div className="mt-7 grid gap-2.5">
+                {social.has("google") && (
+                  <Button
+                    type="button"
+                    onClick={() => handleOAuth("google")}
+                    disabled={!!oauthPending}
+                    variant="outline"
+                    className="h-10 w-full rounded-lg border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F5FB]"
+                  >
+                    {oauthPending === "google" ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <GoogleIcon />
+                    )}
+                    Continue with Google
+                  </Button>
+                )}
+                {social.has("apple") && (
+                  <Button
+                    type="button"
+                    onClick={() => handleOAuth("apple")}
+                    disabled={!!oauthPending}
+                    variant="outline"
+                    className="h-10 w-full rounded-lg border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F5FB]"
+                  >
+                    {oauthPending === "apple" ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <AppleIcon />
+                    )}
+                    Continue with Apple
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
 
           <p className="font-manrope mt-7 text-center text-sm text-muted-foreground">
             Already have an account?{" "}

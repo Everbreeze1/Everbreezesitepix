@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CheckCircle2, ArrowRight, ArrowLeft } from "lucide-react";
 import { authErrorMessage, isUnconfirmedEmail } from "@/lib/auth-errors";
+import { useAuthProviders } from "@/hooks/use-auth-providers";
 import { BrandLogo } from "@/components/BrandLogo";
 import { MobileAppBanner } from "@/components/MobileAppBanner";
 import { toast } from "sonner";
@@ -70,6 +71,9 @@ function LoginPage() {
    */
   const cleanEmail = email.trim().toLowerCase();
 
+  // Only offer social buttons the project has actually enabled.
+  const social = useAuthProviders();
+
   useEffect(() => {
     if (user) navigate({ to: (redirect || "/dashboard") as "/dashboard", replace: true });
   }, [user, navigate, redirect]);
@@ -117,7 +121,10 @@ function LoginPage() {
       provider,
       options: { redirectTo: `${window.location.origin}${redirect || "/dashboard"}` },
     });
-    if (error) toast.error(error.message ?? `${provider} sign-in failed`);
+    if (error) {
+      console.error("[login] oauth failed", error);
+      toast.error(authErrorMessage(error, `${provider} sign-in failed`));
+    }
   };
 
   const handleForgot = async () => {
@@ -224,6 +231,11 @@ function LoginPage() {
                 id="email"
                 type="email"
                 required
+                autoComplete="email"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
@@ -249,6 +261,7 @@ function LoginPage() {
               <PasswordInput
                 id="password"
                 required
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="At least 8 characters"
@@ -288,28 +301,36 @@ function LoginPage() {
             </div>
           )}
 
-          <div className="mt-7 flex items-center gap-3">
-            <div className="h-px flex-1 bg-border" />
-            <span className="font-manrope text-xs text-muted-foreground">or continue with</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
+          {social.any && (
+            <>
+              <div className="mt-7 flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="font-manrope text-xs text-muted-foreground">or continue with</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
 
-          <div className="mt-7 grid gap-2.5">
-            <button
-              type="button"
-              onClick={() => handleOAuth("google")}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border-[0.8px] border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F6FC]"
-            >
-              <GoogleIcon /> Continue with Google
-            </button>
-            <button
-              type="button"
-              onClick={() => handleOAuth("apple")}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border-[0.8px] border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F6FC]"
-            >
-              <AppleIcon /> Continue with Apple
-            </button>
-          </div>
+              <div className="mt-7 grid gap-2.5">
+                {social.has("google") && (
+                  <button
+                    type="button"
+                    onClick={() => handleOAuth("google")}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border-[0.8px] border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F6FC]"
+                  >
+                    <GoogleIcon /> Continue with Google
+                  </button>
+                )}
+                {social.has("apple") && (
+                  <button
+                    type="button"
+                    onClick={() => handleOAuth("apple")}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border-[0.8px] border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F6FC]"
+                  >
+                    <AppleIcon /> Continue with Apple
+                  </button>
+                )}
+              </div>
+            </>
+          )}
 
           <p className="font-manrope mt-7 text-center text-sm text-muted-foreground">
             New to SitePix?{" "}

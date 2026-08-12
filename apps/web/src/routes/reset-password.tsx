@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { BrandLogo } from "@/components/BrandLogo";
 import { PasswordInput } from "@/components/PasswordInput";
 import { supabase } from "@/integrations/sitepix/client";
+import { authErrorMessage } from "@/lib/auth-errors";
 
 export const Route = createFileRoute("/reset-password")({
   head: () => ({ meta: [{ title: "Reset password — Everbreeze SitePix" }] }),
@@ -64,7 +65,8 @@ function ResetPasswordPage() {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
       setLoading(false);
-      return toast.error(error.message);
+      console.error("[reset-password] update failed", error);
+      return toast.error(authErrorMessage(error));
     }
     // Sign out so the user must log in with the new password
     await supabase.auth.signOut();
@@ -111,10 +113,13 @@ function ResetPasswordPage() {
               <form onSubmit={handleSubmit} className="mt-6 space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="password">New password</Label>
+                  {/* Both "new-password" so a manager offers to generate one
+                      and then saves the same value for both fields. */}
                   <PasswordInput
                     id="password"
                     required
                     minLength={8}
+                    autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Min 8 characters"
@@ -126,6 +131,7 @@ function ResetPasswordPage() {
                     id="confirm"
                     required
                     minLength={8}
+                    autoComplete="new-password"
                     value={confirm}
                     onChange={(e) => setConfirm(e.target.value)}
                   />

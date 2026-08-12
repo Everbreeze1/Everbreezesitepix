@@ -44,6 +44,29 @@ function isIOS() {
   return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
 }
 
+/*
+ * Routes where this must never appear.
+ *
+ * The comment above describes the overlay covering the primary button. On the
+ * signup form it is worse than that: measured on an iPhone 13 viewport the
+ * banner occupies 504-568px and the password input sits at 528-573px, so
+ * `elementFromPoint` at the centre of that field returns the banner's text.
+ * A tap aimed at the password box hits the upsell, which means nobody can
+ * create an account on a phone until the 15s auto-retire fires — on an app
+ * whose users are almost entirely on phones.
+ *
+ * Suppressing it here rather than reserving layout space: asking someone to
+ * install the app before they have an account is the wrong moment for the
+ * prompt regardless of whether it overlaps anything.
+ */
+const SUPPRESSED_PATHS = ["/signup", "/login", "/reset-password"];
+
+function isSuppressedRoute() {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  return SUPPRESSED_PATHS.includes(path);
+}
+
 export function InstallPrompt() {
   const [deferred, setDeferred] = useState<BIPEvent | null>(null);
   const [showIOS, setShowIOS] = useState(false);
@@ -51,7 +74,7 @@ export function InstallPrompt() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (isInIframe() || isStandalone()) return;
+    if (isInIframe() || isStandalone() || isSuppressedRoute()) return;
 
     const dismissed = Number(localStorage.getItem(DISMISS_KEY) ?? 0);
     if (dismissed && Date.now() - dismissed < DISMISS_DAYS * 86400_000) return;
@@ -99,6 +122,13 @@ export function InstallPrompt() {
 
   if (hidden) return null;
   if (!deferred && !showIOS) return null;
+  /*
+   * Checked again at render, not just in the mount effect: this component sits
+   * beside <Outlet/> in the root layout and is never unmounted, so a client-side
+   * navigation from /dashboard to /login would otherwise carry an already-open
+   * banner onto the auth form.
+   */
+  if (isSuppressedRoute()) return null;
 
   return (
     <div

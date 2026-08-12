@@ -1543,3 +1543,83 @@ describe("family: the public share payload must not widen", () => {
     expect(src.match(/if \(!envelope\) return empty\("revoked"\)/g) ?? []).toHaveLength(2);
   });
 });
+
+describe("family: auth inputs must be fillable by a password manager", () => {
+  /*
+   * Every auth input shipped without a single autoComplete attribute. The cost
+   * is invisible in desktop dev and severe in the field: password managers
+   * cannot offer to save or fill the credential, and a phone gives a plain
+   * keyboard that auto-capitalises the first letter — which is one of the ways
+   * " A@B.com" gets typed and an unloggable account gets created.
+   *
+   * The exact tokens matter. "current-password" on a signup form makes a
+   * manager autofill an existing credential instead of generating a new one,
+   * and "new-password" on login stops it filling the saved one at all.
+   */
+  it("signup asks for a NEW password and a name", () => {
+    const src = stripComments(read("apps/web/src/routes/signup.tsx"));
+    expect(src).toMatch(/autoComplete="name"/);
+    expect(src).toMatch(/autoComplete="email"/);
+    expect(src).toMatch(/autoComplete="new-password"/);
+    expect(src).not.toMatch(/autoComplete="current-password"/);
+  });
+
+  it("login asks for the CURRENT password", () => {
+    const src = stripComments(read("apps/web/src/routes/login.tsx"));
+    expect(src).toMatch(/autoComplete="email"/);
+    expect(src).toMatch(/autoComplete="current-password"/);
+    expect(src).not.toMatch(/autoComplete="new-password"/);
+  });
+
+  it("reset-password asks for a NEW password on both fields", () => {
+    const src = stripComments(read("apps/web/src/routes/reset-password.tsx"));
+    expect(src.match(/autoComplete="new-password"/g) ?? []).toHaveLength(2);
+  });
+
+  it("email inputs do not auto-capitalise on mobile", () => {
+    for (const f of [
+      "apps/web/src/routes/signup.tsx",
+      "apps/web/src/routes/login.tsx",
+      "apps/web/src/features/settings/pages/SettingsPage.tsx",
+    ]) {
+      const src = stripComments(read(f));
+      expect(src, f).toMatch(/autoCapitalize="none"/);
+      expect(src, f).toMatch(/inputMode="email"/);
+    }
+  });
+});
+
+describe("family: nothing floats over an auth form", () => {
+  /*
+   * InstallPrompt is `fixed ... bottom-24 z-50` and lives beside <Outlet/> in
+   * the root layout, so it renders over page content on every route. On an
+   * iPhone 13 viewport it occupied 504-568px while the signup password input
+   * sat at 528-573px: elementFromPoint at the centre of that field returned the
+   * banner, so a tap aimed at the password box hit the upsell instead. Nobody
+   * could create an account on a phone until its 15s auto-retire fired — on a
+   * product whose users are overwhelmingly on phones.
+   *
+   * The component's own header comment already noted it covers "the primary
+   * submit button" on every form and that no route suppressed it. This pins the
+   * suppression so the next fixed overlay does not reintroduce it.
+   */
+  const SRC = "apps/web/src/components/InstallPrompt.tsx";
+
+  it("the install prompt is suppressed on the auth routes", () => {
+    const src = stripComments(read(SRC));
+    for (const path of ["/signup", "/login", "/reset-password"]) {
+      expect(src).toContain(`"${path}"`);
+    }
+    expect(src).toMatch(/isSuppressedRoute/);
+  });
+
+  it("it checks the route at render, not only on mount", () => {
+    /*
+     * The mount effect runs once. Without a render-time check, navigating
+     * client-side from /dashboard to /login carries an already-open banner
+     * straight onto the auth form.
+     */
+    const src = stripComments(read(SRC));
+    expect(src).toMatch(/if \(isSuppressedRoute\(\)\) return null;/);
+  });
+});

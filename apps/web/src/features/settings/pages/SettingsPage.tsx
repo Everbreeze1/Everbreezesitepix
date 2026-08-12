@@ -36,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { authErrorMessage } from "@/lib/auth-errors";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
 import { useTheme } from "@/hooks/use-theme";
@@ -623,12 +624,17 @@ function AccountSection() {
   useEffect(() => setEmail(user?.email ?? ""), [user?.email]);
 
   const changeEmail = async () => {
-    if (!email || email === user?.email) return;
+    // Normalised for the same reason as signup/login: a stored address with
+    // stray whitespace or mixed case becomes one the owner cannot type back.
+    const next = email.trim().toLowerCase();
+    if (!next || next === (user?.email ?? "").trim().toLowerCase()) return;
     setSavingEmail(true);
-    const { error } = await supabase.auth.updateUser({ email });
+    const { error } = await supabase.auth.updateUser({ email: next });
     setSavingEmail(false);
-    if (error) toast.error(error.message);
-    else toast.success("Check your inbox to confirm the new email.");
+    if (error) {
+      console.error("[settings] email change failed", error);
+      toast.error(authErrorMessage(error));
+    } else toast.success("Check your inbox to confirm the new email.");
   };
 
   const changePassword = async () => {
@@ -637,8 +643,10 @@ function AccountSection() {
     setSavingPw(true);
     const { error } = await supabase.auth.updateUser({ password: pw });
     setSavingPw(false);
-    if (error) toast.error(error.message);
-    else {
+    if (error) {
+      console.error("[settings] password change failed", error);
+      toast.error(authErrorMessage(error));
+    } else {
       toast.success("Password updated");
       setPw("");
       setPw2("");
@@ -666,6 +674,11 @@ function AccountSection() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             type="email"
+            autoComplete="email"
+            inputMode="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             className={cn(inputClass, "flex-1")}
           />
           <Button
@@ -695,6 +708,7 @@ function AccountSection() {
             <Label className={fieldLabelClass}>New password</Label>
             <Input
               type="password"
+              autoComplete="new-password"
               value={pw}
               onChange={(e) => setPw(e.target.value)}
               placeholder="At least 8 characters"
@@ -705,6 +719,7 @@ function AccountSection() {
             <Label className={fieldLabelClass}>Confirm password</Label>
             <Input
               type="password"
+              autoComplete="new-password"
               value={pw2}
               onChange={(e) => setPw2(e.target.value)}
               placeholder="Repeat new password"
