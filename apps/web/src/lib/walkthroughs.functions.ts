@@ -37,6 +37,7 @@ export const saveWalkthroughPhoto = rpcOp<
     projectId: string;
     walkthroughId: string;
     storagePath: string;
+    thumbPath?: string | null;
     sizeBytes: number;
     caption: string;
     offsetSeconds?: number;

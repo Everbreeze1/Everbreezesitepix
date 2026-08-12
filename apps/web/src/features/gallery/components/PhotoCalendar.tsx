@@ -36,6 +36,8 @@ export interface CalendarPhoto {
   id: string;
   project_id: string;
   storage_path: string;
+  /** Pre-generated thumbnail; null for photos uploaded before they existed. */
+  thumb_path?: string | null;
   image_url: string | null;
   caption: string | null;
   created_at: string;
@@ -509,6 +511,7 @@ export function PhotoCalendar({
                     >
                       <PhotoThumb
                         storagePath={p.storage_path}
+                        thumbPath={p.thumb_path}
                         fallbackUrl={daySigned[p.id]}
                         width={160}
                         alt={p.caption ?? ""}
@@ -654,7 +657,9 @@ async function loadDayPhotos(
 
   let q = supabase
     .from("photos")
-    .select("id, project_id, storage_path, image_url, caption, phase, tags, taken_at, created_at")
+    .select(
+      "id, project_id, storage_path, thumb_path, image_url, caption, phase, tags, taken_at, created_at",
+    )
     .eq("archived", false)
     .is("deleted_at", null)
     .not("storage_path", "like", "%/walkthroughs/%")

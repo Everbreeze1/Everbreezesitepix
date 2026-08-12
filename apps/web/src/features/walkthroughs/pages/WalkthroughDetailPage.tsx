@@ -628,7 +628,11 @@ export function WalkthroughDetailPage() {
                 steps={photoSteps}
                 variant={isSummary ? "summary" : "recorded"}
               />
-              <WalkthroughMarkdown markdown={renderedMarkdown} photoUrls={photoUrls} />
+              <WalkthroughMarkdown
+                markdown={renderedMarkdown}
+                photoUrls={photoUrls}
+                variant={isSummary ? "summary" : "recorded"}
+              />
             </>
           )}
         </Card>

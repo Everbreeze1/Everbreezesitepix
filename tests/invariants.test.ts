@@ -108,15 +108,29 @@ describe("family: uploads must not orphan their blob", () => {
   // A failed insert after a successful upload leaves a file no row references.
   // It is unreachable forever: storage usage sums photos.size_bytes so it is
   // not even counted, and every delete path keys off photos.storage_path.
-  const CASES = [
+  //
+  // A photo upload writes TWO objects now — the original and the thumbnail
+  // generated beside it — so reclaiming a bare `[path]` would still strand half
+  // of every failed upload. `photoObjectPaths()` derives both, and asserting on
+  // it is what stops a new call site from quietly reverting to one.
+  const PHOTO_CASES = [
     "apps/web/src/features/gallery/pages/GalleryPage.tsx",
     "apps/web/src/features/projects/pages/ProjectDetailPage.tsx",
     "apps/web/src/features/projects/components/ProjectWorkflows.tsx",
     "apps/web/src/features/projects/components/ProjectChecklists.tsx",
-    "apps/web/src/features/projects/components/ProjectDocuments.tsx",
   ];
+  // Documents have no derived companion object; one path is the whole upload.
+  const SINGLE_OBJECT_CASES = ["apps/web/src/features/projects/components/ProjectDocuments.tsx"];
 
-  it.each(CASES)("%s reclaims the upload when the insert fails", (rel) => {
+  it.each(PHOTO_CASES)("%s reclaims both photo objects when the insert fails", (rel) => {
+    const src = read(rel);
+    expect(src).toMatch(/storage[\s\S]{0,80}\.remove\(photoObjectPaths\(/);
+    // No reclaim may fall back to the single-object form, or the thumbnail it
+    // just wrote is the thing left behind.
+    expect(src).not.toMatch(/from\("site-photos"\)\s*\.remove\(\[/);
+  });
+
+  it.each(SINGLE_OBJECT_CASES)("%s reclaims the upload when the insert fails", (rel) => {
     expect(read(rel)).toMatch(/storage[\s\S]{0,80}\.remove\(\[/);
   });
 });
@@ -1012,5 +1026,50 @@ describe("ProjectPageEditorPage actions that read the stored row", () => {
    */
   it("handles clipboard failure when copying the share link", () => {
     expect(fnBody(editor(), "copyShareLink")).toMatch(/catch\s*\{/);
+  });
+});
+
+describe("family: a summary must not claim a recording it never had", () => {
+  /*
+   * A summary walkthrough has no video, no narration and no timeline: every
+   * linked photo carries offset_seconds 0 and spoken_note null. Any surface
+   * that renders a walkthrough therefore has two modes, and the recorded copy
+   * is actively false in the other one — "0:00" implies a timestamp inside a
+   * recording, and "no narration captured" apologises for the absence of
+   * something that was never possible.
+   *
+   * This was found by generating a real summary and reading the rendered page
+   * and the produced PDF, not by reading the code — three separate surfaces had
+   * the same defect and each one had to be branched independently. That is why
+   * this guard enumerates surfaces rather than checking a single call site.
+   */
+  const surfaces: Array<[string, string]> = [
+    ["web photo steps + markdown", "apps/web/src/components/WalkthroughReport.tsx"],
+    ["walkthrough detail page", "apps/web/src/features/walkthroughs/pages/WalkthroughDetailPage.tsx"],
+    ["public share page", "apps/web/src/routes/share.walkthroughs.$token.tsx"],
+    ["public PDF", "apps/api/src/domains/walkthroughs/public-pdf.ts"],
+  ];
+
+  for (const [label, file] of surfaces) {
+    it(`${label} branches on summary vs recorded`, () => {
+      const src = stripComments(read(file));
+      expect(src).toMatch(/isSummary|variant\s*===\s*["']summary["']|source\s*===\s*["']summary["']/);
+    });
+  }
+
+  it("the PDF does not print a recording timestamp on a summary photo", () => {
+    // Regression: the cover page was branched but the photo pages were not, so
+    // every tile read "Photo 1 · 0:00" on a document with no recording.
+    const src = stripComments(read("apps/api/src/domains/walkthroughs/public-pdf.ts"));
+    const photoLabel = src.match(/`Photo \$\{idx\}[^`]*`/g) ?? [];
+    expect(photoLabel.length).toBeGreaterThan(0);
+    // The offset-bearing variant must be guarded by isSummary somewhere in the
+    // same expression, i.e. it can't be the unconditional argument to drawText.
+    expect(src).toMatch(/isSummary\s*\?\s*`Photo \$\{idx\}`/);
+  });
+
+  it("the PDF suppresses the missing-narration note on a summary", () => {
+    const src = stripComments(read("apps/api/src/domains/walkthroughs/public-pdf.ts"));
+    expect(src).toMatch(/else if \(!isSummary\)[\s\S]{0,200}No spoken note captured/);
   });
 });

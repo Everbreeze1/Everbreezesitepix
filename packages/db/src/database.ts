@@ -322,6 +322,7 @@ export type Database = {
           storage_path: string
           tags: string[]
           taken_at: string | null
+          thumb_path: string | null
           uploaded_by: string
         }
         Insert: {
@@ -339,6 +340,7 @@ export type Database = {
           storage_path: string
           tags?: string[]
           taken_at?: string | null
+          thumb_path?: string | null
           uploaded_by: string
         }
         Update: {
@@ -356,6 +358,7 @@ export type Database = {
           storage_path?: string
           tags?: string[]
           taken_at?: string | null
+          thumb_path?: string | null
           uploaded_by?: string
         }
         Relationships: [

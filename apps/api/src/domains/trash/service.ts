@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { allPhotoObjectPaths } from "@sitepix/shared";
 import type { ServiceContext } from "../../lib/user-context";
 import { chunk, mutateIn, selectIn } from "../../lib/chunked-in";
 
@@ -88,12 +89,15 @@ export async function purgePhotosService(
 ) {
   // Chunked for the same reason as restore. RLS still scopes both statements to
   // what the caller may touch — this runs on ctx.supabase, not the service role.
-  const rows = await selectIn<{ id: string; storage_path: string }>(
+  const rows = await selectIn<{ id: string; storage_path: string; thumb_path: string | null }>(
     data.photoIds,
-    (idChunk) => (ctx.supabase as any).from("photos").select("id, storage_path").in("id", idChunk),
+    (idChunk) =>
+      (ctx.supabase as any).from("photos").select("id, storage_path, thumb_path").in("id", idChunk),
     "purge photos lookup",
   );
-  const paths = rows.map((r) => r.storage_path);
+  // Originals and their stored thumbnails — a thumbnail left behind is
+  // unreachable once its row is gone, same as an orphaned original.
+  const paths = allPhotoObjectPaths(rows);
   const ids = rows.map((r) => r.id);
   if (!ids.length) return { purged: 0 };
 
@@ -215,21 +219,27 @@ export async function purgeProjectService(
    * every purge leaked the entire `site-videos` object for that project.
    */
   const [{ data: photos }, { data: videos }] = await Promise.all([
-    (ctx.supabase as any).from("photos").select("storage_path").eq("project_id", data.projectId),
+    (ctx.supabase as any)
+      .from("photos")
+      .select("storage_path, thumb_path")
+      .eq("project_id", data.projectId),
     (ctx.supabase as any).from("videos").select("storage_path").eq("project_id", data.projectId),
   ]);
 
-  const removeAll = async (bucket: string, rows: Array<{ storage_path: string }> | null) => {
-    const paths = (rows ?? []).map((r) => r.storage_path).filter(Boolean);
-    for (const pathChunk of chunk(paths, 500)) {
+  const removeAll = async (bucket: string, paths: string[]) => {
+    for (const pathChunk of chunk(paths.filter(Boolean), 500)) {
       await ctx.supabase.storage
         .from(bucket)
         .remove(pathChunk)
         .catch(() => {});
     }
   };
-  await removeAll("site-photos", photos);
-  await removeAll("site-videos", videos);
+  // Photos carry a second object each — their stored thumbnail.
+  await removeAll("site-photos", allPhotoObjectPaths(photos ?? []));
+  await removeAll(
+    "site-videos",
+    ((videos ?? []) as Array<{ storage_path: string }>).map((r) => r.storage_path),
+  );
 
   // Rows before the parent, so a failure here leaves the project in Trash to be
   // retried rather than an unreachable project id scattered across three tables.

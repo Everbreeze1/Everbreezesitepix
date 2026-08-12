@@ -40,6 +40,8 @@ import {
   Download,
 } from "lucide-react";
 import { formatBytes } from "@/hooks/use-storage-usage";
+import { allPhotoObjectPaths, photoObjectPaths } from "@sitepix/shared";
+import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import { downloadBlobFile } from "@/lib/download-file";
 import { isOverUploadLimit, overUploadLimitMessage } from "@/lib/upload-limits";
 import { uploadWithResume } from "@/lib/resumable-upload";
@@ -507,7 +509,7 @@ export function ProjectDetailPage() {
       (supabase as any)
         .from("photos")
         .select(
-          "id, storage_path, image_url, caption, phase, tags, created_at, taken_at, latitude, longitude, hidden, deleted_at",
+          "id, storage_path, thumb_path, image_url, caption, phase, tags, created_at, taken_at, latitude, longitude, hidden, deleted_at",
         )
         .eq("project_id", projectId)
         .is("deleted_at", null)
@@ -955,12 +957,14 @@ export function ProjectDetailPage() {
       toast.error(upErr.message);
       return null;
     }
+    const thumbPath = await uploadPhotoThumbnail(path, file);
     const { data: row, error: insErr } = await supabase
       .from("photos")
       .insert({
         project_id: projectId,
         uploaded_by: user.id,
         storage_path: path,
+        thumb_path: thumbPath,
         size_bytes: file.size,
         caption: file.name,
         phase: tag ?? "untagged",
@@ -975,7 +979,7 @@ export function ProjectDetailPage() {
       toast.error(insErr?.message ?? "Upload failed");
       // Reclaim the blob: with no row referencing it, nothing in the product
       // can ever reach it again and storage usage won't even count it.
-      void supabase.storage.from("site-photos").remove([path]);
+      void supabase.storage.from("site-photos").remove(photoObjectPaths(path, thumbPath));
       return null;
     }
     return row.id;
@@ -1064,12 +1068,14 @@ export function ProjectDetailPage() {
           toast.error(upErr.message);
           return null;
         }
+        const thumbPath = await uploadPhotoThumbnail(path, file2);
         const { data: row, error: insErr } = await supabase
           .from("photos")
           .insert({
             project_id: projectId,
             uploaded_by: user.id,
             storage_path: path,
+            thumb_path: thumbPath,
             size_bytes: file2.size,
             caption:
               opts.description && opts.description.trim() ? opts.description.trim() : file2.name,
@@ -1085,7 +1091,7 @@ export function ProjectDetailPage() {
           toast.error(insErr?.message ?? "Upload failed");
           // Reclaim the blob — the camera-capture path was missed by the
           // original orphan fix, which only covered the file picker.
-          void supabase.storage.from("site-photos").remove([path]);
+          void supabase.storage.from("site-photos").remove(photoObjectPaths(path, thumbPath));
           return null;
         }
         return row.id;
@@ -1343,6 +1349,7 @@ export function ProjectDetailPage() {
       toast.error(upErr.message);
       return null;
     }
+    const thumbPath = await uploadPhotoThumbnail(path, file);
     let photoId: string | null = null;
     try {
       devLog("[walkthrough] Linking photos", {
@@ -1355,6 +1362,7 @@ export function ProjectDetailPage() {
           projectId,
           walkthroughId: wid,
           storagePath: path,
+          thumbPath,
           sizeBytes: file.size,
           caption: file.name,
           offsetSeconds: meta.offsetSeconds,
@@ -1375,6 +1383,7 @@ export function ProjectDetailPage() {
             project_id: projectId,
             uploaded_by: user.id,
             storage_path: path,
+            thumb_path: thumbPath,
             size_bytes: file.size,
             caption: file.name,
             phase: "walkthrough",
@@ -1411,7 +1420,7 @@ export function ProjectDetailPage() {
         }
       } catch (fallbackErr: any) {
         console.error("[walkthrough] direct photo/link fallback failed", fallbackErr);
-        void supabase.storage.from("site-photos").remove([path]);
+        void supabase.storage.from("site-photos").remove(photoObjectPaths(path, thumbPath));
         toast.error(
           fallbackErr?.message ??
             insErr?.message ??
@@ -1422,7 +1431,7 @@ export function ProjectDetailPage() {
     }
     if (!photoId) {
       console.error("[walkthrough] photo save returned no id", { wid, path });
-      void supabase.storage.from("site-photos").remove([path]);
+      void supabase.storage.from("site-photos").remove(photoObjectPaths(path, thumbPath));
       toast.error("Captured photo could not be linked to the walkthrough");
       return null;
     }
@@ -2298,7 +2307,7 @@ export function ProjectDetailPage() {
       if (linkedPhotoIds.length) {
         const { data: linkedPhotos } = await supabase
           .from("photos")
-          .select("id, storage_path")
+          .select("id, storage_path, thumb_path")
           .in("id", linkedPhotoIds);
         /*
          * Destroy only the blobs whose rows actually went. `error === null`
@@ -2321,10 +2330,13 @@ export function ProjectDetailPage() {
           return;
         }
         const deletedIds = new Set(deletedRows.map((d) => d.id));
-        const paths = ((linkedPhotos as Array<{ id: string; storage_path: string }> | null) ?? [])
-          .filter((p) => deletedIds.has(p.id))
-          .map((p) => p.storage_path)
-          .filter(Boolean);
+        const paths = allPhotoObjectPaths(
+          ((linkedPhotos as Array<{
+            id: string;
+            storage_path: string;
+            thumb_path: string | null;
+          }> | null) ?? []).filter((p) => deletedIds.has(p.id)),
+        );
         if (paths.length) void supabase.storage.from("site-photos").remove(paths);
       }
       // `status = recording` already excludes a summary, which is inserted
@@ -3241,6 +3253,7 @@ export function ProjectDetailPage() {
                           {url || p.storage_path ? (
                             <PhotoThumb
                               storagePath={p.storage_path}
+                              thumbPath={p.thumb_path}
                               fallbackUrl={url}
                               width={480}
                               alt={p.caption ?? ""}
@@ -3746,11 +3759,13 @@ export function ProjectDetailPage() {
                     .from("site-photos")
                     .upload(path, blob, { contentType: "image/jpeg" });
                   if (upErr) throw upErr;
+                  const thumbPath = await uploadPhotoThumbnail(path, blob);
                   const baseCaption = ph.caption ?? "Photo";
                   const { error: insErr } = await supabase.from("photos").insert({
                     project_id: project.id,
                     uploaded_by: user.id,
                     storage_path: path,
+                    thumb_path: thumbPath,
                     size_bytes: blob.size,
                     caption: baseCaption.startsWith("Annotated:")
                       ? baseCaption

@@ -1,63 +1,76 @@
 import { getSupabaseAdmin } from "./supabase";
 
 /**
- * Signed URLs for photo storage paths, optionally capped to a render width.
+ * Signed URLs for photo storage paths, preferring each photo's stored
+ * thumbnail.
  *
- * Two things make this non-obvious enough to be worth centralising:
+ * This used to take a `width` and ask Supabase to transform each original on
+ * the fly. Two problems with that, and the second is what killed it:
  *
  *   1. The batch `createSignedUrls` does NOT accept `transform` — only the
- *      singular `createSignedUrl` does. So asking for a width costs one request
- *      per path. That is fine for a bounded set (a showcase, a month of days)
- *      and would be bad for an unbounded one (the whole gallery).
- *   2. Image transformation requires a paid Supabase plan. When it is absent
- *      every request fails, so we detect that and fall back to the batched
- *      original URLs rather than rendering a page of broken images.
+ *      singular call does — so a width cost one HTTP request per photo.
+ *   2. Transformation is metered by *distinct origin image per billing cycle*
+ *      (100 on Pro), so the bill grew with how many different photos anyone
+ *      looked at. The organization hit 170% of that quota on ~12 MB of stored
+ *      photos, and with a spend cap enabled that throttles the project.
  *
- * @param width Max rendered width. Omit to serve originals via the batch call.
+ * Thumbnails are now written next to the original at upload time, so the small
+ * variant is just another object: one batch call signs the whole set, and
+ * nothing is metered. Photos predating that have no `thumb_path` and fall back
+ * to their original — never to a transform.
+ *
+ * Returns a map keyed by the ORIGINAL path regardless of which variant was
+ * signed, so callers look up what they already hold.
  */
 export async function signPhotoUrls(
   paths: string[],
-  width?: number,
-  bucket = "site-photos",
+  opts: { thumbByPath?: Record<string, string | null>; bucket?: string } = {},
 ): Promise<Record<string, string>> {
+  const { thumbByPath, bucket = "site-photos" } = opts;
   const unique = Array.from(new Set(paths.filter(Boolean)));
   if (!unique.length) return {};
+
+  // Sign the thumbnail where there is one, the original otherwise, remembering
+  // which original each signed path belongs to.
+  const originalFor = new Map<string, string>();
+  for (const path of unique) originalFor.set(thumbByPath?.[path] || path, path);
+  const toSign = Array.from(originalFor.keys());
+
   const admin = getSupabaseAdmin();
-  const out: Record<string, string> = {};
-
-  if (width) {
-    const results = await Promise.all(
-      unique.map(async (path) => {
-        const { data, error } = await admin.storage
-          .from(bucket)
-          .createSignedUrl(path, 60 * 60, {
-            transform: { width, resize: "contain", quality: 80 },
-          });
-        return { path, url: data?.signedUrl ?? null, failed: !!error };
-      }),
-    );
-    if (!results.every((r) => r.failed)) {
-      for (const r of results) if (r.url) out[r.path] = r.url;
-      return out;
-    }
-    console.warn("[photo-urls] image transformation unavailable, serving originals");
-  }
-
-  const { data: signed, error } = await admin.storage.from(bucket).createSignedUrls(unique, 60 * 60);
+  const { data: signed, error } = await admin.storage.from(bucket).createSignedUrls(toSign, 60 * 60);
   if (error) {
     console.error("[photo-urls] failed to sign photo URLs", {
       error: error.message,
-      count: unique.length,
+      count: toSign.length,
     });
   }
+
+  const out: Record<string, string> = {};
+  const unsignedOriginals: string[] = [];
   signed?.forEach((s, i) => {
-    if (s.signedUrl) out[unique[i]] = s.signedUrl;
-    else if (s.error) {
-      console.error("[photo-urls] failed to sign one photo URL", {
-        storagePath: unique[i],
-        error: s.error,
-      });
+    const signedPath = toSign[i]!;
+    const original = originalFor.get(signedPath)!;
+    if (s.signedUrl) {
+      out[original] = s.signedUrl;
+      return;
     }
+    console.error("[photo-urls] failed to sign one photo URL", {
+      storagePath: signedPath,
+      error: s.error,
+    });
+    // A thumbnail recorded in the DB but missing from storage would otherwise
+    // blank the tile. The original is still there, so retry with that.
+    if (signedPath !== original) unsignedOriginals.push(original);
   });
+
+  if (unsignedOriginals.length) {
+    const { data: retried } = await admin.storage
+      .from(bucket)
+      .createSignedUrls(unsignedOriginals, 60 * 60);
+    retried?.forEach((s, i) => {
+      if (s.signedUrl) out[unsignedOriginals[i]!] = s.signedUrl;
+    });
+  }
+
   return out;
 }

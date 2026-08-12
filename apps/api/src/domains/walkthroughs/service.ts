@@ -26,6 +26,8 @@ const saveWalkthroughPhotoSchema = z.object({
   projectId: z.string().uuid(),
   walkthroughId: z.string().uuid(),
   storagePath: z.string().min(1).max(500),
+  /** Pre-generated thumbnail beside the original; null when generation failed. */
+  thumbPath: z.string().min(1).max(600).nullable().optional(),
   sizeBytes: z.number().int().nonnegative(),
   caption: z.string().min(1).max(255),
   offsetSeconds: z.number().int().nonnegative().default(0),
@@ -169,6 +171,14 @@ async function composeSummaryMarkdown(
     // silently produce a walkthrough row.
     if (e?.status === 403) throw e;
     aiFailed = e?.message ?? "AI unavailable";
+    // The row still saves with a deterministic fallback body, so without this
+    // the server logs a clean "summary saved" and the only trace of the AI
+    // having failed is a toast the user has already dismissed.
+    console.error("[walkthrough] server summary AI draft failed", {
+      status: e?.status,
+      message: aiFailed,
+      photos: args.photos.length,
+    });
   }
 
   const lines: string[] = [`# ${args.title}`];
@@ -690,12 +700,27 @@ export async function saveWalkthroughPhotoService(ctx: AuthedContext, data: any)
      * this caller's to reference.
      */
     const expectedPrefix = `${userId}/${data.projectId}/`;
-    if (!data.storagePath.startsWith(expectedPrefix) || data.storagePath.includes("..")) {
+    const outOfPrefix = (p: string) => !p.startsWith(expectedPrefix) || p.includes("..");
+    if (outOfPrefix(data.storagePath)) {
       console.error("[walkthrough] rejected out-of-prefix storage path", {
         walkthroughId: data.walkthroughId,
         storagePath: data.storagePath,
       });
       throw new Error("Invalid storage path");
+    }
+    /*
+     * `thumb_path` is signed by exactly the same readers as `storage_path`, so
+     * it is the same read handle and needs the same check. Dropping a bad one
+     * rather than rejecting the capture: a thumbnail is optional, and losing a
+     * site photo over it would be the worse failure.
+     */
+    let thumbPath = data.thumbPath ?? null;
+    if (thumbPath && outOfPrefix(thumbPath)) {
+      console.error("[walkthrough] rejected out-of-prefix thumbnail path", {
+        walkthroughId: data.walkthroughId,
+        thumbPath,
+      });
+      thumbPath = null;
     }
 
     const { data: photo, error: photoErr } = await supabaseAdmin
@@ -704,6 +729,7 @@ export async function saveWalkthroughPhotoService(ctx: AuthedContext, data: any)
         project_id: data.projectId,
         uploaded_by: userId,
         storage_path: data.storagePath,
+        thumb_path: thumbPath,
         size_bytes: data.sizeBytes,
         caption: data.caption,
         phase: "walkthrough",

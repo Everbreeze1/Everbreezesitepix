@@ -2,8 +2,6 @@ import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 import { signPhotoUrls } from "../../lib/photo-urls";
 
-/** Month-view day cells show one representative photo each. */
-const DAY_THUMB_WIDTH = 400;
 /**
  * Ceiling on rows pulled for a range. The count-only mode (the year heatmap)
  * gets the higher one: its rows are three small columns rather than six, and a
@@ -137,7 +135,7 @@ export async function listTimelineActivityService(
     // between a small response and a few megabytes.
     .select(
       data.withThumbnails
-        ? "id, project_id, storage_path, image_url, taken_at, created_at"
+        ? "id, project_id, storage_path, thumb_path, image_url, taken_at, created_at"
         : "project_id, taken_at, created_at",
     )
     .eq("archived", false)
@@ -194,12 +192,17 @@ export async function listTimelineActivityService(
       if (cover) covers.set(date, cover);
     }
   }
-  const signed = data.withThumbnails
+  const coverPhotos = data.withThumbnails
+    ? Array.from(covers.values()).filter((p) => !p.image_url && p.storage_path)
+    : [];
+  const signed = coverPhotos.length
     ? await signPhotoUrls(
-        Array.from(covers.values())
-          .filter((p) => !p.image_url && p.storage_path)
-          .map((p) => p.storage_path),
-        DAY_THUMB_WIDTH,
+        coverPhotos.map((p) => p.storage_path),
+        {
+          thumbByPath: Object.fromEntries(
+            coverPhotos.map((p) => [p.storage_path, p.thumb_path ?? null]),
+          ),
+        },
       )
     : {};
 

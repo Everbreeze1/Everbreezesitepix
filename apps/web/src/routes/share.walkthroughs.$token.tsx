@@ -164,6 +164,7 @@ function PublicWalkthroughPage() {
               <WalkthroughMarkdown
                 markdown={cleanWalkthroughMarkdown(w.summary_markdown)}
                 photoUrls={data.photoUrls}
+                variant={isSummary ? "summary" : "recorded"}
               />
             </>
           ) : (

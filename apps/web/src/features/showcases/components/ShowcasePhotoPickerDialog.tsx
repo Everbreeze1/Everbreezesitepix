@@ -19,6 +19,8 @@ interface PhotoRow {
   project_id: string;
   project_name: string;
   storage_path: string;
+  /** Pre-generated thumbnail; null for photos uploaded before they existed. */
+  thumb_path?: string | null;
   image_url: string | null;
   caption: string | null;
 }
@@ -79,7 +81,7 @@ export function ShowcasePhotoPickerDialog({
       // picker permanently empty.
       const { data, error } = await supabase
         .from("photos")
-        .select("id, project_id, storage_path, image_url, caption")
+        .select("id, project_id, storage_path, thumb_path, image_url, caption")
         .is("deleted_at", null)
         .or("phase.is.null,phase.neq.walkthrough")
         .not("storage_path", "like", "%/walkthroughs/%")
@@ -106,6 +108,7 @@ export function ShowcasePhotoPickerDialog({
         project_id: r.project_id,
         project_name: names[r.project_id] ?? "Untitled project",
         storage_path: r.storage_path,
+        thumb_path: r.thumb_path ?? null,
         image_url: r.image_url,
         caption: r.caption,
       })) as PhotoRow[];
@@ -265,6 +268,7 @@ export function ShowcasePhotoPickerDialog({
                                   in the app for thumbnails over originals. */}
                               <PhotoThumb
                                 storagePath={p.storage_path}
+                                thumbPath={p.thumb_path}
                                 fallbackUrl={urlFor(p)}
                                 width={200}
                               />

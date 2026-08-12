@@ -2,11 +2,43 @@ import { jsonError, jsonOk } from "../../lib/errors";
 import { verifyCronSecret } from "../../lib/cron-auth";
 import { getSupabaseAdmin, requireSitepixSupabaseUrl } from "../../lib/supabase";
 
+/**
+ * Off unless `PHOTO_ARCHIVE_ENABLED` is truthy.
+ *
+ * This job downscales six-month-old originals in place through Storage's
+ * `render/image` endpoint — which is metered by *distinct origin image per
+ * billing cycle*, 100 on the Pro plan. It therefore spends the resource the
+ * organization is out of (transformations: 170% of quota) to reclaim the one it
+ * has in surplus (storage: 0.012 of 100 GB used), at up to 50 images per run.
+ * That trade is backwards at the current scale, so it stays disabled until
+ * storage is actually the constraint.
+ *
+ * Kept rather than deleted: the logic is correct and will be worth running once
+ * there is enough stored data to justify it.
+ */
+function archiveEnabled(): boolean {
+  const raw = process.env.PHOTO_ARCHIVE_ENABLED?.trim().toLowerCase();
+  return raw === "1" || raw === "true";
+}
+
 export async function handleArchiveOldPhotos(
   request: Request,
 ): Promise<Response> {
   if (!(await verifyCronSecret(request))) {
     return jsonError(401, "unauthorized", "Unauthorized");
+  }
+
+  if (!archiveEnabled()) {
+    return jsonOk({
+      ok: true,
+      skipped: "disabled",
+      reason:
+        "PHOTO_ARCHIVE_ENABLED is not set. This job consumes Storage image-transformation quota to save storage; see the note in archive-old-photos.ts.",
+      scanned: 0,
+      processed: 0,
+      bytesSaved: 0,
+      failures: [],
+    });
   }
 
   try {

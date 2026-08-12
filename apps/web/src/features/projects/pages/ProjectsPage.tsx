@@ -168,6 +168,7 @@ export function ProjectsPage() {
   const [allProjects, setAllProjects] = useState<ProjectRow[]>([]);
   const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
   const [coverPaths, setCoverPaths] = useState<Record<string, string>>({});
+  const [coverThumbPaths, setCoverThumbPaths] = useState<Record<string, string>>({});
   const [sampleUrls, setSampleUrls] = useState<Record<string, string[]>>({});
   const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
   const [reportCounts, setReportCounts] = useState<Record<string, number>>({});
@@ -268,6 +269,7 @@ export function ProjectsPage() {
     allTags: TagRow[];
     coverUrls: Record<string, string>;
     coverPaths: Record<string, string>;
+    coverThumbPaths: Record<string, string>;
     sampleUrls: Record<string, string[]>;
     photoCounts: Record<string, number>;
     reportCounts: Record<string, number>;
@@ -286,6 +288,7 @@ export function ProjectsPage() {
         allTags: [],
         coverUrls: {},
         coverPaths: {},
+        coverThumbPaths: {},
         sampleUrls: {},
         photoCounts: {},
         reportCounts: {},
@@ -328,7 +331,7 @@ export function ProjectsPage() {
       const [{ data: ph }, { data: rep }, { data: cl }] = await Promise.all([
         supabase
           .from("photos")
-          .select("project_id, storage_path, image_url, uploaded_by, created_at")
+          .select("project_id, storage_path, thumb_path, image_url, uploaded_by, created_at")
           .in("project_id", ids)
           .or("phase.is.null,phase.neq.walkthrough")
           .not("storage_path", "like", "%/walkthroughs/%")
@@ -338,7 +341,7 @@ export function ProjectsPage() {
       ]);
       const samplesByProject: Record<
         string,
-        Array<{ storage_path: string; image_url: string | null }>
+        Array<{ storage_path: string; thumb_path: string | null; image_url: string | null }>
       > = {};
       const uploadersByProject: Record<string, string[]> = {};
       const counts: Record<string, number> = {};
@@ -346,13 +349,19 @@ export function ProjectsPage() {
         (ph as Array<{
           project_id: string;
           storage_path: string;
+          thumb_path: string | null;
           image_url: string | null;
           uploaded_by: string | null;
         }>) ?? []
       ).forEach((row) => {
         counts[row.project_id] = (counts[row.project_id] ?? 0) + 1;
         const arr = (samplesByProject[row.project_id] ??= []);
-        if (arr.length < 4) arr.push({ storage_path: row.storage_path, image_url: row.image_url });
+        if (arr.length < 4)
+          arr.push({
+            storage_path: row.storage_path,
+            thumb_path: row.thumb_path ?? null,
+            image_url: row.image_url,
+          });
         if (row.uploaded_by) {
           const ups = (uploadersByProject[row.project_id] ??= []);
           if (!ups.includes(row.uploaded_by) && ups.length < 4) ups.push(row.uploaded_by);
@@ -365,11 +374,15 @@ export function ProjectsPage() {
       // Storage paths for the covers, so the card can request a thumbnail
       // rather than downloading a full-res photo per project tile.
       const coverPaths: Record<string, string> = {};
+      const coverThumbPaths: Record<string, string> = {};
       const samples: Record<string, string[]> = {};
       Object.entries(samplesByProject).forEach(([pid, list]) => {
         samples[pid] = list.map(() => "");
         list.forEach((f, i) => {
-          if (i === 0 && f.storage_path) coverPaths[pid] = f.storage_path;
+          if (i === 0 && f.storage_path) {
+            coverPaths[pid] = f.storage_path;
+            if (f.thumb_path) coverThumbPaths[pid] = f.thumb_path;
+          }
           if (f.image_url) {
             samples[pid][i] = f.image_url;
             if (i === 0) cover[pid] = f.image_url;
@@ -444,6 +457,7 @@ export function ProjectsPage() {
         allTags: allTagsList,
         coverUrls: cover,
         coverPaths,
+        coverThumbPaths,
         sampleUrls: samples,
         photoCounts: counts,
         reportCounts: rc,
@@ -458,6 +472,7 @@ export function ProjectsPage() {
       allTags: allTagsList,
       coverUrls: {},
       coverPaths: {},
+      coverThumbPaths: {},
       sampleUrls: {},
       photoCounts: {},
       reportCounts: {},
@@ -526,6 +541,7 @@ export function ProjectsPage() {
     setAllTags(projectsQuery.data.allTags);
     setCoverUrls(projectsQuery.data.coverUrls);
     setCoverPaths(projectsQuery.data.coverPaths);
+    setCoverThumbPaths(projectsQuery.data.coverThumbPaths);
     setSampleUrls(projectsQuery.data.sampleUrls);
     setPhotoCounts(projectsQuery.data.photoCounts);
     setReportCounts(projectsQuery.data.reportCounts);
@@ -1526,6 +1542,7 @@ export function ProjectsPage() {
                   projectTagMap={projectTagMap}
                   coverUrls={coverUrls}
                   coverPaths={coverPaths}
+                  coverThumbPaths={coverThumbPaths}
                   photoCounts={photoCounts}
                   reportCounts={reportCounts}
                   checklistCounts={checklistCounts}
@@ -1654,6 +1671,7 @@ function ProjectsList({
   onClearFilters,
   coverUrls,
   coverPaths,
+  coverThumbPaths,
   photoCounts,
   reportCounts,
   checklistCounts,
@@ -1669,6 +1687,7 @@ function ProjectsList({
   onClearFilters: () => void;
   coverUrls: Record<string, string>;
   coverPaths: Record<string, string>;
+  coverThumbPaths: Record<string, string>;
   photoCounts: Record<string, number>;
   reportCounts: Record<string, number>;
   checklistCounts: Record<string, number>;
@@ -1731,6 +1750,7 @@ function ProjectsList({
               {cover || coverPaths[p.id] ? (
                 <PhotoThumb
                   storagePath={coverPaths[p.id]}
+                  thumbPath={coverThumbPaths[p.id]}
                   fallbackUrl={cover}
                   width={420}
                   alt={`${p.name} cover`}

@@ -168,19 +168,25 @@ export function WalkthroughPhotoSteps({
 export function WalkthroughMarkdown({
   markdown,
   photoUrls,
+  variant = "recorded",
 }: {
   markdown: string;
   photoUrls: Record<string, string>;
+  /** "summary": there was no narration to organize — see WalkthroughPhotoSteps. */
+  variant?: "recorded" | "summary";
 }) {
   const trimmed = (markdown ?? "").trim();
   if (!trimmed) return null;
+  const isSummary = variant === "summary";
   return (
     <section className="mt-2">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Summary</h2>
           <p className="text-xs text-muted-foreground">
-            Organized notes from the walkthrough narration.
+            {isSummary
+              ? "AI notes drafted from the photos you picked."
+              : "Organized notes from the walkthrough narration."}
           </p>
         </div>
       </div>

@@ -68,6 +68,8 @@ import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
 import { PhotoThumb } from "@/components/PhotoThumb";
+import { photoObjectPaths } from "@sitepix/shared";
+import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import { CameraCapture, compressImageFile } from "@/features/photos/components/CameraCapture";
 import { TagPhotoDialog } from "@/features/photos/components/TagPhotoDialog";
 import { applyWatermarkToFile, type BeforeAfterTag, type WatermarkContext } from "@/lib/watermark";
@@ -84,6 +86,8 @@ interface Photo {
   id: string;
   project_id: string;
   storage_path: string;
+  /** Pre-generated thumbnail; null for photos uploaded before they existed. */
+  thumb_path?: string | null;
   image_url: string | null;
   caption: string | null;
   created_at: string;
@@ -325,6 +329,7 @@ export function GalleryPage() {
         toast.error(upErr.message);
         return;
       }
+      const thumbPath = await uploadPhotoThumbnail(path, compressed);
       const desc = opts.description?.trim();
       const { data: inserted, error: insErr } = await supabase
         .from("photos")
@@ -332,6 +337,7 @@ export function GalleryPage() {
           project_id: projectId,
           uploaded_by: user.id,
           storage_path: path,
+          thumb_path: thumbPath,
           size_bytes: compressed.size,
           caption: desc && desc.length ? desc : `Photo ${new Date().toLocaleString()}`,
           phase: opts.tag ?? "untagged",
@@ -355,7 +361,7 @@ export function GalleryPage() {
          * elsewhere: confirm the row before destroying the blob on the way
          * out, discard the blob when the row fails on the way in.
          */
-        void supabase.storage.from("site-photos").remove([path]);
+        void supabase.storage.from("site-photos").remove(photoObjectPaths(path, thumbPath));
         return;
       }
       toast.success("Photo saved");
@@ -607,10 +613,12 @@ export function GalleryPage() {
           toast.error(upErr.message);
           continue;
         }
+        const thumbPath = await uploadPhotoThumbnail(path, file);
         const { error: insErr } = await supabase.from("photos").insert({
           project_id: projectId,
           uploaded_by: user.id,
           storage_path: path,
+          thumb_path: thumbPath,
           size_bytes: file.size,
           caption: file.name,
           phase: tag ?? "untagged",
@@ -618,7 +626,7 @@ export function GalleryPage() {
         if (insErr) {
           toast.error(insErr.message);
           // Reclaim the orphaned upload — nothing else can, see `saveCapture`.
-          void supabase.storage.from("site-photos").remove([path]);
+          void supabase.storage.from("site-photos").remove(photoObjectPaths(path, thumbPath));
         }
       }
       toast.success("Photos uploaded");
@@ -1028,11 +1036,13 @@ export function GalleryPage() {
         .from("site-photos")
         .upload(path, blob, { contentType: "image/jpeg" });
       if (upErr) throw upErr;
+      const thumbPath = await uploadPhotoThumbnail(path, blob);
       const baseCaption = activePhoto.caption ?? "Photo";
       const { error: insErr } = await supabase.from("photos").insert({
         project_id: activePhoto.project_id,
         uploaded_by: user.id,
         storage_path: path,
+        thumb_path: thumbPath,
         size_bytes: blob.size,
         caption: baseCaption.startsWith("Annotated:") ? baseCaption : `Annotated: ${baseCaption}`,
       } as any);
@@ -1471,6 +1481,7 @@ export function GalleryPage() {
                       project's plan has no image transformation. */}
                     <PhotoThumb
                       storagePath={p.storage_path}
+                      thumbPath={p.thumb_path}
                       fallbackUrl={signed[p.id]}
                       width={400}
                       alt={p.caption ?? ""}

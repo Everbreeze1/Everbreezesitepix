@@ -179,11 +179,17 @@ export async function handleWalkthroughPdf(token: string): Promise<Response> {
             const rowBottom = rowTop - rowH;
             drawFittedImage(page, img, MARGIN, rowBottom, imgBoxW, rowH, BORDER, fonts.regular, MUTED);
 
-            // Caption column: photo number + timestamp header, then narration
+            // Caption column: photo number + timestamp header, then narration.
+            // A summary has no recording, so every offset is 0 \u2014 printing
+            // "Photo 1 \u00B7 0:00" on a client-facing PDF claims a timeline that
+            // does not exist.
             let cy = rowTop - 4;
-            page.drawText(sanitize(`Photo ${idx}  \u00B7  ${fmtDur(l.offset_seconds ?? 0)}`), {
-              x: MARGIN + imgBoxW + 16, y: cy - 11, size: 10, font: fonts.bold, color: ACCENT,
-            });
+            page.drawText(
+              sanitize(isSummary ? `Photo ${idx}` : `Photo ${idx}  \u00B7  ${fmtDur(l.offset_seconds ?? 0)}`),
+              {
+                x: MARGIN + imgBoxW + 16, y: cy - 11, size: 10, font: fonts.bold, color: ACCENT,
+              },
+            );
             cy -= 22;
             const note = String(l.spoken_note ?? "").trim()
               || estimateSpokenNote(rawTranscript, l.offset_seconds ?? 0, links[i + b + 1]?.offset_seconds ?? null, durationSeconds, i + b, links.length);
@@ -194,7 +200,9 @@ export async function handleWalkthroughPdf(token: string): Promise<Response> {
                 size: 10.5, font: fonts.italic, color: TEXT, lineGap: 3,
               });
               cy -= 6;
-            } else {
+            } else if (!isSummary) {
+              // Nothing was ever spoken over a summary, so this would apologise
+              // for missing narration under every single photo.
               page.drawText(sanitize("No spoken note captured."), {
                 x: MARGIN + imgBoxW + 16, y: cy - 11, size: 10, font: fonts.italic, color: MUTED,
               });

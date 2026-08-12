@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { photoObjectPaths } from "@sitepix/shared";
+import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import {
   Workflow as WorkflowIcon,
   Plus,
@@ -112,6 +114,8 @@ interface Item {
 /** Enough of a photo row to render a thumbnail that can re-sign itself. */
 interface PhotoRef {
   storage_path: string;
+  /** Pre-generated thumbnail; null for photos uploaded before they existed. */
+  thumb_path: string | null;
   image_url: string | null;
 }
 
@@ -391,24 +395,23 @@ export function ProjectWorkflows({
           new Set(itList.map((i) => i.photo_id).filter((x): x is string => !!x)),
         );
         if (photoIds.length) {
-          // Keep the storage path so PhotoThumb can sign a transformed
-          // thumbnail on demand — that is what stops a tab left open past the
-          // old one-hour expiry from filling with broken images.
+          // Keep the storage path so PhotoThumb can sign the stored thumbnail
+          // on demand — that is what stops a tab left open past the old
+          // one-hour expiry from filling with broken images.
           //
-          // But still batch-sign the original as the fallback. Transformation
-          // needs a paid Supabase plan, and PhotoThumb latches a module-level
-          // "unavailable" flag on the first failure of the session, after which
-          // it falls straight through to `fallbackUrl`. Workflow photos are
-          // inserted without an `image_url`, so handing over the bare column
-          // would leave that fallback null and render a permanent grey pulse
-          // over a photo the crew had just taken as evidence.
+          // But still batch-sign the original as the fallback. Photos uploaded
+          // before thumbnails existed have a null `thumb_path`, and workflow
+          // photos are inserted without an `image_url`, so without this the
+          // fallback would be null and a photo the crew just took as evidence
+          // would render as a permanent grey pulse.
           const { data: rows } = await supabase
             .from("photos")
-            .select("id, storage_path, image_url")
+            .select("id, storage_path, thumb_path, image_url")
             .in("id", photoIds);
           const photoRows = ((rows as any[]) ?? []) as {
             id: string;
             storage_path: string;
+            thumb_path: string | null;
             image_url: string | null;
           }[];
 
@@ -427,6 +430,7 @@ export function ProjectWorkflows({
           for (const p of photoRows) {
             map[p.id] = {
               storage_path: p.storage_path,
+              thumb_path: p.thumb_path ?? null,
               image_url: p.image_url ?? signedByPath[p.storage_path] ?? null,
             };
           }
@@ -663,6 +667,7 @@ export function ProjectWorkflows({
         .from("site-photos")
         .upload(path, compressed, { contentType: compressed.type });
       if (upErr) throw upErr;
+      const thumbPath = await uploadPhotoThumbnail(path, compressed);
 
       const { data: row, error: insErr } = await supabase
         .from("photos")
@@ -670,16 +675,17 @@ export function ProjectWorkflows({
           project_id: projectId,
           uploaded_by: user.id,
           storage_path: path,
+          thumb_path: thumbPath,
           size_bytes: compressed.size,
           caption: it.label,
           phase: "workflow",
         } as any)
-        .select("id, storage_path, image_url")
+        .select("id, storage_path, thumb_path, image_url")
         .single();
       if (insErr || !row) {
         // Reclaim the orphaned upload before bailing — no row will reference
         // it, so no delete path can ever find it again.
-        void supabase.storage.from("site-photos").remove([path]);
+        void supabase.storage.from("site-photos").remove(photoObjectPaths(path, thumbPath));
         throw insErr ?? new Error("Couldn't save that photo");
       }
 
@@ -705,6 +711,7 @@ export function ProjectWorkflows({
         ...prev,
         [photoId]: {
           storage_path: (row as any).storage_path,
+          thumb_path: (row as any).thumb_path ?? thumbPath,
           image_url: (row as any).image_url ?? signed?.signedUrl ?? null,
         },
       }));
@@ -1724,6 +1731,7 @@ function PhotoStep({
             {photo ? (
               <PhotoThumb
                 storagePath={photo.storage_path}
+                thumbPath={photo.thumb_path}
                 fallbackUrl={photo.image_url}
                 width={128}
                 alt={item.label}

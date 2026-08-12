@@ -2,6 +2,7 @@ import { z } from "zod";
 import { sanitizeCaption } from "@sitepix/shared";
 import type { AuthedContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";
+import { signPhotoUrls } from "../../lib/photo-urls";
 import { slugify, uniqueSlug } from "../portfolio/slug";
 
 export interface ShowcaseSummary {
@@ -98,98 +99,47 @@ export async function myTeamId(ctx: AuthedContext): Promise<string | null> {
   return (data as any)?.team_id ?? null;
 }
 
-/**
- * Signs each path with a width cap so a showcase serves ~1400px renditions
- * instead of 4000px camera originals — roughly a 10x payload reduction on a
- * page that is mostly photography.
- *
- * Has to be one call per path: the batch `createSignedUrls` does not accept
- * `transform`, only the singular `createSignedUrl` does. That is affordable
- * here because a showcase is capped at 60 photos, and would NOT be for an
- * unbounded surface like the gallery.
- *
- * Returns null if transformation is unavailable (it needs a paid Supabase
- * plan), so the caller can fall back to plain signed URLs rather than serving
- * a page of broken images.
- */
-async function signTransformed(
-  admin: ReturnType<typeof getSupabaseAdmin>,
-  paths: string[],
-  width: number,
-): Promise<Record<string, string> | null> {
-  const results = await Promise.all(
-    paths.map(async (path) => {
-      const { data, error } = await admin.storage
-        .from("site-photos")
-        .createSignedUrl(path, 60 * 60, {
-          transform: { width, resize: "contain", quality: 80 },
-        });
-      return { path, url: data?.signedUrl ?? null, failed: !!error };
-    }),
-  );
-  // If every request failed the feature isn't available at all; bail so the
-  // caller uses the untransformed batch path instead of showing nothing.
-  if (results.every((r) => r.failed)) {
-    console.warn("[showcases] image transformation unavailable, serving originals");
-    return null;
-  }
-  const map: Record<string, string> = {};
-  for (const r of results) if (r.url) map[r.path] = r.url;
-  return map;
-}
-
 export async function resolvePhotoUrls(
   photoIds: string[],
-  /** Max rendered width. Omit to serve originals. */
-  width?: number,
+  /**
+   * Retained for call-site compatibility and ignored. A showcase used to
+   * transform originals down to ~1400px on read; it now serves the thumbnail
+   * stored at upload time, which is sized to that same 1400px for exactly this
+   * page. See `signPhotoUrls` for why transforming on read had to stop.
+   */
+  _width?: number,
 ): Promise<Map<string, { image_url: string; storage_path: string }>> {
   const admin = getSupabaseAdmin();
   const out = new Map<string, { image_url: string; storage_path: string }>();
   if (!photoIds.length) return out;
   const { data } = await admin
     .from("photos")
-    .select("id, storage_path, image_url")
+    .select("id, storage_path, thumb_path, image_url")
     .in("id", photoIds);
-  const rows = (data as Array<{ id: string; storage_path: string; image_url: string | null }>) ?? [];
+  const rows =
+    (data as Array<{
+      id: string;
+      storage_path: string;
+      thumb_path: string | null;
+      image_url: string | null;
+    }>) ?? [];
   // A photo whose row is missing entirely (deleted, or the id never existed —
   // showcase_items.photo_id has no FK) never reaches `rows`, so it silently
   // has no entry in `out` and the caller's `?? ""` fallback kicks in. That's
   // fine; what must not happen is one bad `storage_path` poisoning every
   // *other* photo's signed URL in the same batch call.
   const needSign = rows.filter((r) => !r.image_url && r.storage_path);
-  let signedMap: Record<string, string> = {};
-  if (needSign.length && width) {
-    const transformed = await signTransformed(
-      admin,
+  const signedMap: Record<string, string> = {};
+  if (needSign.length) {
+    const signedMapped = await signPhotoUrls(
       needSign.map((r) => r.storage_path),
-      width,
+      {
+        thumbByPath: Object.fromEntries(
+          needSign.map((r) => [r.storage_path, r.thumb_path ?? null]),
+        ),
+      },
     );
-    if (transformed) signedMap = transformed;
-  }
-  // Either no width was asked for, or transformation isn't available on this
-  // project's plan — fall back to the (batched, cheaper) original URLs.
-  if (needSign.length && !Object.keys(signedMap).length) {
-    const { data: signed, error } = await admin.storage
-      .from("site-photos")
-      .createSignedUrls(
-        needSign.map((r) => r.storage_path),
-        60 * 60,
-      );
-    if (error) {
-      console.error("[showcases] failed to sign photo URLs", {
-        error: error.message,
-        count: needSign.length,
-      });
-    }
-    signed?.forEach((s, i) => {
-      if (s.signedUrl) signedMap[needSign[i].storage_path] = s.signedUrl;
-      else if (s.error) {
-        console.error("[showcases] failed to sign one photo URL", {
-          storagePath: needSign[i].storage_path,
-          error: s.error,
-        });
-      }
-    });
+    Object.assign(signedMap, signedMapped);
   }
   rows.forEach((r) => {
     out.set(r.id, {

@@ -21,6 +21,8 @@ export interface Project {
 export interface Photo {
   id: string;
   storage_path: string;
+  /** Pre-generated thumbnail; null for photos uploaded before they existed. */
+  thumb_path?: string | null;
   image_url: string | null;
   caption: string | null;
   phase: string | null;

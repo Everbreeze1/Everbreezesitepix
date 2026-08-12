@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { photoObjectPaths } from "@sitepix/shared";
+import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import {
   ClipboardList,
   Plus,
@@ -2000,12 +2002,14 @@ function AttachPhotosDialog({
             .from("site-photos")
             .upload(path, file, { contentType: file.type });
           if (upErr) throw upErr;
+          const thumbPath = await uploadPhotoThumbnail(path, file);
           const { data: row, error: insErr } = await supabase
             .from("photos")
             .insert({
               project_id: projectId,
               uploaded_by: user.id,
               storage_path: path,
+              thumb_path: thumbPath,
               size_bytes: file.size,
               caption: file.name,
               phase: "untagged",
@@ -2016,7 +2020,7 @@ function AttachPhotosDialog({
           if (insErr || !row) {
             // Reclaim the orphaned upload — nothing references it, so no
             // delete path can ever reach it and storage usage won't count it.
-            void supabase.storage.from("site-photos").remove([path]);
+            void supabase.storage.from("site-photos").remove(photoObjectPaths(path, thumbPath));
             throw insErr ?? new Error("Upload failed");
           }
           newPhotoIds.push(row.id);

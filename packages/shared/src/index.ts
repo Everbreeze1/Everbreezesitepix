@@ -21,6 +21,13 @@ export {
 } from "./report-pagination";
 export { labelColor, labelChipClass } from "./label-colors";
 export {
+  thumbPathFor,
+  isThumbPath,
+  thumbPathsFor,
+  photoObjectPaths,
+  allPhotoObjectPaths,
+} from "./photo-thumbnails";
+export {
   parseReportTemplateStructure,
   type ReportCoverStyle,
   type ReportSectionLayout,
