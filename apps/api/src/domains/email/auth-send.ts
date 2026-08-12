@@ -41,22 +41,38 @@ function redactEmail(email: string | null | undefined): string {
   return `${localPart[0]}***@${domain}`;
 }
 
-function buildConfirmationUrl(emailData: {
+/**
+ * Build the GoTrue verify link that the email's button points at.
+ *
+ * `email_data.site_url` arrives from Supabase ALREADY pointing at the GoTrue
+ * base — i.e. `https://<ref>.supabase.co/auth/v1`. Appending `/auth/v1/verify`
+ * to that produced
+ *
+ *     https://<ref>.supabase.co/auth/v1/auth/v1/verify?token=...
+ *
+ * which matches no route, so the request fell through to the API gateway and
+ * came back as `{"message":"No API key found in request"}`. Every confirmation
+ * link sent before this fix is dead in exactly that way — the misleading part
+ * is that the error blames a missing apikey rather than the doubled path.
+ *
+ * The suffix is stripped rather than the base hard-coded, so this stays correct
+ * whether Supabase sends the GoTrue base or a bare origin.
+ */
+export function buildConfirmationUrl(emailData: {
   site_url?: string;
   token_hash?: string;
   email_action_type?: string;
   redirect_to?: string;
 }): string {
-  const siteUrl = (emailData.site_url ?? `https://${ROOT_DOMAIN}`).replace(
-    /\/$/,
-    "",
-  );
+  const base = (emailData.site_url ?? `https://${ROOT_DOMAIN}`)
+    .replace(/\/+$/, "")
+    .replace(/\/auth\/v1$/, "");
   const params = new URLSearchParams({
     token: emailData.token_hash ?? "",
     type: emailData.email_action_type ?? "signup",
   });
   if (emailData.redirect_to) params.set("redirect_to", emailData.redirect_to);
-  return `${siteUrl}/auth/v1/verify?${params.toString()}`;
+  return `${base}/auth/v1/verify?${params.toString()}`;
 }
 
 /**
