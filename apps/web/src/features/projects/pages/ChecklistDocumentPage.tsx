@@ -898,7 +898,16 @@ export function ChecklistDocumentPage() {
             )}
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/*
+            `min-w-0` rather than `shrink-0`.
+            `shrink-0` fixed this row at its content's full width, so its own
+            `flex-wrap` could never take effect — the children had no narrower
+            width to wrap into. At 390px that put 379px of controls into 358px of
+            usable row and the whole page scrolled sideways by 5px. Chromium
+            happened to absorb it; WebKit — the engine an actual iPhone uses —
+            did not, which is why it only showed up once the tests ran there.
+          */}
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
             <SaveStatus state={save.state} />
             <Button size="sm" variant="outline" onClick={() => window.print()}>
               <Printer className="mr-1.5 h-3.5 w-3.5" />

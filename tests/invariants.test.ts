@@ -1301,3 +1301,60 @@ describe("family: a rich-text toolbar button must not steal focus from its edito
     for (const rel of users) expect(read(rel)).toContain("toolbarOnFocus");
   });
 });
+
+describe("family: a record's permission model must stay three separate questions", () => {
+  /*
+   * `ChecklistDocumentPage` distinguishes three things that are easy to collapse
+   * into one boolean, and collapsing them is how a teammate loses the ability to
+   * do the job they were assigned:
+   *
+   *   owned        — did I put this checklist on the project? (authoring right)
+   *   canStructure — owned AND not sealed  (add / reorder / delete / rename)
+   *   canFill      — not sealed            (tick, answer, attach a photo)
+   *
+   * A teammate is deliberately NOT the owner but MUST still be able to fill the
+   * record in — that is the entire point of assigning one. Gating the checkbox on
+   * ownership instead of `canFill` would hand them a read-only page; gating the
+   * composer on `canFill` instead of `canStructure` would let anyone restructure
+   * somebody else's checklist. Sealing overrides both, because the snapshot is
+   * the compliance record.
+   *
+   * Asserted as source text because this path cannot be exercised without a
+   * second authenticated account, so nothing else in the suite touches it.
+   */
+  const REL = "apps/web/src/features/projects/pages/ChecklistDocumentPage.tsx";
+
+  it("the three flags are derived, not conflated", () => {
+    const src = read(REL);
+    expect(src).toMatch(
+      /const owned\s*=\s*!!user && !!checklist && checklist\.created_by === user\.id/,
+    );
+    expect(src).toMatch(/const canStructure\s*=\s*owned && !sealed/);
+    expect(src).toMatch(/const canFill\s*=\s*!sealed/);
+  });
+
+  it("filling in the record is gated on canFill, never on ownership", () => {
+    const src = read(REL);
+    // The tick box and the answer widget are the two things a teammate needs.
+    expect(src).toMatch(/disabled=\{!canFill\}/);
+    expect(src).toMatch(/readOnly=\{!canFill\}/);
+    // Neither may be gated on `owned`, which would lock out the assignee.
+    expect(src).not.toMatch(/disabled=\{!owned\}/);
+    expect(src).not.toMatch(/readOnly=\{!owned\}/);
+  });
+
+  it("restructuring the record is gated on canStructure", () => {
+    const src = read(REL);
+    // The add-item composer and the per-row edit menu are structural.
+    expect(src).toMatch(/\{canStructure && \(/);
+    // A non-owner is told why, rather than silently losing the controls.
+    expect(src).toContain("Fill only");
+  });
+
+  it("a sealed record is read-only on every path", () => {
+    const src = read(REL);
+    // Both derived flags fall to false once `sealed` is true, so one assertion
+    // on each is enough — but `sealed` itself must come from completed_at.
+    expect(src).toMatch(/const sealed\s*=\s*!!checklist\?\.completed_at/);
+  });
+});
