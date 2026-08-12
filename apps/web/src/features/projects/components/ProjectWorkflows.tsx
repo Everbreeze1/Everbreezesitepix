@@ -1910,7 +1910,12 @@ function CheckStep({
       </span>
       <span
         className={cn(
-          "flex-1 text-sm",
+          // `min-w-0` + `overflow-wrap: anywhere` for the same reason as the
+          // checklist row: a step label pasted from a spec can carry a long
+          // unbreakable part number, and `break-word` alone does not reduce a
+          // flex child's min-content width, so the row would force the page
+          // wider than the phone holding it.
+          "min-w-0 flex-1 text-sm [overflow-wrap:anywhere]",
           done ? "text-muted-foreground line-through" : "font-medium text-foreground",
         )}
       >

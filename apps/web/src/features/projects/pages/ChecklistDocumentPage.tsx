@@ -1148,6 +1148,20 @@ export function ChecklistDocumentPage() {
                               it.completed_at && it.item_type === "checkbox"
                                 ? "text-muted-foreground line-through"
                                 : "font-medium",
+                              /*
+                               * `overflow-wrap: anywhere`, not `break-words`.
+                               *
+                               * Item labels are pasted from specs, so they carry
+                               * part numbers like PARTNO-XXXX…(90 chars) with no
+                               * space to break at. `break-word` permits a break
+                               * but does NOT shrink the element's min-content
+                               * width, so as a flex child the span still forced
+                               * the row open — 877px inside a 390px phone, the
+                               * whole page scrolling sideways. `anywhere` is the
+                               * one value that also reduces min-content, which
+                               * is why the printed sheet already uses it.
+                               */
+                              "min-w-0 [overflow-wrap:anywhere]",
                             )}
                           >
                             {it.label}
@@ -1175,7 +1189,9 @@ export function ChecklistDocumentPage() {
                           )}
                         </div>
                         {it.description && (
-                          <p className="mt-0.5 text-xs text-muted-foreground">{it.description}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                            {it.description}
+                          </p>
                         )}
                         {it.item_type && it.item_type !== "checkbox" && (
                           <div className="mt-2">

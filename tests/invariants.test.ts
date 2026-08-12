@@ -1358,3 +1358,188 @@ describe("family: a record's permission model must stay three separate questions
     expect(src).toMatch(/const sealed\s*=\s*!!checklist\?\.completed_at/);
   });
 });
+
+describe("family: auth screens must not show raw provider errors", () => {
+  /*
+   * Signup, login, reset-password and settings all call supabase.auth.* and all
+   * used to pipe `error.message` straight into a toast. That message is written
+   * for developers: a real production failure rendered a toast reading literally
+   * `{}`, and others reached users as "Hook requires authorization token" and
+   * "email rate limit exceeded" — our own infrastructure faults, phrased as
+   * though the customer had done something wrong.
+   *
+   * lib/auth-errors.ts is the single place that decides what a person sees.
+   * These are the screens that must go through it.
+   */
+  /*
+   * signup / login / reset-password exist only to do auth, so every error they
+   * surface is an auth error and the whole file is held to the rule. Settings
+   * also writes profile rows and uploads logos, whose Postgres and storage
+   * errors are a separate (and much larger) copy problem — so there only the
+   * two auth handlers are checked.
+   */
+  const AUTH_ONLY_SCREENS = [
+    "apps/web/src/routes/signup.tsx",
+    "apps/web/src/routes/login.tsx",
+    "apps/web/src/routes/reset-password.tsx",
+  ];
+  const SETTINGS = "apps/web/src/features/settings/pages/SettingsPage.tsx";
+
+  for (const file of AUTH_ONLY_SCREENS) {
+    it(`${file.split("/").pop()} never toasts a raw error message`, () => {
+      const src = stripComments(read(file));
+      // `toast.error(error.message)` / `toast.error(e.message ?? …)` is the shape
+      // that leaked. Any auth error must go through authErrorMessage().
+      expect(src).not.toMatch(/toast\.error\(\s*(\w*[eE]rror)\.message\s*[)?]/);
+    });
+  }
+
+  it("settings' auth handlers use the mapper", () => {
+    const src = stripComments(read(SETTINGS));
+    for (const fn of ["changeEmail", "changePassword"]) {
+      const start = src.indexOf(`const ${fn} = async`);
+      expect(start, `${fn} not found`).toBeGreaterThan(-1);
+      const body = src.slice(start, src.indexOf("\n  };", start));
+      expect(body).toMatch(/authErrorMessage/);
+      expect(body).not.toMatch(/toast\.error\(\s*error\.message\s*\)/);
+    }
+  });
+
+  it("the auth screens import the shared mapper", () => {
+    for (const file of [...AUTH_ONLY_SCREENS, SETTINGS]) {
+      expect(read(file)).toMatch(/authErrorMessage/);
+    }
+  });
+
+  it("email is normalised before it reaches Supabase on signup and login", () => {
+    /*
+     * " A@B.com " creates an account the owner can never log into, and the
+     * error they get is "incorrect email or password" — which sends them to
+     * reset a password that was never wrong.
+     */
+    for (const file of ["apps/web/src/routes/signup.tsx", "apps/web/src/routes/login.tsx"]) {
+      const src = stripComments(read(file));
+      expect(src).toMatch(/const cleanEmail = email\.trim\(\)\.toLowerCase\(\)/);
+      expect(src).not.toMatch(/signInWithPassword\(\{\s*email,/);
+      expect(src).not.toMatch(/signUp\(\{\s*\n?\s*email,/);
+    }
+  });
+
+  it("social buttons are gated on what the project actually enables", () => {
+    /*
+     * Google and Apple were rendered unconditionally while both were disabled
+     * on the Supabase project, so two of the three routes onto the product
+     * returned "Unsupported provider: provider is not enabled".
+     */
+    for (const file of ["apps/web/src/routes/signup.tsx", "apps/web/src/routes/login.tsx"]) {
+      const src = stripComments(read(file));
+      expect(src).toMatch(/useAuthProviders/);
+      expect(src).toMatch(/social\.has\("google"\)/);
+      expect(src).toMatch(/social\.has\("apple"\)/);
+    }
+  });
+});
+
+describe("family: a field record must survive text it cannot break", () => {
+  /*
+   * Item labels are pasted from specs, so they carry part numbers with no space
+   * to break at. Two separate mistakes let one of those blow the layout open on a
+   * phone, and both were invisible until a real engine measured them:
+   *
+   * 1. `overflow-wrap: break-word` permits a break but does NOT reduce an
+   *    element's min-content width, so a flex child still forces its row wider.
+   *    Only `anywhere` shrinks min-content. A 97-char part number produced 877px
+   *    of content inside a 390px viewport.
+   *
+   * 2. `shrink-0` on a wrapping flex row pins it at its content's full width, so
+   *    its own `flex-wrap` can never engage. That put 379px of header controls
+   *    into 358px of usable row — a 5px sideways scroll that Chromium absorbed
+   *    and WebKit, the engine an iPhone actually uses, did not.
+   *
+   * Guarded here because the fix is a single easily-dropped utility class, and
+   * the symptom only shows up on a narrow viewport in a non-default engine.
+   */
+  const LABEL_ROWS = [
+    "apps/web/src/features/projects/pages/ChecklistDocumentPage.tsx",
+    "apps/web/src/features/projects/components/ProjectWorkflows.tsx",
+  ];
+
+  it.each(LABEL_ROWS)("%s lets an unbreakable label wrap anywhere", (rel) => {
+    expect(read(rel)).toContain("[overflow-wrap:anywhere]");
+  });
+
+  it("the printed sheet allows the same break", () => {
+    const css = read("apps/web/src/styles/record-document.css");
+    // The sheet had this from the start, which is why only the interactive rows
+    // were affected — keep it that way.
+    expect(css).toMatch(/\.record-doc__label[\s\S]{0,120}overflow-wrap:\s*anywhere/);
+    expect(css).toMatch(/\.record-doc__answer-value[\s\S]{0,120}overflow-wrap:\s*anywhere/);
+  });
+
+  it("the record header's action row can shrink so its wrap can engage", () => {
+    const src = read("apps/web/src/features/projects/pages/ChecklistDocumentPage.tsx");
+    // The row that holds SaveStatus + Print + Share + the ⋯ menu.
+    expect(src).toMatch(/flex min-w-0 flex-wrap items-center justify-end gap-2/);
+    // `shrink-0` on a flex-wrap row is the bug; it must not come back here.
+    expect(src).not.toMatch(/flex shrink-0 flex-wrap/);
+  });
+});
+
+describe("family: the public share payload must not widen", () => {
+  /*
+   * `getPublicChecklist` / `getPublicWorkflow` answer an unauthenticated caller
+   * holding nothing but a share token. The services read `created_by` from the
+   * database (they need it to resolve the letterhead) — which makes it one
+   * careless spread away from being returned to a customer.
+   *
+   * An audit of the live payload showed the intended surface only: the record,
+   * its sections and items, the project's name and address, and the company
+   * letterhead. This pins the interface so a later edit has to argue with a test
+   * rather than silently widen an anonymous endpoint.
+   */
+  const REL = "apps/api/src/domains/projects/field-records.ts";
+
+  it("the payload interface exposes no identity or ownership fields", () => {
+    const src = read(REL);
+    // The declared response type is the contract; extract it and check it alone,
+    // so a `created_by` used internally for the envelope lookup is not a hit.
+    const start = src.indexOf("export interface PublicFieldRecord {");
+    const end = src.indexOf("export const publicFieldRecordInputSchema");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const contract = src.slice(start, end);
+    for (const banned of [
+      "created_by",
+      "owner_id",
+      "user_id",
+      "project_id",
+      "email",
+      "share_token",
+    ]) {
+      expect(contract).not.toContain(banned);
+    }
+  });
+
+  it("the services never spread a whole database row into the response", () => {
+    const src = read(REL);
+    // Every returned field is written out by hand. A `...row` or `...checklist`
+    // would carry whatever columns the select happens to include.
+    expect(src).not.toMatch(/\.\.\.(row|checklist|workflow|item|phase)\b/);
+  });
+
+  it("photo URLs are scoped to the record's own project", () => {
+    const src = read(REL);
+    // signPhotos runs on the service-role client, so without this an item row
+    // pointing at someone else's photo would be signed for a stranger.
+    expect(src).toMatch(/\.in\("id", ids\)[\s\S]{0,80}\.eq\("project_id", projectId\)/);
+  });
+
+  it("a trashed project revokes the link rather than 404ing", () => {
+    const src = read(REL);
+    // The link was valid; the owner took the job away. `loadEnvelope` returning
+    // null must mean "revoked", not "not_found" — otherwise a customer is told
+    // their link was never real.
+    expect(src).toMatch(/if \(!envelope\) return empty\("revoked"\)/);
+    expect(src.match(/if \(!envelope\) return empty\("revoked"\)/g) ?? []).toHaveLength(2);
+  });
+});
