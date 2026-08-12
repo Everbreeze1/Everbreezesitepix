@@ -1095,11 +1095,29 @@ export function ChecklistDocumentPage() {
                         {idx + 1}
                       </span>
                       {it.item_type === "checkbox" || !it.item_type ? (
+                        /*
+                         * 20px of box, 40px of target.
+                         *
+                         * The box stays small because the row is a document
+                         * line, but a 20px tap target is the wrong size for the
+                         * device this is filled in on — a phone, outdoors,
+                         * often through a glove. The transparent `before`
+                         * pseudo-element doubles the hit area in every
+                         * direction without moving a pixel of the layout; the
+                         * inset stops at 10px so it stays inside this row's own
+                         * py-3 and can never steal a tap from its neighbour.
+                         *
+                         * The workflow runner solves the same problem by making
+                         * the entire step row one big button (`min-h-12`), which
+                         * is not available here: a checklist row also carries the
+                         * attach-photo button, the ⋯ menu and, for typed items,
+                         * an answer widget.
+                         */
                         <Checkbox
                           checked={!!it.completed_at}
                           disabled={!canFill}
                           onCheckedChange={() => void toggleItem(it)}
-                          className="mt-0.5 h-5 w-5"
+                          className="relative mt-0.5 h-5 w-5 before:absolute before:-inset-2.5 before:content-['']"
                           aria-label={it.label}
                         />
                       ) : (
