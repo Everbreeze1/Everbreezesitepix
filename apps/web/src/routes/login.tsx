@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CheckCircle2, ArrowRight, ArrowLeft } from "lucide-react";
+import { authErrorMessage, isUnconfirmedEmail } from "@/lib/auth-errors";
 import { BrandLogo } from "@/components/BrandLogo";
 import { MobileAppBanner } from "@/components/MobileAppBanner";
 import { toast } from "sonner";
@@ -61,6 +62,14 @@ function LoginPage() {
   const [needsVerification, setNeedsVerification] = useState(false);
   const [resending, setResending] = useState(false);
 
+  /*
+   * Same normalisation as signup. Without it an account created as
+   * "A@B.com " cannot be logged into by typing "a@b.com", and the error the
+   * user sees is "incorrect email or password" — which sends them to reset a
+   * password that was never wrong.
+   */
+  const cleanEmail = email.trim().toLowerCase();
+
   useEffect(() => {
     if (user) navigate({ to: (redirect || "/dashboard") as "/dashboard", replace: true });
   }, [user, navigate, redirect]);
@@ -69,38 +78,37 @@ function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setNeedsVerification(false);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password,
+    });
     setLoading(false);
     if (error) {
-      const msg = error.message.toLowerCase();
-      if (
-        msg.includes("email not confirmed") ||
-        msg.includes("not confirmed") ||
-        msg.includes("confirm")
-      ) {
+      if (isUnconfirmedEmail(error)) {
         setNeedsVerification(true);
         return toast.error("Please verify your email before signing in.");
       }
-      if (msg.includes("invalid") || msg.includes("credentials")) {
-        return toast.error(
-          "Incorrect email or password. If you signed up with Google or Apple, use that button instead — no password was set.",
-        );
-      }
-      return toast.error(error.message);
+      // Everything else goes through the shared mapper, so an unparseable
+      // error can no longer reach the user as `{}`.
+      console.error("[login] failed", error);
+      return toast.error(authErrorMessage(error));
     }
     toast.success("Welcome back!");
   };
 
   const handleResend = async () => {
-    if (!email) return toast.error("Enter your email first.");
+    if (!cleanEmail) return toast.error("Enter your email first.");
     setResending(true);
     const { error } = await supabase.auth.resend({
       type: "signup",
-      email,
+      email: cleanEmail,
       options: { emailRedirectTo: `${window.location.origin}/dashboard` },
     });
     setResending(false);
-    if (error) return toast.error(error.message);
+    if (error) {
+      console.error("[login] resend failed", error);
+      return toast.error(authErrorMessage(error));
+    }
     toast.success("Verification email sent. Check your inbox.");
   };
 
@@ -113,11 +121,14 @@ function LoginPage() {
   };
 
   const handleForgot = async () => {
-    if (!email) return toast.error("Enter your email first to reset password.");
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    if (!cleanEmail) return toast.error("Enter your email first to reset password.");
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
       redirectTo: `${window.location.origin}/reset-password`,
     });
-    if (error) return toast.error(error.message);
+    if (error) {
+      console.error("[login] reset request failed", error);
+      return toast.error(authErrorMessage(error));
+    }
     toast.success("Password reset email sent. Check your inbox.");
   };
 

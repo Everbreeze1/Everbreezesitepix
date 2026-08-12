@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CircleCheck, ArrowRight } from "lucide-react";
+import { CircleCheck, ArrowRight, MailCheck, Loader2 } from "lucide-react";
+import { authErrorMessage } from "@/lib/auth-errors";
 import { BrandLogo } from "@/components/BrandLogo";
 import { MobileAppBanner } from "@/components/MobileAppBanner";
 import { toast } from "sonner";
@@ -42,6 +43,17 @@ function SignupPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [confirmEmailSent, setConfirmEmailSent] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [oauthPending, setOauthPending] = useState<"google" | "apple" | null>(null);
+
+  /*
+   * Typed addresses arrive with stray whitespace far more often than you'd
+   * think — autofill, and mobile keyboards that append a space after an
+   * autocomplete. Supabase stores the address verbatim, so " a@b.com " signs up
+   * an account the user can then never log into, because they type it cleanly
+   * the second time. Normalise once, here, and use it everywhere below.
+   */
+  const cleanEmail = email.trim().toLowerCase();
 
   useEffect(() => {
     if (user) navigate({ to: "/dashboard", replace: true });
@@ -49,33 +61,65 @@ function SignupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password.length < 8) return toast.error("Password must be at least 8 characters.");
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: cleanEmail,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/dashboard`,
-        data: { full_name: fullName },
+        data: { full_name: fullName.trim() },
       },
     });
     setLoading(false);
-    if (error) return toast.error(error.message);
+    if (error) {
+      // Never render the raw message — see lib/auth-errors.ts.
+      console.error("[signup] failed", error);
+      return toast.error(authErrorMessage(error));
+    }
     if (!data.session) {
-      // Email confirmation is required — no session yet, so the auth-state
-      // redirect below never fires. Tell the user what to actually do next.
+      /*
+       * Email confirmation is required, so there is no session and the
+       * auth-state redirect never fires. This used to set state that nothing
+       * rendered: the form just sat there behind a toast that faded after a
+       * few seconds, at the single most important moment in the funnel. The
+       * confirmation panel below is what that state was always meant to show.
+       */
       setConfirmEmailSent(true);
-      toast.success("Check your email to confirm your account.");
       return;
     }
     toast.success("Account created! Redirecting…");
   };
 
+  const handleResend = async () => {
+    setResending(true);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: cleanEmail,
+      options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+    });
+    setResending(false);
+    if (error) {
+      console.error("[signup] resend failed", error);
+      return toast.error(authErrorMessage(error));
+    }
+    toast.success("Sent again — check your inbox.");
+  };
+
   const handleOAuth = async (provider: "google" | "apple") => {
+    // Guarded: the redirect takes a moment, and a second click during it starts
+    // a competing OAuth handshake.
+    if (oauthPending) return;
+    setOauthPending(provider);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: `${window.location.origin}/dashboard` },
     });
-    if (error) toast.error(error.message ?? `${provider} sign-in failed`);
+    if (error) {
+      setOauthPending(null);
+      console.error("[signup] oauth failed", error);
+      toast.error(authErrorMessage(error, `${provider} sign-in failed`));
+    }
   };
 
   return (
@@ -146,6 +190,64 @@ function SignupPage() {
             </Link>
           </div>
 
+          {confirmEmailSent ? (
+            /*
+             * Terminal state for the confirm-by-email path. It answers the three
+             * things someone stares at this screen wondering: did it work, where
+             * did it go, and what if it never arrives.
+             */
+            <div aria-live="polite">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+                <MailCheck className="h-7 w-7 text-primary" />
+              </div>
+              <h2 className="font-display mt-6 text-[40px] font-black uppercase leading-[0.92] tracking-[-1.4px] text-foreground">
+                Check your email
+              </h2>
+              <p className="font-manrope mt-4 text-sm leading-6 text-muted-foreground">
+                We sent a confirmation link to{" "}
+                <span className="font-bold text-foreground">{cleanEmail}</span>. Click it to finish
+                setting up your account.
+              </p>
+              <p className="font-manrope mt-3 text-sm leading-6 text-muted-foreground">
+                It usually arrives within a minute. Check your spam folder if you don&apos;t see it.
+              </p>
+
+              <div className="mt-8 space-y-3">
+                <Button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={resending}
+                  variant="outline"
+                  className="h-11 w-full rounded-lg font-manrope text-sm font-bold"
+                >
+                  {resending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending…
+                    </>
+                  ) : (
+                    "Resend confirmation email"
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setConfirmEmailSent(false)}
+                  className="h-11 w-full rounded-lg font-manrope text-sm font-bold text-muted-foreground"
+                >
+                  Use a different email
+                </Button>
+              </div>
+
+              <p className="font-manrope mt-7 text-center text-sm text-muted-foreground">
+                Already confirmed?{" "}
+                <Link to="/login" className="font-bold text-primary hover:underline">
+                  Log in
+                </Link>
+              </p>
+            </div>
+          ) : (
+            <>
           <p className="font-manrope text-xs font-extrabold uppercase leading-4 tracking-[1.92px] text-primary">
             Create your account
           </p>
@@ -218,18 +320,30 @@ function SignupPage() {
             <Button
               type="button"
               onClick={() => handleOAuth("google")}
+              disabled={!!oauthPending}
               variant="outline"
               className="h-10 w-full rounded-lg border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F5FB]"
             >
-              <GoogleIcon /> Continue with Google
+              {oauthPending === "google" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <GoogleIcon />
+              )}
+              Continue with Google
             </Button>
             <Button
               type="button"
               onClick={() => handleOAuth("apple")}
+              disabled={!!oauthPending}
               variant="outline"
               className="h-10 w-full rounded-lg border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F5FB]"
             >
-              <AppleIcon /> Continue with Apple
+              {oauthPending === "apple" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <AppleIcon />
+              )}
+              Continue with Apple
             </Button>
           </div>
 
@@ -250,6 +364,8 @@ function SignupPage() {
             </Link>
             .
           </p>
+            </>
+          )}
         </div>
       </div>
     </div>
