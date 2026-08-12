@@ -983,6 +983,23 @@ describe("ProjectPageEditorPage photo slot click", () => {
     expect(src).toMatch(/click: \(view: EditorView, event: MouseEvent\)/);
     expect(src).not.toMatch(/handleClickOn:/);
   });
+
+  /*
+   * The picker's photos are signed URLs with a one-hour life, resolved once at
+   * mount. Documents stay open far longer, and past the hour every thumbnail
+   * 403s and picking one writes a dead `src` into the document. This branch is
+   * time-gated, so it is guarded here rather than exercised in a browser: the
+   * refresh must key off how old the signatures are, not off a bare mount.
+   */
+  it("re-signs stale photo URLs before showing the picker", () => {
+    const src = editor();
+    expect(src).toMatch(/photosLoadedAtRef/);
+    expect(src).toMatch(/PHOTO_URL_TTL_SECONDS/);
+    // The signing lifetime and the staleness threshold must come from the same
+    // constant, or they drift apart and the refresh stops covering the window.
+    expect(src).toMatch(/createSignedUrls\(toSign, PHOTO_URL_TTL_SECONDS\)/);
+    expect(src).toMatch(/age > \(PHOTO_URL_TTL_SECONDS - \d+\) \* 1000/);
+  });
 });
 
 describe("ProjectPageEditorPage actions that read the stored row", () => {
@@ -1013,10 +1030,22 @@ describe("ProjectPageEditorPage actions that read the stored row", () => {
 
   /*
    * The bin icon sits one row from "Use", snippets are a shared library, and
-   * there is no trash and no undo behind this call.
+   * there is no trash and no undo behind this call — so deleting must be asked
+   * about first.
+   *
+   * The confirmation is INLINE, in the row. A confirm dialog opened from inside
+   * the snippets dialog renders in its own portal, so Radix reads a click
+   * inside it as an interaction outside the snippets dialog and dismisses the
+   * library behind it — measured in Chromium: cancelling the delete threw you
+   * out of the snippet list entirely. Keep this to one layer.
    */
-  it("confirms before deleting a snippet", () => {
-    expect(fnBody(editor(), "handleDeleteSnippet")).toMatch(/await confirm\(/);
+  it("asks before deleting a snippet, without opening a second dialog", () => {
+    const src = editor();
+    expect(src).toMatch(/confirmingDelete/);
+    expect(src).toMatch(/setConfirmingDelete\(s\.id\)/);
+    // The trash button must not delete directly, and must not open a dialog.
+    expect(fnBody(src, "handleDeleteSnippet")).not.toMatch(/await confirm\(/);
+    expect(src).toMatch(/onClick=\{\(\) => void handleDeleteSnippet\(s\.id\)\}/);
   });
 
   /*

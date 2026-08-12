@@ -199,6 +199,18 @@ export function ProjectPageEditorPage() {
   const [snippets, setSnippets] = useState<TextSnippet[]>([]);
   const [snippetsLoading, setSnippetsLoading] = useState(false);
   const [snippetSearch, setSnippetSearch] = useState("");
+  /**
+   * Id of the snippet whose row is currently asking "delete this?".
+   *
+   * Deliberately an inline, in-row confirmation rather than a confirm dialog.
+   * A dialog opened from inside the snippets dialog renders in its own portal,
+   * so Radix reads a click inside it as an interaction *outside* the snippets
+   * dialog and dismisses the library behind it — measured: cancelling the
+   * delete threw you out of the snippet list entirely. (`usePrompt` gets away
+   * with it because it is a Dialog, not an AlertDialog.) Confirming in the row
+   * keeps it to one layer, so there is nothing to cascade.
+   */
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   /** Resolved merge-field values, so "Insert field" shows the real company/project name. */
   const [tokenValues, setTokenValues] = useState<TokenValues>({});
   const [exporting, setExporting] = useState(false);
@@ -376,42 +388,69 @@ export function ProjectPageEditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageId, editor]);
 
+  /** How long the signed URLs below stay valid. */
+  const PHOTO_URL_TTL_SECONDS = 3600;
+  /** When `photos` was last resolved, so stale signatures can be spotted. */
+  const photosLoadedAtRef = useRef(0);
+
+  async function loadPhotos() {
+    const { data } = await (supabase as any)
+      .from("photos")
+      .select("id, image_url, storage_path, caption")
+      .eq("project_id", projectId)
+      // Excludes trashed photos, which nothing filters at the database level.
+      // `SelectPhotosForPageDialog` — the other picker on this same screen —
+      // already does this, so the two disagreed about which photos exist.
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    const rows = (data as any[]) ?? [];
+    // Batch signing, not one awaited request per row — at the 200-row limit
+    // above that was 200 sequential round trips before the picker showed
+    // anything. `ProjectChecklists.signPhotos` is the model.
+    const toSign = rows
+      .filter((r) => !r.image_url && r.storage_path)
+      .map((r) => r.storage_path as string);
+    const signedByPath: Record<string, string> = {};
+    if (toSign.length) {
+      const { data: signed } = await supabase.storage
+        .from("site-photos")
+        .createSignedUrls(toSign, PHOTO_URL_TTL_SECONDS);
+      signed?.forEach((s, i) => {
+        if (s.signedUrl) signedByPath[toSign[i]] = s.signedUrl;
+      });
+    }
+    const resolved: ProjectPhoto[] = [];
+    for (const r of rows) {
+      const url = (r.image_url as string | null) ?? signedByPath[r.storage_path] ?? null;
+      if (url) resolved.push({ id: r.id, url, caption: r.caption });
+    }
+    setPhotos(resolved);
+    photosLoadedAtRef.current = Date.now();
+  }
+
   useEffect(() => {
-    (async () => {
-      const { data } = await (supabase as any)
-        .from("photos")
-        .select("id, image_url, storage_path, caption")
-        .eq("project_id", projectId)
-        // Excludes trashed photos, which nothing filters at the database level.
-        // `SelectPhotosForPageDialog` — the other picker on this same screen —
-        // already does this, so the two disagreed about which photos exist.
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(200);
-      const rows = (data as any[]) ?? [];
-      // Batch signing, not one awaited request per row — at the 200-row limit
-      // above that was 200 sequential round trips before the picker showed
-      // anything. `ProjectChecklists.signPhotos` is the model.
-      const toSign = rows
-        .filter((r) => !r.image_url && r.storage_path)
-        .map((r) => r.storage_path as string);
-      const signedByPath: Record<string, string> = {};
-      if (toSign.length) {
-        const { data: signed } = await supabase.storage
-          .from("site-photos")
-          .createSignedUrls(toSign, 3600);
-        signed?.forEach((s, i) => {
-          if (s.signedUrl) signedByPath[toSign[i]] = s.signedUrl;
-        });
-      }
-      const resolved: ProjectPhoto[] = [];
-      for (const r of rows) {
-        const url = (r.image_url as string | null) ?? signedByPath[r.storage_path] ?? null;
-        if (url) resolved.push({ id: r.id, url, caption: r.caption });
-      }
-      setPhotos(resolved);
-    })();
+    void loadPhotos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
+
+  /*
+   * Re-sign before showing the picker if the URLs have gone stale.
+   *
+   * These are signed URLs with a one-hour life, resolved once when the editor
+   * mounted. Documents get left open far longer than that — and past the hour
+   * every thumbnail in the picker 403s, and picking one writes a dead `src`
+   * into the document. (It heals on the next load, because `data-photo-id`
+   * makes the server re-resolve it, but the photo you just placed shows broken
+   * until then.) Refreshing on open keeps the common case instant and only
+   * pays for a round trip when the session has actually run long.
+   */
+  useEffect(() => {
+    if (!picker.open) return;
+    const age = Date.now() - photosLoadedAtRef.current;
+    if (age > (PHOTO_URL_TTL_SECONDS - 600) * 1000) void loadPhotos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picker.open]);
 
   /**
    * The document as HTML, re-serialised only when the document changes.
@@ -781,6 +820,7 @@ export function ProjectPageEditorPage() {
   function openSnippets() {
     setSnippetsOpen(true);
     setSnippetSearch("");
+    setConfirmingDelete(null);
     void loadSnippets();
   }
 
@@ -813,18 +853,8 @@ export function ProjectPageEditorPage() {
     }
   }
 
-  async function handleDeleteSnippet(snippet: TextSnippet) {
-    // Snippets are a shared library with no trash and no undo, and the bin icon
-    // sits one row away from "Use" — a slip destroyed saved work outright.
-    const proceed = await confirm({
-      title: "Delete snippet?",
-      description: `"${snippet.title}" will be removed from your snippet library. This can't be undone.`,
-      confirmText: "Delete",
-      cancelText: "Keep",
-      variant: "destructive",
-    });
-    if (!proceed) return;
-    const snippetId = snippet.id;
+  async function handleDeleteSnippet(snippetId: string) {
+    setConfirmingDelete(null);
     try {
       await deleteTextSnippet({ data: { snippetId } });
       setSnippets((prev) => prev.filter((s) => s.id !== snippetId));
@@ -996,7 +1026,14 @@ export function ProjectPageEditorPage() {
           <div className="flex max-h-[80vh] flex-col">
             <DialogHeader className="border-b px-6 pb-4 pt-5">
               <DialogTitle>
-                {picker.target !== null ? "Fill this photo slot" : "Insert a project photo"}
+                {/* Three states, not two: clicking a filled photo is a swap, not
+                    a fill, and saying "Fill this photo slot" over a photo that
+                    already has one read as though it would add a second. */}
+                {picker.target === null
+                  ? "Insert a project photo"
+                  : isPhotoSlot(picker.target.node.attrs)
+                    ? "Fill this photo slot"
+                    : "Change this photo"}
               </DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-y-auto p-4">
@@ -1011,6 +1048,10 @@ export function ProjectPageEditorPage() {
                       key={p.id}
                       type="button"
                       onClick={() => insertImage(p)}
+                      // An uncaptioned photo left the button with no accessible
+                      // name at all — `alt=""` on the only child announces as a
+                      // bare "button".
+                      aria-label={p.caption?.trim() || "Use this photo"}
                       className="aspect-square overflow-hidden rounded-md border border-border hover:ring-2 hover:ring-primary"
                     >
                       <img
@@ -1126,32 +1167,56 @@ export function ProjectPageEditorPage() {
                           {stripHtml(s.content_html)}
                         </p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <Button
-                          size="sm"
-                          className="font-bold"
-                          onClick={() => {
-                            // Inserted now at the caret the editor still holds;
-                            // only the focus waits for the dialog to close (see
-                            // afterDialogClose).
-                            const { from, to } = editor.state.selection;
-                            editor.commands.insertContentAt({ from, to }, s.content_html);
-                            queueRefocus();
-                            setSnippetsOpen(false);
-                          }}
-                        >
-                          Use
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => void handleDeleteSnippet(s)}
-                          aria-label="Delete snippet"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                      {confirmingDelete === s.id ? (
+                        // Asked and answered in the row itself — see confirmingDelete.
+                        <div className="flex shrink-0 items-center gap-1">
+                          <span className="mr-1 text-xs font-bold text-muted-foreground">
+                            Delete?
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="font-bold"
+                            onClick={() => void handleDeleteSnippet(s.id)}
+                          >
+                            Delete
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setConfirmingDelete(null)}
+                          >
+                            Keep
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            size="sm"
+                            className="font-bold"
+                            onClick={() => {
+                              // Inserted now at the caret the editor still holds;
+                              // only the focus waits for the dialog to close (see
+                              // afterDialogClose).
+                              const { from, to } = editor.state.selection;
+                              editor.commands.insertContentAt({ from, to }, s.content_html);
+                              queueRefocus();
+                              setSnippetsOpen(false);
+                            }}
+                          >
+                            Use
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => setConfirmingDelete(s.id)}
+                            aria-label="Delete snippet"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
