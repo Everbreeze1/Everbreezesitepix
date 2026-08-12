@@ -2,6 +2,7 @@ import ReactMarkdown from "react-markdown";
 import { Check, ImageOff, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cleanCaption } from "@sitepix/shared";
+import { cn } from "@/lib/utils";
 
 export interface WalkthroughPhotoStep {
   photo_id: string;
@@ -107,7 +108,12 @@ export function WalkthroughPhotoSteps({
           beneath with no gap — rather than a side-by-side layout that collapses
           into an unrelated-looking stack on narrow screens. The offset badge on
           the photo (not a "Photo N" label) is enough to place it in the walk. */}
-      <ol className="grid gap-4 sm:grid-cols-2">
+      {/* items-start only for summaries. A recorded walkthrough gives every tile
+          a note strip, so equal-height stretching lines their bottoms up. A
+          summary's strip appears only when the photo has a real caption, and
+          stretching then pads the caption-less tiles with a blank white band
+          the reader reads as a missing image. */}
+      <ol className={cn("grid gap-4 sm:grid-cols-2", isSummary && "items-start")}>
         {steps.map((step, idx) => {
           const note = step.spoken_note?.trim();
           const caption = cleanCaption(step.caption);
@@ -190,7 +196,14 @@ export function WalkthroughMarkdown({
           </p>
         </div>
       </div>
-      <div className="rounded-xl border border-border bg-muted/20 p-5 prose prose-sm max-w-none dark:prose-invert prose-headings:mt-5 prose-headings:mb-2 prose-headings:font-semibold prose-h2:text-base prose-h2:uppercase prose-h2:tracking-wide prose-h2:text-muted-foreground prose-h3:text-sm prose-h3:font-semibold prose-h3:text-foreground prose-p:leading-relaxed prose-p:my-2 prose-ul:my-2 prose-li:my-1 prose-img:rounded-lg prose-img:border prose-img:border-border">
+      {/*
+        `wt-markdown` carries the real styling (see styles.css). The prose-*
+        classes this used to rely on are a no-op — @tailwindcss/typography is
+        not installed — so headings rendered at body size and bullets lost their
+        markers, which Tailwind's preflight strips. Same fix, and same reason,
+        as the explicit `.tiptap` rules.
+      */}
+      <div className="wt-markdown rounded-xl border border-border bg-muted/20 p-5">
         <ReactMarkdown
           components={{
             img: ({ src, alt }) => {

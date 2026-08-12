@@ -143,6 +143,19 @@ function buildFallbackWalkthroughMarkdown(args: {
 }
 
 /**
+ * A caption that is really just the uploaded filename, so it should never be
+ * shown as prose. Mirrors looksLikeFilename() in public-pdf.ts, which guards
+ * the same content on the PDF's photo pages.
+ */
+function looksLikeFilenameCaption(s: string): boolean {
+  const t = s.trim();
+  if (!t) return true;
+  return /\.(jpe?g|png|webp|gif|heic|heif|avif)$/i.test(t)
+    || /^(?:walkthrough|photo|img|image|dsc|screenshot)[-_ ]?\d/i.test(t)
+    || /^https?:\/\//i.test(t);
+}
+
+/**
  * Draft the markdown body for a Summary walkthrough.
  *
  * The AI call is best-effort in exactly one direction: a transport or model
@@ -191,7 +204,12 @@ async function composeSummaryMarkdown(
   lines.push("", "## Photos");
   args.photos.forEach((p, i) => {
     lines.push("", `### Photo ${i + 1}`, "", `![Photo ${i + 1}](photo:${p.id})`);
-    if (p.caption?.trim()) lines.push("", `*${p.caption.trim()}*`);
+    // Only real captions. An unedited upload's caption is its filename, and the
+    // PDF's cover-summary extractor pulls running prose out of this markdown —
+    // so "1 (9).jpg" would be printed as a sentence on a client-facing cover.
+    // Same rule the PDF's own photo pages apply via looksLikeFilename().
+    const caption = p.caption?.trim();
+    if (caption && !looksLikeFilenameCaption(caption)) lines.push("", `*${caption}*`);
   });
 
   return { markdown: lines.join("\n").trim(), aiFailed };

@@ -64,7 +64,10 @@ export const PLANS: PlanPricing[] = [
     maxSeats: 50,
     adds: [
       "Company watermark",
-      "Walkthroughs + 100 Auto Reports/mo",
+      // "Recorded", not just "Walkthroughs": generating an AI Summary also
+      // files into the Walkthroughs tab and is available on any active plan.
+      // Recording a narrated walkthrough is the part this tier unlocks.
+      "Recorded walkthroughs + 100 Auto Reports/mo",
       "AI-assisted Site Logs",
       "Full checklists & templates",
       "Map view",

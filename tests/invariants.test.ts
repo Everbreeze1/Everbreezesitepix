@@ -1102,3 +1102,72 @@ describe("family: a summary must not claim a recording it never had", () => {
     expect(src).toMatch(/else if \(!isSummary\)[\s\S]{0,200}No spoken note captured/);
   });
 });
+
+describe("family: summary copy and layout must not inherit recording assumptions", () => {
+  /*
+   * Found by generating a real summary and reading the rendered page, the
+   * public share page and the produced PDF. Each defect below shipped through
+   * typecheck, build and the full test suite, because none of them is a type
+   * error — they are true statements about a recording printed on a document
+   * that never had one.
+   */
+
+  it("the summary markdown builder drops filename-only captions", () => {
+    /*
+     * An unedited upload's caption is its filename. The PDF's cover-summary
+     * extractor pulls running prose out of this markdown, so an unfiltered
+     * caption printed "1 (9).jpg" as a sentence on a client-facing cover.
+     * public-pdf.ts already guards its own photo pages with looksLikeFilename.
+     */
+    const src = stripComments(read("apps/api/src/domains/walkthroughs/service.ts"));
+    expect(src).toMatch(/looksLikeFilenameCaption/);
+    expect(src).toMatch(/if \(caption && !looksLikeFilenameCaption\(caption\)\)/);
+  });
+
+  it("the delete prompt tells a summary's owner their photos are safe", () => {
+    // A summary links the user's real gallery photos; "cannot be undone" alone
+    // reads as though deleting it destroys them too.
+    const src = stripComments(read("apps/web/src/features/walkthroughs/pages/WalkthroughDetailPage.tsx"));
+    expect(src).toMatch(/isSummary[\s\S]{0,120}photos are not affected/);
+  });
+
+  it("pricing does not sell 'Walkthroughs' as Pro-only", () => {
+    /*
+     * Summary generation keeps the any-active-plan gate but files into the
+     * Walkthroughs tab, so a bare "Walkthroughs" bullet under Pro is false for
+     * a Starter user who owns one. Recording is the part Pro unlocks.
+     */
+    const src = stripComments(read("apps/web/src/lib/pricing.ts"));
+    expect(src).not.toMatch(/["']Walkthroughs \+/);
+    expect(src).toMatch(/Recorded walkthroughs/);
+  });
+});
+
+describe("family: prose-* classes are inert in this app", () => {
+  /*
+   * @tailwindcss/typography is NOT installed, so every `prose-h2:uppercase`,
+   * `prose-li:my-1` etc. is a no-op while Tailwind's preflight still strips
+   * heading sizes, block margins and list markers. styles.css already says this
+   * for the `.tiptap` block; the walkthrough/summary markdown had the same bug,
+   * rendering AI headings at body size and bullets with no markers.
+   */
+  it("the typography plugin really is absent (this guard's premise)", () => {
+    const pkgs = ["package.json", "apps/web/package.json"].map(read).join("\n");
+    expect(pkgs).not.toMatch(/@tailwindcss\/typography/);
+  });
+
+  it("walkthrough markdown styles itself instead of relying on prose-*", () => {
+    const src = read("apps/web/src/components/WalkthroughReport.tsx");
+    expect(src).toMatch(/wt-markdown/);
+    // The inert utility soup must not come back on this block.
+    expect(src).not.toMatch(/prose-h2:uppercase/);
+  });
+
+  it("the wt-markdown rules actually exist in the stylesheet", () => {
+    const css = read("apps/web/src/styles.css");
+    for (const sel of [".wt-markdown h2", ".wt-markdown ul", ".wt-markdown li", ".wt-markdown p"]) {
+      expect(css).toContain(sel);
+    }
+    expect(css).toMatch(/\.wt-markdown ul \{[^}]*list-style: disc/);
+  });
+});

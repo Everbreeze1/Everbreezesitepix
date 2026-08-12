@@ -354,7 +354,12 @@ export function WalkthroughDetailPage() {
     if (!walk) return;
     if (
       !(await confirm({
-        description: "Delete this walkthrough? This cannot be undone.",
+        // The linked photos are the user's own gallery photos, so say plainly
+        // that deleting a summary does not touch them — otherwise "cannot be
+        // undone" reads as though the photos go too.
+        description: isSummary
+          ? "Delete this summary? Your photos are not affected. This cannot be undone."
+          : "Delete this walkthrough? This cannot be undone.",
         variant: "destructive",
       }))
     )
@@ -367,7 +372,7 @@ export function WalkthroughDetailPage() {
       toast.error(error.message);
       return;
     }
-    toast.success("Walkthrough deleted");
+    toast.success(isSummary ? "Summary deleted" : "Walkthrough deleted");
     navigate({
       to: "/projects/$projectId",
       params: { projectId: walk.project_id },

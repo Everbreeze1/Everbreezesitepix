@@ -1204,7 +1204,7 @@ function BillingSection({
   const heroCopy = isTeam
     ? {
         title: "Built for the whole crew.",
-        desc: "Shared workspaces, watermarks, collaboration, walkthrough notes, and unlimited Auto Reports.",
+        desc: "Shared workspaces, watermarks, collaboration, recorded walkthroughs, and unlimited Auto Reports.",
       }
     : isPro
       ? {

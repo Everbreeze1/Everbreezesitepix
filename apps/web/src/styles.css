@@ -445,3 +445,68 @@
   text-transform: uppercase;
   color: var(--primary);
 }
+
+/* Walkthrough / summary AI markdown (WalkthroughReport.tsx — detail page, the
+   public share page and anything else rendering summary_markdown).
+
+   Same root cause as the .tiptap rules above: the component's className list
+   used prose-h2:uppercase, prose-li:my-1 and friends, which are no-ops without
+   @tailwindcss/typography. Tailwind's preflight zeroes heading sizes, block
+   margins and list markers, so an AI summary's "## Overview" / "## Key Points"
+   rendered at body size and its bullets rendered as bare lines with no marker.
+   Declared here rather than adding the plugin, to avoid restyling every other
+   `prose` consumer in the app at the same time. */
+.wt-markdown {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--foreground);
+}
+.wt-markdown > :first-child { margin-top: 0; }
+.wt-markdown > :last-child { margin-bottom: 0; }
+.wt-markdown p { margin: 0.5rem 0; line-height: 1.65; }
+.wt-markdown h1 { font-size: 1.25rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+/* Section labels ("Overview", "Key Points", "Summary") read as eyebrows, which
+   is what the prose-h2 overrides were reaching for. */
+.wt-markdown h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+  margin: 1.25rem 0 0.5rem;
+}
+.wt-markdown h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--foreground);
+  margin: 1.25rem 0 0.5rem;
+}
+.wt-markdown ul { list-style: disc; padding-left: 1.25rem; margin: 0.5rem 0; }
+.wt-markdown ol { list-style: decimal; padding-left: 1.25rem; margin: 0.5rem 0; }
+.wt-markdown li { margin: 0.25rem 0; }
+.wt-markdown li::marker { color: var(--muted-foreground); }
+.wt-markdown strong { font-weight: 600; }
+.wt-markdown em { font-style: italic; }
+.wt-markdown a { color: var(--primary); text-decoration: underline; }
+.wt-markdown blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 0.75rem;
+  margin: 0.75rem 0;
+  color: var(--muted-foreground);
+}
+.wt-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125em;
+  background: var(--muted);
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+}
+.wt-markdown hr { border: 0; border-top: 1px solid var(--border); margin: 1rem 0; }
+.wt-markdown img { border-radius: 0.5rem; border: 1px solid var(--border); margin: 0.75rem 0; }
+.wt-markdown table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
+.wt-markdown th, .wt-markdown td {
+  border: 1px solid var(--border);
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+}
+.wt-markdown th { background: var(--muted); font-weight: 600; }
