@@ -982,9 +982,7 @@ describe("family: a photo the user took is a photo the user can find", () => {
     it(`${file.split("/").pop()} does not filter walkthrough captures out of a photo read`, () => {
       const src = stripComments(read(file));
       // The PostgREST form: .or("phase.is.null,phase.neq.walkthrough")
-      expect(src, "phase.neq.walkthrough exclusion is back").not.toMatch(
-        /phase\.neq\.walkthrough/,
-      );
+      expect(src, "phase.neq.walkthrough exclusion is back").not.toMatch(/phase\.neq\.walkthrough/);
       // The storage-path form, query-side and in-memory.
       expect(src, "/walkthroughs/ path exclusion is back").not.toMatch(
         /["'`]%?\/walkthroughs\/%?["'`]/,
@@ -1019,6 +1017,47 @@ describe("family: a photo the user took is a photo the user can find", () => {
       });
     }
     expect(offenders).toEqual([]);
+  });
+
+  it("Hide actually hides, on both halves of the timeline", () => {
+    /*
+     * The bulk bar's Hide button sets `photos.hidden` and toasts "N hidden from
+     * timeline". Nothing filtered the column — not one query in the repo — so
+     * the action did nothing at all beyond painting a badge on the tile.
+     *
+     * The timeline is two reads that must agree: listTimelineActivity produces
+     * the calendar's day counts, loadDayPhotos produces the photos behind a
+     * day. If only one honoured the flag, opening a day would contradict the
+     * count printed on it.
+     */
+    const HIDE_AWARE = [
+      "apps/api/src/domains/timeline/service.ts",
+      "apps/web/src/features/gallery/components/PhotoCalendar.tsx",
+    ];
+    for (const rel of HIDE_AWARE) {
+      expect(stripComments(read(rel)), `${rel} ignores photos.hidden`).toMatch(
+        /\.eq\(\s*["']hidden["']\s*,\s*false\s*\)/,
+      );
+    }
+  });
+
+  it("Hide does not make a photo unreachable", () => {
+    /*
+     * The counterpart. `hidden` must NOT be filtered on the project grid or the
+     * gallery, because the badge those surfaces render is the only way a user
+     * finds a hidden photo again to unhide it. Filtering there would turn a
+     * reversible action into a one-way disappearance — the exact shape of the
+     * walkthrough bug this whole family exists for.
+     */
+    const MUST_STILL_SHOW = [
+      "apps/web/src/features/projects/pages/ProjectDetailPage.tsx",
+      "apps/web/src/features/gallery/pages/GalleryPage.tsx",
+    ];
+    for (const rel of MUST_STILL_SHOW) {
+      expect(stripComments(read(rel)), `${rel} hides a photo the user can't unhide`).not.toMatch(
+        /\.eq\(\s*["']hidden["']\s*,\s*false\s*\)/,
+      );
+    }
   });
 
   it("the archive job still scans on the column it owns", () => {
@@ -1833,5 +1872,40 @@ describe("family: every GoTrue email action type must have a template", () => {
     for (const t of REQUIRED_TYPES) {
       expect(keys.has(t), `EMAIL_SUBJECTS is missing "${t}"`).toBe(true);
     }
+  });
+});
+
+describe("family: an email-change confirmation must reach the NEW address", () => {
+  /*
+   * `body.user.email` is still the OLD address during an email change — the
+   * change is pending precisely because the new one is unverified. The handler
+   * sent every message to `user.email`, so the "confirm your new email" link
+   * went to the address that already worked. The new address was never asked,
+   * `new_email` stayed set, `email` never moved, and the user could not
+   * complete the change by any means.
+   *
+   * Observed in production: one Resend message, delivered to the old address,
+   * change stuck pending.
+   */
+  const SRC = "apps/api/src/domains/email/auth-send.ts";
+
+  it("the recipient is chosen by action type, not hardcoded to user.email", () => {
+    const src = stripComments(read(SRC));
+    expect(src).toMatch(/const recipient/);
+    // The send must use the computed recipient.
+    expect(src).toMatch(/to:\s*recipient/);
+    expect(src).not.toMatch(/sendEmail\(\{\s*\n?\s*to:\s*email,/);
+  });
+
+  it("email_change and email_change_new resolve to the new address", () => {
+    const src = stripComments(read(SRC));
+    const start = src.indexOf("const recipient");
+    const block = src.slice(start, start + 320);
+    expect(block).toMatch(/email_change_new/);
+    expect(block).toMatch(/newEmail/);
+  });
+
+  it("new_email is read off email_data", () => {
+    expect(stripComments(read(SRC))).toMatch(/emailData\.new_email/);
   });
 });

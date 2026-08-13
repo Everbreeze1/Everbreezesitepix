@@ -141,9 +141,33 @@ export async function handleAuthSendEmail(request: Request): Promise<Response> {
   const emailData = body?.email_data ?? {};
   const emailType = emailData.email_action_type as string | undefined;
 
+  /*
+   * WHO the message goes to is not always `user.email`.
+   *
+   * For an email change, `user.email` is still the OLD address — the change is
+   * pending precisely because the new one is unverified. Sending the
+   * "confirm your new email" link there means the new address is never asked to
+   * confirm, so `new_email` stays set, `email` never moves, and the change can
+   * never complete no matter what the user does. That is exactly what happened
+   * in production: one message, delivered to the old address, change stuck.
+   *
+   *   email_change_current -> the OLD address approves the change
+   *   email_change_new     -> the NEW address confirms it
+   *   email_change         -> single-confirmation mode; it is the NEW address
+   *                           that has to prove ownership
+   *
+   * `new_email` is carried on email_data; fall back to user.email so a missing
+   * field degrades to today's behaviour rather than dropping the mail.
+   */
   if (!email || !emailType) {
     return jsonError(400, "invalid_payload", "Invalid payload");
   }
+
+  const newEmail = (emailData.new_email ?? emailData.email) as string | undefined;
+  const recipient: string =
+    emailType === "email_change" || emailType === "email_change_new"
+      ? (newEmail ?? email)
+      : email;
 
   const EmailTemplate = EMAIL_TEMPLATES[emailType];
   if (!EmailTemplate) {
@@ -153,17 +177,18 @@ export async function handleAuthSendEmail(request: Request): Promise<Response> {
   console.log("Auth email hook", {
     emailType,
     email_redacted: redactEmail(email),
+    recipient_redacted: redactEmail(recipient),
   });
 
   const confirmationUrl = buildConfirmationUrl(emailData);
   const element = React.createElement(EmailTemplate, {
     siteName: SITE_NAME,
     siteUrl: `https://${ROOT_DOMAIN}`,
-    recipient: email,
+    recipient,
     confirmationUrl,
     token: emailData.token,
     email,
-    oldEmail: emailData.old_email ?? emailData.email,
+    oldEmail: emailData.old_email ?? email,
     newEmail: emailData.new_email ?? emailData.email,
   });
   const html = await render(element);
@@ -171,7 +196,7 @@ export async function handleAuthSendEmail(request: Request): Promise<Response> {
 
   try {
     const { id } = await sendEmail({
-      to: email,
+      to: recipient,
       subject: EMAIL_SUBJECTS[emailType] || "Notification",
       html,
       text,

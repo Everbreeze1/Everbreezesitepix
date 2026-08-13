@@ -655,7 +655,10 @@ async function loadDayPhotos(
   const from = start.toISOString();
   const to = end.toISOString();
 
-  let q = supabase
+  // `as any` for the same reason ProjectDetailPage's photo read uses it:
+  // `hidden` and `deleted_at` are real columns that the generated types in
+  // packages/db predate, so `.eq("hidden", ...)` does not typecheck without it.
+  let q = (supabase as any)
     .from("photos")
     .select(
       "id, project_id, storage_path, thumb_path, image_url, caption, phase, tags, taken_at, created_at",
@@ -663,6 +666,11 @@ async function loadDayPhotos(
     // No `archived` filter — that column is the compression job's bookkeeping,
     // not a user's decision to hide a photo. See the note in GalleryPage.
     .is("deleted_at", null)
+    // `hidden` is the user's decision, and the calendar is the timeline the
+    // Hide button names. The day counts above it come from
+    // listTimelineActivity, which filters the same way — if only one of the two
+    // honoured it, opening a day would contradict its own count.
+    .eq("hidden", false)
     .or(
       `and(taken_at.gte.${from},taken_at.lt.${to}),and(taken_at.is.null,created_at.gte.${from},created_at.lt.${to})`,
     )

@@ -141,6 +141,17 @@ export async function listTimelineActivityService(
     // No `archived` filter — that column is the compression job's bookkeeping,
     // not a user's decision to hide a photo. See the note in GalleryPage.
     .is("deleted_at", null)
+    /*
+     * `hidden` IS the user's decision, and this is the surface it is about.
+     * The bulk bar's Hide button says "N hidden from timeline" — this query
+     * builds that timeline's day counts, and it did not honour the flag, so
+     * the toast promised something no query delivered. Hiding a photo did
+     * nothing at all except badge it.
+     *
+     * Deliberately NOT applied to the project grid or the gallery: the badge
+     * there is how a user finds a hidden photo to unhide it.
+     */
+    .eq("hidden", false)
     // Walkthrough frames used to be excluded here as "capture artefacts". They
     // are a record of a day's work — often the only one, on a day the crew
     // walked the site instead of shooting stills — so the heatmap counts them.
