@@ -1917,3 +1917,42 @@ describe("family: an email-change confirmation must reach the NEW address", () =
     expect(src).not.toMatch(/newEmail\s*=\s*\([^)]*emailData\.email/);
   });
 });
+
+describe("family: a secure email change needs BOTH emails from one hook call", () => {
+  /*
+   * GoTrue calls the Send Email hook ONCE for an email change and hands over
+   * two tokens — `token_hash` for the current address, `token_hash_new` for the
+   * new one — because the integrator is expected to send both messages. We sent
+   * a single email, so only one half was ever confirmed: `new_email` stayed
+   * set, `email` never moved, and the user could not finish the change by any
+   * route. Verified in production three times before the cause was found.
+   */
+  const SRC = "apps/api/src/domains/email/auth-send.ts";
+
+  it("one email_change call fans out to two messages", () => {
+    const src = stripComments(read(SRC));
+    expect(src).toMatch(/bothTokens/);
+    expect(src).toMatch(/token_hash_new/);
+    // A messages list, not a single hardcoded send.
+    expect(src).toMatch(/const messages/);
+    expect(src).toMatch(/for \(const m of messages\)/);
+  });
+
+  it("the two messages go to different addresses", () => {
+    const src = stripComments(read(SRC));
+    const start = src.indexOf("if (emailType === \"email_change\" && bothTokens");
+    expect(start, "the fan-out branch is missing").toBeGreaterThan(-1);
+    const block = src.slice(start, start + 420);
+    expect(block).toMatch(/to:\s*email\b/); // current address
+    expect(block).toMatch(/to:\s*newEmail\b/); // new address
+  });
+
+  it("each message builds its own confirmation URL", () => {
+    /*
+     * Both links must not carry the same token — the new address needs
+     * token_hash_new, which buildConfirmationUrl derives from the action type.
+     */
+    const src = stripComments(read(SRC));
+    expect(src).toMatch(/buildConfirmationUrl\(\{[\s\S]{0,120}email_action_type/);
+  });
+});

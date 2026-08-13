@@ -201,36 +201,69 @@ export async function handleAuthSendEmail(request: Request): Promise<Response> {
     return jsonError(400, "unknown_email_type", `Unknown email type: ${emailType}`);
   }
 
+  /*
+   * An email change under Supabase's "secure email change" needs BOTH addresses
+   * to confirm, but GoTrue calls this hook only ONCE. It hands over two tokens
+   * — `token_hash` for the current address and `token_hash_new` for the new one
+   * — precisely because the integrator is expected to send both messages. We
+   * sent a single email, so exactly one half was ever confirmed: `new_email`
+   * stayed set, `email` never moved, and the change could not complete no
+   * matter what the user did.
+   *
+   * Producing the message list here rather than sending inline keeps the
+   * "one hook call, N emails" case explicit, and keeps the ordinary flows as a
+   * single-entry list.
+   */
+  const isChange = emailType.startsWith("email_change");
+  const bothTokens = !!emailData.token_hash && !!emailData.token_hash_new;
+  const messages: Array<{ to: string; subject: string; action: string }> = [];
+
+  if (emailType === "email_change" && bothTokens && newEmail && newEmail !== email) {
+    messages.push(
+      { to: email, subject: EMAIL_SUBJECTS.email_change_current, action: "email_change_current" },
+      { to: newEmail, subject: EMAIL_SUBJECTS.email_change_new, action: "email_change_new" },
+    );
+  } else {
+    messages.push({
+      to: recipient,
+      subject: EMAIL_SUBJECTS[emailType] || "Notification",
+      action: emailType,
+    });
+  }
+
   console.log("Auth email hook", {
     emailType,
     email_redacted: redactEmail(email),
-    recipient_redacted: redactEmail(recipient),
+    messages: messages.map((m) => ({ action: m.action, to: redactEmail(m.to) })),
   });
 
-  const confirmationUrl = buildConfirmationUrl(emailData);
-  const element = React.createElement(EmailTemplate, {
-    siteName: SITE_NAME,
-    siteUrl: `https://${ROOT_DOMAIN}`,
-    recipient,
-    confirmationUrl,
-    token: emailData.token,
-    email,
-    oldEmail: emailData.old_email ?? email,
-    newEmail: emailData.new_email ?? emailData.email,
-  });
-  const html = await render(element);
-  const text = await render(element, { plainText: true });
-
+  const ids: string[] = [];
   try {
-    const { id } = await sendEmail({
-      to: recipient,
-      subject: EMAIL_SUBJECTS[emailType] || "Notification",
-      html,
-      text,
-    });
-    return jsonOk({ success: true, id });
+    for (const m of messages) {
+      // Each message gets the confirmation URL for ITS half of the change, so
+      // the link in the new address's email carries token_hash_new.
+      const confirmationUrl = buildConfirmationUrl({
+        ...emailData,
+        email_action_type: isChange ? m.action : emailType,
+      });
+      const element = React.createElement(EmailTemplate, {
+        siteName: SITE_NAME,
+        siteUrl: `https://${ROOT_DOMAIN}`,
+        recipient: m.to,
+        confirmationUrl,
+        token: emailData.token,
+        email,
+        oldEmail: emailData.old_email ?? email,
+        newEmail: newEmail ?? emailData.email,
+      });
+      const html = await render(element);
+      const text = await render(element, { plainText: true });
+      const { id } = await sendEmail({ to: m.to, subject: m.subject, html, text });
+      ids.push(id);
+    }
+    return jsonOk({ success: true, id: ids[0], ids });
   } catch (error) {
-    console.error("Failed to send auth email", { emailType, error });
+    console.error("Failed to send auth email", { emailType, sent: ids.length, error });
     return jsonError(500, "email_send_failed", "Failed to send email");
   }
 }
