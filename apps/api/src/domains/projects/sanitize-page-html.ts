@@ -67,6 +67,22 @@ const OPTIONS: sanitizeHtml.IOptions = {
     td: ["colspan", "rowspan", "colwidth"],
     th: ["colspan", "rowspan", "colwidth"],
     col: ["span", "width"],
+    /*
+     * TipTap's task list is `<ul data-type="taskList">` /
+     * `<li data-type="taskItem" data-checked>`, and that markup IS the
+     * checkbox: the extension keys off it, and styles.css only draws a tick
+     * box for `ul[data-type="taskList"]`. Stripping it turned every checklist
+     * in a seeded template into plain bullets — silently, and permanently,
+     * because createPageFromTemplateService writes the sanitised HTML into
+     * project_pages. A trade checklist that cannot be ticked is most of why
+     * those templates exist, so these two names are allowed through.
+     *
+     * They are inert data attributes on list tags with fixed names — no URL,
+     * no handler, nothing the renderer executes — so this does not widen the
+     * XSS surface the allow-list is here to close.
+     */
+    ul: ["data-type"],
+    li: ["data-type", "data-checked"],
     // `class` carries the editor's own formatting (the `tiptap prose` styles);
     // `style` is separately restricted by `allowedStyles` below. No other
     // attribute survives, which is what removes every `on*` handler.

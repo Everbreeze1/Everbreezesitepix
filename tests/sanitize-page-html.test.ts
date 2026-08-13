@@ -100,6 +100,30 @@ describe("sanitizePageHtml — preserves legitimate document content", () => {
     expect(out).toContain("text-align:center");
   });
 
+  /*
+   * A task list is only a task list because of `data-type`. TipTap's extension
+   * keys off it and styles.css draws the tick box from
+   * `ul[data-type="taskList"]`, so stripping the attribute turned every
+   * checklist in a seeded template into plain bullets — and permanently, since
+   * createPageFromTemplateService writes the sanitised HTML into project_pages.
+   */
+  it("keeps the checklist markup that makes a task list tickable", () => {
+    const html =
+      '<ul data-type="taskList">' +
+      '<li data-type="taskItem" data-checked="false"><p>Power isolated</p></li>' +
+      '<li data-type="taskItem" data-checked="true"><p>Panel cover refitted</p></li>' +
+      "</ul>";
+    expect(sanitizePageHtml(html)).toBe(html);
+  });
+
+  it("still strips data attributes it has no reason to trust", () => {
+    // The task-list allowance is two named attributes on two list tags, not an
+    // open door to `data-*`.
+    const out = sanitizePageHtml('<p data-anything="x">hi</p><ul data-checked="x"><li>a</li></ul>');
+    expect(out).not.toContain("data-anything");
+    expect(out).not.toContain("<ul data-checked");
+  });
+
   it("passes through null and empty input untouched", () => {
     expect(sanitizePageHtml(null)).toBeNull();
     expect(sanitizePageHtml("")).toBe("");
