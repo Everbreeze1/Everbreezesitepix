@@ -40,6 +40,20 @@ export {
 export type { PublicPhotoShare } from "./domains/photos/shares";
 
 export {
+  getProjectShareService,
+  setProjectShareService,
+  getPublicProjectShareService,
+  getProjectShareInputSchema,
+  setProjectShareInputSchema,
+  publicProjectShareInputSchema,
+} from "./domains/projects/public-share";
+export type {
+  ProjectShareState,
+  PublicProjectShare,
+  PublicProjectSharePhoto,
+} from "./domains/projects/public-share";
+
+export {
   TRASH_RETENTION_DAYS,
   listTrashedPhotosService,
   restorePhotosService,

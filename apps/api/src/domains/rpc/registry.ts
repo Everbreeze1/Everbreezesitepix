@@ -40,6 +40,14 @@ import {
 } from "../trash/service";
 import { combineProjectsInputSchema, combineProjectsService } from "../projects/actions";
 import {
+  getProjectShareInputSchema,
+  getProjectShareService,
+  getPublicProjectShareService,
+  publicProjectShareInputSchema,
+  setProjectShareInputSchema,
+  setProjectShareService,
+} from "../projects/public-share";
+import {
   getPublicProjectReportService,
   publicProjectReportInputSchema,
 } from "../reports/public-get";
@@ -933,6 +941,20 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   getPublicProjectPage: pub(
     (d) => publicProjectPageInputSchema.parse(d),
     getPublicProjectPageService as (data: never) => Promise<unknown>,
+  ),
+  // The project's own public link — what its printed QR code resolves to.
+  // See domains/projects/public-share.ts.
+  getProjectShare: authed(
+    (d) => getProjectShareInputSchema.parse(d),
+    getProjectShareService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  setProjectShare: authed(
+    (d) => setProjectShareInputSchema.parse(d),
+    setProjectShareService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  getPublicProjectShare: pub(
+    (d) => publicProjectShareInputSchema.parse(d),
+    getPublicProjectShareService as (data: never) => Promise<unknown>,
   ),
   // Checklists and workflows share one payload shape and one browser-side
   // document renderer; see domains/projects/field-records.ts.

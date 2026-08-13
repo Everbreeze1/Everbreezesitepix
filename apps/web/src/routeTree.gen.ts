@@ -45,6 +45,7 @@ import { Route as ShareWorkflowsTokenRouteImport } from './routes/share.workflow
 import { Route as ShareWalkthroughsTokenRouteImport } from './routes/share.walkthroughs.$token'
 import { Route as ShareShowcasesTokenRouteImport } from './routes/share.showcases.$token'
 import { Route as ShareReportsTokenRouteImport } from './routes/share.reports.$token'
+import { Route as ShareProjectsTokenRouteImport } from './routes/share.projects.$token'
 import { Route as SharePhotosTokenRouteImport } from './routes/share.photos.$token'
 import { Route as SharePagesTokenRouteImport } from './routes/share.pages.$token'
 import { Route as ShareChecklistsTokenRouteImport } from './routes/share.checklists.$token'
@@ -248,6 +249,11 @@ const ShareReportsTokenRoute = ShareReportsTokenRouteImport.update({
   path: '/share/reports/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShareProjectsTokenRoute = ShareProjectsTokenRouteImport.update({
+  id: '/share/projects/$token',
+  path: '/share/projects/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SharePhotosTokenRoute = SharePhotosTokenRouteImport.update({
   id: '/share/photos/$token',
   path: '/share/photos/$token',
@@ -416,6 +422,7 @@ export interface FileRoutesByFullPath {
   '/share/checklists/$token': typeof ShareChecklistsTokenRoute
   '/share/pages/$token': typeof SharePagesTokenRoute
   '/share/photos/$token': typeof SharePhotosTokenRoute
+  '/share/projects/$token': typeof ShareProjectsTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
   '/share/showcases/$token': typeof ShareShowcasesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
@@ -475,6 +482,7 @@ export interface FileRoutesByTo {
   '/share/checklists/$token': typeof ShareChecklistsTokenRoute
   '/share/pages/$token': typeof SharePagesTokenRoute
   '/share/photos/$token': typeof SharePhotosTokenRoute
+  '/share/projects/$token': typeof ShareProjectsTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
   '/share/showcases/$token': typeof ShareShowcasesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
@@ -537,6 +545,7 @@ export interface FileRoutesById {
   '/share/checklists/$token': typeof ShareChecklistsTokenRoute
   '/share/pages/$token': typeof SharePagesTokenRoute
   '/share/photos/$token': typeof SharePhotosTokenRoute
+  '/share/projects/$token': typeof ShareProjectsTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
   '/share/showcases/$token': typeof ShareShowcasesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
@@ -599,6 +608,7 @@ export interface FileRouteTypes {
     | '/share/checklists/$token'
     | '/share/pages/$token'
     | '/share/photos/$token'
+    | '/share/projects/$token'
     | '/share/reports/$token'
     | '/share/showcases/$token'
     | '/share/walkthroughs/$token'
@@ -658,6 +668,7 @@ export interface FileRouteTypes {
     | '/share/checklists/$token'
     | '/share/pages/$token'
     | '/share/photos/$token'
+    | '/share/projects/$token'
     | '/share/reports/$token'
     | '/share/showcases/$token'
     | '/share/walkthroughs/$token'
@@ -719,6 +730,7 @@ export interface FileRouteTypes {
     | '/share/checklists/$token'
     | '/share/pages/$token'
     | '/share/photos/$token'
+    | '/share/projects/$token'
     | '/share/reports/$token'
     | '/share/showcases/$token'
     | '/share/walkthroughs/$token'
@@ -756,6 +768,7 @@ export interface RootRouteChildren {
   ShareChecklistsTokenRoute: typeof ShareChecklistsTokenRoute
   SharePagesTokenRoute: typeof SharePagesTokenRoute
   SharePhotosTokenRoute: typeof SharePhotosTokenRoute
+  ShareProjectsTokenRoute: typeof ShareProjectsTokenRoute
   ShareReportsTokenRoute: typeof ShareReportsTokenRoute
   ShareShowcasesTokenRoute: typeof ShareShowcasesTokenRoute
   ShareWalkthroughsTokenRoute: typeof ShareWalkthroughsTokenRoute
@@ -1014,6 +1027,13 @@ declare module '@tanstack/react-router' {
       path: '/share/reports/$token'
       fullPath: '/share/reports/$token'
       preLoaderRoute: typeof ShareReportsTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/projects/$token': {
+      id: '/share/projects/$token'
+      path: '/share/projects/$token'
+      fullPath: '/share/projects/$token'
+      preLoaderRoute: typeof ShareProjectsTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/share/photos/$token': {
@@ -1300,6 +1320,7 @@ const rootRouteChildren: RootRouteChildren = {
   ShareChecklistsTokenRoute: ShareChecklistsTokenRoute,
   SharePagesTokenRoute: SharePagesTokenRoute,
   SharePhotosTokenRoute: SharePhotosTokenRoute,
+  ShareProjectsTokenRoute: ShareProjectsTokenRoute,
   ShareReportsTokenRoute: ShareReportsTokenRoute,
   ShareShowcasesTokenRoute: ShareShowcasesTokenRoute,
   ShareWalkthroughsTokenRoute: ShareWalkthroughsTokenRoute,

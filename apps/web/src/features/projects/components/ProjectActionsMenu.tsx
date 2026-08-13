@@ -22,7 +22,6 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
-import QRCode from "qrcode";
 import JSZip from "jszip";
 
 import { Button } from "@/components/ui/button";
@@ -48,9 +47,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
+import { useProfile } from "@/hooks/use-profile";
 import { listProjectGroups, addProjectToGroup } from "@/lib/project-groups.functions";
 import { softDeleteProject } from "@/lib/trash.functions";
 import { combineProjects } from "@/lib/project-actions.functions";
+import { ProjectQrDialog } from "./ProjectQrDialog";
 
 interface ProjectActionsMenuProps {
   project: {
@@ -82,6 +83,15 @@ interface ProjectActionsMenuProps {
 /** Matches the section headings in GenerateDocumentMenu, the menu's neighbour in the header. */
 const sectionLabel = "text-[10px] uppercase tracking-wide text-muted-foreground";
 
+/**
+ * One icon treatment for every non-destructive row.
+ *
+ * Two of these used to be `text-primary` and the rest inherited, which read as
+ * two of the eight actions being highlighted for a reason nobody could name.
+ * Destructive rows still differ — they take their colour from the item.
+ */
+const itemIcon = "mr-2 h-4 w-4 shrink-0 text-muted-foreground";
+
 function projectAddress(project: ProjectActionsMenuProps["project"]) {
   return (
     [project.street, project.city, project.state, project.zip].filter(Boolean).join(", ") ||
@@ -99,15 +109,27 @@ function googleMapsUrl(project: ProjectActionsMenuProps["project"]) {
 }
 
 /**
- * Title + one-line explanation, the same shape GenerateDocumentMenu uses for its
- * items. The two menus sit next to each other in the project header, so they
- * read as one system instead of two different products.
+ * Title, plus an explanation only where one is worth the line.
+ *
+ * The same shape GenerateDocumentMenu uses — the two menus sit next to each
+ * other in the project header, so they read as one system instead of two
+ * different products — but `hint` is optional, and most items now go without.
+ *
+ * Every item used to carry a full sentence of grey text. Eight of those stacked
+ * up is a dropdown taller than the viewport and a paragraph to read before you
+ * can pick "Edit details", which is what client feedback meant by "it looks
+ * crazy". A hint earns its line when the label alone would leave someone
+ * guessing what the action destroys, publishes, or keeps — archive vs delete,
+ * merge, the public QR link, the 60-day trash window. "Edit details" and
+ * "Recently deleted" say everything about themselves already.
  */
-function MenuText({ title, hint }: { title: string; hint: string }) {
+function MenuText({ title, hint }: { title: string; hint?: string }) {
   return (
     <span className="min-w-0">
-      <span className="block font-bold">{title}</span>
-      <span className="block text-xs font-normal leading-snug text-muted-foreground">{hint}</span>
+      <span className="block font-semibold">{title}</span>
+      {hint && (
+        <span className="block text-xs font-normal leading-snug text-muted-foreground">{hint}</span>
+      )}
     </span>
   );
 }
@@ -117,9 +139,10 @@ function MenuText({ title, hint }: { title: string; hint: string }) {
  *
  * Deliberately *not* modelled on the reference app's version. Same practical
  * jobs — because those are what field crews actually need — but grouped by
- * intent (this project / organize / share / recovery) rather than one long
- * list plus a "danger zone", worded in our own vocabulary, and rendered with
- * this app's two-line item style. Trash and Delete live together under
+ * intent (edit / organize / share / recovery) rather than one long list plus a
+ * "danger zone", worded in our own vocabulary, and rendered with this app's
+ * item style: a bold label, and a second line only where one is worth its
+ * height (see MenuText). Trash and Delete live together under
  * "Recovery" because both are the same 60-day soft-delete lifecycle; splitting
  * them across the menu was the reference app's arrangement, not ours.
  */
@@ -139,7 +162,11 @@ export function ProjectActionsMenu({
   const [groupOpen, setGroupOpen] = useState(false);
   const [combineOpen, setCombineOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Only for the printed QR sheet's letterhead — absent is fine, the sheet just
+  // drops that line.
+  const { profile } = useProfile();
 
   const listGroups = listProjectGroups;
   const addToGroup = addProjectToGroup;
@@ -301,27 +328,6 @@ export function ProjectActionsMenu({
   };
 
   // ------------------------------------------------------------------
-  // QR code
-  // ------------------------------------------------------------------
-  const downloadQR = async () => {
-    try {
-      const url = `${window.location.origin}/projects/${project.id}`;
-      const dataUrl = await QRCode.toDataURL(url, {
-        width: 512,
-        margin: 2,
-        color: { dark: "#000000", light: "#ffffff" },
-      });
-      const link = document.createElement("a");
-      link.href = dataUrl;
-      link.download = `${project.name.replace(/[^a-z0-9]/gi, "_")}-qr.png`;
-      link.click();
-      setOpen(false);
-    } catch {
-      toast.error("Could not generate QR code");
-    }
-  };
-
-  // ------------------------------------------------------------------
   // Download all photos
   // ------------------------------------------------------------------
   const downloadAllPhotos = async () => {
@@ -409,17 +415,21 @@ export function ProjectActionsMenu({
             <MoreVertical className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-[19rem] max-w-[calc(100vw-2rem)]">
-          <DropdownMenuLabel className={sectionLabel}>This project</DropdownMenuLabel>
-
+        <DropdownMenuContent align="end" className="w-72 max-w-[calc(100vw-2rem)]">
+          {/*
+            No label over this first pair. "This project" restated the heading of
+            the page the menu is attached to, and a section label above the very
+            first item labels nothing — the two below it separate groups, which
+            is the only job these do.
+          */}
           <DropdownMenuItem
             onClick={() => {
               setOpen(false);
               onEdit();
             }}
           >
-            <SquarePen className="mr-2 h-4 w-4 text-primary" />
-            <MenuText title="Edit details" hint="Name, address, status and description" />
+            <SquarePen className={itemIcon} />
+            <MenuText title="Edit details" />
           </DropdownMenuItem>
 
           <DropdownMenuItem
@@ -429,16 +439,15 @@ export function ProjectActionsMenu({
             }}
           >
             {isArchived ? (
-              <ArchiveRestore className="mr-2 h-4 w-4 text-primary" />
+              <ArchiveRestore className={itemIcon} />
             ) : (
-              <Archive className="mr-2 h-4 w-4 text-primary" />
+              <Archive className={itemIcon} />
             )}
+            {/* Keeps its hint: "archive" and "delete" are the pair people mix up. */}
             <MenuText
               title={isArchived ? "Move back to active" : "Move to archive"}
               hint={
-                isArchived
-                  ? "Show it in the active project list again"
-                  : "Keeps everything, just clears it off the active list"
+                isArchived ? "Back on the active list" : "Keeps everything, off the active list"
               }
             />
           </DropdownMenuItem>
@@ -452,8 +461,8 @@ export function ProjectActionsMenu({
               setGroupOpen(true);
             }}
           >
-            <FolderPlus className="mr-2 h-4 w-4" />
-            <MenuText title="File under a group" hint="Keep related job sites together" />
+            <FolderPlus className={itemIcon} />
+            <MenuText title="File under a group" />
           </DropdownMenuItem>
 
           <DropdownMenuItem
@@ -462,7 +471,8 @@ export function ProjectActionsMenu({
               setCombineOpen(true);
             }}
           >
-            <GitMerge className="mr-2 h-4 w-4" />
+            <GitMerge className={itemIcon} />
+            {/* Keeps its hint: it empties this project and cannot be undone. */}
             <MenuText
               title="Merge into another project"
               hint="Moves every photo, task and document across"
@@ -480,11 +490,11 @@ export function ProjectActionsMenu({
                 rel="noopener noreferrer"
                 className="flex cursor-pointer items-center"
               >
-                <Navigation className="mr-2 h-4 w-4" />
-                {/* Pin-only projects have no address string, so fall back to a generic hint. */}
+                <Navigation className={itemIcon} />
+                {/* The address is the hint — pin-only projects simply go without. */}
                 <MenuText
                   title="Open location in Maps"
-                  hint={projectAddress(project) || "Directions to this site"}
+                  hint={projectAddress(project) ?? undefined}
                 />
                 <ExternalLink className="ml-2 h-3 w-3 shrink-0 opacity-50" />
               </a>
@@ -494,11 +504,16 @@ export function ProjectActionsMenu({
           <DropdownMenuItem
             onClick={() => {
               setOpen(false);
-              void downloadQR();
+              setQrOpen(true);
             }}
           >
-            <QrCode className="mr-2 h-4 w-4" />
-            <MenuText title="Save QR code" hint="Print it on site — a scan opens this project" />
+            <QrCode className={itemIcon} />
+            {/*
+              Keeps its hint, and the hint is the whole point: this code now
+              resolves without a login, so the person clicking needs to know
+              that before they print it and tape it to a door.
+            */}
+            <MenuText title="QR code for this job" hint="Anyone can scan it — no sign-in" />
           </DropdownMenuItem>
 
           <DropdownMenuItem
@@ -508,13 +523,13 @@ export function ProjectActionsMenu({
             }}
             disabled={photos.length === 0}
           >
-            <FileArchive className="mr-2 h-4 w-4" />
+            <FileArchive className={itemIcon} />
             <MenuText
               title="Export photos as ZIP"
               hint={
                 photos.length === 0
-                  ? "No field captures yet"
-                  : `${photos.length} field capture${photos.length === 1 ? "" : "s"}, original quality`
+                  ? "No photos yet"
+                  : `${photos.length} photo${photos.length === 1 ? "" : "s"}, original quality`
               }
             />
           </DropdownMenuItem>
@@ -525,7 +540,8 @@ export function ProjectActionsMenu({
           {/*
             Trash and Delete belong to the same 60-day soft-delete lifecycle, so
             they sit together instead of being split between the main list and a
-            separate "danger zone" at the bottom.
+            separate "danger zone" at the bottom. The window is stated once, on
+            Delete — repeating it on both items was the same sentence twice.
           */}
           <DropdownMenuLabel className={sectionLabel}>Recovery</DropdownMenuLabel>
 
@@ -535,11 +551,8 @@ export function ProjectActionsMenu({
               onTrash();
             }}
           >
-            <History className="mr-2 h-4 w-4" />
-            <MenuText
-              title="Recently deleted"
-              hint="Restore anything removed in the last 60 days"
-            />
+            <History className={itemIcon} />
+            <MenuText title="Recently deleted" />
           </DropdownMenuItem>
 
           <DropdownMenuItem
@@ -549,9 +562,9 @@ export function ProjectActionsMenu({
             }}
             className="text-destructive focus:bg-destructive/10 focus:text-destructive"
           >
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="mr-2 h-4 w-4 shrink-0" />
             <span className="min-w-0">
-              <span className="block font-bold">Delete this project</span>
+              <span className="block font-semibold">Delete this project</span>
               <span className="block text-xs font-normal leading-snug text-destructive/70">
                 Goes to Trash — recoverable for 60 days
               </span>
@@ -559,6 +572,21 @@ export function ProjectActionsMenu({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/*
+        Mounted only once opened. The dialog turns the project's public link on
+        as its first act, so it must never run just because the header rendered.
+      */}
+      {qrOpen && (
+        <ProjectQrDialog
+          open={qrOpen}
+          onOpenChange={setQrOpen}
+          projectId={project.id}
+          projectName={project.name}
+          projectAddress={projectAddress(project)}
+          companyName={profile?.company ?? null}
+        />
+      )}
 
       {/* File under a group dialog */}
       <Dialog open={groupOpen} onOpenChange={setGroupOpen}>

@@ -50,6 +50,11 @@ const ROUTES = [
   // reads `window` nowhere, and this is what keeps it that way.
   { path: `/share/checklists/${NIL_UUID}`, expect: ["<title>shared checklist"] },
   { path: `/share/workflows/${NIL_UUID}`, expect: ["<title>shared workflow"] },
+  // What a printed QR code opens. Same client-fetching shape as the two above,
+  // and the one route here a stranger reaches by pointing a phone at a wall —
+  // so "the shell renders at all" is the difference between a scan showing
+  // "unavailable" and a scan showing a 500.
+  { path: `/share/projects/${NIL_UUID}`, expect: ["<title>shared project"] },
   { path: "/p/a-portfolio-that-does-not-exist", expect: ["portfolio"] },
   { path: "/p/a-portfolio-that-does-not-exist/some-project", expect: ["project"] },
   { path: `/embed/gallery/${NIL_UUID}`, expect: ["gallery"] },

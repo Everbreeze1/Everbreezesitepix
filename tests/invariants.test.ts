@@ -289,6 +289,10 @@ describe("public share pages must not inject unsanitised user HTML", () => {
     "apps/web/src/routes/share.reports.$token.tsx",
     "apps/web/src/routes/share.showcases.$token.tsx",
     "apps/web/src/routes/share.photos.$token.tsx",
+    // What a printed QR code opens. Renders a project's name, address and
+    // photos for someone with no account — captions and project names are
+    // author-controlled text and must stay React children, never markup.
+    "apps/web/src/routes/share.projects.$token.tsx",
   ];
 
   it.each(NO_RAW_HTML)("%s does not use dangerouslySetInnerHTML", (rel) => {
@@ -1940,7 +1944,7 @@ describe("family: a secure email change needs BOTH emails from one hook call", (
 
   it("the two messages go to different addresses", () => {
     const src = stripComments(read(SRC));
-    const start = src.indexOf("if (emailType === \"email_change\" && bothTokens");
+    const start = src.indexOf('if (emailType === "email_change" && bothTokens');
     expect(start, "the fan-out branch is missing").toBeGreaterThan(-1);
     const block = src.slice(start, start + 420);
     expect(block).toMatch(/to:\s*email\b/); // current address
