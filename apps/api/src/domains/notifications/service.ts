@@ -9,6 +9,14 @@ export interface Notification {
   type:
     | "task_assigned"
     | "checklist_assigned"
+    | "workflow_assigned"
+    // The reporting-back half of an assignment: the assignor is told when the
+    // work they handed out is closed, so they can review or reopen it. Raised
+    // by triggers, not by this service — see
+    // 20260819000000_assignment_and_completion.sql.
+    | "task_completed"
+    | "checklist_completed"
+    | "workflow_completed"
     | "photo_comment_mention"
     | "team_invite_accepted"
     | "admin_announcement";

@@ -20,6 +20,7 @@ import {
   Share2,
   Upload,
   Undo2,
+  UserCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,18 @@ import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useProfile } from "@/hooks/use-profile";
+import { useTeamMembers } from "@/hooks/use-team-members";
+import {
+  AssigneeField,
+  AssignmentStatusPill,
+  assigneeLabel,
+} from "@/components/AssignmentControls";
+import {
+  assignmentPatch,
+  assignmentStatus,
+  completionRights,
+  type CompletionRights,
+} from "@/lib/assignment";
 import { toast } from "sonner";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { compressImageFile } from "@/features/photos/components/CameraCapture";
@@ -92,6 +105,15 @@ interface Workflow {
   description: string | null;
   started_at: string;
   completed_at: string | null;
+  /**
+   * Who is running this workflow, and who handed it to them. Workflows were the
+   * one assignable-shaped record with no assignee at all — see
+   * 20260819000000_assignment_and_completion.sql, which also gave crew members
+   * RLS reach into them, without which assigning one would show the assignee
+   * nothing.
+   */
+  assigned_to: string | null;
+  assigned_by: string | null;
   /** The rich-text write-up that ships with the printed and shared record. */
   notes_html: string | null;
   share_token: string | null;
@@ -315,6 +337,7 @@ export function ProjectWorkflows({
   focusWorkflowId?: string | null;
 }) {
   const { user } = useAuth();
+  const { members, isManager } = useTeamMembers();
   const confirm = useConfirm();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -362,7 +385,7 @@ export function ProjectWorkflows({
           supabase
             .from(TABLES.workflows as any)
             .select(
-              "id, project_id, template_id, name, description, started_at, completed_at, notes_html, share_token, revoked_at",
+              "id, project_id, template_id, name, description, started_at, completed_at, assigned_to, assigned_by, notes_html, share_token, revoked_at",
             )
             .eq("project_id", projectId)
             .order("started_at", { ascending: true }),
@@ -935,12 +958,50 @@ export function ProjectWorkflows({
     if (!ok) setPhases((prev) => prev.map((x) => (x.id === ph.id ? before : x)));
   };
 
+  /*
+   * Who may close a given run. Distinct from `WorkflowState.canComplete`, which
+   * is about *readiness* — whether every required step and sign-off is done.
+   * A run can be ready and still not yours to close.
+   */
+  const viewer = { userId: user?.id ?? null, isManager };
+  const workflowRights = (wf: Workflow): CompletionRights =>
+    completionRights(
+      { assignedTo: wf.assigned_to, assignedBy: wf.assigned_by },
+      viewer,
+      assigneeLabel(members, wf.assigned_to),
+    );
+
   /**
    * `project_workflows.completed_at` has existed since the first migration and
    * was never written — "Complete" was only ever derived, so nothing recorded
    * *when* a job's process was actually signed off as done.
    */
   const setWorkflowComplete = async (wf: Workflow, complete: boolean) => {
+    /*
+     * Closing is the assignee's call; reopening is anyone's, so the check only
+     * guards the one direction. Same rule as checklists and tasks, from the
+     * same module — the client's requirement was that this relationship read
+     * identically across every feature that has one.
+     */
+    if (complete) {
+      const rights = workflowRights(wf);
+      if (!rights.canComplete) {
+        toast.error(rights.reason ?? "You can't mark this workflow complete.");
+        return;
+      }
+      if (rights.isOverride) {
+        const who = assigneeLabel(members, wf.assigned_to);
+        if (
+          !(await confirm({
+            title: `Complete this for ${who}?`,
+            description: `“${wf.name}” is assigned to ${who}. You can close it, but the record will show it was closed without ${who} marking it done.`,
+            confirmText: "Complete anyway",
+          }))
+        )
+          return;
+      }
+    }
+
     const patch = { completed_at: complete ? new Date().toISOString() : null };
     const before = wf;
     setWorkflows((prev) => prev.map((x) => (x.id === wf.id ? { ...x, ...patch } : x)));
@@ -954,8 +1015,44 @@ export function ProjectWorkflows({
       setWorkflows((prev) => prev.map((x) => (x.id === wf.id ? before : x)));
       return;
     }
-    toast.success(complete ? `“${wf.name}” marked complete` : `“${wf.name}” reopened`);
+    toast.success(
+      complete
+        ? wf.assigned_by && wf.assigned_by !== user?.id
+          ? `“${wf.name}” complete — ${assigneeLabel(members, wf.assigned_by)} has been notified`
+          : `“${wf.name}” marked complete`
+        : `“${wf.name}” reopened`,
+    );
     onChanged?.();
+  };
+
+  /**
+   * Hand this workflow to someone.
+   *
+   * Written as a pair with `assigned_by` so completion has a person to report
+   * back to, and saved on a button rather than on change — putting a job on
+   * somebody's plate and notifying them is not something to do on the way past
+   * an open dropdown.
+   */
+  const assignWorkflow = async (wf: Workflow, assigneeId: string | null) => {
+    const patch = assignmentPatch(assigneeId, user?.id ?? null);
+    const before = wf;
+    setWorkflows((prev) => prev.map((x) => (x.id === wf.id ? { ...x, ...patch } : x)));
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from(TABLES.workflows as any)
+        .update(patch)
+        .eq("id", wf.id),
+    );
+    if (!ok) {
+      setWorkflows((prev) => prev.map((x) => (x.id === wf.id ? before : x)));
+      return false;
+    }
+    toast.success(
+      assigneeId
+        ? `Assigned to ${assigneeLabel(members, assigneeId)}`
+        : "Assignee cleared — anyone on the crew can complete this",
+    );
+    return true;
   };
 
   const deleteWorkflow = async (wf: Workflow) => {
@@ -1153,6 +1250,9 @@ export function ProjectWorkflows({
           onSignOff={signOff}
           onRevokeSignoff={revokeSignoff}
           onSetComplete={(c) => void setWorkflowComplete(open, c)}
+          members={members}
+          rights={workflowRights(open)}
+          onAssign={(next) => assignWorkflow(open, next)}
           onDelete={() => void deleteWorkflow(open)}
           onNotesChange={(html) => setWorkflowNotes(open, html)}
           onShare={() => setShareOpen(true)}
@@ -1283,6 +1383,9 @@ function WorkflowRunner({
   onSignOff,
   onRevokeSignoff,
   onSetComplete,
+  members,
+  rights,
+  onAssign,
   onDelete,
   onNotesChange,
   onShare,
@@ -1291,6 +1394,10 @@ function WorkflowRunner({
   state: WorkflowState;
   photos: Record<string, PhotoRef>;
   saveState: SaveState;
+  members: Array<{ user_id: string; full_name: string | null; email: string | null }>;
+  /** Whether this viewer may close the run, and why not if they may not. */
+  rights: CompletionRights;
+  onAssign: (next: string | null) => Promise<boolean>;
   onBack: () => void;
   onToggleItem: (it: Item) => void;
   onItemNote: (it: Item, v: string) => void;
@@ -1358,6 +1465,23 @@ function WorkflowRunner({
           progressLabel={`${workflow.name} progress`}
           stats={
             <>
+              {/* Where the run stands and whose it is, in the row that already
+                  answers "how far along is this" — the same three words a
+                  checklist and a task use. */}
+              <AssignmentStatusPill
+                status={assignmentStatus({
+                  completedAt: workflow.completed_at,
+                  done: state.done,
+                  total: state.total,
+                })}
+              />
+              <AssigneeField
+                value={workflow.assigned_to}
+                members={members}
+                onSave={onAssign}
+                disabled={state.isComplete}
+                triggerClassName="h-7 w-[150px]"
+              />
               <RunnerStat icon={ListTree}>
                 {state.phasesComplete}/{state.phases.length} phases
               </RunnerStat>
@@ -1425,11 +1549,12 @@ function WorkflowRunner({
                 <Button
                   size="sm"
                   className="hidden sm:inline-flex"
-                  disabled={!state.canComplete}
+                  disabled={!state.canComplete || !rights.canComplete}
+                  title={rights.reason ?? undefined}
                   onClick={() => onSetComplete(true)}
                 >
                   <CheckCircle2 className="mr-1.5 h-4 w-4" />
-                  Mark complete
+                  {rights.isOverride ? "Complete for them" : "Mark complete"}
                 </Button>
               )}
               <DropdownMenu>
@@ -1447,11 +1572,11 @@ function WorkflowRunner({
                   ) : (
                     <DropdownMenuItem
                       className="sm:hidden"
-                      disabled={!state.canComplete}
+                      disabled={!state.canComplete || !rights.canComplete}
                       onClick={() => onSetComplete(true)}
                     >
                       <CheckCircle2 className="mr-2 h-4 w-4" />
-                      Mark complete
+                      {rights.isOverride ? "Complete for them" : "Mark complete"}
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator className="sm:hidden" />
@@ -1478,6 +1603,15 @@ function WorkflowRunner({
                 {state.requiredTotal - state.requiredDone} required step
                 {state.requiredTotal - state.requiredDone === 1 ? "" : "s"} left before this
                 workflow can be closed.
+              </div>
+            ) : rights.reason ? (
+              /* Ready to close, but not by this person — or closable only as a
+                 manager override. Either way the button's state needs a
+                 sentence next to it, since there is nothing to hover on a
+                 phone. */
+              <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-border bg-muted/60 px-3 py-2 text-[11.5px] font-semibold text-muted-foreground">
+                <UserCircle2 className="h-3.5 w-3.5 shrink-0" />
+                {rights.reason}
               </div>
             ) : null
           }

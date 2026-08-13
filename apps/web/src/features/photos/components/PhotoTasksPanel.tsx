@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useTeamMembers } from "@/hooks/use-team-members";
+import { completionRights } from "@/lib/assignment";
 import type { CommentContributor } from "@/features/photos/components/PhotoCommentsPanel";
 
 type Status = "open" | "in_progress" | "done";
@@ -24,6 +26,7 @@ interface Task {
   title: string;
   status: Status;
   assignee_user_id: string | null;
+  assigned_by: string | null;
   assignee_email: string | null;
   photo_ids: string[];
   due_date: string | null;
@@ -58,6 +61,7 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
   const [title, setTitle] = useState("");
   const [assignee, setAssignee] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const { isManager } = useTeamMembers();
 
   const contribById = useMemo(() => {
     const m = new Map<string, CommentContributor>();
@@ -70,7 +74,7 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
     const { data, error } = await supabase
       .from("tasks" as any)
       .select(
-        "id, title, status, assignee_user_id, assignee_email, photo_ids, due_date, created_at",
+        "id, title, status, assignee_user_id, assigned_by, assignee_email, photo_ids, due_date, created_at",
       )
       .eq("project_id", projectId)
       .contains("photo_ids", [photoId])
@@ -104,12 +108,15 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
     if (assignee) {
       payload.assignee_user_id = assignee;
       payload.assignee_email = contribById.get(assignee)?.email ?? null;
+      // Recorded with the assignment, never separately: it is what the
+      // completion notification is delivered to.
+      payload.assigned_by = currentUserId;
     }
     const { data, error } = await supabase
       .from("tasks" as any)
       .insert(payload)
       .select(
-        "id, title, status, assignee_user_id, assignee_email, photo_ids, due_date, created_at",
+        "id, title, status, assignee_user_id, assigned_by, assignee_email, photo_ids, due_date, created_at",
       )
       .single();
     setSaving(false);
@@ -124,6 +131,27 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
 
   const cycleStatus = async (t: Task) => {
     const next: Status = STATUS_ORDER[(STATUS_ORDER.indexOf(t.status) + 1) % 3];
+
+    // Same rule as the Tasks panel and the checklist page — the assignee closes
+    // their own work, and a manager may override. Checked here so the tap does
+    // nothing visible rather than flashing a completed state that the database
+    // then rejects.
+    if (next === "done") {
+      const rights = completionRights(
+        { assignedTo: t.assignee_user_id, assignedBy: t.assigned_by },
+        { userId: currentUserId, isManager },
+        t.assignee_user_id
+          ? (contribById.get(t.assignee_user_id)?.fullName ??
+              contribById.get(t.assignee_user_id)?.email ??
+              null)
+          : null,
+      );
+      if (!rights.canComplete) {
+        toast.error(rights.reason ?? "You can't mark this task done.");
+        return;
+      }
+    }
+
     const completed_at = next === "done" ? new Date().toISOString() : null;
     setTasks((arr) => arr.map((x) => (x.id === t.id ? { ...x, status: next } : x)));
     const { error } = await supabase
@@ -153,6 +181,7 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
     const patch: any = {
       assignee_user_id: userId,
       assignee_email: c?.email ?? null,
+      assigned_by: userId ? currentUserId : null,
     };
     setTasks((arr) => arr.map((x) => (x.id === t.id ? { ...x, ...patch } : x)));
     const { error } = await supabase

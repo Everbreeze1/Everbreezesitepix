@@ -71,6 +71,9 @@ import {
   deleteProjectGroup,
 } from "@/lib/project-groups.functions";
 import { supabase } from "@/integrations/sitepix/client";
+import { useAuth } from "@/hooks/use-auth";
+import { useTeamMembers } from "@/hooks/use-team-members";
+import { completionRights } from "@/lib/assignment";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { EditGroupProjectsDialog } from "@/features/projects/components/EditGroupProjectsDialog";
@@ -97,6 +100,8 @@ function locationOf(p: any): string | null {
 export function GroupPage() {
   const { groupId } = useParams({ from: "/_app/groups/$groupId" });
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { isManager } = useTeamMembers();
   const fetchGroup = getProjectGroup;
   const updateGroup = updateProjectGroup;
   const removeGroup = deleteProjectGroup;
@@ -221,7 +226,26 @@ export function GroupPage() {
     }
   };
 
-  const updateTaskStatus = async (projectId: string, taskId: string, nextStatus: string) => {
+  const updateTaskStatus = async (
+    projectId: string,
+    taskId: string,
+    nextStatus: string,
+    task?: { assignee_user_id: string | null; assigned_by: string | null },
+  ) => {
+    // The same rule the project panel and the photo panel apply — a rollup is
+    // still a place work gets closed from, and this one used to be the way
+    // round every check the others made.
+    if (nextStatus === "done" && task) {
+      const rights = completionRights(
+        { assignedTo: task.assignee_user_id, assignedBy: task.assigned_by },
+        { userId: user?.id ?? null, isManager },
+      );
+      if (!rights.canComplete) {
+        toast.error(rights.reason ?? "You can't mark this task done.");
+        return;
+      }
+    }
+
     patchProject(projectId, (p) => ({
       ...p,
       tasks: (p.tasks ?? []).map((t: any) => (t.id === taskId ? { ...t, status: nextStatus } : t)),
@@ -231,7 +255,9 @@ export function GroupPage() {
     else patch.completed_at = null;
     const { error } = await (supabase as any).from("tasks").update(patch).eq("id", taskId);
     if (error) {
-      toast.error("Could not update task");
+      // The completion trigger raises its own sentence; a blanket "Could not
+      // update task" would hide the only useful thing it said.
+      toast.error(error.message || "Could not update task");
       void load();
     }
   };
@@ -450,6 +476,7 @@ export function GroupPage() {
                 due_date: string | null;
                 assignee_email: string | null;
                 assignee_user_id: string | null;
+                assigned_by: string | null;
               }> = p.tasks ?? [];
               const openTasks = tasks.filter((t) => t.status !== "done");
               const clDone = p.checklist_items_done ?? 0;
@@ -737,7 +764,7 @@ export function GroupPage() {
                                             : v === "in_progress"
                                               ? "in_progress"
                                               : "open";
-                                        void updateTaskStatus(p.id, t.id, nextStatus);
+                                        void updateTaskStatus(p.id, t.id, nextStatus, t);
                                       }}
                                     >
                                       <SelectTrigger className="h-7 w-[140px] text-[11px]">

@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getMyTeam } from "@/lib/teams.functions";
+import { useAuth } from "@/hooks/use-auth";
+import { isManagerRole } from "@/lib/assignment";
 
 export interface TeamMemberLite {
   user_id: string;
@@ -33,6 +35,7 @@ export interface TeamMemberLite {
  * columns the Teams page already shows everyone.
  */
 export function useTeamMembers() {
+  const { user } = useAuth();
   const q = useQuery({
     queryKey: ["team-members"],
     queryFn: () => getMyTeam(),
@@ -53,8 +56,24 @@ export function useTeamMembers() {
     (a.full_name ?? a.email ?? "").localeCompare(b.full_name ?? b.email ?? ""),
   );
 
+  /*
+   * The caller's own role, read out of the roster they are already loading.
+   *
+   * Every screen that gates on "am I a manager?" would otherwise hit the team
+   * endpoint a second time to ask about one row, and this query is shared and
+   * cached for five minutes across every panel that mounts it.
+   *
+   * A solo account has no `team_members` row at all, so `myRole` is null and
+   * `isManager` is false. That costs them nothing: the manager override only
+   * ever matters for work assigned to somebody else, which needs a team.
+   */
+  const myRole = user ? (members.find((m) => m.user_id === user.id)?.role ?? null) : null;
+
   return {
     members,
+    myRole,
+    /** Workspace admin or project manager — allowed to close another crew member's work. */
+    isManager: isManagerRole(myRole),
     /** Pending invitees. They have no auth user yet, so they are NOT assignable. */
     pendingInvites: ((q.data as any)?.invites ?? []) as Array<{
       id: string;

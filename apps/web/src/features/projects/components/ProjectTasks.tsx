@@ -39,6 +39,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
+import { completionRights, isManagerRole } from "@/lib/assignment";
 import { getMyTeam } from "@/lib/teams.functions";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
@@ -46,12 +47,18 @@ import { EmptyState } from "@/components/EmptyState";
 type Status = "open" | "in_progress" | "done";
 type Priority = "low" | "normal" | "high" | "urgent";
 
+/** One spelling of a teammate's display name, used by every label on this panel. */
+const memberName = (m?: { full_name: string | null; email: string | null } | null) =>
+  m?.full_name || m?.email || "Member";
+
 interface Task {
   id: string;
   project_id: string;
   created_by: string;
   assignee_email: string | null;
   assignee_user_id: string | null;
+  /** Who handed it over. Notified when it is closed; may reopen it. */
+  assigned_by: string | null;
   title: string;
   description: string | null;
   status: Status;
@@ -74,6 +81,7 @@ interface TeamMemberLite {
   full_name: string | null;
   email: string | null;
   avatar_url: string | null;
+  role: string | null;
 }
 
 export interface ProjectTasksHandle {
@@ -216,6 +224,7 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
         full_name: m.profile?.full_name ?? null,
         email: m.profile?.email ?? null,
         avatar_url: m.profile?.avatar_url ?? null,
+        role: m.role ?? null,
       }));
       setMembers(list);
     } catch {
@@ -241,34 +250,89 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
     return tasks.filter((t) => t.status === filter);
   }, [tasks, filter, view]);
 
-  const cycleStatus = async (t: Task) => {
-    const next: Status =
-      t.status === "open" ? "in_progress" : t.status === "in_progress" ? "done" : "open";
+  /**
+   * Who may close a task here.
+   *
+   * Read out of the roster this panel already loads rather than through
+   * `useTeamMembers`, which would be a second fetch of the same rows — but the
+   * rule itself comes from lib/assignment.ts, so a task, a checklist and a
+   * workflow answer the question identically.
+   */
+  const viewer = {
+    userId: user?.id ?? null,
+    isManager: isManagerRole(user ? (memberById.get(user.id)?.role ?? null) : null),
+  };
+  const taskAssigneeName = (t: Task) =>
+    t.assignee_user_id
+      ? memberName(memberById.get(t.assignee_user_id))
+      : (t.assignee_email ?? "the assignee");
+
+  const taskRights = (t: Task) =>
+    completionRights(
+      { assignedTo: t.assignee_user_id, assignedBy: t.assigned_by },
+      viewer,
+      taskAssigneeName(t),
+    );
+
+  /**
+   * The one writer of `status`, so the completion rule cannot be reached around
+   * by the button that happens not to go through it. `cycleStatus` used to be a
+   * second copy of this and was the reason the board's tap-to-advance ignored
+   * everything the row buttons checked.
+   */
+  const setStatus = async (t: Task, next: Status) => {
+    if (t.status === next) return;
+
+    if (next === "done") {
+      const rights = taskRights(t);
+      if (!rights.canComplete) {
+        toast.error(rights.reason ?? "You can't mark this task done.");
+        return;
+      }
+      if (rights.isOverride) {
+        const who = taskAssigneeName(t);
+        if (
+          !(await confirm({
+            title: `Mark this done for ${who}?`,
+            description: `“${t.title}” is assigned to ${who}. You can close it, but it will be recorded as done without ${who} marking it.`,
+            confirmText: "Mark done",
+          }))
+        )
+          return;
+      }
+    }
+
     const completed_at = next === "done" ? new Date().toISOString() : null;
+    const before = t.status;
     setTasks((arr) => arr.map((x) => (x.id === t.id ? { ...x, status: next, completed_at } : x)));
     const { error } = await supabase
       .from("tasks" as any)
       .update({ status: next, completed_at })
       .eq("id", t.id);
     if (error) {
+      // The trigger in 20260819000000 raises the sentence we want shown, so the
+      // refusal explains itself without a lookup table here.
       toast.error(error.message);
+      setTasks((arr) =>
+        arr.map((x) =>
+          x.id === t.id ? { ...x, status: before, completed_at: t.completed_at } : x,
+        ),
+      );
       void load();
+      return;
+    }
+    if (next === "done" && t.assigned_by && t.assigned_by !== user?.id) {
+      toast.success(
+        `Task completed — ${memberName(memberById.get(t.assigned_by))} has been notified`,
+      );
     }
   };
 
-  const setStatus = async (t: Task, next: Status) => {
-    if (t.status === next) return;
-    const completed_at = next === "done" ? new Date().toISOString() : null;
-    setTasks((arr) => arr.map((x) => (x.id === t.id ? { ...x, status: next, completed_at } : x)));
-    const { error } = await supabase
-      .from("tasks" as any)
-      .update({ status: next, completed_at })
-      .eq("id", t.id);
-    if (error) {
-      toast.error(error.message);
-      void load();
-    }
-  };
+  const cycleStatus = (t: Task) =>
+    setStatus(
+      t,
+      t.status === "open" ? "in_progress" : t.status === "in_progress" ? "done" : "open",
+    );
 
   const removeTask = async (t: Task) => {
     if (!(await confirm({ description: "Delete this task?", variant: "destructive" }))) return;
@@ -614,10 +678,7 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
               const col = tasks.filter((t) => t.status === s);
               const SM = STATUS_META[s];
               return (
-                <div
-                  key={s}
-                  className="rounded-2xl border-[0.8px] border-border bg-muted/30 p-3"
-                >
+                <div key={s} className="rounded-2xl border-[0.8px] border-border bg-muted/30 p-3">
                   <div className="mb-2.5 flex items-center justify-between px-0.5">
                     <div
                       className={`flex items-center gap-1.5 font-manrope text-[11px] font-extrabold uppercase tracking-[0.08em] ${SM.cls}`}
@@ -659,6 +720,9 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
           projectPhotos={projectPhotos}
           members={members}
           seedPhotoIds={seedPhotoIds}
+          /* A new task is nobody's yet, so it can be filed as done outright;
+             an existing one obeys the same rule as the row buttons. */
+          canComplete={editing ? taskRights(editing).canComplete : true}
           onSaved={() => {
             setCreating(false);
             setEditing(null);
@@ -680,6 +744,7 @@ function TaskDialog({
   projectPhotos,
   members,
   seedPhotoIds,
+  canComplete,
   onSaved,
 }: {
   open: boolean;
@@ -690,6 +755,7 @@ function TaskDialog({
   projectPhotos: ProjectPhoto[];
   members: TeamMemberLite[];
   seedPhotoIds: string[];
+  canComplete: boolean;
   onSaved: () => void;
 }) {
   const [title, setTitle] = useState(task?.title ?? "");
@@ -726,6 +792,19 @@ function TaskDialog({
       assignee_email: assigneeUserId
         ? (selectedMember?.email ?? null)
         : assigneeEmail.trim() || null,
+      /*
+       * Who handed it over — the half of the relationship the schema never
+       * recorded, and the reason completion can now report back to a person
+       * instead of guessing at `created_by`. Reassigning to someone new makes
+       * the current user the assignor; leaving the same person in place keeps
+       * the original one, so editing a due date does not quietly steal the
+       * notification from whoever actually delegated the work.
+       */
+      assigned_by: assigneeUserId
+        ? task?.assignee_user_id === assigneeUserId
+          ? (task.assigned_by ?? userId)
+          : userId
+        : null,
       due_date: dueDate || null,
       priority,
       status,
@@ -795,9 +874,20 @@ function TaskDialog({
                 <SelectContent>
                   <SelectItem value="open">Open</SelectItem>
                   <SelectItem value="in_progress">In progress</SelectItem>
-                  <SelectItem value="done">Done</SelectItem>
+                  {/* Closing someone else's task is refused by the database, so
+                      it is not offered here either — the alternative is a save
+                      that fails after the dialog has collected every other
+                      edit. */}
+                  <SelectItem value="done" disabled={!canComplete && status !== "done"}>
+                    Done
+                  </SelectItem>
                 </SelectContent>
               </Select>
+              {!canComplete && (
+                <p className="mt-1 text-[10.5px] text-muted-foreground">
+                  Only the assignee or a manager can mark this done.
+                </p>
+              )}
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium">Priority</label>

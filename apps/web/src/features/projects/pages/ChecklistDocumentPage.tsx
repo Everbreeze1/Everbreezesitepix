@@ -33,13 +33,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { BulkAddItemsDialog } from "@/components/BulkAddItemsDialog";
 import { ErrorState } from "@/components/ErrorState";
 import { PendingMigrationState } from "@/components/PendingMigrationState";
@@ -54,6 +47,8 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { usePrompt } from "@/hooks/use-prompt";
 import { useProfile } from "@/hooks/use-profile";
 import { useTeamMembers } from "@/hooks/use-team-members";
+import { AssigneeField, AssignmentStatusPill } from "@/components/AssignmentControls";
+import { assignmentPatch, assignmentStatus, canReopen, completionRights } from "@/lib/assignment";
 import { TYPE_META, TYPE_ORDER, hasResponse, type ItemType } from "@/lib/checklist-items";
 import { friendlyError, isPendingMigrationError } from "@/lib/supabase-errors";
 import { cn } from "@/lib/utils";
@@ -98,7 +93,9 @@ interface Checklist {
   created_at: string;
   created_by: string;
   assigned_to: string | null;
+  assigned_by: string | null;
   completed_at: string | null;
+  completed_by: string | null;
   notes_html: string | null;
   share_token: string | null;
   revoked_at: string | null;
@@ -125,7 +122,7 @@ export function ChecklistDocumentPage() {
   const confirm = useConfirm();
   const promptFor = usePrompt();
   const { profile } = useProfile();
-  const { members: teamMembers } = useTeamMembers();
+  const { members: teamMembers, isManager } = useTeamMembers();
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -174,7 +171,7 @@ export function ChecklistDocumentPage() {
         const clRes = await supabase
           .from("project_checklists" as any)
           .select(
-            "id, project_id, name, created_at, created_by, assigned_to, completed_at, notes_html, share_token, revoked_at, template_id",
+            "id, project_id, name, created_at, created_by, assigned_to, assigned_by, completed_at, completed_by, notes_html, share_token, revoked_at, template_id",
           )
           .eq("id", checklistId)
           .maybeSingle();
@@ -385,9 +382,41 @@ export function ChecklistDocumentPage() {
   const canStructure = owned && !sealed;
   const canFill = !sealed;
 
+  /*
+   * The third lock: who this checklist belongs to, and therefore who closes it.
+   *
+   * Separate from `owned` on purpose. Authoring and assignment are different
+   * powers — the manager handing a job to a tech is frequently not the person
+   * who built the checklist, and the tech filling it in is neither. All three
+   * are derived from one shared rule (lib/assignment.ts) so the checklist,
+   * task and workflow surfaces cannot drift into disagreeing about the same
+   * relationship. The database enforces it; this only decides what the buttons
+   * look like.
+   */
+  const subject = {
+    assignedTo: checklist?.assigned_to ?? null,
+    assignedBy: checklist?.assigned_by ?? null,
+  };
+  const viewer = { userId: user?.id ?? null, isManager };
+  const rights = completionRights(subject, viewer, memberLabel(subject.assignedTo));
+  const status = assignmentStatus({
+    completedAt: checklist?.completed_at,
+    done,
+    total: ordered.length,
+  });
+  const canAssign = !sealed && (owned || isManager || subject.assignedBy === user?.id);
+  const mayReopen = canReopen(
+    {
+      ...subject,
+      createdBy: checklist?.created_by ?? null,
+      completedBy: checklist?.completed_by ?? null,
+    },
+    viewer,
+  );
+
   /* -------------------------------------------------------------- mutations */
 
-  const patchChecklist = async (patch: Partial<Checklist>) => {
+  const patchChecklist = async (patch: Partial<Checklist> & { snapshot?: unknown }) => {
     if (!checklist) return false;
     touch();
     const before = checklist;
@@ -652,6 +681,30 @@ export function ChecklistDocumentPage() {
 
   const completeChecklist = async () => {
     if (!user || !checklist) return;
+
+    /*
+     * The assignee closes their own work. A manager may still close it for
+     * them — a tech goes unreachable and the record has to be closable — but
+     * that is an override of somebody else's name, so it is confirmed rather
+     * than silently allowed. Refusing outright is the database's job; this is
+     * the sentence explaining why the button did nothing.
+     */
+    if (!rights.canComplete) {
+      toast.error(rights.reason ?? "You can't mark this complete.");
+      return;
+    }
+    if (rights.isOverride) {
+      const who = memberLabel(subject.assignedTo);
+      if (
+        !(await confirm({
+          title: `Complete this for ${who}?`,
+          description: `“${checklist.name}” is assigned to ${who}. You can close it, but the sealed record will show you as the person who completed it — not ${who} — and they will not be asked to confirm.`,
+          confirmText: "Complete anyway",
+        }))
+      )
+        return;
+    }
+
     setCompleting(true);
     try {
       // The snapshot is an immutable record of what was answered, so anything
@@ -685,13 +738,28 @@ export function ChecklistDocumentPage() {
           .eq("id", checklist.id),
       );
       if (!ok) return;
-      setChecklist((c) => (c ? { ...c, completed_at: now } : c));
-      toast.success("Checklist marked complete — the record is sealed");
+      setChecklist((c) => (c ? { ...c, completed_at: now, completed_by: user.id } : c));
+      toast.success(
+        subject.assignedBy && subject.assignedBy !== user.id
+          ? `Checklist complete — ${memberLabel(subject.assignedBy)} has been notified`
+          : "Checklist marked complete — the record is sealed",
+      );
     } finally {
       setCompleting(false);
     }
   };
 
+  /**
+   * Reopen — the reviewing half of the assignment loop.
+   *
+   * Available to the assignor, not just the author: being told the work is done
+   * is only useful if the person told can send it back. `completed_by` and
+   * `snapshot` are cleared alongside the timestamp because all three describe
+   * one sealing event. Leaving them behind left a reopened checklist claiming
+   * it had been completed by someone, carrying a frozen copy of answers that
+   * were about to change — and the snapshot is what the printout and the public
+   * share link render.
+   */
   const reopenChecklist = async () => {
     if (!checklist) return;
     if (
@@ -703,7 +771,8 @@ export function ChecklistDocumentPage() {
       }))
     )
       return;
-    await patchChecklist({ completed_at: null });
+    const ok = await patchChecklist({ completed_at: null, completed_by: null, snapshot: null });
+    if (ok) toast.success("Checklist reopened");
   };
 
   const saveAsTemplate = async () => {
@@ -921,7 +990,12 @@ export function ChecklistDocumentPage() {
               <Share2 className="mr-1.5 h-3.5 w-3.5" />
               {checklist.revoked_at ? "Share" : "Shared"}
             </Button>
-            {owned && (
+            {/* The menu no longer belongs to the author alone. Reopening is the
+                assignor's half of the completion loop — they are told the work
+                is done, and being told is only useful if they can send it back —
+                so the trigger appears for them too, while authoring actions
+                stay with whoever built the checklist. */}
+            {(owned || (sealed && mayReopen)) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="More actions">
@@ -929,24 +1003,30 @@ export function ChecklistDocumentPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52">
-                  <DropdownMenuItem onClick={() => void saveAsTemplate()}>
-                    <BookmarkPlus className="mr-2 h-4 w-4" />
-                    Save as template
-                  </DropdownMenuItem>
-                  {sealed && (
+                  {owned && (
+                    <DropdownMenuItem onClick={() => void saveAsTemplate()}>
+                      <BookmarkPlus className="mr-2 h-4 w-4" />
+                      Save as template
+                    </DropdownMenuItem>
+                  )}
+                  {sealed && mayReopen && (
                     <DropdownMenuItem onClick={() => void reopenChecklist()}>
                       <ClipboardList className="mr-2 h-4 w-4" />
                       Reopen checklist
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={() => void deleteChecklist()}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete checklist
-                  </DropdownMenuItem>
+                  {owned && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => void deleteChecklist()}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete checklist
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -979,30 +1059,33 @@ export function ChecklistDocumentPage() {
               </span>
             )
           )}
-          <Select
-            value={checklist.assigned_to ?? "__unassigned"}
-            onValueChange={(v) =>
-              void patchChecklist({ assigned_to: v === "__unassigned" ? null : v })
-            }
-            disabled={!canStructure}
-          >
-            <SelectTrigger className="h-8 w-[170px] shrink-0 text-xs">
-              <div className="flex items-center gap-1.5 truncate">
-                <UserCircle2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className="truncate">{memberLabel(checklist.assigned_to)}</span>
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__unassigned" className="text-sm">
-                Unassigned
-              </SelectItem>
-              {members.map((m) => (
-                <SelectItem key={m.user_id} value={m.user_id} className="text-sm">
-                  {m.full_name || m.email || m.user_id.slice(0, 8)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Assignment is an act with a Save button, not a filter that writes
+              as you pass over it — picking a name here puts a job on somebody's
+              plate and notifies them. Sealed records show who held it without
+              offering to change it. */}
+          {canAssign ? (
+            <AssigneeField
+              value={checklist.assigned_to}
+              members={members}
+              triggerClassName="shrink-0"
+              onSave={async (next) => {
+                const ok = await patchChecklist(assignmentPatch(next, user?.id ?? null));
+                if (ok) {
+                  toast.success(
+                    next
+                      ? `Assigned to ${memberLabel(next)}`
+                      : "Assignee cleared — anyone on the crew can complete this",
+                  );
+                }
+                return ok;
+              }}
+            />
+          ) : (
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+              <UserCircle2 className="h-3 w-3" />
+              {memberLabel(checklist.assigned_to)}
+            </span>
+          )}
         </div>
       </div>
 
@@ -1391,29 +1474,61 @@ export function ChecklistDocumentPage() {
             )}
           </section>
 
-          {/* No Save button: every edit on this page persists on its own and the
-              header's SaveStatus is the honest report of whether it landed. The
-              only terminal action is sealing the record. */}
-          {!sealed && (
-            <div className="mt-6 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
-              {requiredOpen > 0 && (
-                <span className="mr-auto text-[11.5px] font-semibold text-amber-700 dark:text-amber-400">
-                  {requiredOpen} required item{requiredOpen === 1 ? "" : "s"} still open
+          {/*
+            Where this checklist stands, and only then what can be done about it.
+            The items on this page save themselves — the header's SaveStatus is
+            the honest report of that — so the one terminal action is sealing
+            the record, and it now states its own status rather than leaving a
+            greyed-out button as the only clue. Pending / In progress / Complete
+            are the same three words on a task and on a workflow.
+          */}
+          <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border pt-4">
+            <AssignmentStatusPill status={status} />
+
+            {(sealed ? (checklist.completed_by ?? subject.assignedTo) : subject.assignedTo) && (
+              <span className="text-[11.5px] text-muted-foreground">
+                {sealed ? "Completed by" : "Assigned to"}{" "}
+                <span className="font-semibold text-foreground">
+                  {memberLabel(
+                    sealed ? (checklist.completed_by ?? subject.assignedTo) : subject.assignedTo,
+                  )}
                 </span>
-              )}
+              </span>
+            )}
+
+            {!sealed && requiredOpen > 0 && (
+              <span className="text-[11.5px] font-semibold text-amber-700 dark:text-amber-400">
+                {requiredOpen} required item{requiredOpen === 1 ? "" : "s"} still open
+              </span>
+            )}
+
+            {/* Spelled out next to the button rather than hidden in a tooltip —
+                a disabled control with no explanation reads as a bug on a
+                phone, where there is nothing to hover. */}
+            {!sealed && !rights.canComplete && rights.reason && (
+              <span className="text-[11.5px] text-muted-foreground">{rights.reason}</span>
+            )}
+
+            {!sealed && (
               <Button
+                className="ml-auto"
                 onClick={() => void completeChecklist()}
-                disabled={ordered.length === 0 || requiredOpen > 0 || completing}
+                disabled={
+                  ordered.length === 0 || requiredOpen > 0 || completing || !rights.canComplete
+                }
+                title={rights.reason ?? undefined}
               >
                 {completing ? (
                   <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                 ) : (
                   <CheckSquare className="mr-1.5 h-4 w-4" />
                 )}
-                Mark as complete
+                {rights.isOverride
+                  ? `Complete for ${memberLabel(subject.assignedTo)}`
+                  : "Mark as complete"}
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
