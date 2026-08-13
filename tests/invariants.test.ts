@@ -1960,3 +1960,62 @@ describe("family: a secure email change needs BOTH emails from one hook call", (
     expect(src).toMatch(/buildConfirmationUrl\(\{[\s\S]{0,120}email_action_type/);
   });
 });
+
+describe("family: a recovery surface has to be reachable", () => {
+  /*
+   * Deleting is reversible for TRASH_RETENTION_DAYS (60), after which a nightly
+   * sweep purges for good. The whole trash feature existed and worked — route,
+   * page, restore, purge, retention, cron, eight RPC ops — and was reachable
+   * from exactly ONE place: a three-dot overflow menu on the Projects page.
+   * Not the sidebar, not the dashboard, not mobile.
+   *
+   * A recovery screen nobody can find is the same as no recovery screen, except
+   * it also costs storage: 37 photos and 6 projects were sitting in it,
+   * counting down, with no way for their owner to see or restore them.
+   */
+  const SIDEBAR = "apps/web/src/components/AppSidebar.tsx";
+
+  it("the sidebar links to the trash", () => {
+    const src = stripComments(read(SIDEBAR));
+    expect(src).toMatch(/url:\s*"\/projects\/trash"/);
+  });
+
+  it("the trash row is not gated behind a plan or role", () => {
+    /*
+     * Restoring your own deleted work is not a premium feature, and gating it
+     * would recreate the original problem for exactly the users least likely
+     * to have another route in.
+     */
+    const src = stripComments(read(SIDEBAR));
+    const start = src.indexOf("const toolItems");
+    expect(start, "toolItems not found").toBeGreaterThan(-1);
+    // Slice to the array's own terminator, not the first `]` — the spread
+    // `...(showOwnerNav ? [pricingItem] : [])` closes a bracket before it.
+    const block = src.slice(start, src.indexOf("];", start) + 2);
+    expect(block).toMatch(/^\s*trashItem,\s*$/m);
+    // showOwnerNav guards Upgrade only; trashItem must not sit inside a ternary.
+    expect(block).not.toMatch(/\?\s*\[trashItem\]/);
+  });
+
+  it("the badge is driven by the real count, not hardcoded", () => {
+    const src = stripComments(read(SIDEBAR));
+    expect(src).toMatch(/getTrashCounts/);
+    expect(src).toMatch(/trashTotal/);
+  });
+
+  it("the count survives the collapsed rail", () => {
+    /*
+     * Collapsed to icons there is no room for a number. Without a fallback
+     * indicator the only signal that anything is recoverable disappears for
+     * anyone who works with the rail shut.
+     */
+    const src = stripComments(read(SIDEBAR));
+    expect(src).toMatch(/badge > 0 && collapsed/);
+  });
+
+  it("the count is announced to screen readers", () => {
+    const src = stripComments(read(SIDEBAR));
+    expect(src).toMatch(/items?["']?\s*\}?\s*in trash|in trash/);
+    expect(src).toMatch(/sr-only/);
+  });
+});

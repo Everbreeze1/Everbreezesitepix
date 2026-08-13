@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Download, Loader2, Printer, QrCode, RefreshCw } from "lucide-react";
+import { Copy, Download, Loader2, Printer, QrCode, RefreshCw, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import QRCode from "qrcode";
 
@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PrintDocument } from "@/components/PrintDocument";
-import { setProjectShare } from "@/lib/project-shares.functions";
+import { getProjectShare, setProjectShare } from "@/lib/project-shares.functions";
 
 /**
  * The QR code for a project, and the public link behind it.
@@ -37,10 +37,9 @@ import { setProjectShare } from "@/lib/project-shares.functions";
  *     The bytes now go through a Blob and an anchor that is actually in the
  *     document, and the code is on screen before anything is saved.
  *
- * Opening this dialog turns the link on. That is the action the user asked for
- * — a code that resolves — and doing it any other way means handing someone a
- * QR that leads to "unavailable" until they find a second switch. The switch is
- * still here, one tap away, and what the link exposes is stated above it rather
+ * Opening this dialog reads the link's state and changes nothing — see `load`.
+ * Publishing is one tap, on a primary button that is the only action offered
+ * while the link is off, and what a visitor will see is stated next to it rather
  * than buried in a help page.
  */
 
@@ -89,27 +88,40 @@ export function ProjectQrDialog({
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const url = token ? `${origin}/share/projects/${token}` : "";
 
-  const enable = useCallback(async () => {
+  /**
+   * Reads the link. Never changes it.
+   *
+   * This deliberately does not turn sharing on, and the distinction is not
+   * cosmetic. The menu mounts this dialog as `{qrOpen && …}`, so it unmounts on
+   * close and every open starts from blank state — an "enable on open" effect
+   * therefore fires *every* time, not once. An owner who switched the link off
+   * when a job finished and later opened this dialog to look at it would have
+   * silently re-published their customer's photos, with a success state that
+   * looked identical to the one they'd deliberately left.
+   *
+   * Publishing stays an act. It costs one clearly-labelled tap the first time,
+   * which is not the friction the field complained about — that was a login wall
+   * in front of the person *scanning*, and this fixes nothing about it.
+   */
+  const load = useCallback(async () => {
     setLoading(true);
     setFailed(false);
     try {
-      const res = await setProjectShare({ data: { projectId, enable: true } });
+      const res = await getProjectShare({ data: { projectId } });
       setToken(res.shareToken);
       setLive(!res.revokedAt);
     } catch (e: any) {
       setFailed(true);
-      toast.error(e?.message ?? "Could not create the public link");
+      toast.error(e?.message ?? "Could not load the public link");
     } finally {
       setLoading(false);
     }
   }, [projectId]);
 
-  // Minting the link is what "Save QR code" means, so it happens on open rather
-  // than behind another click.
   useEffect(() => {
     if (!open || token || loading || failed) return;
-    void enable();
-  }, [open, token, loading, failed, enable]);
+    void load();
+  }, [open, token, loading, failed, load]);
 
   useEffect(() => {
     if (!url) {
@@ -183,8 +195,9 @@ export function ProjectQrDialog({
           <DialogHeader>
             <DialogTitle>QR code for “{projectName}”</DialogTitle>
             <DialogDescription>
-              Print it and put it on the job. Scanning opens this project&rsquo;s photos in a
-              browser — no app, no account, no sign-in.
+              {live
+                ? "Print it and put it on the job. Scanning opens this project’s photos in a browser — no app, no account, no sign-in."
+                : "Turn the link on and this code opens the project’s photos in any browser — no app, no account, no sign-in."}
             </DialogDescription>
           </DialogHeader>
 
@@ -193,7 +206,7 @@ export function ProjectQrDialog({
               {loading ? (
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               ) : failed ? (
-                <Button variant="outline" size="sm" onClick={() => void enable()}>
+                <Button variant="outline" size="sm" onClick={() => void load()}>
                   <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                   Try again
                 </Button>
@@ -208,8 +221,8 @@ export function ProjectQrDialog({
               )}
             </div>
             {!live && !loading && token && (
-              <p className="text-center text-xs text-destructive">
-                The link is off, so this code currently leads nowhere.
+              <p className="text-center text-xs text-muted-foreground">
+                The link is off, so this code leads nowhere yet.
               </p>
             )}
           </div>
@@ -235,7 +248,12 @@ export function ProjectQrDialog({
             )}
           </div>
 
-          {url && (
+          {/*
+            The link itself, and the two things you can do with a working code,
+            appear only while the code works. Offering "Save PNG" on a dead link
+            is offering to print a sign that sends customers to an error page.
+          */}
+          {live && url && (
             <div className="flex items-center gap-2">
               <Input
                 readOnly
@@ -250,16 +268,33 @@ export function ProjectQrDialog({
             </div>
           )}
 
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button variant="outline" className="flex-1" disabled={!qr} onClick={download}>
-              <Download className="mr-2 h-4 w-4" />
-              Save PNG
+          {live ? (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button variant="outline" className="flex-1" disabled={!qr} onClick={download}>
+                <Download className="mr-2 h-4 w-4" />
+                Save PNG
+              </Button>
+              <Button className="flex-1" disabled={!qr} onClick={() => window.print()}>
+                <Printer className="mr-2 h-4 w-4" />
+                Print sheet
+              </Button>
+            </div>
+          ) : (
+            // The one action that makes sense while the link is off, as the
+            // primary button rather than a switch someone has to notice.
+            <Button
+              className="w-full"
+              disabled={!token || toggling}
+              onClick={() => void toggle(true)}
+            >
+              {toggling ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Share2 className="mr-2 h-4 w-4" />
+              )}
+              Turn the link on
             </Button>
-            <Button className="flex-1" disabled={!qr} onClick={() => window.print()}>
-              <Printer className="mr-2 h-4 w-4" />
-              Print sheet
-            </Button>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
 

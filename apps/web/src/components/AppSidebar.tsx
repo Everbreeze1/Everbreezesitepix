@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Layers,
   Lock,
+  Trash2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -34,6 +35,7 @@ import { useProfile } from "@/hooks/use-profile";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { getMyTeam } from "@/lib/teams.functions";
+import { getTrashCounts } from "@/lib/trash.functions";
 
 const baseItems = [
   { title: "Overview", url: "/dashboard", icon: LayoutDashboard },
@@ -50,6 +52,16 @@ const templatesItem = { title: "Templates", url: "/templates", icon: LayoutTempl
 // project pages + website embeds), so "Portfolio" is what it actually is.
 const showcasesItem = { title: "Portfolio", url: "/showcases", icon: Layers } as const;
 const pricingItem = { title: "Upgrade", url: "/pricing", icon: Crown } as const;
+/*
+ * Deleting is reversible for 60 days, but only if you can find where the
+ * deleted things went. The trash screen has existed the whole time — route,
+ * page, restore and purge, retention, a nightly sweep — reachable from exactly
+ * one place: a three-dot overflow menu on the Projects page. Nothing in the
+ * sidebar, nothing on the dashboard, nothing on mobile. Someone who deletes a
+ * project by mistake has no path back to it that they could reasonably guess,
+ * and the window closes on a timer they cannot see.
+ */
+const trashItem = { title: "Trash", url: "/projects/trash", icon: Trash2 } as const;
 const helpItem = { title: "Help Center", url: "/help", icon: HelpCircle } as const;
 // Covers bugs *and* feature suggestions now, so "Report issue" undersold it.
 const reportIssueItem = { title: "Feedback", url: "/report-issue", icon: LifeBuoy } as const;
@@ -112,7 +124,28 @@ export function AppSidebar() {
     { ...showcasesItem, locked: portfolioLocked },
     ...(showOwnerNav ? [teamItem] : [collabItem]),
   ];
-  const toolItems = [...(showOwnerNav ? [pricingItem] : []), helpItem, reportIssueItem];
+  const toolItems = [
+    ...(showOwnerNav ? [pricingItem] : []),
+    trashItem,
+    helpItem,
+    reportIssueItem,
+  ];
+
+  /*
+   * The badge is the only signal that anything is recoverable at all. Without a
+   * number the row reads as an empty utility and gets ignored, which is the
+   * state the product was already in.
+   *
+   * Deliberately not gated on plan or role: restoring your own deleted work is
+   * not a premium feature, and `getTrashCounts` is already scoped to the caller.
+   */
+  const { data: trashCounts } = useQuery({
+    queryKey: ["trash-counts"],
+    queryFn: async () => (await getTrashCounts()) as { projects: number; photos: number },
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  const trashTotal = (trashCounts?.projects ?? 0) + (trashCounts?.photos ?? 0);
 
   const displayName = profile?.full_name || user?.email || "";
   const initials = getInitials(profile?.full_name, user?.email);
@@ -186,14 +219,42 @@ export function AppSidebar() {
             <SidebarMenu className={`${isMobile ? "gap-2" : "gap-1"}`}>
               {toolItems.map((item) => {
                 const active = pathname === item.url || pathname.startsWith(item.url + "/");
+                const badge = item.url === trashItem.url && trashTotal > 0 ? trashTotal : 0;
                 return (
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton asChild isActive={active} className={navButtonClass(active)}>
                       <Link to={item.url}>
-                        <span className={navIconBoxClass(active)}>
+                        <span className={`relative ${navIconBoxClass(active)}`}>
                           <item.icon className={iconBase} />
+                          {/*
+                            Collapsed to icons there is no room for a number, but
+                            "something is in here" still has to survive — so the
+                            count becomes a dot. Without this the badge simply
+                            vanishes for anyone who works with the rail closed.
+                          */}
+                          {badge > 0 && collapsed && (
+                            <span
+                              aria-hidden
+                              className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-sidebar-ring ring-2 ring-sidebar"
+                            />
+                          )}
                         </span>
                         {!collapsed && <span>{item.title}</span>}
+                        {!collapsed && badge > 0 && (
+                          <span className="ml-auto flex shrink-0 items-center">
+                            <span className="rounded-full bg-sidebar-foreground/15 px-2 py-0.5 text-[11px] font-extrabold tabular-nums text-sidebar-foreground/80">
+                              {badge > 99 ? "99+" : badge}
+                            </span>
+                          </span>
+                        )}
+                        {badge > 0 && (
+                          // One text node carries the meaning for a screen
+                          // reader in both states; the pill and the dot are
+                          // decoration.
+                          <span className="sr-only">
+                            {badge} {badge === 1 ? "item" : "items"} in trash
+                          </span>
+                        )}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

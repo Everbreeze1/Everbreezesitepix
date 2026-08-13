@@ -145,8 +145,13 @@ function PublicProjectPage() {
               </p>
             )}
           </div>
+          {/*
+            `projects.status` is a raw lowercase enum. The app's own header
+            renders it "Active"; a page a customer reads should not be the one
+            surface that shows them the database value.
+          */}
           <Badge variant={project.status === "archived" ? "secondary" : "default"}>
-            {project.status}
+            {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
           </Badge>
         </div>
 

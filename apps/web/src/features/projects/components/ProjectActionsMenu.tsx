@@ -574,8 +574,8 @@ export function ProjectActionsMenu({
       </DropdownMenu>
 
       {/*
-        Mounted only once opened. The dialog turns the project's public link on
-        as its first act, so it must never run just because the header rendered.
+        Mounted only once opened — it fetches the project's link state, which is
+        not work the project header should do on every render.
       */}
       {qrOpen && (
         <ProjectQrDialog
