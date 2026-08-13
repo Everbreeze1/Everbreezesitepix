@@ -81,6 +81,7 @@ function redactEmail(email: string | null | undefined): string {
 export function buildConfirmationUrl(emailData: {
   site_url?: string;
   token_hash?: string;
+  token_hash_new?: string;
   email_action_type?: string;
   redirect_to?: string;
 }): string {
@@ -94,8 +95,16 @@ export function buildConfirmationUrl(emailData: {
    */
   const action = emailData.email_action_type ?? "signup";
   const verifyType = action.startsWith("email_change") ? "email_change" : action;
+  /*
+   * An email change has TWO tokens: `token_hash` proves the old address
+   * approved, `token_hash_new` proves the new one did. Sending the old token to
+   * the new address would confirm the wrong half, so the message aimed at the
+   * new address must carry `token_hash_new`.
+   */
+  const wantsNewToken = action === "email_change" || action === "email_change_new";
+  const token = (wantsNewToken ? emailData.token_hash_new : undefined) ?? emailData.token_hash ?? "";
   const params = new URLSearchParams({
-    token: emailData.token_hash ?? "",
+    token,
     type: verifyType,
   });
   if (emailData.redirect_to) params.set("redirect_to", emailData.redirect_to);
@@ -163,11 +172,29 @@ export async function handleAuthSendEmail(request: Request): Promise<Response> {
     return jsonError(400, "invalid_payload", "Invalid payload");
   }
 
-  const newEmail = (emailData.new_email ?? emailData.email) as string | undefined;
-  const recipient: string =
-    emailType === "email_change" || emailType === "email_change_new"
-      ? (newEmail ?? email)
-      : email;
+  /*
+   * The pending address lives on the USER record as `user.new_email`, not on
+   * email_data. GoTrue's Send Email payload carries `token_hash_new` for the
+   * new address but no `new_email` field, so reading `email_data.new_email`
+   * found nothing — and falling back to `email_data.email` silently resolved
+   * to the OLD address, which is how the confirmation kept going to the wrong
+   * mailbox even after the routing fix.
+   *
+   * No fallback to email_data.email here, deliberately: it is the current
+   * address, so using it would re-introduce exactly that bug. If we genuinely
+   * cannot find the new address we send to `email` and log it, which is at
+   * least visible.
+   */
+  const newEmail = (body?.user?.new_email ?? emailData.new_email) as string | undefined;
+  const wantsNewAddress = emailType === "email_change" || emailType === "email_change_new";
+  const recipient: string = wantsNewAddress ? (newEmail ?? email) : email;
+  if (wantsNewAddress && !newEmail) {
+    console.error("[auth-send] email change with no new address in the payload", {
+      emailType,
+      payloadKeys: Object.keys(emailData),
+      userKeys: Object.keys(body?.user ?? {}),
+    });
+  }
 
   const EmailTemplate = EMAIL_TEMPLATES[emailType];
   if (!EmailTemplate) {

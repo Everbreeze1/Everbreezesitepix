@@ -535,8 +535,9 @@ export function ProjectDetailPage() {
      * above) on `phase = "walkthrough"` / a `/walkthroughs/` storage path,
      * which is what put a technician's site photos out of reach: they snapped
      * them on a walkthrough, then couldn't find them in the project's photos or
-     * add them to a report. `phase` survives as a provenance label — the photo
-     * carousel badges it — it just no longer hides anything.
+     * add them to a report. `phase` survives as a provenance label — the grid
+     * tile below badges it, as does PhotoCarousel — it just no longer hides
+     * anything.
      */
     const photoList = (ph as Photo[]) ?? [];
     setPhotos(photoList);
@@ -3248,7 +3249,7 @@ export function ProjectDetailPage() {
                             </div>
                           )}
                         </button>
-                        {phase !== "untagged" && (
+                        {phase !== "untagged" ? (
                           <span
                             className={`pointer-events-none absolute right-3 top-3 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase text-white ${
                               phase === "after" ? "bg-[#10B981]" : "bg-[#2584F4]"
@@ -3256,6 +3257,27 @@ export function ProjectDetailPage() {
                           >
                             {phase === "after" ? "After" : "Before"}
                           </span>
+                        ) : (
+                          p.phase === "walkthrough" && (
+                            /*
+                             * Walkthrough captures used to be filtered out of
+                             * this grid entirely. Now that they belong here,
+                             * they need to be tellable apart — a walk can add
+                             * dozens of frames at once, and "where did all
+                             * these come from" is the next question after
+                             * "where did my photos go".
+                             *
+                             * Deliberately neutral rather than a third colour:
+                             * Before/After is a judgement the user made about
+                             * the work, this is only where the frame came from.
+                             * `normalizedPhase` maps anything that is not
+                             * before/after to "untagged", so these two branches
+                             * can never both render.
+                             */
+                            <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-sidebar/70 px-2.5 py-1 text-[10px] font-extrabold uppercase text-sidebar-foreground backdrop-blur-sm">
+                              Walkthrough
+                            </span>
+                          )
                         )}
                         <button
                           type="button"

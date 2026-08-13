@@ -1899,13 +1899,21 @@ describe("family: an email-change confirmation must reach the NEW address", () =
 
   it("email_change and email_change_new resolve to the new address", () => {
     const src = stripComments(read(SRC));
-    const start = src.indexOf("const recipient");
-    const block = src.slice(start, start + 320);
-    expect(block).toMatch(/email_change_new/);
-    expect(block).toMatch(/newEmail/);
+    // Anchored on the predicate rather than a fixed slice, so refactoring the
+    // surrounding lines cannot make this pass or fail for the wrong reason.
+    expect(src).toMatch(/wantsNewAddress\s*=[\s\S]{0,160}email_change_new/);
+    expect(src).toMatch(/recipient[^\n]*wantsNewAddress[\s\S]{0,80}newEmail/);
   });
 
-  it("new_email is read off email_data", () => {
-    expect(stripComments(read(SRC))).toMatch(/emailData\.new_email/);
+  it("the new address is read from user.new_email, not email_data.email", () => {
+    /*
+     * `email_data.email` is the CURRENT address. Falling back to it resolved
+     * the "confirm your new email" recipient to the old mailbox, which is the
+     * bug this whole family exists for — the routing looked correct and the
+     * mail still went to the wrong place.
+     */
+    const src = stripComments(read(SRC));
+    expect(src).toMatch(/user\?\.new_email/);
+    expect(src).not.toMatch(/newEmail\s*=\s*\([^)]*emailData\.email/);
   });
 });

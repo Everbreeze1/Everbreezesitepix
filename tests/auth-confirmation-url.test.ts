@@ -100,3 +100,47 @@ describe("buildConfirmationUrl — email change action types", () => {
     }
   });
 });
+
+describe("buildConfirmationUrl — email change carries the right token", () => {
+  /*
+   * An email change mints two tokens: `token_hash` for the old address to
+   * approve, `token_hash_new` for the new one to confirm. Handing the old
+   * token to the new address confirms the wrong half and leaves the change
+   * pending.
+   */
+  const base = {
+    site_url: "https://x.supabase.co/auth/v1",
+    token_hash: "OLD_TOKEN",
+    token_hash_new: "NEW_TOKEN",
+  };
+
+  it("the message to the NEW address uses token_hash_new", () => {
+    for (const action of ["email_change", "email_change_new"]) {
+      const url = new URL(buildConfirmationUrl({ ...base, email_action_type: action }));
+      expect(url.searchParams.get("token"), action).toBe("NEW_TOKEN");
+    }
+  });
+
+  it("the message to the CURRENT address uses token_hash", () => {
+    const url = new URL(
+      buildConfirmationUrl({ ...base, email_action_type: "email_change_current" }),
+    );
+    expect(url.searchParams.get("token")).toBe("OLD_TOKEN");
+  });
+
+  it("falls back to token_hash when no new token is present", () => {
+    const url = new URL(
+      buildConfirmationUrl({
+        site_url: base.site_url,
+        token_hash: "ONLY_TOKEN",
+        email_action_type: "email_change",
+      }),
+    );
+    expect(url.searchParams.get("token")).toBe("ONLY_TOKEN");
+  });
+
+  it("other flows are unaffected", () => {
+    const url = new URL(buildConfirmationUrl({ ...base, email_action_type: "signup" }));
+    expect(url.searchParams.get("token")).toBe("OLD_TOKEN");
+  });
+});
