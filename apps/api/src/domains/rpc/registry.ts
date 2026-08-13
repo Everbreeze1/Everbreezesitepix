@@ -40,6 +40,8 @@ import {
 } from "../trash/service";
 import { combineProjectsInputSchema, combineProjectsService } from "../projects/actions";
 import {
+  ensureProjectShareInputSchema,
+  ensureProjectShareService,
   getProjectShareInputSchema,
   getProjectShareService,
   getPublicProjectShareService,
@@ -947,6 +949,13 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   getProjectShare: authed(
     (d) => getProjectShareInputSchema.parse(d),
     getProjectShareService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  // What the QR dialog opens with: a read that publishes the link if — and only
+  // if — nobody has ever chosen either way. `authed`, and it writes, so it is
+  // covered by scripts/security-idor-check.mjs alongside setProjectShare.
+  ensureProjectShare: authed(
+    (d) => ensureProjectShareInputSchema.parse(d),
+    ensureProjectShareService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   setProjectShare: authed(
     (d) => setProjectShareInputSchema.parse(d),

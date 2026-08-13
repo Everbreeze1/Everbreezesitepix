@@ -20,7 +20,9 @@ import type { AuthedContext } from "../../lib/user-context";
  * Every guard mirrors `getPublicChecklistService` (field-records.ts), for the
  * same reasons:
  *   - the token is the only credential, so nothing is trusted from the caller
- *   - `share_revoked_at` is the owner's off switch, and it starts ON
+ *   - `share_revoked_at` is the owner's off switch, and it starts engaged: the
+ *     column defaults to `now()`, so a project is not shared until its owner
+ *     publishes it (20260817000000 spells out why publishing is an act)
  *   - a trashed project takes its link down with it
  *   - trashed photos never reach the page — a photo is often deleted precisely
  *     because someone asked for it to be
@@ -95,11 +97,29 @@ const empty = (status: PublicProjectShare["status"]): PublicProjectShare => ({
  */
 const notYours = () => Object.assign(new Error("Project not found"), { status: 404 });
 
+/**
+ * "`share_decided_at` isn't there yet" — the one error worth swallowing.
+ *
+ * Migrations here are applied by hand in the Supabase SQL editor, so a deploy
+ * can land in front of 20260818000300 by minutes or by a day. Everything that
+ * touches the new column is written to fall back to the behaviour that shipped
+ * without it: the QR dialog opens on a link the owner turns on themselves, and
+ * the on/off switch keeps working. Publishing on first open then starts the
+ * moment the column exists, with nothing to redeploy.
+ *
+ * Both codes mean the same thing — Postgres does not know the column
+ * (`42703`), or PostgREST's schema cache does not yet (`PGRST204`) — and this
+ * file names exactly one column that could be missing.
+ */
+const missingDecidedColumn = (error: { code?: string } | null): boolean =>
+  !!error && (error.code === "42703" || error.code === "PGRST204");
+
 // ============================================================
 // Owner side — read and flip the switch
 // ============================================================
 
 export const getProjectShareInputSchema = z.object({ projectId: z.string().uuid() });
+export const ensureProjectShareInputSchema = z.object({ projectId: z.string().uuid() });
 export const setProjectShareInputSchema = z.object({
   projectId: z.string().uuid(),
   enable: z.boolean(),
@@ -133,22 +153,79 @@ export async function getProjectShareService(
 }
 
 /**
+ * Reads the link, publishing it if nobody has ever chosen either way.
+ *
+ * What the QR dialog opens with. `share_revoked_at` alone cannot distinguish
+ * "the owner switched this off" from "this project has never been asked about",
+ * and the two deserve opposite answers: the first is a decision to respect, the
+ * second is someone who just opened *QR code for this job* being asked whether
+ * they meant it. `share_decided_at` is the column that tells them apart — see
+ * 20260818000300 — and it is NULL only until the first answer of either kind.
+ *
+ * The publish is the `.is("share_decided_at", null)` filter on the UPDATE, not
+ * a read followed by a write. One statement means two dialogs opened at once
+ * cannot both publish, and a link its owner turned off is untouchable here no
+ * matter how often anyone opens the dialog: the row simply stops matching.
+ *
+ * A foreign project matches zero rows for the same reason a foreign project
+ * matches zero rows in `setProjectShareService` — RLS — and falls through to
+ * the read, which answers 404. Opening a dialog you have no business opening
+ * therefore publishes nothing.
+ */
+export async function ensureProjectShareService(
+  ctx: AuthedContext,
+  data: z.infer<typeof ensureProjectShareInputSchema>,
+): Promise<ProjectShareState> {
+  const { data: rows, error } = await (ctx.supabase as any)
+    .from("projects")
+    .update({ share_revoked_at: null, share_decided_at: new Date().toISOString() })
+    .eq("id", data.projectId)
+    .is("share_decided_at", null)
+    .select("share_token, share_revoked_at");
+  // Before the migration lands there is nothing to publish on, and this becomes
+  // the plain read it used to be — see `missingDecidedColumn`.
+  if (error && !missingDecidedColumn(error)) throw new Error(error.message);
+  const row = error ? null : ((rows as any[]) ?? [])[0];
+  if (row) {
+    return { shareToken: row.share_token as string, revokedAt: row.share_revoked_at ?? null };
+  }
+  // Zero rows means the question is already answered — or the project is not
+  // the caller's. The read tells those two apart, and answers each correctly.
+  return getProjectShareService(ctx, { projectId: data.projectId });
+}
+
+/**
  * Turns the public link on or off.
  *
  * The token is minted by the column default and never rotated here, so turning a
  * link off and on again resurrects the same URL — which is what someone who has
  * already printed and hung a QR sheet needs. Rotating on re-enable would silently
  * kill every code already taped to a door.
+ *
+ * Either direction stamps `share_decided_at`: an owner who turns a link off has
+ * decided, and that has to be the end of `ensureProjectShareService` ever
+ * turning it back on for them.
  */
 export async function setProjectShareService(
   ctx: AuthedContext,
   data: z.infer<typeof setProjectShareInputSchema>,
 ): Promise<ProjectShareState> {
-  const { data: rows, error } = await (ctx.supabase as any)
-    .from("projects")
-    .update({ share_revoked_at: data.enable ? null : new Date().toISOString() })
-    .eq("id", data.projectId)
-    .select("share_token, share_revoked_at");
+  const revokedAt = data.enable ? null : new Date().toISOString();
+  const write = (patch: Record<string, unknown>) =>
+    (ctx.supabase as any)
+      .from("projects")
+      .update(patch)
+      .eq("id", data.projectId)
+      .select("share_token, share_revoked_at");
+
+  let { data: rows, error } = await write({
+    share_revoked_at: revokedAt,
+    share_decided_at: new Date().toISOString(),
+  });
+  // The switch predates the column and must not start failing because of it.
+  if (missingDecidedColumn(error)) {
+    ({ data: rows, error } = await write({ share_revoked_at: revokedAt }));
+  }
   if (error) throw new Error(error.message);
   const row = ((rows as any[]) ?? [])[0];
   // RLS filters an UPDATE to zero rows rather than erroring, so "not yours" and

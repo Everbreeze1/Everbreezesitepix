@@ -7,10 +7,11 @@
  *      shared document so the public route signs it.
  *
  * And the project-level share link behind the printed QR code:
- *   3. setProjectShare / getProjectShare — publishing, or stealing the token
- *      of, a project the caller does not own; plus the two properties that
- *      make the feature safe at all (a new project starts unshared, and an
- *      un-enabled token is not anonymously readable).
+ *   3. setProjectShare / ensureProjectShare / getProjectShare — publishing a
+ *      project the caller does not own, by the switch or by "opening its QR
+ *      dialog", and stealing its token; plus the two properties that make the
+ *      feature safe at all (a new project starts unshared, and an un-enabled
+ *      token is not anonymously readable).
  *
  * SAFETY: never touches the real .env account. It provisions its own victim +
  * attacker accounts and their data via the service role, runs the exploits
@@ -243,6 +244,24 @@ const run = async () => {
     hijack.status === 200
       ? `COMPROMISED: attacker enabled public sharing on the victim's project — token ${String(hijack.json?.shareToken).slice(0, 8)}…`
       : `setProjectShare refused the foreign project with ${hijack.status}: ${JSON.stringify(hijack.json).slice(0, 90)}`,
+  );
+
+  /*
+   * The same hijack through the door that publishes without being asked.
+   *
+   * `ensureProjectShare` is what the QR dialog opens with, and on a project
+   * nobody has decided about it turns the link on — which is precisely the
+   * victim's state here. It gets its own probe rather than riding on
+   * setProjectShare's: they are different statements with different WHERE
+   * clauses, and this one publishes as a side effect of a read.
+   */
+  const autoPublish = await rpc("ensureProjectShare", { projectId: victimProject.id }, atkToken);
+  record(
+    "Project-share first-open publish blocked",
+    autoPublish.status !== 200,
+    autoPublish.status === 200
+      ? `COMPROMISED: attacker published the victim's project by "opening" its QR dialog — token ${String(autoPublish.json?.shareToken).slice(0, 8)}…`
+      : `ensureProjectShare refused the foreign project with ${autoPublish.status}: ${JSON.stringify(autoPublish.json).slice(0, 90)}`,
   );
 
   // Reading the token is enough on its own: it is the credential the QR encodes.

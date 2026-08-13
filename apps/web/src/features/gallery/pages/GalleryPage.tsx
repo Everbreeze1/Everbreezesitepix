@@ -471,6 +471,37 @@ export function GalleryPage() {
     staleTime: 60_000,
   });
 
+  /**
+   * The only way to change view.
+   *
+   * Two rules, both of which were bugs before they were rules:
+   *
+   * 1. Picking the view you are already in does nothing. It used to clear
+   *    `photos` — and nothing put them back, because the effect below only
+   *    fires when `photosQuery.data` changes identity and a cache hit returns
+   *    the very same object. So a full gallery emptied itself and offered
+   *    "No photos yet — take a photo", which is what "I click Grid and it asks
+   *    me to take a photo" was.
+   *
+   * 2. A real change hands the incoming view the list it owns. The two fill
+   *    `photos` from different sources — a page of recent photos vs. the one
+   *    day the calendar loaded — so the outgoing view's list must not flash
+   *    inside the incoming one. On the way back to the grid that list is
+   *    already in the query cache, and taking it from there rather than
+   *    blanking and waiting for the effect below is the difference between a
+   *    grid that reappears and a frame of "No photos yet".
+   */
+  const switchView = (next: "grid" | "calendar") => {
+    if (next === view) return;
+    setView(next);
+    // A day picked in a previous session would otherwise sit selected in a
+    // month it doesn't belong to.
+    setSelectedDay(null);
+    const incoming = next === "grid" ? photosQuery.data : undefined;
+    setPhotos(incoming?.photos ?? []);
+    setSigned(incoming?.signed ?? {});
+  };
+
   useEffect(() => {
     if (projectsQuery.data) setProjects(projectsQuery.data);
   }, [projectsQuery.data]);
@@ -478,11 +509,22 @@ export function GalleryPage() {
     if (totalPhotosQuery.data !== undefined) setTotalPhotos(totalPhotosQuery.data);
   }, [totalPhotosQuery.data]);
   useEffect(() => {
+    /*
+     * Guarded on the view *and* keyed on it, so returning to the grid re-mirrors
+     * whatever the query is holding.
+     *
+     * Without `calendarView` in the deps this effect could only ever fire when
+     * `photosQuery.data` changed identity — and a cache hit hands back the same
+     * object it did before the detour through the calendar. That is the failure
+     * `switchView` above now heads off directly; this stays the backstop for
+     * every other way the two can drift apart.
+     */
+    if (calendarView) return;
     if (photosQuery.data) {
       setPhotos(photosQuery.data.photos);
       setSigned(photosQuery.data.signed);
     }
-  }, [photosQuery.data]);
+  }, [photosQuery.data, calendarView]);
 
   // A disabled query stays `pending` forever, so calendar mode must not read
   // it as "still loading".
@@ -496,14 +538,12 @@ export function GalleryPage() {
   // arriving at ?view=calendar while the gallery is already open (the /timeline
   // redirect, back/forward, a shared link) would leave the grid showing. Only
   // acts when the param is actually present, so navigating to a bare /gallery
-  // doesn't yank the user out of the calendar.
+  // doesn't yank the user out of the calendar — and goes through `switchView`,
+  // so landing on ?view=grid while already in the grid is the no-op it reads as
+  // rather than a self-emptying gallery.
   useEffect(() => {
-    if (search.view) {
-      setView(search.view);
-      setSelectedDay(null);
-      setPhotos([]);
-      setSigned({});
-    }
+    if (search.view) switchView(search.view);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search.view]);
 
   useEffect(() => {
@@ -526,6 +566,19 @@ export function GalleryPage() {
     tagFilter.length === 0
       ? photos
       : photos.filter((p) => (p.tags ?? []).some((t) => tagFilter.includes(t)));
+
+  const filtersActive = projectFilter.length > 0 || tagFilter.length > 0 || !!dateFrom || !!dateTo;
+  /**
+   * A gallery with nothing in it gets the empty state on its own.
+   *
+   * The bar is five controls that all read "All" and a count that reads 0 —
+   * every one of them an answer to a question a first-time user has not asked
+   * yet, stacked on top of the one thing they need, which is where the camera
+   * button is. It comes back the moment there is anything to narrow down, and
+   * stays put while a filter is applied (so the way back from an empty result
+   * is never hidden) or while the calendar is open (it owns the month nav).
+   */
+  const showFilterBar = calendarView || filtersActive || loading || photos.length > 0;
   const activeLightboxPhoto =
     lightboxIndex !== null
       ? (visiblePhotos[Math.min(lightboxIndex, visiblePhotos.length - 1)] ?? null)
@@ -1093,21 +1146,19 @@ export function GalleryPage() {
         title="Analyzing with AI…"
         description="Reading text, detecting defects, drafting findings"
       />
+      {/*
+        Title and the two actions, and nothing else.
+
+        This header used to also carry the plan badge and a line of prose. Neither
+        is what someone opening a gallery came for: the plan is Settings' subject
+        and appears again on every paywall, and "Capture, upload, and analyze site
+        photos" restates the two buttons sitting beside it. Stacked above a filter
+        bar and a grid, they were two of the several things competing for the first
+        screen — which is what the field meant by "too much at once".
+      */}
       <PageHeader
         eyebrow="Media library"
-        title={
-          <span className="flex items-center gap-2">
-            Photo gallery
-            <span
-              className={`inline-flex items-center rounded-lg px-2.5 py-0.5 font-manrope text-[10px] font-semibold shadow-sm ${
-                isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {isActive ? (tier === "team" ? "Team" : "Pro") : "Free"}
-            </span>
-          </span>
-        }
-        description="Capture, upload, and analyze site photos."
+        title="Photo gallery"
         actions={
           <>
             <input
@@ -1156,49 +1207,19 @@ export function GalleryPage() {
         </Card>
       )}
 
-      {projects.length > 0 && (
+      {/*
+        One row, two groups, read left to right: what you are looking at, then
+        how you are looking at it.
+
+        The view toggle used to sit at the head of the row with a rule after it,
+        which put a control that changes the whole page in the middle of three
+        that narrow it — five things and a running count, all fighting for the
+        same line. Filters keep the left; the toggle moves to the right edge,
+        where the eye lands after the grid rather than before the filters.
+      */}
+      {projects.length > 0 && showFilterBar && (
         <div className="mt-5 rounded-[14px] border border-border bg-card p-3">
           <div className="flex flex-wrap items-center gap-2">
-            {/* Grid vs calendar. Segmented, so the current mode is never in doubt. */}
-            <div className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-muted p-0.5">
-              {(
-                [
-                  { key: "grid", label: "Grid", icon: LayoutGrid },
-                  { key: "calendar", label: "Calendar", icon: CalendarDays },
-                ] as const
-              ).map((v) => {
-                const on = view === v.key;
-                return (
-                  <button
-                    key={v.key}
-                    type="button"
-                    onClick={() => {
-                      setView(v.key);
-                      // A day picked in a previous session would otherwise sit
-                      // selected in a month it doesn't belong to.
-                      setSelectedDay(null);
-                      // The two views fill `photos` from different sources, so
-                      // hand over empty rather than letting one view's list
-                      // flash inside the other.
-                      setPhotos([]);
-                      setSigned({});
-                    }}
-                    aria-pressed={on}
-                    className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 font-manrope text-xs font-bold transition ${
-                      on
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <v.icon className="h-3.5 w-3.5" />
-                    {v.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <span aria-hidden className="mx-0.5 hidden h-6 w-px shrink-0 bg-border sm:block" />
-
             {/* Projects multi-select */}
             <Popover>
               <PopoverTrigger asChild>
@@ -1384,9 +1405,7 @@ export function GalleryPage() {
               </PopoverContent>
             </Popover>
 
-            {(projectFilter.length > 0 ||
-              tagFilter.length > 0 ||
-              (!calendarView && (dateFrom || dateTo))) && (
+            {filtersActive && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -1403,12 +1422,46 @@ export function GalleryPage() {
               </Button>
             )}
 
-            {!calendarView && (
-              <div className="ml-auto font-manrope text-xs font-bold text-muted-foreground">
-                {visiblePhotos.length} of {photos.length} photo
-                {photos.length === 1 ? "" : "s"}
+            <div className="ml-auto flex items-center gap-3">
+              {/*
+                The count answers "did my filter catch anything", so it appears
+                when there is a filter to answer for. Unfiltered it was the grid
+                counting itself out loud.
+              */}
+              {!calendarView && filtersActive && (
+                <span className="font-manrope text-xs font-bold text-muted-foreground">
+                  {visiblePhotos.length} photo{visiblePhotos.length === 1 ? "" : "s"}
+                </span>
+              )}
+
+              {/* Grid vs calendar. Segmented, so the current mode is never in doubt. */}
+              <div className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-muted p-0.5">
+                {(
+                  [
+                    { key: "grid", label: "Grid", icon: LayoutGrid },
+                    { key: "calendar", label: "Calendar", icon: CalendarDays },
+                  ] as const
+                ).map((v) => {
+                  const on = view === v.key;
+                  return (
+                    <button
+                      key={v.key}
+                      type="button"
+                      onClick={() => switchView(v.key)}
+                      aria-pressed={on}
+                      className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 font-manrope text-xs font-bold transition ${
+                        on
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <v.icon className="h-3.5 w-3.5" />
+                      {v.label}
+                    </button>
+                  );
+                })}
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}

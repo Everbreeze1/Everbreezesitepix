@@ -41,9 +41,11 @@ export type { PublicPhotoShare } from "./domains/photos/shares";
 
 export {
   getProjectShareService,
+  ensureProjectShareService,
   setProjectShareService,
   getPublicProjectShareService,
   getProjectShareInputSchema,
+  ensureProjectShareInputSchema,
   setProjectShareInputSchema,
   publicProjectShareInputSchema,
 } from "./domains/projects/public-share";
