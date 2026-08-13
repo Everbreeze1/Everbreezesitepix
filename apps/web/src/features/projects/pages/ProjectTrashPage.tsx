@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, Loader2, MapPin, RefreshCw, Trash2, Images } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,17 @@ interface TrashedProject {
 
 export function ProjectTrashPage() {
   const confirm = useConfirm();
+  /*
+   * The sidebar's Trash badge is a cached query (60s). Emptying the trash from
+   * this page left the badge insisting there were still items in it — the one
+   * number whose whole job is to be trustworthy. Invalidate it whenever this
+   * page changes what is in there.
+   */
+  const queryClient = useQueryClient();
+  const refreshTrashBadge = useCallback(
+    () => void queryClient.invalidateQueries({ queryKey: ["trash-counts"] }),
+    [queryClient],
+  );
   const [items, setItems] = useState<TrashedProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -56,6 +68,7 @@ export function ProjectTrashPage() {
       await restoreFn({ data: { projectId: p.id } });
       toast.success(`Restored "${p.name}"`);
       setItems((cur) => cur.filter((i) => i.id !== p.id));
+      refreshTrashBadge();
     } catch (e: any) {
       toast.error(e?.message ?? "Restore failed");
     } finally {
@@ -76,6 +89,7 @@ export function ProjectTrashPage() {
       await purgeFn({ data: { projectId: p.id } });
       toast.success(`Deleted "${p.name}" permanently`);
       setItems((cur) => cur.filter((i) => i.id !== p.id));
+      refreshTrashBadge();
     } catch (e: any) {
       toast.error(e?.message ?? "Delete failed");
     } finally {

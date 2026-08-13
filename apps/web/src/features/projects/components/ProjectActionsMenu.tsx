@@ -123,12 +123,35 @@ function googleMapsUrl(project: ProjectActionsMenuProps["project"]) {
  * merge, the public QR link, the 60-day trash window. "Edit details" and
  * "Recently deleted" say everything about themselves already.
  */
-function MenuText({ title, hint }: { title: string; hint?: string }) {
+function MenuText({
+  title,
+  hint,
+  /**
+   * Clamp the hint to one line.
+   *
+   * For a hint that is *data* rather than a sentence — the site address — a
+   * second wrapped line buys nothing: the start of an address is what
+   * identifies it, and the rest is what makes the row three lines tall. Prose
+   * hints are written short enough to fit instead, so they never need this.
+   */
+  clampHint,
+}: {
+  title: string;
+  hint?: string;
+  clampHint?: boolean;
+}) {
   return (
     <span className="min-w-0">
       <span className="block font-semibold">{title}</span>
       {hint && (
-        <span className="block text-xs font-normal leading-snug text-muted-foreground">{hint}</span>
+        <span
+          className={cn(
+            "block text-xs font-normal leading-snug text-muted-foreground",
+            clampHint && "truncate",
+          )}
+        >
+          {hint}
+        </span>
       )}
     </span>
   );
@@ -475,7 +498,7 @@ export function ProjectActionsMenu({
             {/* Keeps its hint: it empties this project and cannot be undone. */}
             <MenuText
               title="Merge into another project"
-              hint="Moves every photo, task and document across"
+              hint="Moves everything, empties this one"
             />
           </DropdownMenuItem>
 
@@ -495,6 +518,7 @@ export function ProjectActionsMenu({
                 <MenuText
                   title="Open location in Maps"
                   hint={projectAddress(project) ?? undefined}
+                  clampHint
                 />
                 <ExternalLink className="ml-2 h-3 w-3 shrink-0 opacity-50" />
               </a>

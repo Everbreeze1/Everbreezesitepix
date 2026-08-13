@@ -196,8 +196,20 @@ function PublicProjectPage() {
                     loading="lazy"
                     className="h-full w-full object-cover transition group-hover:scale-105"
                   />
-                  {p.phase && (
-                    <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                  {/*
+                    Same rule and same treatment as PhotoCarousel, the app's own
+                    photo tile.
+
+                    `"untagged"` is not a phase — it is what `uploadOne` stores
+                    when someone picks "No marker", so rendering any truthy
+                    `phase` put the word UNTAGGED on a customer's screen.
+                    Capitalised rather than shouted, too: most of these images
+                    already carry a burnt-in BEFORE/AFTER watermark, and a second
+                    uppercase chip on top of it was the same word twice on one
+                    tile.
+                  */}
+                  {p.phase && p.phase !== "untagged" && (
+                    <span className="absolute left-1.5 top-1.5 rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-medium capitalize text-white backdrop-blur-sm">
                       {p.phase}
                     </span>
                   )}
