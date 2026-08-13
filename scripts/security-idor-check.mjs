@@ -6,6 +6,12 @@
  *   2. getPublicProjectPage — embedding <img data-photo-id="foreign"> in a
  *      shared document so the public route signs it.
  *
+ * And the project-level share link behind the printed QR code:
+ *   3. setProjectShare / getProjectShare — publishing, or stealing the token
+ *      of, a project the caller does not own; plus the two properties that
+ *      make the feature safe at all (a new project starts unshared, and an
+ *      un-enabled token is not anonymously readable).
+ *
  * SAFETY: never touches the real .env account. It provisions its own victim +
  * attacker accounts and their data via the service role, runs the exploits
  * through the real API, then deletes everything it made. The victim photo uses
@@ -211,6 +217,75 @@ const run = async () => {
           : `public page did NOT resolve the foreign photo (marker absent). status ${pub.status}.`,
       );
     }
+  }
+
+  // ---------- IDOR 3: publish the victim's whole project to the internet ----------
+  /*
+   * `setProjectShare` flips `projects.share_revoked_at` through the caller's
+   * RLS-scoped client, so an attacker naming a foreign `projectId` should match
+   * zero rows. That is an assumption about the `projects` UPDATE policy, and it
+   * is the highest-stakes one in the share feature: if it is wrong, anyone with
+   * an account can put someone else's job site — every photo, the address —
+   * on a public URL, and the owner is never told.
+   *
+   * Checked in three parts, because "the write failed" is not the same as "the
+   * link is dead": the write, the token read, and finally the anonymous read
+   * that is what an attacker actually wants.
+   */
+  const hijack = await rpc(
+    "setProjectShare",
+    { projectId: victimProject.id, enable: true },
+    atkToken,
+  );
+  record(
+    "Project-share hijack blocked",
+    hijack.status !== 200,
+    hijack.status === 200
+      ? `COMPROMISED: attacker enabled public sharing on the victim's project — token ${String(hijack.json?.shareToken).slice(0, 8)}…`
+      : `setProjectShare refused the foreign project with ${hijack.status}: ${JSON.stringify(hijack.json).slice(0, 90)}`,
+  );
+
+  // Reading the token is enough on its own: it is the credential the QR encodes.
+  const steal = await rpc("getProjectShare", { projectId: victimProject.id }, atkToken);
+  record(
+    "Project share-token read blocked",
+    steal.status !== 200,
+    steal.status === 200
+      ? `COMPROMISED: attacker read the victim project's share token (${String(steal.json?.shareToken).slice(0, 8)}…) — enough to hand out the link.`
+      : `getProjectShare refused the foreign project with ${steal.status}: ${JSON.stringify(steal.json).slice(0, 90)}`,
+  );
+
+  // Whatever the writes did, the victim's project must not be anonymously
+  // readable. Read the real token with the service role and try it as a stranger.
+  const tokRes = await fetch(
+    `${URL}/rest/v1/projects?id=eq.${victimProject.id}&select=share_token,share_revoked_at`,
+    { headers: svcH },
+  );
+  const tokRow = (await tokRes.json().catch(() => []))[0];
+  if (!tokRow?.share_token) {
+    record(
+      "Project share default-off",
+      false,
+      "could not read share_token — is the migration applied?",
+    );
+  } else {
+    record(
+      "Project share defaults to OFF",
+      !!tokRow.share_revoked_at,
+      tokRow.share_revoked_at
+        ? "a freshly created project is not publicly shared"
+        : "COMPROMISED: a new project is publicly readable the moment it exists.",
+    );
+    const anon = await rpc("getPublicProjectShare", { token: tokRow.share_token }, null);
+    const body = JSON.stringify(anon.json);
+    const exposed = anon.json?.status === "ok" || body.includes(MARKER);
+    record(
+      "Victim project not anonymously readable",
+      !exposed,
+      exposed
+        ? `COMPROMISED: the victim's project is served to an anonymous caller (status ${anon.json?.status}).`
+        : `anonymous read refused: status "${anon.json?.status}", victim photo marker absent.`,
+    );
   }
 
   finish();

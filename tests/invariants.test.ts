@@ -2019,3 +2019,157 @@ describe("family: a recovery surface has to be reachable", () => {
     expect(src).toMatch(/sr-only/);
   });
 });
+
+describe("family: a cron endpoint that cannot authenticate fails silently", () => {
+  /*
+   * verifyCronSecret resolves the expected secret through
+   * `admin.rpc("get_cron_shared_secret")`. That function was never defined in
+   * any migration, so the RPC always errored, the check always returned false,
+   * and BOTH scheduled endpoints answered 401 to every caller — for the life of
+   * the project. Nothing purged, nothing archived, storage never reclaimed, and
+   * the 60-day deletion promise quietly untrue.
+   *
+   * The failure is invisible by construction: no user action breaks, no page
+   * errors, a scheduled job just 401s into a log nobody reads. So the guard is
+   * that the SQL side of the contract exists at all.
+   */
+  const migrationsDir = join(ROOT, "supabase/migrations");
+  const allMigrations = () =>
+    readdirSync(migrationsDir)
+      .filter((f) => f.endsWith(".sql"))
+      .map((f) => readFileSync(join(migrationsDir, f), "utf8"))
+      .join("\n");
+
+  it("every function the API calls via rpc() is defined in a migration", () => {
+    const src = read("apps/api/src/lib/cron-auth.ts");
+    const called = [...src.matchAll(/\.rpc\(\s*["'](\w+)["']/g)].map((m) => m[1]);
+    expect(called.length, "no rpc() call found — did cron-auth.ts change?").toBeGreaterThan(0);
+    const sql = allMigrations();
+    for (const fn of called) {
+      expect(sql, `${fn}() is called by the API but defined in no migration`).toContain(
+        `FUNCTION public.${fn}(`,
+      );
+    }
+  });
+
+  it("the cron secret function is not executable by anon or authenticated", () => {
+    /*
+     * It is SECURITY DEFINER and returns a secret that authorises permanent
+     * deletion. CREATE FUNCTION grants EXECUTE to PUBLIC by default, so the
+     * revoke is the entire security boundary.
+     */
+    const sql = allMigrations();
+    expect(sql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.get_cron_shared_secret\(\) FROM PUBLIC, anon, authenticated/i,
+    );
+    expect(sql).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.get_cron_shared_secret\(\) TO service_role/i,
+    );
+  });
+
+  it("the SECURITY DEFINER function pins its search_path", () => {
+    // Without this, a caller-controlled search_path can shadow
+    // vault.decrypted_secrets and make the function return a chosen value.
+    const sql = allMigrations();
+    const start = sql.indexOf("FUNCTION public.get_cron_shared_secret(");
+    expect(start).toBeGreaterThan(-1);
+    const body = sql.slice(start, start + 600);
+    expect(body).toMatch(/SET search_path = ''/);
+  });
+});
+
+describe("family: the project share link behind the printed QR code", () => {
+  /*
+   * A QR code taped to a job site is the one credential in this product that
+   * gets handed out physically and can never be recalled from whoever
+   * photographed it. Every guard below is what keeps that link from turning
+   * into "the whole project, forever, to anyone who walked past".
+   *
+   * These assert on source text for the same reason the rest of this file does:
+   * the alternative is a live Supabase + service-role harness, which exists
+   * (scripts/security-idor-check.mjs) but cannot run in CI.
+   */
+  const SERVICE = "apps/api/src/domains/projects/public-share.ts";
+  const ROUTE = "apps/web/src/routes/share.projects.$token.tsx";
+  const MIGRATION = "supabase/migrations/20260817000000_project_share_links.sql";
+
+  it("the public read refuses a revoked link", () => {
+    /*
+     * Asserted as one adjacent statement, not `share_revoked_at` … `.*` …
+     * `empty("revoked")` across a dotall span. The loose version passed with the
+     * check deleted: `share_revoked_at` still appeared in the `.select(...)`
+     * list, and the span ran all the way to the *deleted_at* branch's own
+     * `return empty("revoked")`. A guard test that its own mutation cannot fail
+     * is worse than no test — it reports coverage that isn't there.
+     */
+    const src = stripComments(read(SERVICE));
+    expect(src).toMatch(/project\.share_revoked_at\)\s*\{?\s*return empty\("revoked"\)/);
+  });
+
+  it("trashing the project takes its public link down with it", () => {
+    /*
+     * `projects.deleted_at` is a 60-day window and nothing schedules the purge,
+     * so without this the link outlives the job it describes indefinitely —
+     * the same defect getPublicProjectPageService had to be fixed for.
+     */
+    const src = stripComments(read(SERVICE));
+    // Adjacent statement, for the same reason as the revoked check above.
+    expect(src).toMatch(/project\.deleted_at\)\s*\{?\s*return empty\("revoked"\)/);
+  });
+
+  it("trashed photos never reach an anonymous visitor", () => {
+    /*
+     * A photo is often deleted precisely because someone asked for it to be.
+     * Serving it on a public URL after that is the worst version of this bug.
+     */
+    const src = stripComments(read(SERVICE));
+    expect(src).toMatch(/from\("photos"\)[\s\S]{0,400}?\.is\("deleted_at", null\)/);
+  });
+
+  it("the public payload carries no share token", () => {
+    // The token IS the credential. Echoing it into a page anyone can load
+    // would hand every reader the ability to re-share the project themselves.
+    const src = stripComments(read(SERVICE));
+    const publicFn = src.slice(src.indexOf("getPublicProjectShareService"));
+    expect(publicFn).not.toMatch(/shareToken|share_token:/);
+  });
+
+  it("ownership rejections are client errors, not 500s", () => {
+    /*
+     * lib/errors.ts only maps a 4xx when the thrown Error carries `status`.
+     * A bare `throw new Error(...)` makes an ownership check look like a server
+     * crash to the client and to error monitoring.
+     */
+    const src = stripComments(read(SERVICE));
+    expect(src).toMatch(/status:\s*404/);
+    expect(src).not.toMatch(/if \(!row\) throw new Error/);
+  });
+
+  it("a project starts unshared", () => {
+    /*
+     * The migration mints a token onto every project that already exists, so a
+     * `share_revoked_at` with no default would retroactively publish the entire
+     * database. Publishing to the internet is an act, not a default.
+     */
+    const sql = read(MIGRATION);
+    expect(sql).toMatch(/ALTER COLUMN share_revoked_at SET DEFAULT now\(\)/);
+  });
+
+  it("anon holds no grant on projects, which now carry the token", () => {
+    // RLS cannot hide a single column: one anon-readable policy and every
+    // share secret in the table goes out at once.
+    const sql = read(MIGRATION);
+    expect(sql).toMatch(/REVOKE ALL ON public\.projects FROM anon, PUBLIC/);
+  });
+
+  it("the public page never renders 'untagged' as a phase", () => {
+    /*
+     * `uploadOne` stores `phase: tag ?? "untagged"` when someone picks "No
+     * marker", so rendering any truthy phase put the word UNTAGGED on a
+     * customer's screen. PhotoCarousel — the app's own tile — has always
+     * excluded it.
+     */
+    const src = stripComments(read(ROUTE));
+    expect(src).toMatch(/phase !== "untagged"/);
+  });
+});

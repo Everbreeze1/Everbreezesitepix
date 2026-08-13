@@ -80,6 +80,21 @@ const empty = (status: PublicProjectShare["status"]): PublicProjectShare => ({
   photos: [],
 });
 
+/**
+ * "That project isn't yours, or isn't there" — as a client error, not a crash.
+ *
+ * 404 rather than 403 for both cases deliberately: RLS filters a foreign row out
+ * of the result set rather than erroring, so the two are genuinely
+ * indistinguishable here, and answering 403 would confirm to a prober that a
+ * project with that id exists.
+ *
+ * The `status` property is what `jsonFromUnknownError` (lib/errors.ts) reads to
+ * emit a real 404 `not_found`. Without it an ownership rejection reaches the
+ * client as a 500 `internal_error` — the wrong status for retries, and a
+ * permission check that reads like a server fault in the logs.
+ */
+const notYours = () => Object.assign(new Error("Project not found"), { status: 404 });
+
 // ============================================================
 // Owner side — read and flip the switch
 // ============================================================
@@ -113,7 +128,7 @@ export async function getProjectShareService(
     .eq("id", data.projectId)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  if (!row) throw new Error("Project not found");
+  if (!row) throw notYours();
   return { shareToken: row.share_token as string, revokedAt: row.share_revoked_at ?? null };
 }
 
@@ -138,7 +153,7 @@ export async function setProjectShareService(
   const row = ((rows as any[]) ?? [])[0];
   // RLS filters an UPDATE to zero rows rather than erroring, so "not yours" and
   // "doesn't exist" arrive here identically — and are answered identically.
-  if (!row) throw new Error("Project not found");
+  if (!row) throw notYours();
   return { shareToken: row.share_token as string, revokedAt: row.share_revoked_at ?? null };
 }
 
