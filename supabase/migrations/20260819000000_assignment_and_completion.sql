@@ -493,12 +493,23 @@ WHERE NOT t.tgisinternal
   )
 ORDER BY c.relname, t.tgname;
 
--- Teammate reach into workflows — expect 3 policies.
-SELECT tablename, policyname
+-- Teammate reach into workflows — expect 6 rows: a view and an update policy on
+-- each of the three workflow tables, and `cmd` never INSERT or ALL (see the
+-- note in section 2 about the Team-plan gate).
+SELECT tablename, policyname, cmd
 FROM pg_policies
 WHERE schemaname = 'public'
-  AND policyname LIKE 'Teammates manage team workflow%'
-ORDER BY tablename;
+  AND tablename IN ('project_workflows', 'project_workflow_phases', 'project_workflow_items')
+  AND policyname LIKE 'Teammates%'
+ORDER BY tablename, cmd;
+
+-- And the gate those policies must not have widened — expect exactly one
+-- INSERT policy on project_workflows, still carrying is_team_plan().
+SELECT policyname, with_check
+FROM pg_policies
+WHERE schemaname = 'public'
+  AND tablename = 'project_workflows'
+  AND cmd IN ('INSERT', 'ALL');
 
 -- Assignment coverage — `assigned_by` must be non-NULL wherever work is assigned.
 SELECT 'checklists' AS kind,
