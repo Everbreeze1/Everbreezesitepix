@@ -23,6 +23,11 @@ import {
 
 const ROOT = resolve(__dirname, "..");
 const MIGRATION = join(ROOT, "supabase/migrations/20260819000000_assignment_and_completion.sql");
+/** In apply order — later files replace functions defined in earlier ones. */
+const MIGRATIONS = [
+  MIGRATION,
+  join(ROOT, "supabase/migrations/20260819000100_workflow_completed_notifies_creator.sql"),
+];
 
 const MANAGER = { userId: "manager", isManager: true };
 const CREW = { userId: "crew", isManager: false };
@@ -202,6 +207,39 @@ describe("the SQL half still says the same thing", () => {
     // Falling back to the record's owner keeps work that was never formally
     // handed over from notifying nobody.
     expect(sql).toContain("COALESCE(NEW.assigned_by, NEW.created_by)");
+  });
+
+  /*
+   * All three must address the same person the same way, which is the whole
+   * point of the feature — two records closed identically should not notify
+   * different people for reasons nothing in the UI explains.
+   *
+   * `notify_workflow_completed` originally reached through `project_workflows`
+   * to the PROJECT's owner, on the mistaken belief that the table had no
+   * `created_by` of its own (it has had one, NOT NULL, since 20260616050717).
+   * That only bit unassigned workflows — where `assigned_by` is NULL and the
+   * fallback actually runs — but on a team where a manager applies workflows to
+   * jobs they did not create, it sent the report to the wrong person entirely.
+   * Fixed in 20260819000100; this reads the LAST definition of each function
+   * across both files, so a future migration that regresses it fails here.
+   */
+  it("addresses all three completion notifications to the same person", () => {
+    const combined = MIGRATIONS.map((m) => readFileSync(m, "utf8")).join("\n");
+    for (const fn of [
+      "notify_checklist_completed",
+      "notify_task_completed",
+      "notify_workflow_completed",
+    ]) {
+      // Anchored on CREATE OR REPLACE, not on `FUNCTION public.<fn>()` — the
+      // latter also matches the trigger's `EXECUTE FUNCTION` clause, which
+      // sits after the definition and would slice the wrong span.
+      const last = combined.lastIndexOf(`CREATE OR REPLACE FUNCTION public.${fn}()`);
+      expect(last, `${fn} not defined`).toBeGreaterThan(-1);
+      const body = combined.slice(last, combined.indexOf("$$;", last));
+      expect(body, `${fn} recipient`).toContain("COALESCE(NEW.assigned_by, NEW.created_by)");
+      // Reaching into another table for the fallback is what went wrong before.
+      expect(body, `${fn} should not look up the project`).not.toContain("FROM public.projects");
+    }
   });
 
   /*
