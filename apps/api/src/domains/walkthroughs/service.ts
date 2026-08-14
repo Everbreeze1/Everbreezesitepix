@@ -526,6 +526,95 @@ function buildFallbackAiReport(args: {
   return { title, subtitle, introduction: intro, sections, conclusion };
 }
 
+/** One captured photo, as the prompt describes it to the model. */
+export interface AutoReportPromptPhoto {
+  index: number;
+  offset: number;
+  spoken_note: string;
+  caption: string | null;
+}
+
+/**
+ * The Auto Report prompt.
+ *
+ * Pulled out of the service so it can be exercised without a database, a
+ * walkthrough row or a signed-in user - `scripts/check-auto-report-prompt.mjs`
+ * runs this exact text against the real model. A prompt that can only be tested
+ * by recording a walkthrough in production is a prompt nobody tests.
+ *
+ * `maxPhotoSections` and the per-section minimum are given to the model as
+ * arithmetic rather than as a vague "group things", because one heading per
+ * photo is its default instinct and that is precisely what paginates into one
+ * photo per page. consolidateReportSections enforces the same numbers
+ * afterwards for the runs where it does not comply.
+ */
+export function buildAutoReportPrompt(args: {
+  projectName: string | null;
+  walkTitle: string | null;
+  durationSeconds: number;
+  transcript: string;
+  photos: AutoReportPromptPhoto[];
+  photosPerPage: 1 | 2 | 3 | 4;
+  maxPhotoSections: number;
+}): string {
+  const photoLines = args.photos
+    .map(
+      (p) =>
+        `- Photo index ${p.index} - captured at ${fmtDuration(p.offset)}${p.spoken_note ? ` - spoken: "${p.spoken_note.replace(/"/g, '\\"')}"` : ""}${p.caption ? ` - existing caption: ${p.caption}` : ""}`,
+    )
+    .join("\n");
+  const minPhotosPerSection = Math.min(args.photos.length, args.photosPerPage);
+
+  return `You are drafting a formal, client-facing site REPORT from a recorded walkthrough. It is a deliverable the client receives, so it reads as a document, not as a running commentary on each photo.
+
+Project: ${args.projectName ?? "(unspecified)"}
+Walkthrough title: ${args.walkTitle ?? "Untitled walkthrough"}
+Duration: ${fmtDuration(args.durationSeconds)}
+Photos captured: ${args.photos.length}
+
+VOICE:
+- Complete, professional prose in the introduction and conclusion. No bullets there.
+- Section bodies: short prose, or tight bullets (<ul><li>) where the speaker genuinely listed things. Never a caption-by-caption walk through the photos - the photos carry their own captions.
+- Neutral and factual. Do NOT call anything "critical", a "code violation", a "safety hazard" or "severity: high" unless the speaker used those words. Do NOT invent defects, measurements, brands, risks, recommendations or next steps. If the source material is thin, keep it short rather than padding it.
+- Base every sentence on the spoken transcript and the spoken notes tied to each photo.
+
+STRUCTURE (this is what decides how the PDF paginates - follow it exactly):
+- Produce AT MOST ${args.maxPhotoSections} section(s) that carry photos. Group them the way the walk actually divided up: by area, elevation, trade or stage. Do NOT create a section per photo.
+- Every section carrying photos must carry at least ${minPhotosPerSection} of them, unless there are not that many photos left to give it.
+- You may add at most one further section with no photos at all if the speaker covered something that has no picture.
+- Section headings are short noun phrases: "Roof and flashings", "Interior - second floor", "Work completed". Not sentences.
+
+OUTPUT:
+- Valid JSON matching the schema below. No markdown fences, no commentary.
+- Body fields are safe HTML using only these tags: <p>, <br/>, <strong>, <em>, <ul>, <ol>, <li>, <h3>. No inline styles, no other tags.
+- Assign photos by integer index (0..${Math.max(0, args.photos.length - 1)}) in "photo_indices". Each index may appear in at most one section. Anything left unassigned is appended as a final gallery.
+
+Return JSON:
+{
+  "title": "short, descriptive report title based on project and date",
+  "subtitle": "one-sentence subtitle",
+  "introduction": "<p>2-4 sentences of prose: what was walked, why, and what this report documents</p>",
+  "sections": [
+    { "title": "Section heading", "body": "<p>...</p>", "photo_indices": [0,1,2,3] }
+  ],
+  "conclusion": "<p>2-3 sentences closing out what the documentation shows overall, plus any next steps the speaker actually stated.</p>"
+}
+
+Available photos:
+${photoLines || "(none)"}
+
+Raw spoken transcript:
+"""
+${args.transcript || "(no speech captured)"}
+"""
+
+If the transcript is empty, still produce valid JSON: an introduction stating plainly that the walk was recorded without narration, a single section titled "Captured photos" with an empty body and photo_indices listing every photo in order, and a one-sentence conclusion. Invent nothing.`;
+}
+
+/** The system message that pairs with `buildAutoReportPrompt`. */
+export const AUTO_REPORT_SYSTEM_PROMPT =
+  "You are SitePix AI drafting a formal, client-facing site report. You output only valid JSON that matches the requested schema, never commentary outside the JSON. You write in neutral, factual, professional prose, you base every sentence on the provided transcript and spoken notes, and you never invent facts, findings, risks or recommendations. You group photos into a small number of themed sections rather than giving each photo its own heading.";
+
 /**
  * Page density for a generated report: what the caller asked for, else the
  * author's saved default, else two per page.
@@ -1958,56 +2047,15 @@ export async function createReportFromWalkthroughService(
     // ---- AI structuring ----
     let ai: AiReportShape | null = null;
     if (apiKey) {
-      const photoLines = photoList.map((p) =>
-        `- Photo index ${p.index} - captured at ${fmtDuration(p.offset)}${p.spoken_note ? ` - spoken: "${p.spoken_note.replace(/"/g, '\\"')}"` : ""}${p.caption ? ` - existing caption: ${p.caption}` : ""}`
-      ).join("\n");
-
-      const minPhotosPerSection = Math.min(photoList.length, photosPerPage);
-
-      const userPrompt = `You are drafting a formal, client-facing site REPORT from a recorded walkthrough. It is a deliverable the client receives, so it reads as a document, not as a running commentary on each photo.
-
-Project: ${projectName ?? "(unspecified)"}
-Walkthrough title: ${walkTitle ?? "Untitled walkthrough"}
-Duration: ${fmtDuration((walk as any).duration_seconds ?? 0)}
-Photos captured: ${photoList.length}
-
-VOICE:
-- Complete, professional prose in the introduction and conclusion. No bullets there.
-- Section bodies: short prose, or tight bullets (<ul><li>) where the speaker genuinely listed things. Never a caption-by-caption walk through the photos - the photos carry their own captions.
-- Neutral and factual. Do NOT call anything "critical", a "code violation", a "safety hazard" or "severity: high" unless the speaker used those words. Do NOT invent defects, measurements, brands, risks, recommendations or next steps. If the source material is thin, keep it short rather than padding it.
-- Base every sentence on the spoken transcript and the spoken notes tied to each photo.
-
-STRUCTURE (this is what decides how the PDF paginates - follow it exactly):
-- Produce AT MOST ${maxPhotoSections} section(s) that carry photos. Group them the way the walk actually divided up: by area, elevation, trade or stage. Do NOT create a section per photo.
-- Every section carrying photos must carry at least ${minPhotosPerSection} of them, unless there are not that many photos left to give it.
-- You may add at most one further section with no photos at all if the speaker covered something that has no picture.
-- Section headings are short noun phrases: "Roof and flashings", "Interior - second floor", "Work completed". Not sentences.
-
-OUTPUT:
-- Valid JSON matching the schema below. No markdown fences, no commentary.
-- Body fields are safe HTML using only these tags: <p>, <br/>, <strong>, <em>, <ul>, <ol>, <li>, <h3>. No inline styles, no other tags.
-- Assign photos by integer index (0..${Math.max(0, photoList.length - 1)}) in "photo_indices". Each index may appear in at most one section. Anything left unassigned is appended as a final gallery.
-
-Return JSON:
-{
-  "title": "short, descriptive report title based on project and date",
-  "subtitle": "one-sentence subtitle",
-  "introduction": "<p>2-4 sentences of prose: what was walked, why, and what this report documents</p>",
-  "sections": [
-    { "title": "Section heading", "body": "<p>...</p>", "photo_indices": [0,1,2,3] }
-  ],
-  "conclusion": "<p>2-3 sentences closing out what the documentation shows overall, plus any next steps the speaker actually stated.</p>"
-}
-
-Available photos:
-${photoLines || "(none)"}
-
-Raw spoken transcript:
-"""
-${transcript || "(no speech captured)"}
-"""
-
-If the transcript is empty, still produce valid JSON: an introduction stating plainly that the walk was recorded without narration, a single section titled "Captured photos" with an empty body and photo_indices listing every photo in order, and a one-sentence conclusion. Invent nothing.`;
+      const userPrompt = buildAutoReportPrompt({
+        projectName,
+        walkTitle,
+        durationSeconds: (walk as any).duration_seconds ?? 0,
+        transcript,
+        photos: photoList,
+        photosPerPage,
+        maxPhotoSections,
+      });
 
       try {
         const ep = chatEndpoint(MODEL);
@@ -2018,7 +2066,7 @@ If the transcript is empty, still produce valid JSON: an introduction stating pl
             model: ep.model,
             response_format: { type: "json_object" },
             messages: [
-              { role: "system", content: "You are SitePix AI drafting a formal, client-facing site report. You output only valid JSON that matches the requested schema, never commentary outside the JSON. You write in neutral, factual, professional prose, you base every sentence on the provided transcript and spoken notes, and you never invent facts, findings, risks or recommendations. You group photos into a small number of themed sections rather than giving each photo its own heading." },
+              { role: "system", content: AUTO_REPORT_SYSTEM_PROMPT },
               { role: "user", content: userPrompt },
             ],
           }),
