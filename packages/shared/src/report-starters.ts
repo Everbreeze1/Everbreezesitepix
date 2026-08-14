@@ -124,16 +124,3 @@ export function getReportStarter(id: string | null | undefined): ReportStarter |
   if (!id) return null;
   return REPORT_STARTERS.find((t) => t.id === id) ?? null;
 }
-
-/**
- * Category order for the picker.
- *
- * Derived from `REPORT_STARTERS` rather than hardcoded so a starter added to a
- * category that is not listed here still appears, instead of vanishing from the
- * picker because someone forgot to update a second list.
- */
-export function reportStarterCategories(): ReportStarterCategory[] {
-  const seen: ReportStarterCategory[] = [];
-  for (const t of REPORT_STARTERS) if (!seen.includes(t.category)) seen.push(t.category);
-  return seen;
-}

@@ -47,7 +47,6 @@ export {
 export {
   REPORT_STARTERS,
   getReportStarter,
-  reportStarterCategories,
   type ReportStarter,
   type ReportStarterCategory,
   type ReportStarterCover,

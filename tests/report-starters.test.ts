@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  REPORT_STARTERS,
-  getReportStarter,
-  reportStarterCategories,
-} from "../packages/shared/src/index";
+import { REPORT_STARTERS, getReportStarter } from "../packages/shared/src/index";
 
 /**
  * The starter library is data that lands straight in a client's PDF, so the
@@ -62,9 +58,7 @@ describe("built-in report starters", () => {
     }
   });
 
-  it("derives its categories from the library rather than a second list", () => {
-    const categories = reportStarterCategories();
-    expect(new Set(categories).size).toBe(categories.length);
-    for (const t of REPORT_STARTERS) expect(categories).toContain(t.category);
+  it("labels every starter with a category the picker can badge", () => {
+    for (const t of REPORT_STARTERS) expect(t.category.trim(), t.id).not.toBe("");
   });
 });
