@@ -56,4 +56,11 @@ export {
   consolidateReportSections,
   type DraftReportSection,
 } from "./report-autostructure";
-export { PHOTO_ROW_WIDTH, PHOTO_ROW_HEIGHT, photoRows, photoPageGroups } from "./photo-row-layout";
+export {
+  PHOTO_ROW_WIDTH,
+  PHOTO_ROW_HEIGHT,
+  photoWidthFor,
+  photoRows,
+  photoPageGroups,
+  type PhotoRowMode,
+} from "./photo-row-layout";

@@ -4,6 +4,7 @@ import {
   PHOTO_ROW_WIDTH,
   photoPageGroups,
   photoRows,
+  photoWidthFor,
 } from "../packages/shared/src/index";
 import { photoRowHtml } from "../apps/web/src/lib/tiptap-photo-slot";
 
@@ -21,19 +22,39 @@ describe("photo row layout", () => {
     expect(photoRows([1, 2, 3], 3)).toEqual([[1, 2, 3]]);
   });
 
-  it("splits four up into a 2x2 grid rather than one four-wide row", () => {
-    expect(photoRows([1, 2, 3, 4], 4)).toEqual([
+  it("splits four up into a 2x2 grid for tap-target slots", () => {
+    expect(photoRows([1, 2, 3, 4], 4, "slots")).toEqual([
       [1, 2],
       [3, 4],
     ]);
+  });
+
+  /*
+   * The measured reason the modes exist: page-pdf.ts divides the content column
+   * between the images sharing a paragraph, so a 2x2 renders at two-up's size.
+   * Four finished photos on a sheet the same size as two is a control whose top
+   * setting does nothing.
+   */
+  it("keeps four finished photos in one row, so density is monotonic", () => {
+    expect(photoRows([1, 2, 3, 4], 4, "photos")).toEqual([[1, 2, 3, 4]]);
+    expect(photoWidthFor(4, "photos")).toBe(PHOTO_ROW_WIDTH[4]);
+    expect(photoWidthFor(4, "slots")).toBe(PHOTO_ROW_WIDTH[2]);
+  });
+
+  it("agrees between the modes everywhere except four up", () => {
+    for (const perPage of [1, 2, 3] as const) {
+      const items = [1, 2, 3].slice(0, perPage);
+      expect(photoRows(items, perPage, "slots")).toEqual(photoRows(items, perPage, "photos"));
+      expect(photoWidthFor(perPage, "slots")).toBe(photoWidthFor(perPage, "photos"));
+    }
   });
 
   it("keeps a short final row rather than padding it", () => {
     expect(photoRows([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
   });
 
-  it("groups by page, so a 2x2 is one group of two rows", () => {
-    expect(photoPageGroups([1, 2, 3, 4, 5, 6, 7, 8], 4)).toEqual([
+  it("groups by page, so a 2x2 slot block is one group of two rows", () => {
+    expect(photoPageGroups([1, 2, 3, 4, 5, 6, 7, 8], 4, "slots")).toEqual([
       [
         [1, 2],
         [3, 4],
@@ -43,14 +64,20 @@ describe("photo row layout", () => {
         [7, 8],
       ],
     ]);
+    expect(photoPageGroups([1, 2, 3, 4, 5, 6, 7, 8], 4, "photos")).toEqual([
+      [[1, 2, 3, 4]],
+      [[5, 6, 7, 8]],
+    ]);
     expect(photoPageGroups([1, 2, 3, 4], 2)).toEqual([[[1, 2]], [[3, 4]]]);
   });
 
-  it("loses nothing, at any density", () => {
+  it("loses nothing, at any density or mode", () => {
     const items = Array.from({ length: 11 }, (_, i) => i);
     for (const perPage of [1, 2, 3, 4] as const) {
-      expect(photoRows(items, perPage).flat(), `perPage ${perPage}`).toEqual(items);
-      expect(photoPageGroups(items, perPage).flat(2), `perPage ${perPage}`).toEqual(items);
+      for (const mode of ["slots", "photos"] as const) {
+        expect(photoRows(items, perPage, mode).flat(), `${perPage}/${mode}`).toEqual(items);
+        expect(photoPageGroups(items, perPage, mode).flat(2), `${perPage}/${mode}`).toEqual(items);
+      }
     }
   });
 
@@ -89,9 +116,12 @@ describe("photoRowHtml, after moving its arithmetic into the shared rule", () =>
 
   it("still carries the widths and height the seeded templates use", () => {
     for (const n of [1, 2, 3, 4] as const) {
-      expect(photoRowHtml(n, 1), `${n} up`).toContain(`width="${PHOTO_ROW_WIDTH[n]}"`);
+      expect(photoRowHtml(n, 1), `${n} up`).toContain(`width="${photoWidthFor(n, "slots")}"`);
       expect(photoRowHtml(n, 1), `${n} up`).toContain(`height="${PHOTO_ROW_HEIGHT}"`);
     }
+    // Four-up slots are 48% wide (two per row), which is the pre-existing
+    // markup the seeded SQL templates and the click-to-fill path depend on.
+    expect(photoRowHtml(4, 1)).toContain(`width="${PHOTO_ROW_WIDTH[2]}"`);
   });
 
   it("numbers slots continuously from the index it is given", () => {

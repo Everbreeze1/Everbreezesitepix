@@ -3,7 +3,7 @@ import {
   photoEvidenceHtml,
   type GeneratedPhoto,
 } from "../apps/api/src/domains/projects/page-generate";
-import { PHOTO_ROW_HEIGHT, PHOTO_ROW_WIDTH } from "../packages/shared/src/index";
+import { PHOTO_ROW_HEIGHT, photoWidthFor } from "../packages/shared/src/index";
 
 /**
  * The generated Report's evidence body.
@@ -34,17 +34,16 @@ describe("photoEvidenceHtml", () => {
   });
 
   /*
-   * Four across at a quarter width each is a strip of thumbnails. The editor's
-   * Insert menu and the seeded SQL templates had already settled this - see
-   * @sitepix/shared's photo-row-layout - and the generator has to match, or a
-   * generated document and a hand-built one are visibly different products.
+   * Finished evidence, not tap targets. page-pdf.ts divides the content column
+   * between the images sharing a paragraph and ignores the width attribute, so
+   * images-per-paragraph is the only lever on density - and a 2x2 at four-up
+   * renders exactly like two-up, which made the top of the control useless.
    */
-  it("lays four-up out as a 2x2 grid, the same as the editor and the seeded templates", () => {
-    expect(paragraphImageCounts(photoEvidenceHtml(photos(8), 4))).toEqual([2, 2, 2, 2]);
-    expect(photoEvidenceHtml(photos(8), 4)).toContain(`width="${PHOTO_ROW_WIDTH[4]}"`);
+  it("puts four up in one row, so each step of the setting fits more than the last", () => {
+    expect(paragraphImageCounts(photoEvidenceHtml(photos(8), 4))).toEqual([4, 4]);
   });
 
-  it("groups each page's rows into one card, so a 2x2 is one block not two", () => {
+  it("groups each page's photos into one card", () => {
     const cards = (html: string) => (html.match(/<div data-panel="photo">/g) ?? []).length;
     expect(cards(photoEvidenceHtml(photos(8), 4))).toBe(2);
     expect(cards(photoEvidenceHtml(photos(6), 3))).toBe(2);
@@ -53,7 +52,7 @@ describe("photoEvidenceHtml", () => {
   it("sizes photos with the shared row rule", () => {
     for (const perPage of [2, 3, 4] as const) {
       const html = photoEvidenceHtml(photos(4), perPage);
-      expect(html, `perPage ${perPage}`).toContain(`width="${PHOTO_ROW_WIDTH[perPage]}"`);
+      expect(html, `perPage ${perPage}`).toContain(`width="${photoWidthFor(perPage, "photos")}"`);
       expect(html, `perPage ${perPage}`).toContain(`height="${PHOTO_ROW_HEIGHT}"`);
     }
   });

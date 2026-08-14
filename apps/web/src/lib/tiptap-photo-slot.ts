@@ -13,7 +13,7 @@
  * slot's dimensions across).
  */
 
-import { PHOTO_ROW_HEIGHT, PHOTO_ROW_WIDTH, photoRows } from "@sitepix/shared";
+import { PHOTO_ROW_HEIGHT, photoRows, photoWidthFor } from "@sitepix/shared";
 
 /** Matches the slot art in the seeded templates: dashed rounded rect, caption, hint. */
 function slotSvg(label: string): string {
@@ -33,10 +33,10 @@ function slotSvg(label: string): string {
 
 /*
  * The widths, the height and the four-up-is-a-2x2-grid rule now live in
- * @sitepix/shared, because the Report generator needs the identical layout on
- * the server and had drifted into four-across thumbnails. See photo-row-layout.ts.
+ * @sitepix/shared so the Report generator can share the arithmetic. Slots stay
+ * in "slots" mode: an empty box is a tap target first, so four-up stacks 2x2
+ * rather than shrinking to a quarter width. See photo-row-layout.ts.
  */
-const ROW_WIDTH = PHOTO_ROW_WIDTH;
 const SLOT_HEIGHT = PHOTO_ROW_HEIGHT;
 
 function slotImg(index: number, width: string): string {
@@ -54,9 +54,9 @@ function slotImg(index: number, width: string): string {
  * readable size instead of being squeezed to a quarter of the page.
  */
 export function photoRowHtml(count: 1 | 2 | 3 | 4, startIndex: number): string {
-  const width = ROW_WIDTH[count];
+  const width = photoWidthFor(count, "slots");
   const indices = Array.from({ length: count }, (_, i) => startIndex + i);
-  return photoRows(indices, count)
+  return photoRows(indices, count, "slots")
     .map((row) => `<p>${row.map((i) => slotImg(i, width)).join("")}</p>`)
     .join("");
 }

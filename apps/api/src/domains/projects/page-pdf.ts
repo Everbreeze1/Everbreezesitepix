@@ -690,7 +690,17 @@ function wordsFromHtml(html: string | null | undefined): Word[] {
   return words;
 }
 
-async function renderPagePdf(
+/**
+ * The pure render step: HTML in, PDF out, no database and no network beyond the
+ * image URLs already resolved into the markup.
+ *
+ * Exported so the layout can be asserted against a real rendered document
+ * rather than against the HTML that goes into it. Page counts are the whole
+ * point of the photos-per-page setting, and they only exist once pdf-lib has
+ * laid the thing out - "the markup batches photos correctly" is not the same
+ * claim as "the client's PDF has four photos on a sheet".
+ */
+export async function renderPagePdf(
   title: string,
   resolvedContentHtml: string,
   resolvedHeaderHtml: string | null,

@@ -1,12 +1,7 @@
 import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 import { summarizePhotosReportService, draftReportNarrativeService } from "../ai/service";
-import {
-  PHOTO_ROW_HEIGHT,
-  PHOTO_ROW_WIDTH,
-  cleanCaption,
-  photoPageGroups,
-} from "@sitepix/shared";
+import { PHOTO_ROW_HEIGHT, cleanCaption, photoPageGroups, photoWidthFor } from "@sitepix/shared";
 
 /**
  * Minimal Markdown → HTML for the constrained subset our AI prompts emit
@@ -191,10 +186,12 @@ function photoGridHtml(photos: GeneratedPhoto[]): string {
  * one image to lay out at a time, so a report came back at one picture per
  * sheet no matter how many photos went into it.
  *
- * The row arithmetic is @sitepix/shared's, the same rule the editor's Insert
- * menu and the seeded SQL templates use - four-up is a 2x2 grid, not four
- * across. A generated document and a hand-built one have to look like the same
- * product.
+ * The row arithmetic is @sitepix/shared's, in "photos" mode: every step of the
+ * setting has to fit more on a sheet than the step below it. Measured on a
+ * rendered PDF, the editor's 2x2-at-four-up rule broke that - four-up came out
+ * at 248pt wide, four to a sheet, which is two-up's layout and less dense than
+ * three-up's six. Slots keep the grid because an empty box is a tap target
+ * first; finished evidence does not need to be tappable.
  */
 export function photoEvidenceHtml(photos: GeneratedPhoto[], perPage: 1 | 2 | 3 | 4): string {
   // No heading over nothing. The picker requires a photo, so this is a guard
@@ -207,9 +204,9 @@ export function photoEvidenceHtml(photos: GeneratedPhoto[], perPage: 1 | 2 | 3 |
       .join("");
   }
 
-  const width = PHOTO_ROW_WIDTH[perPage];
+  const width = photoWidthFor(perPage, "photos");
   let n = 0;
-  const cards = photoPageGroups(photos, perPage).map((rows) => {
+  const cards = photoPageGroups(photos, perPage, "photos").map((rows) => {
     const imgRows = rows
       .map(
         (row) =>
