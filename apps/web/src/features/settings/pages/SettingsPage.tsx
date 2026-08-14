@@ -1154,9 +1154,9 @@ function CompanySection({
         <div className="mt-5 border-t border-border pt-5">
           <div className="font-manrope text-sm font-extrabold text-foreground">Report layout</div>
           <p className="font-manrope text-xs text-muted-foreground">
-            How densely photos sit in a report: one page of a built report, one row of a generated
-            document. The default for every new report, including the one built for you when a
-            walkthrough ends. Any single report can still be changed afterwards.
+            How densely photos sit in a report. The default for every new report, including the one
+            built for you when a walkthrough ends. Any single report can still be changed
+            afterwards.
           </p>
           <div className="mt-3">
             <PhotosPerPagePicker
