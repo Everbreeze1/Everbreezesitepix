@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { FileText, ClipboardList, Sparkles, Layers, Footprints } from "lucide-react";
+import { FileText, ClipboardList, Sparkles, Layers, Footprints, Lock } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -18,6 +19,9 @@ import {
 import { generateWalkthroughSummary } from "@/lib/walkthroughs.functions";
 import { SelectPhotosForPageDialog } from "@/features/projects/components/SelectPhotosForPageDialog";
 import { ChoosePageTemplateDialog } from "@/features/projects/components/ChoosePageTemplateDialog";
+import { PhotosPerPagePicker } from "@/features/projects/components/PhotosPerPagePicker";
+import { clampPhotosPerPage, useProfile } from "@/hooks/use-profile";
+import { useTemplateGate } from "@/features/projects/components/use-template-gate";
 
 /**
  * Summary is deliberately absent: it is not a document. It writes a
@@ -55,8 +59,17 @@ export function GenerateDocumentMenu({
   onCreated?: () => void;
 }) {
   const navigate = useNavigate();
+  const { profile } = useProfile();
+  const { locked: templatesLocked, promptUpgrade } = useTemplateGate();
   const [aiTemplate, setAiTemplate] = useState<AiTemplate | null>(null);
   const [generating, setGenerating] = useState(false);
+  /*
+   * Report page density. Seeded from the author's saved default each time the
+   * picker opens, so a company that always files three-up is not resetting a
+   * control on every report - but still changeable for the one document in
+   * front of them.
+   */
+  const [photosPerPage, setPhotosPerPage] = useState<1 | 2 | 3 | 4>(2);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [summaryPickerOpen, setSummaryPickerOpen] = useState(false);
@@ -83,7 +96,13 @@ export function GenerateDocumentMenu({
     setGenerating(true);
     try {
       const res = await generateProjectPage({
-        data: { projectId, folderId, template: aiTemplate, photoIds },
+        data: {
+          projectId,
+          folderId,
+          template: aiTemplate,
+          photoIds,
+          ...(aiTemplate === "report" ? { photosPerPage } : {}),
+        },
       });
       if (res.aiFailed) {
         toast.warning("Created without AI text", { description: res.aiFailed });
@@ -169,7 +188,12 @@ export function GenerateDocumentMenu({
               </span>
             </span>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setAiTemplate("report")}>
+          <DropdownMenuItem
+            onClick={() => {
+              setPhotosPerPage(clampPhotosPerPage(profile?.report_photos_per_page));
+              setAiTemplate("report");
+            }}
+          >
             <ClipboardList className="mr-2 h-4 w-4 text-primary" />
             <span>
               <span className="block font-bold">Report</span>
@@ -180,10 +204,28 @@ export function GenerateDocumentMenu({
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setTemplatePickerOpen(true)}>
-            <Layers className="mr-2 h-4 w-4" />
+          {/*
+            Badged rather than removed: the padlock is what tells a Starter
+            account the library exists. Selecting it opens the upgrade prompt
+            instead of the picker.
+          */}
+          <DropdownMenuItem
+            onClick={(e) => {
+              if (!templatesLocked) return setTemplatePickerOpen(true);
+              e.preventDefault();
+              promptUpgrade();
+            }}
+          >
+            {templatesLocked ? <Lock className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />}
             <span>
-              <span className="block font-bold">More Templates</span>
+              <span className="flex items-center gap-1.5 font-bold">
+                More Templates
+                {templatesLocked && (
+                  <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
+                    Pro
+                  </Badge>
+                )}
+              </span>
               <span className="block text-xs text-muted-foreground">
                 Saved by your team or examples
               </span>
@@ -204,6 +246,33 @@ export function GenerateDocumentMenu({
         projectId={projectId}
         templateLabel={aiTemplate === "daily_log" ? "Daily Log" : "Report"}
         generating={generating}
+        options={
+          aiTemplate === "report" ? (
+            <>
+              {/*
+                Same wording, same arithmetic and same 2x2-at-four-up layout as
+                the editor's Insert > "Section with photos" menu, which has said
+                "N photos per page" since long before this control existed. The
+                two produce byte-similar markup now (@sitepix/shared's
+                photo-row-layout), so a generated document and a hand-built one
+                cannot look like different products.
+              */}
+              <PhotosPerPagePicker
+                label="Photos per page"
+                hint={false}
+                value={photosPerPage}
+                onChange={setPhotosPerPage}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {photosPerPage === 1
+                  ? "One photo per page, each with its own heading and space to write under it."
+                  : photosPerPage === 4
+                    ? 'Four photos as a 2x2 grid under one "Photographic record" heading.'
+                    : `${photosPerPage} photos side by side under one "Photographic record" heading.`}
+              </p>
+            </>
+          ) : undefined
+        }
         onCancel={() => setAiTemplate(null)}
         onGenerate={handleGenerate}
       />

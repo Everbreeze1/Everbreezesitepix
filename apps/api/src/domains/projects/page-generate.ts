@@ -1,7 +1,12 @@
 import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 import { summarizePhotosReportService, draftReportNarrativeService } from "../ai/service";
-import { cleanCaption } from "@sitepix/shared";
+import {
+  PHOTO_ROW_HEIGHT,
+  PHOTO_ROW_WIDTH,
+  cleanCaption,
+  photoPageGroups,
+} from "@sitepix/shared";
 
 /**
  * Minimal Markdown → HTML for the constrained subset our AI prompts emit
@@ -82,8 +87,8 @@ export function markdownToHtml(md: string): string {
  * block. Kept below full width so a portrait phone photo doesn't dominate the
  * page; `object-fit: cover` (styles.css) crops it to the box.
  */
-const PHOTO_ROW_WIDTH = "62%";
-const PHOTO_ROW_HEIGHT = 300;
+const SINGLE_PHOTO_WIDTH = "62%";
+const SINGLE_PHOTO_HEIGHT = 300;
 
 /** A selected photo plus the metadata already captured in the field. */
 export interface GeneratedPhoto {
@@ -122,12 +127,27 @@ function captionBlockHtml(photo: GeneratedPhoto, n: number): string {
 }
 
 /**
+ * The one-line form, for a card that holds several photos: byline and caption
+ * on the same line, so four photos do not cost eight paragraphs underneath.
+ */
+function captionLineHtml(photo: GeneratedPhoto, n: number): string {
+  const date = formatPhotoDate(photo.takenAt);
+  const byline = [`Photo ${n}`, date].filter(Boolean).join(" &middot; ");
+  const real = cleanCaption(photo.caption);
+  return (
+    `<p><span class="panel-caption">${byline}</span>` +
+    (real ? ` ${escapeHtml(real)}` : "") +
+    `</p>`
+  );
+}
+
+/**
  * One photo per shaded card: the image sits above its own byline and
  * description, so the picture leads and its details read as a designed unit
  * rather than a loose caption line floating under a grid.
  */
 function photoCardHtml(photo: GeneratedPhoto, n: number): string {
-  const img = `<img data-photo-id="${photo.id}" src="" width="${PHOTO_ROW_WIDTH}" height="${PHOTO_ROW_HEIGHT}">`;
+  const img = `<img data-photo-id="${photo.id}" src="" width="${SINGLE_PHOTO_WIDTH}" height="${SINGLE_PHOTO_HEIGHT}">`;
   return panelHtml("photo", `<p>${img}</p>` + captionBlockHtml(photo, n));
 }
 
@@ -157,17 +177,57 @@ function photoGridHtml(photos: GeneratedPhoto[]): string {
 }
 
 /**
- * The evidence body of a formal report: a heading per photo card so each
- * observation is independently referenceable, with room under it for the
- * author's own findings.
+ * The evidence body of a formal report.
+ *
+ * At one photo per page this is a heading and a card per photo, with a blank
+ * paragraph under each for the author's own findings - the layout somebody who
+ * asked for one-up actually wants, where each observation is separately
+ * referenceable.
+ *
+ * At any other density the photos are grouped a page at a time under a single
+ * "Photographic record" heading, each group a card holding its rows of images
+ * with one caption line per photo. That is the change behind the complaint: a
+ * heading and a full-width card per photo meant the PDF renderer only ever had
+ * one image to lay out at a time, so a report came back at one picture per
+ * sheet no matter how many photos went into it.
+ *
+ * The row arithmetic is @sitepix/shared's, the same rule the editor's Insert
+ * menu and the seeded SQL templates use - four-up is a 2x2 grid, not four
+ * across. A generated document and a hand-built one have to look like the same
+ * product.
  */
-function sectionedReportHtml(photos: GeneratedPhoto[]): string {
-  return photos
-    .map((p, i) => {
-      const n = i + 1;
-      return `<h2>Observation ${n}</h2>` + photoCardHtml(p, n) + `<p></p>`;
-    })
-    .join("");
+export function photoEvidenceHtml(photos: GeneratedPhoto[], perPage: 1 | 2 | 3 | 4): string {
+  // No heading over nothing. The picker requires a photo, so this is a guard
+  // against a future caller rather than a path users reach.
+  if (!photos.length) return "";
+
+  if (perPage === 1) {
+    return photos
+      .map((p, i) => `<h2>Photo ${i + 1}</h2>` + photoCardHtml(p, i + 1) + `<p></p>`)
+      .join("");
+  }
+
+  const width = PHOTO_ROW_WIDTH[perPage];
+  let n = 0;
+  const cards = photoPageGroups(photos, perPage).map((rows) => {
+    const imgRows = rows
+      .map(
+        (row) =>
+          `<p>${row
+            .map(
+              (p) =>
+                `<img data-photo-id="${p.id}" src="" width="${width}" height="${PHOTO_ROW_HEIGHT}">`,
+            )
+            .join("")}</p>`,
+      )
+      .join("");
+    const captions = rows
+      .flat()
+      .map((p) => captionLineHtml(p, ++n))
+      .join("");
+    return panelHtml("photo", imgRows + captions);
+  });
+  return `<h2>Photographic record</h2>` + cards.join("") + `<p></p>`;
 }
 
 /**
@@ -211,6 +271,15 @@ export const generateProjectPageInputSchema = z.object({
   template: z.enum(["daily_log", "summary", "report"]),
   photoIds: z.array(z.string().uuid()).min(1).max(50),
   title: z.string().trim().min(1).max(200).optional(),
+  /**
+   * Report only: how many photos are grouped onto a page of the evidence body,
+   * using the shared row rule (four-up is a 2x2 grid). Omitted falls back to
+   * `profiles.report_photos_per_page`, then to 2.
+   *
+   * The Daily Log and the Summary are single-column by design - they are the
+   * technician's own record, read on a phone - so they ignore this.
+   */
+  photosPerPage: z.number().int().min(1).max(4).optional(),
 });
 
 /**
@@ -238,12 +307,25 @@ export async function generateProjectPageService(
     day: "numeric",
   });
 
+  // `select("*")` rather than naming the two columns: PostgREST fails the whole
+  // select when one column is unknown, so naming `report_photos_per_page`
+  // before 20260821000000_report_photos_per_page_default.sql has been applied
+  // would take `full_name` down with it and silently drop the author from every
+  // generated cover page.
   const { data: profile } = await (ctx.supabase as any)
     .from("profiles")
-    .select("full_name")
+    .select("*")
     .eq("id", ctx.userId)
     .maybeSingle();
   const author = profile?.full_name ?? "";
+
+  // Caller's choice, else the author's saved default, else two up.
+  const rawPerPage = data.photosPerPage ?? profile?.report_photos_per_page ?? 2;
+  const photosPerPage = Math.min(4, Math.max(1, Math.round(Number(rawPerPage) || 2))) as
+    | 1
+    | 2
+    | 3
+    | 4;
 
   const defaultTitle =
     data.template === "daily_log"
@@ -295,7 +377,7 @@ export async function generateProjectPageService(
       coverPageHtml({ title, projectName, address, today, author }) +
       `<h2>Executive Summary</h2>` +
       (summary || `<p></p>`) +
-      sectionedReportHtml(photos) +
+      photoEvidenceHtml(photos, photosPerPage) +
       `<h2>Conclusion</h2>` +
       (conclusion || `<p></p>`);
   } else {

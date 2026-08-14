@@ -56,6 +56,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { toast } from "sonner";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { ReportDocument, type ReportDocModel } from "@/components/ReportDocument";
+import { PhotosPerPagePicker } from "@/features/projects/components/PhotosPerPagePicker";
 import { sanitizeCaption } from "@sitepix/shared";
 
 // ---------- types ----------
@@ -605,33 +606,10 @@ export function ReportBuilderPage() {
             />
 
             <div className="mt-4">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                Photos per page
-              </Label>
-              <div className="mt-2 grid max-w-xs grid-cols-4 gap-2">
-                {([1, 2, 3, 4] as const).map((n) => {
-                  const active = (report.photos_per_page ?? 2) === n;
-                  return (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => patchReport({ photos_per_page: n })}
-                      className={`rounded-md border px-2 py-2 text-sm font-medium transition ${
-                        active
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border hover:border-primary/50"
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {(report.photos_per_page ?? 2) <= 2
-                  ? "Captions render beside each photo."
-                  : "Captions render below each photo."}
-              </p>
+              <PhotosPerPagePicker
+                value={Math.min(4, Math.max(1, report.photos_per_page ?? 2)) as 1 | 2 | 3 | 4}
+                onChange={(n) => patchReport({ photos_per_page: n })}
+              />
             </div>
           </Card>
 

@@ -13,6 +13,8 @@
  * slot's dimensions across).
  */
 
+import { PHOTO_ROW_HEIGHT, PHOTO_ROW_WIDTH, photoRows } from "@sitepix/shared";
+
 /** Matches the slot art in the seeded templates: dashed rounded rect, caption, hint. */
 function slotSvg(label: string): string {
   const svg =
@@ -29,10 +31,13 @@ function slotSvg(label: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-/** Percentage width per slot so a row fills the page without wrapping. */
-const ROW_WIDTH: Record<number, string> = { 1: "100%", 2: "48%", 3: "32%", 4: "48%" };
-
-const SLOT_HEIGHT = 280;
+/*
+ * The widths, the height and the four-up-is-a-2x2-grid rule now live in
+ * @sitepix/shared, because the Report generator needs the identical layout on
+ * the server and had drifted into four-across thumbnails. See photo-row-layout.ts.
+ */
+const ROW_WIDTH = PHOTO_ROW_WIDTH;
+const SLOT_HEIGHT = PHOTO_ROW_HEIGHT;
 
 function slotImg(index: number, width: string): string {
   return (
@@ -50,14 +55,10 @@ function slotImg(index: number, width: string): string {
  */
 export function photoRowHtml(count: 1 | 2 | 3 | 4, startIndex: number): string {
   const width = ROW_WIDTH[count];
-  if (count === 4) {
-    return (
-      `<p>${slotImg(startIndex, width)}${slotImg(startIndex + 1, width)}</p>` +
-      `<p>${slotImg(startIndex + 2, width)}${slotImg(startIndex + 3, width)}</p>`
-    );
-  }
-  const imgs = Array.from({ length: count }, (_, i) => slotImg(startIndex + i, width)).join("");
-  return `<p>${imgs}</p>`;
+  const indices = Array.from({ length: count }, (_, i) => startIndex + i);
+  return photoRows(indices, count)
+    .map((row) => `<p>${row.map((i) => slotImg(i, width)).join("")}</p>`)
+    .join("");
 }
 
 /**

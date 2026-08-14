@@ -36,6 +36,7 @@ export function SelectPhotosForPageDialog({
   projectId,
   templateLabel,
   outputNoun = "document",
+  options,
   generating,
   onCancel,
   onGenerate,
@@ -43,6 +44,13 @@ export function SelectPhotosForPageDialog({
   open: boolean;
   projectId: string;
   templateLabel: string;
+  /**
+   * Per-template controls shown above the footer - the Report's photos-per-page
+   * density, for instance. Rendered here rather than after generation because
+   * layout is a decision about the document, and asking for it once beats
+   * generating something informal and making the user go fix it.
+   */
+  options?: React.ReactNode;
   /**
    * What the picker produces, for the no-photos copy. Defaults to "document"
    * because most templates here file into Documents - but Summary writes a
@@ -227,6 +235,8 @@ export function SelectPhotosForPageDialog({
             </div>
           )}
         </div>
+
+        {options && <div className="border-t px-6 py-4">{options}</div>}
 
         <div className="flex items-center justify-between gap-3 border-t px-6 py-4">
           <div className="flex items-center gap-3">

@@ -14,25 +14,17 @@ import {
   MoreHorizontal,
   Sparkles,
   ListChecks,
+  Lock,
 } from "lucide-react";
 import { ProjectSiteLogs } from "@/features/projects/components/ProjectSiteLogs";
 import { ApplyTemplateDialog } from "@/features/projects/components/ApplyTemplateDialog";
+import { NewReportDialog } from "@/features/projects/components/NewReportDialog";
+import { useTemplateGate } from "@/features/projects/components/use-template-gate";
 import { useNavigate } from "@tanstack/react-router";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -78,6 +70,7 @@ export function ProjectReports({ projectId, projectName, projectPhotos }: Props)
   const { user } = useAuth();
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const { locked: templatesLocked, promptUpgrade } = useTemplateGate();
   const [reports, setReports] = useState<ProjectReport[]>([]);
   const [completedChecklists, setCompletedChecklists] = useState<
     Array<{ id: string; name: string; completed_at: string; snapshot: any }>
@@ -86,14 +79,6 @@ export function ProjectReports({ projectId, projectName, projectPhotos }: Props)
   const [tab, setTab] = useState<"reports" | "checklists" | "sitelogs">("reports");
   const [applyOpen, setApplyOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [draftTitle, setDraftTitle] = useState("");
-  const [draftPhotosPerPage, setDraftPhotosPerPage] = useState<1 | 2 | 3 | 4>(2);
-  const [draftCoverEnabled, setDraftCoverEnabled] = useState(true);
-  const [draftShowProject, setDraftShowProject] = useState(true);
-  const [draftShowAddress, setDraftShowAddress] = useState(true);
-  const [draftShowDate, setDraftShowDate] = useState(true);
-  const [draftShowAuthor, setDraftShowAuthor] = useState(true);
 
   const photoMap = useMemo(() => {
     const m = new Map<string, ReportPhotoRef>();
@@ -128,52 +113,6 @@ export function ProjectReports({ projectId, projectName, projectPhotos }: Props)
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, projectId]);
-
-  function openCreate() {
-    setDraftTitle(`${projectName} report - ${new Date().toLocaleDateString()}`);
-    setDraftPhotosPerPage(2);
-    setDraftCoverEnabled(true);
-    setDraftShowProject(true);
-    setDraftShowAddress(true);
-    setDraftShowDate(true);
-    setDraftShowAuthor(true);
-    setCreateOpen(true);
-  }
-
-  async function submitCreate() {
-    if (!user) return;
-    const title = draftTitle.trim() || `${projectName} report`;
-    setCreating(true);
-    const { data, error } = await (supabase as any)
-      .from("project_reports")
-      .insert({
-        project_id: projectId,
-        created_by: user.id,
-        title,
-        summary: null,
-        photo_ids: [],
-        include_project_info: true,
-        allow_download: true,
-        photos_per_page: draftPhotosPerPage,
-        cover_enabled: draftCoverEnabled,
-        cover_show_project_name: draftShowProject,
-        cover_show_address: draftShowAddress,
-        cover_show_date: draftShowDate,
-        cover_show_author: draftShowAuthor,
-      })
-      .select("*")
-      .single();
-    setCreating(false);
-    if (error || !data) {
-      toast.error("Couldn't create report", { description: error?.message });
-      return;
-    }
-    setCreateOpen(false);
-    navigate({
-      to: "/projects/$projectId/reports/$reportId",
-      params: { projectId, reportId: (data as ProjectReport).id },
-    });
-  }
 
   function openBuilder(r: ProjectReport) {
     navigate({
@@ -243,8 +182,27 @@ export function ProjectReports({ projectId, projectName, projectPhotos }: Props)
               <Sparkles className="h-3.5 w-3.5" /> Site Logs
             </TabsTrigger>
           </TabsList>
-          <Button size="sm" variant="outline" onClick={() => setApplyOpen(true)}>
-            <Sparkles className="mr-1 h-3.5 w-3.5" /> Apply template
+          {/*
+            Badged, not hidden. A gated action that vanishes reads as a missing
+            feature; the padlock is what tells a Starter account the capability
+            exists and what it costs.
+          */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => (templatesLocked ? promptUpgrade() : setApplyOpen(true))}
+          >
+            {templatesLocked ? (
+              <Lock className="mr-1 h-3.5 w-3.5" />
+            ) : (
+              <Sparkles className="mr-1 h-3.5 w-3.5" />
+            )}
+            Apply template
+            {templatesLocked && (
+              <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">
+                Pro
+              </Badge>
+            )}
           </Button>
         </div>
 
@@ -265,12 +223,8 @@ export function ProjectReports({ projectId, projectName, projectPhotos }: Props)
                   Client-ready PDFs built from your project photos.
                 </p>
               </div>
-              <Button size="sm" onClick={openCreate} disabled={creating}>
-                {creating ? (
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="mr-1 h-4 w-4" />
-                )}
+              <Button size="sm" onClick={() => setCreateOpen(true)}>
+                <Plus className="mr-1 h-4 w-4" />
                 New report
               </Button>
             </div>
@@ -283,9 +237,9 @@ export function ProjectReports({ projectId, projectName, projectPhotos }: Props)
               <EmptyState
                 icon={FileText}
                 title="No reports yet"
-                description="Create a sectioned client-ready report with photos and captions."
+                description="Start from a template or a blank structure, then drop in photos and captions."
                 action={
-                  <Button size="sm" onClick={openCreate}>
+                  <Button size="sm" onClick={() => setCreateOpen(true)}>
                     <Plus className="mr-1 h-4 w-4" /> New report
                   </Button>
                 }
@@ -509,109 +463,12 @@ export function ProjectReports({ projectId, projectName, projectPhotos }: Props)
         </TabsContent>
       </Tabs>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-3xl p-6 sm:p-8">
-          <DialogHeader>
-            <DialogTitle>Create report</DialogTitle>
-            <DialogDescription>
-              Set up the basics. You can refine everything in the builder.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <Label htmlFor="rep-title" className="text-xs uppercase text-muted-foreground">
-                Report title
-              </Label>
-              <Input
-                id="rep-title"
-                className="mt-1"
-                value={draftTitle}
-                onChange={(e) => setDraftTitle(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label className="text-xs uppercase text-muted-foreground">Photos per PDF page</Label>
-              <div className="mt-2 grid grid-cols-4 gap-2">
-                {([1, 2, 3, 4] as const).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setDraftPhotosPerPage(n)}
-                    className={`rounded-md border px-2 py-3 text-sm font-medium transition ${
-                      draftPhotosPerPage === n
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border hover:border-primary/50"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {draftPhotosPerPage <= 2
-                  ? "Captions appear beside each photo."
-                  : "Captions appear below each photo."}
-              </p>
-            </div>
-
-            <div className="rounded-md border border-dashed border-border p-3">
-              <label className="flex items-center gap-2 text-sm font-medium">
-                <Checkbox
-                  checked={draftCoverEnabled}
-                  onCheckedChange={(v) => setDraftCoverEnabled(v === true)}
-                />
-                Include cover page
-              </label>
-              {draftCoverEnabled && (
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={draftShowProject}
-                      onCheckedChange={(v) => setDraftShowProject(v === true)}
-                    />{" "}
-                    Project name
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={draftShowAddress}
-                      onCheckedChange={(v) => setDraftShowAddress(v === true)}
-                    />{" "}
-                    Address
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={draftShowDate}
-                      onCheckedChange={(v) => setDraftShowDate(v === true)}
-                    />{" "}
-                    Date
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={draftShowAuthor}
-                      onCheckedChange={(v) => setDraftShowAuthor(v === true)}
-                    />{" "}
-                    Author
-                  </label>
-                </div>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={submitCreate} disabled={creating || !draftTitle.trim()}>
-              {creating ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="mr-1 h-4 w-4" />
-              )}
-              Create & open builder
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <NewReportDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        projectId={projectId}
+        projectName={projectName}
+      />
 
       <ApplyTemplateDialog
         open={applyOpen}

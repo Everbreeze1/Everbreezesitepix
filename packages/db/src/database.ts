@@ -382,6 +382,7 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          report_photos_per_page: number
           updated_at: string
           watermark_enabled: boolean
         }
@@ -395,6 +396,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          report_photos_per_page?: number
           updated_at?: string
           watermark_enabled?: boolean
         }
@@ -408,6 +410,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          report_photos_per_page?: number
           updated_at?: string
           watermark_enabled?: boolean
         }

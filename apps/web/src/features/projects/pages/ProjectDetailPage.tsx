@@ -108,7 +108,7 @@ import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
-import { useProfile } from "@/hooks/use-profile";
+import { clampPhotosPerPage, useProfile } from "@/hooks/use-profile";
 import { useConfirm } from "@/hooks/use-confirm";
 import { analyzePhoto, extractPhotoText } from "@/lib/ai.functions";
 import {
@@ -382,7 +382,7 @@ export function ProjectDetailPage() {
         photo_ids: photos.map((p) => p.id),
         include_project_info: true,
         allow_download: true,
-        photos_per_page: 2,
+        photos_per_page: clampPhotosPerPage(profile?.report_photos_per_page),
         cover_enabled: true,
         cover_show_project_name: true,
         cover_show_address: true,
@@ -2026,7 +2026,15 @@ export function ProjectDetailPage() {
       // client-ready, PDF-exportable report without opening the manual builder.
       try {
         devLog("[walkthrough→report] Creating auto project report", { wid });
-        const built = await buildReportFromWalk({ data: { walkthroughId: wid } });
+        const built = await buildReportFromWalk({
+          data: {
+            walkthroughId: wid,
+            // The author's saved density. Nothing can ask them here - this runs
+            // unattended once the walk ends - so the report is built at the
+            // setting they chose in Settings rather than a hardcoded two-up.
+            photosPerPage: clampPhotosPerPage(profile?.report_photos_per_page),
+          },
+        });
         if (built?.reportId) {
           if (built.alreadyExisted) {
             toast.message("Walkthrough report already exists in Reports");

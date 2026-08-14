@@ -117,7 +117,7 @@ export const getPublicWalkthrough = rpcOp<
 >("getPublicWalkthrough");
 
 export const createReportFromWalkthrough = rpcOp<
-  { walkthroughId: string },
+  { walkthroughId: string; photosPerPage?: 1 | 2 | 3 | 4 },
   Result<typeof createReportFromWalkthroughService>
 >("createReportFromWalkthrough");
 

@@ -83,6 +83,20 @@ const OPTIONS: sanitizeHtml.IOptions = {
      */
     ul: ["data-type"],
     li: ["data-type", "data-checked"],
+    /*
+     * `<div data-panel="meta|photo">` is the InfoPanel node
+     * (apps/web/src/lib/tiptap-info-panel.ts) - the shaded card that every
+     * generated document wraps its masthead and its photo groups in. Stripping
+     * the attribute left the div behind with nothing to style it, so a report
+     * opened on its public share link lost the card treatment that the PDF and
+     * the editor both draw. The client saw two different documents depending on
+     * how they opened it.
+     *
+     * Same reasoning as the task-list names above: an inert data attribute with
+     * a fixed name on a fixed tag, carrying no URL and nothing the renderer
+     * executes.
+     */
+    div: ["data-panel"],
     // `class` carries the editor's own formatting (the `tiptap prose` styles);
     // `style` is separately restricted by `allowedStyles` below. No other
     // attribute survives, which is what removes every `on*` handler.

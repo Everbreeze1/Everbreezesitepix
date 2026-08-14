@@ -108,6 +108,8 @@ export const generateProjectPage = rpcOp<
     template: "daily_log" | "report";
     photoIds: string[];
     title?: string;
+    /** Report only - the Daily Log is single-column by design. */
+    photosPerPage?: 1 | 2 | 3 | 4;
   },
   { page: { id: string; title: string; updated_at: string }; aiFailed: string | null }
 >("generateProjectPage", { idempotent: true });

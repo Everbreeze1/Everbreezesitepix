@@ -101,6 +101,7 @@ import {
   updateProjectGroupService,
 } from "../projects/groups";
 import {
+  createReportFromWalkInputSchema,
   createReportFromWalkthroughService,
   createWalkthroughSessionService,
   ensureWalkthroughPhotoLinksService,
@@ -717,7 +718,7 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     getPublicWalkthroughService as (data: never) => Promise<unknown>,
   ),
   createReportFromWalkthrough: authed(
-    (d) => z.object({ walkthroughId: z.string().uuid() }).parse(d),
+    (d) => createReportFromWalkInputSchema.parse(d),
     createReportFromWalkthroughService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   // A Summary is a walkthrough, not a document - it writes a walkthroughs row

@@ -38,7 +38,8 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { useAuth } from "@/hooks/use-auth";
-import { useProfile } from "@/hooks/use-profile";
+import { clampPhotosPerPage, useProfile } from "@/hooks/use-profile";
+import { PhotosPerPagePicker } from "@/features/projects/components/PhotosPerPagePicker";
 import { useTheme } from "@/hooks/use-theme";
 import { useSubscription, PRO_AUTO_REPORTS_PER_MONTH } from "@/hooks/use-subscription";
 import { supabase } from "@/integrations/sitepix/client";
@@ -1141,6 +1142,39 @@ function CompanySection({
               className={inputClass}
             />
           </Field>
+        </div>
+
+        {/*
+          Report page density lives with the company details rather than in a
+          settings screen of its own, because it is the same kind of fact: how
+          this company's paperwork looks when a client receives it. It is also
+          the only place the unattended Auto Report can be told - that one runs
+          when a walkthrough ends, with no dialog to ask in.
+        */}
+        <div className="mt-5 border-t border-border pt-5">
+          <div className="font-manrope text-sm font-extrabold text-foreground">Report layout</div>
+          <p className="font-manrope text-xs text-muted-foreground">
+            How densely photos sit in a report: one page of a built report, one row of a generated
+            document. The default for every new report, including the one built for you when a
+            walkthrough ends. Any single report can still be changed afterwards.
+          </p>
+          <div className="mt-3">
+            <PhotosPerPagePicker
+              label="Photos per page"
+              hint={false}
+              value={clampPhotosPerPage(profile?.report_photos_per_page)}
+              onChange={async (n) => {
+                if (!user) return;
+                const { error } = await supabase
+                  .from("profiles")
+                  .update({ report_photos_per_page: n })
+                  .eq("id", user.id);
+                if (error) return toast.error(error.message);
+                toast.success(`New reports will use ${n} photo${n > 1 ? "s" : ""} per page`);
+                await reload();
+              }}
+            />
+          </div>
         </div>
 
         <div className="mt-5 border-t border-border pt-5">

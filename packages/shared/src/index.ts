@@ -43,3 +43,17 @@ export {
   type ReportTemplateSection,
   type ReportTemplateStructure,
 } from "./report-template-structure";
+export {
+  REPORT_STARTERS,
+  getReportStarter,
+  reportStarterCategories,
+  type ReportStarter,
+  type ReportStarterCategory,
+  type ReportStarterCover,
+} from "./report-starters";
+export {
+  MAX_AUTO_REPORT_PHOTO_SECTIONS,
+  consolidateReportSections,
+  type DraftReportSection,
+} from "./report-autostructure";
+export { PHOTO_ROW_WIDTH, PHOTO_ROW_HEIGHT, photoRows, photoPageGroups } from "./photo-row-layout";

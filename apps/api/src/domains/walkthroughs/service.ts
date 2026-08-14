@@ -3,7 +3,15 @@ import { chatEndpoint, transcriptionEndpoint } from "../../lib/ai-provider";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
 import { summarizePhotosReportService } from "../ai/service";
-import { releaseAutoReport, reserveAutoReport } from "./auto-report-quota";
+import {
+  assertAutoReportAllowed,
+  releaseAutoReport,
+  reserveAutoReport,
+} from "./auto-report-quota";
+import {
+  MAX_AUTO_REPORT_PHOTO_SECTIONS,
+  consolidateReportSections,
+} from "@sitepix/shared";
 
 
 const MODEL = "google/gemini-2.5-flash";
@@ -461,8 +469,15 @@ async function recoverOrphanWalkthroughPhotosForProject(supabaseAdmin: any, args
 // report inside the Documents / Reports section for that project.
 // ---------------------------------------------------------------------------
 
-const createReportFromWalkSchema = z.object({
+export const createReportFromWalkInputSchema = z.object({
   walkthroughId: z.string().uuid(),
+  /**
+   * Page density for the generated report. Optional because the auto-report
+   * runs unattended at the end of a walkthrough, with no dialog to ask in - the
+   * caller passes the author's saved default and the server falls back to
+   * `profiles.report_photos_per_page` when it does not.
+   */
+  photosPerPage: z.number().int().min(1).max(4).optional(),
 });
 
 function escapeHtml(str: string) {
@@ -509,6 +524,34 @@ function buildFallbackAiReport(args: {
   if (notesHtml) sections.push({ title: "Field Notes", body: notesHtml, photo_indices: [] });
   const conclusion = `<p>End of walkthrough. Refer to the attached photos for visual context.</p>`;
   return { title, subtitle, introduction: intro, sections, conclusion };
+}
+
+/**
+ * Page density for a generated report: what the caller asked for, else the
+ * author's saved default, else two per page.
+ *
+ * Read with the service role because the auto-report runs on a request that has
+ * already been authenticated - and because a missing or unreadable preference
+ * must degrade to the default rather than fail a report the user is waiting on.
+ */
+async function resolveReportPhotosPerPage(
+  userId: string,
+  requested: number | undefined,
+): Promise<1 | 2 | 3 | 4> {
+  const clamp = (n: number) => Math.min(4, Math.max(1, Math.round(n))) as 1 | 2 | 3 | 4;
+  if (typeof requested === "number" && Number.isFinite(requested)) return clamp(requested);
+  try {
+    const { data: prof } = await getSupabaseAdmin()
+      .from("profiles")
+      .select("report_photos_per_page")
+      .eq("id", userId)
+      .maybeSingle();
+    const saved = (prof as any)?.report_photos_per_page;
+    if (typeof saved === "number" && Number.isFinite(saved)) return clamp(saved);
+  } catch (e) {
+    console.warn("[walkthrough→report] could not read report density preference", e, { userId });
+  }
+  return 2;
 }
 
 export async function createWalkthroughSessionService(ctx: AuthedContext, data: any) {
@@ -1817,10 +1860,24 @@ export async function getPublicWalkthroughService(data: { token: string }) {
     };
   }
 
-export async function createReportFromWalkthroughService(ctx: AuthedContext, data: any) {
+export async function createReportFromWalkthroughService(
+  ctx: AuthedContext,
+  data: z.infer<typeof createReportFromWalkInputSchema>,
+) {
     const { userId } = ctx;
     const supabaseAdmin = getSupabaseAdmin();
     const apiKey = process.env.GEMINI_API_KEY;
+
+    // Auto Reports are Pro and Team. This path used to be reachable with no
+    // plan check at all: the recorder UI is behind a Pro gate, so nothing
+    // *visible* got through, but the RPC itself was open to any authenticated
+    // caller holding a walkthrough id.
+    //
+    // Asserted, not reserved. generateWalkthroughReportService already spends a
+    // quota slot for this same walkthrough moments earlier, and the structured
+    // project report is the second half of that one generation, not a second
+    // one - reserving here would bill a Pro account twice for one recording.
+    await assertAutoReportAllowed(ctx.supabase, userId);
 
     const { data: walk, error: wErr } = await supabaseAdmin
       .from("walkthroughs" as any)
@@ -1845,6 +1902,8 @@ export async function createReportFromWalkthroughService(ctx: AuthedContext, dat
       .eq("id", projectId)
       .maybeSingle();
     const projectName = ((projectRow as any)?.name ?? null) as string | null;
+
+    const photosPerPage = await resolveReportPhotosPerPage(userId, data.photosPerPage);
 
     // Idempotency: if a report already exists for this walkthrough (marker in
     // summary), return it instead of creating a duplicate.
@@ -1885,6 +1944,17 @@ export async function createReportFromWalkthroughService(ctx: AuthedContext, dat
       caption: photoCaptions.get(l.photo_id) ?? null,
     }));
 
+    // Section budget. The report paginates one section per page and then
+    // batches that section's photos `photosPerPage` at a time, so the number of
+    // sections is the number of pages - and a section holding one photo is a
+    // page holding one photo no matter what density the author set. The model
+    // is told this number, and consolidateReportSections enforces it afterwards
+    // for the runs where it does not comply.
+    const maxPhotoSections = Math.max(
+      1,
+      Math.min(MAX_AUTO_REPORT_PHOTO_SECTIONS, Math.ceil(photoList.length / photosPerPage)),
+    );
+
     // ---- AI structuring ----
     let ai: AiReportShape | null = null;
     if (apiKey) {
@@ -1892,30 +1962,41 @@ export async function createReportFromWalkthroughService(ctx: AuthedContext, dat
         `- Photo index ${p.index} - captured at ${fmtDuration(p.offset)}${p.spoken_note ? ` - spoken: "${p.spoken_note.replace(/"/g, '\\"')}"` : ""}${p.caption ? ` - existing caption: ${p.caption}` : ""}`
       ).join("\n");
 
-      const userPrompt = `You are turning a recorded site walkthrough into a polished, client-ready project report.
+      const minPhotosPerSection = Math.min(photoList.length, photosPerPage);
+
+      const userPrompt = `You are drafting a formal, client-facing site REPORT from a recorded walkthrough. It is a deliverable the client receives, so it reads as a document, not as a running commentary on each photo.
 
 Project: ${projectName ?? "(unspecified)"}
 Walkthrough title: ${walkTitle ?? "Untitled walkthrough"}
 Duration: ${fmtDuration((walk as any).duration_seconds ?? 0)}
 Photos captured: ${photoList.length}
 
-STRICT RULES:
-- Base ALL content on the technician's spoken transcript and the spoken notes tied to each photo. Do not invent facts, measurements, brands, or defects.
-- Tone: neutral, factual, SUMMARY-focused - like a clean site log/recap, not an engineering diagnosis. Do NOT use language like "critical", "code violation", "safety hazard", "severity: high", or strong diagnostic opinions unless the speaker explicitly used those words. Do NOT invent risks, recommendations, or next steps.
-- Prefer short bullet points (<ul><li>) and tight sections over long paragraphs. Use clear section headings that reflect what the speaker actually covered.
-- Output MUST be valid JSON matching the schema below - no markdown fences, no commentary.
-- Body fields must be safe HTML using only these tags: <p>, <br/>, <strong>, <em>, <ul>, <ol>, <li>, <h3>. No inline styles, no other tags.
-- Distribute photos across sections using their integer index (0..${Math.max(0, photoList.length - 1)}) in "photo_indices". Each photo index may appear in at most one section. Photos not assigned to any section will be appended automatically at the end.
+VOICE:
+- Complete, professional prose in the introduction and conclusion. No bullets there.
+- Section bodies: short prose, or tight bullets (<ul><li>) where the speaker genuinely listed things. Never a caption-by-caption walk through the photos - the photos carry their own captions.
+- Neutral and factual. Do NOT call anything "critical", a "code violation", a "safety hazard" or "severity: high" unless the speaker used those words. Do NOT invent defects, measurements, brands, risks, recommendations or next steps. If the source material is thin, keep it short rather than padding it.
+- Base every sentence on the spoken transcript and the spoken notes tied to each photo.
+
+STRUCTURE (this is what decides how the PDF paginates - follow it exactly):
+- Produce AT MOST ${maxPhotoSections} section(s) that carry photos. Group them the way the walk actually divided up: by area, elevation, trade or stage. Do NOT create a section per photo.
+- Every section carrying photos must carry at least ${minPhotosPerSection} of them, unless there are not that many photos left to give it.
+- You may add at most one further section with no photos at all if the speaker covered something that has no picture.
+- Section headings are short noun phrases: "Roof and flashings", "Interior - second floor", "Work completed". Not sentences.
+
+OUTPUT:
+- Valid JSON matching the schema below. No markdown fences, no commentary.
+- Body fields are safe HTML using only these tags: <p>, <br/>, <strong>, <em>, <ul>, <ol>, <li>, <h3>. No inline styles, no other tags.
+- Assign photos by integer index (0..${Math.max(0, photoList.length - 1)}) in "photo_indices". Each index may appear in at most one section. Anything left unassigned is appended as a final gallery.
 
 Return JSON:
 {
   "title": "short, descriptive report title based on project and date",
   "subtitle": "one-sentence subtitle",
-  "introduction": "<p>1-2 short paragraphs introducing what was walked and why</p>",
+  "introduction": "<p>2-4 sentences of prose: what was walked, why, and what this report documents</p>",
   "sections": [
-    { "title": "Section heading", "body": "<p>...</p><ul><li>...</li></ul>", "photo_indices": [0,1] }
+    { "title": "Section heading", "body": "<p>...</p>", "photo_indices": [0,1,2,3] }
   ],
-  "conclusion": "<p>Short closing summary of what was observed. Do NOT invent recommendations the speaker didn't make.</p>"
+  "conclusion": "<p>2-3 sentences closing out what the documentation shows overall, plus any next steps the speaker actually stated.</p>"
 }
 
 Available photos:
@@ -1926,7 +2007,7 @@ Raw spoken transcript:
 ${transcript || "(no speech captured)"}
 """
 
-If the transcript is empty, still produce a valid report with an introduction that says the walk was recorded without narration, a single section titled "Captured Photos" with an empty body and photo_indices listing all photos in order, and a brief conclusion.`;
+If the transcript is empty, still produce valid JSON: an introduction stating plainly that the walk was recorded without narration, a single section titled "Captured photos" with an empty body and photo_indices listing every photo in order, and a one-sentence conclusion. Invent nothing.`;
 
       try {
         const ep = chatEndpoint(MODEL);
@@ -1937,7 +2018,7 @@ If the transcript is empty, still produce a valid report with an introduction th
             model: ep.model,
             response_format: { type: "json_object" },
             messages: [
-              { role: "system", content: "You output only valid JSON that matches the requested schema. You never add commentary outside the JSON. You base every sentence on the provided transcript and spoken notes and never invent facts." },
+              { role: "system", content: "You are SitePix AI drafting a formal, client-facing site report. You output only valid JSON that matches the requested schema, never commentary outside the JSON. You write in neutral, factual, professional prose, you base every sentence on the provided transcript and spoken notes, and you never invent facts, findings, risks or recommendations. You group photos into a small number of themed sections rather than giving each photo its own heading." },
               { role: "user", content: userPrompt },
             ],
           }),
@@ -2002,11 +2083,30 @@ If the transcript is empty, still produce a valid report with an introduction th
     const leftover = photoList.filter((p) => !usedIdx.has(p.index));
     if (leftover.length) {
       sectionsForDb.push({
-        title: sectionsForDb.some((s) => s.photos.length) ? "Additional Photos" : "Photos",
+        title: sectionsForDb.some((s) => s.photos.length) ? "Additional photos" : "Photos",
         body: "",
         photos: leftover.map((p) => ({ photo_id: p.photo_id, caption: p.spoken_note || p.caption || "" })),
       });
     }
+
+    // Fold thin and surplus photo sections together before the Conclusion is
+    // appended, so the closing prose is never a merge target. Without this a
+    // model that ignored the section budget still produces one photo per page,
+    // whatever density the author chose.
+    const consolidated = consolidateReportSections(sectionsForDb, {
+      photosPerPage,
+      maxPhotoSections,
+    });
+    if (consolidated.length !== sectionsForDb.length) {
+      console.log("[walkthrough→report] consolidated sections", {
+        walkthroughId: data.walkthroughId,
+        before: sectionsForDb.length,
+        after: consolidated.length,
+        photosPerPage,
+      });
+    }
+    sectionsForDb.length = 0;
+    sectionsForDb.push(...consolidated);
 
     if (ai.conclusion?.trim()) {
       sectionsForDb.push({ title: "Conclusion", body: ai.conclusion, photos: [] });
@@ -2029,7 +2129,7 @@ If the transcript is empty, still produce a valid report with an introduction th
         photo_ids: photoList.map((p) => p.photo_id),
         include_project_info: true,
         allow_download: true,
-        photos_per_page: 2,
+        photos_per_page: photosPerPage,
         cover_enabled: true,
         cover_show_project_name: true,
         cover_show_address: true,
