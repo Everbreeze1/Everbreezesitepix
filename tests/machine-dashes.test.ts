@@ -29,7 +29,7 @@ describe("normalizeDashes", () => {
   });
 
   it("keeps the spacing the model wrote", () => {
-    // No space collapsing: "a—b" is "a-b", not "a - b".
+    // No space collapsing: a long dash with no spaces yields a bare hyphen.
     expect(normalizeDashes(`a${EM}b`)).toBe("a-b");
   });
 

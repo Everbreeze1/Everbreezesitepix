@@ -2302,3 +2302,65 @@ describe("family: bulk actions honour the page density the author chose", () => 
     expect(src).toMatch(/\$\{esc\(/);
   });
 });
+
+describe("family: every AI prose boundary folds the dashes, and only prose does", () => {
+  /*
+   * The Auto Report was the reported case, but the same raw-model-text shape
+   * existed at every other generator: chat replies, site-log bodies, report
+   * summaries and conclusions, per-photo notes, the multi-walkthrough digest
+   * and the structured photo analysis. Fixing one and leaving the rest just
+   * moves where the character next shows up.
+   *
+   * The exceptions are the point of the rule, not a gap in it. OCR and speech
+   * transcription reproduce something that already exists - a label, a sign,
+   * what a person said. Folding a dash there rewrites the record.
+   */
+  const AI = "apps/api/src/domains/ai/service.ts";
+  const WALK = "apps/api/src/domains/walkthroughs/service.ts";
+
+  const contentReads = (src: string) =>
+    (src.match(/choices\?\.\[0\]\?\.message\?\.content/g) ?? []).length;
+  const foldedReads = (src: string) => (src.match(/normalizeDashes\(json\.choices/g) ?? []).length;
+
+  it("every model text read in ai/service.ts is folded except the OCR one", () => {
+    const src = stripComments(read(AI));
+    const total = contentReads(src);
+    expect(total).toBeGreaterThan(3);
+    // extractPhotoTextService is the single deliberate exception.
+    expect(foldedReads(src)).toBe(total - 1);
+  });
+
+  it("the OCR exception is the one that stays raw, and says why", () => {
+    const raw = read(AI);
+    const ocrAt = raw.indexOf("OCR engine");
+    expect(ocrAt, "OCR prompt not found").toBeGreaterThan(-1);
+    // The justification has to travel with the exception or it reads as a miss.
+    const tail = raw.slice(ocrAt);
+    expect(tail).toMatch(/NOT run through `normalizeDashes`/);
+    const after = tail.slice(tail.indexOf("normalizeDashes`"));
+    expect(after.slice(0, 600)).not.toMatch(/normalizeDashes\(json\.choices/);
+  });
+
+  it("the structured photo analysis folds its prose but not what it read off the plate", () => {
+    const src = stripComments(read(AI));
+    expect(src).toMatch(/report_text: parsed\.report_text \? normalizeDashes/);
+    expect(src).toMatch(/recommendations: \(parsed\.recommendations \?\? \[\]\)\.map/);
+    // ocr_text carries brand/model/serial, all of them printed values.
+    expect(src).not.toMatch(/ocr_text: normalizeDashes/);
+  });
+
+  it("the walkthrough report markdown is folded and the transcript is not", () => {
+    const src = stripComments(read(WALK));
+    expect(src).toMatch(/markdown = normalizeDashes\(json\.choices/);
+    expect(src).not.toMatch(/transcript: normalizeDashes/);
+  });
+
+  it("the backfill migration leaves transcripts and OCR alone", () => {
+    const sql = read("supabase/migrations/20260822000000_normalize_machine_dashes.sql");
+    expect(sql).toMatch(/project_reports'?,\s*'title'/);
+    expect(sql).not.toMatch(/'transcript'/);
+    expect(sql).not.toMatch(/'ocr_text'/);
+    // Escapes, not literals, so the migration does not fail no-em-dash itself.
+    expect(sql).toContain("2014");
+  });
+});

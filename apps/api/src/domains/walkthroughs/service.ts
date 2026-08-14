@@ -11,6 +11,7 @@ import {
 import {
   MAX_AUTO_REPORT_PHOTO_SECTIONS,
   consolidateReportSections,
+  normalizeDashes,
   normalizeDashesTrimmed,
 } from "@sitepix/shared";
 
@@ -1701,7 +1702,7 @@ ${hasSpeech
           throw new Error(`AI error ${res.status}: ${txt.slice(0, 200)}`);
         }
         const json = await res.json();
-        markdown = json.choices?.[0]?.message?.content ?? "";
+        markdown = normalizeDashes(json.choices?.[0]?.message?.content ?? "");
       } catch (aiErr) {
         console.warn("[walkthrough] AI report generation failed; using deterministic fallback", aiErr, { walkthroughId: data.walkthroughId, userId });
       }

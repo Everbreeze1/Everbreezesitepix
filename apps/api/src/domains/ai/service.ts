@@ -1,4 +1,4 @@
-import { cleanCaption } from "@sitepix/shared";
+import { cleanCaption, normalizeDashes } from "@sitepix/shared";
 import { chatEndpoint } from "../../lib/ai-provider";
 import { inlineImageAsDataUrl } from "../../lib/inline-image";
 import { getCallerTeamPlan } from "../../lib/team-plan";
@@ -121,15 +121,27 @@ export async function analyzePhotoService(ctx: AuthedContext, data: { photoId: s
     if (parsed.serial_number) idLines.push(`Serial: ${parsed.serial_number}`);
     const ocrCombined = [idLines.join("\n"), parsed.ocr_text ?? ""].filter(Boolean).join("\n\n").trim();
 
+    /*
+     * The prose the model wrote gets the dash fold; the values it read off the
+     * equipment do not. `ocr_text`, and the brand/model/serial lines folded
+     * into it above, are transcriptions of what is printed on a plate - see
+     * extractPhotoTextService for the same distinction.
+     */
+    const defects = (parsed.defects ?? []).map((d: any) => ({
+      ...d,
+      location: d?.location ? normalizeDashes(String(d.location)) : d?.location,
+      description: normalizeDashes(String(d?.description ?? "")),
+    }));
+
     await supabase
       .from("ai_analyses")
       .update({
         status: "completed",
         ocr_text: ocrCombined || null,
-        labels: parsed.labels ?? [],
-        defects: parsed.defects ?? [],
-        report_text: parsed.report_text ?? null,
-        recommendations: parsed.recommendations ?? [],
+        labels: (parsed.labels ?? []).map((l: any) => normalizeDashes(String(l))),
+        defects,
+        report_text: parsed.report_text ? normalizeDashes(String(parsed.report_text)) : null,
+        recommendations: (parsed.recommendations ?? []).map((r: any) => normalizeDashes(String(r))),
         raw_response: json,
       })
       .eq("id", pending.id);
@@ -248,7 +260,7 @@ export async function chatWithAssistantService(
     throw new Error(`AI error ${res.status}: ${t.slice(0, 200)}`);
   }
   const json = await res.json();
-  const reply = json.choices?.[0]?.message?.content ?? "";
+  const reply = normalizeDashes(json.choices?.[0]?.message?.content ?? "");
 
   await supabase.from("messages").insert({
     conversation_id: convId,
@@ -447,7 +459,14 @@ async function buildPhotoContext(
   };
 }
 
-/** Shared chat call - returns the assistant's message text. */
+/**
+ * Shared chat call - returns the assistant's message text.
+ *
+ * Every drafter in this file funnels through here, so the dash fold happens
+ * once rather than at each caller: site-log bodies, report summaries and
+ * conclusions, and the walkthrough summaries composed on top of them. See
+ * `normalizeDashes` for why model prose needs it when tracked source does not.
+ */
 async function chatComplete(system: string, user: string): Promise<string> {
   const ep = chatEndpoint(CHAT_MODEL);
   const res = await fetch(ep.url, {
@@ -468,7 +487,7 @@ async function chatComplete(system: string, user: string): Promise<string> {
     throw new Error(`AI error ${res.status}: ${t.slice(0, 200)}`);
   }
   const json = await res.json();
-  return json.choices?.[0]?.message?.content ?? "";
+  return normalizeDashes(json.choices?.[0]?.message?.content ?? "");
 }
 
 /**
@@ -627,7 +646,7 @@ export async function describeSiteLogPhotosService(ctx: AuthedContext, data: { p
       });
       if (!res.ok) return [item.id, NEUTRAL] as const;
       const json = await res.json();
-      const text = (json.choices?.[0]?.message?.content ?? "").trim();
+      const text = normalizeDashes(json.choices?.[0]?.message?.content ?? "").trim();
       return [item.id, text || NEUTRAL] as const;
     } catch {
       return [item.id, NEUTRAL] as const;
@@ -692,7 +711,7 @@ export async function summarizeWalkthroughsReportService(
     throw new Error(`AI error ${res.status}: ${t.slice(0, 200)}`);
   }
   const json = await res.json();
-  const markdown = json.choices?.[0]?.message?.content ?? "";
+  const markdown = normalizeDashes(json.choices?.[0]?.message?.content ?? "");
   return { markdown, walkthroughCount: mine.length };
 }
 
@@ -742,6 +761,14 @@ export async function extractPhotoTextService(ctx: AuthedContext, data: { photoI
     throw new Error(`AI error ${res.status}: ${t.slice(0, 200)}`);
   }
   const json = await res.json();
+  /*
+   * Deliberately NOT run through `normalizeDashes`, unlike every other model
+   * output in this file. This is OCR: the value is a transcription of what is
+   * physically printed on a label, a warning plate or a sign. If the sign says
+   * it with a long dash, the extracted text has to say it the same way, or the
+   * feature is quietly rewriting evidence. The house style governs prose we
+   * author, not text we copy off an object in a photograph.
+   */
   const text = (json.choices?.[0]?.message?.content ?? "").trim();
   return { text };
 }
