@@ -24,6 +24,7 @@ import {
   REPORT_STARTERS,
   getReportStarter,
   parseReportTemplateStructure,
+  sanitizeCaption,
   type ReportStarter,
 } from "@sitepix/shared";
 import { PhotosPerPagePicker } from "@/features/projects/components/PhotosPerPagePicker";
@@ -47,11 +48,36 @@ interface SavedTemplate {
   bodies: string[];
 }
 
+/** A photo the caller wants filed into the report it is about to create. */
+export interface AttachedReportPhoto {
+  id: string;
+  caption?: string | null;
+}
+
+/** Shape of one entry in `project_report_sections.photos`. */
+interface SectionPhotoRow {
+  photo_id: string;
+  caption: string;
+}
+
+/** Heading the attached photos are filed under. Renameable in the builder. */
+const ATTACHED_SECTION_TITLE = "Photos";
+
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   projectId: string;
   projectName: string;
+  /**
+   * Photos to file into the new report, in order.
+   *
+   * This is what lets the photo selection bar open the real New Report dialog
+   * instead of keeping its own report-creation code path. They land in one
+   * section appended after whatever the chosen template contributes; the PDF
+   * renderer paginates that section at `photos_per_page`, so there is nothing
+   * to chunk here.
+   */
+  attachPhotos?: AttachedReportPhoto[];
 }
 
 /**
@@ -63,12 +89,20 @@ interface Props {
  * disappears reads as a missing feature, and nobody upgrades for something they
  * cannot see.
  */
-export function NewReportDialog({ open, onOpenChange, projectId, projectName }: Props) {
+export function NewReportDialog({
+  open,
+  onOpenChange,
+  projectId,
+  projectName,
+  attachPhotos,
+}: Props) {
   const { user } = useAuth();
   const { profile } = useProfile();
   const navigate = useNavigate();
   const { isPro } = useSubscription();
   const { locked: templatesLocked, promptUpgrade } = useTemplateGate();
+
+  const attached = attachPhotos ?? [];
 
   const [choice, setChoice] = useState<Choice>({ kind: "blank" });
   const [saved, setSaved] = useState<SavedTemplate[]>([]);
@@ -138,10 +172,9 @@ export function NewReportDialog({ open, onOpenChange, projectId, projectName }: 
 
   /** Headings the created report will start with, for the confirmation line. */
   const previewHeadings = useMemo(() => {
-    if (activeStarter) return activeStarter.sections;
-    if (activeSaved) return activeSaved.headings;
-    return [];
-  }, [activeStarter, activeSaved]);
+    const base = activeStarter ? activeStarter.sections : activeSaved ? activeSaved.headings : [];
+    return attached.length ? [...base, ATTACHED_SECTION_TITLE] : base;
+  }, [activeStarter, activeSaved, attached.length]);
 
   function pickStarter(t: ReportStarter) {
     if (templatesLocked) {
@@ -185,14 +218,27 @@ export function NewReportDialog({ open, onOpenChange, projectId, projectName }: 
       if (error || !data) throw error ?? new Error("Could not create report");
       const reportId = data.id as string;
 
-      const sections = activeStarter
-        ? activeStarter.sections.map((heading) => ({ title: heading, body: "" }))
-        : activeSaved
-          ? activeSaved.headings.map((heading, i) => ({
-              title: heading,
-              body: activeSaved.bodies[i] ?? "",
-            }))
-          : [];
+      const sections: Array<{ title: string; body: string; photos: SectionPhotoRow[] }> = (
+        activeStarter
+          ? activeStarter.sections.map((heading) => ({ title: heading, body: "" }))
+          : activeSaved
+            ? activeSaved.headings.map((heading, i) => ({
+                title: heading,
+                body: activeSaved.bodies[i] ?? "",
+              }))
+            : []
+      ).map((s) => ({ ...s, photos: [] }));
+
+      if (attached.length) {
+        sections.push({
+          title: ATTACHED_SECTION_TITLE,
+          body: "",
+          photos: attached.map((p) => ({
+            photo_id: p.id,
+            caption: sanitizeCaption(p.caption ?? null),
+          })),
+        });
+      }
 
       if (sections.length) {
         // A failed section insert leaves a usable, empty report rather than
@@ -205,13 +251,16 @@ export function NewReportDialog({ open, onOpenChange, projectId, projectName }: 
             position: i,
             title: s.title,
             body: s.body,
-            photos: [],
+            photos: s.photos,
           })),
         );
         if (secErr)
-          toast.warning("Report created, but its sections did not save", {
-            description: secErr.message,
-          });
+          toast.warning(
+            attached.length
+              ? "Report created, but its sections and photos did not save"
+              : "Report created, but its sections did not save",
+            { description: secErr.message },
+          );
       }
 
       onOpenChange(false);
@@ -229,6 +278,12 @@ export function NewReportDialog({ open, onOpenChange, projectId, projectName }: 
         <DialogHeader className="px-6 pb-2 pt-6">
           <DialogTitle>New report</DialogTitle>
           <DialogDescription>
+            {attached.length > 0 && (
+              <>
+                {attached.length} selected photo{attached.length > 1 ? "s" : ""} will be filed under
+                a &quot;{ATTACHED_SECTION_TITLE}&quot; section.{" "}
+              </>
+            )}
             Pick a structure to start from, then set the page layout. Everything stays editable in
             the builder.
           </DialogDescription>

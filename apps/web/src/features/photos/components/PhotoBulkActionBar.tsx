@@ -16,6 +16,7 @@ import {
   Loader2,
   Plus,
   Check,
+  Sparkles,
 } from "lucide-react";
 import {
   Dialog,
@@ -32,7 +33,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
@@ -43,6 +43,8 @@ import { mutateByIds } from "@/lib/chunked-ids";
 import { ensureGlobalTag } from "@/hooks/use-tag-colors";
 import { useConfirm } from "@/hooks/use-confirm";
 import { sanitizeCaption } from "@sitepix/shared";
+import { NewReportDialog } from "@/features/projects/components/NewReportDialog";
+import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
 
 export interface BulkPhoto {
   id: string;
@@ -56,6 +58,7 @@ export interface BulkPhoto {
 
 interface Props {
   projectId: string;
+  projectName: string;
   userId: string | null;
   selectedIds: string[];
   photosById: Map<string, BulkPhoto>;
@@ -101,6 +104,7 @@ function printPhotos(urls: string[]) {
 export function PhotoBulkActionBar(props: Props) {
   const {
     projectId,
+    projectName,
     userId,
     selectedIds,
     photosById,
@@ -110,7 +114,6 @@ export function PhotoBulkActionBar(props: Props) {
     onSelectAll,
     onRefresh,
   } = props;
-  const navigate = useNavigate();
   const confirm = useConfirm();
   const count = selectedIds.length;
   const selectedPhotos = useMemo(
@@ -121,7 +124,8 @@ export function PhotoBulkActionBar(props: Props) {
 
   const [tagOpen, setTagOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
-  const [reportOpen, setReportOpen] = useState<null | "new" | "template" | "existing">(null);
+  const [newReportOpen, setNewReportOpen] = useState(false);
+  const [addToReportOpen, setAddToReportOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
   if (count === 0) return null;
@@ -204,8 +208,6 @@ export function PhotoBulkActionBar(props: Props) {
       onRefresh();
     });
 
-  // "Create new report" opens the dialog so the user can pick photos-per-section.
-
   return (
     <>
       <div className="pointer-events-none fixed inset-x-0 top-3 z-50 flex justify-center px-3 sm:top-4">
@@ -253,24 +255,60 @@ export function PhotoBulkActionBar(props: Props) {
                     <span className="hidden text-sm font-medium sm:inline">Report</span>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="center" side="bottom" className="w-60">
+                {/*
+                  Both items hand off to the report flow the rest of the app
+                  uses. "Create from template" used to be a third entry here
+                  that listed existing *reports* and copied their settings - it
+                  never touched the template library at all. The New Report
+                  dialog's "Start from" grid is the real one: built-in starters,
+                  your team's saved templates, and the Pro gate.
+                */}
+                <DropdownMenuContent align="center" side="bottom" className="w-72">
                   <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
                     Reports
                   </DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => setReportOpen("new")}>
-                    <FilePlus2 className="mr-2 h-4 w-4" />
-                    Create new report
+                  <DropdownMenuItem onClick={() => setNewReportOpen(true)}>
+                    <FilePlus2 className="mr-2 mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      <span className="block font-medium">New report</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Blank or from a template, with cover page and layout
+                      </span>
+                    </span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setReportOpen("template")}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    Create from template
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setReportOpen("existing")}>
-                    <FolderPlus className="mr-2 h-4 w-4" />
-                    Add to existing report
+                  <DropdownMenuItem onClick={() => setAddToReportOpen(true)}>
+                    <FolderPlus className="mr-2 mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      <span className="block font-medium">Add to existing report</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Files them as one section, at that report's density
+                      </span>
+                    </span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+
+              {/*
+                The same menu the project header and the Documents tab mount,
+                so "generate something from these photos" means one thing
+                everywhere. It opens its own photo picker with this selection
+                already ticked rather than asking for the photos twice.
+              */}
+              <GenerateDocumentMenu
+                projectId={projectId}
+                photoIds={selectedIds}
+                align="start"
+                trigger={
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-11 gap-2 rounded-xl px-3 hover:bg-muted"
+                  >
+                    <Sparkles className="h-[18px] w-[18px]" />
+                    <span className="hidden text-sm font-medium sm:inline">Generate</span>
+                  </Button>
+                }
+              />
 
               <div className="mx-1 h-8 w-px bg-border" />
 
@@ -330,11 +368,23 @@ export function PhotoBulkActionBar(props: Props) {
         }}
       />
 
-      <ReportBulkDialog
-        mode={reportOpen}
-        onClose={() => setReportOpen(null)}
+      <NewReportDialog
+        open={newReportOpen}
+        onOpenChange={setNewReportOpen}
         projectId={projectId}
-        userId={userId}
+        projectName={projectName}
+        attachPhotos={selectedPhotos.map((p) => ({ id: p.id, caption: p.caption }))}
+      />
+
+      {/*
+        Neither dialog clears the selection on success: both open the report
+        builder, which unmounts this project screen and its selection with it.
+        Clearing first would unmount the open dialog mid-submit.
+      */}
+      <AddToReportDialog
+        open={addToReportOpen}
+        onClose={() => setAddToReportOpen(false)}
+        projectId={projectId}
         selectedPhotos={selectedPhotos}
       />
     </>
@@ -622,151 +672,117 @@ function MoveDialog({
   );
 }
 
-// ── Report bulk dialog ─────────────────────────────────────────────────────
-function ReportBulkDialog({
-  mode,
+// ── Add-to-existing-report dialog ──────────────────────────────────────────
+interface ReportOption {
+  id: string;
+  title: string;
+  created_at: string;
+  photos_per_page: number | null;
+}
+
+/** What the PDF renderer will actually use, whatever the column holds. */
+function densityOf(r: ReportOption) {
+  return Math.min(4, Math.max(1, Number(r.photos_per_page ?? 2)));
+}
+
+function AddToReportDialog({
+  open,
   onClose,
   projectId,
-  userId,
   selectedPhotos,
 }: {
-  mode: null | "new" | "template" | "existing";
+  open: boolean;
   onClose: () => void;
   projectId: string;
-  userId: string | null;
   selectedPhotos: BulkPhoto[];
 }) {
   const navigate = useNavigate();
-  const [title, setTitle] = useState("");
-  const [reports, setReports] = useState<Array<{ id: string; title: string; created_at: string }>>(
-    [],
-  );
+  const [reports, setReports] = useState<ReportOption[]>([]);
   const [reportId, setReportId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  // Photos per section - also drives the report's photos-per-page layout
-  // (clamped to 1..4 for PDF layout density).
-  const [perSection, setPerSection] = useState<number>(4);
 
   useEffect(() => {
-    if (!mode) return;
-    setTitle(`Report - ${new Date().toLocaleDateString()}`);
+    if (!open) return;
     setReportId("");
-    setPerSection(4);
-    if (mode === "template" || mode === "existing") {
-      setLoading(true);
-      (async () => {
-        const { data } = await (supabase as any)
-          .from("project_reports")
-          .select("id, title, created_at, photos_per_page")
-          .eq("project_id", projectId)
-          .order("created_at", { ascending: false });
-        setReports((data as any[]) ?? []);
-        setLoading(false);
-      })();
-    }
-  }, [mode, projectId]);
+    setLoading(true);
+    (async () => {
+      const { data } = await (supabase as any)
+        .from("project_reports")
+        .select("id, title, created_at, photos_per_page")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false });
+      setReports((data as ReportOption[]) ?? []);
+      setLoading(false);
+    })();
+  }, [open, projectId]);
 
-  // Split selectedPhotos into chunks of `perSection` and insert one section per chunk.
-  const insertSections = async (rid: string, startPos: number) => {
-    const size = Math.max(1, Math.min(24, perSection));
-    const chunks: BulkPhoto[][] = [];
-    for (let i = 0; i < selectedPhotos.length; i += size) {
-      chunks.push(selectedPhotos.slice(i, i + size));
-    }
-    const total = chunks.length;
-    const rows = chunks.map((chunk, idx) => ({
-      report_id: rid,
-      position: startPos + idx,
-      title:
-        total > 1
-          ? `Photos ${idx * size + 1}–${idx * size + chunk.length}`
-          : `${chunk.length} photo${chunk.length > 1 ? "s" : ""}`,
-      body: null,
-      photos: chunk.map((p) => ({ photo_id: p.id, caption: sanitizeCaption(p.caption) })),
-    }));
-    const { error } = await (supabase as any).from("project_report_sections").insert(rows);
-    if (error) throw error;
-  };
+  const target = reports.find((r) => r.id === reportId);
 
+  /*
+   * One section, not one section per N photos.
+   *
+   * This used to ask for a "photos per section" size and chunk the selection
+   * into sections called "Photos 1-4", "Photos 5-8" and so on, which is how
+   * page density worked before the report renderer paginated. It does now:
+   * `planSectionPages` fills pages from a section's photo list at the report's
+   * own `photos_per_page`, so chunking here only ever added headings nobody
+   * asked for and fought the layout the author picked.
+   */
   const submit = async () => {
-    if (!userId) return;
+    if (!reportId) return;
     setSaving(true);
     try {
-      let rid = reportId;
-      // Layout density for the PDF: clamp to 1..4 since that's what the renderer supports.
-      const layoutPerPage = Math.max(1, Math.min(4, perSection));
-      if (mode === "new") {
-        const { data, error } = await (supabase as any)
-          .from("project_reports")
-          .insert({
-            project_id: projectId,
-            created_by: userId,
-            title: title.trim() || "Report",
-            summary: null,
-            photo_ids: [],
-            include_project_info: true,
-            allow_download: true,
-            photos_per_page: layoutPerPage,
-          })
-          .select("id")
-          .single();
-        if (error || !data) throw error ?? new Error("Could not create report");
-        rid = data.id;
-      } else if (mode === "template") {
-        if (!reportId) throw new Error("Pick a template report");
-        const { data: tmpl, error: tErr } = await (supabase as any)
-          .from("project_reports")
-          .select("*")
-          .eq("id", reportId)
-          .maybeSingle();
-        if (tErr || !tmpl) throw tErr ?? new Error("Template not found");
-        const { data, error } = await (supabase as any)
-          .from("project_reports")
-          .insert({
-            project_id: projectId,
-            created_by: userId,
-            title: title.trim() || `${tmpl.title} (copy)`,
-            summary: null,
-            photo_ids: [],
-            include_project_info: tmpl.include_project_info,
-            allow_download: tmpl.allow_download,
-            photos_per_page: layoutPerPage,
-            cover_enabled: tmpl.cover_enabled,
-            cover_show_project_name: tmpl.cover_show_project_name,
-            cover_show_address: tmpl.cover_show_address,
-            cover_show_date: tmpl.cover_show_date,
-            cover_show_author: tmpl.cover_show_author,
-          })
-          .select("id")
-          .single();
-        if (error || !data) throw error ?? new Error("Could not create report");
-        rid = data.id;
-      } else if (mode === "existing") {
-        if (!reportId) throw new Error("Pick a report");
-        rid = reportId;
-      }
-      // Compute the starting position for the new sections.
-      const { data: existing } = await (supabase as any)
+      const { data: secRows, error: secErr } = await (supabase as any)
         .from("project_report_sections")
-        .select("position")
-        .eq("report_id", rid)
-        .order("position", { ascending: false })
-        .limit(1);
-      const nextPos = ((existing as any[])?.[0]?.position ?? -1) + 1;
-      await insertSections(rid, nextPos);
-      toast.success(
-        mode === "existing"
-          ? "Added to report - opening builder…"
-          : "Report created - opening builder…",
+        .select("id, position, title, photos")
+        .eq("report_id", reportId)
+        .order("position", { ascending: true });
+      if (secErr) throw secErr;
+      const existing = (secRows as any[]) ?? [];
+
+      // A photo filed twice renders twice in the PDF, so a repeat drop of an
+      // overlapping selection adds only what is new.
+      const already = new Set<string>();
+      existing.forEach((s) =>
+        (s.photos ?? []).forEach((p: any) => p?.photo_id && already.add(p.photo_id)),
       );
+      const fresh = selectedPhotos.filter((p) => !already.has(p.id));
+      if (fresh.length === 0) {
+        toast.info("Those photos are already in this report");
+        setSaving(false);
+        return;
+      }
+
+      // "Photos", then "Photos 2" - a second drop should not collide with the first.
+      const priorDrops = existing.filter((s) =>
+        /^Photos( \d+)?$/.test(String(s.title ?? "")),
+      ).length;
+      const sectionTitle = priorDrops === 0 ? "Photos" : `Photos ${priorDrops + 1}`;
+      const nextPos = existing.reduce((max, s) => Math.max(max, Number(s.position) || 0), -1) + 1;
+
+      const { error } = await (supabase as any).from("project_report_sections").insert({
+        report_id: reportId,
+        position: nextPos,
+        title: sectionTitle,
+        body: null,
+        photos: fresh.map((p) => ({ photo_id: p.id, caption: sanitizeCaption(p.caption) })),
+      });
+      if (error) throw error;
+
+      const skipped = selectedPhotos.length - fresh.length;
+      toast.success(`${fresh.length} photo${fresh.length > 1 ? "s" : ""} added to the report`, {
+        description: skipped
+          ? `${skipped} already in it, so ${skipped > 1 ? "they were" : "it was"} skipped.`
+          : undefined,
+      });
       onClose();
       navigate({
         to: "/projects/$projectId/reports/$reportId",
-        params: { projectId, reportId: rid },
+        params: { projectId, reportId },
       });
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not save");
+      toast.error(e?.message ?? "Could not add to report");
     } finally {
       setSaving(false);
     }
@@ -774,114 +790,72 @@ function ReportBulkDialog({
 
   return (
     <Dialog
-      open={!!mode}
+      open={open}
       onOpenChange={(o) => {
         if (!o) onClose();
       }}
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {mode === "new"
-              ? "New report"
-              : mode === "template"
-                ? "Create from template"
-                : "Add to existing report"}
-          </DialogTitle>
+          <DialogTitle>Add to existing report</DialogTitle>
           <DialogDescription>
-            {(() => {
-              const size = Math.max(1, Math.min(24, perSection));
-              const chunks = Math.ceil(selectedPhotos.length / size);
-              return `${selectedPhotos.length} photo${selectedPhotos.length > 1 ? "s" : ""} will be split into ${chunks} section${chunks > 1 ? "s" : ""} of up to ${size}.`;
-            })()}
+            {selectedPhotos.length} photo{selectedPhotos.length > 1 ? "s" : ""} will be appended as
+            one section. The report's own page layout decides how they are laid out.
           </DialogDescription>
         </DialogHeader>
 
-        {mode === "new" && (
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Report title
-            </label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-9" />
-          </div>
-        )}
-
         <div className="space-y-2">
           <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Photos per section
+            Report
           </label>
-          <div className="flex flex-wrap gap-1.5">
-            {[1, 2, 3, 4, 6, 8, 12].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setPerSection(n)}
-                className={`h-8 min-w-9 rounded-md border px-2.5 text-sm transition ${
-                  perSection === n
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border hover:bg-muted"
-                }`}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            Values above 4 keep the PDF layout at 4 photos per page.
-          </p>
-        </div>
-
-        {(mode === "template" || mode === "existing") && (
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {mode === "template" ? "Copy settings from" : "Report"}
-            </label>
-            {mode === "template" && (
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="New report title"
-                className="h-9"
-              />
+          <div className="max-h-56 space-y-1 overflow-auto rounded-lg border border-border p-1">
+            {loading ? (
+              <div className="flex items-center justify-center p-6 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </div>
+            ) : reports.length === 0 ? (
+              <p className="p-4 text-center text-xs text-muted-foreground">
+                No reports yet on this project. Use New report instead.
+              </p>
+            ) : (
+              reports.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setReportId(r.id)}
+                  className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition ${
+                    reportId === r.id ? "bg-primary/10" : "hover:bg-muted"
+                  }`}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{r.title}</span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      {new Date(r.created_at).toLocaleDateString()} · {densityOf(r)} per page
+                    </span>
+                  </span>
+                  {reportId === r.id && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                </button>
+              ))
             )}
-            <div className="max-h-56 space-y-1 overflow-auto rounded-lg border border-border p-1">
-              {loading ? (
-                <div className="flex items-center justify-center p-6 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                </div>
-              ) : reports.length === 0 ? (
-                <p className="p-4 text-center text-xs text-muted-foreground">
-                  No reports yet on this project.
-                </p>
-              ) : (
-                reports.map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => setReportId(r.id)}
-                    className={`flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-sm transition ${
-                      reportId === r.id ? "bg-primary/10" : "hover:bg-muted"
-                    }`}
-                  >
-                    <span className="truncate">{r.title}</span>
-                    {reportId === r.id && <Check className="h-4 w-4 text-primary" />}
-                  </button>
-                ))
-              )}
-            </div>
           </div>
-        )}
+          {target && (
+            <p className="text-[11px] text-muted-foreground">
+              {selectedPhotos.length} photo{selectedPhotos.length > 1 ? "s" : ""} at{" "}
+              {densityOf(target)} per page fills{" "}
+              {Math.ceil(selectedPhotos.length / densityOf(target))} page
+              {Math.ceil(selectedPhotos.length / densityOf(target)) > 1 ? "s" : ""}. Change the
+              density in the builder.
+            </p>
+          )}
+        </div>
 
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            onClick={submit}
-            disabled={saving || ((mode === "template" || mode === "existing") && !reportId)}
-          >
+          <Button onClick={submit} disabled={saving || !reportId}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {mode === "existing" ? "Add to report" : "Create report"}
+            Add to report
           </Button>
         </DialogFooter>
       </DialogContent>

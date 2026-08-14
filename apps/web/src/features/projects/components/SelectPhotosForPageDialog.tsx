@@ -38,12 +38,20 @@ export function SelectPhotosForPageDialog({
   outputNoun = "document",
   options,
   generating,
+  initialSelected,
   onCancel,
   onGenerate,
 }: {
   open: boolean;
   projectId: string;
   templateLabel: string;
+  /**
+   * Photos to arrive pre-ticked - the photo selection bar opens this with the
+   * user's current selection, and re-picking what they just picked is the kind
+   * of step that makes a feature feel like it was bolted on. Ids the project
+   * does not have (or beyond the cap) are dropped, and the drop is announced.
+   */
+  initialSelected?: string[];
   /**
    * Per-template controls shown above the footer - the Report's photos-per-page
    * density, for instance. Rendered here rather than after generation because
@@ -66,6 +74,10 @@ export function SelectPhotosForPageDialog({
   const [photos, setPhotos] = useState<PickerPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // A joined key, not the array itself: callers build `initialSelected` inline,
+  // so depending on the array re-runs this load on every parent render.
+  const initialKey = (initialSelected ?? []).join(",");
 
   useEffect(() => {
     if (!open) return;
@@ -116,7 +128,25 @@ export function SelectPhotosForPageDialog({
             });
           }
         }
-        if (!cancelled) setPhotos(resolved);
+        if (cancelled) return;
+        setPhotos(resolved);
+
+        const seed = initialKey ? initialKey.split(",") : [];
+        if (seed.length) {
+          const onScreen = new Set(resolved.map((p) => p.id));
+          const usable = seed.filter((id) => onScreen.has(id));
+          const kept = usable.slice(0, MAX_PHOTOS);
+          setSelected(new Set(kept));
+          const dropped = seed.length - kept.length;
+          if (dropped > 0) {
+            toast.warning(`${kept.length} of your ${seed.length} selected photos carried over`, {
+              description:
+                usable.length > MAX_PHOTOS
+                  ? `${templateLabel} takes up to ${MAX_PHOTOS}. Adjust the picks below.`
+                  : `${dropped} are not in this project's recent photos. Adjust the picks below.`,
+            });
+          }
+        }
       } catch (e: any) {
         if (!cancelled) toast.error(e?.message ?? "Could not load photos");
       } finally {
@@ -126,7 +156,7 @@ export function SelectPhotosForPageDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, projectId]);
+  }, [open, projectId, initialKey]);
 
   const groups = useMemo(() => {
     const map = new Map<string, PickerPhoto[]>();

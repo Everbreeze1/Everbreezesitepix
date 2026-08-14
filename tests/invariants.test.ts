@@ -2173,3 +2173,64 @@ describe("family: the project share link behind the printed QR code", () => {
     expect(src).toMatch(/phase !== "untagged"/);
   });
 });
+
+describe("family: one report-creation flow, not one per entry point", () => {
+  /*
+   * The photo selection bar shipped with its own report-creation code path,
+   * written before the current report model existed. It inserted into
+   * `project_reports` directly, so it missed the template library, the cover
+   * page options and the author's saved page density; its "Create from
+   * template" listed existing REPORTS and copied their settings, never
+   * touching `report_templates` or the Pro gate; and it chunked the selection
+   * into sections of N, which is how page density worked before the renderer
+   * paginated sections itself.
+   *
+   * Every entry point that creates a report must go through NewReportDialog,
+   * or the flow the client sees depends on where they clicked.
+   */
+  const BAR = "apps/web/src/features/photos/components/PhotoBulkActionBar.tsx";
+
+  it("the selection bar creates reports through NewReportDialog", () => {
+    const src = stripComments(read(BAR));
+    expect(src).toContain("NewReportDialog");
+    expect(src).toMatch(/attachPhotos=/);
+  });
+
+  it("the selection bar has no report-creation insert of its own", () => {
+    const src = stripComments(read(BAR));
+    // Adding photos to an existing report writes sections, never a report row.
+    expect(src).not.toMatch(/from\("project_reports"\)[\s\S]{0,80}\.insert\(/);
+  });
+
+  it("the selection bar does not chunk photos into fixed-size sections", () => {
+    /*
+     * `planSectionPages` fills pages from a section's photo list at the
+     * report's own `photos_per_page`. A second chunking pass here re-introduces
+     * the "Photos 1-4" / "Photos 5-8" headings and fights that layout.
+     */
+    const src = stripComments(read(BAR));
+    expect(src).not.toMatch(/perSection/);
+    expect(src).not.toMatch(/Photos per section/);
+  });
+
+  it("the project header's Create Report goes through the dialog too", () => {
+    /*
+     * This one inserted a report row with no sections at all, writing its
+     * photos to the legacy `photo_ids` column - so which controls the author
+     * got depended on which button they had pressed.
+     */
+    const src = stripComments(read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx"));
+    expect(src).toContain("NewReportDialog");
+    expect(src).not.toMatch(/from\("project_reports"\)[\s\S]{0,80}\.insert\(/);
+  });
+
+  it("NewReportDialog files attached photos into a section", () => {
+    const src = stripComments(
+      read("apps/web/src/features/projects/components/NewReportDialog.tsx"),
+    );
+    expect(src).toMatch(/attachPhotos\?:/);
+    expect(src).toMatch(/photo_id: p\.id/);
+    // Captions reaching a shared PDF go through the sanitiser like every other path.
+    expect(src).toContain("sanitizeCaption");
+  });
+});

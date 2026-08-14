@@ -49,6 +49,7 @@ export function GenerateDocumentMenu({
   folderId = null,
   trigger,
   align = "end",
+  photoIds,
   onCreated,
 }: {
   projectId: string;
@@ -56,6 +57,13 @@ export function GenerateDocumentMenu({
   folderId?: string | null;
   trigger: ReactNode;
   align?: "start" | "end";
+  /**
+   * Photos already chosen by the caller - the photo selection bar mounts this
+   * menu, and its user has picked their photos before the menu even opens. The
+   * picker still appears so they can see and adjust what will be read; it just
+   * opens with their selection ticked instead of blank.
+   */
+  photoIds?: string[];
   onCreated?: () => void;
 }) {
   const navigate = useNavigate();
@@ -216,7 +224,11 @@ export function GenerateDocumentMenu({
               promptUpgrade();
             }}
           >
-            {templatesLocked ? <Lock className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />}
+            {templatesLocked ? (
+              <Lock className="mr-2 h-4 w-4" />
+            ) : (
+              <Layers className="mr-2 h-4 w-4" />
+            )}
             <span>
               <span className="flex items-center gap-1.5 font-bold">
                 More Templates
@@ -246,6 +258,7 @@ export function GenerateDocumentMenu({
         projectId={projectId}
         templateLabel={aiTemplate === "daily_log" ? "Daily Log" : "Report"}
         generating={generating}
+        initialSelected={photoIds}
         options={
           aiTemplate === "report" ? (
             <>
@@ -283,6 +296,7 @@ export function GenerateDocumentMenu({
         templateLabel="Summary"
         outputNoun="summary"
         generating={generatingSummary}
+        initialSelected={photoIds}
         onCancel={() => setSummaryPickerOpen(false)}
         onGenerate={handleGenerateSummary}
       />

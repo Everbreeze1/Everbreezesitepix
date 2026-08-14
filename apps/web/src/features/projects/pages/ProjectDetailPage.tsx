@@ -48,6 +48,7 @@ import { uploadWithResume } from "@/lib/resumable-upload";
 import { relativeTime, cleanCaption } from "@sitepix/shared";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EditProjectDialog } from "@/features/projects/components/EditProjectDialog";
+import { NewReportDialog } from "@/features/projects/components/NewReportDialog";
 import { ProjectActionsMenu } from "@/features/projects/components/ProjectActionsMenu";
 import { ProjectChecklists } from "@/features/projects/components/ProjectChecklists";
 import { ProjectBlueprintOrigin } from "@/features/projects/components/ProjectBlueprintOrigin";
@@ -366,41 +367,19 @@ export function ProjectDetailPage() {
    */
   const blueprintOrigin = useProjectBlueprintOrigin(projectId);
 
-  const [creatingReport, setCreatingReport] = useState(false);
-
-  async function generateReport() {
-    if (!user) return;
-    setCreatingReport(true);
-    const title = `${project?.name ?? "Project"} report - ${new Date().toLocaleDateString()}`;
-    const { data, error } = await (supabase as any)
-      .from("project_reports")
-      .insert({
-        project_id: projectId,
-        created_by: user.id,
-        title,
-        summary: null,
-        photo_ids: photos.map((p) => p.id),
-        include_project_info: true,
-        allow_download: true,
-        photos_per_page: clampPhotosPerPage(profile?.report_photos_per_page),
-        cover_enabled: true,
-        cover_show_project_name: true,
-        cover_show_address: true,
-        cover_show_date: true,
-        cover_show_author: true,
-      })
-      .select("id")
-      .single();
-    setCreatingReport(false);
-    if (error || !data) {
-      toast.error("Couldn't create report", { description: error?.message });
-      return;
-    }
-    navigate({
-      to: "/projects/$projectId/reports/$reportId",
-      params: { projectId, reportId: (data as { id: string }).id },
-    });
-  }
+  /*
+   * "Create Report" used to insert a report row straight from here: no title to
+   * type, no structure to pick, no cover options, and the photos written to the
+   * legacy `photo_ids` column with no sections at all. So the report you got
+   * depended entirely on which button you had pressed, and this one skipped
+   * every control the New Report dialog offers.
+   *
+   * It opens that dialog now, seeded with the photos the button always
+   * attached. The dialog is Pro-aware on its own - the template cards padlock
+   * for Starter, which is who this button is shown to - so nothing is lost by
+   * routing through it.
+   */
+  const [createReportOpen, setCreateReportOpen] = useState(false);
   const fetchWalkthroughs = listProjectWalkthroughs;
 
   const loadWalkthroughsDirect = async () => {
@@ -2426,6 +2405,16 @@ export function ProjectDetailPage() {
           onSaved={(next) => setProject({ ...project, ...next } as Project)}
         />
       )}
+
+      {project && (
+        <NewReportDialog
+          open={createReportOpen}
+          onOpenChange={setCreateReportOpen}
+          projectId={projectId}
+          projectName={project.name}
+          attachPhotos={photos.map((p) => ({ id: p.id, caption: p.caption }))}
+        />
+      )}
       {/* Pull-to-refresh indicator (mobile) */}
       <div className="pointer-events-none fixed inset-x-0 top-14 z-30 flex justify-center md:hidden">
         <div
@@ -2558,15 +2547,10 @@ export function ProjectDetailPage() {
               {canUseManualPhotoReport && (
                 <Button
                   variant="outline"
-                  onClick={() => void generateReport()}
-                  disabled={creatingReport}
+                  onClick={() => setCreateReportOpen(true)}
                   className="h-10 rounded-lg border-sidebar-foreground/15 bg-sidebar-foreground/10 px-4 font-bold text-sidebar-foreground hover:bg-sidebar-foreground/20 hover:text-sidebar-foreground"
                 >
-                  {creatingReport ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <FileText className="mr-2 h-4 w-4 text-sidebar-ring" />
-                  )}
+                  <FileText className="mr-2 h-4 w-4 text-sidebar-ring" />
                   Create Report
                 </Button>
               )}
@@ -3348,6 +3332,7 @@ export function ProjectDetailPage() {
 
           <PhotoBulkActionBar
             projectId={projectId}
+            projectName={project?.name ?? "Project"}
             userId={user?.id ?? null}
             selectedIds={selectedPhotoIds}
             photosById={
