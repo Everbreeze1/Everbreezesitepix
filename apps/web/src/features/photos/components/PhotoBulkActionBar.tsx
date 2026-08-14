@@ -42,7 +42,9 @@ import { sharePhotoNative } from "@/lib/native-share";
 import { mutateByIds } from "@/lib/chunked-ids";
 import { ensureGlobalTag } from "@/hooks/use-tag-colors";
 import { useConfirm } from "@/hooks/use-confirm";
-import { sanitizeCaption } from "@sitepix/shared";
+import { useSidebar } from "@/components/ui/sidebar";
+import { clampPhotosPerPage, useProfile } from "@/hooks/use-profile";
+import { cleanCaption, sanitizeCaption } from "@sitepix/shared";
 import { NewReportDialog } from "@/features/projects/components/NewReportDialog";
 import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
 
@@ -82,23 +84,116 @@ async function downloadOne(url: string, filename: string) {
   setTimeout(() => URL.revokeObjectURL(href), 1500);
 }
 
-function printPhotos(urls: string[]) {
-  const w = window.open("", "_blank");
-  if (!w) {
-    toast.error("Popup blocked");
-    return;
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
+
+/**
+ * Build the print sheet at the author's chosen page density.
+ *
+ * The old sheet was a hardcoded two-column grid of bare images: no captions,
+ * no page breaks it controlled, and no relationship to `photos_per_page` - so
+ * a company that files four-up got two-up whenever it printed, and the printout
+ * did not match the PDF of the same photos. The page geometry here is US
+ * Letter with half-inch margins, the same page the report renderer draws on
+ * (612x792pt), and the 1/2/3-across and 2x2 arrangements are the ones the rest
+ * of the app already describes in its own copy.
+ */
+function buildPrintDocument(photos: BulkPhoto[], perPage: 1 | 2 | 3 | 4, projectName: string) {
+  const cols = perPage === 4 ? 2 : perPage;
+  const rows = perPage === 4 ? 2 : 1;
+  const pages: BulkPhoto[][] = [];
+  for (let i = 0; i < photos.length; i += perPage) pages.push(photos.slice(i, i + perPage));
+
+  const sheets = pages
+    .map((chunk, idx) => {
+      const cells = chunk
+        .map((p) => {
+          const caption = cleanCaption(p.caption);
+          return `<figure><img src="${esc(p.url)}" alt="" />${
+            caption ? `<figcaption>${esc(caption)}</figcaption>` : ""
+          }</figure>`;
+        })
+        .join("");
+      return `<section class="page"><header><span>${esc(projectName)}</span><span>${
+        idx + 1
+      } / ${pages.length}</span></header><div class="grid">${cells}</div></section>`;
+    })
+    .join("");
+
+  return `<!doctype html><html><head><meta charset="utf-8" /><title>${esc(projectName)} photos</title>
+<style>
+  @page { size: letter; margin: 0.5in; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 12px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: #111; background: #fff; }
+  .page { display: flex; flex-direction: column; height: 10in; break-after: page; page-break-after: always; }
+  .page:last-child { break-after: auto; page-break-after: auto; }
+  header { display: flex; justify-content: space-between; gap: 12px; font-size: 10px; color: #555;
+           border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 12px; }
+  .grid { flex: 1; min-height: 0; display: grid; gap: 16px;
+          grid-template-columns: repeat(${cols}, minmax(0, 1fr));
+          grid-template-rows: repeat(${rows}, minmax(0, 1fr)); }
+  figure { margin: 0; min-height: 0; display: flex; flex-direction: column;
+           break-inside: avoid; page-break-inside: avoid; }
+  img { flex: 1; min-height: 0; width: 100%; object-fit: contain; }
+  figcaption { margin-top: 6px; font-size: 10px; color: #333; text-align: center;
+               overflow-wrap: anywhere; }
+</style></head><body>${sheets}</body></html>`;
+}
+
+/**
+ * Print through a hidden iframe rather than a popup window.
+ *
+ * `window.open` + `document.write` is blocked by default in most browsers now,
+ * so the old Print reported "Popup blocked" and did nothing. An iframe in the
+ * current document needs no permission, and waiting on its images means the
+ * print dialog never opens over half-loaded photos.
+ */
+async function printPhotos(photos: BulkPhoto[], perPage: 1 | 2 | 3 | 4, projectName: string) {
+  const usable = photos.filter((p) => p.url);
+  if (!usable.length) throw new Error("Those photos have no image to print");
+
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.setAttribute("title", "Print sheet");
+  frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+  const loaded = new Promise<void>((resolve) => {
+    frame.addEventListener("load", () => resolve(), { once: true });
+  });
+  frame.srcdoc = buildPrintDocument(usable, perPage, projectName);
+  document.body.appendChild(frame);
+
+  try {
+    await loaded;
+    const win = frame.contentWindow;
+    const doc = frame.contentDocument;
+    if (!win || !doc) throw new Error("Could not build the print sheet");
+    await Promise.all(
+      Array.from(doc.images).map((img) =>
+        img.complete
+          ? Promise.resolve()
+          : new Promise<void>((resolve) => {
+              img.addEventListener("load", () => resolve(), { once: true });
+              img.addEventListener("error", () => resolve(), { once: true });
+            }),
+      ),
+    );
+    // Removing the frame the instant print() returns cancels the job in the
+    // browsers where the dialog is not modal, so teardown waits for afterprint
+    // and keeps a timer as the backstop for the ones that never fire it.
+    win.addEventListener("afterprint", () => frame.remove(), { once: true });
+    window.setTimeout(() => frame.remove(), 120_000);
+    win.focus();
+    win.print();
+  } catch (e) {
+    frame.remove();
+    throw e;
   }
-  w.document.write(`<!doctype html><html><head><title>Print photos</title>
-    <style>
-      body{margin:0;font-family:system-ui,sans-serif;background:#fff;color:#111}
-      .g{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px}
-      img{width:100%;height:auto;break-inside:avoid;page-break-inside:avoid;border:1px solid #eee;border-radius:8px}
-      @media print{.g{gap:8px;padding:8px}}
-    </style></head><body>
-    <div class="g">${urls.map((u) => `<img src="${u}" />`).join("")}</div>
-    <script>window.onload=()=>setTimeout(()=>window.print(),400)</script>
-    </body></html>`);
-  w.document.close();
 }
 
 export function PhotoBulkActionBar(props: Props) {
@@ -115,6 +210,13 @@ export function PhotoBulkActionBar(props: Props) {
     onRefresh,
   } = props;
   const confirm = useConfirm();
+  const { profile } = useProfile();
+  const { state: sidebarState, isMobile } = useSidebar();
+  const barLeftOffset = isMobile
+    ? 0
+    : sidebarState === "collapsed"
+      ? "var(--sidebar-width-icon)"
+      : "var(--sidebar-width)";
   const count = selectedIds.length;
   const selectedPhotos = useMemo(
     () => selectedIds.map((id) => photosById.get(id)).filter(Boolean) as BulkPhoto[],
@@ -153,7 +255,14 @@ export function PhotoBulkActionBar(props: Props) {
       toast.success(`${count} photo${count > 1 ? "s" : ""} downloaded`);
     });
 
-  const doPrint = () => printPhotos(selectedPhotos.map((p) => p.url).filter(Boolean));
+  const doPrint = () =>
+    withBusy("print", async () => {
+      await printPhotos(
+        selectedPhotos,
+        clampPhotosPerPage(profile?.report_photos_per_page),
+        projectName,
+      );
+    });
 
   const doShare = () =>
     withBusy("share", async () => {
@@ -210,12 +319,34 @@ export function PhotoBulkActionBar(props: Props) {
 
   return (
     <>
-      <div className="pointer-events-none fixed inset-x-0 top-3 z-50 flex justify-center px-3 sm:top-4">
-        <div className="pointer-events-auto w-full max-w-[min(1100px,98vw)] rounded-2xl border border-border/70 bg-background/95 shadow-2xl ring-1 ring-primary/10 backdrop-blur-xl animate-in fade-in slide-in-from-top-4 duration-200">
-          <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
+      {/*
+        Offset by the sidebar. `inset-x-0` centred this across the whole
+        viewport, so the bar sat on top of the logo and the top nav rows, and
+        centred over the window rather than over the photos it acts on.
+
+        The offset is read from `useSidebar` rather than hardcoded, because the
+        rail is `collapsible="icon"`: a fixed 16rem would be wrong the moment
+        anyone collapses it. On mobile the sidebar is a sheet over the content,
+        so there is nothing to clear.
+      */}
+      <div
+        style={{ left: barLeftOffset }}
+        className="pointer-events-none fixed right-0 top-3 z-50 flex justify-center px-3 transition-[left] duration-200 ease-linear sm:top-4"
+      >
+        {/*
+          1100 fitted the seven actions this bar shipped with. Generate is an
+          eighth, and clearing the sidebar took 16rem of room away, so the row
+          needed both a higher cap and tighter controls: measured at 1222px it
+          wrapped on any window under 1500. The paddings and gaps below are
+          trimmed to bring that to roughly 1120, which holds one row from a
+          1440 laptop up. Narrower than that it wraps, which is what the
+          flex-wrap is for.
+        */}
+        <div className="pointer-events-auto w-full max-w-[min(1280px,98vw)] rounded-2xl border border-border/70 bg-background/95 shadow-2xl ring-1 ring-primary/10 backdrop-blur-xl animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 sm:px-3 sm:py-3">
             {/* Count pill */}
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-10 items-center gap-2 rounded-xl bg-primary px-3 text-primary-foreground shadow-sm">
+            <div className="flex items-center gap-2">
+              <div className="flex h-10 items-center gap-1.5 rounded-xl bg-primary px-2.5 text-primary-foreground shadow-sm">
                 <CheckSquare className="h-4 w-4" />
                 <span className="text-sm font-semibold tabular-nums">{count}</span>
                 <span className="text-xs font-medium opacity-90">Selected</span>
@@ -223,7 +354,7 @@ export function PhotoBulkActionBar(props: Props) {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-10 rounded-xl px-3 text-xs font-medium"
+                className="h-10 rounded-xl px-2.5 text-xs font-medium"
                 onClick={onSelectAll}
               >
                 Select all {totalVisible}
@@ -233,7 +364,7 @@ export function PhotoBulkActionBar(props: Props) {
             <div className="mx-1 hidden h-8 w-px bg-border sm:block" />
 
             {/* Primary actions */}
-            <div className="flex flex-1 flex-wrap items-center gap-1.5">
+            <div className="flex flex-1 flex-wrap items-center gap-1">
               <ActionBtn
                 label="Download"
                 icon={Download}
@@ -241,7 +372,7 @@ export function PhotoBulkActionBar(props: Props) {
                 busy={busy === "dl"}
               />
               <ActionBtn label="Tag" icon={TagIcon} onClick={() => setTagOpen(true)} />
-              <ActionBtn label="Print" icon={Printer} onClick={doPrint} />
+              <ActionBtn label="Print" icon={Printer} onClick={doPrint} busy={busy === "print"} />
               <ActionBtn label="Share" icon={Share2} onClick={doShare} busy={busy === "share"} />
 
               <DropdownMenu>
@@ -249,7 +380,7 @@ export function PhotoBulkActionBar(props: Props) {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-11 gap-2 rounded-xl px-3 hover:bg-muted"
+                    className="h-11 gap-1.5 rounded-xl px-2.5 hover:bg-muted"
                   >
                     <FileText className="h-[18px] w-[18px]" />
                     <span className="hidden text-sm font-medium sm:inline">Report</span>
@@ -302,7 +433,7 @@ export function PhotoBulkActionBar(props: Props) {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-11 gap-2 rounded-xl px-3 hover:bg-muted"
+                    className="h-11 gap-1.5 rounded-xl px-2.5 hover:bg-muted"
                   >
                     <Sparkles className="h-[18px] w-[18px]" />
                     <span className="hidden text-sm font-medium sm:inline">Generate</span>
@@ -333,7 +464,7 @@ export function PhotoBulkActionBar(props: Props) {
             <Button
               size="sm"
               variant="ghost"
-              className="h-10 gap-1.5 rounded-xl px-3 text-muted-foreground hover:text-foreground"
+              className="h-10 gap-1.5 rounded-xl px-2.5 text-muted-foreground hover:text-foreground"
               onClick={onClear}
               aria-label="Clear selection"
             >
@@ -410,7 +541,7 @@ function ActionBtn({
       variant="ghost"
       onClick={onClick}
       disabled={busy}
-      className={`h-11 gap-2 rounded-xl px-3 transition-all hover:bg-muted hover:shadow-sm ${
+      className={`h-11 gap-1.5 rounded-xl px-2.5 transition-all hover:bg-muted hover:shadow-sm ${
         danger ? "text-destructive hover:bg-destructive/10 hover:text-destructive" : ""
       }`}
       title={label}

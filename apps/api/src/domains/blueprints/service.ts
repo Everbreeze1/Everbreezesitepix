@@ -220,10 +220,10 @@ export async function applyProjectBlueprintService(
       } else if (it.kind === "document") {
         // Create a real page, the same object "Save as template" round-trips
         // out of. This used to write a `project_site_logs` row, whose only
-        // reader (ProjectSiteLogs) is mounted inside ProjectReports - a
-        // component nothing renders any more. The apply reported "1 document
-        // created" and the project's Documents tab stayed empty, because the
-        // row landed somewhere with no UI attached to it.
+        // reader (ProjectSiteLogs) was mounted inside ProjectReports, a
+        // component nothing rendered and which has since been deleted. The
+        // apply reported "1 document created" and the project's Documents tab
+        // stayed empty, because the row landed somewhere with no UI attached.
         //
         // createPageFromTemplateService also resolves the placeholder tokens
         // against the project itself, so the copy here no longer has to guess

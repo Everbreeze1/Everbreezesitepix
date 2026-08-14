@@ -2234,3 +2234,71 @@ describe("family: one report-creation flow, not one per entry point", () => {
     expect(src).toContain("sanitizeCaption");
   });
 });
+
+describe("family: text a model wrote still has to obey the house style", () => {
+  /*
+   * CLAUDE.md bans the long dashes and tests/no-em-dash.test.ts enforces it
+   * across every tracked file. Neither can reach a string an LLM produced at
+   * runtime, and the Auto Report stores the model's title, subtitle and prose
+   * verbatim - so report titles carrying an em dash were being written to the
+   * database and shown on every screen that lists a report.
+   *
+   * The fold has to happen where model output is accepted. The PDF sanitisers
+   * do their own fold, but only while drawing a page, and they never touch
+   * what was stored.
+   */
+  const SERVICE = "apps/api/src/domains/walkthroughs/service.ts";
+
+  it("the Auto Report folds every AI string it keeps", () => {
+    const src = stripComments(read(SERVICE));
+    expect(src).toContain("normalizeDashesTrimmed");
+    // The raw String(...).trim() shape is what let the dashes through.
+    const aiBlock = src.slice(
+      src.indexOf("ai = {"),
+      src.indexOf("conclusion:", src.indexOf("ai = {")) + 200,
+    );
+    expect(aiBlock).not.toMatch(/String\(parsed\.\w+ \?\? ""\)\.trim\(\)/);
+    expect(aiBlock).not.toMatch(/String\(s\?\.\w+ \?\? ""\)\.trim\(\)/);
+  });
+
+  it("the normaliser never spells the characters it strips", () => {
+    /*
+     * Writing them literally would fail no-em-dash.test.ts, which is why the
+     * pattern is built from escapes.
+     */
+    const src = read("packages/shared/src/machine-dashes.ts");
+    expect(src).toContain("u2014");
+    expect(src).not.toMatch(/[\u2013\u2014\u2015\u2E3A\u2E3B]/);
+  });
+});
+
+describe("family: bulk actions honour the page density the author chose", () => {
+  /*
+   * `profiles.report_photos_per_page` is the answer to "every report came out
+   * at the wrong density". Print ignored it: a hardcoded two-column grid of
+   * bare images, so a company filing four-up got two-up whenever it printed
+   * and the sheet did not match the PDF of the same photos. It also went
+   * through window.open + document.write, which browsers block by default -
+   * the action's most common outcome was a "Popup blocked" toast.
+   */
+  const BAR = "apps/web/src/features/photos/components/PhotoBulkActionBar.tsx";
+
+  it("Print reads the author's saved density", () => {
+    const src = stripComments(read(BAR));
+    expect(src).toContain("clampPhotosPerPage");
+    expect(src).toMatch(/report_photos_per_page/);
+  });
+
+  it("Print does not open a popup window", () => {
+    const src = stripComments(read(BAR));
+    expect(src).not.toMatch(/window\.open\(/);
+    expect(src).not.toMatch(/document\.write\(/);
+  });
+
+  it("the print sheet escapes what it interpolates", () => {
+    // Captions and project names reach this markup as raw text.
+    const src = stripComments(read(BAR));
+    expect(src).toMatch(/const esc =/);
+    expect(src).toMatch(/\$\{esc\(/);
+  });
+});

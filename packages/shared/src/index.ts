@@ -19,6 +19,7 @@ export {
   planSectionPages,
   type SectionPagePlan,
 } from "./report-pagination";
+export { normalizeDashes, normalizeDashesTrimmed } from "./machine-dashes";
 export { labelColor, labelChipClass } from "./label-colors";
 export {
   thumbPathFor,

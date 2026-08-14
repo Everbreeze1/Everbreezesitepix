@@ -279,9 +279,7 @@ export function GenerateDocumentMenu({
               <p className="mt-1 text-xs text-muted-foreground">
                 {photosPerPage === 1
                   ? "One photo per page, each with its own heading and space to write under it."
-                  : photosPerPage === 4
-                    ? 'Four photos as a 2x2 grid under one "Photographic record" heading.'
-                    : `${photosPerPage} photos side by side under one "Photographic record" heading.`}
+                  : `${photosPerPage} photos across, grouped under one "Photographic record" heading.`}
               </p>
             </>
           ) : undefined

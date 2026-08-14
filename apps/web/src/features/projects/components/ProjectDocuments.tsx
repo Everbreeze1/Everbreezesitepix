@@ -54,7 +54,6 @@ import { uploadWithResume } from "@/lib/resumable-upload";
 import { relativeTime } from "@sitepix/shared";
 import { BlueprintItemBadge } from "./BlueprintItemBadge";
 import { downloadBase64File } from "@/lib/download-file";
-import { type ReportPhotoRef } from "@/features/projects/components/ProjectReports";
 import {
   listProjectDocumentTree,
   createDocumentFolder,
@@ -70,6 +69,21 @@ import {
   type DocumentTreeFolder,
 } from "@/lib/project-pages.functions";
 import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
+
+/**
+ * A project photo as the document screens need it.
+ *
+ * This lived in ProjectReports.tsx, which was 485 lines of report UI that
+ * nothing rendered: the Reports tab shows ProjectDocuments, and the report
+ * cards live on ReportsIndexPage. The dead file's only remaining job was
+ * exporting this type, so it moved here and the file is gone.
+ */
+export interface ReportPhotoRef {
+  id: string;
+  url: string;
+  caption?: string | null;
+  taken_at?: string | null;
+}
 
 interface ProjectDocument {
   id: string;

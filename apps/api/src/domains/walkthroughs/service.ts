@@ -11,6 +11,7 @@ import {
 import {
   MAX_AUTO_REPORT_PHOTO_SECTIONS,
   consolidateReportSections,
+  normalizeDashesTrimmed,
 } from "@sitepix/shared";
 
 
@@ -2076,18 +2077,29 @@ export async function createReportFromWalkthroughService(
           const raw = json.choices?.[0]?.message?.content ?? "";
           const parsed = JSON.parse(raw);
           if (parsed && typeof parsed === "object" && Array.isArray(parsed.sections)) {
+            /*
+             * Every string the model returns is folded through
+             * `normalizeDashesTrimmed` here, at the one point model output
+             * becomes our data. Models write long dashes by reflex, and this
+             * text is stored verbatim: the title alone shows up on the reports
+             * index, the project screen, the builder, the share page and the
+             * PDF bookmark. CLAUDE.md forbids that character everywhere, and
+             * no lint over tracked files can catch text written at runtime.
+             */
             ai = {
-              title: String(parsed.title ?? "").trim() || `${projectName ?? "Site"} Walkthrough Report`,
-              subtitle: String(parsed.subtitle ?? "").trim(),
-              introduction: String(parsed.introduction ?? "").trim(),
+              title:
+                normalizeDashesTrimmed(parsed.title) ||
+                `${projectName ?? "Site"} Walkthrough Report`,
+              subtitle: normalizeDashesTrimmed(parsed.subtitle),
+              introduction: normalizeDashesTrimmed(parsed.introduction),
               sections: parsed.sections.map((s: any) => ({
-                title: String(s?.title ?? "").trim() || "Section",
-                body: String(s?.body ?? "").trim(),
+                title: normalizeDashesTrimmed(s?.title) || "Section",
+                body: normalizeDashesTrimmed(s?.body),
                 photo_indices: Array.isArray(s?.photo_indices)
                   ? s.photo_indices.filter((n: any) => Number.isInteger(n) && n >= 0 && n < photoList.length)
                   : [],
               })),
-              conclusion: String(parsed.conclusion ?? "").trim(),
+              conclusion: normalizeDashesTrimmed(parsed.conclusion),
             };
           }
         } else {
