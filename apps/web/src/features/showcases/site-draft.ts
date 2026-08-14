@@ -168,6 +168,10 @@ export function usePortfolioSiteDraft(
       }
       const { data: pub } = supabase.storage.from("company-logos").getPublicUrl(path);
       set("logoUrl", pub.publicUrl);
+      // Deliberately doesn't say how it gets published: the wizard commits on
+      // Continue and the editor on Save, and a message naming the wrong one is
+      // worse than a message naming neither.
+      toast.success("Logo uploaded");
     } finally {
       setLogoUploading(false);
     }

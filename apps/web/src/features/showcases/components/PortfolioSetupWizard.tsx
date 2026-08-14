@@ -306,7 +306,8 @@ function StepScreen({
       </div>
 
       <p className="mt-3 text-right text-[11px] text-muted-foreground">
-        Saved automatically as you go. Press Enter to continue.
+        Saved automatically as you go.
+        {step.enterAdvances && " Press Enter to continue."}
       </p>
     </form>
   );

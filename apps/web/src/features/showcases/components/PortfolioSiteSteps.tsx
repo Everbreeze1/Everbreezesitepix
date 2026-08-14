@@ -69,6 +69,15 @@ export interface SiteStep {
   optional?: boolean;
   /** Which block of the live preview this step is writing. */
   previewFocus: "hero" | "services" | "areas" | "about" | "contact" | "address";
+  /**
+   * Whether Enter in this step's fields submits the step.
+   *
+   * True only where a plain text input is the answer. The tag inputs and the
+   * rich text editor bind Enter themselves (add a chip, start a paragraph), so
+   * a step made of those never submits - and promising "press Enter" under one
+   * of them teaches people the shortcut is broken.
+   */
+  enterAdvances: boolean;
   isDone: (d: Draft) => boolean;
   Fields: ComponentType<{ ctx: StepCtx }>;
 }
@@ -519,6 +528,7 @@ export const SITE_STEPS: SiteStep[] = [
     hint: "Your name, mark and colour set the tone for every page on the site.",
     icon: Building2,
     previewFocus: "hero",
+    enterAdvances: true,
     isDone: (d) => d.businessName.trim().length > 0,
     Fields: BusinessFields,
   },
@@ -529,6 +539,7 @@ export const SITE_STEPS: SiteStep[] = [
     hint: "These become the headline trades and the filters over your projects.",
     icon: Hammer,
     previewFocus: "services",
+    enterAdvances: false,
     isDone: (d) => d.services.length > 0,
     Fields: ServicesFields,
   },
@@ -539,6 +550,7 @@ export const SITE_STEPS: SiteStep[] = [
     hint: "The full-bleed shot at the top of the site, with your headline over it.",
     icon: ImagePlus,
     previewFocus: "hero",
+    enterAdvances: true,
     isDone: (d) => !!d.heroPhotoId || d.heroHeadline.trim().length > 0,
     Fields: CoverFields,
   },
@@ -550,6 +562,7 @@ export const SITE_STEPS: SiteStep[] = [
     icon: MapPin,
     optional: true,
     previewFocus: "areas",
+    enterAdvances: false,
     isDone: (d) => d.serviceAreas.length > 0,
     Fields: AreasFields,
   },
@@ -561,6 +574,7 @@ export const SITE_STEPS: SiteStep[] = [
     icon: MessageSquareText,
     optional: true,
     previewFocus: "about",
+    enterAdvances: false,
     isDone: (d) => !richIsEmpty(d.aboutHtml),
     Fields: AboutFields,
   },
@@ -571,6 +585,7 @@ export const SITE_STEPS: SiteStep[] = [
     hint: "This fills the header button, the contact band and the footer.",
     icon: PhoneCall,
     previewFocus: "contact",
+    enterAdvances: true,
     isDone: (d) => !!(d.phone.trim() || d.email.trim()),
     Fields: ContactFields,
   },
@@ -581,6 +596,7 @@ export const SITE_STEPS: SiteStep[] = [
     hint: "This is the link you'll text to customers. It's yours to change until you share it.",
     icon: Link2,
     previewFocus: "address",
+    enterAdvances: true,
     isDone: () => true,
     Fields: AddressFields,
   },
