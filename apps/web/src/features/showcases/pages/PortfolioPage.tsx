@@ -15,8 +15,11 @@ import {
   type PortfolioDetail,
 } from "@/lib/portfolio.functions";
 import { PortfolioSitePanel } from "@/features/showcases/components/PortfolioSitePanel";
+import { PortfolioSetupWizard } from "@/features/showcases/components/PortfolioSetupWizard";
 import { PortfolioEmbedsPanel } from "@/features/showcases/components/PortfolioEmbedsPanel";
 import { ShowcasesPanel } from "@/features/showcases/components/ShowcasesPanel";
+import { needsGuidedSetup } from "@/features/showcases/components/PortfolioSiteSteps";
+import { toDraft } from "@/features/showcases/site-draft";
 
 /**
  * Portfolio - the home for everything that used to be "Showcases".
@@ -38,6 +41,9 @@ export function PortfolioPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [tab, setTab] = useState("site");
+  /** null until the loaded portfolio has been judged; then true = wizard open. */
+  const [guided, setGuided] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,6 +60,21 @@ export function PortfolioPage() {
   useEffect(() => {
     if (isTeam) void load();
   }, [isTeam, load]);
+
+  // Decide once per load whether this person is *building* a site or editing
+  // one. A blank portfolio dropped straight into the section editor is the
+  // overwhelm the wizard exists to remove, and a finished one interrupted by a
+  // seven-step queue is worse. Dismissal is remembered so "I'd rather do this
+  // my own way" survives a refresh.
+  useEffect(() => {
+    if (guided !== null || !data) return;
+    const p = data.portfolio;
+    if (!p || data.canEdit === false) {
+      setGuided(false);
+      return;
+    }
+    setGuided(!isSetupDismissed(p.id) && needsGuidedSetup(toDraft(p)));
+  }, [data, guided]);
 
   // `portfolio` is null for a plain member of a team that has no portfolio yet
   // (create-on-read is an owner/admin privilege - see getMyPortfolioService),
@@ -75,7 +96,10 @@ export function PortfolioPage() {
     }
   };
 
-  if (subLoading || (isTeam && loading)) {
+  // `guided === null` means the effect above hasn't judged this portfolio yet.
+  // Holding the spinner for that one frame avoids flashing the tabbed editor at
+  // someone who is about to be shown the wizard instead.
+  if (subLoading || (isTeam && loading) || (isTeam && data?.portfolio && guided === null)) {
     return (
       <div className="flex min-h-full items-center justify-center p-10">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -145,6 +169,28 @@ export function PortfolioPage() {
   const siteUrl =
     typeof window !== "undefined" ? `${window.location.origin}/p/${p.slug}` : `/p/${p.slug}`;
 
+  // The guided build takes the whole page. Leaving the tabs and the publish bar
+  // above it would put three other jobs on screen while asking one question,
+  // which is the crowding this flow was written to undo.
+  if (guided && canEdit) {
+    return (
+      <PortfolioSetupWizard
+        portfolio={p}
+        serviceTypes={data.serviceTypes}
+        projectCount={data.showcases.length}
+        published={p.published}
+        publishing={publishing}
+        onPublish={(v) => void togglePublished(v)}
+        onSaved={patchPortfolio}
+        onExit={() => {
+          dismissSetup(p.id);
+          setGuided(false);
+        }}
+        onGoToProjects={() => setTab("projects")}
+      />
+    );
+  }
+
   return (
     <div className="px-6 pb-24 pt-6 sm:px-10 sm:pt-10">
       <PageHeader
@@ -167,7 +213,7 @@ export function PortfolioPage() {
         onToggle={togglePublished}
       />
 
-      <Tabs defaultValue="site" className="mt-8">
+      <Tabs value={tab} onValueChange={setTab} className="mt-8">
         <TabsList>
           <TabsTrigger value="site">
             <Globe className="mr-1.5 h-4 w-4" /> Site
@@ -185,7 +231,9 @@ export function PortfolioPage() {
             <PortfolioSitePanel
               portfolio={p}
               serviceTypes={data.serviceTypes}
+              projectCount={data.showcases.length}
               onSaved={patchPortfolio}
+              onStartGuided={() => setGuided(true)}
             />
           ) : (
             <ReadOnlyNotice what="the site's branding and copy" />
@@ -214,6 +262,31 @@ export function PortfolioPage() {
       </Tabs>
     </div>
   );
+}
+
+/**
+ * Whether this person has already chosen the editor over the guided build.
+ *
+ * Kept in localStorage rather than on the portfolio row because it is a
+ * per-person preference about a workflow, not a fact about the site: an admin
+ * who skips the wizard should not decide that for their co-owner.
+ */
+const setupKey = (portfolioId: string) => `sitepix.portfolio-setup-dismissed.${portfolioId}`;
+
+function isSetupDismissed(portfolioId: string): boolean {
+  try {
+    return window.localStorage.getItem(setupKey(portfolioId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function dismissSetup(portfolioId: string) {
+  try {
+    window.localStorage.setItem(setupKey(portfolioId), "1");
+  } catch {
+    /* Private browsing and blocked storage just mean the wizard offers itself again. */
+  }
 }
 
 /**
