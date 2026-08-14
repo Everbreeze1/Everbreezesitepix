@@ -232,7 +232,7 @@ export function GroupPage() {
     nextStatus: string,
     task?: { assignee_user_id: string | null; assigned_by: string | null },
   ) => {
-    // The same rule the project panel and the photo panel apply — a rollup is
+    // The same rule the project panel and the photo panel apply - a rollup is
     // still a place work gets closed from, and this one used to be the way
     // round every check the others made.
     if (nextStatus === "done" && task) {
@@ -556,7 +556,7 @@ export function GroupPage() {
                     </div>
                   </div>
 
-                  {/* Checklists + Tasks — always visible */}
+                  {/* Checklists + Tasks - always visible */}
                   <div className="grid gap-4 border-t border-border/60 bg-muted/20 p-4 sm:grid-cols-2 sm:p-5">
                     {/* Checklists */}
                     <div>

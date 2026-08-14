@@ -1,6 +1,6 @@
 -- Records platform-admin actions (grants/revokes, broadcasts, billing syncs)
 -- for accountability. Service-role only, same access pattern as
--- platform_admins — never exposed to `authenticated`. Idempotent.
+-- platform_admins - never exposed to `authenticated`. Idempotent.
 
 CREATE TABLE IF NOT EXISTS public.admin_audit_log (
   id          uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,

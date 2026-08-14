@@ -174,13 +174,13 @@ export function GalleryPage() {
    * The grid answers "what have we got"; it can't answer "what happened on the
    * 12th" or "which weeks were busy", which is most of what people bring to a
    * field-photo archive. In calendar mode the visible month *is* the date
-   * range — the separate Date pill would be a second, contradictory way to say
+   * range - the separate Date pill would be a second, contradictory way to say
    * the same thing, so it steps aside.
    *
    * The two views also load differently. The grid pages photos; the calendar
    * asks the server for day-bucketed counts and fetches only the day you open.
    * So the photo query below is switched off entirely in calendar mode, and
-   * `photos` is instead filled from whatever day the calendar has loaded —
+   * `photos` is instead filled from whatever day the calendar has loaded -
    * which keeps the lightbox, tag filter and per-photo panels working off the
    * same list in both views.
    */
@@ -308,8 +308,8 @@ export function GalleryPage() {
        *
        * This upload path wrote no `taken_at`, `latitude` or `longitude` at all,
        * so the same photo kept its capture time and GPS when added from a
-       * project page and lost both — permanently, since the stripped copy is
-       * what gets stored — when added from the Gallery. For a product whose
+       * project page and lost both - permanently, since the stripped copy is
+       * what gets stored - when added from the Gallery. For a product whose
        * value is proving what a site looked like and when, that is the data
        * that matters most: it drives the map, the timeline and the date
        * grouping. Mirrors ProjectDetailPage.tsx:891.
@@ -353,7 +353,7 @@ export function GalleryPage() {
         toast.error(insErr?.message ?? "Insert failed");
         /*
          * Reclaim the blob we just uploaded. Without this a failed insert
-         * leaves a file in the bucket that no row references — and it is
+         * leaves a file in the bucket that no row references - and it is
          * unreachable forever: `use-storage-usage` derives usage from
          * SUM(photos.size_bytes) so it isn't even counted, and every delete
          * path keys off `photos.storage_path`, so nothing in the product can
@@ -402,7 +402,7 @@ export function GalleryPage() {
       /*
        * `photos.archived` is NOT the archive the template pages offer. It is
        * set only by the archive-old-photos cron, which downscales a six-month
-       * -old original in place — same row, same path, fewer bytes. Nothing in
+       * -old original in place - same row, same path, fewer bytes. Nothing in
        * the product sets it, and nothing offers a way to see an archived photo.
        *
        * So filtering it here meant: the day that job is enabled, a user's older
@@ -413,7 +413,7 @@ export function GalleryPage() {
       .order("created_at", { ascending: false })
       .limit(photoLimit);
     if (projectFilter.length > 0) q = q.in("project_id", projectFilter);
-    // `new Date("2026-08-31")` is UTC midnight, not local — west of Greenwich
+    // `new Date("2026-08-31")` is UTC midnight, not local - west of Greenwich
     // that lands on the 30th, so the last day the user picked was being cut
     // off the range entirely. Pin both ends to local time explicitly.
     if (dateFrom) q = q.gte("created_at", new Date(`${dateFrom}T00:00:00`).toISOString());
@@ -437,7 +437,7 @@ export function GalleryPage() {
     return { photos: ps, signed: map };
   };
 
-  // Each useQuery below is purely a scheduling gate — "do I actually need to
+  // Each useQuery below is purely a scheduling gate - "do I actually need to
   // run load*() again, or is cached-and-fresh good enough". A useEffect
   // synced on each query's data (below) mirrors it into local useState so a
   // cache-hit remount (queryFn skipped) still repopulates the page instead
@@ -464,8 +464,8 @@ export function GalleryPage() {
       dateTo,
     }),
     queryFn: loadPhotos,
-    // Calendar mode has no use for a page of recent photos — it loads a day at
-    // a time — and running this anyway was the single biggest cost of opening
+    // Calendar mode has no use for a page of recent photos - it loads a day at
+    // a time - and running this anyway was the single biggest cost of opening
     // the calendar.
     enabled: !!user && !calendarView,
     staleTime: 60_000,
@@ -477,15 +477,15 @@ export function GalleryPage() {
    * Two rules, both of which were bugs before they were rules:
    *
    * 1. Picking the view you are already in does nothing. It used to clear
-   *    `photos` — and nothing put them back, because the effect below only
+   *    `photos` - and nothing put them back, because the effect below only
    *    fires when `photosQuery.data` changes identity and a cache hit returns
    *    the very same object. So a full gallery emptied itself and offered
-   *    "No photos yet — take a photo", which is what "I click Grid and it asks
+   *    "No photos yet - take a photo", which is what "I click Grid and it asks
    *    me to take a photo" was.
    *
    * 2. A real change hands the incoming view the list it owns. The two fill
-   *    `photos` from different sources — a page of recent photos vs. the one
-   *    day the calendar loaded — so the outgoing view's list must not flash
+   *    `photos` from different sources - a page of recent photos vs. the one
+   *    day the calendar loaded - so the outgoing view's list must not flash
    *    inside the incoming one. On the way back to the grid that list is
    *    already in the query cache, and taking it from there rather than
    *    blanking and waiting for the effect below is the difference between a
@@ -514,7 +514,7 @@ export function GalleryPage() {
      * whatever the query is holding.
      *
      * Without `calendarView` in the deps this effect could only ever fire when
-     * `photosQuery.data` changed identity — and a cache hit hands back the same
+     * `photosQuery.data` changed identity - and a cache hit hands back the same
      * object it did before the detour through the calendar. That is the failure
      * `switchView` above now heads off directly; this stays the backstop for
      * every other way the two can drift apart.
@@ -534,11 +534,11 @@ export function GalleryPage() {
     if (search.project) setProjectFilter([search.project]);
   }, [search.project]);
 
-  // `view` seeds from the URL, but the initial state only runs on mount — so
+  // `view` seeds from the URL, but the initial state only runs on mount - so
   // arriving at ?view=calendar while the gallery is already open (the /timeline
   // redirect, back/forward, a shared link) would leave the grid showing. Only
   // acts when the param is actually present, so navigating to a bare /gallery
-  // doesn't yank the user out of the calendar — and goes through `switchView`,
+  // doesn't yank the user out of the calendar - and goes through `switchView`,
   // so landing on ?view=grid while already in the grid is the no-op it reads as
   // rather than a self-emptying gallery.
   useEffect(() => {
@@ -571,7 +571,7 @@ export function GalleryPage() {
   /**
    * A gallery with nothing in it gets the empty state on its own.
    *
-   * The bar is five controls that all read "All" and a count that reads 0 —
+   * The bar is five controls that all read "All" and a count that reads 0 -
    * every one of them an answer to a question a first-time user has not asked
    * yet, stacked on top of the one thing they need, which is where the camera
    * button is. It comes back the moment there is anything to narrow down, and
@@ -616,7 +616,7 @@ export function GalleryPage() {
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         if (!sessionData.session?.access_token) {
-          reply({ ok: false, error: "Session expired — please sign in again." });
+          reply({ ok: false, error: "Session expired - please sign in again." });
           return;
         }
         const result = await sitepixApi.email.sendFieldReport({
@@ -683,7 +683,7 @@ export function GalleryPage() {
         });
         if (insErr) {
           toast.error(insErr.message);
-          // Reclaim the orphaned upload — nothing else can, see `saveCapture`.
+          // Reclaim the orphaned upload - nothing else can, see `saveCapture`.
           void supabase.storage.from("site-photos").remove(photoObjectPaths(path, thumbPath));
         }
       }
@@ -753,7 +753,7 @@ export function GalleryPage() {
     if (!isActive) {
       setPaywallOpen(true);
       toast.error(
-        "AI photo analysis is a paid feature. Upgrade to Starter or Team to continue — both include unlimited AI scans.",
+        "AI photo analysis is a paid feature. Upgrade to Starter or Team to continue - both include unlimited AI scans.",
       );
       return;
     }
@@ -917,11 +917,11 @@ export function GalleryPage() {
       )
       .join("");
     const fileSlug = `sitepix-report-${a.id.slice(0, 8)}.pdf`;
-    const subject = `SitePix report — ${photo.caption ?? "Site photo"}`;
+    const subject = `SitePix report - ${photo.caption ?? "Site photo"}`;
     const opener_origin = window.location.origin;
 
     return `<!doctype html>
-<html><head><meta charset="utf-8"><title>SitePix Report — ${escapeHtml(photo.caption ?? "Photo")}</title>
+<html><head><meta charset="utf-8"><title>SitePix Report - ${escapeHtml(photo.caption ?? "Photo")}</title>
 <style>
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#111827;margin:0;background:#f3f4f6;}
   .toolbar{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #e5e7eb;padding:10px 16px;display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;}
@@ -1018,7 +1018,7 @@ export function GalleryPage() {
       sendBtn.addEventListener('click', async function(){
         if (!window.opener || window.opener.closed) {
           status.className='status err';
-          status.textContent='Original tab closed — reopen the report from the gallery to send.';
+          status.textContent='Original tab closed - reopen the report from the gallery to send.';
           return;
         }
         sendBtn.disabled = true; toggle.disabled = true;
@@ -1069,7 +1069,7 @@ export function GalleryPage() {
     const html = buildReportHtml(analysis, activePhoto, imgSrc, "", reportWatermarkUrl);
     const w = window.open("", "_blank");
     if (!w) {
-      toast.error("Pop-up blocked — allow pop-ups to export the report");
+      toast.error("Pop-up blocked - allow pop-ups to export the report");
       return;
     }
     w.document.open();
@@ -1154,7 +1154,7 @@ export function GalleryPage() {
         and appears again on every paywall, and "Capture, upload, and analyze site
         photos" restates the two buttons sitting beside it. Stacked above a filter
         bar and a grid, they were two of the several things competing for the first
-        screen — which is what the field meant by "too much at once".
+        screen - which is what the field meant by "too much at once".
       */}
       <PageHeader
         eyebrow="Media library"
@@ -1199,7 +1199,7 @@ export function GalleryPage() {
           <Camera className="h-10 w-10 text-muted-foreground" />
           <h2 className="mt-3 text-lg font-semibold">No project yet</h2>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            Create a project first — photos are organized by job site.
+            Create a project first - photos are organized by job site.
           </p>
           <Button asChild className="mt-4">
             <Link to="/projects/new">Create project</Link>
@@ -1213,7 +1213,7 @@ export function GalleryPage() {
 
         The view toggle used to sit at the head of the row with a rule after it,
         which put a control that changes the whole page in the middle of three
-        that narrow it — five things and a running count, all fighting for the
+        that narrow it - five things and a running count, all fighting for the
         same line. Filters keep the left; the toggle moves to the right edge,
         where the eye lands after the grid rather than before the filters.
       */}
@@ -1279,7 +1279,7 @@ export function GalleryPage() {
               </PopoverContent>
             </Popover>
 
-            {/* Date range — in calendar view the visible month already is the
+            {/* Date range - in calendar view the visible month already is the
                 range, so this would be a second way to say the same thing. */}
             <Popover>
               <PopoverTrigger asChild>
@@ -1489,7 +1489,7 @@ export function GalleryPage() {
         />
       )}
 
-      {/* Unmounted rather than hidden in calendar view — a `hidden` grid still
+      {/* Unmounted rather than hidden in calendar view - a `hidden` grid still
           mounts every tile and fires a signed-thumbnail request per photo. */}
       {!calendarView && (
         <div className="mt-6 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
@@ -1533,7 +1533,7 @@ export function GalleryPage() {
                   className="group flex flex-col overflow-hidden rounded-3xl bg-sidebar text-left shadow-[0_20px_35px_-26px_rgba(16,25,41,0.55)] transition-transform hover:-translate-y-0.5"
                 >
                   <div className="relative aspect-[4/3] w-full overflow-hidden">
-                    {/* Thumbnail, not the camera original — a 200-photo grid of
+                    {/* Thumbnail, not the camera original - a 200-photo grid of
                       full-res site photos is the single heaviest thing in the
                       app on a phone. Falls back to the full image if the
                       project's plan has no image transformation. */}

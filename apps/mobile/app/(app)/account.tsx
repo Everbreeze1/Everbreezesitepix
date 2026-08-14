@@ -15,7 +15,7 @@ export default function AccountScreen() {
     (async () => {
       try {
         const res = await api.health();
-        if (!cancelled) setHealth(`${res.service} ${res.version} — ok`);
+        if (!cancelled) setHealth(`${res.service} ${res.version} - ok`);
       } catch (e) {
         if (cancelled) return;
         setHealth(

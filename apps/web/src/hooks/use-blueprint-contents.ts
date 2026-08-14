@@ -22,8 +22,8 @@ export interface BlueprintContents {
  * Reads one blueprint's contents, resolved to display names.
  *
  * The Templates page already loads every library wholesale for its builder, but
- * anywhere else that wants to show "here is what this blueprint will do" — the
- * new-project form, for one — only needs the one blueprint. Same ordering rule
+ * anywhere else that wants to show "here is what this blueprint will do" - the
+ * new-project form, for one - only needs the one blueprint. Same ordering rule
  * as the server: legacy `project_template_checklists` links first, then
  * `project_template_items` by position.
  */

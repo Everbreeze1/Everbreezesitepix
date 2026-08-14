@@ -133,7 +133,7 @@ const STARTER_WORKFLOWS: {
         description: "Confirm scope and site conditions before anything comes off the truck.",
         items: [
           { kind: "check", label: "Scope confirmed with customer", required: true },
-          { kind: "photo", label: "Site condition — wide shot", required: true },
+          { kind: "photo", label: "Site condition - wide shot", required: true },
           { kind: "check", label: "Access and parking arranged" },
           { kind: "note", label: "Existing damage noted" },
         ],
@@ -399,7 +399,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
     setSelectedId(id);
     setPane("editor");
     await load();
-    // A brand-new workflow is an empty canvas — give it a first phase so there
+    // A brand-new workflow is an empty canvas - give it a first phase so there
     // is somewhere to type instead of one lonely "Add phase" button.
     await addPhaseTo(id, 0, "Phase 1");
   };
@@ -411,7 +411,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
       if (!id) return;
       /*
        * Both inserts below used to discard their error, and a dropped phase
-       * `continue`d in silence — so a starter could land as empty shells under
+       * `continue`d in silence - so a starter could land as empty shells under
        * an unconditional "Created" toast, and the author would go on to build
        * real jobs on top of it. Stop at the first failure and say so.
        */
@@ -448,9 +448,9 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
           break;
         }
       }
-      // Land the author on whatever did get built either way — a half-built
+      // Land the author on whatever did get built either way - a half-built
       // starter they can see and repair beats a success toast over a shell.
-      if (failure) toast.error(`Created “${starter.name}”, but not completely — ${failure}`);
+      if (failure) toast.error(`Created “${starter.name}”, but not completely - ${failure}`);
       else toast.success(`Created “${starter.name}”`);
       setStartersOpen(false);
       setSelectedId(id);
@@ -504,7 +504,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
         }
       }
     }
-    if (failure) toast.error(`Duplicated “${t.name}”, but not completely — ${failure}`);
+    if (failure) toast.error(`Duplicated “${t.name}”, but not completely - ${failure}`);
     else toast.success("Workflow duplicated");
     setSelectedId(id);
     await load();
@@ -626,7 +626,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
    * isn't displaced keeps a number at or below source.
    *
    * Every result is checked, the way `reorderPhases` already does it.
-   * `duplicatePhase` used to fire these bare — and since the query builder
+   * `duplicatePhase` used to fire these bare - and since the query builder
    * resolves to `{ error }` instead of rejecting, a failed shift returned as if
    * it had worked, leaving the screen showing an order the database didn't
    * have until the next load put two rows on one number.
@@ -654,7 +654,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
     // Refetch rather than roll back: these are independent requests, so a
     // failure can be partial and no local undo is right for both halves.
     if (!ok) {
-      // Flush first — `load()` replaces state from the database but leaves the
+      // Flush first - `load()` replaces state from the database but leaves the
       // autosave queue holding its pending patch, which then lands afterwards
       // with no re-render, so a label mid-edit would vanish and still be saved.
       await save.flush();
@@ -875,7 +875,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
           backLabel="Settings"
           eyebrow="Workspace tools"
           title="Workflow templates"
-          description="Phases the crew works through in order — checklist items, photo prompts, notes, and sign-off gates."
+          description="Phases the crew works through in order - checklist items, photo prompts, notes, and sign-off gates."
           actions={headerActions}
         />
       )}
@@ -888,7 +888,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
         <EmptyState
           icon={WorkflowIcon}
           title="No workflows yet"
-          description="Build a workflow once — Pre-Job, Install, Inspection, Handover — then apply it to any project. Start from a proven one or design your own."
+          description="Build a workflow once - Pre-Job, Install, Inspection, Handover - then apply it to any project. Start from a proven one or design your own."
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <Button onClick={() => setStartersOpen(true)}>
@@ -984,7 +984,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
                       selected.archived ? (
                         <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-[11.5px] font-semibold text-muted-foreground">
                           <Archive className="h-3.5 w-3.5" />
-                          Archived — it won't show up when applying a workflow to a project.
+                          Archived - it won't show up when applying a workflow to a project.
                         </div>
                       ) : null
                     }
@@ -1081,7 +1081,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
                         <div className="relative space-y-2.5">
                           {/* Connector between the numbered phase badges. Cards
                               come later in the DOM and carry bg-card, so it only
-                              shows through in the gaps — left-[47px] centres it
+                              shows through in the gaps - left-[47px] centres it
                               under the badge (10px card pad + 20px handle + 4px
                               gap + half of the 28px badge). */}
                           {selectedPhases.length > 1 && (
@@ -1314,7 +1314,7 @@ function PhaseCard({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "group/phase relative rounded-2xl border border-border bg-card transition-shadow",
-        // The card is already `relative`, so this z-index is live — at z-30 a
+        // The card is already `relative`, so this z-index is live - at z-30 a
         // dragged phase floated over the sticky BuilderTitleBar (z-10) and the
         // AppHeader (z-20). It only needs to clear its sibling phases.
         isDragging && "z-[5] opacity-90 shadow-[0px_18px_36px_-20px_rgba(16,25,41,0.55)]",
@@ -1429,7 +1429,7 @@ function PhaseCard({
         <div className="border-t border-border/70 px-2.5 py-2.5">
           {items.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-              No steps yet — add the first thing the crew does in this phase.
+              No steps yet - add the first thing the crew does in this phase.
             </p>
           ) : (
             <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
@@ -1495,7 +1495,7 @@ function StepRow({
   });
   const inputRef = useRef<HTMLInputElement>(null);
   // A row created by "add step" starts empty and is discarded if you walk away
-  // without naming it — so the builder never accumulates blank rows.
+  // without naming it - so the builder never accumulates blank rows.
   const removed = useRef(false);
 
   useEffect(() => {
@@ -1515,7 +1515,7 @@ function StepRow({
   };
 
   /**
-   * Discard a never-named row, but only once focus actually leaves it —
+   * Discard a never-named row, but only once focus actually leaves it -
    * otherwise reaching for the type chip on a row you just added would delete
    * it out from under you.
    */
@@ -1545,7 +1545,7 @@ function StepRow({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            title={`${meta.label} — click to change`}
+            title={`${meta.label} - click to change`}
             className={cn(
               "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[10.5px] font-extrabold uppercase tracking-wide transition-opacity hover:opacity-80",
               meta.tint,
@@ -1614,7 +1614,7 @@ function StepRow({
 }
 
 /**
- * Read-only rendering of the workflow as the crew meets it — the answer to
+ * Read-only rendering of the workflow as the crew meets it - the answer to
  * "what am I actually building here?" without leaving the designer.
  */
 function WorkflowPreview({

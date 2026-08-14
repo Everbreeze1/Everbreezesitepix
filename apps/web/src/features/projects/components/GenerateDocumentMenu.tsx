@@ -26,7 +26,7 @@ import { ChoosePageTemplateDialog } from "@/features/projects/components/ChooseP
 type AiTemplate = "daily_log" | "report";
 
 /**
- * The single place a project artefact gets generated — Summary, Daily Log,
+ * The single place a project artefact gets generated - Summary, Daily Log,
  * Report, a saved template, or a blank page.
  *
  * This used to live only inside the Documents tab's "Create" dropdown, which
@@ -36,7 +36,7 @@ type AiTemplate = "daily_log" | "report";
  * Both entry points share this component so the two can never drift apart.
  *
  * Not everything here lands in Documents. A Summary is the AI's notes on a set
- * of photos — the same object a walkthrough produces, minus the walk — so it is
+ * of photos - the same object a walkthrough produces, minus the walk - so it is
  * filed under Walkthroughs. The menu says so at the point of click rather than
  * surprising the user with a document that isn't in Documents.
  */
@@ -101,7 +101,7 @@ export function GenerateDocumentMenu({
 
   /**
    * Summary lands in the Walkthroughs tab, so this navigates there rather than
-   * to the page editor — `folderId` is meaningless for it.
+   * to the page editor - `folderId` is meaningless for it.
    */
   async function handleGenerateSummary(photoIds: string[]) {
     setGeneratingSummary(true);

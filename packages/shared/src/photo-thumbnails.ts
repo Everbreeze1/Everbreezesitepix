@@ -4,7 +4,7 @@
  * Shared rather than duplicated because upload and delete have to agree
  * exactly: the writer derives the path from the original, and every delete path
  * derives it again to clean up. A divergence between the two would not fail
- * loudly — it would quietly orphan a thumbnail per deleted photo, in a bucket
+ * loudly - it would quietly orphan a thumbnail per deleted photo, in a bucket
  * nothing else enumerates.
  *
  * The suffix is appended, never prefixed. `site-photos` RLS keys off the first
@@ -38,7 +38,7 @@ export function thumbPathsFor(storagePaths: readonly string[]): string[] {
  *
  * The thumbnail is included by derivation rather than only when the caller
  * knows about one. `thumb_path` is null for photos predating thumbnails and for
- * any upload where generation failed, but a thumbnail may still exist — from a
+ * any upload where generation failed, but a thumbnail may still exist - from a
  * later re-save, or a partial failure that stored the object without recording
  * it. Removing a path that isn't there is a no-op; leaving one behind orphans
  * it forever, because every delete path in the product keys off the DB row.

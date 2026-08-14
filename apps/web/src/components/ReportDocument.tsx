@@ -1,4 +1,4 @@
-// Visual report document — rendered identically in:
+// Visual report document - rendered identically in:
 //   - the in-builder Preview tab
 //   - the public shareable view
 // And visually mirrors the PDF generator (cover page + section pages,
@@ -34,7 +34,7 @@ export interface ReportDocSection {
 }
 export interface ReportDocModel {
   title: string;
-  summary: string | null; // plain or HTML — no longer shown on cover, kept for compat
+  summary: string | null; // plain or HTML - no longer shown on cover, kept for compat
   subtitle: string | null; // optional plain-text subtitle shown under the title on the cover
   createdAt: string;
   photosPerPage: 1 | 2 | 3 | 4;
@@ -341,7 +341,7 @@ function SectionPage({
       )}
       {blocks.length > 0 && (
         <div className="mb-7 text-neutral-800">
-          {/* Pre-split blocks, not the raw body — this page holds one group. */}
+          {/* Pre-split blocks, not the raw body - this page holds one group. */}
           <RichText blocks={blocks} />
         </div>
       )}
@@ -355,7 +355,7 @@ function SectionPage({
 
 function PhotoGrid({ photos, perPage }: { photos: ReportDocPhoto[]; perPage: 1 | 2 | 3 | 4 }) {
   // Always render photo-left, caption-right (side-by-side). `perPage` only
-  // controls visual rhythm (page break gap) — every photo gets a full-width
+  // controls visual rhythm (page break gap) - every photo gets a full-width
   // side-by-side row so captions are clean, bold, and easy to read.
   const pages: ReportDocPhoto[][] = [];
   for (let i = 0; i < photos.length; i += perPage) pages.push(photos.slice(i, i + perPage));

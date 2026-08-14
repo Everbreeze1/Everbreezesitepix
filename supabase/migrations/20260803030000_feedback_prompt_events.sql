@@ -1,7 +1,7 @@
 -- Funnel telemetry for the in-app feedback prompt.
 --
 -- `issue_reports` records what people SAID. This records whether they were
--- willing to say anything at all — which is the other half of the question
+-- willing to say anything at all - which is the other half of the question
 -- "is this prompt earning its place, and which features do people care enough
 -- about to answer for?".
 --
@@ -12,9 +12,9 @@
 --     `issue_reports` is a work queue someone actually reads.
 --
 -- Three events per prompt lifecycle:
---   shown     — the prompt appeared
---   dismissed — X'd out, or "Not now"
---   answered  — a thumbs signal, bug or idea was submitted
+--   shown     - the prompt appeared
+--   dismissed - X'd out, or "Not now"
+--   answered  - a thumbs signal, bug or idea was submitted
 --
 -- so the rates are one GROUP BY, with `shown` as the denominator:
 --
@@ -27,7 +27,7 @@
 --   FROM public.feedback_prompt_events
 --   GROUP BY feature ORDER BY shown DESC;
 --
--- No message content is stored here — only who, which surface, and what they
+-- No message content is stored here - only who, which surface, and what they
 -- did with the prompt.
 --
 -- Apply via the SitePix Supabase SQL editor. Safe to re-run.

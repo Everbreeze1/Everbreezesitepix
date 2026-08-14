@@ -1,6 +1,6 @@
 -- Teams v1: account owner + invited members share projects.
 -- Apply via Supabase SQL editor on project ulmgvtuqjlzzadlwtiog.
--- This migration is ADDITIVE — existing owner-only RLS policies remain,
+-- This migration is ADDITIVE - existing owner-only RLS policies remain,
 -- and we add teammate-access policies alongside them (RLS combines with OR).
 
 -- ============================================================
@@ -165,7 +165,7 @@ CREATE POLICY "Admins manage invites" ON public.team_invites
 
 -- ============================================================
 -- Teammate access to shared resources (ADDITIVE policies).
--- Existing owner-only policies remain — RLS unions across policies.
+-- Existing owner-only policies remain - RLS unions across policies.
 -- ============================================================
 
 -- projects

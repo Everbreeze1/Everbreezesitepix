@@ -26,7 +26,7 @@ const MODES: Array<{
     label: "What went wrong?",
     placeholder: "Tell us what you were trying to do and what happened…",
     cta: "Send report",
-    thanks: "Thanks — our team has been notified.",
+    thanks: "Thanks - our team has been notified.",
   },
   {
     kind: "idea",
@@ -37,7 +37,7 @@ const MODES: Array<{
     label: "What would you like to see?",
     placeholder: "Describe the feature and what it would let you do…",
     cta: "Send suggestion",
-    thanks: "Thanks — every suggestion gets read.",
+    thanks: "Thanks - every suggestion gets read.",
   },
 ];
 
@@ -66,7 +66,7 @@ export function ReportIssuePage() {
       toast.success(mode.thanks);
       setMessage("");
     } catch (e: any) {
-      toast.error(e?.message ?? "Couldn't send that — try again.");
+      toast.error(e?.message ?? "Couldn't send that - try again.");
     } finally {
       setSubmitting(false);
     }

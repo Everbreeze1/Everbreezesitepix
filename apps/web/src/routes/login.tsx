@@ -25,13 +25,13 @@ export const Route = createFileRoute("/login")({
   }),
   head: () => ({
     meta: [
-      { title: "Sign in — Everbreeze SitePix" },
+      { title: "Sign in - Everbreeze SitePix" },
       {
         name: "description",
         content:
           "Sign in to Everbreeze SitePix to access your construction job site photos, projects, AI analyses, and Breeze assistant.",
       },
-      { property: "og:title", content: "Sign in — Everbreeze SitePix" },
+      { property: "og:title", content: "Sign in - Everbreeze SitePix" },
       {
         property: "og:description",
         content:
@@ -66,7 +66,7 @@ function LoginPage() {
   /*
    * Same normalisation as signup. Without it an account created as
    * "A@B.com " cannot be logged into by typing "a@b.com", and the error the
-   * user sees is "incorrect email or password" — which sends them to reset a
+   * user sees is "incorrect email or password" - which sends them to reset a
    * password that was never wrong.
    */
   const cleanEmail = email.trim().toLowerCase();
@@ -141,9 +141,9 @@ function LoginPage() {
 
   return (
     <div className="min-h-screen w-full bg-background lg:grid lg:grid-cols-2">
-      {/* LEFT — marketing panel (desktop only) */}
+      {/* LEFT - marketing panel (desktop only) */}
       <aside className="relative hidden overflow-hidden bg-sidebar lg:flex lg:flex-col lg:justify-between">
-        {/* Background rather than <img> — see signup.tsx. `hidden lg:flex` does
+        {/* Background rather than <img> - see signup.tsx. `hidden lg:flex` does
             not stop an <img src> downloading, so this 606 KB decoration was
             being fetched on every phone that opened the login page. */}
         <div
@@ -169,7 +169,7 @@ function LoginPage() {
               Know what happened. <span className="text-sidebar-ring">Prove it.</span>
             </h1>
             <p className="font-manrope mt-6 text-base leading-7 text-sidebar-foreground/70">
-              Photos, walkthroughs, reports, and your project history — all in the same place.
+              Photos, walkthroughs, reports, and your project history - all in the same place.
             </p>
             <ul className="mt-8 space-y-3">
               {highlights.map((h) => (
@@ -189,7 +189,7 @@ function LoginPage() {
         </div>
       </aside>
 
-      {/* RIGHT — form */}
+      {/* RIGHT - form */}
       <div className="flex min-h-screen flex-col px-5 py-8 sm:px-8 lg:justify-center lg:px-12 lg:py-12">
         <div className="mb-6 flex items-center justify-between lg:hidden">
           <Link

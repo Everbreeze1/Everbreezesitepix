@@ -8,7 +8,7 @@ import { ShowcaseView } from "@/components/ShowcaseView";
 export const Route = createFileRoute("/share/showcases/$token")({
   head: () => ({
     meta: [
-      { title: "Project — SitePix" },
+      { title: "Project - SitePix" },
       { name: "description", content: "A completed job shared from SitePix." },
       { name: "robots", content: "noindex,nofollow" },
     ],

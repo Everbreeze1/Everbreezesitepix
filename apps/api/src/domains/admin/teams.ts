@@ -127,7 +127,7 @@ export interface PlatformTeamDetail {
 export const getPlatformTeamDetailInputSchema = z.object({ teamId: z.string().uuid() });
 
 /**
- * Read-only "inspect team" view for support debugging — deliberately does NOT
+ * Read-only "inspect team" view for support debugging - deliberately does NOT
  * mint a session or let the admin act as the team, only lets them see what's
  * in the team's workspace via the service-role key.
  */
@@ -209,7 +209,7 @@ export async function getPlatformTeamDetailService(
 
 export const syncTeamBillingInputSchema = z.object({ teamId: z.string().uuid() });
 
-/** Manually re-pulls subscription status from Stripe — for when a webhook was missed or delayed. */
+/** Manually re-pulls subscription status from Stripe - for when a webhook was missed or delayed. */
 export async function syncTeamBillingService(
   ctx: AuthedContext,
   data: z.infer<typeof syncTeamBillingInputSchema>,

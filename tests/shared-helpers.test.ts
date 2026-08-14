@@ -80,14 +80,14 @@ describe("isFilenameLikeCaption", () => {
 
   /*
    * The prefix rule used to fire on anything merely STARTING with one of the
-   * generated-name words plus a digit, so these real captions were discarded —
+   * generated-name words plus a digit, so these real captions were discarded -
    * and `sanitizeCaption` blanks them, with report sections persisting the
    * blank. The digit run now has to reach the end of the string.
    */
   it("keeps captions that begin with a generated-looking word but continue in prose", () => {
     expect(isFilenameLikeCaption("Photo 3 of the north wall crack")).toBe(false);
     expect(isFilenameLikeCaption("Image 2 shows the damaged flashing")).toBe(false);
-    expect(isFilenameLikeCaption("Capture 1 — before repair")).toBe(false);
+    expect(isFilenameLikeCaption("Capture 1 - before repair")).toBe(false);
     expect(isFilenameLikeCaption("IMG 4 taken from the roof")).toBe(false);
   });
 
@@ -142,7 +142,7 @@ describe("sanitizeCaption", () => {
    * that if someone later makes it actually sanitise, the test fails loudly and
    * they check every consumer that relies on formatting being preserved.
    */
-  it("does NOT strip active markup — it is a filter, not a sanitiser", () => {
+  it("does NOT strip active markup - it is a filter, not a sanitiser", () => {
     const payload = '<img src=x onerror="alert(1)">Roof detail';
     expect(sanitizeCaption(payload)).toBe(payload);
     expect(sanitizeCaption(payload)).toContain("onerror");
@@ -156,8 +156,8 @@ describe("sanitizeCaption", () => {
  * The printed / shared field record.
  *
  * These two helpers live in `shared` because the SAME record is rendered from two
- * sources — the web app maps live rows, the public share service maps rows read
- * with the service role — and both must produce identical paper. A drift here is
+ * sources - the web app maps live rows, the public share service maps rows read
+ * with the service role - and both must produce identical paper. A drift here is
  * a customer receiving a checklist that disagrees with the one the crew printed,
  * so the edge cases are pinned rather than left to each caller.
  */

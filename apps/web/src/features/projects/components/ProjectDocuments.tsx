@@ -221,7 +221,7 @@ export function ProjectDocuments({
 
     /*
      * Sort before uploading anything. The picker hands over whatever the OS will
-     * give it — this is the only input in the app not restricted to images, so a
+     * give it - this is the only input in the app not restricted to images, so a
      * multi-GB video from the camera roll can land here. Splitting up front
      * means oversized files are reported immediately instead of interrupting
      * progress on the others, and the counter below reflects what will actually
@@ -233,7 +233,7 @@ export function ProjectDocuments({
         toast.error(
           `${file.name} is ${formatBytes(file.size)}, over the ${formatBytes(
             MAX_UPLOAD_BYTES,
-          )} upload limit — skipped.`,
+          )} upload limit - skipped.`,
         );
         continue;
       }
@@ -277,8 +277,8 @@ export function ProjectDocuments({
         if (insErr) {
           toast.error(`${file.name}: ${insErr.message}`);
           // Reclaim the orphaned upload: with no `project_documents` row
-          // pointing at it, every delete path in this file — which all key off
-          // `storage_path` — is permanently unable to find it.
+          // pointing at it, every delete path in this file - which all key off
+          // `storage_path` - is permanently unable to find it.
           void supabase.storage.from("site-documents").remove([path]);
           continue;
         }
@@ -515,7 +515,7 @@ export function ProjectDocuments({
            * policy that filters every row away is indistinguishable from a
            * successful delete. `.select("id")` asks for the affected rows, so
            * an empty array means nothing was deleted and the file must be left
-           * where it is — otherwise the row survives, its blob doesn't, and the
+           * where it is - otherwise the row survives, its blob doesn't, and the
            * document 404s forever behind a success toast.
            */
           const { data: deleted, error } = await (supabase as any)
@@ -535,7 +535,7 @@ export function ProjectDocuments({
       onChanged?.();
     } catch (e: any) {
       toast.error(e?.message ?? "Could not delete the selected items");
-      // A rejected batch is a PARTIAL batch — `Promise.all` abandons the other
+      // A rejected batch is a PARTIAL batch - `Promise.all` abandons the other
       // deletes' results, and some will have succeeded. Resync rather than
       // leaving the list showing rows that are already gone.
       clearSelection();
@@ -597,7 +597,7 @@ export function ProjectDocuments({
     return [...pagesInView].sort((a, b) => {
       if (sortKey === "name") return a.title.localeCompare(b.title) * dir;
       if (sortKey === "updated") return (a.updatedAt < b.updatedAt ? -1 : 1) * dir;
-      return 0; // "type" — pages and files are sorted as separate lists, nothing to compare within one
+      return 0; // "type" - pages and files are sorted as separate lists, nothing to compare within one
     });
   }, [pagesInView, sortKey, sortDir]);
 
@@ -673,7 +673,7 @@ export function ProjectDocuments({
     <div>
       {/* `accept` steers the picker toward paperwork and away from the camera
           roll, which is where the multi-GB files come from. It is a hint, not a
-          guard — every platform lets you switch back to "All files" — so the
+          guard - every platform lets you switch back to "All files" - so the
           real limit is the size check in `uploadFiles`. */}
       <input
         ref={fileInput}
@@ -695,7 +695,7 @@ export function ProjectDocuments({
           </h2>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
             Storage for every plan, permit, report, and delivery ticket. Generated logs and reports
-            are filed here too — create them from{" "}
+            are filed here too - create them from{" "}
             <span className="font-bold">Create document</span> at the top of the project. Summaries
             are filed under <span className="font-bold">Walkthroughs</span>.
           </p>
@@ -740,7 +740,7 @@ export function ProjectDocuments({
             )}
             {uploadStatus
               ? uploadStatus.total > 1
-                ? `Uploading ${uploadStatus.index}/${uploadStatus.total} — ${uploadStatus.percent}%`
+                ? `Uploading ${uploadStatus.index}/${uploadStatus.total} - ${uploadStatus.percent}%`
                 : `Uploading ${uploadStatus.percent}%`
               : "Add document"}
           </Button>

@@ -2,7 +2,7 @@
  * URL slugs for the portfolio site and its project pages.
  *
  * These end up in addresses customers see and search engines index, so they are
- * generated once and then treated as stable — renaming a showcase deliberately
+ * generated once and then treated as stable - renaming a showcase deliberately
  * does NOT re-slug it, because that would silently 404 every link the contractor
  * already sent out.
  */

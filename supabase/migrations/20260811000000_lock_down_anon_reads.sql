@@ -1,4 +1,4 @@
--- SECURITY — revoke anonymous read on team_invites, walkthroughs and
+-- SECURITY - revoke anonymous read on team_invites, walkthroughs and
 -- walkthrough_photos.
 --
 -- Proven against production with the publishable (anon) key and NO Authorization
@@ -21,7 +21,7 @@
 --
 -- THE FIX IS THE GRANT, NOT THE POLICY. Revoking the table privilege from
 -- `anon` cannot be undone by a policy anyone adds later, and it does not depend
--- on knowing the names of the policies that are currently leaking — which
+-- on knowing the names of the policies that are currently leaking - which
 -- cannot be read from here because walkthroughs and walkthrough_photos were
 -- created outside this folder (see 20260811001000). The policy sweep in PART 3
 -- is defence in depth on top of it.
@@ -29,13 +29,13 @@
 -- NOTHING PUBLIC BREAKS. Every unauthenticated read path goes through the API's
 -- service-role client (apps/api/src/lib/supabase.ts getSupabaseAdmin), which
 -- bypasses RLS and holds its own grants:
---   * getPublicWalkthroughService  — walkthroughs/service.ts:1304 getSupabaseAdmin()
---   * handleWalkthroughPdf         — walkthroughs/public-pdf.ts:13  getSupabaseAdmin()
---   * lookupInviteService          — teams/service.ts:469           getSupabaseAdmin()
---   * acceptInviteSignupService    — teams/service.ts:553           getSupabaseAdmin()
+--   * getPublicWalkthroughService  - walkthroughs/service.ts:1304 getSupabaseAdmin()
+--   * handleWalkthroughPdf         - walkthroughs/public-pdf.ts:13  getSupabaseAdmin()
+--   * lookupInviteService          - teams/service.ts:469           getSupabaseAdmin()
+--   * acceptInviteSignupService    - teams/service.ts:553           getSupabaseAdmin()
 -- The browser never queries these tables without a session.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent — safe to re-run.
+-- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run.
 
 -- ===========================================================================
 -- RUN THIS ONE QUERY ON ITS OWN FIRST, AND KEEP THE OUTPUT.
@@ -43,7 +43,7 @@
 -- PART 3 drops policies by ROLE, not by name, and it is the only statement here
 -- that can lose something legitimate. It RAISE NOTICEs what it drops, but the
 -- Supabase SQL editor does not surface notices, and it renders only the LAST
--- result set of a script — so running the file whole shows neither. Select just
+-- result set of a script - so running the file whole shows neither. Select just
 -- the SELECT below, run it, and save the result: `qual` and `with_check` are the
 -- policy bodies, and they are the only way to rebuild anything PART 3 removes
 -- that step 5 of the smoke test says you still needed.
@@ -60,7 +60,7 @@ ORDER BY tablename, policyname;
 SET lock_timeout = '5s';
 
 
--- === PART 1 — guarantee the grants the app actually needs =================
+-- === PART 1 - guarantee the grants the app actually needs =================
 -- Deliberately BEFORE the revoke. walkthroughs and walkthrough_photos have no
 -- CREATE TABLE in this folder, so their grants were issued by Supabase's default
 -- privileges rather than by a migration and cannot be read back from here.
@@ -75,10 +75,10 @@ GRANT ALL ON public.walkthroughs       TO service_role;
 GRANT ALL ON public.walkthrough_photos TO service_role;
 
 
--- === PART 2 — take the tables away from anon ==============================
+-- === PART 2 - take the tables away from anon ==============================
 -- REVOKE ALL, not REVOKE SELECT: an anonymous caller has no business writing
 -- these rows either, and leaving INSERT/UPDATE granted would mean the only thing
--- standing between an attacker and a forged invite row is a policy — which is
+-- standing between an attacker and a forged invite row is a policy - which is
 -- exactly the assumption that failed here.
 REVOKE ALL ON public.team_invites       FROM anon;
 REVOKE ALL ON public.walkthroughs       FROM anon;
@@ -93,14 +93,14 @@ REVOKE ALL ON public.walkthroughs       FROM PUBLIC;
 REVOKE ALL ON public.walkthrough_photos FROM PUBLIC;
 
 
--- === PART 3 — drop the policies that grant anon/public access =============
+-- === PART 3 - drop the policies that grant anon/public access =============
 -- The leaking policies were created outside this folder and their names are
 -- unknown, so they are located by role rather than by name.
 --
 -- PERMISSIVE only: a RESTRICTIVE policy on PUBLIC *subtracts* access, and
 -- dropping one would loosen the table rather than tighten it.
 --
--- Policies scoped `TO authenticated` are left alone — those are the owner-only
+-- Policies scoped `TO authenticated` are left alone - those are the owner-only
 -- rules that predate the migrations folder and are still load-bearing.
 DO $$
 DECLARE
@@ -125,7 +125,7 @@ BEGIN
 END $$;
 
 
--- === PART 4 — the authenticated-only policies that replace them ===========
+-- === PART 4 - the authenticated-only policies that replace them ===========
 -- RLS asserted explicitly: with the grants revoked in PART 2 an anonymous caller
 -- is already blocked, but a table with RLS off would hand every row to any
 -- signed-in user the moment someone re-grants it.
@@ -137,7 +137,7 @@ ALTER TABLE public.walkthrough_photos ENABLE ROW LEVEL SECURITY;
 -- Team-scoped via is_team_admin() rather than plain membership, because the row
 -- carries `token` and RLS cannot hide a single column: whoever can read the row
 -- can read the credential. The only reader is getMyTeamService
--- (apps/api/src/domains/teams/service.ts:179), which runs on ctx.supabase — the
+-- (apps/api/src/domains/teams/service.ts:179), which runs on ctx.supabase - the
 -- publishable key plus the caller's JWT (lib/user-context.ts), i.e. RLS applies
 -- and the service role does NOT cover it. Its one consumer, TeamsPage, returns
 -- "Team settings are owner-only" before rendering invites for anyone else
@@ -203,7 +203,7 @@ CREATE POLICY "Teammates manage team walkthrough photos" ON public.walkthrough_p
 
 -- The definitive check. has_table_privilege() is used rather than
 -- information_schema.role_table_grants because it answers the question the
--- attacker asks — it already folds in anything granted via PUBLIC, and it is not
+-- attacker asks - it already folds in anything granted via PUBLIC, and it is not
 -- filtered by which roles the session happens to be a member of.
 SELECT t.table_name,
        has_table_privilege('anon', 'public.' || t.table_name, 'SELECT') AS anon_can_select,
@@ -229,7 +229,7 @@ ORDER BY relname;
 
 
 -- ===========================================================================
--- SHARE TOKEN ROTATION — DELIBERATELY NOT RUN. OWNER'S DECISION.
+-- SHARE TOKEN ROTATION - DELIBERATELY NOT RUN. OWNER'S DECISION.
 -- ===========================================================================
 -- The 31 `share_token` values in this table were readable by anyone with the
 -- publishable key for as long as the policy above existed, so they must be
@@ -238,7 +238,7 @@ ORDER BY relname;
 -- THE COST: every walkthrough share link already sent to a customer 404s the
 -- moment this runs, including links pasted into emails, texts and PDFs that
 -- cannot be recalled. Whoever owns those customer relationships decides, not
--- this migration — which is why it is commented out rather than guarded.
+-- this migration - which is why it is commented out rather than guarded.
 --
 -- ORDER MATTERS: run this only AFTER the rest of this file has been applied and
 -- the VERIFY block above returns no anon grants. Rotating first just publishes a
@@ -268,7 +268,7 @@ ORDER BY relname;
 --   -- Lock the backup down IN THE SAME TRANSACTION as its creation. Supabase
 --   -- ships `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO
 --   -- anon, authenticated, service_role`, so a new public table is readable by
---   -- the publishable key the moment it exists and PostgREST will serve it —
+--   -- the publishable key the moment it exists and PostgREST will serve it -
 --   -- which is the exact mechanism that leaked `walkthroughs` in the first
 --   -- place. Without these two lines the rotation republishes every token it is
 --   -- rotating away, and RLS with no policy is what keeps `authenticated` out.
@@ -285,4 +285,4 @@ ORDER BY relname;
 --   FROM public.walkthroughs w
 --   WHERE w.share_token IS NOT NULL;
 -- and drop public.walkthrough_share_token_backup once the re-sends have settled
--- — it holds the leaked values and there is no reason to keep them around.
+-- - it holds the leaked values and there is no reason to keep them around.

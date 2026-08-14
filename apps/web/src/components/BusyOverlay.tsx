@@ -10,7 +10,7 @@ interface BusyOverlayProps {
 
 /**
  * Full-screen polished spinner overlay for long-running tasks (uploads, analysis).
- * Pure presentational — render conditionally from a parent.
+ * Pure presentational - render conditionally from a parent.
  */
 export function BusyOverlay({
   open,

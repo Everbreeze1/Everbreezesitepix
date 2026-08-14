@@ -72,7 +72,7 @@ export function TagInput({
       <Input
         value={draft}
         onChange={(e) => {
-          // Typing the comma commits the chip immediately — waiting for Enter
+          // Typing the comma commits the chip immediately - waiting for Enter
           // after a comma is the single most common way these inputs feel broken.
           if (e.target.value.includes(",")) add(e.target.value);
           else setDraft(e.target.value);

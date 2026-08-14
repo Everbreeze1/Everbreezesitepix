@@ -7,7 +7,7 @@ import { getPortfolioEmbed, type PortfolioEmbedData } from "@/lib/portfolio.func
 import { SITE_ORIGIN } from "@/lib/site-url";
 
 /**
- * The website map widget — /embed/map/<embed-key>.
+ * The website map widget - /embed/map/<embed-key>.
  *
  * "We've worked on your street" is the argument this makes, and it is the one
  * a homeowner actually responds to. Same iframe contract as the gallery embed.
@@ -23,7 +23,7 @@ interface MapSearch {
 
 export const Route = createFileRoute("/embed/map/$key")({
   /**
-   * Pass-through, clamped at read time — see the gallery embed for why
+   * Pass-through, clamped at read time - see the gallery embed for why
    * normalising here would cost every iframe load a 307 redirect first.
    */
   validateSearch: (search: Record<string, unknown>): MapSearch => {

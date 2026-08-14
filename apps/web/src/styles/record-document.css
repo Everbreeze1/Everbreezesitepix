@@ -1,5 +1,5 @@
 /* ===========================================================================
- * Printable field records — checklists and workflows on paper.
+ * Printable field records - checklists and workflows on paper.
  *
  * A record is a compliance document: the customer, the inspector and the crew
  * lead all end up wanting it as a sheet. Printing the app page directly cannot
@@ -14,8 +14,8 @@
  * remember to opt out.
  *
  * Written in plain CSS rather than Tailwind utilities because the same document
- * has to hold up in three places — the app's print output, the public share
- * link on screen, and that link printed by the recipient — and because print
+ * has to hold up in three places - the app's print output, the public share
+ * link on screen, and that link printed by the recipient - and because print
  * needs physical units and break control that utilities do not express.
  * ======================================================================== */
 
@@ -38,7 +38,7 @@
     padding-top: 0 !important;
   }
 
-  /* The share page prints the same document without the portal — it has no app
+  /* The share page prints the same document without the portal - it has no app
      shell to hide, only its own toolbar. */
   .record-doc-print-hide {
     display: none !important;
@@ -46,7 +46,7 @@
 }
 
 /*
- * `@page` is global — CSS gives no way to scope it to one route — so this is
+ * `@page` is global - CSS gives no way to scope it to one route - so this is
  * deliberately 12.7mm (0.5in), the margin browsers already apply by default.
  * The record gets a deterministic sheet without silently re-laying-out the
  * report and document print paths that shipped before it.
@@ -126,7 +126,7 @@
   margin-top: 3px;
 }
 
-/* Facts strip: project, dates, progress — the header a reader scans before
+/* Facts strip: project, dates, progress - the header a reader scans before
    reading a single line item. */
 .record-doc__facts {
   display: grid;
@@ -248,7 +248,7 @@
   gap: 9px;
   padding: 7px 0;
   border-bottom: 1px solid var(--doc-line-soft);
-  /* Never split one line item across two sheets — half a check is unreadable
+  /* Never split one line item across two sheets - half a check is unreadable
      as a record of what was done. */
   break-inside: avoid;
 }
@@ -334,7 +334,7 @@
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-/* An unanswered line still has to work as a form — the crew fills it in with a
+/* An unanswered line still has to work as a form - the crew fills it in with a
    pen. A blank rule says "write here"; nothing at all says nothing. */
 .record-doc__blank {
   display: inline-block;
@@ -445,7 +445,7 @@
 
   /* Keep the letterhead with the title and facts that follow it, so a long
      record never opens with a company logo alone on sheet one. It does not
-     repeat on later sheets — the footer carries the company name for that, since
+     repeat on later sheets - the footer carries the company name for that, since
      the reliable ways to repeat a running header in paged media (fixed
      positioning, table thead) each break in a different browser. */
   .record-doc__letterhead {

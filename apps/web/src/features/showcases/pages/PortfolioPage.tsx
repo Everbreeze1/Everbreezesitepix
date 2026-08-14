@@ -19,7 +19,7 @@ import { PortfolioEmbedsPanel } from "@/features/showcases/components/PortfolioE
 import { ShowcasesPanel } from "@/features/showcases/components/ShowcasesPanel";
 
 /**
- * Portfolio — the home for everything that used to be "Showcases".
+ * Portfolio - the home for everything that used to be "Showcases".
  *
  * The rename is the point, not decoration. The client's note was that a
  * showcase "looks like a very beautiful report… it's like a mini site that
@@ -28,9 +28,9 @@ import { ShowcasesPanel } from "@/features/showcases/components/ShowcasesPanel";
  * makes the site, the grid and the embeds all obviously belong together.
  *
  * Three tabs, matching the three things a contractor can do with their work:
- *   Site      — the mini-site itself
- *   Projects  — the showcases that fill it
- *   Embeds    — putting it on the website they already have
+ *   Site      - the mini-site itself
+ *   Projects  - the showcases that fill it
+ *   Embeds    - putting it on the website they already have
  */
 export function PortfolioPage() {
   const { isTeam, loading: subLoading } = useSubscription();
@@ -56,7 +56,7 @@ export function PortfolioPage() {
   }, [isTeam, load]);
 
   // `portfolio` is null for a plain member of a team that has no portfolio yet
-  // (create-on-read is an owner/admin privilege — see getMyPortfolioService),
+  // (create-on-read is an owner/admin privilege - see getMyPortfolioService),
   // so a patch has nothing to merge into and must be a no-op rather than
   // spreading null into a half-built object.
   const patchPortfolio = (patch: Partial<PortfolioDetail>) =>
@@ -139,7 +139,7 @@ export function PortfolioPage() {
 
   const p = data.portfolio;
   // Fail OPEN on an older API that doesn't send the field yet: RLS blocks the
-  // write anyway, so the worst case is a clear error toast — whereas failing
+  // write anyway, so the worst case is a clear error toast - whereas failing
   // closed would show every owner a read-only site during a rolling deploy.
   const canEdit = data.canEdit ?? true;
   const siteUrl =
@@ -149,7 +149,7 @@ export function PortfolioPage() {
     <div className="px-6 pb-24 pt-6 sm:px-10 sm:pt-10">
       <PageHeader
         title="Portfolio"
-        description="A shareable mini-site of your best work — one page per project, plus embeds for your own website."
+        description="A shareable mini-site of your best work - one page per project, plus embeds for your own website."
         actions={
           <Button variant="outline" asChild disabled={!p.published}>
             <a href={siteUrl} target="_blank" rel="noreferrer">
@@ -312,7 +312,7 @@ function PublishBar({
  *
  * The tab still exists rather than being hidden: "why can't I see Embeds?" is a
  * worse question than "why is this read-only?", and only one of them answers
- * itself. Writes are blocked by RLS regardless — this is the explanation, not
+ * itself. Writes are blocked by RLS regardless - this is the explanation, not
  * the enforcement.
  */
 function ReadOnlyNotice({ what }: { what: string }) {

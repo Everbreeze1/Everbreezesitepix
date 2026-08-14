@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
  * Regression guards for defect FAMILIES, not individual lines.
  *
  * Every family below was found repeated across many files, because each one is
- * a project-wide invariant with no single enforcement point — the codebase has
+ * a project-wide invariant with no single enforcement point - the codebase has
  * no view enforcing the soft delete, no shared "next position" helper, and no
  * wrapper around the Supabase client. Until those enforcement points exist,
  * these tests are the enforcement point: they fail when the pattern comes back.
@@ -35,7 +35,7 @@ const ALL_WEB_FILES = walk(WEB);
  * Strip comments before pattern-matching source.
  *
  * Several of the guards below look for a banned call, and the files that used to
- * make that call now carry a comment explaining why they no longer do — so a
+ * make that call now carry a comment explaining why they no longer do - so a
  * naive scan matches its own documentation and fails.
  */
 const stripComments = (src: string) =>
@@ -44,7 +44,7 @@ const stripComments = (src: string) =>
 describe("family: soft-delete leakage (photos.deleted_at)", () => {
   // `photos.deleted_at` has no view and no RLS predicate enforcing it, so every
   // read must exclude the trash by hand. These are the picker/stat surfaces
-  // that forgot to — a deleted photo reaching one of them ends up embedded in
+  // that forgot to - a deleted photo reaching one of them ends up embedded in
   // a customer-facing shared report.
   const MUST_FILTER = [
     "apps/web/src/features/projects/pages/ReportBuilderPage.tsx",
@@ -74,7 +74,7 @@ describe("family: soft-delete leakage (photos.deleted_at)", () => {
         if (!line.includes('.from("photos")')) return;
         const window = lines.slice(i, i + 12).join("\n");
         if (!/\.select\(/.test(window)) return;
-        // Inserts chain `.select()` to return the new row — not a read.
+        // Inserts chain `.select()` to return the new row - not a read.
         if (/\.(insert|update|upsert|delete)\(/.test(window)) return;
         // Lookups of already-linked rows by explicit id are exempt: hiding a
         // trashed photo there would blank out evidence already attached to a
@@ -90,7 +90,7 @@ describe("family: soft-delete leakage (photos.deleted_at)", () => {
 
 describe("family: a row delete must be confirmed before its blob is destroyed", () => {
   // `.delete()` with no trailing `.select()` returns 204 with an empty body, so
-  // `error === null` does NOT prove a row was affected — an RLS policy that
+  // `error === null` does NOT prove a row was affected - an RLS policy that
   // filters every row away is indistinguishable from success. Destroying the
   // storage object on that signal is unrecoverable.
   const CASES = [
@@ -112,8 +112,8 @@ describe("family: a row delete must be confirmed before its blob is destroyed", 
      * recorder hard-deleted every linked photo row and its storage blob, and
      * that delete needed the proof this family is about.
      *
-     * The path is gone. It was unreachable — the branch above it returns
-     * whenever a capture exists — and it contradicted the rule the photo
+     * The path is gone. It was unreachable - the branch above it returns
+     * whenever a capture exists - and it contradicted the rule the photo
      * surfaces now follow: a photo the user took is theirs, and dismissing a
      * recorder is not a request to destroy it. The trash is the only route out.
      *
@@ -131,8 +131,8 @@ describe("family: uploads must not orphan their blob", () => {
   // It is unreachable forever: storage usage sums photos.size_bytes so it is
   // not even counted, and every delete path keys off photos.storage_path.
   //
-  // A photo upload writes TWO objects now — the original and the thumbnail
-  // generated beside it — so reclaiming a bare `[path]` would still strand half
+  // A photo upload writes TWO objects now - the original and the thumbnail
+  // generated beside it - so reclaiming a bare `[path]` would still strand half
   // of every failed upload. `photoObjectPaths()` derives both, and asserting on
   // it is what stops a new call site from quietly reverting to one.
   const PHOTO_CASES = [
@@ -213,7 +213,7 @@ describe("family: z-index", () => {
         if (!/isDragging/.test(line)) return;
         if (!/\bz-\[?\d/.test(line)) return;
         // The positioning class usually lives in the element's base className,
-        // a few lines above the isDragging branch inside the same cn() call —
+        // a few lines above the isDragging branch inside the same cn() call -
         // so look at the surrounding block, not the single line.
         const block = lines.slice(Math.max(0, i - 8), i + 2).join("\n");
         if (!/\b(relative|absolute|fixed|sticky)\b/.test(block)) {
@@ -227,7 +227,7 @@ describe("family: z-index", () => {
 
 describe("family: responsive py-* clobbering a page's bottom clearance", () => {
   // A variant utility outranks an unvariated one, so `pb-32 ... md:py-10`
-  // silently collapses desktop bottom padding to 40px — less than the 84px the
+  // silently collapses desktop bottom padding to 40px - less than the 84px the
   // fixed camera button occupies, so the last row of the page sits under it.
   it("no className sets both an unvariated pb-* and a responsive py-*", () => {
     const offenders: string[] = [];
@@ -290,7 +290,7 @@ describe("public share pages must not inject unsanitised user HTML", () => {
     "apps/web/src/routes/share.showcases.$token.tsx",
     "apps/web/src/routes/share.photos.$token.tsx",
     // What a printed QR code opens. Renders a project's name, address and
-    // photos for someone with no account — captions and project names are
+    // photos for someone with no account - captions and project names are
     // author-controlled text and must stay React children, never markup.
     "apps/web/src/routes/share.projects.$token.tsx",
   ];
@@ -302,7 +302,7 @@ describe("public share pages must not inject unsanitised user HTML", () => {
   /*
    * share.pages is the exception: a shared document IS rich text, so it has to
    * render markup. It is safe only because the server sanitises before the
-   * HTML ever leaves the API — `content_html` is stored exactly as the author
+   * HTML ever leaves the API - `content_html` is stored exactly as the author
    * PUT it (write-side validation is a 2MB length cap and nothing else). If
    * this assertion ever fails, the public route is injecting author-controlled
    * HTML into an anonymous visitor's browser again.
@@ -327,7 +327,7 @@ describe("public share pages must not inject unsanitised user HTML", () => {
    */
   it("both public field-record services sanitise the notes HTML they return", () => {
     const svc = read("apps/api/src/domains/projects/field-records.ts");
-    // One occurrence per service — checklist and workflow.
+    // One occurrence per service - checklist and workflow.
     expect(svc.match(/notesHtml:\s*sanitizePageHtml\(/g) ?? []).toHaveLength(2);
   });
 
@@ -346,7 +346,7 @@ describe("public share pages must not inject unsanitised user HTML", () => {
   /*
    * The share routes themselves render `RecordDocument`, which is also used
    * inside the authenticated app. If it ever stopped being the single renderer,
-   * the sanitised public copy and the trusted in-app copy would diverge — and
+   * the sanitised public copy and the trusted in-app copy would diverge - and
    * the public one is the copy that matters.
    */
   it("the public record view renders the shared RecordDocument", () => {
@@ -359,7 +359,7 @@ describe("public share pages must not inject unsanitised user HTML", () => {
 /*
  * ---------------------------------------------------------------------------
  * Families found by the production audit. Each one was a live customer-facing
- * defect, and each is a PATTERN rather than a single line — which is why they
+ * defect, and each is a PATTERN rather than a single line - which is why they
  * belong here and not in a unit test.
  * ---------------------------------------------------------------------------
  */
@@ -370,7 +370,7 @@ describe("family: `.in()` over an unbounded id list", () => {
    * header, ~37 bytes per uuid. Past ~398 ids that overflows Node's 16 KB
    * header limit; past ~672 the gateway rejects the URI outright.
    *
-   * This produced four separate customer-visible bugs at once — a public report
+   * This produced four separate customer-visible bugs at once - a public report
    * PDF that rendered with ZERO photos and still returned 200, trash "Select
    * all" 500ing, the cron purge silently deleting nothing, and browser bulk
    * actions failing with a raw 400. The fix is to chunk; these files must keep
@@ -411,7 +411,7 @@ describe("family: `.in()` over an unbounded id list", () => {
 
 describe("family: public share paths must honour the soft delete", () => {
   /*
-   * Trashing a project left every share link serving it in full — photos,
+   * Trashing a project left every share link serving it in full - photos,
    * reports, documents, walkthrough audio and transcripts. Trash is a 60-day
    * window and nothing schedules the purge hook, so in practice it never
    * stopped. Each of these services resolves an object for an ANONYMOUS caller
@@ -469,7 +469,7 @@ describe("family: a new public table must revoke anon", () => {
   /*
    * Supabase ships `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON
    * TABLES TO anon`, so a newly created public table is readable by the
-   * publishable key — which is in the browser bundle — the moment it exists.
+   * publishable key - which is in the browser bundle - the moment it exists.
    * That is exactly how `walkthroughs`, `walkthrough_photos` and `team_invites`
    * leaked, share tokens and invite tokens included.
    */
@@ -480,7 +480,7 @@ describe("family: a new public table must revoke anon", () => {
       const sql = readFileSync(join(dir, file), "utf8");
       if (!/CREATE TABLE IF NOT EXISTS public\.|CREATE TABLE public\./i.test(sql)) continue;
       // Only the migrations written once the leak was understood are held to
-      // this — retrofitting it onto the historical ones is what 20260811000000
+      // this - retrofitting it onto the historical ones is what 20260811000000
       // already did, in one place, for the tables that were actually exposed.
       if (file < "20260811") continue;
       if (!/REVOKE\s+(ALL|SELECT)[\s\S]*?FROM\s+[^;]*anon/i.test(sql)) offenders.push(file);
@@ -491,15 +491,15 @@ describe("family: a new public table must revoke anon", () => {
 
 describe("family: a read must not collapse failure into an empty result", () => {
   /*
-   * `null`/`[]` from a Supabase read means three different things — no rows, RLS
-   * filtered everything, or the table is not in this database — and postgrest-js
+   * `null`/`[]` from a Supabase read means three different things - no rows, RLS
+   * filtered everything, or the table is not in this database - and postgrest-js
    * RESOLVES rather than throws, so a missing table arrives as
    * `{ data: null, error: { code: "PGRST205" } }`.
    *
    * A reader that returns early on `error` therefore renders "there is nothing"
    * for all three. That is how blueprint provenance disappeared: the ledger read
    * failed, the component rendered nothing, and a project set up from a blueprint
-   * looked exactly like one that never had one — with no console line anywhere.
+   * looked exactly like one that never had one - with no console line anywhere.
    *
    * The rule these enforce: every ledger reader has to SAY something when it
    * cannot read, rather than silently returning.
@@ -520,7 +520,7 @@ describe("family: a read must not collapse failure into an empty result", () => 
   it("the blueprint origin component distinguishes 'none' from 'unavailable'", () => {
     const src = read("apps/web/src/features/projects/components/ProjectBlueprintOrigin.tsx");
     expect(src).toMatch(/unavailable/);
-    // Badge it, never hide it — an unreadable ledger must still render something.
+    // Badge it, never hide it - an unreadable ledger must still render something.
     expect(src).toMatch(/Blueprint origin unavailable/);
   });
 
@@ -542,7 +542,7 @@ describe("family: per-item blueprint badges must not key off template_id being s
    * `project_checklists.template_id` and `project_workflows.template_id` are also
    * written when a template is applied DIRECTLY, outside any blueprint. Badging
    * on `template_id !== null` would therefore label hand-applied items as
-   * blueprint output — a confident, wrong attribution.
+   * blueprint output - a confident, wrong attribution.
    *
    * The badge is driven by the ledger's `itemSources` lookup instead, so it fires
    * only for templates a blueprint applied to this project actually contains.
@@ -566,7 +566,7 @@ describe("family: per-item blueprint badges must not key off template_id being s
 
 describe("family: a new column must not be able to break a shipped screen", () => {
   /*
-   * Code and migrations do not deploy atomically here — the whole reason
+   * Code and migrations do not deploy atomically here - the whole reason
    * 20260811001000_schema_drift_repair.sql exists is that production was found
    * running behind this folder. PostgREST rejects an ENTIRE statement over one
    * unknown column (PGRST204), so naming a brand-new column in a select list
@@ -609,11 +609,11 @@ describe("family: a new column must not be able to break a shipped screen", () =
 
 describe("family: people-lists must not read profiles from the browser", () => {
   /*
-   * public.profiles has exactly ONE SELECT policy — "Users can view own profile"
+   * public.profiles has exactly ONE SELECT policy - "Users can view own profile"
    * USING (auth.uid() = id), 20260618045310_profiles_company_fix.sql. Any
    * browser-side `.from("profiles").select(...).in("id", …)` therefore returns a
    * single row: the caller's own. It never errors and never renders an empty
-   * state, so the failure is silent — the assignee dropdown quietly contained
+   * state, so the failure is silent - the assignee dropdown quietly contained
    * one person, avatar stacks filled with "?", and the activity feed said
    * "Someone" for the whole crew. That is the "I can never assign anything to
    * Jackson" report.
@@ -621,7 +621,7 @@ describe("family: people-lists must not read profiles from the browser", () => {
    * Teammate names come from the getMyTeam RPC, which resolves them server-side
    * with the service-role client. Widening the RLS policy was rejected: a policy
    * is row-level, not column-level, and profiles also carries company_address,
-   * company_phone and company_logo_url — a teammate-scoped policy would hand
+   * company_phone and company_logo_url - a teammate-scoped policy would hand
    * every crew member the owner's business details to fix a dropdown.
    */
   it("no component resolves a list of OTHER users through profiles", () => {
@@ -652,7 +652,7 @@ describe("family: people-lists must not read profiles from the browser", () => {
 describe("family: an email that did not send must not be reported as success", () => {
   /*
    * inviteMemberService delegated 100% to GoTrue's inviteUserByEmail, which
-   * refuses — and sends NOTHING — for an address that already has an account,
+   * refuses - and sends NOTHING - for an address that already has an account,
    * for a rate-limited address, and for any error from the Send Email hook. All
    * three returned { sent: false } with no second attempt, while the client
    * wrapped both branches in toast.success. So the UI announced an invite it had
@@ -663,7 +663,7 @@ describe("family: an email that did not send must not be reported as success", (
     expect(src).toMatch(/sendTeamInviteEmail/);
     /*
      * inviteUserByEmail CREATES an auth user for the invited address. That
-     * account has no password, so a brand-new invitee could not sign in — and
+     * account has no password, so a brand-new invitee could not sign in - and
      * when they followed the invite link, acceptInviteSignup either 409d with
      * "an account already exists" or failed inside createUser. Inviting someone
      * who had no account created a ghost that blocked them from making a real
@@ -678,7 +678,7 @@ describe("family: an email that did not send must not be reported as success", (
   it("the invite UI does not claim success on a failed send", () => {
     const src = read("apps/web/src/features/teams/pages/TeamsPage.tsx");
     // Neither toast.success call may sit on the falsy side of an emailSent
-    // ternary — the old code did exactly that, twice.
+    // ternary - the old code did exactly that, twice.
     expect(src).not.toMatch(/toast\.success\(\s*\n?\s*res\.emailSent\s*\?/);
     expect(src).not.toMatch(/toast\.success\(\s*\n?\s*\(res as any\)\?\.emailSent\s*\?/);
     expect(src).toMatch(/toast\.warning\(/);
@@ -687,7 +687,7 @@ describe("family: an email that did not send must not be reported as success", (
 
 describe("family: the seat ceiling is hidden on Team, shown on Starter and Pro", () => {
   /*
-   * Team ships 50 seats — a number nobody approaches, which reads as a
+   * Team ships 50 seats - a number nobody approaches, which reads as a
    * restriction on the one plan whose pitch is "add the crew". Starter (2) and
    * Pro are different: there the remaining count is actionable. Hiding it is a
    * display change only; PLAN_MEMBER_CAP still enforces the cap server-side.
@@ -714,7 +714,7 @@ describe("family: the PDF text renderer must be able to start a new page", () =>
    * `drawRuns` used to take a bare `PDFPage`, which made it structurally
    * incapable of adding one: it decremented `y` with no comparison to the
    * bottom margin and kept calling `drawText` at ever-smaller coordinates. Past
-   * roughly 600 words in a section body, lines were emitted at NEGATIVE y —
+   * roughly 600 words in a section body, lines were emitted at NEGATIVE y -
    * which pdf-lib writes happily and every viewer clips away. The prose was
    * gone from the client's PDF while the preview still showed all of it, and
    * the page count never grew to hint that anything was missing.
@@ -755,7 +755,7 @@ describe("family: the PDF text renderer must be able to start a new page", () =>
 
 describe("family: preview, share and PDF must agree on page boundaries", () => {
   /*
-   * The PDF's old rule was `!(i === 0 && py > PAGE_H * 0.55)` — a font-metrics
+   * The PDF's old rule was `!(i === 0 && py > PAGE_H * 0.55)` - a font-metrics
    * cursor test that no DOM renderer can reproduce, so the preview's page count
    * and the downloaded file's could differ, and the PDF's would change when you
    * added a sentence. `planSectionPages` is data-only and both execute it.
@@ -823,7 +823,7 @@ describe("family: report photo order is editable, because it decides page layout
   /*
    * Every renderer consumes `section.photos` positionally and batches it
    * `photosPerPage` at a time, so the sequence decides which photos share a
-   * page. The builder could append, caption and remove — but never reorder, so
+   * page. The builder could append, caption and remove - but never reorder, so
    * moving photo 5 ahead of photo 2 meant deleting everything after it and
    * re-adding, which also discarded the captions.
    */
@@ -848,15 +848,15 @@ describe("family: only capture paths may label a photo a walkthrough frame", () 
    *
    * A Summary is the case that gets it wrong: it LINKS photos the user shot
    * normally and picked out of their gallery. Reusing the recorded-walkthrough
-   * linker there — the obvious "simplification", since the link rows are
-   * otherwise identical — would relabel real gallery photos as capture frames
+   * linker there - the obvious "simplification", since the link rows are
+   * otherwise identical - would relabel real gallery photos as capture frames
    * with no undo path.
    *
    * Hence the summary services write `walkthrough_photos` directly. This guard
    * is the enforcement point for that, because nothing else is.
    *
    * This label used to also HIDE the photo from every photo surface in the
-   * product. It no longer does — see the sibling family below.
+   * product. It no longer does - see the sibling family below.
    */
   const SERVICE = "apps/api/src/domains/walkthroughs/service.ts";
 
@@ -910,7 +910,7 @@ describe("family: only capture paths may label a photo a walkthrough frame", () 
     /*
      * The scans find capture frames that lost their `walkthrough_photos` link.
      * One of their three signals is `caption LIKE 'walkthrough-%'`, and caption
-     * is user-editable — an unedited upload's caption is its filename. A photo
+     * is user-editable - an unedited upload's caption is its filename. A photo
      * the user shot with the camera and named "walkthrough-front-door.jpg" was
      * therefore adopted into a fabricated walkthrough and relabelled a capture,
      * neither of which this codebase can undo.
@@ -936,7 +936,7 @@ describe("family: only capture paths may label a photo a walkthrough frame", () 
     const recorder = stripComments(
       read("apps/web/src/features/photos/components/WalkthroughRecorder.tsx"),
     );
-    expect(recorder, "recorder filename changed — update RECORDER_FILENAME_CAPTION").toMatch(
+    expect(recorder, "recorder filename changed - update RECORDER_FILENAME_CAPTION").toMatch(
       /`walkthrough-\$\{Date\.now\(\)\}\.jpg`/,
     );
     const rule = stripComments(read(SERVICE)).match(/RECORDER_FILENAME_CAPTION\s*=\s*(\/.+\/i?)/);
@@ -954,18 +954,18 @@ describe("family: a photo the user took is a photo the user can find", () => {
    * photos, those photos don't show up in the general project photos. They are
    * hiding in each report."
    *
-   * Eleven separate reads excluded walkthrough captures — some on
+   * Eleven separate reads excluded walkthrough captures - some on
    * `phase != "walkthrough"`, some on a `/walkthroughs/` storage path, most on
    * both, and three of them a second time client-side after the query had
    * already filtered. A technician who documented a site by walking it could
    * not find a single one of those photos in the project's photos, the gallery,
    * the calendar or the mobile app. The report builder never had the filter, so
-   * the frames existed but only inside reports — hence "hiding".
+   * the frames existed but only inside reports - hence "hiding".
    *
    * The photos were never separate: `photos` has no walkthrough column, and a
    * capture is an ordinary row with a `walkthrough_photos` link. Only these
    * reads made them invisible. `phase` stays as a provenance label (PhotoCarousel
-   * badges it, and orphan recovery finds captures by it) — it must not be
+   * badges it, and orphan recovery finds captures by it) - it must not be
    * reintroduced as a visibility rule, on any surface, in either form.
    */
   const READS = [
@@ -1007,7 +1007,7 @@ describe("family: a photo the user took is a photo the user can find", () => {
      * gallery the day PHOTO_ARCHIVE_ENABLED is turned on.
      *
      * It reads like the template pages' `archived`, which IS a user's choice
-     * with a "Show archived" toggle. Same word, unrelated meaning — which is
+     * with a "Show archived" toggle. Same word, unrelated meaning - which is
      * why five reads picked it up. The job's own scan is the one legitimate
      * use and is excluded here by path.
      */
@@ -1026,7 +1026,7 @@ describe("family: a photo the user took is a photo the user can find", () => {
   it("Hide actually hides, on both halves of the timeline", () => {
     /*
      * The bulk bar's Hide button sets `photos.hidden` and toasts "N hidden from
-     * timeline". Nothing filtered the column — not one query in the repo — so
+     * timeline". Nothing filtered the column - not one query in the repo - so
      * the action did nothing at all beyond painting a badge on the tile.
      *
      * The timeline is two reads that must agree: listTimelineActivity produces
@@ -1050,7 +1050,7 @@ describe("family: a photo the user took is a photo the user can find", () => {
      * The counterpart. `hidden` must NOT be filtered on the project grid or the
      * gallery, because the badge those surfaces render is the only way a user
      * finds a hidden photo again to unhide it. Filtering there would turn a
-     * reversible action into a one-way disappearance — the exact shape of the
+     * reversible action into a one-way disappearance - the exact shape of the
      * walkthrough bug this whole family exists for.
      */
     const MUST_STILL_SHOW = [
@@ -1090,8 +1090,8 @@ describe("family: rpcOp names are strings the compiler cannot check", () => {
   /*
    * A client op is declared as rpcOp<In, Out>("someName"). The generic argument
    * is type-checked against the service, but the NAME is a bare string matched
-   * against registry.ts at runtime. Mistype it — or rename the registry key and
-   * miss a call site — and everything compiles, the build passes, the tests
+   * against registry.ts at runtime. Mistype it - or rename the registry key and
+   * miss a call site - and everything compiles, the build passes, the tests
    * pass, and the feature 404s the first time a user clicks the button.
    *
    * There is no shared constant to import and no codegen step, so this scan is
@@ -1102,7 +1102,7 @@ describe("family: rpcOp names are strings the compiler cannot check", () => {
   it("every rpcOp name exists as a key in the RPC registry", () => {
     const registry = read("apps/api/src/domains/rpc/registry.ts");
     // Keys are declared at two-space indent, wrapped in authed(, pub(, or a
-    // bare object literal — so match the key itself, not the wrapper.
+    // bare object literal - so match the key itself, not the wrapper.
     const keys = new Set([...registry.matchAll(/^ {2}([a-zA-Z0-9_]+):/gm)].map((m) => m[1]));
     expect(keys.size).toBeGreaterThan(100);
 
@@ -1131,14 +1131,14 @@ describe("ProjectPageEditorPage autosave", () => {
   const editor = () => read("apps/web/src/features/projects/pages/ProjectPageEditorPage.tsx");
 
   /*
-   * `useDebouncedValue` seeds its state with the value from the FIRST render —
+   * `useDebouncedValue` seeds its state with the value from the FIRST render -
    * for the document body that is the empty string the editor mounts with,
    * before the fetched content is ever put into it. The title debounces at
    * 800ms and the three bodies at 1200ms, so the title's tick fired a save
    * 400ms before the body's tick had replaced that empty seed, and the save
    * carried it: opening a document blanked its stored `content_html` until the
-   * next tick put it back. Anything that stopped the second write — a closed
-   * tab, a dropped connection, a 409 — made it permanent, and a failed load
+   * next tick put it back. Anything that stopped the second write - a closed
+   * tab, a dropped connection, a 409 - made it permanent, and a failed load
    * (which also ends with an empty editor and `loading` false) blanked it with
    * no window at all.
    *
@@ -1169,7 +1169,7 @@ describe("ProjectPageEditorPage autosave", () => {
 
   /*
    * Opening a document produces debounce ticks of its own. Acting on them
-   * rewrote the row on every visit — moving "Last updated" and burning an
+   * rewrote the row on every visit - moving "Last updated" and burning an
    * optimistic-concurrency version for a document nobody touched.
    */
   it("does not write until the user has actually edited something", () => {
@@ -1194,8 +1194,8 @@ describe("ProjectPageEditorPage autosave", () => {
    * `getHTML()` walks the whole document and used to run on every render.
    *
    * That makes the load path load-bearing: `setContent` passes
-   * `emitUpdate: false` so `onUpdate` — the thing that normally bumps
-   * `docVersion` — deliberately does NOT fire. If the manual bump beside it
+   * `emitUpdate: false` so `onUpdate` - the thing that normally bumps
+   * `docVersion` - deliberately does NOT fire. If the manual bump beside it
    * ever goes away, `html` keeps the empty string the editor mounted with and
    * the blanking bug walks back in through a different door.
    */
@@ -1212,10 +1212,10 @@ describe("a photo slot's declared box survives out of the editor", () => {
   /*
    * The box is carried by TWO halves that must stay together:
    *
-   *   size — an inline style from ProjectImage.renderHTML, because the HTML
+   *   size - an inline style from ProjectImage.renderHTML, because the HTML
    *          width/height attributes lose to Tailwind's preflight
    *          `img { height: auto }` wherever stored HTML is rendered directly.
-   *   crop — `object-fit: cover` from CSS.
+   *   crop - `object-fit: cover` from CSS.
    *
    * Keep only the size and photos STRETCH to fill the box. Keep only the crop
    * and the box collapses to the photo's natural aspect, which is the bug this
@@ -1241,15 +1241,15 @@ describe("ProjectPageEditorPage photo slot click", () => {
 
   /*
    * Measured in Chromium against the running app: pressing on a photo slot and
-   * releasing 9px away emits `mousedown, dragstart, dragend` — no mouseup and
-   * no click at all — because ProseMirror marks image nodes draggable and sets
+   * releasing 9px away emits `mousedown, dragstart, dragend` - no mouseup and
+   * no click at all - because ProseMirror marks image nodes draggable and sets
    * `draggable` on the NodeView wrapper. The slot therefore ignored every
    * gesture except a perfectly still click, and the photo the user reached for
    * next (via the toolbar) landed beside the still-empty box. Cancelling the
    * drag restores the mouseup/click pair; verified 3px/9px/25px wobbles all
    * open the picker afterwards.
    *
-   * Only unfilled slots are undraggable — real photos keep drag-to-reorder.
+   * Only unfilled slots are undraggable - real photos keep drag-to-reorder.
    */
   it("cancels the native drag on unfilled slots so the click survives", () => {
     const src = editor();
@@ -1300,7 +1300,7 @@ describe("ProjectPageEditorPage actions that read the stored row", () => {
   }
 
   /*
-   * Both build from `project_pages.content_html` server-side — page-pdf.ts
+   * Both build from `project_pages.content_html` server-side - page-pdf.ts
    * re-reads the row, and savePageAsTemplateService reads `page.content_html`.
    * The editor autosaves on a 1.2s debounce, so either one run straight after
    * typing produced a PDF, or a template, of the document as it was BEFORE the
@@ -1315,13 +1315,13 @@ describe("ProjectPageEditorPage actions that read the stored row", () => {
 
   /*
    * The bin icon sits one row from "Use", snippets are a shared library, and
-   * there is no trash and no undo behind this call — so deleting must be asked
+   * there is no trash and no undo behind this call - so deleting must be asked
    * about first.
    *
    * The confirmation is INLINE, in the row. A confirm dialog opened from inside
    * the snippets dialog renders in its own portal, so Radix reads a click
    * inside it as an interaction outside the snippets dialog and dismisses the
-   * library behind it — measured in Chromium: cancelling the delete threw you
+   * library behind it - measured in Chromium: cancelling the delete threw you
    * out of the snippet list entirely. Keep this to one layer.
    */
   it("asks before deleting a snippet, without opening a second dialog", () => {
@@ -1348,12 +1348,12 @@ describe("family: a summary must not claim a recording it never had", () => {
    * A summary walkthrough has no video, no narration and no timeline: every
    * linked photo carries offset_seconds 0 and spoken_note null. Any surface
    * that renders a walkthrough therefore has two modes, and the recorded copy
-   * is actively false in the other one — "0:00" implies a timestamp inside a
+   * is actively false in the other one - "0:00" implies a timestamp inside a
    * recording, and "no narration captured" apologises for the absence of
    * something that was never possible.
    *
    * This was found by generating a real summary and reading the rendered page
-   * and the produced PDF, not by reading the code — three separate surfaces had
+   * and the produced PDF, not by reading the code - three separate surfaces had
    * the same defect and each one had to be branched independently. That is why
    * this guard enumerates surfaces rather than checking a single call site.
    */
@@ -1398,7 +1398,7 @@ describe("family: summary copy and layout must not inherit recording assumptions
    * Found by generating a real summary and reading the rendered page, the
    * public share page and the produced PDF. Each defect below shipped through
    * typecheck, build and the full test suite, because none of them is a type
-   * error — they are true statements about a recording printed on a document
+   * error - they are true statements about a recording printed on a document
    * that never had one.
    */
 
@@ -1469,7 +1469,7 @@ describe("family: a rich-text toolbar button must not steal focus from its edito
    * Pressing a toolbar button moves focus out of the contenteditable, which
    * fires the editor's `onBlur`. `RichTextEditor` renders its toolbar only while
    * focused when `toolbarOnFocus` is set, so React unmounted the toolbar BETWEEN
-   * mousedown and mouseup — no click event ever landed and the command never
+   * mousedown and mouseup - no click event ever landed and the command never
    * ran. Every control in the document header, the document footer and both
    * field-record write-ups was inert: it highlighted on hover and did nothing.
    *
@@ -1485,7 +1485,7 @@ describe("family: a rich-text toolbar button must not steal focus from its edito
 
   it("every toolbar control goes through the single guarded button", () => {
     const src = read("apps/web/src/components/RichTextEditor.tsx");
-    // Exactly one raw <button> may exist — ToolButton's own. Any other is a
+    // Exactly one raw <button> may exist - ToolButton's own. Any other is a
     // control that bypassed the guard.
     expect(src.match(/<button\b/g) ?? []).toHaveLength(1);
     // And it is the one carrying the guard.
@@ -1511,12 +1511,12 @@ describe("family: a record's permission model must stay three separate questions
    * into one boolean, and collapsing them is how a teammate loses the ability to
    * do the job they were assigned:
    *
-   *   owned        — did I put this checklist on the project? (authoring right)
-   *   canStructure — owned AND not sealed  (add / reorder / delete / rename)
-   *   canFill      — not sealed            (tick, answer, attach a photo)
+   *   owned        - did I put this checklist on the project? (authoring right)
+   *   canStructure - owned AND not sealed  (add / reorder / delete / rename)
+   *   canFill      - not sealed            (tick, answer, attach a photo)
    *
    * A teammate is deliberately NOT the owner but MUST still be able to fill the
-   * record in — that is the entire point of assigning one. Gating the checkbox on
+   * record in - that is the entire point of assigning one. Gating the checkbox on
    * ownership instead of `canFill` would hand them a read-only page; gating the
    * composer on `canFill` instead of `canStructure` would let anyone restructure
    * somebody else's checklist. Sealing overrides both, because the snapshot is
@@ -1557,7 +1557,7 @@ describe("family: a record's permission model must stay three separate questions
   it("a sealed record is read-only on every path", () => {
     const src = read(REL);
     // Both derived flags fall to false once `sealed` is true, so one assertion
-    // on each is enough — but `sealed` itself must come from completed_at.
+    // on each is enough - but `sealed` itself must come from completed_at.
     expect(src).toMatch(/const sealed\s*=\s*!!checklist\?\.completed_at/);
   });
 });
@@ -1568,7 +1568,7 @@ describe("family: auth screens must not show raw provider errors", () => {
    * used to pipe `error.message` straight into a toast. That message is written
    * for developers: a real production failure rendered a toast reading literally
    * `{}`, and others reached users as "Hook requires authorization token" and
-   * "email rate limit exceeded" — our own infrastructure faults, phrased as
+   * "email rate limit exceeded" - our own infrastructure faults, phrased as
    * though the customer had done something wrong.
    *
    * lib/auth-errors.ts is the single place that decides what a person sees.
@@ -1578,7 +1578,7 @@ describe("family: auth screens must not show raw provider errors", () => {
    * signup / login / reset-password exist only to do auth, so every error they
    * surface is an auth error and the whole file is held to the rule. Settings
    * also writes profile rows and uploads logos, whose Postgres and storage
-   * errors are a separate (and much larger) copy problem — so there only the
+   * errors are a separate (and much larger) copy problem - so there only the
    * two auth handlers are checked.
    */
   const AUTH_ONLY_SCREENS = [
@@ -1617,7 +1617,7 @@ describe("family: auth screens must not show raw provider errors", () => {
   it("email is normalised before it reaches Supabase on signup and login", () => {
     /*
      * " A@B.com " creates an account the owner can never log into, and the
-     * error they get is "incorrect email or password" — which sends them to
+     * error they get is "incorrect email or password" - which sends them to
      * reset a password that was never wrong.
      */
     for (const file of ["apps/web/src/routes/signup.tsx", "apps/web/src/routes/login.tsx"]) {
@@ -1656,7 +1656,7 @@ describe("family: a field record must survive text it cannot break", () => {
    *
    * 2. `shrink-0` on a wrapping flex row pins it at its content's full width, so
    *    its own `flex-wrap` can never engage. That put 379px of header controls
-   *    into 358px of usable row — a 5px sideways scroll that Chromium absorbed
+   *    into 358px of usable row - a 5px sideways scroll that Chromium absorbed
    *    and WebKit, the engine an iPhone actually uses, did not.
    *
    * Guarded here because the fix is a single easily-dropped utility class, and
@@ -1674,7 +1674,7 @@ describe("family: a field record must survive text it cannot break", () => {
   it("the printed sheet allows the same break", () => {
     const css = read("apps/web/src/styles/record-document.css");
     // The sheet had this from the start, which is why only the interactive rows
-    // were affected — keep it that way.
+    // were affected - keep it that way.
     expect(css).toMatch(/\.record-doc__label[\s\S]{0,120}overflow-wrap:\s*anywhere/);
     expect(css).toMatch(/\.record-doc__answer-value[\s\S]{0,120}overflow-wrap:\s*anywhere/);
   });
@@ -1692,7 +1692,7 @@ describe("family: the public share payload must not widen", () => {
   /*
    * `getPublicChecklist` / `getPublicWorkflow` answer an unauthenticated caller
    * holding nothing but a share token. The services read `created_by` from the
-   * database (they need it to resolve the letterhead) — which makes it one
+   * database (they need it to resolve the letterhead) - which makes it one
    * careless spread away from being returned to a customer.
    *
    * An audit of the live payload showed the intended surface only: the record,
@@ -1740,7 +1740,7 @@ describe("family: the public share payload must not widen", () => {
   it("a trashed project revokes the link rather than 404ing", () => {
     const src = read(REL);
     // The link was valid; the owner took the job away. `loadEnvelope` returning
-    // null must mean "revoked", not "not_found" — otherwise a customer is told
+    // null must mean "revoked", not "not_found" - otherwise a customer is told
     // their link was never real.
     expect(src).toMatch(/if \(!envelope\) return empty\("revoked"\)/);
     expect(src.match(/if \(!envelope\) return empty\("revoked"\)/g) ?? []).toHaveLength(2);
@@ -1752,7 +1752,7 @@ describe("family: auth inputs must be fillable by a password manager", () => {
    * Every auth input shipped without a single autoComplete attribute. The cost
    * is invisible in desktop dev and severe in the field: password managers
    * cannot offer to save or fill the credential, and a phone gives a plain
-   * keyboard that auto-capitalises the first letter — which is one of the ways
+   * keyboard that auto-capitalises the first letter - which is one of the ways
    * " A@B.com" gets typed and an unloggable account gets created.
    *
    * The exact tokens matter. "current-password" on a signup form makes a
@@ -1799,7 +1799,7 @@ describe("family: nothing floats over an auth form", () => {
    * iPhone 13 viewport it occupied 504-568px while the signup password input
    * sat at 528-573px: elementFromPoint at the centre of that field returned the
    * banner, so a tap aimed at the password box hit the upsell instead. Nobody
-   * could create an account on a phone until its 15s auto-retire fired — on a
+   * could create an account on a phone until its 15s auto-retire fired - on a
    * product whose users are overwhelmingly on phones.
    *
    * The component's own header comment already noted it covers "the primary
@@ -1830,7 +1830,7 @@ describe("family: nothing floats over an auth form", () => {
 describe("family: every GoTrue email action type must have a template", () => {
   /*
    * The Send Email hook answers 400 for an action type it does not know, and
-   * GoTrue treats that as a failed send — the mail simply never goes out. That
+   * GoTrue treats that as a failed send - the mail simply never goes out. That
    * is invisible until a user tries the flow: secure email change fires
    * `email_change_current` and `email_change_new`, neither was mapped, so the
    * second confirmation never arrived and the change could never complete.
@@ -1848,7 +1848,7 @@ describe("family: every GoTrue email action type must have a template", () => {
     "reauthentication",
   ];
 
-  /** Object-literal keys read straight off the source — no regex to mis-escape. */
+  /** Object-literal keys read straight off the source - no regex to mis-escape. */
   const keysIn = (constName: string, endMarker: string) => {
     const src = read("apps/api/src/domains/email/auth-send.ts");
     const start = src.indexOf(`const ${constName}`);
@@ -1881,7 +1881,7 @@ describe("family: every GoTrue email action type must have a template", () => {
 
 describe("family: an email-change confirmation must reach the NEW address", () => {
   /*
-   * `body.user.email` is still the OLD address during an email change — the
+   * `body.user.email` is still the OLD address during an email change - the
    * change is pending precisely because the new one is unverified. The handler
    * sent every message to `user.email`, so the "confirm your new email" link
    * went to the address that already worked. The new address was never asked,
@@ -1913,7 +1913,7 @@ describe("family: an email-change confirmation must reach the NEW address", () =
     /*
      * `email_data.email` is the CURRENT address. Falling back to it resolved
      * the "confirm your new email" recipient to the old mailbox, which is the
-     * bug this whole family exists for — the routing looked correct and the
+     * bug this whole family exists for - the routing looked correct and the
      * mail still went to the wrong place.
      */
     const src = stripComments(read(SRC));
@@ -1925,8 +1925,8 @@ describe("family: an email-change confirmation must reach the NEW address", () =
 describe("family: a secure email change needs BOTH emails from one hook call", () => {
   /*
    * GoTrue calls the Send Email hook ONCE for an email change and hands over
-   * two tokens — `token_hash` for the current address, `token_hash_new` for the
-   * new one — because the integrator is expected to send both messages. We sent
+   * two tokens - `token_hash` for the current address, `token_hash_new` for the
+   * new one - because the integrator is expected to send both messages. We sent
    * a single email, so only one half was ever confirmed: `new_email` stayed
    * set, `email` never moved, and the user could not finish the change by any
    * route. Verified in production three times before the cause was found.
@@ -1953,7 +1953,7 @@ describe("family: a secure email change needs BOTH emails from one hook call", (
 
   it("each message builds its own confirmation URL", () => {
     /*
-     * Both links must not carry the same token — the new address needs
+     * Both links must not carry the same token - the new address needs
      * token_hash_new, which buildConfirmationUrl derives from the action type.
      */
     const src = stripComments(read(SRC));
@@ -1964,8 +1964,8 @@ describe("family: a secure email change needs BOTH emails from one hook call", (
 describe("family: a recovery surface has to be reachable", () => {
   /*
    * Deleting is reversible for TRASH_RETENTION_DAYS (60), after which a nightly
-   * sweep purges for good. The whole trash feature existed and worked — route,
-   * page, restore, purge, retention, cron, eight RPC ops — and was reachable
+   * sweep purges for good. The whole trash feature existed and worked - route,
+   * page, restore, purge, retention, cron, eight RPC ops - and was reachable
    * from exactly ONE place: a three-dot overflow menu on the Projects page.
    * Not the sidebar, not the dashboard, not mobile.
    *
@@ -1989,7 +1989,7 @@ describe("family: a recovery surface has to be reachable", () => {
     const src = stripComments(read(SIDEBAR));
     const start = src.indexOf("const toolItems");
     expect(start, "toolItems not found").toBeGreaterThan(-1);
-    // Slice to the array's own terminator, not the first `]` — the spread
+    // Slice to the array's own terminator, not the first `]` - the spread
     // `...(showOwnerNav ? [pricingItem] : [])` closes a bracket before it.
     const block = src.slice(start, src.indexOf("];", start) + 2);
     expect(block).toMatch(/^\s*trashItem,\s*$/m);
@@ -2025,7 +2025,7 @@ describe("family: a cron endpoint that cannot authenticate fails silently", () =
    * verifyCronSecret resolves the expected secret through
    * `admin.rpc("get_cron_shared_secret")`. That function was never defined in
    * any migration, so the RPC always errored, the check always returned false,
-   * and BOTH scheduled endpoints answered 401 to every caller — for the life of
+   * and BOTH scheduled endpoints answered 401 to every caller - for the life of
    * the project. Nothing purged, nothing archived, storage never reclaimed, and
    * the 60-day deletion promise quietly untrue.
    *
@@ -2043,7 +2043,7 @@ describe("family: a cron endpoint that cannot authenticate fails silently", () =
   it("every function the API calls via rpc() is defined in a migration", () => {
     const src = read("apps/api/src/lib/cron-auth.ts");
     const called = [...src.matchAll(/\.rpc\(\s*["'](\w+)["']/g)].map((m) => m[1]);
-    expect(called.length, "no rpc() call found — did cron-auth.ts change?").toBeGreaterThan(0);
+    expect(called.length, "no rpc() call found - did cron-auth.ts change?").toBeGreaterThan(0);
     const sql = allMigrations();
     for (const fn of called) {
       expect(sql, `${fn}() is called by the API but defined in no migration`).toContain(
@@ -2100,7 +2100,7 @@ describe("family: the project share link behind the printed QR code", () => {
      * check deleted: `share_revoked_at` still appeared in the `.select(...)`
      * list, and the span ran all the way to the *deleted_at* branch's own
      * `return empty("revoked")`. A guard test that its own mutation cannot fail
-     * is worse than no test — it reports coverage that isn't there.
+     * is worse than no test - it reports coverage that isn't there.
      */
     const src = stripComments(read(SERVICE));
     expect(src).toMatch(/project\.share_revoked_at\)\s*\{?\s*return empty\("revoked"\)/);
@@ -2109,7 +2109,7 @@ describe("family: the project share link behind the printed QR code", () => {
   it("trashing the project takes its public link down with it", () => {
     /*
      * `projects.deleted_at` is a 60-day window and nothing schedules the purge,
-     * so without this the link outlives the job it describes indefinitely —
+     * so without this the link outlives the job it describes indefinitely -
      * the same defect getPublicProjectPageService had to be fixed for.
      */
     const src = stripComments(read(SERVICE));
@@ -2166,7 +2166,7 @@ describe("family: the project share link behind the printed QR code", () => {
     /*
      * `uploadOne` stores `phase: tag ?? "untagged"` when someone picks "No
      * marker", so rendering any truthy phase put the word UNTAGGED on a
-     * customer's screen. PhotoCarousel — the app's own tile — has always
+     * customer's screen. PhotoCarousel - the app's own tile - has always
      * excluded it.
      */
     const src = stripComments(read(ROUTE));

@@ -7,7 +7,7 @@ export type FeedbackSource = "page" | "prompt";
 export interface SubmitFeedbackInput {
   kind: FeedbackKind;
   message?: string;
-  /** Which surface this is about — the axis the whole thing gets grouped by. */
+  /** Which surface this is about - the axis the whole thing gets grouped by. */
   feature?: string | null;
   sentiment?: FeedbackSentiment | null;
   source: FeedbackSource;
@@ -19,7 +19,7 @@ export async function submitFeedback(input: SubmitFeedbackInput): Promise<void> 
   const { error } = await supabase.from("issue_reports").insert({
     user_id: input.userId ?? null,
     email: input.email ?? null,
-    // The table's text column is `description` — NOT `message`, whatever the
+    // The table's text column is `description` - NOT `message`, whatever the
     // generated types used to say. See 20260803040000.
     description: (input.message ?? "").trim().slice(0, 4000),
     kind: input.kind,
@@ -40,7 +40,7 @@ export type PromptEvent = "shown" | "dismissed" | "answered";
 
 /**
  * Records what happened to a prompt so response/dismissal rates have a
- * denominator — a dismissal count without impressions isn't a rate.
+ * denominator - a dismissal count without impressions isn't a rate.
  *
  * Fire-and-forget by design: this is disposable telemetry, so a failure here
  * (offline, RLS, migration not applied yet) must never surface to the user or
@@ -66,7 +66,7 @@ export function logPromptEvent(userId: string, feature: string, event: PromptEve
 const FEATURE_ROUTES: Array<{ test: RegExp; key: string; label: string }> = [
   { test: /^\/projects\/[^/]+\/pages\//, key: "documents", label: "Documents" },
   { test: /^\/projects\/[^/]+\/reports\//, key: "report_builder", label: "the report builder" },
-  // `key` is written to issue_reports.feature and feedback_prompt_events —
+  // `key` is written to issue_reports.feature and feedback_prompt_events -
   // renaming it would split the existing telemetry, so only the label moves.
   { test: /^\/showcases\/[^/]+/, key: "showcases", label: "Portfolio" },
   { test: /^\/showcases/, key: "showcases", label: "Portfolio" },
@@ -100,7 +100,7 @@ export function featureForPath(pathname: string): { key: string; label: string }
 const DISMISS_SESSIONS = 2;
 /** Minimum gap between prompts about anything, so it never feels naggy. */
 const COOLDOWN_DAYS = 3;
-/** Time on a surface before asking — enough that they've actually used it. */
+/** Time on a surface before asking - enough that they've actually used it. */
 export const DWELL_MS = 25_000;
 
 interface FeedbackState {
@@ -137,7 +137,7 @@ function write(userId: string, state: FeedbackState): void {
   try {
     window.localStorage.setItem(storeKey(userId), JSON.stringify(state));
   } catch {
-    /* private mode / quota — the prompt is optional, never break the app for it */
+    /* private mode / quota - the prompt is optional, never break the app for it */
   }
 }
 

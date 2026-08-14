@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/sitepix/client";
  * originals `compressImageFile` produces. Storing a second, smaller variant
  * would save bytes a phone already downloads quickly, at the cost of another
  * upload on every capture; not worth it. Anything asking for more than this
- * reads the original instead — see `PhotoThumb`.
+ * reads the original instead - see `PhotoThumb`.
  */
 export const THUMBNAIL_MAX_DIM = 1400;
 const THUMBNAIL_QUALITY = 0.7;
@@ -54,8 +54,8 @@ export async function renderThumbnailBlob(source: Blob): Promise<Blob | null> {
  * back to the full-size object. Failing the upload over a missing thumbnail
  * would trade a slow grid tile for a lost site photo.
  *
- * `upsert` because a re-save of the same object path — a retry, or the
- * annotate-and-replace flow — must overwrite the stale thumbnail rather than
+ * `upsert` because a re-save of the same object path - a retry, or the
+ * annotate-and-replace flow - must overwrite the stale thumbnail rather than
  * collide with it and leave the old image showing.
  */
 export async function uploadPhotoThumbnail(

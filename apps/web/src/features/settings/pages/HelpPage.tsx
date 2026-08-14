@@ -53,7 +53,7 @@ const CATEGORIES: Category[] = [
         summary: "Take photos from any project without leaving the app.",
         steps: [
           "Open a project and tap the floating camera button in the bottom-right.",
-          "Snap one or more shots — each is geotagged and timestamped automatically.",
+          "Snap one or more shots - each is geotagged and timestamped automatically.",
           "Add an optional caption or voice note before saving.",
           "Photos sync in the background; you can keep shooting offline.",
         ],
@@ -119,10 +119,10 @@ const CATEGORIES: Category[] = [
     guides: [
       {
         id: "workflow-vs-checklist",
-        title: "Workflows vs Checklists — what's the difference?",
+        title: "Workflows vs Checklists - what's the difference?",
         summary: "Both track work; workflows add structure.",
         steps: [
-          "Checklists are a single flat task list — good for QA or punch items.",
+          "Checklists are a single flat task list - good for QA or punch items.",
           "Workflows are multi-phase processes (e.g. Install: Site Assessment → Removal → Installation → Testing → Sign-off).",
           "Each workflow phase can contain its own checklists, required photos, and sign-offs.",
         ],
@@ -170,7 +170,7 @@ const CATEGORIES: Category[] = [
       {
         id: "share-walkthrough",
         title: "Share a walkthrough with a client",
-        summary: "Send a link — no login required.",
+        summary: "Send a link - no login required.",
         steps: [
           "Open the walkthrough and click Share.",
           "Copy the public link and send it via email or text.",
@@ -222,7 +222,7 @@ const CATEGORIES: Category[] = [
           "Open Templates in the sidebar.",
           "Tabs: Checklists, Workflows, Reports.",
           "Create, edit, duplicate, or delete templates here.",
-          "You can also create & edit templates directly from any project — you'll be returned to the project when you save.",
+          "You can also create & edit templates directly from any project - you'll be returned to the project when you save.",
         ],
       },
     ],
@@ -356,7 +356,7 @@ export function HelpPage() {
 
   const matchCount = results.reduce((n, c) => n + c.guides.length, 0);
 
-  // Searching auto-opens what matched — the answer should be on screen, not
+  // Searching auto-opens what matched - the answer should be on screen, not
   // one more click away.
   useEffect(() => {
     if (!q) return;
@@ -390,7 +390,7 @@ export function HelpPage() {
       {/*
         One scannable list rather than three copies of the same navigation.
         This page previously showed 3 shortcut cards, then 10 category cards,
-        then every one of the 20 guides fully expanded — so finding an answer
+        then every one of the 20 guides fully expanded - so finding an answer
         meant scrolling past all of them. Topics are now collapsed by default
         and open in place.
       */}
@@ -401,7 +401,7 @@ export function HelpPage() {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search help — e.g. “annotate”, “PDF”, “offline”…"
+              placeholder="Search help - e.g. “annotate”, “PDF”, “offline”…"
               className="h-11 rounded-xl pl-9 pr-9 text-sm font-medium"
               aria-label="Search help topics"
             />

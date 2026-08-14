@@ -1,4 +1,4 @@
-# Runs exactly the checks that already pass locally — lint, both typechecks,
+# Runs exactly the checks that already pass locally - lint, both typechecks,
 # the vitest suite, and a real production build. Nothing new is introduced here;
 # the point is that a regression in any of them stops a PR instead of reaching
 # www.everbreezesitepix.com.
@@ -9,7 +9,7 @@ on:
     branches: ["**"]
   pull_request:
 
-# A second push to the same branch makes the first run pointless — cancel it
+# A second push to the same branch makes the first run pointless - cancel it
 # rather than queueing behind it.
 concurrency:
   group: ci-${{ github.ref }}
@@ -29,7 +29,7 @@ jobs:
       # `vite.config.ts` inlines `import.meta.env.VITE_*` at build time via
       # `loadEnv`, which also reads `process.env`. Real values are only needed
       # by the deployed app (Vercel supplies its own), but the build is more
-      # deterministic when they are always defined — hence the placeholders.
+      # deterministic when they are always defined - hence the placeholders.
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://placeholder.supabase.co' }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'placeholder-publishable-key' }}
       VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://api.everbreezesitepix.com' }}
@@ -48,7 +48,7 @@ jobs:
           node-version: "24"
           cache: npm
 
-      # `apps/api/railway.toml` warns off `npm ci` — that is a Railpack build
+      # `apps/api/railway.toml` warns off `npm ci` - that is a Railpack build
       # cache problem on Railway (EBUSY against a warm, restored `node_modules`),
       # not a property of npm. GitHub Actions starts from an empty workspace
       # every run, so the lockfile-exact install is both safe and what CI wants.
@@ -70,7 +70,7 @@ jobs:
       # Those wrappers now derive their result type from the service function
       # they call (`Awaited<ReturnType<typeof fooService>>`), which both cleared
       # the errors and made a return-shape change in apps/api fail here instead
-      # of at runtime. It is blocking again — keep it that way.
+      # of at runtime. It is blocking again - keep it that way.
       - name: Typecheck (apps/web)
         run: npx tsc --noEmit
         working-directory: apps/web

@@ -12,7 +12,7 @@ export interface TimelineDay {
 export interface TimelineActivity {
   days: TimelineDay[];
   totalPhotos: number;
-  /** The range hit the server's row ceiling — counts are a floor, not a total. */
+  /** The range hit the server's row ceiling - counts are a floor, not a total. */
   capped: boolean;
 }
 

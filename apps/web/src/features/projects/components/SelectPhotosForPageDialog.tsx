@@ -45,7 +45,7 @@ export function SelectPhotosForPageDialog({
   templateLabel: string;
   /**
    * What the picker produces, for the no-photos copy. Defaults to "document"
-   * because most templates here file into Documents — but Summary writes a
+   * because most templates here file into Documents - but Summary writes a
    * walkthrough, and telling its user to "generate a document" points them at
    * the wrong tab. Passed explicitly rather than derived from `templateLabel`,
    * which is display copy and free to change.
@@ -79,7 +79,7 @@ export function SelectPhotosForPageDialog({
         /*
          * One batch signing request rather than one per row inside an awaited
          * loop. At the 300-row limit above that was 300 sequential round trips
-         * — tens of seconds on a field connection before a single thumbnail
+         * - tens of seconds on a field connection before a single thumbnail
          * appeared, and invisible in dev where a project has five photos.
          * `createSignedUrls` (plural) signs the whole array at once;
          * `ProjectChecklists.signPhotos` is the model implementation.
@@ -165,7 +165,7 @@ export function SelectPhotosForPageDialog({
         <DialogHeader className="border-b px-6 pb-4 pt-5 text-left">
           <DialogTitle>Select up to {MAX_PHOTOS} photos</DialogTitle>
           <DialogDescription>
-            {templateLabel} will be drafted from the photos you pick — their captions, tags and any
+            {templateLabel} will be drafted from the photos you pick - their captions, tags and any
             AI analysis.
           </DialogDescription>
         </DialogHeader>

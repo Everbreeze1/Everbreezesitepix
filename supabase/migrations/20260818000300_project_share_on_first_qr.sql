@@ -1,5 +1,5 @@
 -- A project's public link publishes itself the first time its owner opens the
--- QR dialog — and never again after that.
+-- QR dialog - and never again after that.
 --
 -- 20260817000000 gave every project a `share_token` and an off switch
 -- (`share_revoked_at`) that starts engaged, on the principle that publishing to
@@ -7,20 +7,20 @@
 -- that migration had no way to express is that "off" covers two different
 -- situations:
 --
---   * nobody has ever said anything about this link   — the column default
---   * the owner turned it off on purpose              — a decision
+--   * nobody has ever said anything about this link   - the column default
+--   * the owner turned it off on purpose              - a decision
 --
 -- Both read `share_revoked_at IS NOT NULL`, so the QR dialog had to treat them
 -- alike and ask for a tap either way. Asking in the second case is correct.
 -- Asking in the first is asking someone who has just opened "QR code for this
--- job" whether they meant it — which is what the field reported: the point of
+-- job" whether they meant it - which is what the field reported: the point of
 -- generating a code is to hand it to a client who cannot sign in, so a code
 -- that arrives dead is a code that needs explaining.
 --
 -- `share_decided_at` records that the question has an answer:
 --
---   NULL      — nobody has chosen. Opening the QR dialog publishes, once.
---   NOT NULL  — the owner published or revoked. Only they change it from here,
+--   NULL      - nobody has chosen. Opening the QR dialog publishes, once.
+--   NOT NULL  - the owner published or revoked. Only they change it from here,
 --               and no amount of opening the dialog will touch it again.
 --
 -- The publishing happens in `ensureProjectShareService`, as one conditional
@@ -34,7 +34,7 @@
 ALTER TABLE public.projects
   ADD COLUMN IF NOT EXISTS share_decided_at timestamptz;
 
--- === BACKFILL — one time only ==============================================
+-- === BACKFILL - one time only ==============================================
 -- Every project that exists when this runs is marked as already decided, which
 -- means none of them auto-publish: `share_revoked_at` is taken at face value,
 -- so a link an owner deliberately switched off in the days since 20260817000000
@@ -46,7 +46,7 @@ ALTER TABLE public.projects
 -- Everything created from here on starts undecided and publishes on first open.
 --
 -- If you would rather the projects that already exist behave the same way, run
--- this once — after which the next person to open one of their QR dialogs
+-- this once - after which the next person to open one of their QR dialogs
 -- publishes that project:
 --
 --   UPDATE public.projects SET share_decided_at = NULL WHERE share_revoked_at IS NOT NULL;
@@ -54,7 +54,7 @@ ALTER TABLE public.projects
 -- Guarded on the column's comment rather than on `share_decided_at IS NULL`,
 -- because this file is advertised as re-runnable and a bare NULL-guarded UPDATE
 -- would, on a second run, mark every project created since the first run as
--- "already decided" — silently switching first-open publishing off for exactly
+-- "already decided" - silently switching first-open publishing off for exactly
 -- the projects it was written for.
 DO $$
 BEGIN
@@ -70,7 +70,7 @@ BEGIN
      WHERE share_decided_at IS NULL;
 
     COMMENT ON COLUMN public.projects.share_decided_at IS
-      'When the owner last chose to publish or revoke the public link. NULL means nobody has chosen yet and opening the QR dialog publishes it once — see ensureProjectShareService.';
+      'When the owner last chose to publish or revoke the public link. NULL means nobody has chosen yet and opening the QR dialog publishes it once - see ensureProjectShareService.';
   END IF;
 END $$;
 

@@ -40,7 +40,7 @@ export function AdminOverviewPage() {
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[2fr_1fr]">
         <div className="rounded-2xl border border-border bg-card p-6">
-          <p className="text-sm font-extrabold text-foreground">Signups — last 30 days</p>
+          <p className="text-sm font-extrabold text-foreground">Signups - last 30 days</p>
           <div className="mt-4 h-[220px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={metrics.signupsLast30Days}>

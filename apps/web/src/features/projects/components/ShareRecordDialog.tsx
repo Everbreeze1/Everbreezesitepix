@@ -18,7 +18,7 @@ import { friendlyError } from "@/lib/supabase-errors";
  * Issue or disable the public link for a checklist or workflow.
  *
  * The token is minted by the database default when the row is created, so this
- * only ever flips `revoked_at` — there is no "generate" step that could leave a
+ * only ever flips `revoked_at` - there is no "generate" step that could leave a
  * shared record without a link, and no window where the same record has two.
  *
  * Writes through supabase directly rather than an RPC: it is one column on a row
@@ -51,7 +51,7 @@ export function ShareRecordDialog({
   const [updating, setUpdating] = useState(false);
   const live = !revokedAt;
   /*
-   * `typeof window` guard, even though both call sites live under `_app` — which
+   * `typeof window` guard, even though both call sites live under `_app` - which
    * renders a loader until auth resolves and therefore never server-renders its
    * children. This dialog is mounted unconditionally (with `open={false}`), so
    * its body runs on every render of the host page; a component that reads
@@ -83,7 +83,7 @@ export function ShareRecordDialog({
       await navigator.clipboard.writeText(url);
       toast.success("Link copied");
     } catch {
-      toast.error("Couldn't copy — select the link and copy it manually");
+      toast.error("Couldn't copy - select the link and copy it manually");
     }
   }
 

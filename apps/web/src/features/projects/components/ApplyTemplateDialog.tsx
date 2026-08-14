@@ -129,7 +129,7 @@ export function ApplyTemplateDialog({
     setApplying(t.id);
     try {
       const html = fill((t.body?.html as string) ?? "");
-      const title = `${t.name} — ${new Date().toLocaleDateString()}`;
+      const title = `${t.name} - ${new Date().toLocaleDateString()}`;
       // Site logs table lets us persist a project doc quickly.
       // We stash the HTML in the notes bag under a reserved key so it can be exported.
       const { error } = await (supabase as any).from("project_site_logs").insert({
@@ -173,7 +173,7 @@ export function ApplyTemplateDialog({
         .single();
       if (error || !created) throw error ?? new Error("Failed");
       // Renumber from zero rather than carrying the template's stored
-      // positions across — rows already arrive ordered, and a template whose
+      // positions across - rows already arrive ordered, and a template whose
       // own positions have gaps or duplicates would otherwise hand the new
       // checklist a list the reorder controls can't move. Matches
       // ProjectChecklists.applyTemplate.
@@ -223,10 +223,10 @@ export function ApplyTemplateDialog({
 
   function previewDownload(t: DocTpl) {
     const html = fill((t.body?.html as string) ?? "");
-    const title = `${t.name} — ${projectName}`;
+    const title = `${t.name} - ${projectName}`;
     const win = window.open("", "_blank", "width=900,height=1100");
     if (!win) {
-      toast.error("Popup blocked — allow popups to preview.");
+      toast.error("Popup blocked - allow popups to preview.");
       return;
     }
     win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>

@@ -3,7 +3,7 @@
  *
  * Signup and login used to render `error.message` straight into a toast. That
  * message is written for developers, and on a bad day it is not a sentence at
- * all — a real signup failure in production showed the user a toast reading
+ * all - a real signup failure in production showed the user a toast reading
  * literally `{}`, because supabase-js could not parse the error body and passed
  * the raw payload through. Others that reached users unedited:
  *
@@ -31,7 +31,7 @@ const RULES: Array<{ match: RegExp; copy: string }> = [
   },
   {
     match: /invalid login credentials|invalid credentials/,
-    copy: "Incorrect email or password. If you signed up with Google or Apple, use that button instead — no password was set.",
+    copy: "Incorrect email or password. If you signed up with Google or Apple, use that button instead - no password was set.",
   },
   {
     match: /email not confirmed|not confirmed/,
@@ -68,7 +68,7 @@ const RULES: Array<{ match: RegExp; copy: string }> = [
      * naming it only alarms them, so it is logged instead of shown.
      */
     match: /hook|unexpected_failure|internal|database error|failed to send|email_send_failed/,
-    copy: "We couldn't complete that just now — this one is on us. Please try again in a moment.",
+    copy: "We couldn't complete that just now - this one is on us. Please try again in a moment.",
   },
 ];
 
@@ -87,7 +87,7 @@ function rawMessage(error: unknown): string {
 
 /**
  * Human-facing copy for an auth error. `fallback` covers the case where the
- * error carries no usable message at all — which is exactly how `{}` reached a
+ * error carries no usable message at all - which is exactly how `{}` reached a
  * user's screen.
  */
 export function authErrorMessage(error: unknown, fallback: string = GENERIC): string {
@@ -104,8 +104,8 @@ export function authErrorMessage(error: unknown, fallback: string = GENERIC): st
   }
 
   /*
-   * Unrecognised but human-looking. Show it — an unknown-but-real message beats
-   * a generic one — unless it reads like a stack trace or internal identifier.
+   * Unrecognised but human-looking. Show it - an unknown-but-real message beats
+   * a generic one - unless it reads like a stack trace or internal identifier.
    */
   if (raw.length > 160 || /\n/.test(raw) || /^[a-z_]+$/.test(raw)) return fallback;
   return raw;

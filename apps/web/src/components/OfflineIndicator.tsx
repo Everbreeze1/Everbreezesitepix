@@ -29,7 +29,7 @@ export function OfflineIndicator() {
     >
       <div className="flex items-center gap-2 rounded-full border border-destructive/30 bg-destructive px-4 py-1.5 text-xs font-medium text-destructive-foreground shadow-lg">
         <WifiOff className="h-3.5 w-3.5" />
-        You're offline — changes will sync when you reconnect
+        You're offline - changes will sync when you reconnect
       </div>
     </div>
   );

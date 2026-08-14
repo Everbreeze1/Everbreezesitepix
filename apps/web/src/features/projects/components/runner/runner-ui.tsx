@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { TONES, type RunTone } from "./runner-tokens";
 
 /**
- * Shared chrome for the two in-project runners — Checklists and Workflows.
+ * Shared chrome for the two in-project runners - Checklists and Workflows.
  *
  * The template designers were rebuilt against one language
  * (`@/components/builder/builder-ui`); the screens where crews actually *use*
@@ -17,7 +17,7 @@ import { TONES, type RunTone } from "./runner-tokens";
  * bolted onto one tab bar. Checklists painted status with six hardcoded hex
  * values; Workflows painted cards dark/blue/light by `index % 3`, so colour
  * carried position instead of meaning and one variant used the sidebar's
- * pinned-navy token — invisible against a dark page.
+ * pinned-navy token - invisible against a dark page.
  *
  * These primitives fix the root cause rather than the symptoms: there is
  * exactly one place that decides what "in progress" looks like, and the pill,
@@ -29,13 +29,13 @@ import { TONES, type RunTone } from "./runner-tokens";
 /**
  * The heading for a project-detail panel.
  *
- * Checklists and Workflows each hand-rolled this and drifted apart — one at a
+ * Checklists and Workflows each hand-rolled this and drifted apart - one at a
  * fixed `text-[40px]` that overflows a 360px phone, one at `text-4xl sm:text-5xl`,
  * with eyebrow tracking rounded to `1.52px` in one and `1.5232px` in the other.
  * One component, one responsive scale, both panels.
  *
  * The scale deliberately matches the sibling panels (Tasks, Documents) rather
- * than shrinking to `SectionHeading` — a heading that changes size as you move
+ * than shrinking to `SectionHeading` - a heading that changes size as you move
  * along the tab bar is its own kind of unfinished.
  */
 export function RunnerPanelHeader({
@@ -99,7 +99,7 @@ export function RunnerStatusPill({
  *
  * Hand-rolled rather than the shadcn `Progress` because the fill has to carry
  * tone, and because a bar reporting compliance progress needs to announce
- * itself to a screen reader — the previous two implementations were
+ * itself to a screen reader - the previous two implementations were
  * decorative `<div>`s with no role and no value.
  */
 export function RunnerProgress({
@@ -137,7 +137,7 @@ export function RunnerProgress({
   );
 }
 
-/** A single fact in a header — count of phases, steps, sign-offs. */
+/** A single fact in a header - count of phases, steps, sign-offs. */
 export function RunnerStat({
   icon: Icon,
   tone,
@@ -190,14 +190,14 @@ export function RunnerCard({
   title: string;
   /**
    * Optional. Omit it when the progress bar and `meta` already say the same
-   * thing — a card that reports "In progress", "3 of 8 items complete" and a
+   * thing - a card that reports "In progress", "3 of 8 items complete" and a
    * 37%-filled bar is three renderings of two integers, which is most of what
    * made these grids read as generated rather than designed.
    */
   statusLabel?: string;
   /** One line of counts under the title. */
   meta: ReactNode;
-  /** Optional richer body — a next-step line, a phase pipeline. */
+  /** Optional richer body - a next-step line, a phase pipeline. */
   detail?: ReactNode;
   done: number;
   total: number;
@@ -274,7 +274,7 @@ export function RunnerCardSkeleton() {
  *
  * Deliberately NOT `overflow-hidden`. The header inside it is `position: sticky`
  * against the page scroll, and `overflow: hidden` on any ancestor silently
- * turns that ancestor into the sticky container — the header would scroll away
+ * turns that ancestor into the sticky container - the header would scroll away
  * with the card instead of holding the workflow name, progress and save state
  * in view while you work down a long list of phases. The header rounds its own
  * top corners instead, which is what the clip was there for.
@@ -293,7 +293,7 @@ export function RunnerDetailShell({
  * Sticky detail header: identity, live counts, save state and actions in one
  * bar that stays put while you scroll a long run.
  *
- * Deliberately the same shape as the designer's `BuilderTitleBar` — the crew
+ * Deliberately the same shape as the designer's `BuilderTitleBar` - the crew
  * filling a workflow in and the manager who authored it should recognise the
  * same screen.
  */

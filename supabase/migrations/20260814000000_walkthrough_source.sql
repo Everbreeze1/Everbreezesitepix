@@ -3,21 +3,21 @@
 -- Two different things produce a `walkthroughs` row and they are not the same
 -- object:
 --
---   1. RECORDED — the technician walked the site. Video, narration, transcript,
+--   1. RECORDED - the technician walked the site. Video, narration, transcript,
 --      a real duration, and photos captured at offsets *inside* the recording.
---   2. SUMMARY  — the AI wrote a short recap from photos the user picked out of
+--   2. SUMMARY  - the AI wrote a short recap from photos the user picked out of
 --      the gallery. No video, no audio, no transcript, duration 0. The photos
 --      are pre-existing gallery photos that are LINKED, not captured.
 --
 -- "video_path IS NULL" cannot tell them apart, which is why this column exists
 -- rather than a derived check. A recorded walkthrough whose upload failed is
--- video-less too — that is the entire point of the pending-video recovery flow
--- in ProjectDetailPage — and so are the rows fabricated by
+-- video-less too - that is the entire point of the pending-video recovery flow
+-- in ProjectDetailPage - and so are the rows fabricated by
 -- recoverOrphanWalkthroughPhotosForProject. Every UI branch that hides the play
 -- button, the duration, or the narration column needs a fact, not a guess.
 --
 -- NOTE FOR WHOEVER READS THIS NEXT: `public.walkthroughs` has no CREATE TABLE in
--- this folder — it predates the migrations directory (see the comment at
+-- this folder - it predates the migrations directory (see the comment at
 -- 20260811000000_lock_down_anon_reads.sql:64-66). This file is ALTER-only by
 -- necessity. The column list of record is packages/db/src/database.ts.
 --
@@ -26,11 +26,11 @@
 -- new column inherits it. Grants are restated below only so this file is
 -- self-sufficient against a database that somehow missed 20260811000000.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent — safe to re-run.
+-- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run.
 
 SET lock_timeout = '5s';
 
--- === PART 1 — the discriminator ============================================
+-- === PART 1 - the discriminator ============================================
 -- ADD COLUMN ... NOT NULL DEFAULT is metadata-only on PG11+, so no table
 -- rewrite and no long lock even on a large walkthroughs table.
 ALTER TABLE public.walkthroughs
@@ -54,12 +54,12 @@ BEGIN
   END IF;
 END $$;
 
--- === PART 2 — indexes ======================================================
+-- === PART 2 - indexes ======================================================
 -- Four call sites already upsert walkthrough_photos with
 -- onConflict: "walkthrough_id,photo_id", which raises Postgres 42P10 unless a
 -- unique index backs that pair. It is presumably present from the pre-migration
 -- schema, but it is not provable from this repo, and the summary linker is a
--- fifth caller — so state it here rather than inherit the assumption.
+-- fifth caller - so state it here rather than inherit the assumption.
 CREATE UNIQUE INDEX IF NOT EXISTS walkthrough_photos_unique_link_idx
   ON public.walkthrough_photos(walkthrough_id, photo_id);
 
@@ -72,7 +72,7 @@ CREATE INDEX IF NOT EXISTS walkthroughs_project_created_idx
 CREATE INDEX IF NOT EXISTS walkthrough_photos_walkthrough_position_idx
   ON public.walkthrough_photos(walkthrough_id, "position");
 
--- === PART 3 — grants (restated, unchanged from 20260811000000) =============
+-- === PART 3 - grants (restated, unchanged from 20260811000000) =============
 REVOKE ALL ON public.walkthroughs       FROM anon, PUBLIC;
 REVOKE ALL ON public.walkthrough_photos FROM anon, PUBLIC;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.walkthroughs       TO authenticated;

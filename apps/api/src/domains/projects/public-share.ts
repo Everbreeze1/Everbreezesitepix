@@ -7,13 +7,13 @@ import type { AuthedContext } from "../../lib/user-context";
  * The public link behind a project's QR code.
  *
  * A QR code printed on a job site is scanned by whoever is standing in front of
- * it — the homeowner, an inspector, a sub, the next crew. None of them have an
+ * it - the homeowner, an inspector, a sub, the next crew. None of them have an
  * account, and the previous code encoded `/projects/<id>`, so every scan hit the
  * login wall. This is the read side of a link that doesn't.
  *
  * What an anonymous visitor gets is deliberately narrower than the app's project
  * page: the job's identity, and the photographic record. No tasks, no documents,
- * no checklists, no team, no description — the crew's working notes are not what
+ * no checklists, no team, no description - the crew's working notes are not what
  * a client asked to see, and a code taped to a door is not a credential anyone
  * chose to hand out.
  *
@@ -24,7 +24,7 @@ import type { AuthedContext } from "../../lib/user-context";
  *     column defaults to `now()`, so a project is not shared until its owner
  *     publishes it (20260817000000 spells out why publishing is an act)
  *   - a trashed project takes its link down with it
- *   - trashed photos never reach the page — a photo is often deleted precisely
+ *   - trashed photos never reach the page - a photo is often deleted precisely
  *     because someone asked for it to be
  */
 
@@ -34,7 +34,7 @@ const SIGNED_URL_TTL_SECONDS = 60 * 60;
  * Ceiling on how many photos one anonymous request can pull.
  *
  * Every photo past this point costs a signed URL, and this endpoint takes no
- * credential — an unbounded project is an unbounded response to anyone holding
+ * credential - an unbounded project is an unbounded response to anyone holding
  * a link. Newest first, so the cap trims the oldest history rather than the
  * work that was just done.
  */
@@ -42,7 +42,7 @@ const MAX_PUBLIC_PHOTOS = 300;
 
 export interface PublicProjectSharePhoto {
   id: string;
-  /** Full-size URL — the copy a client zooms into. */
+  /** Full-size URL - the copy a client zooms into. */
   url: string;
   /** Grid-sized URL, falling back to the full-size object when no thumb exists. */
   thumbUrl: string;
@@ -83,7 +83,7 @@ const empty = (status: PublicProjectShare["status"]): PublicProjectShare => ({
 });
 
 /**
- * "That project isn't yours, or isn't there" — as a client error, not a crash.
+ * "That project isn't yours, or isn't there" - as a client error, not a crash.
  *
  * 404 rather than 403 for both cases deliberately: RLS filters a foreign row out
  * of the result set rather than erroring, so the two are genuinely
@@ -92,13 +92,13 @@ const empty = (status: PublicProjectShare["status"]): PublicProjectShare => ({
  *
  * The `status` property is what `jsonFromUnknownError` (lib/errors.ts) reads to
  * emit a real 404 `not_found`. Without it an ownership rejection reaches the
- * client as a 500 `internal_error` — the wrong status for retries, and a
+ * client as a 500 `internal_error` - the wrong status for retries, and a
  * permission check that reads like a server fault in the logs.
  */
 const notYours = () => Object.assign(new Error("Project not found"), { status: 404 });
 
 /**
- * "`share_decided_at` isn't there yet" — the one error worth swallowing.
+ * "`share_decided_at` isn't there yet" - the one error worth swallowing.
  *
  * Migrations here are applied by hand in the Supabase SQL editor, so a deploy
  * can land in front of 20260818000300 by minutes or by a day. Everything that
@@ -107,15 +107,15 @@ const notYours = () => Object.assign(new Error("Project not found"), { status: 4
  * the on/off switch keeps working. Publishing on first open then starts the
  * moment the column exists, with nothing to redeploy.
  *
- * Both codes mean the same thing — Postgres does not know the column
- * (`42703`), or PostgREST's schema cache does not yet (`PGRST204`) — and this
+ * Both codes mean the same thing - Postgres does not know the column
+ * (`42703`), or PostgREST's schema cache does not yet (`PGRST204`) - and this
  * file names exactly one column that could be missing.
  */
 const missingDecidedColumn = (error: { code?: string } | null): boolean =>
   !!error && (error.code === "42703" || error.code === "PGRST204");
 
 // ============================================================
-// Owner side — read and flip the switch
+// Owner side - read and flip the switch
 // ============================================================
 
 export const getProjectShareInputSchema = z.object({ projectId: z.string().uuid() });
@@ -134,7 +134,7 @@ export interface ProjectShareState {
 /**
  * Reads the project's link without changing it.
  *
- * Goes through `ctx.supabase` — the caller's RLS-scoped client — so the token
+ * Goes through `ctx.supabase` - the caller's RLS-scoped client - so the token
  * only ever comes back to someone the `projects` policies already let read the
  * row. `as any` because packages/db's generated types predate these two columns.
  */
@@ -159,8 +159,8 @@ export async function getProjectShareService(
  * "the owner switched this off" from "this project has never been asked about",
  * and the two deserve opposite answers: the first is a decision to respect, the
  * second is someone who just opened *QR code for this job* being asked whether
- * they meant it. `share_decided_at` is the column that tells them apart — see
- * 20260818000300 — and it is NULL only until the first answer of either kind.
+ * they meant it. `share_decided_at` is the column that tells them apart - see
+ * 20260818000300 - and it is NULL only until the first answer of either kind.
  *
  * The publish is the `.is("share_decided_at", null)` filter on the UPDATE, not
  * a read followed by a write. One statement means two dialogs opened at once
@@ -168,7 +168,7 @@ export async function getProjectShareService(
  * matter how often anyone opens the dialog: the row simply stops matching.
  *
  * A foreign project matches zero rows for the same reason a foreign project
- * matches zero rows in `setProjectShareService` — RLS — and falls through to
+ * matches zero rows in `setProjectShareService` - RLS - and falls through to
  * the read, which answers 404. Opening a dialog you have no business opening
  * therefore publishes nothing.
  */
@@ -183,13 +183,13 @@ export async function ensureProjectShareService(
     .is("share_decided_at", null)
     .select("share_token, share_revoked_at");
   // Before the migration lands there is nothing to publish on, and this becomes
-  // the plain read it used to be — see `missingDecidedColumn`.
+  // the plain read it used to be - see `missingDecidedColumn`.
   if (error && !missingDecidedColumn(error)) throw new Error(error.message);
   const row = error ? null : ((rows as any[]) ?? [])[0];
   if (row) {
     return { shareToken: row.share_token as string, revokedAt: row.share_revoked_at ?? null };
   }
-  // Zero rows means the question is already answered — or the project is not
+  // Zero rows means the question is already answered - or the project is not
   // the caller's. The read tells those two apart, and answers each correctly.
   return getProjectShareService(ctx, { projectId: data.projectId });
 }
@@ -198,7 +198,7 @@ export async function ensureProjectShareService(
  * Turns the public link on or off.
  *
  * The token is minted by the column default and never rotated here, so turning a
- * link off and on again resurrects the same URL — which is what someone who has
+ * link off and on again resurrects the same URL - which is what someone who has
  * already printed and hung a QR sheet needs. Rotating on re-enable would silently
  * kill every code already taped to a door.
  *
@@ -229,13 +229,13 @@ export async function setProjectShareService(
   if (error) throw new Error(error.message);
   const row = ((rows as any[]) ?? [])[0];
   // RLS filters an UPDATE to zero rows rather than erroring, so "not yours" and
-  // "doesn't exist" arrive here identically — and are answered identically.
+  // "doesn't exist" arrive here identically - and are answered identically.
   if (!row) throw notYours();
   return { shareToken: row.share_token as string, revokedAt: row.share_revoked_at ?? null };
 }
 
 // ============================================================
-// Public side — no credential but the token
+// Public side - no credential but the token
 // ============================================================
 
 export const publicProjectShareInputSchema = z.object({ token: z.string().uuid() });
@@ -254,7 +254,7 @@ export async function getPublicProjectShareService(
   if (project.share_revoked_at) return empty("revoked");
   // Trashing the job has to take its public link down with it. `deleted_at` is a
   // 60-day window and nothing schedules the purge, so without this the link
-  // outlives the project it describes — indefinitely.
+  // outlives the project it describes - indefinitely.
   if (project.deleted_at) return empty("revoked");
 
   const [{ data: photoRows, count }, { data: profile }] = await Promise.all([
@@ -311,7 +311,7 @@ export async function getPublicProjectShareService(
     const url = r.image_url ?? signed.get(r.storage_path) ?? "";
     if (!url) continue;
     // A thumbnail is an optimisation, never a gate: photos predating thumbnails
-    // — and any upload whose thumb generation failed — fall back to the full
+    // - and any upload whose thumb generation failed - fall back to the full
     // object rather than dropping out of the grid.
     const thumbUrl = signed.get(r.thumb_path || thumbPathFor(r.storage_path)) ?? url;
     photos.push({

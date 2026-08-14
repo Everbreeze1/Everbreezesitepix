@@ -1,6 +1,6 @@
 # SitePix mobile (`@sitepix/mobile`)
 
-**Deferred.** Web FE/BE separation comes first — see [`docs/plan.md`](../../docs/plan.md).
+**Deferred.** Web FE/BE separation comes first - see [`docs/plan.md`](../../docs/plan.md).
 
 This folder may contain an early Expo stub; do not expand product features here until the web split (Steps 1–3 in the plan) is solid.
 

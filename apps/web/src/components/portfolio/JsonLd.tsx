@@ -2,7 +2,7 @@
  * Structured data for the portfolio site.
  *
  * Rendered inline rather than through the router's `head` so it is part of the
- * server-rendered markup on first paint — a crawler that does not execute JS
+ * server-rendered markup on first paint - a crawler that does not execute JS
  * still sees it, which is the entire point of shipping it.
  *
  * `</script>` inside a JSON string would close this tag early, so the sequence

@@ -12,7 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { checkIsPlatformAdmin } from "@/lib/admin.functions";
 
-/** Add new admin sections here — nothing else needs to change to grow the admin area. */
+/** Add new admin sections here - nothing else needs to change to grow the admin area. */
 const ADMIN_NAV = [
   { label: "Overview", to: "/admin", icon: LayoutDashboard },
   { label: "Users", to: "/admin/users", icon: Users },

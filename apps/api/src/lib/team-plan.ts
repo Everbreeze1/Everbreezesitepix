@@ -3,7 +3,7 @@ import type { AuthedContext } from "./user-context";
 export type BillingTier = "starter" | "pro" | "team";
 
 /**
- * Hard seat ceiling per tier — what actually blocks invites (teams/service.ts)
+ * Hard seat ceiling per tier - what actually blocks invites (teams/service.ts)
  * and what checkout refuses to sell beyond (billing/service.ts).
  *
  * Mirrors `maxSeats` in apps/web/src/lib/pricing.ts, which is what the pricing
@@ -20,15 +20,15 @@ export const PLAN_MEMBER_CAP: Record<BillingTier, number> = {
  * `teams.subscription_status` values that grant paid access.
  *
  * This is the single definition of "is this team allowed in", and getting the
- * set wrong is expensive in both directions — too narrow locks out paying
+ * set wrong is expensive in both directions - too narrow locks out paying
  * customers, too wide gives the product away.
  *
- * - `active`   — paid and current.
- * - `trialing` — **every** checkout starts a trial (see TRIAL_DAYS in
+ * - `active`   - paid and current.
+ * - `trialing` - **every** checkout starts a trial (see TRIAL_DAYS in
  *   billing/service.ts), so this is the status of every new customer for their
  *   first days. Omitting it locked out each one for the whole trial they had
  *   just signed up for.
- * - `past_due` — a renewal charge failed and Stripe is still retrying on its
+ * - `past_due` - a renewal charge failed and Stripe is still retrying on its
  *   own schedule. That retry window *is* the grace period: Stripe fires
  *   `customer.subscription.deleted` only once it gives up, and that is what
  *   ends access. Treating `past_due` as inactive turned an expired card into an
@@ -41,7 +41,7 @@ export const PLAN_MEMBER_CAP: Record<BillingTier, number> = {
  * never fall through to access.
  *
  * Mirrored client-side by `useSubscription` in
- * apps/web/src/hooks/use-subscription.tsx — keep the two in sync, or the UI
+ * apps/web/src/hooks/use-subscription.tsx - keep the two in sync, or the UI
  * hides features the server would happily serve.
  */
 export const ACTIVE_SUBSCRIPTION_STATUSES: ReadonlySet<string> = new Set([
@@ -53,15 +53,15 @@ export const ACTIVE_SUBSCRIPTION_STATUSES: ReadonlySet<string> = new Set([
 export interface CallerPlan {
   /** Subscription is live (or the team is flagged internal/complimentary). */
   isActive: boolean;
-  /** Pro *or* Team — the gate for paid features generally. */
+  /** Pro *or* Team - the gate for paid features generally. */
   isPro: boolean;
-  /** Team specifically — the gate for unlimited-tier allowances. */
+  /** Team specifically - the gate for unlimited-tier allowances. */
   isTeam: boolean;
   tier: BillingTier;
 }
 
 /**
- * Real team billing (teams.plan / subscription_status / is_internal) —
+ * Real team billing (teams.plan / subscription_status / is_internal) -
  * replaces the old per-user `subscriptions` table, which was never wired to
  * Stripe and doesn't exist on the live database.
  *
@@ -73,7 +73,7 @@ export interface CallerPlan {
  * Server-side gate for a Team-tier feature.
  *
  * The client hides these behind `useSubscription().isTeam`, but a hidden button
- * is not enforcement — the RPC stays reachable with a hand-made request, so a
+ * is not enforcement - the RPC stays reachable with a hand-made request, so a
  * Starter account could use a feature it never paid for. Any write that is
  * *sold* as Team-only needs this on the server as well as in the UI.
  */

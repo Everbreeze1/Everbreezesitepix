@@ -180,7 +180,7 @@ export async function handleWalkthroughPdf(token: string): Promise<Response> {
             drawFittedImage(page, img, MARGIN, rowBottom, imgBoxW, rowH, BORDER, fonts.regular, MUTED);
 
             // Caption column: photo number + timestamp header, then narration.
-            // A summary has no recording, so every offset is 0 \u2014 printing
+            // A summary has no recording, so every offset is 0 - printing
             // "Photo 1 \u00B7 0:00" on a client-facing PDF claims a timeline that
             // does not exist.
             let cy = rowTop - 4;

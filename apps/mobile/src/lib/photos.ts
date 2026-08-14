@@ -27,11 +27,11 @@ export async function uploadProjectPhoto(options: {
   if (upErr) throw new Error(upErr.message);
 
   /*
-   * KNOWN GAP — no `thumb_path`. The web app writes a downscaled copy beside
+   * KNOWN GAP - no `thumb_path`. The web app writes a downscaled copy beside
    * every original (`apps/web/src/lib/photo-thumbnails.ts`) so grids never pull
    * full-size photos, but that renderer is canvas-based and React Native has
    * neither `createImageBitmap` nor `<canvas>`. Photos uploaded here therefore
-   * read back at full size, exactly like pre-thumbnail rows — correct, just not
+   * read back at full size, exactly like pre-thumbnail rows - correct, just not
    * cheap. Closing it means resizing with `expo-image-manipulator` and passing
    * the result through the same `thumbPathFor()` derivation so the delete paths
    * still find it.

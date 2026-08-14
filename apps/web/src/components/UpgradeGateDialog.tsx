@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 
 /** Single shared "you need a subscription for this" dialog, driven by
- * SubscriptionGateProvider — rendered once at the app layout level so any
+ * SubscriptionGateProvider - rendered once at the app layout level so any
  * page can gate an action via useSubscriptionGate().guard(fn) without each
  * page owning its own dialog instance. */
 export function UpgradeGateDialog() {
@@ -22,7 +22,7 @@ export function UpgradeGateDialog() {
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           {gateState.reason ?? "This action needs an active plan."} Choose a plan to keep
-          creating and uploading — you can keep browsing your existing projects for free.
+          creating and uploading - you can keep browsing your existing projects for free.
         </p>
         <Button asChild className="w-full">
           <Link to="/pricing" onClick={closeGate}>

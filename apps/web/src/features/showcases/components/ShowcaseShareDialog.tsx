@@ -72,7 +72,7 @@ export function ShowcaseShareDialog({
         <DialogHeader>
           <DialogTitle className="truncate">Share “{title}”</DialogTitle>
           <DialogDescription>
-            Anyone with the link can view this project — no SitePix account needed.
+            Anyone with the link can view this project - no SitePix account needed.
           </DialogDescription>
         </DialogHeader>
 
@@ -112,7 +112,7 @@ export function ShowcaseShareDialog({
             </div>
             {hasUnsavedChanges && (
               <p className="text-xs text-amber-600">
-                You have unsaved changes — visitors still see the last saved version.
+                You have unsaved changes - visitors still see the last saved version.
               </p>
             )}
             <a

@@ -3,7 +3,7 @@ import { supabase, SITEPIX_SUPABASE_URL } from "@/integrations/sitepix/client";
 
 /**
  * Supabase's resumable endpoint speaks TUS and requires chunks of exactly this
- * size — not a tunable. It doubles as the threshold below which resumable
+ * size - not a tunable. It doubles as the threshold below which resumable
  * uploads buy nothing: a blob that fits in one chunk gains no resume points,
  * and the protocol's extra creation round-trip just makes it slower.
  */
@@ -53,7 +53,7 @@ function reportProgress(
  * 80% on site LTE starts over from zero. TUS splits the same transfer into 6 MB
  * chunks the server acknowledges individually, so a drop costs one chunk rather
  * than the whole upload, and it retries on its own. Small blobs still take the
- * plain path — one chunk has nothing to resume to.
+ * plain path - one chunk has nothing to resume to.
  *
  * Throws on failure so callers can hold onto the blob and offer a retry.
  */
@@ -75,7 +75,7 @@ export async function uploadWithResume(opts: ResumableUploadOptions): Promise<vo
     data: { session },
   } = await supabase.auth.getSession();
   const accessToken = session?.access_token;
-  if (!accessToken) throw new Error("Your session expired — sign in again to upload.");
+  if (!accessToken) throw new Error("Your session expired - sign in again to upload.");
 
   reportProgress(onProgress, 0, blob.size);
 
@@ -87,7 +87,7 @@ export async function uploadWithResume(opts: ResumableUploadOptions): Promise<vo
         authorization: `Bearer ${accessToken}`,
         "x-upsert": upsert ? "true" : "false",
       },
-      // Send the first chunk with the creation request — saves a round trip,
+      // Send the first chunk with the creation request - saves a round trip,
       // and Supabase expects it.
       uploadDataDuringCreation: true,
       // Without this the localStorage fingerprint outlives the upload and the

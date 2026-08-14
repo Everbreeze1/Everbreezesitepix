@@ -14,7 +14,7 @@ export const DEFAULT_ACCENT = "#2563eb";
  * This component is the actual answer to "it looks like a report, it should be
  * a mini site". A document has a beginning and an end; a site has a masthead
  * that stays with you, a way to reach any room from any other room, and a
- * footer that repeats the important things. Nothing below is decorative — the
+ * footer that repeats the important things. Nothing below is decorative - the
  * nav is what makes the project pages feel like part of something rather than
  * separate PDFs that happen to share a colour.
  *
@@ -65,7 +65,7 @@ function SiteHeader({
   sections: Array<{ id: string; label: string }>;
 }) {
   const [open, setOpen] = useState(false);
-  // Transparent over the hero, solid once you scroll — the header has to be
+  // Transparent over the hero, solid once you scroll - the header has to be
   // legible over both a dark photo and white page body, and swapping at the
   // fold is cheaper than compositing a permanent scrim over the artwork.
   const [scrolled, setScrolled] = useState(false);

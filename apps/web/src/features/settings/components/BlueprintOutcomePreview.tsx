@@ -18,7 +18,7 @@ interface Group {
   destination: BlueprintDestination;
   /**
    * `looseLabels` marks the blueprint's own labels, which land on the project
-   * as bare labels rather than as a saved label set — same destination, so the
+   * as bare labels rather than as a saved label set - same destination, so the
    * row is labelled "Label" instead of "Label set".
    */
   entries: Array<{ kind: BlueprintItemKind; names: string[]; looseLabels?: boolean }>;
@@ -49,8 +49,8 @@ function groupByDestination(items: BlueprintPreviewItem[], labels: string[]): Gr
       const names = byKind.get(kind);
       if (names?.length) entries.push({ kind, names });
     }
-    // Blueprint labels are not an item — they are a property of the blueprint
-    // itself — but they land on the project just the same, so the preview has
+    // Blueprint labels are not an item - they are a property of the blueprint
+    // itself - but they land on the project just the same, so the preview has
     // to account for them or "what this creates" under-reports.
     if (destination === "labels" && labels.length) {
       entries.push({ kind: "label_set", names: labels, looseLabels: true });
@@ -68,7 +68,7 @@ function groupByDestination(items: BlueprintPreviewItem[], labels: string[]): Gr
 /**
  * "Apply this and here is the project you get."
  *
- * The blueprint builder listed template *types* — a row saying "Checklist ·
+ * The blueprint builder listed template *types* - a row saying "Checklist ·
  * HVAC Inspection" told you what you had picked but never what selecting it
  * does. This shows the destination first: the project tab, then the things that
  * appear in it. Same component on the blueprint detail (before you have chosen

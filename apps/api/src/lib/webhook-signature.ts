@@ -30,7 +30,7 @@ function safeEqual(a: string, b: string): boolean {
 
 /**
  * True when `rawBody` carries a valid Standard Webhooks signature for `secret`.
- * Returns false — never throws — so callers can fall through to another scheme.
+ * Returns false - never throws - so callers can fall through to another scheme.
  */
 export function verifyStandardWebhook(
   request: Request,

@@ -46,7 +46,7 @@ export async function beginIdempotency(options: {
       return { kind: "proceed", recordId: inserted.id };
     }
 
-    // Unique violation or other — look up existing
+    // Unique violation or other - look up existing
     const { data: existing, error: selectErr } = await admin
       .from("api_idempotency_keys")
       .select("id, status, created_at, response_status, response_body")
@@ -56,7 +56,7 @@ export async function beginIdempotency(options: {
       .maybeSingle();
 
     if (selectErr || !existing) {
-      // Tables missing or race — proceed without guarantee
+      // Tables missing or race - proceed without guarantee
       console.error("idempotency_begin_failed", selectErr?.message ?? insertErr?.message);
       return { kind: "skip" };
     }
@@ -89,7 +89,7 @@ export async function beginIdempotency(options: {
 
     if (row.status === "pending") {
       if (ageMs < PENDING_STALE_MS) return { kind: "in_progress" };
-      // Stale pending — reclaim
+      // Stale pending - reclaim
       const { error: reclaimErr } = await admin
         .from("api_idempotency_keys")
         .update({
@@ -103,7 +103,7 @@ export async function beginIdempotency(options: {
       return { kind: "proceed", recordId: row.id };
     }
 
-    // failed — allow retry
+    // failed - allow retry
     const { error: resetErr } = await admin
       .from("api_idempotency_keys")
       .update({

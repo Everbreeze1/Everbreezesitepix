@@ -6,7 +6,7 @@ import { getSupabaseAdmin, requireSitepixSupabaseUrl } from "../../lib/supabase"
  * Off unless `PHOTO_ARCHIVE_ENABLED` is truthy.
  *
  * This job downscales six-month-old originals in place through Storage's
- * `render/image` endpoint — which is metered by *distinct origin image per
+ * `render/image` endpoint - which is metered by *distinct origin image per
  * billing cycle*, 100 on the Pro plan. It therefore spends the resource the
  * organization is out of (transformations: 170% of quota) to reclaim the one it
  * has in surplus (storage: 0.012 of 100 GB used), at up to 50 images per run.
@@ -18,13 +18,13 @@ import { getSupabaseAdmin, requireSitepixSupabaseUrl } from "../../lib/supabase"
  *
  * `photos.archived` IS NOT THE ARCHIVE THE TEMPLATE PAGES OFFER. There it is a
  * user's decision, with a toggle and a "Show archived" filter. Here it means
- * only "this original has already been downscaled" — same row, same
+ * only "this original has already been downscaled" - same row, same
  * storage_path, fewer bytes, nothing about it hidden. The scan below is the one
  * correct use of the column: finding the photos this job has not processed yet.
  *
- * No READ may use it to exclude a photo from a user-facing surface. Five did —
+ * No READ may use it to exclude a photo from a user-facing surface. Five did -
  * the gallery, its total count, the calendar, the activity heatmap and the
- * showcase builder — which meant enabling this job would have quietly started
+ * showcase builder - which meant enabling this job would have quietly started
  * emptying users' older photos out of their own gallery. Those are gone; see
  * the note in GalleryPage's loadPhotos.
  */

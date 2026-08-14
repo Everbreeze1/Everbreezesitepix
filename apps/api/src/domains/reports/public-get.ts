@@ -120,7 +120,7 @@ export async function getPublicProjectReportService(
   /*
    * Trashing the project has to take its public report link down with it.
    * Nothing here filtered `deleted_at`, so a report shared with a client kept
-   * serving in full after the job was deleted — including every photo in it.
+   * serving in full after the job was deleted - including every photo in it.
    * Trash is a 60-day window, and nothing schedules the purge hook, so in
    * practice it never stopped.
    */
@@ -170,7 +170,7 @@ export async function getPublicProjectReportService(
   }>();
   if (photoIdSet.size) {
     // Chunked, and errors throw rather than being dropped by destructuring only
-    // `data` — above ~398 ids the single `.in()` this replaced failed on
+    // `data` - above ~398 ids the single `.in()` this replaced failed on
     // PostgREST's echoed Content-Location header and the page rendered with no
     // photos at all. See lib/chunked-in.ts.
     const list = await selectIn<{

@@ -66,7 +66,7 @@ export function VideoRecorder({
   );
   /**
    * Set when `onSave` rejects. The preview stays open with the blob intact, so
-   * the recording survives a failed upload and can be retried or downloaded —
+   * the recording survives a failed upload and can be retried or downloaded -
    * it exists nowhere else.
    */
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -185,7 +185,7 @@ export function VideoRecorder({
       if (timerRef.current) window.clearInterval(timerRef.current);
       timerRef.current = null;
       if (blob.size === 0) {
-        toast.error("Recording was empty — your browser couldn't capture this format. Try again.");
+        toast.error("Recording was empty - your browser couldn't capture this format. Try again.");
         setPhase("idle");
       } else {
         const url = URL.createObjectURL(blob);
@@ -281,7 +281,7 @@ export function VideoRecorder({
                 Video recording requires an active subscription
               </h3>
               <p className="max-w-md text-sm text-white/70">
-                Record site videos — up to 5 minutes on Starter, 10 on Pro, 20 on Team.
+                Record site videos - up to 5 minutes on Starter, 10 on Pro, 20 on Team.
               </p>
               <Button
                 onClick={onClose}
@@ -383,7 +383,7 @@ export function VideoRecorder({
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
                       {saveError
-                        ? `Upload failed: ${saveError} Your recording is still here — retry, or download it before closing.`
+                        ? `Upload failed: ${saveError} Your recording is still here - retry, or download it before closing.`
                         : overUploadLimitMessage(recorded.blob.size)}
                     </span>
                   </div>
@@ -422,7 +422,7 @@ export function VideoRecorder({
               <div className="flex flex-col items-center gap-2 text-white/80">
                 <Loader2 className="h-5 w-5 animate-spin" />
                 <span className="text-sm">
-                  Uploading video{uploadProgress != null ? ` — ${uploadProgress}%` : "…"}
+                  Uploading video{uploadProgress != null ? ` - ${uploadProgress}%` : "…"}
                 </span>
                 {uploadProgress != null && (
                   <div

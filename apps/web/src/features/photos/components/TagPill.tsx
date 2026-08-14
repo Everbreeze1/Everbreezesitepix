@@ -15,7 +15,7 @@ function hexToRgb(hex: string): [number, number, number] {
 /**
  * Picks whichever of black/white has the higher WCAG contrast ratio against the
  * pill colour. The previous 0.6 perceived-brightness cutoff put white text on
- * mid-tone tags (oranges, teals, mid greens) where black reads far better —
+ * mid-tone tags (oranges, teals, mid greens) where black reads far better -
  * a large part of why tags were reported as hard to read.
  */
 function readableText(hex: string): string {
@@ -48,7 +48,7 @@ export function TagPill({ name, size = "md", onRemove, className }: PillProps) {
   const { colorOf } = useTagColors();
   const bg = colorOf(name);
   const fg = readableText(bg);
-  // One step larger across the board — these sit over photography as often as
+  // One step larger across the board - these sit over photography as often as
   // on cards, where the old 11px caption size was the main legibility problem.
   const sizing =
     size === "lg"

@@ -6,7 +6,7 @@ import { cleanCaption } from "@sitepix/shared";
 /**
  * Minimal Markdown → HTML for the constrained subset our AI prompts emit
  * (headings, bullets, bold/italic, paragraphs). Deliberately not a general
- * Markdown parser — adding one would mean a new runtime dependency for a
+ * Markdown parser - adding one would mean a new runtime dependency for a
  * handful of block types we fully control via the system prompt.
  */
 export function markdownToHtml(md: string): string {
@@ -74,7 +74,7 @@ export function markdownToHtml(md: string): string {
 }
 
 /**
- * Photos are persisted as `data-photo-id` only — `src` is re-signed on every
+ * Photos are persisted as `data-photo-id` only - `src` is re-signed on every
  * read (see resolvePageImages), because signed storage URLs expire.
  *
  * Each photo now gets its own shaded card rather than sharing a two-up row,
@@ -93,7 +93,7 @@ export interface GeneratedPhoto {
   takenAt: string | null;
 }
 
-/** "3 August 2026" — the byline date on a photo card. */
+/** "3 August 2026" - the byline date on a photo card. */
 function formatPhotoDate(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -107,7 +107,7 @@ function formatPhotoDate(iso: string | null): string {
  *
  * Captions are run through `cleanCaption` first: uploads default the caption to
  * the source filename (`IMG_1234.JPG`, `sitepix-178155…jpg`), which is not
- * information — printing it made documents read as though every photo were
+ * information - printing it made documents read as though every photo were
  * annotated when none were. A photo with nothing real recorded says so plainly
  * instead of showing its filename.
  */
@@ -131,7 +131,7 @@ function photoCardHtml(photo: GeneratedPhoto, n: number): string {
   return panelHtml("photo", `<p>${img}</p>` + captionBlockHtml(photo, n));
 }
 
-/** `<div data-panel="…">` — the InfoPanel node (apps/web/src/lib/tiptap-info-panel.ts). */
+/** `<div data-panel="…">` - the InfoPanel node (apps/web/src/lib/tiptap-info-panel.ts). */
 function panelHtml(variant: "meta" | "photo", inner: string): string {
   return `<div data-panel="${variant}">${inner}</div>`;
 }
@@ -171,10 +171,10 @@ function sectionedReportHtml(photos: GeneratedPhoto[]): string {
 }
 
 /**
- * Title page for a generated report — the same shape as the seeded "Pre-Built
+ * Title page for a generated report - the same shape as the seeded "Pre-Built
  * Report" templates: rules top and bottom, oversized centred title, muted
  * address/date, and a Spacer paragraph sized to push the body onto page two.
- * (See apps/web/src/lib/tiptap-spacer.ts — an empty `<p style="height:…">` is
+ * (See apps/web/src/lib/tiptap-spacer.ts - an empty `<p style="height:…">` is
  * deliberate blank space that the PDF renderer honours.)
  */
 function coverPageHtml(args: {
@@ -214,7 +214,7 @@ export const generateProjectPageInputSchema = z.object({
 });
 
 /**
- * Creates a page whose body is drafted by AI from the selected photos —
+ * Creates a page whose body is drafted by AI from the selected photos -
  * the "Daily Log" / "Summary" flow. Falls back to a structured scaffold if the
  * AI is unavailable so the user always ends up with a usable page.
  */
@@ -300,7 +300,7 @@ export async function generateProjectPageService(
       (conclusion || `<p></p>`);
   } else {
     // Site log: the technician's own quick record. Compact header, terse
-    // bullets, photos — deliberately not dressed up as a client deliverable.
+    // bullets, photos - deliberately not dressed up as a client deliverable.
     let bodyHtml = "";
     try {
       const res = await summarizePhotosReportService(ctx, {
@@ -308,7 +308,7 @@ export async function generateProjectPageService(
         title,
         mode: data.template === "summary" ? "summary" : "daily_log",
       });
-      // The prompt is told not to emit a title, but strip one defensively —
+      // The prompt is told not to emit a title, but strip one defensively -
       // the page already has a title field.
       bodyHtml = markdownToHtml(res.markdown ?? "").replace(/^<h1>.*?<\/h1>/, "");
     } catch (e: any) {

@@ -43,7 +43,7 @@ function toDraft(s: ShowcaseDetail): SiteDraft {
  *
  * Saved independently of the document above it. The builder's dirty flag covers
  * title/copy/sections and nothing here, so a user who only wants to re-file a
- * project under a different service doesn't have to re-save its whole body —
+ * project under a different service doesn't have to re-save its whole body -
  * and, more importantly, can't accidentally publish half-finished copy while
  * doing it.
  */
@@ -199,7 +199,7 @@ export function ShowcaseSiteCard({
             ))}
           </datalist>
           <p className="mt-1.5 text-xs text-muted-foreground">
-            Becomes a filter on your site — reuse the same wording across jobs.
+            Becomes a filter on your site - reuse the same wording across jobs.
           </p>
         </div>
 

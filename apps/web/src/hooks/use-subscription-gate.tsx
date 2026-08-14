@@ -45,7 +45,7 @@ export function SubscriptionGateProvider({ children }: { children: ReactNode }) 
 }
 
 /** Guard mutating actions (create/upload/edit) behind an active subscription
- * from anywhere in the app — shows a shared upgrade dialog instead of
+ * from anywhere in the app - shows a shared upgrade dialog instead of
  * silently blocking or redirecting away from the page. */
 export function useSubscriptionGate() {
   const ctx = useContext(SubscriptionGateContext);

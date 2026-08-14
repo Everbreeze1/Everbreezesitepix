@@ -8,7 +8,7 @@ import type {
   extractPhotoTextService,
 } from "@sitepix/api";
 
-/** See walkthroughs.functions.ts — result types are derived, not hand-written. */
+/** See walkthroughs.functions.ts - result types are derived, not hand-written. */
 type Result<T extends (...args: never[]) => unknown> = Awaited<ReturnType<T>>;
 
 export const analyzePhoto = rpcOp<{ photoId: string }, Result<typeof analyzePhotoService>>(

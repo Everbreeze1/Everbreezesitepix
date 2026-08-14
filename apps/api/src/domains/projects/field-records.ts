@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from "../../lib/supabase";
 import { sanitizePageHtml } from "./sanitize-page-html";
 
 /**
- * Public share for the two field records — checklists and workflows.
+ * Public share for the two field records - checklists and workflows.
  *
  * Both already held the full account of what was done on a job: what was
  * checked, what was measured, which photos prove it, who signed the phase off.
@@ -12,8 +12,8 @@ import { sanitizePageHtml } from "./sanitize-page-html";
  * inspector the record was a screenshot of a modal.
  *
  * These two services are the read side of that link. Deliberately shaped as one
- * payload for both kinds — a checklist is a workflow with a single unnamed
- * section — so the browser has exactly one document renderer to maintain and a
+ * payload for both kinds - a checklist is a workflow with a single unnamed
+ * section - so the browser has exactly one document renderer to maintain and a
  * printed checklist and a printed workflow come out looking like the same
  * company produced them.
  *
@@ -22,7 +22,7 @@ import { sanitizePageHtml } from "./sanitize-page-html";
  *   - `revoked_at` is the owner's off switch
  *   - a trashed project takes its shared records down with it, because
  *     `project_checklists` has no `deleted_at` of its own and dies only with
- *     the project's eventual purge — which nothing schedules
+ *     the project's eventual purge - which nothing schedules
  *   - author HTML is sanitised on the way out, not on the way in, so every row
  *     already in the database is covered
  */
@@ -34,7 +34,7 @@ export interface PublicFieldRecordItem {
   /**
    * Plain text, passed through untouched.
    *
-   * Deliberately NOT run through `sanitizeCaption` — despite the name, that
+   * Deliberately NOT run through `sanitizeCaption` - despite the name, that
    * helper only strips tags to *decide* whether a caption is filename-like and
    * then returns the original input verbatim (see the assertions in
    * tests/shared-helpers.test.ts). Calling it here was a no-op that read like a
@@ -48,7 +48,7 @@ export interface PublicFieldRecordItem {
   /** `item_type` for a checklist, `kind` for a workflow. */
   type: string;
   required: boolean;
-  /** Whether this line counts as answered — the tick in the printed box. */
+  /** Whether this line counts as answered - the tick in the printed box. */
   answered: boolean;
   /** The answer as printable text; null when the tick alone is the answer. */
   answer: string | null;
@@ -59,14 +59,14 @@ export interface PublicFieldRecordItem {
 
 export interface PublicFieldRecordSection {
   id: string;
-  /** null for a checklist — it has one implicit, unnamed section. */
+  /** null for a checklist - it has one implicit, unnamed section. */
   name: string | null;
   description: string | null;
   notes: string | null;
   /**
    * Whether this phase was *designed* to be signed. Carried separately from
    * `signoff` so the printed sheet can draw a signature rule on an unsigned
-   * gate — and, just as importantly, draw nothing under a phase that never
+   * gate - and, just as importantly, draw nothing under a phase that never
    * asked for one. Inferring it from `signoff === null` would put a signature
    * line under every ordinary phase.
    */
@@ -119,7 +119,7 @@ const empty = (status: PublicFieldRecord["status"]): PublicFieldRecord => ({
  * Project + letterhead + author, resolved once for either kind.
  *
  * Returns `null` when the project is trashed, which the callers translate into
- * a revoked link rather than a 404 — the link was valid, the owner took the job
+ * a revoked link rather than a 404 - the link was valid, the owner took the job
  * away.
  */
 async function loadEnvelope(projectId: string, createdBy: string) {
@@ -231,7 +231,7 @@ export async function getPublicChecklistService(
    * checklist.
    *
    * The snapshot exists so a sealed record cannot be rewritten, and it stays the
-   * durable copy — but it is a flat JSON blob with no item ids and only
+   * durable copy - but it is a flat JSON blob with no item ids and only
    * `photo_ids`, so serving it would mean a second mapping, a second signing
    * pass, and a shared record whose photographic evidence rendered differently
    * from the app's. Every write path that could make the two disagree is closed
@@ -395,7 +395,7 @@ export async function getPublicWorkflowService(
     workflow.project_id,
   );
 
-  /** Same rule as `isItemComplete` in the runner — a photo step is done when a
+  /** Same rule as `isItemComplete` in the runner - a photo step is done when a
    *  photo exists, a note step when there is text, a check when it is ticked. */
   const isDone = (it: ItemRow) => {
     if (it.kind === "photo") return !!it.photo_id;

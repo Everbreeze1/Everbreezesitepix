@@ -35,7 +35,7 @@ export function AdminTeamsPage() {
     setSyncingId(teamId);
     try {
       const res = await syncTeamBilling({ data: { teamId } });
-      toast.success(`Synced — status: ${res.subscriptionStatus}, plan: ${res.plan}`);
+      toast.success(`Synced - status: ${res.subscriptionStatus}, plan: ${res.plan}`);
       void qc.invalidateQueries({ queryKey: ["admin", "teams"] });
     } catch (e: any) {
       toast.error(e?.message ?? "Could not sync billing");

@@ -8,7 +8,7 @@ const FILENAME_RE = /\.(jpe?g|png|webp|heic|heif|gif|bmp|tiff?)$/i;
  * The digit run has to reach the END of the string.
  *
  * This used to be `…[\s_-]?\d`, which fired on anything merely *starting* with
- * one of these words followed by a digit — so a caption a person actually
+ * one of these words followed by a digit - so a caption a person actually
  * typed, like "Photo 3 of the north wall crack", was classified as a generated
  * filename and thrown away. The discard is not cosmetic: `sanitizeCaption`
  * blanks it, and report sections persist the blanked value.
@@ -37,7 +37,7 @@ export function cleanCaption(caption?: string | null): string | null {
 
 /**
  * Sanitize a caption that may be plain text or HTML (rich-text).
- * Strips tags/entities to test the underlying text — if it's filename-like
+ * Strips tags/entities to test the underlying text - if it's filename-like
  * or empty, returns "". Otherwise returns the original input unchanged so
  * any rich formatting is preserved.
  */

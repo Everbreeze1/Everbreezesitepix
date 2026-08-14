@@ -29,7 +29,7 @@ export function ProjectTrashPage() {
   const confirm = useConfirm();
   /*
    * The sidebar's Trash badge is a cached query (60s). Emptying the trash from
-   * this page left the badge insisting there were still items in it — the one
+   * this page left the badge insisting there were still items in it - the one
    * number whose whole job is to be trustworthy. Invalidate it whenever this
    * page changes what is in there.
    */
@@ -115,7 +115,7 @@ export function ProjectTrashPage() {
             Trashed projects are kept for {TRASH_RETENTION_DAYS} days
           </p>
           <p className="text-xs text-amber-800/90 dark:text-amber-200/80">
-            You can restore any project — including all its photos, reports, tasks, and checklists —
+            You can restore any project - including all its photos, reports, tasks, and checklists -
             before it's permanently deleted. After {TRASH_RETENTION_DAYS} days trashed projects are
             automatically removed and cannot be recovered.
           </p>

@@ -8,8 +8,8 @@ import { formatBytes } from "@/hooks/use-storage-usage";
  * applies until someone raises it.
  *
  * Worth checking because the recorders out-record it. At their hardcoded
- * bitrates — 1.2 Mbps video + 96 kbps audio for a walkthrough, 2 Mbps + 96 kbps
- * for a project video — every tier's maximum-length recording clears 50 MB:
+ * bitrates - 1.2 Mbps video + 96 kbps audio for a walkthrough, 2 Mbps + 96 kbps
+ * for a project video - every tier's maximum-length recording clears 50 MB:
  * a 10-minute walkthrough lands near 97 MB, a 5-minute Starter video near 79 MB.
  */
 const DEFAULT_MAX_UPLOAD_MB = 50;
@@ -22,7 +22,7 @@ function configuredMaxMb(): number {
 export const MAX_UPLOAD_BYTES = Math.round(configuredMaxMb() * 1024 * 1024);
 
 /**
- * ADVISORY ONLY — never gate an upload on this.
+ * ADVISORY ONLY - never gate an upload on this.
  *
  * Until `VITE_MAX_UPLOAD_MB` is set the limit is an assumption, and refusing to
  * upload on a wrong assumption would break a feature that works. Callers warn,
@@ -36,5 +36,5 @@ export function isOverUploadLimit(bytes: number): boolean {
 export function overUploadLimitMessage(bytes: number): string {
   return `This recording is ${formatBytes(bytes)}, over the ${formatBytes(
     MAX_UPLOAD_BYTES,
-  )} upload limit — storage will likely reject it. Download a copy so a failed upload doesn't lose it.`;
+  )} upload limit - storage will likely reject it. Download a copy so a failed upload doesn't lose it.`;
 }

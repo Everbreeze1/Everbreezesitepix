@@ -62,12 +62,12 @@ export function AdminUsersPage() {
               <tbody>
                 {data.users.map((u) => (
                   <tr key={u.id} className="border-t border-border">
-                    <td className="py-2 pr-4 font-medium text-foreground">{u.fullName ?? "—"}</td>
-                    <td className="py-2 pr-4 text-muted-foreground">{u.email ?? "—"}</td>
+                    <td className="py-2 pr-4 font-medium text-foreground">{u.fullName ?? "-"}</td>
+                    <td className="py-2 pr-4 text-muted-foreground">{u.email ?? "-"}</td>
                     <td className="py-2 pr-4 text-muted-foreground">
-                      {u.team ? `${u.team.name} (${u.team.role})` : "—"}
+                      {u.team ? `${u.team.name} (${u.team.role})` : "-"}
                     </td>
-                    <td className="py-2 pr-4 capitalize text-muted-foreground">{u.team?.plan ?? "—"}</td>
+                    <td className="py-2 pr-4 capitalize text-muted-foreground">{u.team?.plan ?? "-"}</td>
                     <td className="py-2 pr-4 text-muted-foreground">
                       {new Date(u.createdAt).toLocaleDateString()}
                     </td>

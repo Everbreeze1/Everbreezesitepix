@@ -15,7 +15,7 @@ import {
 export const Route = createFileRoute("/share/walkthroughs/$token")({
   head: () => ({
     meta: [
-      { title: "Walkthrough Note — SitePix" },
+      { title: "Walkthrough Note - SitePix" },
       { name: "description", content: "Shared site walkthrough report." },
       { name: "robots", content: "noindex,nofollow" },
     ],
@@ -105,7 +105,7 @@ function PublicWalkthroughPage() {
 
   const w = data.walkthrough;
   const p = data.project;
-  /** No recording behind this one — it is the AI's notes on a set of photos. */
+  /** No recording behind this one - it is the AI's notes on a set of photos. */
   const isSummary = (w as { source?: string }).source === "summary";
   const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
   const addr = p
@@ -141,7 +141,7 @@ function PublicWalkthroughPage() {
                   </>
                 ) : null}
                 {new Date(w.started_at).toLocaleDateString()}
-                {/* A summary was never recorded, so its duration is 0 — printing
+                {/* A summary was never recorded, so its duration is 0 - printing
                     "0:00" on a customer-facing page reads as a broken link. */}
                 {isSummary ? null : ` · ${fmt(w.duration_seconds)}`}
               </p>

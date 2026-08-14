@@ -32,7 +32,7 @@ export async function handlePurgeTrash(request: Request): Promise<Response> {
       // id ceiling where PostgREST's echoed Content-Location header overflows
       // Node's 16 KB header limit, so the delete threw and 60-day retention
       // never actually ran. `mutateIn` also throws instead of the old
-      // `if (!delErr)`, which reported `photosPurged: 0` alongside `ok: true` —
+      // `if (!delErr)`, which reported `photosPurged: 0` alongside `ok: true` -
       // a cron that looks healthy while doing nothing is worse than one that fails.
       await mutateIn(
         photoIds,
@@ -57,7 +57,7 @@ export async function handlePurgeTrash(request: Request): Promise<Response> {
 
     let projectsPurged = 0;
     if (projectIds.length) {
-      // Same chunking, same reason — `.limit(1000)` above.
+      // Same chunking, same reason - `.limit(1000)` above.
       const remaining = await selectIn<{ storage_path: string; thumb_path: string | null }>(
         projectIds,
         (idChunk) =>

@@ -10,7 +10,7 @@
  * project: 398 ids OK, 400 ids fail. Higher still (~672) and the Supabase
  * gateway rejects the request URI outright.
  *
- * That limit produced four separate customer-visible bugs — a public report PDF
+ * That limit produced four separate customer-visible bugs - a public report PDF
  * that rendered with **zero photos** and still returned HTTP 200, trash bulk
  * restore/delete 500ing on "Select all", the cron trash purge silently never
  * deleting anything above ~397 rows, and browser bulk actions failing with a raw
@@ -28,7 +28,7 @@
 
 /**
  * Ids per request. ~37 bytes each puts a full chunk near 7.4 KB of echoed
- * header — comfortably under the 16 KB limit with room for the rest of the
+ * header - comfortably under the 16 KB limit with room for the rest of the
  * response headers, and well under the URI cap.
  */
 export const IN_CHUNK_SIZE = 200;
@@ -51,7 +51,7 @@ type Postgrestish<T> = PromiseLike<{ data: T[] | null; error: { message: string 
  * database matters more than latency, and a stampede of 25 parallel queries is
  * how you turn a big report into an outage for everyone else.
  *
- * @throws if any chunk fails — callers must not silently render partial data.
+ * @throws if any chunk fails - callers must not silently render partial data.
  */
 export async function selectIn<T>(
   ids: readonly string[],
@@ -70,7 +70,7 @@ export async function selectIn<T>(
 /**
  * Run a write (UPDATE/DELETE) filtered by `IN (...)` in safe batches.
  *
- * Not atomic across chunks — PostgREST gives one statement per request — so a
+ * Not atomic across chunks - PostgREST gives one statement per request - so a
  * failure partway leaves earlier chunks applied. That is still strictly better
  * than the previous behaviour, where the whole operation failed for everyone
  * above the limit and nothing was applied at all. Callers doing something

@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { supabase } from "@/integrations/sitepix/client";
 
 // ---------------------------------------------------------------------------
-// Global label catalog — labels are company/team-wide with a custom color.
+// Global label catalog - labels are company/team-wide with a custom color.
 // This module keeps a single shared cache so every chip across the app paints
 // the same color, and exposes CRUD helpers for the Labels tab.
 // ---------------------------------------------------------------------------
@@ -226,7 +226,7 @@ function hexToRgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-// A curated professional swatch palette. Muted, print-safe tones — no neons.
+// A curated professional swatch palette. Muted, print-safe tones - no neons.
 export const COLOR_SWATCHES = [
   "#b91c1c",
   "#c2410c",
@@ -250,7 +250,7 @@ export const COLOR_SWATCHES = [
   "#1f2937",
 ];
 
-// Use the cache without subscribing — for one-shot calls.
+// Use the cache without subscribing - for one-shot calls.
 export function getCachedLabels(): LabelRow[] {
   return store.rows;
 }

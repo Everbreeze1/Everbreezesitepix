@@ -8,10 +8,10 @@ project_id = "ulmgvtuqjlzzadlwtiog"
 # review a change to it and nothing recorded what the intended values were.
 #
 # IMPORTANT: writing it here does NOT change the live project. It takes effect
-# only when the CLI is linked and `supabase config push` is run — until then the
+# only when the CLI is linked and `supabase config push` is run - until then the
 # dashboard is still authoritative. See LAUNCH.md § Supabase.
 [auth]
-# The site actually serves from www — Vercel 308s the apex there — so links
+# The site actually serves from www - Vercel 308s the apex there - so links
 # built by Auth (confirm, recover, invite) must point at www or the user lands
 # on a redirect that drops the URL fragment carrying the token.
 site_url = "https://www.everbreezesitepix.com"
@@ -24,7 +24,7 @@ additional_redirect_urls = [
   # The apex only ever 308s to www, but keep it allow-listed so an old link that
   # somehow reaches Auth directly still validates instead of erroring.
   "https://everbreezesitepix.com/**",
-  # Local dev — Vite serves on 8080 (apps/web/vite.config.ts `server.port`).
+  # Local dev - Vite serves on 8080 (apps/web/vite.config.ts `server.port`).
   "http://localhost:8080/**",
   "http://127.0.0.1:8080/**",
   # UNVERIFIED: Vercel preview deployments. Uncomment and substitute the Vercel
@@ -39,7 +39,7 @@ additional_redirect_urls = [
 jwt_expiry = 3600
 
 # Rotate the refresh token on every use and revoke the whole family if an
-# already-used token is replayed — this is what makes a stolen refresh token
+# already-used token is replayed - this is what makes a stolen refresh token
 # detectable rather than permanent.
 enable_refresh_token_rotation = true
 # Grace window for the rotated token, so a double-fired refresh (two tabs, or a
@@ -63,7 +63,7 @@ password_requirements = ""
 
 [auth.email]
 enable_signup = true
-# Confirmations are ON in production — signup.tsx branches on `!data.session`
+# Confirmations are ON in production - signup.tsx branches on `!data.session`
 # ("Check your email to confirm your account") and login.tsx exposes a
 # `resend({ type: "signup" })` action, neither of which is reachable otherwise.
 enable_confirmations = true
@@ -79,7 +79,7 @@ otp_length = 6
 otp_expiry = 3600
 
 # Per-IP auth abuse limits. These are separate from the API's own limiter in
-# apps/api/src/lib/rate-limit.ts — that one never sees Supabase Auth traffic,
+# apps/api/src/lib/rate-limit.ts - that one never sees Supabase Auth traffic,
 # because the browser talks to GoTrue directly.
 [auth.rate_limit]
 # Sign-in + sign-up attempts per 5 minutes per IP.
@@ -97,7 +97,7 @@ anonymous_users = 30
 
 # The Send Email auth hook, the SMTP sender, and the Google/Apple OAuth
 # providers are deliberately NOT declared here. They carry secrets, and more
-# importantly `supabase config push` writes the whole auth block — declaring a
+# importantly `supabase config push` writes the whole auth block - declaring a
 # provider here with `enabled = false`, or omitting one the CLI defaults to off,
 # would switch off a login method that is currently live. Leave those in the
 # dashboard until someone has verified how the push behaves for this project.

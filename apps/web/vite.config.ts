@@ -81,7 +81,7 @@ export default defineConfig(async ({ command, mode }) => {
          *
          * `nitro({ preset: "vercel" })` above writes `apps/web/.vercel/output/`
          * on every `npm run build`. If a dev server is then started while those
-         * files are still held open — routine on Windows — chokidar throws
+         * files are still held open - routine on Windows - chokidar throws
          * `EBUSY: resource busy or locked` on one of them (in practice
          * `static/apple-touch-icon.png`). That surfaces as an unhandled `error`
          * event on FSWatcher, which kills the whole dev process rather than

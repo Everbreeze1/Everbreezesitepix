@@ -6,17 +6,17 @@ import { PRIVACY_EMAIL, SUPPORT_EMAIL, isPlaceholder, mailtoHref } from "@/lib/c
 export const Route = createFileRoute("/contact")({
   head: () => ({
     meta: [
-      { title: "Contact & Support — Everbreeze SitePix" },
+      { title: "Contact & Support - Everbreeze SitePix" },
       {
         name: "description",
         content:
-          "Get in touch with the Everbreeze SitePix team — support for job site photo capture, reports, billing questions, and privacy requests.",
+          "Get in touch with the Everbreeze SitePix team - support for job site photo capture, reports, billing questions, and privacy requests.",
       },
-      { property: "og:title", content: "Contact & Support — Everbreeze SitePix" },
+      { property: "og:title", content: "Contact & Support - Everbreeze SitePix" },
       {
         property: "og:description",
         content:
-          "Get in touch with the Everbreeze SitePix team — support for job site photo capture, reports, billing questions, and privacy requests.",
+          "Get in touch with the Everbreeze SitePix team - support for job site photo capture, reports, billing questions, and privacy requests.",
       },
       { property: "og:url", content: "https://www.everbreezesitepix.com/contact" },
     ],
@@ -27,7 +27,7 @@ export const Route = createFileRoute("/contact")({
 
 /**
  * An address is rendered as a live `mailto:` only once the owner has replaced
- * the placeholder in lib/contact.ts — an unresolved one shows as plain text so
+ * the placeholder in lib/contact.ts - an unresolved one shows as plain text so
  * we never publish a link that bounces.
  */
 function EmailLine({ label, email, subject }: { label: string; email: string; subject?: string }) {
@@ -86,7 +86,7 @@ function ContactPage() {
             <h2 className="text-lg font-semibold text-foreground mb-3">Support</h2>
             <p className="text-muted-foreground">
               Something not working, a question about a feature, or trouble with an upload? Email us
-              and include your account email plus the project or report you were on — it gets you an
+              and include your account email plus the project or report you were on - it gets you an
               answer far faster.
             </p>
             <div className="mt-3 rounded-lg border border-border bg-muted/40 p-4">
@@ -99,7 +99,7 @@ function ContactPage() {
             <h2 className="text-lg font-semibold text-foreground mb-3">Already signed in?</h2>
             <p className="text-muted-foreground">
               The in-app Help Center has step-by-step guides for photo capture, checklists,
-              workflows, walkthroughs, reports and team management — most questions are answered
+              workflows, walkthroughs, reports and team management - most questions are answered
               there without waiting for a reply. You can also report a bug straight from the app,
               which sends us the context we need automatically.
             </p>
@@ -125,8 +125,8 @@ function ContactPage() {
             </h2>
             <p className="text-muted-foreground">
               Plan changes, seat counts, invoices and cancellation are all self-serve from the
-              Settings page inside the app. For anything the billing portal cannot do — a refund
-              question, a failed payment, or a plan that does not fit — email support and mention
+              Settings page inside the app. For anything the billing portal cannot do - a refund
+              question, a failed payment, or a plan that does not fit - email support and mention
               your team name.
             </p>
             <p className="text-muted-foreground mt-2">
@@ -147,8 +147,8 @@ function ContactPage() {
               Privacy and data requests
             </h2>
             <p className="text-muted-foreground">
-              To request access to, correction of, or deletion of your personal data — or to ask how
-              your photos are processed — use the privacy inbox. We respond within 30 days as
+              To request access to, correction of, or deletion of your personal data - or to ask how
+              your photos are processed - use the privacy inbox. We respond within 30 days as
               described in our{" "}
               <Link to="/privacy-policy" className="text-primary hover:underline">
                 Privacy Policy

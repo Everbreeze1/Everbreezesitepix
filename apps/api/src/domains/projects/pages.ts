@@ -6,19 +6,19 @@ import { sanitizePageHtml } from "./sanitize-page-html";
 
 const IMG_TAG_RE = /<img\b[^>]*\bdata-photo-id="([0-9a-fA-F-]{36})"[^>]*>/g;
 
-/** Unfilled template photo slots — an inline SVG data URI and never a real photo. */
+/** Unfilled template photo slots - an inline SVG data URI and never a real photo. */
 const PHOTO_SLOT_RE = /<img\b[^>]*src="data:image\/svg\+xml[^"]*"[^>]*>/gi;
 
 /**
  * Drops unfilled photo slots. They are authoring affordances ("click to add"),
- * not deliverable content, so anything a client sees — a shared link or an
- * exported PDF — must never show them.
+ * not deliverable content, so anything a client sees - a shared link or an
+ * exported PDF - must never show them.
  */
 export function stripPhotoSlots(html: string): string {
   return html.replace(PHOTO_SLOT_RE, "");
 }
 
-/** Rewrites every `<img data-photo-id="...">` tag's `src` to a fresh signed URL — never persist signed URLs, they expire. */
+/** Rewrites every `<img data-photo-id="...">` tag's `src` to a fresh signed URL - never persist signed URLs, they expire. */
 export async function resolvePageImages(
   html: string,
   supabase: SupabaseClient<any>,
@@ -27,7 +27,7 @@ export async function resolvePageImages(
    *
    * REQUIRED on any path that passes the service-role client. The ids come
    * from `data-photo-id` attributes inside author-controlled HTML, which is
-   * stored with no validation of those ids at all — so on the public share
+   * stored with no validation of those ids at all - so on the public share
    * route the service role would happily sign any photo in the system whose
    * id an author pasted into their document, bypassing the `photos` RLS
    * entirely. Scoping to the page's own project makes a pasted foreign id
@@ -135,7 +135,7 @@ export async function moveDocumentService(
 }
 
 // ============================================================
-// Unified tree — folders + pages + files for a project's Documents tab
+// Unified tree - folders + pages + files for a project's Documents tab
 // ============================================================
 
 export interface DocumentTreeFolder {
@@ -155,7 +155,7 @@ export interface DocumentTreePage {
    * `project_pages.source_template` stores either a template kind ("daily_log",
    * "summary") or `document_template:<uuid>` (page-templates.ts:175). Only the
    * latter can map back to a blueprint, so the prefix is stripped here and
-   * anything else becomes null — the client should never have to know that
+   * anything else becomes null - the client should never have to know that
    * encoding.
    */
   sourceTemplateId: string | null;
@@ -238,7 +238,7 @@ export async function listProjectDocumentTreeService(
 }
 
 // ============================================================
-// Field tokens — {{company}}, {{project_name}}, {{project_address}}, {{date}}
+// Field tokens - {{company}}, {{project_name}}, {{project_address}}, {{date}}
 // in header/footer, resolved at read time (never persisted resolved, so
 // renaming the project or company later updates every page automatically).
 // ============================================================
@@ -263,7 +263,7 @@ const PLACEHOLDER_LABELS: Record<string, string> = {
 /**
  * Resolves `{{token}}` merge fields against live project/company data. A
  * *known* token with no data behind it renders as `[Field name]`. A token
- * that isn't recognized at all is left verbatim as `{{token}}` — that case
+ * that isn't recognized at all is left verbatim as `{{token}}` - that case
  * means the template itself is wrong (typo, or references a field we don't
  * support), which is worth surfacing differently than "just needs filling in".
  */
@@ -322,7 +322,7 @@ export async function resolvePageTokens(
   });
 }
 
-/** @deprecated Use {@link resolvePageTokens} — kept as the original call-site name. */
+/** @deprecated Use {@link resolvePageTokens} - kept as the original call-site name. */
 export const resolveHeaderFooterTokens = resolvePageTokens;
 
 // ============================================================
@@ -330,8 +330,8 @@ export const resolveHeaderFooterTokens = resolvePageTokens;
 //
 // Templates express blanks two ways, and both used to reach the editor as raw
 // bracket text the user had to select and delete before typing:
-//   [Client Name]      — hand-filled, becomes an editable FillField box
-//   {{project_name}}   — merge field, becomes a read-only MergeToken pill
+//   [Client Name]      - hand-filled, becomes an editable FillField box
+//   {{project_name}}   - merge field, becomes a read-only MergeToken pill
 //
 // The database always stores the canonical `{{token}}` form, so PDF/share
 // rendering and "renaming the project updates every page" keep working; the
@@ -351,7 +351,7 @@ function escapeAttr(s: string): string {
  *
  * Applied to template HTML at the moment a page is created from it, so the
  * seeded SQL templates gain click-to-type fields without rewriting every
- * migration. Only text between tags is touched, never attribute values — so
+ * migration. Only text between tags is touched, never attribute values - so
  * `alt="Photo slot 1"` and inline styles are left alone.
  */
 export function bracketsToFillFields(html: string | null): string | null {
@@ -415,7 +415,7 @@ function blankTemplateHtml(kind: string | undefined, projectName: string, addres
     return `<p><strong>Project Name:</strong> ${projectName}</p><p><strong>Project Address:</strong> ${address}</p><p><strong>Date:</strong> ${today}</p><h2>Overview</h2><p></p>`;
   }
   if (kind === "summary") {
-    return `<h1>${projectName} — Summary</h1><p><strong>Date:</strong> ${today}</p><p></p>`;
+    return `<h1>${projectName} - Summary</h1><p><strong>Date:</strong> ${today}</p><p></p>`;
   }
   return "";
 }
@@ -484,7 +484,7 @@ export async function getProjectPageService(
     ),
     // Header/footer get pills for the same reason, and to fix a real data
     // loss: these used to resolve to plain text, which the editor's autosave
-    // then wrote straight back — baking today's company name in permanently
+    // then wrote straight back - baking today's company name in permanently
     // and silently killing the merge field.
     tokensToPills(row.header_html, row.project_id, row.created_by).then((h) =>
       h ? resolvePageImages(h, ctx.supabase) : h,
@@ -518,7 +518,7 @@ export const updateProjectPageInputSchema = z.object({
    *
    * Optional on purpose: older clients (and the mobile app) omit it and keep the
    * previous last-write-wins behaviour rather than breaking. `updated_at` is
-   * safe to use as a version because a trigger maintains it —
+   * safe to use as a version because a trigger maintains it -
    * `trg_project_pages_updated_at` in 20260729010000_project_pages.sql.
    */
   expectedUpdatedAt: z.string().optional(),
@@ -529,7 +529,7 @@ export async function updateProjectPageService(
 ) {
   const patch: Record<string, unknown> = {};
   if (data.title !== undefined) patch.title = data.title;
-  // Store the canonical `{{token}}` form, never the resolved pill — otherwise
+  // Store the canonical `{{token}}` form, never the resolved pill - otherwise
   // the first autosave would bake today's company name into the document and
   // the merge field would stop tracking project/profile changes.
   if (data.contentHtml !== undefined) patch.content_html = pillsToTokens(data.contentHtml);
@@ -542,7 +542,7 @@ export async function updateProjectPageService(
    *
    * These pages are team-shared documents and the editor autosaves, so two
    * people with the same page open would each write their whole document back
-   * over the other's — no error, no conflict, the loser's paragraphs simply
+   * over the other's - no error, no conflict, the loser's paragraphs simply
    * gone at the next autosave. Nobody finds out until a client asks where a
    * section went.
    *
@@ -560,7 +560,7 @@ export async function updateProjectPageService(
   const updated = (rows as Array<{ id: string; updated_at: string }> | null) ?? [];
   if (updated.length === 0) {
     if (!data.expectedUpdatedAt) throw new Error("Page not found");
-    // The row exists but has moved on — someone else saved first.
+    // The row exists but has moved on - someone else saved first.
     throw Object.assign(
       new Error(
         "This page was changed by someone else while you were editing. Reload to get their changes before saving again.",
@@ -663,8 +663,8 @@ export async function getPublicProjectPageService(
   /*
    * Trashing the project revokes its shared pages too.
    *
-   * `project_pages` has no `deleted_at` of its own — a page dies with its
-   * project, via the ON DELETE CASCADE — but soft-deleting the project only
+   * `project_pages` has no `deleted_at` of its own - a page dies with its
+   * project, via the ON DELETE CASCADE - but soft-deleting the project only
    * sets `projects.deleted_at`, and nothing on this path looked at it. So a
    * document shared with a client kept serving in full after the job was
    * deleted.
@@ -678,7 +678,7 @@ export async function getPublicProjectPageService(
 
   const supa = admin as unknown as SupabaseClient<any>;
   // `supa` is the service-role client, so every resolution here is scoped to
-  // this page's own project — otherwise a `data-photo-id` the author pasted in
+  // this page's own project - otherwise a `data-photo-id` the author pasted in
   // by hand would be signed regardless of who owns the photo.
   const [contentHtml, headerHtml, footerHtml] = await Promise.all([
     resolvePageImages(row.content_html, supa, row.project_id).then(stripPhotoSlots),
@@ -692,7 +692,7 @@ export async function getPublicProjectPageService(
   /*
    * Sanitise on the way out to anonymous visitors. `content_html` is only
    * length-validated on write, so whatever an authenticated author PUTs is
-   * stored verbatim — and the public share route injects it with
+   * stored verbatim - and the public share route injects it with
    * `dangerouslySetInnerHTML`. Cleaning here fixes every row already in the
    * database, not just future writes.
    */

@@ -6,13 +6,13 @@ import { POLICY_LAST_UPDATED, PRIVACY_EMAIL, mailtoHref } from "@/lib/contact";
 export const Route = createFileRoute("/privacy-policy")({
   head: () => ({
     meta: [
-      { title: "Privacy Policy — Everbreeze SitePix" },
+      { title: "Privacy Policy - Everbreeze SitePix" },
       {
         name: "description",
         content:
           "Privacy Policy for Everbreeze SitePix. Learn how we collect, use, store, and protect your personal information, job site photos, and AI analysis data.",
       },
-      { property: "og:title", content: "Privacy Policy — Everbreeze SitePix" },
+      { property: "og:title", content: "Privacy Policy - Everbreeze SitePix" },
       {
         property: "og:description",
         content:
@@ -89,8 +89,8 @@ function PrivacyPolicyPage() {
                   extracts the original capture time and the GPS latitude and longitude, storing
                   them alongside the photo so it can be placed on the project map and timeline. If a
                   photo carries no GPS data we fall back to the coordinates of the project address.
-                  Because these coordinates identify the job site — usually a private property
-                  belonging to your client — treat them as location data and consider that before
+                  Because these coordinates identify the job site - usually a private property
+                  belonging to your client - treat them as location data and consider that before
                   publishing a photo through a public share link. You can strip EXIF data from a
                   file before uploading it if you do not want us to receive it.
                 </p>
@@ -158,37 +158,37 @@ function PrivacyPolicyPage() {
             </p>
             <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
               <li>
-                <strong className="text-foreground">Supabase</strong> — For database hosting,
+                <strong className="text-foreground">Supabase</strong> - For database hosting,
                 authentication, and file storage. Your account data, project information, and photos
                 are stored securely in Supabase infrastructure.
               </li>
               <li>
-                <strong className="text-foreground">Google Gemini / AI Providers</strong> — For
+                <strong className="text-foreground">Google Gemini / AI Providers</strong> - For
                 AI-powered analysis features. When you use AI features, your photos and text queries
                 may be processed by Google Gemini. These providers have their own privacy policies
                 governing AI data processing.
               </li>
               <li>
-                <strong className="text-foreground">Google Cloud Text-to-Speech</strong> — Text you
+                <strong className="text-foreground">Google Cloud Text-to-Speech</strong> - Text you
                 ask the app to read aloud is sent to Google to synthesise the audio.
               </li>
               <li>
-                <strong className="text-foreground">Google Maps Platform</strong> — Project and job
+                <strong className="text-foreground">Google Maps Platform</strong> - Project and job
                 site addresses you enter are sent to Google&apos;s Geocoding and Maps APIs to
                 convert them to coordinates and render map views.
               </li>
               <li>
-                <strong className="text-foreground">Stripe</strong> — For subscription payments.
+                <strong className="text-foreground">Stripe</strong> - For subscription payments.
                 Stripe receives your billing details and card data directly; we store only a
                 customer and subscription reference, never your full card number.
               </li>
               <li>
-                <strong className="text-foreground">Resend</strong> — For transactional email such
+                <strong className="text-foreground">Resend</strong> - For transactional email such
                 as team invitations, share notifications, and account messages. Resend receives the
                 recipient address and message content.
               </li>
               <li>
-                <strong className="text-foreground">Vercel and Railway</strong> — For hosting the
+                <strong className="text-foreground">Vercel and Railway</strong> - For hosting the
                 website and the API. They process request data (including IP address and user agent)
                 and keep short-lived operational logs.
               </li>
@@ -196,7 +196,7 @@ function PrivacyPolicyPage() {
                 {/* No analytics SDK ships in the app today, so this stays as the
                     forward-looking "may use" wording it has always had. Name the
                     provider here the day one is added. */}
-                <strong className="text-foreground">Analytics Providers</strong> — We may use
+                <strong className="text-foreground">Analytics Providers</strong> - We may use
                 anonymized analytics tools to understand app usage and performance.
               </li>
             </ul>
@@ -209,8 +209,8 @@ function PrivacyPolicyPage() {
             <p className="text-muted-foreground mt-2">
               <strong className="text-foreground">Public share links.</strong> When you create a
               share link, portfolio page, project page, or website embed, the photos, captions and
-              report content you include become viewable by anyone who has the URL — no sign-in
-              required — and published portfolio and project pages may be indexed by search engines.
+              report content you include become viewable by anyone who has the URL - no sign-in
+              required - and published portfolio and project pages may be indexed by search engines.
               You control what goes into a share link and you can revoke it from within the app.
             </p>
             <p className="text-muted-foreground mt-3">
@@ -243,28 +243,28 @@ function PrivacyPolicyPage() {
             </p>
             <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
               <li>
-                <strong className="text-foreground">Access</strong> — Request a copy of the personal
+                <strong className="text-foreground">Access</strong> - Request a copy of the personal
                 data we hold about you.
               </li>
               <li>
-                <strong className="text-foreground">Correction</strong> — Request that we correct
+                <strong className="text-foreground">Correction</strong> - Request that we correct
                 inaccurate or incomplete information.
               </li>
               <li>
-                <strong className="text-foreground">Deletion</strong> — Request deletion of your
+                <strong className="text-foreground">Deletion</strong> - Request deletion of your
                 account and associated data. You can delete your account at any time from the
                 Settings page.
               </li>
               <li>
-                <strong className="text-foreground">Portability</strong> — Request your data in a
+                <strong className="text-foreground">Portability</strong> - Request your data in a
                 structured, machine-readable format.
               </li>
               <li>
-                <strong className="text-foreground">Restriction</strong> — Request that we limit how
+                <strong className="text-foreground">Restriction</strong> - Request that we limit how
                 we use your data in certain circumstances.
               </li>
               <li>
-                <strong className="text-foreground">Objection</strong> — Object to processing based
+                <strong className="text-foreground">Objection</strong> - Object to processing based
                 on legitimate interests.
               </li>
             </ul>
@@ -350,7 +350,7 @@ function PrivacyPolicyPage() {
               <p className="font-medium text-foreground">Everbreeze SitePix</p>
               <p className="text-muted-foreground">
                 Email:{" "}
-                {/* Was privacy@everbreeze.io — a domain that is not the product
+                {/* Was privacy@everbreeze.io - a domain that is not the product
                     domain. Held as a placeholder until the owner confirms the
                     real mailbox rather than publishing one that may bounce. */}
                 {privacyMailto ? (

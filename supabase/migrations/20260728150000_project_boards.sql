@@ -1,6 +1,6 @@
--- "Tag Boards" — team-shared, auto-updating project boards (any project whose
+-- "Tag Boards" - team-shared, auto-updating project boards (any project whose
 -- tags intersect the board's tag_ids appears automatically). Distinct from the
--- existing project_groups (manual, per-user, static membership) — see
+-- existing project_groups (manual, per-user, static membership) - see
 -- docs/new-features-plan.md §5 for why this is a separate table.
 -- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog). Idempotent.
 

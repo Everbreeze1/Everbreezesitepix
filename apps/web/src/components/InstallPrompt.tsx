@@ -14,7 +14,7 @@ const DISMISS_DAYS = 14;
  * How long the banner stays up before retiring itself.
  *
  * It is a fixed overlay pinned above the mobile tab bar, so on a phone it sits
- * directly over whatever the page puts at the bottom of the screen — which on
+ * directly over whatever the page puts at the bottom of the screen - which on
  * every form in the app is the primary submit button. Nothing about the layout
  * reserves space for it, and there is no route where it is suppressed, so a
  * user who ignores it is left tapping through it until they think to dismiss it.
@@ -52,7 +52,7 @@ function isIOS() {
  * banner occupies 504-568px and the password input sits at 528-573px, so
  * `elementFromPoint` at the centre of that field returns the banner's text.
  * A tap aimed at the password box hits the upsell, which means nobody can
- * create an account on a phone until the 15s auto-retire fires — on an app
+ * create an account on a phone until the 15s auto-retire fires - on an app
  * whose users are almost entirely on phones.
  *
  * Suppressing it here rather than reserving layout space: asking someone to

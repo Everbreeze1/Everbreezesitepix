@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 
 /**
- * Snippets are team-shared when the user has a team, personal otherwise —
+ * Snippets are team-shared when the user has a team, personal otherwise -
  * they must never hard-fail for solo users. Visibility is enforced by RLS
  * ("mine OR my team's"), so reads don't filter by team here.
  */

@@ -8,8 +8,8 @@ type Queue = Record<string, Record<string, Record<string, unknown>>>;
 /**
  * One persistence model for the whole template builder.
  *
- * Both designers used to mix write strategies — some edits fired instantly,
- * some waited for a Save button, some only landed on blur — which is why you
+ * Both designers used to mix write strategies - some edits fired instantly,
+ * some waited for a Save button, some only landed on blur - which is why you
  * could never tell whether the thing you just typed had stuck. Everything now
  * goes through here: patches land in local state first, get coalesced per row,
  * and flush shortly after you stop typing, feeding one honest status line.
@@ -48,7 +48,7 @@ export function useAutosave(
       return true;
     } catch (e) {
       // Put the unsent patches back rather than dropping them. They used to be
-      // gone the moment a write failed — the status line said "Not saved" and
+      // gone the moment a write failed - the status line said "Not saved" and
       // that was the end of it, so a crew filling a checklist through a bad
       // signal could lose an answer with no way to get it back. Now the next
       // flush (the next edit, or the one on unmount) retries them.

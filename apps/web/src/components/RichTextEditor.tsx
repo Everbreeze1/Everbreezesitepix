@@ -25,7 +25,7 @@ interface Props {
   compact?: boolean;
   // For single-line use (section titles): disable Enter creating new paragraphs visually
   singleLine?: boolean;
-  // Keep the toolbar hidden until the field is focused — for editors embedded
+  // Keep the toolbar hidden until the field is focused - for editors embedded
   // inside a page's visual surface (e.g. a document header/footer), where a
   // permanently visible toolbar is distracting.
   toolbarOnFocus?: boolean;
@@ -121,7 +121,7 @@ export function RichTextEditor({
  * `onMouseDown` preventing default is the load-bearing line, not a nicety.
  * Pressing a button moves focus out of the contenteditable, which fires the
  * editor's `onBlur`. In `toolbarOnFocus` mode that sets `focused` to false and
- * React unmounts the toolbar *between mousedown and mouseup* — so no click event
+ * React unmounts the toolbar *between mousedown and mouseup* - so no click event
  * ever lands and the command never runs. Every control in the document header,
  * the document footer and the two field-record write-ups was inert: the button
  * highlighted on hover, and did nothing.
@@ -233,7 +233,7 @@ function Toolbar({
               <ToolButton
                 onRun={() => editor.chain().focus().setHorizontalRule().run()}
                 label="Insert page break"
-                title="Insert page break — the rest of this section starts on a new page"
+                title="Insert page break - the rest of this section starts on a new page"
               >
                 <SeparatorHorizontal className="h-3.5 w-3.5" />
               </ToolButton>

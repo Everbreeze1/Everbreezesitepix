@@ -221,7 +221,7 @@ const STYLE_PRESETS: {
     label: "Report",
     icon: Newspaper,
     description: "Formal report with sections and findings.",
-    html: `<h1>{{project_name}} — Field Report</h1>
+    html: `<h1>{{project_name}} - Field Report</h1>
 <p><em>{{date}} · Prepared by {{prepared_by}}</em></p>
 <h2>Overview</h2>
 <p>Summary of site conditions observed at {{project_address}}.</p>
@@ -248,7 +248,7 @@ const STYLE_PRESETS: {
     label: "Checklist summary",
     icon: FileCheck2,
     description: "Recap format for completed checklists.",
-    html: `<h1>{{project_name}} — Checklist Summary</h1>
+    html: `<h1>{{project_name}} - Checklist Summary</h1>
 <p><em>Completed {{date}} · {{prepared_by}}</em></p>
 <h2>Completed items</h2>
 <ul><li>Item one</li><li>Item two</li></ul>
@@ -273,7 +273,7 @@ const STYLE_PRESETS: {
     label: "Walkthrough report",
     icon: Footprints,
     description: "Structured walkthrough with observations by area.",
-    html: `<h1>{{project_name}} — Walkthrough Report</h1>
+    html: `<h1>{{project_name}} - Walkthrough Report</h1>
 <p><em>{{date}} · Led by {{prepared_by}} · Weather: {{weather}}</em></p>
 <h2>Attendees</h2>
 <ul><li>{{prepared_by}} ({{prepared_by_title}})</li><li>{{client_name}}</li></ul>
@@ -302,8 +302,8 @@ const STYLE_PRESETS: {
 <strong>Project #:</strong> {{project_number}}</p>
 <h2>Crew on site</h2>
 <ul>
-  <li>Trade / company — number of workers — hours</li>
-  <li>Trade / company — number of workers — hours</li>
+  <li>Trade / company - number of workers - hours</li>
+  <li>Trade / company - number of workers - hours</li>
 </ul>
 <h2>Work performed today</h2>
 <ol>
@@ -313,7 +313,7 @@ const STYLE_PRESETS: {
 </ol>
 <h2>Deliveries & equipment</h2>
 <ul>
-  <li>Material or equipment — supplier — quantity</li>
+  <li>Material or equipment - supplier - quantity</li>
 </ul>
 <h2>Issues, delays & safety</h2>
 <blockquote><p>Record any RFIs, blockers, incidents, or safety observations here. Note who was informed and the follow-up action taken.</p></blockquote>
@@ -325,7 +325,7 @@ const STYLE_PRESETS: {
   <li>Coordination items or deliveries expected</li>
 </ul>
 <hr>
-<p><em>Signed: {{prepared_by}} — {{date}}</em></p>`,
+<p><em>Signed: {{prepared_by}} - {{date}}</em></p>`,
   },
   {
     key: "sitelog_basic",
@@ -333,49 +333,49 @@ const STYLE_PRESETS: {
     icon: ClipboardList,
     description: "Simple daily summary with photos and notes.",
     html: `<h1>{{project_name}}</h1>
-<p><strong>Daily Site Log</strong> — {{date}}</p>
+<p><strong>Daily Site Log</strong> - {{date}}</p>
 <p><em>{{prepared_by}} · {{company_name}}</em></p>
 <hr>
 <h2>Summary</h2>
 <p>Brief overview of what happened on site today at {{project_address}}. Weather was {{weather}}.</p>
 <h2>Work completed</h2>
 <ul>
-  <li>Task one — location / trade</li>
-  <li>Task two — location / trade</li>
-  <li>Task three — location / trade</li>
+  <li>Task one - location / trade</li>
+  <li>Task two - location / trade</li>
+  <li>Task three - location / trade</li>
 </ul>
 <h2>Photos &amp; notes</h2>
 <blockquote><p>Attach the day's photos and add a short caption for each. Highlight anything worth flagging for the client or the team.</p></blockquote>
 <h2>Notes for tomorrow</h2>
 <p>Anything the crew or client should know before the next shift.</p>
 <hr>
-<p><em>Prepared by {{prepared_by}} — {{date}}</em></p>`,
+<p><em>Prepared by {{prepared_by}} - {{date}}</em></p>`,
   },
   {
     key: "sitelog_walkthrough",
     label: "Detailed walkthrough log (sample)",
     icon: Footprints,
     description: "Structured walkthrough with findings, action items, and photo notes.",
-    html: `<h1>{{project_name}} — Walkthrough Log</h1>
+    html: `<h1>{{project_name}} - Walkthrough Log</h1>
 <p><strong>Date:</strong> {{date}} · <strong>Weather:</strong> {{weather}}</p>
 <p><strong>Led by:</strong> {{prepared_by}}, {{prepared_by_title}} · <strong>Client:</strong> {{client_name}}</p>
 <p><strong>Location:</strong> {{project_address}} · <strong>Project #:</strong> {{project_number}}</p>
 <hr>
 <h2>1. Attendees</h2>
 <ul>
-  <li>{{prepared_by}} — {{prepared_by_title}} ({{company_name}})</li>
-  <li>{{client_name}} — Owner representative</li>
-  <li>Additional attendee — role</li>
+  <li>{{prepared_by}} - {{prepared_by_title}} ({{company_name}})</li>
+  <li>{{client_name}} - Owner representative</li>
+  <li>Additional attendee - role</li>
 </ul>
 <h2>2. Scope of walkthrough</h2>
 <p>Describe the areas covered, the purpose of the visit, and any specific items requested by the client.</p>
 <h2>3. Findings by area</h2>
-<h3>Area A — e.g. Ground floor</h3>
+<h3>Area A - e.g. Ground floor</h3>
 <ul>
   <li><strong>Observation:</strong> what was seen</li>
   <li><strong>Status:</strong> on track / delayed / needs attention</li>
 </ul>
-<h3>Area B — e.g. Mechanical room</h3>
+<h3>Area B - e.g. Mechanical room</h3>
 <ul>
   <li><strong>Observation:</strong> what was seen</li>
   <li><strong>Status:</strong> on track / delayed / needs attention</li>
@@ -383,73 +383,73 @@ const STYLE_PRESETS: {
 <h2>4. Photo notes</h2>
 <blockquote><p>Reference each photo by number and add a one-line caption describing what it shows and why it matters.</p></blockquote>
 <ol>
-  <li>Photo 1 — caption</li>
-  <li>Photo 2 — caption</li>
-  <li>Photo 3 — caption</li>
+  <li>Photo 1 - caption</li>
+  <li>Photo 2 - caption</li>
+  <li>Photo 3 - caption</li>
 </ol>
 <h2>5. Action items</h2>
 <ol>
-  <li>Action — <strong>Owner:</strong> name — <strong>Due:</strong> date</li>
-  <li>Action — <strong>Owner:</strong> name — <strong>Due:</strong> date</li>
+  <li>Action - <strong>Owner:</strong> name - <strong>Due:</strong> date</li>
+  <li>Action - <strong>Owner:</strong> name - <strong>Due:</strong> date</li>
 </ol>
 <h2>6. Next walkthrough</h2>
 <p>Proposed date, attendees, and focus areas for the next visit.</p>
 <hr>
-<p><em>Signed: {{prepared_by}} — {{date}}</em></p>`,
+<p><em>Signed: {{prepared_by}} - {{date}}</em></p>`,
   },
   {
     key: "sitelog_hvac",
     label: "HVAC / construction log (sample)",
     icon: FileCheck2,
     description: "Technical observations, system progress, and recommendations.",
-    html: `<h1>{{project_name}} — HVAC / Construction Log</h1>
+    html: `<h1>{{project_name}} - HVAC / Construction Log</h1>
 <p><strong>Date:</strong> {{date}} · <strong>Project #:</strong> {{project_number}}</p>
 <p><strong>Inspector:</strong> {{prepared_by}}, {{prepared_by_title}} · {{company_name}}</p>
 <p><strong>Site:</strong> {{project_address}} · <strong>Conditions:</strong> {{weather}}</p>
 <hr>
 <h2>1. Systems inspected</h2>
 <ul>
-  <li>Air handling unit(s) — location / tag</li>
-  <li>Ductwork run(s) — floor / zone</li>
-  <li>Piping / refrigerant lines — segment</li>
-  <li>Controls &amp; thermostats — zone</li>
+  <li>Air handling unit(s) - location / tag</li>
+  <li>Ductwork run(s) - floor / zone</li>
+  <li>Piping / refrigerant lines - segment</li>
+  <li>Controls &amp; thermostats - zone</li>
 </ul>
 <h2>2. Technical observations</h2>
 <h3>Mechanical</h3>
 <ul>
-  <li>Component — measurement / reading — status</li>
-  <li>Component — measurement / reading — status</li>
+  <li>Component - measurement / reading - status</li>
+  <li>Component - measurement / reading - status</li>
 </ul>
 <h3>Electrical &amp; controls</h3>
 <ul>
-  <li>Panel / circuit — observation</li>
-  <li>Sensor / control — observation</li>
+  <li>Panel / circuit - observation</li>
+  <li>Sensor / control - observation</li>
 </ul>
 <h3>Structural / rough-in</h3>
 <ul>
-  <li>Framing, penetrations, hangers — observation</li>
+  <li>Framing, penetrations, hangers - observation</li>
 </ul>
 <h2>3. Progress vs. schedule</h2>
 <blockquote><p>Summarize percent complete for each system and call out anything ahead of or behind the baseline schedule.</p></blockquote>
 <ol>
-  <li>HVAC rough-in — % complete — on track / behind</li>
-  <li>Duct insulation — % complete — on track / behind</li>
-  <li>Startup &amp; commissioning — % complete — on track / behind</li>
+  <li>HVAC rough-in - % complete - on track / behind</li>
+  <li>Duct insulation - % complete - on track / behind</li>
+  <li>Startup &amp; commissioning - % complete - on track / behind</li>
 </ol>
 <h2>4. Deficiencies &amp; safety</h2>
 <ul>
-  <li>Deficiency — location — severity — corrective action</li>
-  <li>Safety observation — corrective action</li>
+  <li>Deficiency - location - severity - corrective action</li>
+  <li>Safety observation - corrective action</li>
 </ul>
 <h2>5. Recommendations</h2>
 <ol>
-  <li>Recommendation — responsible party — target date</li>
-  <li>Recommendation — responsible party — target date</li>
+  <li>Recommendation - responsible party - target date</li>
+  <li>Recommendation - responsible party - target date</li>
 </ol>
 <h2>6. Photos referenced</h2>
 <p>Attach labeled photos of each system inspected, with tags matching the observations above.</p>
 <hr>
-<p><em>Report prepared by {{prepared_by}} ({{prepared_by_title}}) — {{date}}</em></p>`,
+<p><em>Report prepared by {{prepared_by}} ({{prepared_by_title}}) - {{date}}</em></p>`,
   },
 ];
 
@@ -517,7 +517,7 @@ function escapeAttr(s: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Placeholder decoration — styles {{token}} as an editable pill in the editor.
+// Placeholder decoration - styles {{token}} as an editable pill in the editor.
 // The raw text stays fully selectable/deletable; we only add a class so it
 // visually reads as a chip. Placeholders remain 100% editable.
 // ---------------------------------------------------------------------------
@@ -579,7 +579,7 @@ const PlaceholderChips = Extension.create<{ getValue: (token: string) => string 
                         const span = document.createElement("span");
                         span.className = "doc-chip-inline doc-chip-filled-inline";
                         span.textContent = filled;
-                        span.setAttribute("title", `${label} — live value from Fields panel`);
+                        span.setAttribute("title", `${label} - live value from Fields panel`);
                         span.setAttribute("data-token", token);
                         return span;
                       },
@@ -590,7 +590,7 @@ const PlaceholderChips = Extension.create<{ getValue: (token: string) => string 
                   decos.push(
                     Decoration.inline(from, to, {
                       class: "doc-chip-inline",
-                      title: `${label} — editable placeholder`,
+                      title: `${label} - editable placeholder`,
                     }),
                   );
                 }
@@ -746,13 +746,13 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
    * `select("*")`, and the editor renders `editor.body.html` through
    * `dangerouslySetInnerHTML`. Template bodies are authored HTML that came from
    * a project page, they are shared across the whole team, and a teammate can
-   * write one directly via PostgREST — so rendering the raw column is stored
+   * write one directly via PostgREST - so rendering the raw column is stored
    * XSS against every other member of the team.
    *
    * `getDocumentTemplate` runs the same sanitiser the public page share uses
    * (apps/api sanitize-page-html.ts, covered by tests/sanitize-page-html.test.ts)
    * and returns cleaned HTML. Reusing it beats adding a second, unproven
-   * sanitiser to the client — and it disarms rows that are already poisoned,
+   * sanitiser to the client - and it disarms rows that are already poisoned,
    * which a write-side fix alone would not.
    *
    * `style` and `description` still come from the local row: they are plain
@@ -768,7 +768,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
         body: { ...local, html: (fresh as { html?: string })?.html ?? "" },
       });
     } catch (e: any) {
-      // Never fall back to the unsanitised local copy — that is the bug.
+      // Never fall back to the unsanitised local copy - that is the bug.
       toast.error(e?.message ?? "Could not open this template");
     }
   }
@@ -822,7 +822,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     const { data, error } = await supabase
       .from("document_templates" as any)
       .insert({
-        // Never inherit a null team_id from an example — the copy must belong
+        // Never inherit a null team_id from an example - the copy must belong
         // to the caller's team so it is editable.
         name: `${t.name} (copy)`,
         team_id: teamId ?? null,
@@ -900,7 +900,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
         <div>
           <p className="font-semibold">How to use a template</p>
           <p className="mt-0.5 text-blue-900/80 dark:text-blue-200/80">
-            Hit <strong>Use in a project</strong> on any template below and pick the job — the
+            Hit <strong>Use in a project</strong> on any template below and pick the job - the
             document is created with its fields already filled in. They&rsquo;re also available
             inside a project under <strong>Documents → Create → More Templates</strong>.
           </p>
@@ -926,7 +926,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
             const body = parseBody(t.body);
             const preset = STYLE_PRESETS.find((p) => p.key === body.style) ?? STYLE_PRESETS[0];
             const Icon = preset.icon;
-            // Built-in examples (no team, no owner) are read-only for everyone —
+            // Built-in examples (no team, no owner) are read-only for everyone -
             // RLS rejects writes to them, so only Duplicate is offered.
             const isExample = t.team_id === null;
             return (
@@ -967,7 +967,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                 </div>
                 <div className="mt-auto flex flex-wrap gap-1 border-t border-border/60 pt-3">
                   {/* The primary verb. Without it the Templates page could only
-                      author templates, never apply one — which is exactly why
+                      author templates, never apply one - which is exactly why
                       "not sure how to use that template again" came back as
                       feedback. Available on examples too: using one doesn't
                       write to it, so the read-only rule doesn't apply. */}
@@ -1129,7 +1129,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
         </DialogContent>
       </Dialog>
 
-      {/* Editor — full-screen Word-like surface */}
+      {/* Editor - full-screen Word-like surface */}
       <Dialog
         open={!!editor}
         onOpenChange={(v) => {
@@ -1181,7 +1181,7 @@ function ChipStyles() {
         cursor: default;
         vertical-align: baseline;
       }
-      /* Editor: style the raw {{token}} text as a pill — still fully editable */
+      /* Editor: style the raw {{token}} text as a pill - still fully editable */
       .doc-chip-inline {
         background: #dbeafe;
         color: #1e3a8a;
@@ -1225,7 +1225,7 @@ function ChipStyles() {
         line-height: 1.7;
       }
       /* The preview pane is the same document, so it gets the same face and
-         measure — otherwise "preview" means "the same words in a different
+         measure - otherwise "preview" means "the same words in a different
          typeface". */
       .doc-page .doc-preview {
         font-family: ui-serif, Georgia, "Times New Roman", serif;
@@ -1235,7 +1235,7 @@ function ChipStyles() {
       }
       /* Every rule below is shared with .doc-preview, the read-only pane the
          Preview toggle shows. That pane's className leans on the prose
-         utilities, which are a no-op in this app — @tailwindcss/typography is
+         utilities, which are a no-op in this app - @tailwindcss/typography is
          not installed, and the codebase declares typography per surface
          instead (see the .tiptap and .wt-markdown blocks in styles.css).
          Nobody ever declared it for this one, so Tailwind's preflight was left
@@ -1271,8 +1271,8 @@ function ChipStyles() {
       }
       /* Photo slots get the same box model the project page editor gives them
          (styles.css:256-279). Those rules are all scoped to .tiptap, a class
-         this surface deliberately does not use — it has its own typography
-         above — so without restating them here a "2 photos per page" slot row
+         this surface deliberately does not use - it has its own typography
+         above - so without restating them here a "2 photos per page" slot row
          previews STACKED and full-width, while the project page it is authored
          for renders it as a side-by-side pair. Scoped to .doc-page, which
          wraps both the editor and the preview pane.
@@ -1325,7 +1325,7 @@ function DocumentEditorSurface({
   const tiptap = useEditor({
     // Deliberately the same extension set as the project page editor. A
     // template is authored here and rendered there, so anything missing from
-    // this list is something a user simply cannot put in their own template —
+    // this list is something a user simply cannot put in their own template -
     // which is why the seeded templates (tables, photo slots, task lists,
     // alignment, colour) were previously impossible to reproduce by hand.
     extensions: [
@@ -1398,7 +1398,7 @@ function DocumentEditorSurface({
     const title = editor.name || "Document";
     const win = window.open("", "_blank", "width=900,height=1100");
     if (!win) {
-      toast.error("Popup blocked — allow popups to export.");
+      toast.error("Popup blocked - allow popups to export.");
       return;
     }
     win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(
@@ -1536,7 +1536,7 @@ function DocumentEditorSurface({
               </>
             ) : (
               <div className="doc-page">
-                {/* Quick fields — side-by-side inputs above the document.
+                {/* Quick fields - side-by-side inputs above the document.
                   Editing here instantly updates the matching placeholder in
                   the document body (via PlaceholderChips widget decorations). */}
                 {quickFields.length > 0 && (
@@ -1569,7 +1569,7 @@ function DocumentEditorSurface({
                     </div>
                   </div>
                 )}
-                {/* Formatting toolbar — the same component the project page
+                {/* Formatting toolbar - the same component the project page
                     editor uses, so a template can contain everything a real
                     document can. Project-only actions (insert a project photo,
                     snippets, running header/footer) are omitted: a template has
@@ -1623,7 +1623,7 @@ function DocumentEditorSurface({
                   Editable fields
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Change any value — the document updates live.
+                  Change any value - the document updates live.
                 </p>
                 {(() => {
                   const editableTokens = Array.from(

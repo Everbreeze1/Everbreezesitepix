@@ -1,5 +1,5 @@
 /**
- * Exercises the checklist builder — the screen from the original bug report.
+ * Exercises the checklist builder - the screen from the original bug report.
  *
  * The test account is empty, so nothing can be measured without data. This
  * creates ONE starter template ("HVAC Inspection", the same one in the report),
@@ -128,9 +128,9 @@ try {
   const gone = await page.evaluate(() => !document.body.innerText.includes("HVAC Inspection"));
   say(`cleanup removed the template: ${gone}`);
   if (!gone)
-    findings.push("CLEANUP INCOMPLETE — 'HVAC Inspection' still present, delete it manually");
+    findings.push("CLEANUP INCOMPLETE - 'HVAC Inspection' still present, delete it manually");
 } catch (e) {
-  findings.push(`CLEANUP FAILED (${String(e).slice(0, 120)}) — delete 'HVAC Inspection' manually`);
+  findings.push(`CLEANUP FAILED (${String(e).slice(0, 120)}) - delete 'HVAC Inspection' manually`);
 }
 
 await browser.close();

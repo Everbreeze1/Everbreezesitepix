@@ -13,8 +13,8 @@
  *
  * The endpoint does not fetch remote images. It accepts inline base64 only.
  *
- * That this is specifically the *image* payload — not the key, model, endpoint
- * or region — was confirmed by the text-only path working from the same
+ * That this is specifically the *image* payload - not the key, model, endpoint
+ * or region - was confirmed by the text-only path working from the same
  * deployment with the same `chatEndpoint()`: `chatWithAssistant` returns 200
  * while `analyzePhoto` and `extractPhotoText` return INVALID_ARGUMENT.
  */
@@ -22,7 +22,7 @@
 /**
  * Ceiling on the fetched image, before base64.
  *
- * Base64 inflates by 4/3, so this lands around 9.3 MB on the wire — inside
+ * Base64 inflates by 4/3, so this lands around 9.3 MB on the wire - inside
  * Gemini's inline-data limit with headroom for the prompt and the tool schema.
  * Phone photos are typically 2-5 MB, so this only bites on unusually large
  * originals, where failing with a clear message beats a 400 from the gateway.
@@ -43,7 +43,7 @@ export async function inlineImageAsDataUrl(url: string): Promise<string> {
     throw new Error(`Could not download the photo for analysis (HTTP ${res.status})`);
   }
 
-  // Trust the declared length when present — cheaper than buffering a 50 MB file
+  // Trust the declared length when present - cheaper than buffering a 50 MB file
   // only to reject it.
   const declared = Number(res.headers.get("content-length") ?? 0);
   if (declared && declared > MAX_IMAGE_BYTES) {

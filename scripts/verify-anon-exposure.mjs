@@ -1,7 +1,7 @@
 /**
  * Verify that no table leaks rows to an anonymous caller.
  *
- * "Anonymous" here means the publishable key with no Authorization header — and since
+ * "Anonymous" here means the publishable key with no Authorization header - and since
  * that key ships inside the browser bundle, anonymous is equivalent to "anyone on the
  * internet". Any table that returns rows to this script is world-readable.
  *
@@ -44,7 +44,7 @@ if (!SUPABASE_URL || !ANON_KEY) {
 
 /**
  * Tables that are legitimately readable without authentication, if any.
- * Keep this list empty unless there is a deliberate, reviewed reason — public share
+ * Keep this list empty unless there is a deliberate, reviewed reason - public share
  * pages are served by the service-role client through `pub()` RPC ops, not by anon
  * reads, so they do not need an entry here.
  */
@@ -66,7 +66,7 @@ const TABLES = [
   "team_members", "team_review_links", "teams", "text_snippets", "walkthrough_photos",
   "walkthroughs", "workflow_template_items", "workflow_template_phases", "workflow_templates",
   // Restored by 20260811003000. They hold private chat history and, in
-  // photo_shares, the share `token` itself — exactly the shape of data that
+  // photo_shares, the share `token` itself - exactly the shape of data that
   // leaked from `walkthroughs`, so they are the most important rows here.
   "conversations", "messages", "photo_shares",
 ];
@@ -95,14 +95,14 @@ for (const table of TABLES) {
   }
 }
 
-for (const line of errors) console.error(`  network error — ${line}`);
+for (const line of errors) console.error(`  network error - ${line}`);
 
 if (leaks.length === 0) {
-  console.log(`OK — ${TABLES.length} tables probed, none readable by an anonymous caller.`);
+  console.log(`OK - ${TABLES.length} tables probed, none readable by an anonymous caller.`);
   process.exit(errors.length ? 2 : 0);
 }
 
-console.error(`\nFAIL — ${leaks.length} table(s) readable by ANY anonymous caller:\n`);
+console.error(`\nFAIL - ${leaks.length} table(s) readable by ANY anonymous caller:\n`);
 for (const { table, rows } of leaks) {
   console.error(`  ${table.padEnd(32)} ${rows} rows`);
 }

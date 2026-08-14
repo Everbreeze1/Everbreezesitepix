@@ -12,8 +12,8 @@ export function friendlyError(e: unknown, fallback: string): string {
     return "You don't have permission to do that on this project";
   if (/duplicate key|already exists/i.test(msg)) return "That already exists";
   if (/violates foreign key/i.test(msg))
-    return "Something it depends on was removed — refresh and try again";
-  if (/fetch|network|timeout|offline/i.test(msg)) return "No connection — try again in a moment";
+    return "Something it depends on was removed - refresh and try again";
+  if (/fetch|network|timeout|offline/i.test(msg)) return "No connection - try again in a moment";
   if (/payload too large|exceeded the maximum/i.test(msg)) return "That file is too large";
   return fallback;
 }
@@ -21,16 +21,16 @@ export function friendlyError(e: unknown, fallback: string): string {
 /**
  * Whether a query failed because the database is behind the code.
  *
- * Migrations here are applied by hand — every file in `supabase/migrations`
+ * Migrations here are applied by hand - every file in `supabase/migrations`
  * carries a header saying to run `supabase db push` or paste it into the SQL
- * editor — so there is a real window between pulling a branch and applying it
+ * editor - so there is a real window between pulling a branch and applying it
  * where a `select` names a column that does not exist yet. PostgREST answers
  * `42703` (undefined_column) and supabase-js hands it back as an ordinary error,
  * indistinguishable from a network failure to the caller.
  *
  * Without this check a whole panel renders "you may be offline. Nothing has been
- * lost — try again once you have a connection", and the retry button can never
- * succeed. The one thing that would fix it — running a migration — is the one
+ * lost - try again once you have a connection", and the retry button can never
+ * succeed. The one thing that would fix it - running a migration - is the one
  * thing the message does not mention.
  */
 export function isPendingMigrationError(e: unknown): boolean {

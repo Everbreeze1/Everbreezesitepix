@@ -267,7 +267,7 @@ import {
 
 export type RpcEntry = {
   public?: boolean;
-  /** Expensive / side-effecting ops — clients SHOULD send Idempotency-Key. */
+  /** Expensive / side-effecting ops - clients SHOULD send Idempotency-Key. */
   idempotent?: boolean;
   handle: (ctx: ServiceContext | null, data: unknown) => Promise<unknown>;
 };
@@ -460,7 +460,7 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     (d) => applyProjectBlueprintInputSchema.parse(d),
     applyProjectBlueprintService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
-  // A pure read — deliberately not `{ idempotent: true }`, which is the
+  // A pure read - deliberately not `{ idempotent: true }`, which is the
   // write-dedup path.
   getProjectBlueprintOrigin: authed(
     (d) => getProjectBlueprintOriginInputSchema.parse(d),
@@ -720,7 +720,7 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     (d) => z.object({ walkthroughId: z.string().uuid() }).parse(d),
     createReportFromWalkthroughService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
-  // A Summary is a walkthrough, not a document — it writes a walkthroughs row
+  // A Summary is a walkthrough, not a document - it writes a walkthroughs row
   // with source='summary'. Marked idempotent like every other LLM-spending op
   // so a retry can't bill twice.
   generateWalkthroughSummary: authed(
@@ -944,14 +944,14 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     (d) => publicProjectPageInputSchema.parse(d),
     getPublicProjectPageService as (data: never) => Promise<unknown>,
   ),
-  // The project's own public link — what its printed QR code resolves to.
+  // The project's own public link - what its printed QR code resolves to.
   // See domains/projects/public-share.ts.
   getProjectShare: authed(
     (d) => getProjectShareInputSchema.parse(d),
     getProjectShareService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
-  // What the QR dialog opens with: a read that publishes the link if — and only
-  // if — nobody has ever chosen either way. `authed`, and it writes, so it is
+  // What the QR dialog opens with: a read that publishes the link if - and only
+  // if - nobody has ever chosen either way. `authed`, and it writes, so it is
   // covered by scripts/security-idor-check.mjs alongside setProjectShare.
   ensureProjectShare: authed(
     (d) => ensureProjectShareInputSchema.parse(d),

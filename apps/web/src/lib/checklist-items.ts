@@ -4,8 +4,8 @@ import type { LucideIcon } from "lucide-react";
 /**
  * The checklist answer-type vocabulary, in one place.
  *
- * This map used to exist twice — once in the template designer and once in the
- * project runner, minus the hints — so the two screens could describe the same
+ * This map used to exist twice - once in the template designer and once in the
+ * project runner, minus the hints - so the two screens could describe the same
  * concept differently, and adding a seventh type only showed up in one of them.
  * Both now read from here, which is also what keeps a "Pass / Fail" chip the
  * same shade of green whether you are authoring it or answering it.
@@ -82,7 +82,7 @@ export const TYPE_ORDER: ItemType[] = [
 /**
  * Whether a recorded answer counts as given.
  *
- * Deliberately does *not* look at pass/fail polarity — a "Fail" is an answer,
+ * Deliberately does *not* look at pass/fail polarity - a "Fail" is an answer,
  * not an incomplete item. Group-board rollups
  * (`apps/api/src/domains/projects/groups.ts`) count completion off
  * `completed_at` alone, so anything stricter here would make the two disagree.

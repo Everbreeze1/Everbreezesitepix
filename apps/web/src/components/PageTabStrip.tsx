@@ -15,7 +15,7 @@ export interface PageTabStripItem {
  * The projects index and the project home page shipped character-identical
  * copies of this markup, and the client still read the two screens as different
  * products. A comment saying "the same control the project home page uses" is
- * not the same control — this is. Anything that should be true of both strips
+ * not the same control - this is. Anything that should be true of both strips
  * gets changed here once.
  */
 export function PageTabStrip({

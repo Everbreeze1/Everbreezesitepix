@@ -14,7 +14,7 @@ import { PortfolioMap } from "./PortfolioMap";
 import { ShowcaseCard } from "./ShowcaseCard";
 
 /**
- * The portfolio home page — the front door the brochure never had.
+ * The portfolio home page - the front door the brochure never had.
  *
  * Section order is a sales argument, not a layout preference: prove it (hero +
  * numbers), show it (filterable work), explain it (about), localise it (map and
@@ -72,7 +72,7 @@ export function PortfolioHome({
             }
           />
 
-          {/* Filters only appear when they'd actually narrow anything — a lone
+          {/* Filters only appear when they'd actually narrow anything - a lone
               chip labelled with the only service is noise. */}
           {serviceTypes.length > 1 && (
             <div className="mt-8 flex flex-wrap gap-2">
@@ -95,7 +95,7 @@ export function PortfolioHome({
           {visible.length === 0 ? (
             <p className="mt-14 text-center text-sm text-neutral-400">
               {showcases.length === 0
-                ? "New projects are on the way — check back soon."
+                ? "New projects are on the way - check back soon."
                 : "No projects in that category yet."}
             </p>
           ) : (
@@ -302,7 +302,7 @@ function Hero({
         </div>
       </div>
 
-      {/* Proof strip. Real counts from real photos — the credibility argument
+      {/* Proof strip. Real counts from real photos - the credibility argument
           CompanyCam makes with "11,000+ showcased projects", scaled to one
           contractor. Hidden entirely when there's nothing to boast about. */}
       {stats.projects > 0 && (

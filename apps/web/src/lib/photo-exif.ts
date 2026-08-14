@@ -7,7 +7,7 @@ export interface PhotoMeta {
 }
 
 /**
- * Extract GPS + timestamp from a JPEG/HEIC file. Returns nulls on failure —
+ * Extract GPS + timestamp from a JPEG/HEIC file. Returns nulls on failure -
  * caller should fall back to project address coords and `now()`.
  */
 export async function extractPhotoMeta(file: File): Promise<PhotoMeta> {

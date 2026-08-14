@@ -45,7 +45,7 @@ export default tseslint.config(
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
       /*
-       * `any` is a warning, not an error — deliberately, and with a way out.
+       * `any` is a warning, not an error - deliberately, and with a way out.
        *
        * There are 756 of these across 84 files, and they are overwhelmingly not
        * laziness: `packages/db/src/database.ts` is stale (it describes 18 tables
@@ -64,7 +64,7 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "warn",
       /*
        * Empty `catch {}` is the house idiom for best-effort cleanup that must
-       * not mask the real error — stopping a MediaRecorder that may already be
+       * not mask the real error - stopping a MediaRecorder that may already be
        * stopped, revoking an object URL, deleting a storage blob after a failed
        * insert. All 30 occurrences are catch blocks. Every other kind of empty
        * block stays an error.

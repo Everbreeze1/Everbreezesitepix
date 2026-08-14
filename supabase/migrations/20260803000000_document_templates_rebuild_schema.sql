@@ -1,4 +1,4 @@
--- SitePix example-template library rebuild — part 1 of 2: schema.
+-- SitePix example-template library rebuild - part 1 of 2: schema.
 --
 -- Split from a single migration into two after a deadlock ran hitting it as
 -- one transaction: this file only ALTERs document_templates (needs a brief
@@ -11,12 +11,12 @@
 -- 20260803000001_document_templates_rebuild_seed.sql separately. If you hit
 -- SQLSTATE 40P01 (deadlock detected) again, close any other tab/query
 -- touching document_templates (Supabase Studio’s own Table Editor keeps a
--- live connection on whatever table it has open) and re-run — everything
+-- live connection on whatever table it has open) and re-run - everything
 -- here is idempotent.
 
 -- 0. Schema for ownerless built-in templates, carried over from the deleted
 --    20260730000000_document_template_examples.sql. Example templates are
---    modelled as `team_id IS NULL AND created_by IS NULL` — readable by every
+--    modelled as `team_id IS NULL AND created_by IS NULL` - readable by every
 --    authenticated user, writable by nobody (the pre-existing FOR ALL policy
 --    can never match a NULL created_by), so duplicating is the only way to get
 --    an editable copy.
@@ -33,7 +33,7 @@ CREATE POLICY "Anyone can read example document templates"
 
 -- 1. Retire the superseded seeds. Deleted rather than archived: they are
 --    ownerless built-ins (team_id IS NULL AND created_by IS NULL), so nobody's
---    own work is at risk. Documents already created FROM them are unaffected —
+--    own work is at risk. Documents already created FROM them are unaffected -
 --    project_pages copies the HTML at creation time and does not reference the
 --    template row.
 DELETE FROM public.document_templates

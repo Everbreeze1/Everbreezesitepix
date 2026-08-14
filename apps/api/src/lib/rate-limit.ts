@@ -3,15 +3,15 @@
  *
  * Scope is **one API instance**: the counters live in this Node process's heap,
  * so they reset on every Railway deploy/restart and are not a cluster-wide
- * quota — run two replicas and each one grants the full limit independently.
+ * quota - run two replicas and each one grants the full limit independently.
  * Good enough for abuse dampening, not for billing-grade enforcement. Making it
  * a real shared quota means moving the buckets to an external store (Redis or a
  * Postgres counter) keyed exactly as `clientRateKey` keys them; that is a
  * follow-up, not a drop-in swap, because it turns every check into a round trip.
  *
  * Memory: the map used to grow forever (one entry per user/IP, never removed).
- * It is now swept lazily from `rateLimit()` — no `setInterval`, which would keep
- * the event loop alive and fight the graceful shutdown in server.ts — plus a
+ * It is now swept lazily from `rateLimit()` - no `setInterval`, which would keep
+ * the event loop alive and fight the graceful shutdown in server.ts - plus a
  * hard size cap as a backstop.
  */
 
@@ -28,7 +28,7 @@ const MAX_BUCKETS = 10_000;
 /**
  * Trim below the cap, not exactly to it. Shedding to `MAX_BUCKETS` leaves the
  * map one insert away from being over again, so the very next unique key would
- * re-enter the O(n log n) trim — turning the backstop into per-request work for
+ * re-enter the O(n log n) trim - turning the backstop into per-request work for
  * exactly the flood it exists to absorb (`invite:<token>` in teams/service.ts
  * and a spoofable `x-forwarded-for` both mint unique keys freely).
  */
@@ -44,7 +44,7 @@ function sweep(now: number): void {
 
   if (buckets.size <= MAX_BUCKETS) return;
   // Still over cap after dropping the expired ones, so shed live buckets too,
-  // soonest-to-reset first — those are the cheapest to lose, since a dropped
+  // soonest-to-reset first - those are the cheapest to lose, since a dropped
   // bucket only restarts that key's window slightly early.
   const oldestFirst = [...buckets.entries()].sort((a, b) => a[1].resetAt - b[1].resetAt);
   for (const [key] of oldestFirst.slice(0, buckets.size - EVICT_TO)) {

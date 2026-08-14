@@ -4,7 +4,7 @@
  * SAFETY: this NEVER touches the real account in .env. It creates its own
  * throwaway attacker + victim accounts against Supabase auth, runs the exploits
  * against those, and reports whether each is blocked. The account-takeover test
- * in particular would change a victim's password if the fix were broken — which
+ * in particular would change a victim's password if the fix were broken - which
  * is exactly why it only ever targets a fresh disposable account.
  *
  * Run with both dev servers up: node scripts/security-check.mjs
@@ -24,7 +24,7 @@ if (!SUPA_URL || !SUPA_KEY) throw new Error("Supabase URL/key missing from .env"
 
 /*
  * The service-role key (from apps/api/.env) is used ONLY to provision and tear
- * down the two disposable test accounts — public signup here requires email
+ * down the two disposable test accounts - public signup here requires email
  * confirmation and is rate-limited, so it can't seed a confirmed account. The
  * exploit itself never uses this key: it runs through the public /v1/rpc path
  * with no auth, which is what actually proves the fix.
@@ -140,7 +140,7 @@ const run = async () => {
   console.log(`  inviteMember: ${invite.status}`);
 
   /*
-   * The token IS present in the inviter's response — and that is BY DESIGN:
+   * The token IS present in the inviter's response - and that is BY DESIGN:
    * TeamsPage builds a `/invite/{token}` link from it for "copy invite link".
    * So this is not asserted as a leak. What matters is that holding the token
    * cannot take over an existing account, which is the real check below.
@@ -152,7 +152,7 @@ const run = async () => {
     invite.json?.invite?.invite?.token ??
     null;
   console.log(
-    `  invite token present in response: ${!!leakedToken} (expected — used for the copy-invite-link feature)`,
+    `  invite token present in response: ${!!leakedToken} (expected - used for the copy-invite-link feature)`,
   );
 
   // If we couldn't read a token, try the authed getMyTeam path the sweep named.
@@ -168,7 +168,7 @@ const run = async () => {
     record(
       "ACCOUNT TAKEOVER",
       true,
-      "Could not obtain the invite token by any means — the exploit's precondition (token readable by attacker) does not hold, so the takeover is not reachable.",
+      "Could not obtain the invite token by any means - the exploit's precondition (token readable by attacker) does not hold, so the takeover is not reachable.",
     );
   } else {
     // ---- THE EXPLOIT: unauthenticated password overwrite ----
@@ -214,7 +214,7 @@ const run = async () => {
 
   /*
    * Blueprint apply. For this Starter, no-team account the request is refused
-   * at `requireTeamPlan` — before my blueprint-ownership check even runs — so
+   * at `requireTeamPlan` - before my blueprint-ownership check even runs - so
    * this proves "a non-Team caller cannot apply blueprints", NOT the ownership
    * check specifically (isolating that needs a Team account with a real project
    * plus a foreign blueprint id; it is verified by code review, not here).
@@ -230,7 +230,7 @@ const run = async () => {
     bp.status >= 400 && bp.status < 500,
     bp.status >= 400 && bp.status < 500
       ? `applyProjectBlueprint refused with a clean ${bp.status}: ${JSON.stringify(bp.json).slice(0, 90)}`
-      : `applyProjectBlueprint returned ${bp.status} — expected a 4xx. body: ${JSON.stringify(bp.json).slice(0, 120)}`,
+      : `applyProjectBlueprint returned ${bp.status} - expected a 4xx. body: ${JSON.stringify(bp.json).slice(0, 120)}`,
   );
 
   console.log("\nTearing down disposable accounts…");

@@ -7,7 +7,7 @@ export type SendEmailInput = {
   /**
    * Display name for this one message, overriding both `SENDER_NAME` and any
    * display name already baked into `EMAIL_FROM`. The address itself never
-   * changes — only a verified domain can send, and this must not become a way
+   * changes - only a verified domain can send, and this must not become a way
    * to forge one.
    *
    * Used for the "Someone (via Everbreeze SitePix)" pattern on person-to-person
@@ -48,13 +48,13 @@ function addressOf(from: string): string {
  * Guarantee the From header carries a display name.
  *
  * `EMAIL_FROM` was a bare `info@everbreezesitepix.com`, and a bare address makes
- * every mail client fall back to the local part — so invites, password resets
+ * every mail client fall back to the local part - so invites, password resets
  * and field reports all arrived from a sender called **"info"**. Wrapping it
  * once here fixes every email at the same time, and keeps working if the env is
  * ever set back to a bare address.
  *
  * An `EMAIL_FROM` that already has a display name (`Name <addr>`) is passed
- * through untouched, so the env stays authoritative when it says something —
+ * through untouched, so the env stays authoritative when it says something -
  * unless this call asked for a specific `fromName`, which is more specific than
  * either default and wins over both.
  */
@@ -63,7 +63,7 @@ function withSenderName(from: string, fromName?: string): string {
   const override = fromName ? sanitizeDisplayName(fromName) : "";
   // Per-message name. Rebuild around the env's address, never the caller's.
   if (override) return `"${override}" <${addressOf(trimmed)}>`;
-  // Already `Something <addr@host>` — respect it.
+  // Already `Something <addr@host>` - respect it.
   if (/^[^<>]*<[^<>]+>$/.test(trimmed)) return trimmed;
   // Bare address. Quote the name so punctuation can never break the header.
   return `"${SENDER_NAME.replace(/"/g, "")}" <${trimmed}>`;
@@ -71,8 +71,8 @@ function withSenderName(from: string, fromName?: string): string {
 
 /**
  * Reply-To is likewise user-adjacent (a teammate's own address on invites), so
- * it is reduced to a bare `addr@host` — `Name <addr@host>` is unwrapped rather
- * than rejected, since that is a perfectly ordinary `EMAIL_REPLY_TO` — and
+ * it is reduced to a bare `addr@host` - `Name <addr@host>` is unwrapped rather
+ * than rejected, since that is a perfectly ordinary `EMAIL_REPLY_TO` - and
  * anything that still does not look like one address is dropped rather than
  * forwarded to Resend. A malformed reply address is worth losing; a smuggled
  * header is not.

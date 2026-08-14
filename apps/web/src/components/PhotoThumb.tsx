@@ -49,13 +49,13 @@ interface Props {
   fallbackUrl?: string | null;
   /**
    * Rendered width in CSS px. Decides whether the stored thumbnail is big
-   * enough (it is compared at 2x for retina) — a lightbox asking for more than
+   * enough (it is compared at 2x for retina) - a lightbox asking for more than
    * the thumbnail holds gets the original instead of an upscaled blur.
    */
   width?: number;
   alt?: string;
   className?: string;
-  /** Wrapper class — the observed element, so it must have real dimensions. */
+  /** Wrapper class - the observed element, so it must have real dimensions. */
   wrapperClassName?: string;
 }
 
@@ -63,8 +63,8 @@ interface Props {
  * A grid photo that downloads a stored thumbnail instead of the camera original.
  *
  * This used to ask Supabase to transform the original on the fly. That endpoint
- * is metered by *distinct origin image per billing cycle* — 100 on the Pro plan
- * — so the cost grew with how many different photos anyone looked at, and the
+ * is metered by *distinct origin image per billing cycle* - 100 on the Pro plan
+ * - so the cost grew with how many different photos anyone looked at, and the
  * organization hit 170% of quota on roughly 12 MB of stored photos. Thumbnails
  * are now produced once at upload time (`lib/photo-thumbnails.ts`) and simply
  * signed here, which takes the meter off the read path completely.

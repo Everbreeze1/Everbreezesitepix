@@ -56,7 +56,7 @@ interface EditorItem {
 }
 
 interface EditorSection {
-  /** Stable client-side key — server section ids are regenerated on every save. */
+  /** Stable client-side key - server section ids are regenerated on every save. */
   key: string;
   project_id: string | null;
   project_name: string | null;
@@ -68,7 +68,7 @@ interface EditorSection {
 let keySeq = 0;
 const nextKey = () => `sec-${++keySeq}`;
 
-/** Canonical serialization of everything that gets persisted — the dirty flag
+/** Canonical serialization of everything that gets persisted - the dirty flag
  *  is a string comparison against the last-saved snapshot, so this must cover
  *  every editable field and nothing else (section keys are client-only). */
 function makeSnapshot(v: {
@@ -128,20 +128,20 @@ export function ShowcaseBuilderPage() {
   const [shareToken, setShareToken] = useState("");
   const [revokedAt, setRevokedAt] = useState<string | null>(null);
 
-  /** Site-only metadata. Owned by <ShowcaseSiteCard>, which saves it itself —
+  /** Site-only metadata. Owned by <ShowcaseSiteCard>, which saves it itself -
    *  deliberately outside the document snapshot below. */
   const [detail, setDetail] = useState<ShowcaseDetail | null>(null);
   const [portfolio, setPortfolio] = useState<MyPortfolio | null>(null);
 
   /**
    * Picker target: a section key, "new" to build sections from projects, or
-   * "cover" to choose the masthead photo. One dialog, three jobs — three
+   * "cover" to choose the masthead photo. One dialog, three jobs - three
    * separate mounted dialogs would each load the same 300 photos.
    */
   const [pickerFor, setPickerFor] = useState<string | "new" | "cover" | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
 
-  /** Serialized last-saved state — the source of truth for the dirty flag. */
+  /** Serialized last-saved state - the source of truth for the dirty flag. */
   const savedSnapshotRef = useRef<string>("");
 
   const snapshot = useMemo(
@@ -209,7 +209,7 @@ export function ShowcaseBuilderPage() {
       }));
       setSections(loadedSections);
       // Baseline is derived from the same values we just loaded rather than in
-      // a follow-up effect — otherwise the first render after loading compares
+      // a follow-up effect - otherwise the first render after loading compares
       // against an empty ref and flashes "Unsaved changes".
       savedSnapshotRef.current = makeSnapshot({
         title: s.title,
@@ -290,7 +290,7 @@ export function ShowcaseBuilderPage() {
   };
 
   // Nothing here autosaves, so leaving with unsaved edits would silently lose
-  // them — confirm instead of discarding.
+  // them - confirm instead of discarding.
   useBlocker({
     shouldBlockFn: async () => {
       if (!dirty) return false;
@@ -371,7 +371,7 @@ export function ShowcaseBuilderPage() {
     }
 
     if (target === "new") {
-      // One section per project, titled with the project's name — this is the
+      // One section per project, titled with the project's name - this is the
       // "pick which project to show off" flow.
       const byProject = new Map<string, PickedPhoto[]>();
       for (const p of picked) {
@@ -423,7 +423,7 @@ export function ShowcaseBuilderPage() {
   }
 
   // Fail loudly rather than rendering an empty editor the user could type into
-  // and then lose — a failed load means Save would fail too.
+  // and then lose - a failed load means Save would fail too.
   if (loadError) {
     return (
       <div className="p-6 sm:p-10">
@@ -479,7 +479,7 @@ export function ShowcaseBuilderPage() {
 
   return (
     <div className="pb-16">
-      {/* Sticky action bar — save state is always visible, so "did that save?"
+      {/* Sticky action bar - save state is always visible, so "did that save?"
           is never a question the user has to ask. */}
       <div className="sticky top-[82px] z-20 border-b border-border bg-background/95 px-6 py-3 backdrop-blur sm:px-10">
         <div className="flex flex-wrap items-center gap-3">
@@ -551,7 +551,7 @@ export function ShowcaseBuilderPage() {
       {mode === "preview" ? (
         <div className="p-6 sm:p-10">
           <p className="mb-3 text-xs text-muted-foreground">
-            Exactly what a prospect sees at your share link — no need to publish or open a new tab
+            Exactly what a prospect sees at your share link - no need to publish or open a new tab
             to check it.
           </p>
           <div className="overflow-hidden rounded-2xl border border-border">
@@ -633,7 +633,7 @@ export function ShowcaseBuilderPage() {
             <div className="rounded-2xl border border-border bg-card p-6">
               <p className="text-sm font-extrabold text-foreground">Opening</p>
               <p className="mt-1 mb-3 text-xs text-muted-foreground">
-                Introduce the company — who you are, what you do, why prospects should call you.
+                Introduce the company - who you are, what you do, why prospects should call you.
               </p>
               <RichTextEditor
                 value={introHtml}
@@ -669,7 +669,7 @@ export function ShowcaseBuilderPage() {
                   <p className="mt-3 text-sm font-bold text-foreground">Nothing to show off yet</p>
                   <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
                     “Add from projects” pulls in a job&rsquo;s photos and creates a section from
-                    them — the fastest way to build this out.
+                    them - the fastest way to build this out.
                   </p>
                 </div>
               ) : (
@@ -697,7 +697,7 @@ export function ShowcaseBuilderPage() {
             <div className="rounded-2xl border border-border bg-card p-6">
               <p className="text-sm font-extrabold text-foreground">Closing</p>
               <p className="mt-1 mb-3 text-xs text-muted-foreground">
-                A call to action — free estimates, service area, what to do next.
+                A call to action - free estimates, service area, what to do next.
               </p>
               <RichTextEditor
                 value={outroHtml}
@@ -785,7 +785,7 @@ export function ShowcaseBuilderPage() {
                 )}
                 {showContact && !profile?.company_phone && !profile?.company_address && (
                   <p className="text-xs text-amber-600">
-                    Your company phone and address are empty — add them in{" "}
+                    Your company phone and address are empty - add them in{" "}
                     <Link to="/settings" className="underline">
                       Settings
                     </Link>{" "}
@@ -795,14 +795,14 @@ export function ShowcaseBuilderPage() {
               </div>
             </div>
 
-            {/* Publishing lives in the Share dialog off the top bar — the same
-                one the Portfolio's project list uses — so there is a single
+            {/* Publishing lives in the Share dialog off the top bar - the same
+                one the Portfolio's project list uses - so there is a single
                 place that answers "how do I send this to someone?". */}
             <div className="h-fit rounded-2xl border border-border bg-card p-6">
               <p className="text-sm font-extrabold text-foreground">Status</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {revokedAt
-                  ? "This project is a draft — only your team can see it."
+                  ? "This project is a draft - only your team can see it."
                   : "Live. Anyone with the link can view it."}
               </p>
               <Button variant="outline" className="mt-4 w-full" onClick={() => setShareOpen(true)}>
@@ -844,7 +844,7 @@ export function ShowcaseBuilderPage() {
               ? // "each one" rather than "each project": the page being edited
                 // is itself a project now, so naming the source the same way in
                 // the same sentence read as a project inside a project.
-                "Pick whole jobs or individual photos — each one becomes its own section."
+                "Pick whole jobs or individual photos - each one becomes its own section."
               : "Photos are grouped by job. Use “Select all” to pull in a whole one at once."
         }
         confirmLabel={pickerFor === "cover" ? "Use this photo" : "Add"}
@@ -929,7 +929,7 @@ function SectionEditor({
         <RichTextEditor
           value={section.body_html}
           onChange={(html) => onPatch({ body_html: html })}
-          placeholder="Describe the job — the problem, what your crew did, the result…"
+          placeholder="Describe the job - the problem, what your crew did, the result…"
           minHeight={80}
         />
       </div>

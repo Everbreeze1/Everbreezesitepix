@@ -88,7 +88,7 @@ const sectionLabel = "text-[10px] uppercase tracking-wide text-muted-foreground"
  *
  * Two of these used to be `text-primary` and the rest inherited, which read as
  * two of the eight actions being highlighted for a reason nobody could name.
- * Destructive rows still differ — they take their colour from the item.
+ * Destructive rows still differ - they take their colour from the item.
  */
 const itemIcon = "mr-2 h-4 w-4 shrink-0 text-muted-foreground";
 
@@ -111,15 +111,15 @@ function googleMapsUrl(project: ProjectActionsMenuProps["project"]) {
 /**
  * Title, plus an explanation only where one is worth the line.
  *
- * The same shape GenerateDocumentMenu uses — the two menus sit next to each
+ * The same shape GenerateDocumentMenu uses - the two menus sit next to each
  * other in the project header, so they read as one system instead of two
- * different products — but `hint` is optional, and most items now go without.
+ * different products - but `hint` is optional, and most items now go without.
  *
  * Every item used to carry a full sentence of grey text. Eight of those stacked
  * up is a dropdown taller than the viewport and a paragraph to read before you
  * can pick "Edit details", which is what client feedback meant by "it looks
  * crazy". A hint earns its line when the label alone would leave someone
- * guessing what the action destroys, publishes, or keeps — archive vs delete,
+ * guessing what the action destroys, publishes, or keeps - archive vs delete,
  * merge, the public QR link, the 60-day trash window. "Edit details" and
  * "Recently deleted" say everything about themselves already.
  */
@@ -129,7 +129,7 @@ function MenuText({
   /**
    * Clamp the hint to one line.
    *
-   * For a hint that is *data* rather than a sentence — the site address — a
+   * For a hint that is *data* rather than a sentence - the site address - a
    * second wrapped line buys nothing: the start of an address is what
    * identifies it, and the rest is what makes the row three lines tall. Prose
    * hints are written short enough to fit instead, so they never need this.
@@ -161,7 +161,7 @@ function MenuText({
  * The project header's overflow menu.
  *
  * Deliberately *not* modelled on the reference app's version. Same practical
- * jobs — because those are what field crews actually need — but grouped by
+ * jobs - because those are what field crews actually need - but grouped by
  * intent (edit / organize / share / recovery) rather than one long list plus a
  * "danger zone", worded in our own vocabulary, and rendered with this app's
  * item style: a bold label, and a second line only where one is worth its
@@ -187,7 +187,7 @@ export function ProjectActionsMenu({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  // Only for the printed QR sheet's letterhead — absent is fine, the sheet just
+  // Only for the printed QR sheet's letterhead - absent is fine, the sheet just
   // drops that line.
   const { profile } = useProfile();
 
@@ -442,7 +442,7 @@ export function ProjectActionsMenu({
           {/*
             No label over this first pair. "This project" restated the heading of
             the page the menu is attached to, and a section label above the very
-            first item labels nothing — the two below it separate groups, which
+            first item labels nothing - the two below it separate groups, which
             is the only job these do.
           */}
           <DropdownMenuItem
@@ -514,7 +514,7 @@ export function ProjectActionsMenu({
                 className="flex cursor-pointer items-center"
               >
                 <Navigation className={itemIcon} />
-                {/* The address is the hint — pin-only projects simply go without. */}
+                {/* The address is the hint - pin-only projects simply go without. */}
                 <MenuText
                   title="Open location in Maps"
                   hint={projectAddress(project) ?? undefined}
@@ -537,7 +537,7 @@ export function ProjectActionsMenu({
               resolves without a login, so the person clicking needs to know
               that before they print it and tape it to a door.
             */}
-            <MenuText title="QR code for this job" hint="Anyone can scan it — no sign-in" />
+            <MenuText title="QR code for this job" hint="Anyone can scan it - no sign-in" />
           </DropdownMenuItem>
 
           <DropdownMenuItem
@@ -565,7 +565,7 @@ export function ProjectActionsMenu({
             Trash and Delete belong to the same 60-day soft-delete lifecycle, so
             they sit together instead of being split between the main list and a
             separate "danger zone" at the bottom. The window is stated once, on
-            Delete — repeating it on both items was the same sentence twice.
+            Delete - repeating it on both items was the same sentence twice.
           */}
           <DropdownMenuLabel className={sectionLabel}>Recovery</DropdownMenuLabel>
 
@@ -590,7 +590,7 @@ export function ProjectActionsMenu({
             <span className="min-w-0">
               <span className="block font-semibold">Delete this project</span>
               <span className="block text-xs font-normal leading-snug text-destructive/70">
-                Goes to Trash — recoverable for 60 days
+                Goes to Trash - recoverable for 60 days
               </span>
             </span>
           </DropdownMenuItem>
@@ -598,7 +598,7 @@ export function ProjectActionsMenu({
       </DropdownMenu>
 
       {/*
-        Mounted only once opened — it fetches the project's link state, which is
+        Mounted only once opened - it fetches the project's link state, which is
         not work the project header should do on every render.
       */}
       {qrOpen && (

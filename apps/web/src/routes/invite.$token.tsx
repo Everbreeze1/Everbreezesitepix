@@ -13,7 +13,7 @@ import { lookupInvite, acceptInvite, acceptInviteSignup } from "@/lib/teams.func
 import heroImg from "@/assets/hero-construction.png";
 
 export const Route = createFileRoute("/invite/$token")({
-  head: () => ({ meta: [{ title: "Accept your invitation — Everbreeze SitePix" }] }),
+  head: () => ({ meta: [{ title: "Accept your invitation - Everbreeze SitePix" }] }),
   component: AcceptInvitePage,
 });
 
@@ -24,7 +24,7 @@ const FIELD_CLASS =
 /*
  * The invite page is a SIGNUP page, so it is built on the signup page's layout.
  *
- * It used to be a lone `Card` centred on an empty gradient — no marketing panel,
+ * It used to be a lone `Card` centred on an empty gradient - no marketing panel,
  * no wordmark beyond a bare logo, none of the display type the rest of the
  * product uses. For most invitees this is the very first screen they ever see of
  * the product, arriving straight from an email, and it looked like a different
@@ -126,9 +126,9 @@ function AcceptInvitePage() {
 
   return (
     <div className="min-h-screen w-full bg-background lg:grid lg:grid-cols-2">
-      {/* LEFT — marketing panel (desktop only) */}
+      {/* LEFT - marketing panel (desktop only) */}
       <aside className="relative hidden overflow-hidden bg-sidebar text-sidebar-foreground lg:flex lg:flex-col lg:justify-between">
-        {/* A CSS background, not an <img> — see the note in signup.tsx: an <img>
+        {/* A CSS background, not an <img> - see the note in signup.tsx: an <img>
             in a `hidden lg:flex` subtree is still downloaded on every phone. */}
         <div
           aria-hidden
@@ -154,8 +154,8 @@ function AcceptInvitePage() {
             </h1>
             <p className="font-manrope mt-6 text-base leading-7 text-sidebar-foreground/70">
               {state === "ready" && team
-                ? `${team.name} uses SitePix to keep every job site documented — photos, walkthroughs and reports in one place.`
-                : "Photos, walkthroughs, reports, and your project history — all in the same place."}
+                ? `${team.name} uses SitePix to keep every job site documented - photos, walkthroughs and reports in one place.`
+                : "Photos, walkthroughs, reports, and your project history - all in the same place."}
             </p>
 
             <ul className="mt-8 space-y-3">
@@ -171,7 +171,7 @@ function AcceptInvitePage() {
         </div>
       </aside>
 
-      {/* RIGHT — the invite itself */}
+      {/* RIGHT - the invite itself */}
       <div className="flex min-h-screen flex-col items-center justify-center px-5 py-8 sm:px-8 lg:px-12">
         <div className="mx-auto flex w-full max-w-[448px] flex-1 flex-col justify-center lg:flex-none">
           <div className="mb-4 lg:hidden">
@@ -212,7 +212,7 @@ function AcceptInvitePage() {
                   <Loader2 className="h-4 w-4 animate-spin" /> Checking your session…
                 </div>
               ) : user && user.email?.toLowerCase() === invite.email.toLowerCase() ? (
-                /* Already signed in as the invited address — one button, no form. */
+                /* Already signed in as the invited address - one button, no form. */
                 <div className="mt-8 space-y-4">
                   <p className="font-manrope text-sm text-muted-foreground">
                     Signed in as <strong className="text-foreground">{user.email}</strong>
@@ -228,7 +228,7 @@ function AcceptInvitePage() {
                   {message && <FormError>{message}</FormError>}
                 </div>
               ) : user ? (
-                /* Signed in as somebody else — the invite is not transferable. */
+                /* Signed in as somebody else - the invite is not transferable. */
                 <div className="mt-8 space-y-4">
                   <FormError>
                     You're signed in as <strong>{user.email}</strong>, but this invitation is for{" "}

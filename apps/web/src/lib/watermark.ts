@@ -1,4 +1,4 @@
-// Shared photo watermarking utilities — used by camera capture and file uploads
+// Shared photo watermarking utilities - used by camera capture and file uploads
 // to brand site photos with Before/After labels and project context.
 
 export type BeforeAfterTag = "before" | "after" | null;

@@ -11,7 +11,7 @@ interface Options {
 /**
  * Simple, mobile-first pull-to-refresh hook.
  * Attach the returned `bind` ref to a scrollable container (or window-level by default).
- * Renders nothing — exposes `pulling` distance and `refreshing` so the consumer can show an indicator.
+ * Renders nothing - exposes `pulling` distance and `refreshing` so the consumer can show an indicator.
  */
 export function usePullToRefresh({ onRefresh, threshold = 70, enabled = true }: Options) {
   const startY = useRef<number | null>(null);

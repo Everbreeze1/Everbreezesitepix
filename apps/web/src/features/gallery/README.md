@@ -1,11 +1,11 @@
 # Gallery feature
 
-- `pages/GalleryPage.tsx` — global gallery UI. Two views, switched in the filter
+- `pages/GalleryPage.tsx` - global gallery UI. Two views, switched in the filter
   bar: the photo **grid**, and the **calendar**.
-- `components/PhotoCalendar.tsx` — the calendar. Month view where each day cell
+- `components/PhotoCalendar.tsx` - the calendar. Month view where each day cell
   is a thumbnail of that day's last capture with a count badge, a year heatmap
   behind the same header, and a side panel listing the picked day's photos.
-- `api.ts` — privileged `/v1/rpc` adapters for this feature
+- `api.ts` - privileged `/v1/rpc` adapters for this feature
 
 Route: `src/routes/_app.gallery.tsx` (thin). `?view=calendar` opens straight
 into the calendar; `/timeline` redirects here.
@@ -33,7 +33,7 @@ Consequences worth knowing:
   the lightbox, tag filter and per-photo panels work the same in both views.
 - Project and tag filters are passed to the aggregate, so day counts respect
   them rather than only the photos already downloaded.
-- Days bucket on `taken_at`, falling back to `created_at` — a photo shot at 6pm
+- Days bucket on `taken_at`, falling back to `created_at` - a photo shot at 6pm
   and synced the next morning belongs to the day the crew was on site. The
   server over-fetches a few days past each end of the range to catch that drift
   and trims afterwards.

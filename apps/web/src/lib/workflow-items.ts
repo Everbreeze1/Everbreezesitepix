@@ -15,7 +15,7 @@ export interface ItemKindMeta {
   label: string;
   short: string;
   icon: LucideIcon;
-  /** What the crew is expected to do — shown in the designer's type menu. */
+  /** What the crew is expected to do - shown in the designer's type menu. */
   hint: string;
   tint: string;
   /** Example label, used as the designer's field placeholder. */
@@ -37,7 +37,7 @@ export const KIND_META: Record<ItemKind, ItemKindMeta> = {
     short: "Photo",
     hint: "Crew must capture a photo",
     tint: "border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300",
-    placeholder: "e.g. Before photo — front elevation",
+    placeholder: "e.g. Before photo - front elevation",
   },
   note: {
     icon: StickyNote,

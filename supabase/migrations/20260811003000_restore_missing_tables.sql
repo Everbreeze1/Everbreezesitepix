@@ -1,7 +1,7 @@
 -- Restore three tables that live code queries but production does not have.
 --
--- These are not new features. `packages/db/src/database.ts` — generated from a
--- database that had them — carries their full row shape, so they existed on an
+-- These are not new features. `packages/db/src/database.ts` - generated from a
+-- database that had them - carries their full row shape, so they existed on an
 -- earlier Supabase project and were never recreated on
 -- ulmgvtuqjlzzadlwtiog. No migration in this folder creates them, which is why
 -- nothing has healed the gap.
@@ -20,28 +20,28 @@
 -- live. Both are advertised features.
 --
 -- The other six absent tables are deliberately NOT recreated: `subscriptions`
--- is explicitly obsolete (see the comment in lib/team-plan.ts — teams.plan
+-- is explicitly obsolete (see the comment in lib/team-plan.ts - teams.plan
 -- replaced it), and `voice_usage`, `portfolio_items`, `project_page_shares`,
 -- `showcase_shares` have zero references in apps/api or apps/web.
 -- `project_label_events` also has no table and one reference, in
 -- combineProjectsService, which now skips missing tables by error code rather
--- than throwing — so it degrades cleanly and does not need to exist.
+-- than throwing - so it degrades cleanly and does not need to exist.
 --
 -- ANON GRANTS ARE REVOKED EXPLICITLY. Supabase ships
 -- `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon,
 -- authenticated, service_role`, so a newly created public table is readable by
--- the publishable key the moment it exists — which is exactly how
+-- the publishable key the moment it exists - which is exactly how
 -- `walkthroughs` and `team_invites` leaked (see 20260811000000). Creating a
 -- table without revoking anon is how this class of bug is born, so every table
 -- below does it in the same statement block, and
 -- `node scripts/verify-anon-exposure.mjs` should be re-run after applying this.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent — safe to re-run.
+-- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run.
 
 SET lock_timeout = '5s';
 
 
--- === conversations + messages — the AI assistant ==========================
+-- === conversations + messages - the AI assistant ==========================
 -- Shape from packages/db/src/database.ts. Writes go through ctx.supabase (the
 -- caller's JWT, RLS applies) in domains/ai/service.ts:170-185, so the policies
 -- below are load-bearing, not decoration.
@@ -112,7 +112,7 @@ CREATE POLICY "Users manage their own messages" ON public.messages
   );
 
 
--- === photo_shares — per-photo public share links ==========================
+-- === photo_shares - per-photo public share links ==========================
 -- createPhotoShareService (domains/photos/shares.ts:59) inserts WITHOUT a
 -- token and then reads it back in the same statement, so the default below is
 -- what actually mints the share secret. It must stay a default, and it must
@@ -133,7 +133,7 @@ CREATE INDEX IF NOT EXISTS photo_shares_token_idx    ON public.photo_shares(toke
 CREATE INDEX IF NOT EXISTS photo_shares_photo_id_idx ON public.photo_shares(photo_id, created_at DESC);
 
 -- Anon must NOT read this table: the rows hold `token`, and RLS cannot hide a
--- single column. The public share page does not need it — getPublicPhotoShare
+-- single column. The public share page does not need it - getPublicPhotoShare
 -- is a pub() op served by the service-role client, which bypasses RLS. Same
 -- shape as the walkthroughs fix in 20260811000000.
 REVOKE ALL ON public.photo_shares FROM anon, PUBLIC;
@@ -144,7 +144,7 @@ ALTER TABLE public.photo_shares ENABLE ROW LEVEL SECURITY;
 
 -- Scoped through the photo's project to the same teammate rule the rest of the
 -- schema uses (public.are_teammates, defined in 20260612191404_teams.sql), so a
--- teammate can see and revoke a share a colleague created — revocation is a
+-- teammate can see and revoke a share a colleague created - revocation is a
 -- safety control and must not be locked to one person.
 DROP POLICY IF EXISTS "Teammates manage photo shares" ON public.photo_shares;
 CREATE POLICY "Teammates manage photo shares" ON public.photo_shares

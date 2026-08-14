@@ -3,7 +3,7 @@ import { Extension } from "@tiptap/core";
 /**
  * Lets a paragraph carry an explicit `style="height: 500px"` for deliberate
  * blank vertical space (e.g. a title-page cover meant to occupy roughly a
- * full page) — Tiptap's Paragraph node doesn't preserve a bare `style`
+ * full page) - Tiptap's Paragraph node doesn't preserve a bare `style`
  * attribute by default, so without this it gets silently stripped on parse
  * (the same issue text-align had before TextAlign was added).
  *

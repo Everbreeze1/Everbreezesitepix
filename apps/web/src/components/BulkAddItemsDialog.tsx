@@ -19,7 +19,7 @@ const MAX_ITEMS = 200;
  * Turn a pasted list into checklist items.
  *
  * Both the template designer and the on-project checklist only ever let you add
- * one item at a time — type a label, pick a type, click Add, repeat. Building a
+ * one item at a time - type a label, pick a type, click Add, repeat. Building a
  * 30-line QA walk that way is the single most tedious thing in the product, and
  * the list almost always already exists somewhere (a spec, an email, a Word
  * doc). This takes that list as-is.
@@ -30,7 +30,10 @@ function parseItemLines(raw: string): string[] {
       .split(/\r?\n/)
       // Strip the bullet or numbering the source list came with, so pasting
       // "1. Check breaker" doesn't create an item literally called "1. Check…".
-      .map((line) => line.replace(/^\s*(?:[-*•·–—]|\d+[.)])\s+/, "").trim())
+      // The dashes are written as escapes on purpose: this matches what a user
+      // may paste in, so it must keep covering en/em dashes even though we never
+      // emit those characters ourselves (see tests/no-em-dash.test.ts).
+      .map((line) => line.replace(/^\s*(?:[-*•·\u2013\u2014]|\d+[.)])\s+/, "").trim())
       .filter(Boolean)
       .slice(0, MAX_ITEMS)
   );

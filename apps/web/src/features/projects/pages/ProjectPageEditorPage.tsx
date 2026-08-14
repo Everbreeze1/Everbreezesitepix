@@ -123,7 +123,7 @@ export function ProjectPageEditorPage() {
   const navigate = useNavigate();
   const prompt = usePrompt();
   const confirm = useConfirm();
-  /** True if this page was just created and abandoned without ever being edited — deleted on exit instead of left as clutter in the Documents list. */
+  /** True if this page was just created and abandoned without ever being edited - deleted on exit instead of left as clutter in the Documents list. */
   const freshRef = useRef(false);
   /** True once the user has made any edit this session. */
   const dirtyRef = useRef(false);
@@ -131,7 +131,7 @@ export function ProjectPageEditorPage() {
   const unsavedRef = useRef(false);
   /**
    * The title the server is known to hold. Renaming on a phone means tapping the
-   * box, clearing it, then waiting for the keyboard — so the field sits empty far
+   * box, clearing it, then waiting for the keyboard - so the field sits empty far
    * longer than the 800ms autosave debounce, and an empty box has to mean "rename
    * in progress", never "blank the title". Autosave omits the field while it is
    * empty and blur restores this value, so the header can't show a name the page
@@ -176,7 +176,7 @@ export function ProjectPageEditorPage() {
    * `useState` plus a separate `useRef`, and the dialog's title read the ref
    * during render to decide between "Fill this photo slot" and "Insert a
    * project photo". A ref mutates without triggering a render, so that read
-   * only ever showed the *previous* render's value — right the instant the
+   * only ever showed the *previous* render's value - right the instant the
    * click handler happened to fire before the state update it triggered was
    * committed, stale otherwise, and visibly wrong for the ~200ms the dialog
    * spends fading out after `target` is cleared but before `open` catches up.
@@ -186,8 +186,8 @@ export function ProjectPageEditorPage() {
    * `target` carries the node itself, not just its position: a bare position
    * that drifted (an undo, a reload, an edit elsewhere in the document) still
    * points at *something*, so filling it blindly would put the photo in the
-   * wrong place. Keeping the node lets the target be recovered by identity —
-   * see `findImagePos` — or the fill refused outright.
+   * wrong place. Keeping the node lets the target be recovered by identity -
+   * see `findImagePos` - or the fill refused outright.
    */
   const [picker, setPicker] = useState<{
     open: boolean;
@@ -205,7 +205,7 @@ export function ProjectPageEditorPage() {
    * Deliberately an inline, in-row confirmation rather than a confirm dialog.
    * A dialog opened from inside the snippets dialog renders in its own portal,
    * so Radix reads a click inside it as an interaction *outside* the snippets
-   * dialog and dismisses the library behind it — measured: cancelling the
+   * dialog and dismisses the library behind it - measured: cancelling the
    * delete threw you out of the snippet list entirely. (`usePrompt` gets away
    * with it because it is a Dialog, not an AlertDialog.) Confirming in the row
    * keeps it to one layer, so there is nothing to cascade.
@@ -223,13 +223,13 @@ export function ProjectPageEditorPage() {
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   // Both built once, not on every render. `useEditor`'s default `deps: []`
-  // only skips *recreating* the editor instance — it does not stop
+  // only skips *recreating* the editor instance - it does not stop
   // `EditorInstanceManager.onRender` from diffing the options object on every
   // single render (including the ones `onTransaction` below triggers just to
   // repaint the toolbar) and calling `editor.setOptions(...)` whenever a key
   // differs. `extensions` and `editorProps` were both fresh objects every
-  // render — `.configure()` returns a new instance each call, and the
-  // `editorProps` object literal is itself new — so that diff never once came
+  // render - `.configure()` returns a new instance each call, and the
+  // `editorProps` object literal is itself new - so that diff never once came
   // back clean: every keystroke's toolbar repaint was also re-propping the
   // whole ProseMirror view. Neither has anything to capture from render scope
   // (the click handler below reads `view.state` live, and only closes over
@@ -239,7 +239,7 @@ export function ProjectPageEditorPage() {
       // Tiptap 3's StarterKit now bundles Link and Underline itself, which
       // duplicated the standalone Underline/LinkExtension below (console warning:
       // "Duplicate extension names found: ['link', 'underline']"). Disable
-      // StarterKit's copies so ours — which needs openOnClick: false — stay
+      // StarterKit's copies so ours - which needs openOnClick: false - stay
       // the single registered instance of each.
       StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: false, underline: false }),
       Placeholder.configure({ placeholder: "Start writing…" }),
@@ -270,7 +270,7 @@ export function ProjectPageEditorPage() {
     () => ({
       /*
        * Clicking an unfilled template photo slot OR an already-inserted project
-       * photo (hover reveals a "Change photo" overlay — see ProjectImage's
+       * photo (hover reveals a "Change photo" overlay - see ProjectImage's
        * NodeView) opens the picker and swaps in the chosen photo at that spot.
        *
        * A real DOM `click`, deliberately not ProseMirror's `handleClickOn`.
@@ -279,7 +279,7 @@ export function ProjectPageEditorPage() {
        * (`MouseDown.updateAllowDefault`, prosemirror-view), and a 280px-tall
        * dashed box that ProseMirror also turns into a drag handle collects
        * exactly that kind of imprecise click. When it was abandoned the slot
-       * simply did not react — and the caret was left parked right beside it,
+       * simply did not react - and the caret was left parked right beside it,
        * so the next thing the user reached for (the toolbar's "Add photo")
        * dropped the photo next to the empty box instead of into it. That is
        * the "photo inserted separately and detached" report. A DOM click
@@ -291,9 +291,9 @@ export function ProjectPageEditorPage() {
          *
          * ProseMirror marks every image node draggable and sets `draggable` on
          * the NodeView wrapper, so Chromium turns press-and-twitch on one into
-         * a native HTML5 drag. A drag swallows `mouseup` and `click` outright —
+         * a native HTML5 drag. A drag swallows `mouseup` and `click` outright -
          * measured on the real page, a 9px wobble emits `mousedown, dragstart,
-         * dragend` and nothing else — so the box silently ignored anything but
+         * dragend` and nothing else - so the box silently ignored anything but
          * a perfectly still click, whichever handler was listening. Cancelling
          * the drag restores the normal mouseup/click pair.
          *
@@ -334,7 +334,7 @@ export function ProjectPageEditorPage() {
 
   const editor = useEditor({
     // `onTransaction` fires for every dispatched transaction, selection-only
-    // ones included, so it already covers `onSelectionUpdate` — registering
+    // ones included, so it already covers `onSelectionUpdate` - registering
     // both simply re-rendered the whole page twice per keystroke.
     onTransaction: () => forceToolbarUpdate((n) => n + 1),
     onUpdate: () => {
@@ -370,7 +370,7 @@ export function ProjectPageEditorPage() {
         versionRef.current = res.page.updated_at;
         editor?.commands.setContent(res.page.content_html || "", { emitUpdate: false });
         // `emitUpdate: false` keeps loading from counting as an edit, but it
-        // also means `onUpdate` does not fire — so the serialised `html` below
+        // also means `onUpdate` does not fire - so the serialised `html` below
         // has to be invalidated by hand. Without this it would still hold the
         // empty string the editor mounted with, which is the exact value that
         // used to get written back over the document.
@@ -399,13 +399,13 @@ export function ProjectPageEditorPage() {
       .select("id, image_url, storage_path, caption")
       .eq("project_id", projectId)
       // Excludes trashed photos, which nothing filters at the database level.
-      // `SelectPhotosForPageDialog` — the other picker on this same screen —
+      // `SelectPhotosForPageDialog` - the other picker on this same screen -
       // already does this, so the two disagreed about which photos exist.
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(200);
     const rows = (data as any[]) ?? [];
-    // Batch signing, not one awaited request per row — at the 200-row limit
+    // Batch signing, not one awaited request per row - at the 200-row limit
     // above that was 200 sequential round trips before the picker showed
     // anything. `ProjectChecklists.signPhotos` is the model.
     const toSign = rows
@@ -438,7 +438,7 @@ export function ProjectPageEditorPage() {
    * Re-sign before showing the picker if the URLs have gone stale.
    *
    * These are signed URLs with a one-hour life, resolved once when the editor
-   * mounted. Documents get left open far longer than that — and past the hour
+   * mounted. Documents get left open far longer than that - and past the hour
    * every thumbnail in the picker 403s, and picking one writes a dead `src`
    * into the document. (It heals on the next load, because `data-photo-id`
    * makes the server re-resolve it, but the photo you just placed shows broken
@@ -456,13 +456,13 @@ export function ProjectPageEditorPage() {
    * The document as HTML, re-serialised only when the document changes.
    *
    * `getHTML()` walks and serialises the entire document, and this used to run
-   * on every render — while `onTransaction` re-renders the page on every
+   * on every render - while `onTransaction` re-renders the page on every
    * keystroke and every caret movement. A long report was therefore fully
    * serialised several times per character typed, for a string that only ever
    * changes on `onUpdate`.
    */
   // `docVersion` looks unused to the linter because the editor's content is
-  // mutable state it cannot see through — it is precisely what makes this
+  // mutable state it cannot see through - it is precisely what makes this
   // re-serialise, so it has to stay.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const html = useMemo(() => editor?.getHTML() ?? "", [editor, docVersion]);
@@ -474,16 +474,16 @@ export function ProjectPageEditorPage() {
    * What a save writes, read at the moment it actually runs.
    *
    * The debounced values above decide *when* to save; they must never supply
-   * *what* is saved. They settle on two different clocks — 800ms for the title,
-   * 1200ms for the three bodies — and each one starts life holding the value
+   * *what* is saved. They settle on two different clocks - 800ms for the title,
+   * 1200ms for the three bodies - and each one starts life holding the value
    * from before the document loaded, so whichever fired first dragged its stale
    * companions along with it. That was enough to lose a document just by
    * opening it: roughly 800ms after load the title's tick fired a save carrying
    * `debouncedHtml`, still the empty string the editor mounted with, and the
    * stored `content_html` was blanked until the body's own tick put it back
    * 400ms later. A closed tab, a dropped connection or a 409 inside that window
-   * made the blanking permanent, and a failed load — which also ends with an
-   * empty editor and `loading` false — blanked it with no window at all.
+   * made the blanking permanent, and a failed load - which also ends with an
+   * empty editor and `loading` false - blanked it with no window at all.
    */
   const latestRef = useRef({ title, html, headerHtml, footerHtml, showHeader, showFooter });
   latestRef.current = { title, html, headerHtml, footerHtml, showHeader, showFooter };
@@ -496,7 +496,7 @@ export function ProjectPageEditorPage() {
    *
    * Queued because the four debounced values settle on two different schedules
    * (800ms for the title, 1200ms for the bodies), so two writes could be in
-   * flight at once with nothing ordering them — and because each carries a full
+   * flight at once with nothing ordering them - and because each carries a full
    * snapshot, an older one landing second silently reverted the newer content.
    */
   function queueSave(): Promise<boolean> {
@@ -504,7 +504,7 @@ export function ProjectPageEditorPage() {
       .catch(() => {})
       .then(async () => {
         setSaving(true);
-        // Read at request time, not from the debounced snapshots — see latestRef.
+        // Read at request time, not from the debounced snapshots - see latestRef.
         const latest = latestRef.current;
         const savedAt = editCountRef.current;
         /*
@@ -512,7 +512,7 @@ export function ProjectPageEditorPage() {
          * title. `title` is optional server-side and the service only patches
          * it when present, so omitting it saves the body and leaves the stored
          * title alone. Sending "" instead failed the schema's `min(1)` and took
-         * the *whole* write down with it — including the content typed in the
+         * the *whole* write down with it - including the content typed in the
          * same window, which was never retried because the next autosave only
          * fires on the next change.
          */
@@ -536,7 +536,7 @@ export function ProjectPageEditorPage() {
               expectedUpdatedAt: versionRef.current ?? undefined,
             },
           });
-          // Track the server's value, not a locally-generated timestamp — a
+          // Track the server's value, not a locally-generated timestamp - a
           // guessed one would never match the row and every save after the
           // first would 409.
           if (res?.updatedAt) {
@@ -544,7 +544,7 @@ export function ProjectPageEditorPage() {
             setUpdatedAt(res.updatedAt);
           }
           if (titleToSave) savedTitleRef.current = titleToSave;
-          // Only if nothing was typed while this request was in flight —
+          // Only if nothing was typed while this request was in flight -
           // otherwise the leave-confirmation would stop guarding an edit this
           // save never carried.
           if (editCountRef.current === savedAt) unsavedRef.current = false;
@@ -565,7 +565,7 @@ export function ProjectPageEditorPage() {
    * the stored row now matches the editor.
    *
    * "Export PDF" and "Save as a New Template" both work from the *stored* row,
-   * not from what is on screen — so running either inside the 1.2s debounce
+   * not from what is on screen - so running either inside the 1.2s debounce
    * window produced a PDF, or a template, of the document as it was before the
    * last thing typed. Neither announced that; you simply got the wrong file.
    */
@@ -581,7 +581,7 @@ export function ProjectPageEditorPage() {
     /*
      * Nothing to write until the user has actually changed something.
      * Merely opening a document produces debounce ticks of its own, and acting
-     * on those meant every visit rewrote the row — burning a version, moving
+     * on those meant every visit rewrote the row - burning a version, moving
      * "Last updated", and writing whatever the debounced snapshots happened to
      * hold at the time. `markDirty` runs on editor updates, title edits and
      * header/footer changes, and `setContent` on load is deliberately
@@ -603,7 +603,7 @@ export function ProjectPageEditorPage() {
   useBlocker({
     shouldBlockFn: async () => {
       if (freshRef.current && !dirtyRef.current) {
-        // Never-edited page created via "Create" — drop it instead of leaving an
+        // Never-edited page created via "Create" - drop it instead of leaving an
         // empty "Untitled" entry cluttering the Documents list.
         try {
           await deleteProjectPage({ data: { pageId } });
@@ -647,9 +647,9 @@ export function ProjectPageEditorPage() {
     } catch {
       // The Clipboard API rejects outside a secure context, and in some
       // browsers when the document isn't focused. Unhandled, that was a silent
-      // no-op plus a console rejection — the link sits right there, so say to
+      // no-op plus a console rejection - the link sits right there, so say to
       // copy it by hand.
-      toast.error("Couldn't copy automatically — select the link and copy it");
+      toast.error("Couldn't copy automatically - select the link and copy it");
     }
   }
 
@@ -664,11 +664,11 @@ export function ProjectPageEditorPage() {
       // The template is built from the stored row, so anything still in the
       // autosave debounce would be missing from it.
       if (!(await flushPendingSave())) {
-        toast.error("Couldn't save your latest changes — template not created");
+        toast.error("Couldn't save your latest changes - template not created");
         return;
       }
       await savePageAsTemplate({ data: { pageId, name } });
-      // It lands in the document library — say so, and offer the route there.
+      // It lands in the document library - say so, and offer the route there.
       toast.success(`Saved "${name}" to your templates`, {
         description: "Find it under Templates → Documents, or add it to a blueprint.",
         action: {
@@ -689,7 +689,7 @@ export function ProjectPageEditorPage() {
       // typed in the last second or so. Better to fail loudly than to export
       // a stale one.
       if (!(await flushPendingSave())) {
-        toast.error("Couldn't save your latest changes — export cancelled");
+        toast.error("Couldn't save your latest changes - export cancelled");
         return;
       }
       const res = await generatePagePdf({ data: { pageId } });
@@ -740,8 +740,8 @@ export function ProjectPageEditorPage() {
    *
    * Deliberately not `chain().focus().setNodeSelection(pos).setImage(attrs)`:
    * that spelling inserts *at the current selection*, so anything that leaves
-   * the selection where the caret happened to be — a stale position, the focus
-   * hand-off as the picker closes, an editor re-created mid-flight — quietly
+   * the selection where the caret happened to be - a stale position, the focus
+   * hand-off as the picker closes, an editor re-created mid-flight - quietly
    * turns the replace into an insert, and the photo lands beside the empty slot
    * it was meant to become instead of inside it. A `replaceWith` over an
    * explicit range cannot degrade that way, and needs no focus, so it is safe
@@ -756,7 +756,7 @@ export function ProjectPageEditorPage() {
     // layout never reflows just because a real photo's aspect ratio differs.
     //
     // An unfilled slot's `alt` is the template's authored label for that box
-    // ("Wide shot — whole area", "Before", "After"), so an uncaptioned photo
+    // ("Wide shot - whole area", "Before", "After"), so an uncaptioned photo
     // inherits it rather than blanking it: the labelling is not recoverable
     // once gone, and it is also what tells two otherwise identical images apart
     // when the slot has to be re-found by identity.
@@ -785,7 +785,7 @@ export function ProjectPageEditorPage() {
       if (pos === null || !replaceImageAt(pos, attrs)) {
         // Never fall back to inserting at the caret. A photo landing anywhere
         // other than the box that was clicked is precisely the bug this path
-        // exists to prevent — say so instead of doing it quietly.
+        // exists to prevent - say so instead of doing it quietly.
         toast.error("That photo slot is no longer in the document");
         return;
       }
@@ -840,7 +840,7 @@ export function ProjectPageEditorPage() {
       toast.error("Select some text in the document first");
       return;
     }
-    // Only the selected range — `editor.getHTML()` would capture the whole document.
+    // Only the selected range - `editor.getHTML()` would capture the whole document.
     const html = getHTMLFromFragment(editor.state.doc.slice(from, to).content, editor.schema);
     const title = await prompt({ title: "Save snippet", label: "Snippet name" });
     if (!title) return;
@@ -874,7 +874,7 @@ export function ProjectPageEditorPage() {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      {/* Sticks just below AppHeader (h-[82px], also sticky top-0) rather than at top-0 itself —
+      {/* Sticks just below AppHeader (h-[82px], also sticky top-0) rather than at top-0 itself -
           otherwise both stick to the same viewport position and AppHeader's higher z-index
           paints over this toolbar as soon as the page scrolls. */}
       <div className="sticky top-[82px] z-10 border-b border-border bg-background/95 backdrop-blur">
@@ -953,7 +953,7 @@ export function ProjectPageEditorPage() {
         <DocumentToolbar
           editor={editor}
           onAddImage={() =>
-            // Explicitly "put a photo here", not "fill that slot" — no target,
+            // Explicitly "put a photo here", not "fill that slot" - no target,
             // so this can't silently fill a box the user is no longer looking at.
             setPicker({ open: true, target: null })
           }
@@ -1049,7 +1049,7 @@ export function ProjectPageEditorPage() {
                       type="button"
                       onClick={() => insertImage(p)}
                       // An uncaptioned photo left the button with no accessible
-                      // name at all — `alt=""` on the only child announces as a
+                      // name at all - `alt=""` on the only child announces as a
                       // bare "button".
                       aria-label={p.caption?.trim() || "Use this photo"}
                       className="aspect-square overflow-hidden rounded-md border border-border hover:ring-2 hover:ring-primary"
@@ -1168,7 +1168,7 @@ export function ProjectPageEditorPage() {
                         </p>
                       </div>
                       {confirmingDelete === s.id ? (
-                        // Asked and answered in the row itself — see confirmingDelete.
+                        // Asked and answered in the row itself - see confirmingDelete.
                         <div className="flex shrink-0 items-center gap-1">
                           <span className="mr-1 text-xs font-bold text-muted-foreground">
                             Delete?
@@ -1248,7 +1248,7 @@ function escapeAttr(s: string): string {
 
 /**
  * Markup for an inserted merge field. It shows the *resolved* value (the actual
- * company name), never `{{company}}` — nobody wants to see template source in
+ * company name), never `{{company}}` - nobody wants to see template source in
  * their document. The token itself rides along in `data-token`, and the API
  * converts the pill back to `{{company}}` on save, so the field stays live and
  * renaming the company still updates every page.
@@ -1265,7 +1265,7 @@ function tokenPillHtml(key: string, values: TokenValues): string {
  *
  * The fallback appends rather than replaces. A running block is paragraphs-only
  * today (`RunningBlock` passes `singleLine`, which disables headings, lists and
- * blockquotes), so the regex always matches and the fallback is unreachable —
+ * blockquotes), so the regex always matches and the fallback is unreachable -
  * but it used to return just the new token, which would have silently thrown
  * away whatever the block already contained the moment that stopped being true.
  */
@@ -1276,7 +1276,7 @@ function appendToken(current: string, html: string): string {
 
 /**
  * A running header or footer. When absent it renders as an invisible hover strip
- * that reveals a "+ Add header/footer" button — so a document with neither stays
+ * that reveals a "+ Add header/footer" button - so a document with neither stays
  * visually clean, matching how Word/Docs treat these regions.
  */
 function RunningBlock({
@@ -1329,7 +1329,7 @@ function RunningBlock({
           <RichTextEditor
             value={value}
             onChange={onChange}
-            placeholder={`${isHeader ? "Header" : "Footer"} — appears on every page`}
+            placeholder={`${isHeader ? "Header" : "Footer"} - appears on every page`}
             compact
             singleLine
             toolbarOnFocus
@@ -1383,7 +1383,7 @@ function FieldTokenMenu({
                 {/* Preview of what will actually be inserted, so it's obvious
                     this drops in the real value and not a code token. */}
                 <span className="block truncate text-xs text-muted-foreground">
-                  {resolved && !resolved.empty ? resolved.label : "Not set — add it in Settings"}
+                  {resolved && !resolved.empty ? resolved.label : "Not set - add it in Settings"}
                 </span>
               </span>
             </DropdownMenuItem>

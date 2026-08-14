@@ -2,7 +2,7 @@
  * Single source for every address and legal fact we publish to customers.
  *
  * The footer used to advertise `hello@sitepix.com` and the policy pages
- * `privacy@everbreeze.io` — neither domain is the product domain
+ * `privacy@everbreeze.io` - neither domain is the product domain
  * (everbreezesitepix.com), and the API only ever sends from `EMAIL_FROM` on
  * that product domain. Rather than guess a mailbox that may bounce, these stay
  * as `[[...]]` placeholders until the owner confirms the real ones.
@@ -16,7 +16,7 @@ export const SUPPORT_EMAIL = "[[SUPPORT_EMAIL]]";
 export const PRIVACY_EMAIL = "[[PRIVACY_EMAIL]]";
 export const LEGAL_EMAIL = "[[LEGAL_EMAIL]]";
 
-/** Legal entity behind the Services — used by the Terms and Privacy pages. */
+/** Legal entity behind the Services - used by the Terms and Privacy pages. */
 export const LEGAL_ENTITY = "[[LEGAL_ENTITY_NAME]]";
 export const REGISTERED_ADDRESS = "[[REGISTERED_ADDRESS]]";
 export const GOVERNING_LAW = "[[GOVERNING_LAW_JURISDICTION]]";

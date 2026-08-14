@@ -116,7 +116,7 @@ export function CreateBoardDialog({
           <DialogTitle>{isEdit ? "Manage Pipeline" : "New Pipeline"}</DialogTitle>
           <DialogDescription>
             Each tag becomes a stage. Any project carrying one of these tags shows up in that stage
-            automatically — shared with your whole team, and always up to date.
+            automatically - shared with your whole team, and always up to date.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -136,7 +136,7 @@ export function CreateBoardDialog({
               <div className="p-1">
                 {allTags.length === 0 ? (
                   <p className="p-4 text-center text-xs text-muted-foreground">
-                    No tags yet — add tags to your projects first.
+                    No tags yet - add tags to your projects first.
                   </p>
                 ) : (
                   allTags.map((t) => (

@@ -10,7 +10,7 @@ import { cleanCaption } from "@sitepix/shared";
 export const Route = createFileRoute("/share/photos/$token")({
   head: () => ({
     meta: [
-      { title: "Shared photo — SitePix" },
+      { title: "Shared photo - SitePix" },
       { name: "description", content: "A photo shared from a SitePix project." },
       { name: "robots", content: "noindex,nofollow" },
     ],

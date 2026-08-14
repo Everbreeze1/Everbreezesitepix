@@ -4,19 +4,19 @@ import { parseReportTemplateStructure } from "../packages/shared/src/report-temp
 /*
  * `report_templates.sections` is jsonb carrying two shapes at once:
  *
- *   legacy   [{ heading, body }]                        — the column DEFAULT
- *   current  { coverStyle, placeholders, items: [...] } — what the editor writes
+ *   legacy   [{ heading, body }]                        - the column DEFAULT
+ *   current  { coverStyle, placeholders, items: [...] } - what the editor writes
  *
  * Nothing migrated the old rows, so both are live. The blueprint apply service
- * read the column as `((r as any).sections as any[]) ?? []` — a cast plus a
- * null-only guard — and then called `.map`, so every report template saved by
+ * read the column as `((r as any).sections as any[]) ?? []` - a cast plus a
+ * null-only guard - and then called `.map`, so every report template saved by
  * the current editor blew up with "sections.map is not a function" mid-apply.
  *
  * The contract these lock in: parseReportTemplateStructure is TOTAL. Whatever is
  * in that column, callers get an object with a real `items` array and can `.map`
  * it without a type guard.
  */
-describe("parseReportTemplateStructure — both live shapes of report_templates.sections", () => {
+describe("parseReportTemplateStructure - both live shapes of report_templates.sections", () => {
   it("reads the current editor object shape (the one that threw)", () => {
     const s = parseReportTemplateStructure({
       coverStyle: "hero",
@@ -43,7 +43,7 @@ describe("parseReportTemplateStructure — both live shapes of report_templates.
     expect(s.placeholders).toEqual([]);
   });
 
-  it("always returns a mappable items array — never throws", () => {
+  it("always returns a mappable items array - never throws", () => {
     for (const raw of [
       null,
       undefined,

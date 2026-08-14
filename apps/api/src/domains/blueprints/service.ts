@@ -66,13 +66,13 @@ export async function applyProjectBlueprintService(
   await requireTeamPlan(ctx);
 
   /*
-   * SECURITY — prove the caller can see this blueprint before dereferencing it.
+   * SECURITY - prove the caller can see this blueprint before dereferencing it.
    *
    * `requireOwnProject` validates the DESTINATION and `requireTeamPlan` the
    * plan, but `blueprintId` itself was never checked, and every read below
    * runs on the SERVICE-ROLE client, which bypasses RLS. A caller could pass
    * another team's blueprint id and have its checklists, documents, reports,
-   * workflows and label sets copied wholesale into their own project — a full
+   * workflows and label sets copied wholesale into their own project - a full
    * read of another team's template library through a write endpoint.
    *
    * Reading through `ctx.supabase` IS the check: RLS hides rows the caller has
@@ -168,7 +168,7 @@ export async function applyProjectBlueprintService(
     company_name: data.companyName ?? "",
     /*
      * Aliases for the vocabulary the report-template wizard advertises
-     * (ReportTemplatesManager's DEFAULT_PLACEHOLDERS) — its starter sections ship
+     * (ReportTemplatesManager's DEFAULT_PLACEHOLDERS) - its starter sections ship
      * "{{report_date}}" in the body. `fill` leaves an unknown token as literal
      * source, so without these a blueprint-applied report reads
      * "Overview of the site visit for Acme on {{report_date}}". Harmless while
@@ -220,7 +220,7 @@ export async function applyProjectBlueprintService(
       } else if (it.kind === "document") {
         // Create a real page, the same object "Save as template" round-trips
         // out of. This used to write a `project_site_logs` row, whose only
-        // reader (ProjectSiteLogs) is mounted inside ProjectReports — a
+        // reader (ProjectSiteLogs) is mounted inside ProjectReports - a
         // component nothing renders any more. The apply reported "1 document
         // created" and the project's Documents tab stayed empty, because the
         // row landed somewhere with no UI attached to it.
@@ -247,26 +247,26 @@ export async function applyProjectBlueprintService(
          * `{coverStyle, placeholders, items}` object. Nothing migrated the old
          * rows, so both are live.
          *
-         * This used to be `((r as any).sections as any[]) ?? []` — a cast plus a
+         * This used to be `((r as any).sections as any[]) ?? []` - a cast plus a
          * null-only guard, which is no guard at all against the object shape. So
          * every report template saved by the current editor threw
          * "sections.map is not a function", the item was pushed onto `failed`,
          * and the dialog still announced the blueprint as applied.
          *
          * `parseReportTemplateStructure` is the single shared reading of that
-         * column — the same one the editor uses — so the two cannot drift again.
+         * column - the same one the editor uses - so the two cannot drift again.
          */
         const structure = parseReportTemplateStructure((r as any).sections);
 
         /*
          * A report's content lives in `project_report_sections`, one row per
-         * section — that is what the builder, the public share page and the PDF
+         * section - that is what the builder, the public share page and the PDF
          * all read.
          *
          * This used to concatenate every section into one HTML string and store
          * it as `project_reports.body`. There is no `body` column on that table
          * (20260618230000 creates it; the only ALTERs add cover flags,
-         * photos_per_page and subtitle) — `{ html }` is the shape of
+         * photos_per_page and subtitle) - `{ html }` is the shape of
          * `document_templates.body`, copy-pasted onto the wrong table. PostgREST
          * rejects an insert naming an unknown column, and because the result was
          * never destructured that rejection was discarded and `counts.reports++`
@@ -324,7 +324,7 @@ export async function applyProjectBlueprintService(
           const { error: sectionsErr } = await supabaseAdmin
             .from("project_report_sections" as any)
             .insert(sectionRows);
-          // Thrown, not warned — same as the workflow branch below. An empty
+          // Thrown, not warned - same as the workflow branch below. An empty
           // report counted as a success is the exact miscount this branch is
           // being fixed for.
           if (sectionsErr) throw sectionsErr;
@@ -401,7 +401,7 @@ export async function applyProjectBlueprintService(
           const { data: pItems } = await supabaseAdmin
             .from("workflow_template_items" as any)
             // `kind` is NOT NULL with no default on project_workflow_items, so
-            // omitting it here rejected every row — a blueprint containing a
+            // omitting it here rejected every row - a blueprint containing a
             // workflow produced phases with no steps at all.
             .select("label, position, required, kind")
             .eq("phase_id", p.id)
@@ -424,21 +424,21 @@ export async function applyProjectBlueprintService(
       }
     } catch (e) {
       // One bad item must not abort the rest of the blueprint, but it also
-      // must not be invisible — the caller reports these so "applied" never
+      // must not be invisible - the caller reports these so "applied" never
       // silently means "applied most of it".
       console.error("apply blueprint item failed", it, e);
       failed.push({ kind: it.kind, reason: e instanceof Error ? e.message : String(e) });
     }
   }
 
-  // Ledger row. Everything above lands as ordinary project rows — a checklist
-  // created by a blueprint is indistinguishable from one typed by hand — so
+  // Ledger row. Everything above lands as ordinary project rows - a checklist
+  // created by a blueprint is indistinguishable from one typed by hand - so
   // without this the blueprint's own screen can never show where it has been
   // used. Best-effort on purpose: the work is already committed, and losing the
   // audit trail must not turn a successful apply into a failed one (notably on
   // an environment where 20260810000000 has not been run yet).
   // postgrest-js resolves rather than throws, so the error is checked, not
-  // caught — a missing table comes back as `error`, not an exception.
+  // caught - a missing table comes back as `error`, not an exception.
   const ledgerBase = {
     blueprint_id: data.blueprintId,
     project_id: data.projectId,
@@ -462,7 +462,7 @@ export async function applyProjectBlueprintService(
      * 20260812000000 has not been applied here yet. PostgREST rejects the whole
      * row over one unknown column, so without this retry adding those two
      * columns to the insert would have STOPPED provenance being recorded on any
-     * database still waiting for the migration — breaking something that worked.
+     * database still waiting for the migration - breaking something that worked.
      * Write what this database can hold; the origin still gets recorded.
      */
     console.warn("blueprint ledger: retrying without blueprint_name/origin", ledgerErr.message);
@@ -473,7 +473,7 @@ export async function applyProjectBlueprintService(
   if (ledgerErr) console.error("record blueprint application failed", ledgerErr);
 
   /*
-   * Best-effort stays non-throwing — the items really were created and that must
+   * Best-effort stays non-throwing - the items really were created and that must
    * not be reported as a failure. But it stops being SILENT: without this flag
    * the caller could not tell that the project will never show its origin, so
    * "which blueprint set this up?" became unanswerable with nothing anywhere
@@ -510,7 +510,7 @@ export type BlueprintOriginApplication = {
  * and the blueprint library have different visibility rules. `projects` is
  * visible to every teammate via are_teammates(), but `project_templates` (and
  * therefore `project_template_items`) is visible only to its author when the
- * blueprint carries no team_id — which is what the Templates screen writes for a
+ * blueprint carries no team_id - which is what the Templates screen writes for a
  * user without a team. A teammate reading the ledger directly got zero rows and
  * an empty item map, i.e. exactly what a project with no blueprint looks like.
  *
@@ -528,7 +528,7 @@ export async function getProjectBlueprintOriginService(
   /**
    * `template ref_id` → the blueprint that brought it in, for per-item badges.
    * Keyed by ref_id alone: a checklist template appears at most once in a given
-   * blueprint, and if two applied blueprints share one, the later apply wins —
+   * blueprint, and if two applied blueprints share one, the later apply wins -
    * which matches what the project actually ended up with.
    */
   itemSources: Record<string, { blueprintId: string | null; blueprintName: string | null }>;
@@ -537,7 +537,7 @@ export async function getProjectBlueprintOriginService(
    * Authorisation is "can this person see the project", NOT "did they create
    * it". `requireOwnProject` above is creator-only and would re-break the
    * teammate case this function exists to fix. Reading through `ctx.supabase`
-   * IS the check — RLS on `projects` already unions owner + are_teammates.
+   * IS the check - RLS on `projects` already unions owner + are_teammates.
    */
   const { data: proj } = await (ctx.supabase as any)
     .from("projects")
@@ -549,7 +549,7 @@ export async function getProjectBlueprintOriginService(
   const supabaseAdmin = getSupabaseAdmin();
   // `blueprint_name` and `origin` arrive with 20260812000000. PostgREST rejects
   // the whole select over an unknown column, so a database still waiting for
-  // that migration falls back to the original column list — the names then come
+  // that migration falls back to the original column list - the names then come
   // from the lookup below and every row reads as a real apply, which is exactly
   // what it was before `origin` existed.
   const LEDGER_BASE = "blueprint_id, counts, failed_count, created_at";
@@ -678,7 +678,7 @@ export const listBlueprintItemSourcesInputSchema = z.object({
  *
  * The workspace Reports screen lists reports from every project at once, so
  * asking the per-project endpoint once per project would be one round trip per
- * row group. Same authorisation rule — the caller's own RLS decides which of the
+ * row group. Same authorisation rule - the caller's own RLS decides which of the
  * requested projects they may see, and unseen ones are simply absent from the
  * result rather than erroring.
  */

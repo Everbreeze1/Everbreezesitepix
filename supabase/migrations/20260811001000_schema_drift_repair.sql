@@ -4,12 +4,12 @@
 -- 20260803010000_showcase_brochure.sql and 20260803020000_feedback_signals.sql
 -- describe columns that do not exist in production, even though APPLY_PENDING.sql
 -- claimed the first of them was applied. That file has been deleted rather than
--- corrected — a hand-maintained "what is applied" list is wrong the moment it
+-- corrected - a hand-maintained "what is applied" list is wrong the moment it
 -- disagrees with the database, and it was.
 --
 -- NAMING, because the audit reported these by filename and the filenames lie:
 --   * there is no `feedback_signals` TABLE. 20260803020000_feedback_signals.sql
---     converges public.issue_reports — kind/feature/sentiment/source/description
+--     converges public.issue_reports - kind/feature/sentiment/source/description
 --     are the "feedback signals" it is named for. Nothing in the repo references
 --     a table by that name.
 --   * there is no `showcases.brochure_enabled` COLUMN.
@@ -24,18 +24,18 @@
 -- attempt (see the header of 20260803010000). Keeping them apart means a
 -- deadlock here can never delay the lockdown there.
 --
--- Everything is IF NOT EXISTS / guarded, so re-running is a no-op — which is the
+-- Everything is IF NOT EXISTS / guarded, so re-running is a no-op - which is the
 -- point, since it is genuinely unknown how much of each original file landed.
 --
 -- Apply via the SitePix Supabase SQL editor. Safe to re-run.
 
 -- Fail fast rather than queueing behind app traffic. If a PART errors with
--- "canceling statement due to lock timeout" nothing in it was applied — close
+-- "canceling statement due to lock timeout" nothing in it was applied - close
 -- any open SitePix tabs and run that PART again.
 SET lock_timeout = '5s';
 
 
--- === PART 1 — 20260803020000: feedback columns on issue_reports ============
+-- === PART 1 - 20260803020000: feedback columns on issue_reports ============
 -- Source of truth stays 20260803020000_feedback_signals.sql; this is its
 -- convergence restated, with the `message` -> `description` fold from
 -- 20260803040001 folded in, because a database that missed 020000 may equally
@@ -123,7 +123,7 @@ CREATE INDEX IF NOT EXISTS issue_reports_kind_idx
 -- any database where this table did not already exist. Feedback rows carry the
 -- submitter's email, so the publishable key must not reach them. RLS already
 -- restricts INSERT to `authenticated`, so this only closes the privilege layer
--- behind the policy — nothing that works today stops working.
+-- behind the policy - nothing that works today stops working.
 REVOKE ALL ON public.issue_reports FROM anon, PUBLIC;
 GRANT SELECT, INSERT ON public.issue_reports TO authenticated;
 GRANT ALL ON public.issue_reports TO service_role;
@@ -139,7 +139,7 @@ CREATE POLICY "Users view own issue reports" ON public.issue_reports
   FOR SELECT TO authenticated USING (user_id = auth.uid());
 
 
--- === PART 2 — 20260803010000: the showcase brochure columns ================
+-- === PART 2 - 20260803010000: the showcase brochure columns ================
 -- Most deadlock-prone statement in this file; `showcases` is read on every
 -- Portfolio and Showcase load.
 ALTER TABLE public.showcases
@@ -151,7 +151,7 @@ ALTER TABLE public.showcases
 CREATE TABLE IF NOT EXISTS public.showcase_sections (
   id          uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   showcase_id uuid NOT NULL REFERENCES public.showcases(id) ON DELETE CASCADE,
-  -- Optional provenance, deliberately not a FK — see 20260803010000.
+  -- Optional provenance, deliberately not a FK - see 20260803010000.
   project_id  uuid,
   title       text,
   body_html   text,
@@ -206,10 +206,10 @@ CREATE POLICY "Manage sections on your own showcases" ON public.showcase_section
   );
 
 
--- === PART 3 — migration history bookkeeping ================================
+-- === PART 3 - migration history bookkeeping ================================
 -- 20260803040000 was used twice (issue_reports_description_fix and
--- starter_project_sharing). Two files cannot share a version — the CLI's history
--- table is keyed on it — so the description fix has been renamed to
+-- starter_project_sharing). Two files cannot share a version - the CLI's history
+-- table is keyed on it - so the description fix has been renamed to
 -- 20260803040001 (it repairs 20260803020000, so it is the one that must sort
 -- later; starter_project_sharing is independent of both and keeps the original
 -- stamp, which also matches the order they were written in).
@@ -218,7 +218,7 @@ CREATE POLICY "Manage sections on your own showcases" ON public.showcase_section
 -- records the new version as applied so `supabase db push` does not try to
 -- re-run it. It is a no-op on a database whose history is not CLI-tracked, and
 -- the file itself is idempotent anyway, so a re-run would be harmless either
--- way — this just avoids the surprise.
+-- way - this just avoids the surprise.
 DO $$
 BEGIN
   -- Two separate steps, and the INSERT goes through EXECUTE, because PL/pgSQL
@@ -229,7 +229,7 @@ BEGIN
     SELECT 1 FROM information_schema.tables
     WHERE table_schema = 'supabase_migrations' AND table_name = 'schema_migrations'
   ) THEN
-    RAISE NOTICE 'no CLI-tracked migration history — nothing to record';
+    RAISE NOTICE 'no CLI-tracked migration history - nothing to record';
     RETURN;
   END IF;
 

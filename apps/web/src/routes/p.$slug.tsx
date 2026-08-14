@@ -7,7 +7,7 @@ import { getPublicPortfolio, type PublicPortfolio } from "@/lib/portfolio.functi
 import { absoluteUrl } from "@/lib/site-url";
 
 /**
- * The portfolio site's home page — /p/<slug>.
+ * The portfolio site's home page - /p/<slug>.
  *
  * Loaded in a route `loader` rather than a client-side effect (which is how the
  * older /share pages work) for one reason: this page is meant to be indexed.
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/p/$slug")({
     try {
       return await getPublicPortfolio({ data: { slug: params.slug } });
     } catch {
-      // A failed load must not 500 a public marketing page — render the same
+      // A failed load must not 500 a public marketing page - render the same
       // "unavailable" state an unknown slug gets.
       return {
         status: "not_found",
@@ -40,7 +40,7 @@ export const Route = createFileRoute("/p/$slug")({
       };
     }
     const name = site.business_name?.trim() || "Our work";
-    const title = site.seo_title?.trim() || `${name} — Our work`;
+    const title = site.seo_title?.trim() || `${name} - Our work`;
     const description =
       site.seo_description?.trim() ||
       site.hero_subhead?.trim() ||
@@ -54,7 +54,7 @@ export const Route = createFileRoute("/p/$slug")({
       meta: [
         { title },
         { name: "description", content: description },
-        // Unlike /share links, a portfolio is meant to be found — this is the
+        // Unlike /share links, a portfolio is meant to be found - this is the
         // "boost your SEO" half of the feature.
         { name: "robots", content: "index,follow" },
         { property: "og:type", content: "website" },
@@ -126,7 +126,7 @@ function PortfolioHomePage() {
             {
               "@type": "CollectionPage",
               "@id": url,
-              name: `${name} — Our work`,
+              name: `${name} - Our work`,
               url,
               isPartOf: { "@id": `${url}#business` },
               hasPart: data.showcases.slice(0, 50).map((s) => ({

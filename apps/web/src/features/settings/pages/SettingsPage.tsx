@@ -763,7 +763,7 @@ function NotificationsSection() {
   };
 
   // "Product updates & tips" is kept in NotifPrefs/DEFAULT_NOTIFS for existing
-  // stored preferences, but isn't shown as a row here — the design only lists
+  // stored preferences, but isn't shown as a row here - the design only lists
   // these four.
   const rows: { key: keyof NotifPrefs; label: string; desc: string }[] = [
     {
@@ -1265,7 +1265,7 @@ function BillingSection({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-border bg-card/[0.55] p-5">
-          {/* Team hides the ceiling — see WorkspaceCoverageCard in TeamsPage. */}
+          {/* Team hides the ceiling - see WorkspaceCoverageCard in TeamsPage. */}
           <p className={fieldLabelClass}>{isTeam ? "People" : "Seats"}</p>
           <p className="mt-3 font-manrope text-lg font-extrabold text-foreground">
             {isTeam ? seatsUsed : `${seatsUsed} of ${seatsLimit}`}
@@ -1383,7 +1383,7 @@ function TeamSection({ isTeam, teamData }: { isTeam: boolean; teamData: any }) {
   );
 }
 
-/* ---------------- Support (kept, no longer reachable from settings nav — Help Center now lives in the global sidebar) ---------------- */
+/* ---------------- Support (kept, no longer reachable from settings nav - Help Center now lives in the global sidebar) ---------------- */
 
 function SupportTile({
   icon: Icon,

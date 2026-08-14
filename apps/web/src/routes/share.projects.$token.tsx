@@ -10,7 +10,7 @@ import { cleanCaption } from "@sitepix/shared";
 /**
  * What a scanned QR code opens.
  *
- * No sign-in, no account, no app shell — the person holding the phone is
+ * No sign-in, no account, no app shell - the person holding the phone is
  * standing at the job site and is not a customer of ours. The payload is built
  * by `getPublicProjectShareService`, which decides what an anonymous visitor is
  * allowed to see; this file only renders it, and deliberately renders no
@@ -19,7 +19,7 @@ import { cleanCaption } from "@sitepix/shared";
 export const Route = createFileRoute("/share/projects/$token")({
   head: () => ({
     meta: [
-      { title: "Shared project — SitePix" },
+      { title: "Shared project - SitePix" },
       { name: "description", content: "A job site shared from SitePix." },
       // A printed QR code is handed to specific people, not published. Keeping
       // it out of search results is the whole difference between "shared" and
@@ -200,7 +200,7 @@ function PublicProjectPage() {
                     Same rule and same treatment as PhotoCarousel, the app's own
                     photo tile.
 
-                    `"untagged"` is not a phase — it is what `uploadOne` stores
+                    `"untagged"` is not a phase - it is what `uploadOne` stores
                     when someone picks "No marker", so rendering any truthy
                     `phase` put the word UNTAGGED on a customer's screen.
                     Capitalised rather than shouted, too: most of these images

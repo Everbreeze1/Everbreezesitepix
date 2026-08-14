@@ -5,7 +5,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 /**
  * A bare HTML width/height attribute value ("48%", "280") is a valid
  * *attribute*, but as a CSS length "280" is invalid and gets silently
- * dropped — it needs an explicit unit ("280px").
+ * dropped - it needs an explicit unit ("280px").
  */
 function cssLength(v: unknown): string | null {
   if (v == null) return null;
@@ -16,13 +16,13 @@ function cssLength(v: unknown): string | null {
 
 /**
  * Image node that additionally persists `data-photo-id` so the backend can
- * re-resolve a fresh signed URL on every read — the `src` we set at insert
+ * re-resolve a fresh signed URL on every read - the `src` we set at insert
  * time is a signed URL that expires in an hour and must never be trusted
  * as the persisted value.
  *
  * `inline` lets several images share a paragraph, which is how template photo
  * strips lay out side by side. `allowBase64` is required for the inline SVG
- * "click to add" photo slots that templates ship with — Tiptap otherwise
+ * "click to add" photo slots that templates ship with - Tiptap otherwise
  * drops any `src` starting with `data:` while parsing.
  */
 export const ProjectImage = Image.extend({
@@ -42,8 +42,8 @@ export const ProjectImage = Image.extend({
    * Serialise the declared box as an inline style as well as width/height
    * attributes.
    *
-   * Every surface that renders stored HTML directly — the shared page, the
-   * template previews — sits under Tailwind's preflight, and its
+   * Every surface that renders stored HTML directly - the shared page, the
+   * template previews - sits under Tailwind's preflight, and its
    * `img { height: auto }` outranks an HTML `height` attribute (presentational
    * hints lose to any author rule). So the fixed box a template authored was
    * silently dropped and the photo rendered at its natural aspect instead:
@@ -52,7 +52,7 @@ export const ProjectImage = Image.extend({
    *
    * An inline style outranks preflight, so the box now survives everywhere.
    * The crop itself still comes from `.tiptap img[width][height]`, which every
-   * one of those surfaces already carries — this only restores the size.
+   * one of those surfaces already carries - this only restores the size.
    */
   renderHTML({ HTMLAttributes }) {
     const w = cssLength(HTMLAttributes.width);
@@ -63,7 +63,7 @@ export const ProjectImage = Image.extend({
 
   // A plain `renderHTML` <img> can't host a hover overlay (browsers don't
   // paint generated content on replaced elements), so every image is wrapped
-  // in a span. Only a real inserted photo — anything with data-photo-id —
+  // in a span. Only a real inserted photo - anything with data-photo-id -
   // gets the "Change photo" overlay inside that wrapper; an empty template
   // slot has its own click-to-add art and takes the wrapper without one.
   addNodeView() {
@@ -74,7 +74,7 @@ export const ProjectImage = Image.extend({
       wrapper.className = "tiptap-photo";
 
       // ProseMirror sets `draggable` on the NodeView's own dom (the wrapper)
-      // for reordering — leave the inner <img> non-draggable so it doesn't
+      // for reordering - leave the inner <img> non-draggable so it doesn't
       // additionally trigger the browser's native "drag image out" behavior.
       const img = document.createElement("img");
       img.draggable = false;
@@ -93,7 +93,7 @@ export const ProjectImage = Image.extend({
         // containing block with a definite width. The wrapper span this
         // NodeView adds is `display: inline-block` with no width of its own,
         // so leaving the percentage on the <img> makes it resolve against
-        // nothing — the browser falls back to the photo's native pixel size,
+        // nothing - the browser falls back to the photo's native pixel size,
         // which is how a real upload was blowing up to its own huge intrinsic
         // size while a neighboring empty slot (a small SVG) stayed put and
         // wrapped to the next line. Put the real box size on the wrapper

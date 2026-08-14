@@ -85,7 +85,7 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
   const [loading, setLoading] = useState(true);
   const [sets, setSets] = useState<LabelSet[]>([]);
   const [itemsBySet, setItemsBySet] = useState<Record<string, LabelSetItem[]>>({});
-  /** Guards `addItem` against overlapping inserts — see the note there. */
+  /** Guards `addItem` against overlapping inserts - see the note there. */
   const addingRef = useRef(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -258,7 +258,7 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
     if (!selected || addingRef.current) return;
     addingRef.current = true;
     try {
-      // max+1, not `.length` — `deleteItem` doesn't renumber survivors, so length
+      // max+1, not `.length` - `deleteItem` doesn't renumber survivors, so length
       // collided with a surviving label's position. It also drives the swatch
       // below, so the collision handed the new label its twin's colour too.
       const position = items.reduce((max, i) => Math.max(max, i.position), -1) + 1;
@@ -273,7 +273,7 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
         return;
       }
       const created = data as unknown as LabelSetItem;
-      // Append onto the CURRENT list, not the closure's — `[...items, created]`
+      // Append onto the CURRENT list, not the closure's - `[...items, created]`
       // dropped any row added during the round trip.
       setItemsBySet((m) => ({ ...m, [selected.id]: [...(m[selected.id] ?? []), created] }));
     } finally {
@@ -336,7 +336,7 @@ export function LabelSetsManager({ teamId, canManage }: Props) {
     if (results.some((r) => r.error)) {
       toast.error("Failed to save order");
       // Restore the previous ORDER only. The functional form isn't enough on
-      // its own here — only `m` was fresh, the `items` payload was the pre-drag
+      // its own here - only `m` was fresh, the `items` payload was the pre-drag
       // closure, so replaying it wholesale reverted any rename or colour change
       // made during the round trip (which had already been written on its own).
       const before = new Map(items.map((it, i) => [it.id, { i, position: it.position }]));
@@ -670,7 +670,7 @@ function SortableItem({
     // Lifts the row over its siblings while dragging. Without it every later
     // row's opaque `bg-card` painted across the row being dragged, which at 0.6
     // opacity read as the row sinking behind the list. `position` comes from
-    // the `relative` class below — z-index is inert on a static box.
+    // the `relative` class below - z-index is inert on a static box.
     zIndex: isDragging ? 5 : undefined,
   };
   const [name, setName] = useState(item.name);

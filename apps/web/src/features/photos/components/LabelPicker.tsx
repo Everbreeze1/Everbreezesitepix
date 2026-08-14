@@ -23,7 +23,7 @@ import {
 
 type ChipSize = "xs" | "sm" | "md" | "lg";
 
-// Bumped one step to match TagPill — labels sit over photos and on dense cards,
+// Bumped one step to match TagPill - labels sit over photos and on dense cards,
 // where the old 11-13px sizes were reported as hard to read.
 const CHIP_SIZE_CLASSES: Record<ChipSize, string> = {
   xs: "px-2.5 py-1 text-xs tracking-tight",
@@ -185,7 +185,7 @@ export function LabelPicker({
             {available.length === 0 && (
               <p className="px-2 py-3 text-center text-xs text-muted-foreground">
                 {suggestions.length === 0
-                  ? "No labels yet — create your first one."
+                  ? "No labels yet - create your first one."
                   : "No matching labels."}
               </p>
             )}

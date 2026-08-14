@@ -307,7 +307,7 @@ export function ReportTemplatesManager({ teamId, canManage }: Props) {
           title="No report templates yet"
           description={
             canManage
-              ? "Create a reusable report structure — cover style, sections, and placeholders — you can apply to any project."
+              ? "Create a reusable report structure - cover style, sections, and placeholders - you can apply to any project."
               : "Ask your account owner or admin to create a report template."
           }
           action={
@@ -851,7 +851,7 @@ function SortableSection({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.6 : 1,
-    // Lifts the section over its siblings while dragging — these rows are tall,
+    // Lifts the section over its siblings while dragging - these rows are tall,
     // so without it the following sections' opaque fill painted straight
     // through the one being dragged for most of the drag. Needs the `relative`
     // below: z-index does nothing on a static box.
@@ -906,7 +906,7 @@ function SortableSection({
           <Textarea
             value={section.body}
             onChange={(e) => onChange({ body: e.target.value })}
-            placeholder="Section body — supports {{placeholders}}"
+            placeholder="Section body - supports {{placeholders}}"
             rows={2}
             className="text-sm"
           />

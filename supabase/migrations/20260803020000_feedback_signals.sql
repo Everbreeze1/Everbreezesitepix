@@ -2,7 +2,7 @@
 --
 -- It only ever held free-text bug reports typed on the Report an issue page.
 -- Two things are now needed on top of that:
---   1. "Suggest a feature" — ideas belong next to bugs, not in a separate silo,
+--   1. "Suggest a feature" - ideas belong next to bugs, not in a separate silo,
 --      so one queue can be triaged and one query answers "what are users
 --      asking for?".
 --   2. An occasional in-app prompt on the surface a user is actually using,
@@ -16,7 +16,7 @@
 -- all one GROUP BY.
 --
 -- This table predates the migrations folder and the checked-in generated types
--- (packages/db/src/database.ts) do NOT match what is actually deployed — a
+-- (packages/db/src/database.ts) do NOT match what is actually deployed - a
 -- first cut of this migration assumed `message` existed and failed with
 -- 42703. So everything below is written to CONVERGE the table to the shape the
 -- app writes, whatever state it starts in: create it if absent, add every
@@ -38,7 +38,7 @@ ALTER TABLE public.issue_reports
   ADD COLUMN IF NOT EXISTS user_id     uuid,
   ADD COLUMN IF NOT EXISTS email       text,
   -- The text column is `description`. An earlier cut of this file said
-  -- `message`, which does not exist on the deployed table — see 20260803040001.
+  -- `message`, which does not exist on the deployed table - see 20260803040001.
   ADD COLUMN IF NOT EXISTS description text,
   ADD COLUMN IF NOT EXISTS url        text,
   ADD COLUMN IF NOT EXISTS user_agent text,

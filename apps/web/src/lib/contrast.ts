@@ -2,7 +2,7 @@
  * Contrast helpers for surfaces painted with a user-chosen brand colour.
  *
  * A portfolio's accent is picked by the contractor from a colour input, so it
- * can be anything — including pale yellow. Hardcoding white button text is what
+ * can be anything - including pale yellow. Hardcoding white button text is what
  * turns "brand colour" into "illegible button", hence these.
  */
 

@@ -13,7 +13,7 @@ export interface AdminAuditLogRow {
   actor: { id: string; name: string | null; email: string | null } | null;
 }
 
-/** Best-effort — never let a logging failure block the admin action it's recording. */
+/** Best-effort - never let a logging failure block the admin action it's recording. */
 export async function logAdminAction(
   admin: ReturnType<typeof getSupabaseAdmin>,
   params: {
@@ -33,7 +33,7 @@ export async function logAdminAction(
       metadata: params.metadata ?? null,
     });
   } catch {
-    // Swallow — audit logging is best-effort, not a correctness dependency.
+    // Swallow - audit logging is best-effort, not a correctness dependency.
   }
 }
 

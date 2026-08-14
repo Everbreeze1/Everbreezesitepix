@@ -6,13 +6,13 @@
  * API v3) and invokes its `fetch` handler in-process. For each route it asserts:
  *   1. The handler returns a Response (no thrown exception, no h3-swallowed
  *      `{"unhandled":true,"message":"HTTPError"}` 500).
- *   2. The status is < 500 — every one of these routes is expected to render a
+ *   2. The status is < 500 - every one of these routes is expected to render a
  *      graceful "unavailable" state for unknown ids, not blow up.
  *   3. The body looks like the intended route rather than some other document.
  *
  * This originally guarded one operator-precedence bug in the walkthrough share
  * loader. It now covers the portfolio site and its embeds too, because those
- * routes load data in a *route loader* — so a loader that throws takes down a
+ * routes load data in a *route loader* - so a loader that throws takes down a
  * page a search engine is crawling, rather than flashing an error inside an
  * already-rendered shell the way the older client-fetching share pages do.
  *
@@ -46,12 +46,12 @@ const ROUTES = [
   // is streamed, so the head is the only server-rendered text there is.
   { path: `/share/showcases/${NIL_UUID}`, expect: ["<title>project"] },
   // The two field records. Both fetch client-side, so the server renders only
-  // the shell — the assertion is that the shell renders at all. `RecordDocument`
+  // the shell - the assertion is that the shell renders at all. `RecordDocument`
   // reads `window` nowhere, and this is what keeps it that way.
   { path: `/share/checklists/${NIL_UUID}`, expect: ["<title>shared checklist"] },
   { path: `/share/workflows/${NIL_UUID}`, expect: ["<title>shared workflow"] },
   // What a printed QR code opens. Same client-fetching shape as the two above,
-  // and the one route here a stranger reaches by pointing a phone at a wall —
+  // and the one route here a stranger reaches by pointing a phone at a wall -
   // so "the shell renders at all" is the difference between a scan showing
   // "unavailable" and a scan showing a 500.
   { path: `/share/projects/${NIL_UUID}`, expect: ["<title>shared project"] },
@@ -60,7 +60,7 @@ const ROUTES = [
   { path: `/embed/gallery/${NIL_UUID}`, expect: ["gallery"] },
   { path: `/embed/map/${NIL_UUID}`, expect: ["map"] },
   {
-    // Pure server handler, no React — asserts the snippet contractors paste is
+    // Pure server handler, no React - asserts the snippet contractors paste is
     // actually served rather than falling through to the SPA shell.
     path: "/embed.js",
     expect: ["sitepix:embed:height", "data-sitepix"],
@@ -72,7 +72,7 @@ const ROUTES = [
   },
 ];
 
-// Minimal Vercel Node function context shim — the handler only touches
+// Minimal Vercel Node function context shim - the handler only touches
 // context.waitUntil, everything else (static assets, ISR headers) is handled by
 // Vercel's routing layer, not this function.
 const context = { waitUntil() {} };

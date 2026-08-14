@@ -61,7 +61,7 @@ export interface ShowcaseDetail {
   cover_photo_id: string | null;
   cover_image_url: string | null;
   sections: ShowcaseSectionDetail[];
-  /** Portfolio-site metadata — edited separately via updateShowcaseSite. */
+  /** Portfolio-site metadata - edited separately via updateShowcaseSite. */
   slug: string | null;
   service_type: string | null;
   products_used: string[];

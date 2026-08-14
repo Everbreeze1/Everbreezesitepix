@@ -135,8 +135,8 @@ export async function getPublicPhotoShareService(
    * Trashing must take the public link down with it.
    *
    * Deleting a photo did not touch its shares, and nothing here filtered
-   * `deleted_at`, so a contractor who removed a photo — often precisely because
-   * a client asked them to, or because it showed something it shouldn't — kept
+   * `deleted_at`, so a contractor who removed a photo - often precisely because
+   * a client asked them to, or because it showed something it shouldn't - kept
    * serving it in full to anyone holding the link. Trash is a 60-day window, and
    * with no scheduler running the purge hook (see LAUNCH.md §4.4) it is
    * effectively forever.

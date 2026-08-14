@@ -71,7 +71,7 @@ function toDraft(p: PortfolioDetail): Draft {
 }
 
 /**
- * Editor for the site *around* the showcases — the brand, the copy, the
+ * Editor for the site *around* the showcases - the brand, the copy, the
  * contact details and the address it lives at.
  *
  * Mirrors the showcase builder's save model on purpose: no autosave, an
@@ -133,7 +133,7 @@ export function PortfolioSitePanel({
 
   /**
    * Uploaded to the same `company-logos` bucket Settings uses, but stored on
-   * the portfolio rather than the profile — the marketing site's logo and the
+   * the portfolio rather than the profile - the marketing site's logo and the
    * one stamped on reports are allowed to differ.
    */
   const onLogoUpload = async (files: FileList | null) => {
@@ -156,7 +156,7 @@ export function PortfolioSitePanel({
       }
       const { data: pub } = supabase.storage.from("company-logos").getPublicUrl(path);
       set("logoUrl", pub.publicUrl);
-      toast.success("Logo uploaded — press Save to publish it.");
+      toast.success("Logo uploaded - press Save to publish it.");
     } finally {
       setUploadingLogo(false);
       if (logoInput.current) logoInput.current.value = "";
@@ -215,7 +215,7 @@ export function PortfolioSitePanel({
 
   return (
     <div className="space-y-6">
-      {/* Sticky save bar — same affordance as the showcase builder, so "did
+      {/* Sticky save bar - same affordance as the showcase builder, so "did
           that save?" is never a question on either screen. */}
       <div className="sticky top-[82px] z-20 -mx-6 flex flex-wrap items-center gap-3 border-b border-border bg-background/95 px-6 py-3 backdrop-blur sm:-mx-10 sm:px-10">
         <span
@@ -266,7 +266,7 @@ export function PortfolioSitePanel({
 
           <Card
             title="Cover"
-            hint="The first thing a prospect sees — full-bleed, with your headline over it."
+            hint="The first thing a prospect sees - full-bleed, with your headline over it."
           >
             <div>
               <Label>Hero photo</Label>
@@ -280,7 +280,7 @@ export function PortfolioSitePanel({
                   <div className="flex aspect-[21/9] flex-col items-center justify-center gap-2 text-muted-foreground">
                     <ImagePlus className="h-7 w-7 opacity-60" />
                     <p className="px-6 text-center text-xs">
-                      No hero chosen — your newest project&rsquo;s cover is used instead.
+                      No hero chosen - your newest project&rsquo;s cover is used instead.
                     </p>
                   </div>
                 )}
@@ -388,7 +388,7 @@ export function PortfolioSitePanel({
             <TagInput
               value={draft.services}
               onChange={(v) => set("services", v)}
-              placeholder="Roofing, Siding, Gutters — press Enter after each"
+              placeholder="Roofing, Siding, Gutters - press Enter after each"
               suggestions={serviceTypes}
             />
           </Card>
@@ -419,7 +419,7 @@ export function PortfolioSitePanel({
 
           <Card
             title="Search engines"
-            hint="How your site appears in Google results. Optional — sensible defaults are generated."
+            hint="How your site appears in Google results. Optional - sensible defaults are generated."
           >
             <div>
               <Label>Page title</Label>
@@ -427,7 +427,7 @@ export function PortfolioSitePanel({
                 value={draft.seoTitle}
                 onChange={(e) => set("seoTitle", e.target.value)}
                 maxLength={70}
-                placeholder="Acme Roofing — Roof replacement in Sacramento"
+                placeholder="Acme Roofing - Roof replacement in Sacramento"
               />
               <CharCount value={draft.seoTitle.length} max={70} />
             </div>
@@ -590,7 +590,7 @@ function SlugStatus({
   return (
     <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-amber-600">
       <TriangleAlert className="h-3 w-3" />
-      Available — but changing this breaks links you've already shared.
+      Available - but changing this breaks links you've already shared.
     </p>
   );
 }

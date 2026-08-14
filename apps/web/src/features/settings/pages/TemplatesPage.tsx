@@ -96,7 +96,7 @@ export type TemplateTabKey = (typeof TEMPLATE_TAB_KEYS)[number];
 
 export type TemplatesSearch = {
   tab?: TemplateTabKey;
-  /** Opens straight to one blueprint — used by links from projects. */
+  /** Opens straight to one blueprint - used by links from projects. */
   blueprint?: string;
 };
 
@@ -148,7 +148,7 @@ interface BlueprintApplication {
  *
  * `legacy` rows live in `project_template_checklists`, which predates the
  * generic `project_template_items` table. Both still apply, so both have to be
- * editable here — see `persistOrder` for how reordering reconciles them.
+ * editable here - see `persistOrder` for how reordering reconciles them.
  */
 interface SectionRow {
   id: string;
@@ -259,7 +259,7 @@ export function TemplatesPage() {
   const [applyOpen, setApplyOpen] = useState(false);
 
   /**
-   * `null` means the ledger is unreadable — most likely migration
+   * `null` means the ledger is unreadable - most likely migration
    * 20260810000000 has not been run on this environment yet. The usage panel
    * hides itself rather than showing a permanently empty "never used".
    */
@@ -279,8 +279,8 @@ export function TemplatesPage() {
       .limit(200);
     if (error) {
       // Reported, not swallowed. Without this line the usage panel simply
-      // vanishes and there is nothing anywhere — console, UI or network tab
-      // summary — saying the ledger could not be read.
+      // vanishes and there is nothing anywhere - console, UI or network tab
+      // summary - saying the ledger could not be read.
       console.warn("[blueprint-applications] ledger read failed", {
         code: (error as { code?: string }).code,
         message: error.message,
@@ -364,7 +364,7 @@ export function TemplatesPage() {
     void loadApplications();
   }, [user, gated, load, loadApplications]);
 
-  // A `?blueprint=` link should win over whatever was selected, and only once —
+  // A `?blueprint=` link should win over whatever was selected, and only once -
   // the param is cleared so a later click in the rail is not snapped back.
   useEffect(() => {
     if (!search.blueprint) return;
@@ -470,7 +470,7 @@ export function TemplatesPage() {
    * The selected blueprint's contents in apply order.
    *
    * Legacy checklist links come first because `applyProjectBlueprintService`
-   * processes them first — the list has to show the order that will actually
+   * processes them first - the list has to show the order that will actually
    * happen, not a prettier one.
    */
   const sections: SectionRow[] = useMemo(() => {
@@ -624,7 +624,7 @@ export function TemplatesPage() {
       }
     }
     // Copying only the legacy checklist links silently dropped every document,
-    // report, workflow and label set — a "duplicate" of a five-section
+    // report, workflow and label set - a "duplicate" of a five-section
     // blueprint could come back with none of them.
     const items = tplItems.filter((i) => i.project_template_id === t.id);
     if (items.length) {
@@ -699,7 +699,7 @@ export function TemplatesPage() {
       ref_id: refId,
       // max+1 over this blueprint's rows, not `sections.length`. `removeSection`
       // never renumbers survivors, and `sections` also counts legacy
-      // `project_template_checklists` rows — so length was both gap-blind and
+      // `project_template_checklists` rows - so length was both gap-blind and
       // inflated, and could hand the new section a number a sibling held.
       position:
         tplItems
@@ -869,10 +869,10 @@ export function TemplatesPage() {
     <div className="min-h-screen bg-background">
       {/* pt-only responsive scaling. `md:py-10` used to sit here, and because a
           variant shorthand outranks the unvariated `pb-32`, desktop bottom
-          padding collapsed to 40px — less than the 84px the floating camera
+          padding collapsed to 40px - less than the 84px the floating camera
           button occupies, so the last row of every tab sat under it. */}
       <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pt-10">
-        {/* Hero — same shell, ornament, badge and stats rail as Projects and the
+        {/* Hero - same shell, ornament, badge and stats rail as Projects and the
             project home page. Templates was the last product surface still
             wearing the plain settings header, which is most of why it read as a
             bolted-on admin screen rather than the thing the workflow runs on. */}
@@ -888,7 +888,7 @@ export function TemplatesPage() {
                   Templates
                 </h1>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-sidebar-foreground/60">
-                  Build a job setup once as a blueprint, then apply it to any project — its
+                  Build a job setup once as a blueprint, then apply it to any project - its
                   checklists, workflows, documents, reports and labels all land in place.
                 </p>
               </div>
@@ -908,7 +908,7 @@ export function TemplatesPage() {
               </div>
             </div>
 
-            {/* Stats rail — states what the library holds and cuts to it. */}
+            {/* Stats rail - states what the library holds and cuts to it. */}
             <div className="flex flex-col gap-4 border-t border-sidebar-border pt-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="mr-1 text-[10px] font-extrabold uppercase tracking-[1.5px] text-sidebar-foreground/45">
@@ -1608,7 +1608,7 @@ function BlueprintsTab(props: {
 
           {/* What applying it does. This is the answer to "when I select a
               template, what happens to it?" and it comes before the builder on
-              purpose — the outcome is the point, the parts list is detail. */}
+              purpose - the outcome is the point, the parts list is detail. */}
           <div className={cn(SURFACE_CARD, "p-5")}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <div>
@@ -1739,7 +1739,7 @@ function BlueprintsTab(props: {
                         </span>
                         <span className="block truncate text-[11px] text-muted-foreground">
                           {r.missing
-                            ? "The source template was deleted — remove this section"
+                            ? "The source template was deleted - remove this section"
                             : `→ ${KIND_OUTCOME[r.kind].becomes}`}
                         </span>
                       </span>
@@ -1888,7 +1888,7 @@ function BlueprintsIntro({ canManage, onCreate }: { canManage: boolean; onCreate
     {
       icon: LayoutTemplate,
       title: "Build the pieces",
-      body: "Checklists, workflows, documents, reports and label sets — each on its own tab above. Anything you save from a project lands there too.",
+      body: "Checklists, workflows, documents, reports and label sets - each on its own tab above. Anything you save from a project lands there too.",
     },
     {
       icon: FolderOpen,
@@ -1926,7 +1926,7 @@ function BlueprintsIntro({ canManage, onCreate }: { canManage: boolean; onCreate
         title="No project blueprints yet"
         description={
           canManage
-            ? "Create one to standardise how a job gets set up — then apply it to any project in a click."
+            ? "Create one to standardise how a job gets set up - then apply it to any project in a click."
             : "Ask your account owner or an admin to create one."
         }
         action={

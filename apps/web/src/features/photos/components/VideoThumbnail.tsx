@@ -33,7 +33,7 @@ function writeCache(key: string, dataUrl: string) {
   try {
     localStorage.setItem(CACHE_PREFIX + key, dataUrl);
   } catch {
-    // Quota exceeded — try sessionStorage as a soft fallback.
+    // Quota exceeded - try sessionStorage as a soft fallback.
     try {
       sessionStorage.setItem(CACHE_PREFIX + key, dataUrl);
     } catch {}

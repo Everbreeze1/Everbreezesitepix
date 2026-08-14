@@ -335,7 +335,7 @@ export function WalkthroughRecorder({
     });
     setMuted(next);
     if (next) {
-      toast.message("Microphone muted — narration won't be recorded while muted.");
+      toast.message("Microphone muted - narration won't be recorded while muted.");
     }
   }, [muted]);
 
@@ -484,7 +484,7 @@ export function WalkthroughRecorder({
       to: target,
       deviceId: newTrack.getSettings?.().deviceId,
     });
-    // Front-facing main view + PiP self-view is redundant — turn PiP off.
+    // Front-facing main view + PiP self-view is redundant - turn PiP off.
     if (target === "user") stopSelfView();
   }, [flipping, stopSelfView]);
 
@@ -528,7 +528,7 @@ export function WalkthroughRecorder({
 
     // Single getUserMedia call for both camera preview AND microphone capture.
     // Recording audio with MediaRecorder is far more reliable than live Scribe
-    // on mobile — we batch-transcribe server-side after stop for accuracy.
+    // on mobile - we batch-transcribe server-side after stop for accuracy.
     let stream: MediaStream;
     try {
       // Prefer the rear camera on phones. Try `exact` first for reliable
@@ -583,12 +583,12 @@ export function WalkthroughRecorder({
       }
     }
 
-    // Single MediaRecorder on the FULL A/V stream — this is the saved playback
+    // Single MediaRecorder on the FULL A/V stream - this is the saved playback
     // file, so it must keep the microphone track attached for narration.
     mediaChunksRef.current = [];
     const audioTracks = stream.getAudioTracks();
     if (audioTracks.length === 0) {
-      toast.error("No microphone detected — We can't transcribe without audio.");
+      toast.error("No microphone detected - We can't transcribe without audio.");
       stopAll();
       setStarting(false);
       return;
@@ -731,7 +731,7 @@ export function WalkthroughRecorder({
           resolve();
         };
         // Some Android WebView/Chrome builds do not reliably fire `onstop`
-        // after `requestData()`. Never let that block the database save — the
+        // after `requestData()`. Never let that block the database save - the
         // walkthrough card and linked photos are more important than video.
         const timeout = window.setTimeout(done, 2500);
         rec.onstop = () => {
@@ -795,7 +795,7 @@ export function WalkthroughRecorder({
     } catch (e: any) {
       console.warn("[walkthrough] finish failed", e);
       setFinishError(
-        "We couldn't save your walkthrough. Your recording is still on this device — please try again.",
+        "We couldn't save your walkthrough. Your recording is still on this device - please try again.",
       );
     }
   };
@@ -822,7 +822,7 @@ export function WalkthroughRecorder({
               <Lock className="h-10 w-10 text-white/70" />
               <h3 className="text-lg font-semibold">Walkthrough Notes are a Pro feature</h3>
               <p className="max-w-md text-sm text-white/70">
-                Walk the job, speak naturally, snap photos as you go — our AI turns it all into a
+                Walk the job, speak naturally, snap photos as you go - our AI turns it all into a
                 polished, client-ready report. Up to 10 minutes per note on Pro, 20 minutes on Team.
               </p>
               <Button
@@ -864,7 +864,7 @@ export function WalkthroughRecorder({
                   <h3 className="text-xl font-semibold">Start your Walkthrough Note</h3>
                   <p className="max-w-md text-sm text-white/70">
                     {tierLabel} · up to {Math.round(maxSeconds / 60)} min. Speak naturally about
-                    what you see — we record your narration, snaps the photos you take, and writes a
+                    what you see - we record your narration, snaps the photos you take, and writes a
                     clean report based purely on what you said.
                   </p>
                   <Button
@@ -1077,7 +1077,7 @@ export function WalkthroughRecorder({
                     </>
                   ) : (
                     <p className="max-w-sm text-center text-sm text-white/60">
-                      This usually takes under a minute. You can leave this screen — we'll keep
+                      This usually takes under a minute. You can leave this screen - we'll keep
                       working in the background and your report will be waiting for you.
                     </p>
                   )}

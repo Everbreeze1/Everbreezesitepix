@@ -71,7 +71,7 @@ export function ReportsIndexPage() {
       /*
        * `source_template` is added by migration 20260812000000. Code and
        * migrations do not deploy atomically here, and PostgREST rejects the
-       * ENTIRE select over one unknown column — so naming it unconditionally
+       * ENTIRE select over one unknown column - so naming it unconditionally
        * would have taken the whole Reports screen down on any database still
        * waiting for that migration. Ask for it, and fall back to the column list
        * that has always existed if it is not there yet; the only thing lost is
@@ -107,7 +107,7 @@ export function ReportsIndexPage() {
 
       /*
        * Which blueprint produced each report. Batched across every project on
-       * screen — one call, not one per project — and best-effort: a report that
+       * screen - one call, not one per project - and best-effort: a report that
        * cannot be attributed simply carries no badge, which is also the correct
        * rendering for a report someone built by hand.
        */

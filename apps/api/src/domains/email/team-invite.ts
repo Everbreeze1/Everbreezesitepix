@@ -10,7 +10,7 @@ const ROOT_DOMAIN = "everbreezesitepix.com";
  * Trim to `max` characters on a word boundary where there is one.
  *
  * Also flattens whitespace, which is what keeps a `full_name` containing CR/LF
- * from reaching a header — Subject has no equivalent of `sendEmail`'s From
+ * from reaching a header - Subject has no equivalent of `sendEmail`'s From
  * sanitising, so this is the only guard on that path.
  */
 function clip(value: string, max: number): string {
@@ -27,7 +27,7 @@ function clip(value: string, max: number): string {
  * `teams/service.ts` used to delegate every invite email to
  * `auth.admin.inviteUserByEmail` and give up when GoTrue refused. GoTrue refuses
  * for an address that already has an account, for a rate-limited address, and
- * for any error from the Send Email hook — and in all three cases it sends
+ * for any error from the Send Email hook - and in all three cases it sends
  * NOTHING. Each one returned `{ sent: false }`, the dialog fell back to showing
  * a raw token for the owner to copy by hand, and the invitee received nothing at
  * all. That is the "Invite link (email not sent)" box in the bug report.
@@ -42,7 +42,7 @@ export async function sendTeamInviteEmail(opts: {
   to: string;
   acceptUrl: string;
   teamName?: string;
-  /** Display label for the body copy — a name if we have one, else their email. */
+  /** Display label for the body copy - a name if we have one, else their email. */
   inviterName?: string;
   /**
    * The inviter's real name and address, when the profile carries them. Kept
@@ -66,7 +66,7 @@ export async function sendTeamInviteEmail(opts: {
   const text = await render(element, { plainText: true });
   // Lead with the person, not the product. Naming the team is what makes this
   // read as a real invitation rather than generic system mail; naming the
-  // *inviter* first is what makes it read as mail from a human — the same cue
+  // *inviter* first is what makes it read as mail from a human - the same cue
   // Gmail weighs when it decides between Primary and Promotions. The site name
   // is left out on purpose: it is already the From display name, and repeating
   // it only lengthens the subject with branding.
@@ -80,7 +80,7 @@ export async function sendTeamInviteEmail(opts: {
     subject,
     html,
     text,
-    // "Mark Lagura (via Everbreeze SitePix)" — the pattern shared-document mail
+    // "Mark Lagura (via Everbreeze SitePix)" - the pattern shared-document mail
     // has used for years. The address stays our verified sender, so DKIM/DMARC
     // are untouched; only the name a human reads changes.
     //

@@ -23,13 +23,13 @@ dist-ssr
 # Vercel
 .vercel/
 
-# Env files — real values live in Vercel/Railway dashboards, not git
+# Env files - real values live in Vercel/Railway dashboards, not git
 .env
 .env.local
 apps/api/.env
 apps/api/.env.local
 
-# Local-only project docs — not committed
+# Local-only project docs - not committed
 /docs/
 
 # Throwaway files from local probing/debugging scripts. These have already once

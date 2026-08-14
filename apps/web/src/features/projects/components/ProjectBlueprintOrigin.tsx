@@ -22,7 +22,7 @@ export type ProjectPanel = "reports" | "checklists" | "workflows";
  * The items land in Checklists / Documents / Workflows looking exactly like rows
  * someone typed by hand.
  *
- * This closes the loop from the project end — the pill names the blueprint, and
+ * This closes the loop from the project end - the pill names the blueprint, and
  * opening it breaks down what that apply created and which tab each part landed
  * on, so the connection between "a blueprint was applied" and "these checklists
  * appeared" is visible rather than inferred.
@@ -31,7 +31,7 @@ export function ProjectBlueprintOrigin({
   state,
   onOpenPanel,
 }: {
-  /** From `useProjectBlueprintOrigin` — one reader shared with the per-item badges. */
+  /** From `useProjectBlueprintOrigin` - one reader shared with the per-item badges. */
   state: BlueprintOriginState;
   onOpenPanel?: (panel: ProjectPanel) => void;
 }) {
@@ -96,7 +96,7 @@ function ApplicationBlock({
   onOpenPanel?: (panel: ProjectPanel) => void;
 }) {
   /*
-   * Counts are keyed by `countsKey`, not by the display plural — the two are
+   * Counts are keyed by `countsKey`, not by the display plural - the two are
    * deliberately separate fields (see blueprint-outcomes.ts). Walking KIND_ORDER
    * rather than Object.entries keeps the rows in apply order and drops any key
    * the server adds later that this build doesn't know how to name.
@@ -168,7 +168,7 @@ function ApplicationBlock({
             const Icon = meta.icon;
             const label = `${n} ${n === 1 ? meta.label.toLowerCase() : meta.plural}`;
             // Reports collect on the workspace Reports screen, not a project
-            // tab, and labels are not a tab at all — so only project-scoped
+            // tab, and labels are not a tab at all - so only project-scoped
             // destinations get a jump button. DESTINATION carries that fact so
             // it isn't re-guessed here.
             const jumpable =

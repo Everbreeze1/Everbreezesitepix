@@ -4,10 +4,10 @@ import { Node, mergeAttributes } from "@tiptap/core";
  * Two kinds of placeholder, both of which used to surface as raw bracket text
  * the user had to select and delete before typing:
  *
- *  - `FillField`  — a hand-filled blank (`[Client Name]`, `[Qty]`, `[####]` in
+ *  - `FillField`  - a hand-filled blank (`[Client Name]`, `[Qty]`, `[####]` in
  *    the CLEANING / ADJUSTING templates). Renders as a click-into box that
  *    shows its field name as ghost text while empty.
- *  - `MergeToken` — a `{{project_name}}` merge field that resolves from live
+ *  - `MergeToken` - a `{{project_name}}` merge field that resolves from live
  *    project/company data. Renders as a read-only pill so the document never
  *    shows template source; the API converts it back to `{{token}}` on save so
  *    the merge stays live and renaming the project still updates the page.
@@ -21,7 +21,7 @@ export const FillField = Node.create({
   inline: true,
   group: "inline",
   // Editable text lives inside the node, so clicking in and typing is just
-  // ordinary editing — no delete-the-brackets step.
+  // ordinary editing - no delete-the-brackets step.
   content: "text*",
 
   addAttributes() {
@@ -98,7 +98,7 @@ export const MergeToken = Node.create({
  * nodes, so the seeded SQL templates gain click-to-type fields without every
  * migration being rewritten.
  *
- * Only bracket runs inside text are converted — never inside a tag — so
+ * Only bracket runs inside text are converted - never inside a tag - so
  * attribute values (`alt="Photo slot 1"`, style rules, URLs) are untouched.
  */
 export function bracketsToFillFields(html: string): string {

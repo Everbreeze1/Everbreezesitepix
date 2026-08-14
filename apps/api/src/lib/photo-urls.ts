@@ -7,8 +7,8 @@ import { getSupabaseAdmin } from "./supabase";
  * This used to take a `width` and ask Supabase to transform each original on
  * the fly. Two problems with that, and the second is what killed it:
  *
- *   1. The batch `createSignedUrls` does NOT accept `transform` — only the
- *      singular call does — so a width cost one HTTP request per photo.
+ *   1. The batch `createSignedUrls` does NOT accept `transform` - only the
+ *      singular call does - so a width cost one HTTP request per photo.
  *   2. Transformation is metered by *distinct origin image per billing cycle*
  *      (100 on Pro), so the bill grew with how many different photos anyone
  *      looked at. The organization hit 170% of that quota on ~12 MB of stored
@@ -17,7 +17,7 @@ import { getSupabaseAdmin } from "./supabase";
  * Thumbnails are now written next to the original at upload time, so the small
  * variant is just another object: one batch call signs the whole set, and
  * nothing is metered. Photos predating that have no `thumb_path` and fall back
- * to their original — never to a transform.
+ * to their original - never to a transform.
  *
  * Returns a map keyed by the ORIGINAL path regardless of which variant was
  * signed, so callers look up what they already hold.

@@ -96,7 +96,7 @@ export function DashboardPage() {
   });
 
   // Local useState mirrors query.data so a cache-hit remount (queryFn
-  // skipped, data served straight from cache) still repopulates the page —
+  // skipped, data served straight from cache) still repopulates the page -
   // a plain useState reset on mount would otherwise leave everything empty
   // until the next refetch.
   useEffect(() => {
@@ -139,7 +139,7 @@ export function DashboardPage() {
       recentReportsResult,
     ] = await Promise.all([
       loadActiveCards(topActive),
-      // Every `photos` read excludes the trash by hand — the soft delete has no
+      // Every `photos` read excludes the trash by hand - the soft delete has no
       // database-level enforcement. Without it these stats counted photos the
       // crew had already deleted, and the activity feed listed them.
       supabase
@@ -308,8 +308,8 @@ export function DashboardPage() {
     /*
      * Names come from the team RPC, not from `profiles`.
      *
-     * Team photos genuinely reach this browser — the photos and projects RLS
-     * policies are teammate-scoped — so a teammate's upload arrived with their
+     * Team photos genuinely reach this browser - the photos and projects RLS
+     * policies are teammate-scoped - so a teammate's upload arrived with their
      * uuid attached. But resolving that uuid went through `profiles`, which
      * lets you read only your OWN row, so `nameById` never held anyone else and
      * every teammate's activity rendered as "Someone".
@@ -422,7 +422,7 @@ export function DashboardPage() {
               Documentation health
             </p>
             <p className="font-display mt-3 text-4xl font-bold leading-none tracking-[-1.26px] text-foreground">
-              {docHealthPct === null ? "—" : `${docHealthPct}%`}
+              {docHealthPct === null ? "-" : `${docHealthPct}%`}
             </p>
             <p className="font-manrope mt-2 text-xs font-bold text-muted-foreground">
               Documented this week

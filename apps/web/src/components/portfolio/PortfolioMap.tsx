@@ -6,14 +6,14 @@ import { readableTextOn } from "@/lib/contrast";
 import type { PortfolioShowcaseCard } from "@/lib/portfolio.functions";
 
 /**
- * "We've worked in your neighbourhood" — the single most persuasive thing a
+ * "We've worked in your neighbourhood" - the single most persuasive thing a
  * local contractor can show, and the reason CompanyCam ships a map alongside
  * the gallery.
  *
  * Pins come from the project's geocoded address, denormalised onto the showcase
  * at build time, so a published map keeps its pins after the project is gone.
  *
- * Renders nothing at all when no showcase has coordinates — an empty grey
+ * Renders nothing at all when no showcase has coordinates - an empty grey
  * rectangle centred on the Atlantic is worse than no map.
  */
 export function PortfolioMap({
@@ -148,7 +148,7 @@ function pinIcon(accent: string) {
 
 /**
  * Info window markup. Google renders this as raw HTML, so every interpolated
- * value is escaped — these strings come from user-entered project data.
+ * value is escaped - these strings come from user-entered project data.
  */
 function infoHtml(
   p: PortfolioShowcaseCard,

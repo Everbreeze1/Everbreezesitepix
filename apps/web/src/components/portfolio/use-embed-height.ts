@@ -25,7 +25,7 @@ export function useEmbedHeight(): void {
       // Sub-pixel churn would otherwise fire a message on every scroll frame.
       if (Math.abs(height - last) < 2) return;
       last = height;
-      // "*" because the embed is deliberately host-agnostic — it has to work on
+      // "*" because the embed is deliberately host-agnostic - it has to work on
       // whatever domain the contractor pastes it into. Only a height is sent.
       window.parent.postMessage({ type: EMBED_MESSAGE_TYPE, height }, "*");
     };

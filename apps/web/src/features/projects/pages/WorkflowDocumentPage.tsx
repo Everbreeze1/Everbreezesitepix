@@ -13,12 +13,12 @@ import { ProjectWorkflows } from "../components/ProjectWorkflows";
  * browser Back button walked off the project entirely instead of returning to
  * the grid, and a refresh dropped you back to the list. A checklist got a route
  * in the same pass; a workflow is the same kind of artefact and now reads the
- * same way — print it, share it, link to it.
+ * same way - print it, share it, link to it.
  *
  * The run itself is still rendered by `ProjectWorkflows` in focus mode rather
- * than by a second implementation here. Everything a workflow does — the
+ * than by a second implementation here. Everything a workflow does - the
  * optimistic tick, the phase sign-off, reorder-and-renumber, the photo prompt
- * upload with its orphan reclaim — is exactly the logic that rots once it exists
+ * upload with its orphan reclaim - is exactly the logic that rots once it exists
  * twice, and `tests/invariants.test.ts` pins several of those behaviours to that
  * one file by path.
  */

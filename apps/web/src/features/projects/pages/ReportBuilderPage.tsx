@@ -191,7 +191,7 @@ export function ReportBuilderPage() {
    * them. Both timers below used to close over a single `patch` object, so
    * re-arming inside the debounce window discarded the earlier patch outright:
    * choose cover photos, type one character within 600ms, and the cover write
-   * was cancelled and never re-issued — local state kept showing the covers
+   * was cancelled and never re-issued - local state kept showing the covers
    * that the database, and therefore the exported and shared PDF, never got.
    * It is invisible when testing one field at a time, because each keystroke in
    * a single input carries that whole field's current value.
@@ -258,7 +258,7 @@ export function ReportBuilderPage() {
 
   /*
    * Flush whatever is still debounced when the editor unmounts. Navigating away
-   * inside the 600ms window otherwise dropped the last edit with no signal —
+   * inside the 600ms window otherwise dropped the last edit with no signal -
    * the timers were never cleared either, so they also fired into a dead
    * component. Fire-and-forget is deliberate: unmount can't await, and a
    * best-effort write beats a guaranteed loss.
@@ -286,7 +286,7 @@ export function ReportBuilderPage() {
 
   // ----- section ops -----
   async function addSection() {
-    // max+1, not `.length` — `deleteSection` doesn't renumber survivors, so
+    // max+1, not `.length` - `deleteSection` doesn't renumber survivors, so
     // length reused a position an existing section still held and the two then
     // sorted arbitrarily in the builder and in the exported report.
     const position = sections.reduce((max, s) => Math.max(max, s.position), -1) + 1;
@@ -323,8 +323,8 @@ export function ReportBuilderPage() {
   /**
    * Drop handler for dragging a section.
    *
-   * The card has always shown a grip handle, but nothing was wired to it — no
-   * DndContext, no listeners — so grabbing it did nothing and the only way to
+   * The card has always shown a grip handle, but nothing was wired to it - no
+   * DndContext, no listeners - so grabbing it did nothing and the only way to
    * reorder was the chevrons in the opposite corner of the card. Both paths now
    * end in `persistSectionOrder`, so they cannot drift.
    */
@@ -350,7 +350,7 @@ export function ReportBuilderPage() {
           .eq("id", s.id),
       ),
     );
-    // The export is rendered from the database, not from this screen — so an
+    // The export is rendered from the database, not from this screen - so an
     // unreported failure here shipped the customer a report whose sections are
     // in a different order than the author was looking at. Both sibling writes
     // in this file (`patchReport`, `patchSection`) already check; this didn't.
@@ -359,7 +359,7 @@ export function ReportBuilderPage() {
       /*
        * Restore the previous ORDER only, keyed by id and computed inside the
        * updater. Replaying the whole `prev` snapshot would also revert any
-       * title or body edit made during the round trip — and `patchSection`
+       * title or body edit made during the round trip - and `patchSection`
        * has already queued that edit for the database on its own debounce, so
        * the text would disappear from the editor and still be saved, leaving
        * the screen and the exported report disagreeing.
@@ -391,7 +391,7 @@ export function ReportBuilderPage() {
     patchSection(sectionId, { photos: sec.photos.filter((p) => p.photo_id !== photoId) });
     /*
      * Offer the caption back. Removing a photo used to silently destroy whatever
-     * had been typed about it, and re-adding it returns an empty caption — so a
+     * had been typed about it, and re-adding it returns an empty caption - so a
      * misclick cost real writing with no way back. The undo restores the entry
      * at its original index, because photo order decides which photos share a
      * page in the export.
@@ -419,7 +419,7 @@ export function ReportBuilderPage() {
    * Order is load-bearing, not cosmetic: every renderer consumes `photos`
    * positionally and batches them `photosPerPage` at a time, so the sequence
    * decides which photos share a page. Until now the only way to move photo 5
-   * ahead of photo 2 was to remove everything after it and re-add it — which
+   * ahead of photo 2 was to remove everything after it and re-add it - which
    * also discarded the captions.
    */
   function movePhoto(sectionId: string, from: number, to: number) {
@@ -855,7 +855,7 @@ interface SectionEditorProps {
 }
 function SectionEditor(p: SectionEditorProps) {
   // The tile itself is the drag surface, so it needs a slightly longer travel
-  // before a drag starts — otherwise tapping the remove button can register as
+  // before a drag starts - otherwise tapping the remove button can register as
   // a drag on a touchscreen.
   const photoSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -875,7 +875,7 @@ function SectionEditor(p: SectionEditorProps) {
     opacity: isDragging ? 0.6 : 1,
     // Lift the card over its siblings while dragging; without it the next
     // card's opaque background paints across the one being moved. `position`
-    // comes from `relative` below — z-index is inert on a static box, and
+    // comes from `relative` below - z-index is inert on a static box, and
     // stays under AppHeader's z-20.
     zIndex: isDragging ? 5 : undefined,
   };
@@ -884,7 +884,7 @@ function SectionEditor(p: SectionEditorProps) {
       <div className="flex items-start gap-2">
         {/*
           A real handle. This was a bare icon with no listeners for as long as
-          the screen has existed — it advertised a drag that did nothing, while
+          the screen has existed - it advertised a drag that did nothing, while
           the only working reorder was the chevrons in the opposite corner.
         */}
         <button
@@ -922,7 +922,7 @@ function SectionEditor(p: SectionEditorProps) {
             </div>
             {/*
               The page model was never stated anywhere, which is most of why
-              "I should be able to insert a page break — I don't see that
+              "I should be able to insert a page break - I don't see that
               option" was a fair complaint: sections have always been pages,
               and nothing said so.
             */}
@@ -940,7 +940,7 @@ function SectionEditor(p: SectionEditorProps) {
                 consumes this array positionally and batches it photosPerPage at
                 a time, so the sequence decides which photos share a page. Before
                 this the only way to move one was to delete everything after it
-                and re-add — which also discarded the captions.
+                and re-add - which also discarded the captions.
               */}
               <p className="text-[11px] text-muted-foreground">
                 Drag a photo to reorder. Order decides which photos share a page.
@@ -1222,7 +1222,7 @@ async function loadProjectPhotos(projectId: string): Promise<PhotoRef[]> {
     // database level, so every read has to exclude them by hand. Without this
     // a deleted photo stayed selectable here, got written into
     // `project_report_sections.photos`, and was rendered to the customer on
-    // /share/reports/$token — until the 60-day purge blanked the slot.
+    // /share/reports/$token - until the 60-day purge blanked the slot.
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
   const rows = (data as any[]) ?? [];

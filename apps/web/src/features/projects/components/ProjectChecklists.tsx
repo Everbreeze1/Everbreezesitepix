@@ -42,8 +42,8 @@ import { BlueprintItemBadge } from "./BlueprintItemBadge";
  * way to start another one.
  *
  * It used to be the whole feature. Opening a checklist raised an 88vh dialog
- * that carried the entire runner — every answer widget, the photo picker, the
- * bulk-paste flow, complete/delete/save-as-template — which is why a checklist
+ * that carried the entire runner - every answer widget, the photo picker, the
+ * bulk-paste flow, complete/delete/save-as-template - which is why a checklist
  * could not be printed, linked to, or shared with the customer it was filled in
  * for. All of that now lives at
  * `/projects/$projectId/checklists/$checklistId` (`ChecklistDocumentPage`), and
@@ -127,7 +127,7 @@ export function ProjectChecklists({
    * `silent` keeps the panel on screen while it refreshes.
    *
    * Every refetch used to flip the whole panel back to a spinner, and three
-   * unfiltered realtime handlers called it — so ticking a box made the list you
+   * unfiltered realtime handlers called it - so ticking a box made the list you
    * were reading disappear and come back.
    */
   const load = useCallback(
@@ -164,7 +164,7 @@ export function ProjectChecklists({
          * Items, for the progress bars only.
          *
          * The panel no longer renders a single answer, so it selects the columns
-         * it counts and nothing more — it used to pull `response_value` and
+         * it counts and nothing more - it used to pull `response_value` and
          * every note for every item on every checklist in the project purely to
          * draw a "3/8 done" caption.
          */
@@ -251,7 +251,7 @@ export function ProjectChecklists({
    *
    * Takes the id as an argument rather than reading it from state: the old
    * Templates tab called `setApplyingTemplate(id)` and then invoked this
-   * immediately, which read the *previous* render's value — so the first tap did
+   * immediately, which read the *previous* render's value - so the first tap did
    * nothing and the second applied whichever template you pressed before.
    */
   const applyTemplate = async (templateId: string) => {
@@ -319,7 +319,7 @@ export function ProjectChecklists({
    * No name prompt: the record is created with a placeholder and the page opens
    * with the title box selected, so naming it is the first thing you type rather
    * than a modal you clear before you can start. Nothing is lost if the user
-   * never renames it — the placeholder is a real name, not an empty row.
+   * never renames it - the placeholder is a real name, not an empty row.
    */
   const createBlank = async () => {
     if (!user) return;
@@ -405,7 +405,7 @@ export function ProjectChecklists({
         title="Checklists"
         description={
           checklists.length === 0
-            ? "Task lists that travel with this job — printable and shareable once filled in. For multi-phase processes with sign-off, use Workflows."
+            ? "Task lists that travel with this job - printable and shareable once filled in. For multi-phase processes with sign-off, use Workflows."
             : activeCount === 0
               ? `All ${checklists.length} checklist${checklists.length === 1 ? "" : "s"} on this job are complete.`
               : `${activeCount} still open on this job.`
@@ -415,7 +415,7 @@ export function ProjectChecklists({
 
       {/* Filter strip. Deliberately plain toggle buttons rather than
           role="tablist"/role="tab": half-implemented tab semantics are worse
-          than none — a screen reader would promise arrow-key navigation and an
+          than none - a screen reader would promise arrow-key navigation and an
           associated tabpanel that don't exist here. */}
       <div className="mt-6 flex flex-wrap gap-1 border-b border-border">
         {(
@@ -459,7 +459,7 @@ export function ProjectChecklists({
         <ErrorState
           className="mt-6"
           title="Couldn't load checklists"
-          description="You may be offline. Nothing has been lost — try again once you have a connection."
+          description="You may be offline. Nothing has been lost - try again once you have a connection."
           onRetry={() => void load()}
         />
       ) : tab === "completed" ? (
@@ -525,7 +525,7 @@ export function ProjectChecklists({
                 description={
                   checklists.length
                     ? "Every checklist on this job is complete."
-                    : "QA walks, punch lists, safety checks — start from a template or paste a list you already have."
+                    : "QA walks, punch lists, safety checks - start from a template or paste a list you already have."
                 }
                 className="mt-6"
                 action={newMenu}

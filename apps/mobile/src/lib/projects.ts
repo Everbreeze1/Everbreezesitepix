@@ -60,7 +60,7 @@ export async function listProjectPhotos(projectId: string, limit = 40): Promise<
     .from("photos")
     .select("id, caption, storage_path, image_url, created_at, phase")
     .eq("project_id", projectId)
-    // Walkthrough captures included — same photo library the web app shows.
+    // Walkthrough captures included - same photo library the web app shows.
     // The trash is not part of that library, and `deleted_at` has no RLS
     // predicate behind it, so this read has to exclude it by hand like the rest.
     .is("deleted_at", null)

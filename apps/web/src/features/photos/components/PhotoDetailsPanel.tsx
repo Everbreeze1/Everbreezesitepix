@@ -271,7 +271,7 @@ export function PhotoDetailsPanel({
               <Textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder="Describe what's in this photo — location, issue, next steps…"
+                placeholder="Describe what's in this photo - location, issue, next steps…"
                 rows={4}
                 className="resize-none border-white/15 bg-black/30 text-sm text-white placeholder:text-white/40 focus-visible:ring-white/25"
               />

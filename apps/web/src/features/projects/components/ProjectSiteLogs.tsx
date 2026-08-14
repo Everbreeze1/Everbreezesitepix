@@ -243,7 +243,7 @@ function SiteLogBuilder({
   const [selected, setSelected] = useState<Set<string>>(new Set(existing?.photo_ids ?? []));
   const [loading, setLoading] = useState(false);
   const [title, setTitle] = useState(
-    existing?.title ?? `${projectName} — ${new Date().toLocaleDateString()}`,
+    existing?.title ?? `${projectName} - ${new Date().toLocaleDateString()}`,
   );
   const [notes, setNotes] = useState<Record<string, PhotoNote>>(existing?.notes ?? {});
   const [stage, setStage] = useState<"pick" | "edit">(existing ? "edit" : "pick");
@@ -272,7 +272,7 @@ function SiteLogBuilder({
       if (cancelled) return;
       const list = (ps as Photo[]) ?? [];
       setPhotos(list);
-      // One batch request instead of up to 500 concurrent ones — the fan-out
+      // One batch request instead of up to 500 concurrent ones - the fan-out
       // was enough to saturate the browser's connection pool and stall the
       // rest of the page's requests behind it.
       const sig: Record<string, string> = {};
@@ -721,7 +721,7 @@ function TodoInput({
       };
       rec.onerror = () => {
         setListening(false);
-        toast.error("Couldn't hear you — try again");
+        toast.error("Couldn't hear you - try again");
       };
       rec.onend = () => setListening(false);
       recRef.current = rec;

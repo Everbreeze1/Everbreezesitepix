@@ -2,10 +2,10 @@
 //
 // That jsonb column holds TWO different shapes and always will:
 //
-//   legacy   [{ heading, body }]                       — the column's DEFAULT
+//   legacy   [{ heading, body }]                       - the column's DEFAULT
 //                                                        '[]' and its comment in
 //                                                        20260717145402_template_kinds.sql
-//   current  { coverStyle, placeholders, items: [...] } — what the report template
+//   current  { coverStyle, placeholders, items: [...] } - what the report template
 //                                                        editor has written since
 //                                                        cover styles and layouts
 //                                                        were added
@@ -15,7 +15,7 @@
 // This module exists because the two readers disagreed. The editor
 // (ReportTemplatesManager) handled both shapes; `applyProjectBlueprintService`
 // handled only the legacy array and reached for `.map` behind a `?? []` that
-// guards null but not a wrong type — so applying a blueprint containing any
+// guards null but not a wrong type - so applying a blueprint containing any
 // report template saved by the current editor died with
 // "sections.map is not a function", and the user was told the blueprint had been
 // applied anyway.
@@ -45,8 +45,8 @@ const SECTION_LAYOUTS: ReportSectionLayout[] = ["text", "text-photos", "photo-gr
 /**
  * A section id that is stable for a given row and unique within its list.
  *
- * `crypto.randomUUID` is used when it exists — the editor wants ids that survive
- * drag-and-drop reordering — but this module is imported by the API too, so it
+ * `crypto.randomUUID` is used when it exists - the editor wants ids that survive
+ * drag-and-drop reordering - but this module is imported by the API too, so it
  * must not assume a global that is only guaranteed from Node 19. The positional
  * fallback satisfies the only hard requirement (uniqueness within one list).
  */
@@ -74,7 +74,7 @@ function toSection(raw: unknown, idx: number): ReportTemplateSection {
  * Total by construction: every branch returns a real object with a real `items`
  * array, so callers can `.map` without a type guard. A row that is null, a
  * string, a number or an object with no `items` yields an empty section list
- * rather than throwing — a blueprint must not die on one malformed template.
+ * rather than throwing - a blueprint must not die on one malformed template.
  */
 export function parseReportTemplateStructure(raw: unknown): ReportTemplateStructure {
   // Legacy: a bare array IS the items list.
@@ -88,7 +88,7 @@ export function parseReportTemplateStructure(raw: unknown): ReportTemplateStruct
   if (typeof raw === "string") {
     try {
       const reparsed: unknown = JSON.parse(raw);
-      // Only one level — a string inside a string is corrupt, not a shape.
+      // Only one level - a string inside a string is corrupt, not a shape.
       if (typeof reparsed !== "string") return parseReportTemplateStructure(reparsed);
     } catch {
       // Not JSON; fall through to the empty structure below.

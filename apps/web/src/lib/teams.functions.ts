@@ -20,7 +20,7 @@ import type {
 
 export type { ProjectContributor, TeamActivityItem, TeamMemberContribution };
 
-/** See walkthroughs.functions.ts — result types are derived, not hand-written. */
+/** See walkthroughs.functions.ts - result types are derived, not hand-written. */
 type Result<T extends (...args: never[]) => unknown> = Awaited<ReturnType<T>>;
 
 export const getMyTeam = rpcOp<undefined, Result<typeof getMyTeamService>>("getMyTeam");
@@ -71,7 +71,7 @@ export const resendInvite = rpcOp<
 
 /*
  * These two were declared as bare arrays, but both services return a wrapper
- * object — `{ members, recent }` and `{ contributors }` respectively. Every
+ * object - `{ members, recent }` and `{ contributors }` respectively. Every
  * call site already cast the result back to the real shape, which is what kept
  * the mistake invisible. Deriving from the service keeps the two in step.
  */

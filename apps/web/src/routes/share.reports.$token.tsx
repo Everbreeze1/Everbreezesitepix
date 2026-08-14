@@ -10,7 +10,7 @@ import { sitepixApi } from "@/lib/sitepix-api";
 export const Route = createFileRoute("/share/reports/$token")({
   head: () => ({
     meta: [
-      { title: "Shared report — SitePix" },
+      { title: "Shared report - SitePix" },
       { name: "description", content: "A project report shared from SitePix." },
       { name: "robots", content: "noindex,nofollow" },
     ],
@@ -144,7 +144,7 @@ function PublicReportPage() {
               {data.reviewLinks.map((link, i) => (
                 <Button key={i} asChild size="sm">
                   <a href={link.url} target="_blank" rel="noreferrer">
-                    Leave a review{link.label ? ` — ${link.label}` : ""}
+                    Leave a review{link.label ? ` - ${link.label}` : ""}
                   </a>
                 </Button>
               ))}

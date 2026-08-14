@@ -2,7 +2,7 @@
 @source "../src";
 @import "tw-animate-css";
 /* Printable checklist / workflow records. Kept in its own file because it is
-   plain CSS with physical units and print break control — see the header there. */
+   plain CSS with physical units and print break control - see the header there. */
 @import "./styles/record-document.css";
 
 @custom-variant dark (&:is(.dark *));
@@ -180,7 +180,7 @@
 }
 
 /* Radix Accordion open/close. components/ui/accordion.tsx has always asked for
-   `animate-accordion-down`/`-up`, but the keyframes were never defined — so
+   `animate-accordion-down`/`-up`, but the keyframes were never defined - so
    every accordion in the app snapped open instantly. Radix measures the panel
    and exposes `--radix-accordion-content-height` for exactly this. */
 @keyframes accordion-down {
@@ -241,7 +241,7 @@
   }
 }
 
-/* Tiptap editor — placeholder + minimal prose niceties */
+/* Tiptap editor - placeholder + minimal prose niceties */
 .tiptap p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
@@ -292,7 +292,7 @@
   margin: 0;
 }
 
-/* Tables — without these a table inserts but renders borderless (looks broken). */
+/* Tables - without these a table inserts but renders borderless (looks broken). */
 .tiptap table {
   border-collapse: collapse;
   table-layout: fixed;
@@ -324,7 +324,7 @@
   pointer-events: none;
 }
 
-/* Task lists — the checkbox markup needs explicit layout or it renders as plain bullets. */
+/* Task lists - the checkbox markup needs explicit layout or it renders as plain bullets. */
 .tiptap ul[data-type="taskList"] {
   list-style: none;
   padding-left: 0;
@@ -369,7 +369,7 @@
    fixed size by design (see document_templates seed migrations). A real photo
    swapped into that slot keeps the same width/height attrs (ProjectPageEditorPage's
    insertImage carries them over) but almost never matches the slot's aspect
-   ratio, so without object-fit the browser would stretch it to fill the box —
+   ratio, so without object-fit the browser would stretch it to fill the box -
    crop to fill instead. */
 .tiptap img[width][height] {
   object-fit: cover;
@@ -380,9 +380,9 @@
 }
 /* Images are inline nodes, so several can share a paragraph as a photo strip.
    Tailwind's preflight forces `img { display: block }`, which stacks them
-   vertically instead — override back to inline-block so they flow left to right.
+   vertically instead - override back to inline-block so they flow left to right.
    The live editor renders every image through ProjectImage's NodeView, which
-   wraps it in a `.tiptap-photo` span (needed for the hover overlay below) — so
+   wraps it in a `.tiptap-photo` span (needed for the hover overlay below) - so
    this has to match both that wrapper (editor) and a bare `img` (the shared
    page / preview dialog / PDF-adjacent surfaces, which render stored HTML
    directly and never see the wrapper). */
@@ -396,7 +396,7 @@
 .tiptap p > .tiptap-photo:last-child {
   margin-right: 0;
 }
-/* ---- Shaded panels (InfoPanel node — see lib/tiptap-info-panel.ts) --------
+/* ---- Shaded panels (InfoPanel node - see lib/tiptap-info-panel.ts) --------
    The card treatment generated photo reports use: a photo sits above its own
    caption inside a tinted, rounded box, and the document masthead
    (project / address / date / prepared by) gets the same container so the
@@ -449,7 +449,7 @@
   color: var(--muted-foreground);
 }
 
-/* Wrapper for a real inserted photo (see ProjectImage's addNodeView) — sized
+/* Wrapper for a real inserted photo (see ProjectImage's addNodeView) - sized
    to exactly match the <img> inside it since the overlay is positioned out
    of flow and doesn't affect that. */
 .tiptap-photo {
@@ -476,7 +476,7 @@
   opacity: 1;
 }
 /* Unfilled template photo slots: clicking one opens the project photo picker.
-   Editable surfaces only — on a shared/read-only page there is nothing to click. */
+   Editable surfaces only - on a shared/read-only page there is nothing to click. */
 .tiptap[contenteditable="true"] img[src^="data:image/svg+xml"] {
   cursor: pointer;
 }
@@ -499,7 +499,7 @@
 }
 /* Ghost hint, shown only while editing and only while the field is empty.
    `content` comes from the attribute so the hint stays out of the text layer
-   entirely — it can never be exported to PDF or copied with the text. Scoped
+   entirely - it can never be exported to PDF or copied with the text. Scoped
    to contenteditable so a client viewing a shared page is not shown internal
    field names; there, an unfilled field renders as a plain ruled blank. */
 .tiptap[contenteditable="true"] .tiptap-field:empty::before {
@@ -527,7 +527,7 @@
   outline-offset: 1px;
   border-style: solid;
 }
-/* A filled field stops advertising itself — it reads as ordinary prose. */
+/* A filled field stops advertising itself - it reads as ordinary prose. */
 .tiptap-field:not(:empty) {
   border-color: transparent;
   background: transparent;
@@ -544,7 +544,7 @@
   color: color-mix(in oklab, var(--primary) 85%, var(--foreground));
   font-weight: 600;
 }
-/* No data behind it yet — styled like an unfilled blank so it is obvious the
+/* No data behind it yet - styled like an unfilled blank so it is obvious the
    value comes from settings rather than from typing here. */
 .tiptap-token[data-empty="true"] {
   background: transparent;
@@ -588,7 +588,7 @@
   color: var(--primary);
 }
 
-/* Walkthrough / summary AI markdown (WalkthroughReport.tsx — detail page, the
+/* Walkthrough / summary AI markdown (WalkthroughReport.tsx - detail page, the
    public share page and anything else rendering summary_markdown).
 
    Same root cause as the .tiptap rules above: the component's className list

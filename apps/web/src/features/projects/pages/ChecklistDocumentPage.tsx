@@ -126,7 +126,7 @@ export function ChecklistDocumentPage() {
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  /** The record columns this page selects do not exist yet — see RECORD_MIGRATION. */
+  /** The record columns this page selects do not exist yet - see RECORD_MIGRATION. */
   const [pendingMigration, setPendingMigration] = useState(false);
   const [checklist, setChecklist] = useState<Checklist | null>(null);
   const [project, setProject] = useState<ProjectHeader | null>(null);
@@ -159,7 +159,7 @@ export function ChecklistDocumentPage() {
         .then((r: any) => {
           if (r.error) throw r.error;
         }),
-    { onError: () => toast.error("Couldn't save that change — check your connection") },
+    { onError: () => toast.error("Couldn't save that change - check your connection") },
   );
 
   /* ------------------------------------------------------------------- load */
@@ -320,7 +320,7 @@ export function ChecklistDocumentPage() {
   /**
    * A checklist created from the panel's "Blank checklist" entry arrives with a
    * placeholder name and `?new=1`. Select the title so naming it is the first
-   * thing typed — that is the one useful step the old create modal spent an
+   * thing typed - that is the one useful step the old create modal spent an
    * entire dialog on.
    *
    * Pointedly not on a phone: raising the keyboard over a record the user has
@@ -372,7 +372,7 @@ export function ChecklistDocumentPage() {
   /*
    * Two different locks, deliberately kept apart.
    *
-   * `owned` is an authoring right — only the person who put the checklist on the
+   * `owned` is an authoring right - only the person who put the checklist on the
    * project restructures it (add, reorder, delete, mark required). Any teammate
    * with RLS access can still *fill it in*, which is the whole point of
    * assigning one. `sealed` overrides both: a completed checklist carries a
@@ -386,7 +386,7 @@ export function ChecklistDocumentPage() {
    * The third lock: who this checklist belongs to, and therefore who closes it.
    *
    * Separate from `owned` on purpose. Authoring and assignment are different
-   * powers — the manager handing a job to a tech is frequently not the person
+   * powers - the manager handing a job to a tech is frequently not the person
    * who built the checklist, and the tech filling it in is neither. All three
    * are derived from one shared rule (lib/assignment.ts) so the checklist,
    * task and workflow surfaces cannot drift into disagreeing about the same
@@ -431,7 +431,7 @@ export function ChecklistDocumentPage() {
     return ok;
   };
 
-  /** Notes ride the debounced queue — it is prose, typed a character at a time. */
+  /** Notes ride the debounced queue - it is prose, typed a character at a time. */
   const setNotes = (html: string) => {
     if (!checklist) return;
     touch();
@@ -506,7 +506,7 @@ export function ChecklistDocumentPage() {
   /**
    * Reorder by array index and renumber 0..n rather than swapping two rows'
    * stored `position` values. `deleteItem` doesn't renumber survivors, so
-   * duplicate positions are routine — and a swap between two rows already
+   * duplicate positions are routine - and a swap between two rows already
    * holding the same number moves nothing at all.
    */
   const moveItem = async (item: ChecklistItem, dir: -1 | 1) => {
@@ -593,7 +593,7 @@ export function ChecklistDocumentPage() {
     });
     if (!ok) return;
     if (out.row) setItems((xs) => [...xs, out.row as ChecklistItem]);
-    // The answer type is kept for the next line — a run of Pass/Fail checks is
+    // The answer type is kept for the next line - a run of Pass/Fail checks is
     // typed as a run, not one at a time with a re-pick between each.
     setDraft({ label: "", type: draft.type });
     void load({ silent: true });
@@ -684,7 +684,7 @@ export function ChecklistDocumentPage() {
 
     /*
      * The assignee closes their own work. A manager may still close it for
-     * them — a tech goes unreachable and the record has to be closable — but
+     * them - a tech goes unreachable and the record has to be closable - but
      * that is an override of somebody else's name, so it is confirmed rather
      * than silently allowed. Refusing outright is the database's job; this is
      * the sentence explaining why the button did nothing.
@@ -698,7 +698,7 @@ export function ChecklistDocumentPage() {
       if (
         !(await confirm({
           title: `Complete this for ${who}?`,
-          description: `“${checklist.name}” is assigned to ${who}. You can close it, but the sealed record will show you as the person who completed it — not ${who} — and they will not be asked to confirm.`,
+          description: `“${checklist.name}” is assigned to ${who}. You can close it, but the sealed record will show you as the person who completed it - not ${who} - and they will not be asked to confirm.`,
           confirmText: "Complete anyway",
         }))
       )
@@ -708,7 +708,7 @@ export function ChecklistDocumentPage() {
     setCompleting(true);
     try {
       // The snapshot is an immutable record of what was answered, so anything
-      // still sitting in the debounce queue has to land first — otherwise
+      // still sitting in the debounce queue has to land first - otherwise
       // "Mark as complete" freezes the value from before the last keystroke.
       await save.flush();
       if (requiredOpen > 0) {
@@ -741,8 +741,8 @@ export function ChecklistDocumentPage() {
       setChecklist((c) => (c ? { ...c, completed_at: now, completed_by: user.id } : c));
       toast.success(
         subject.assignedBy && subject.assignedBy !== user.id
-          ? `Checklist complete — ${memberLabel(subject.assignedBy)} has been notified`
-          : "Checklist marked complete — the record is sealed",
+          ? `Checklist complete - ${memberLabel(subject.assignedBy)} has been notified`
+          : "Checklist marked complete - the record is sealed",
       );
     } finally {
       setCompleting(false);
@@ -750,14 +750,14 @@ export function ChecklistDocumentPage() {
   };
 
   /**
-   * Reopen — the reviewing half of the assignment loop.
+   * Reopen - the reviewing half of the assignment loop.
    *
    * Available to the assignor, not just the author: being told the work is done
    * is only useful if the person told can send it back. `completed_by` and
    * `snapshot` are cleared alongside the timestamp because all three describe
    * one sealing event. Leaving them behind left a reopened checklist claiming
    * it had been completed by someone, carrying a frozen copy of answers that
-   * were about to change — and the snapshot is what the printout and the public
+   * were about to change - and the snapshot is what the printout and the public
    * share link render.
    */
   const reopenChecklist = async () => {
@@ -777,7 +777,7 @@ export function ChecklistDocumentPage() {
 
   const saveAsTemplate = async () => {
     if (!user || !checklist) return;
-    // App-styled prompt, not `window.prompt` — the native dialog is unstyled,
+    // App-styled prompt, not `window.prompt` - the native dialog is unstyled,
     // unthemed, and blocks the whole tab.
     const name = await promptFor({
       title: "Save as template",
@@ -867,7 +867,7 @@ export function ChecklistDocumentPage() {
             required: it.required,
             answered: !!it.completed_at,
             // Shared with the server so the sheet the owner prints and the sheet
-            // a customer prints from the link format an answer identically —
+            // a customer prints from the link format an answer identically -
             // "4 / 5", not "4" in one place and "4/5" in the other.
             answer: formatChecklistAnswer(it.item_type, it.response_value),
             notes: it.notes,
@@ -934,7 +934,7 @@ export function ChecklistDocumentPage() {
   return (
     <div className="min-h-screen bg-muted/30">
       {/* Sticks below AppHeader (h-[82px], also sticky top-0) rather than at
-          top-0 itself — otherwise both claim the same viewport position and the
+          top-0 itself - otherwise both claim the same viewport position and the
           app header paints over this bar as soon as the page scrolls. */}
       <div className="sticky top-[82px] z-10 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
@@ -970,10 +970,10 @@ export function ChecklistDocumentPage() {
           {/*
             `min-w-0` rather than `shrink-0`.
             `shrink-0` fixed this row at its content's full width, so its own
-            `flex-wrap` could never take effect — the children had no narrower
+            `flex-wrap` could never take effect - the children had no narrower
             width to wrap into. At 390px that put 379px of controls into 358px of
             usable row and the whole page scrolled sideways by 5px. Chromium
-            happened to absorb it; WebKit — the engine an actual iPhone uses —
+            happened to absorb it; WebKit - the engine an actual iPhone uses -
             did not, which is why it only showed up once the tests ran there.
           */}
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
@@ -991,8 +991,8 @@ export function ChecklistDocumentPage() {
               {checklist.revoked_at ? "Share" : "Shared"}
             </Button>
             {/* The menu no longer belongs to the author alone. Reopening is the
-                assignor's half of the completion loop — they are told the work
-                is done, and being told is only useful if they can send it back —
+                assignor's half of the completion loop - they are told the work
+                is done, and being told is only useful if they can send it back -
                 so the trigger appears for them too, while authoring actions
                 stay with whoever built the checklist. */}
             {(owned || (sealed && mayReopen)) && (
@@ -1034,7 +1034,7 @@ export function ChecklistDocumentPage() {
         </div>
 
         {/* Progress + who owns it. One row, always visible while scrolling a
-            long list — the two numbers people check most often. */}
+            long list - the two numbers people check most often. */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 px-4 pb-2.5 pt-2 sm:px-6">
           <RunnerProgress
             done={done}
@@ -1049,7 +1049,7 @@ export function ChecklistDocumentPage() {
           {sealed ? (
             <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
               <Lock className="h-3 w-3" />
-              Complete — sealed record
+              Complete - sealed record
             </span>
           ) : (
             !owned && (
@@ -1060,7 +1060,7 @@ export function ChecklistDocumentPage() {
             )
           )}
           {/* Assignment is an act with a Save button, not a filter that writes
-              as you pass over it — picking a name here puts a job on somebody's
+              as you pass over it - picking a name here puts a job on somebody's
               plate and notifies them. Sealed records show who held it without
               offering to change it. */}
           {canAssign ? (
@@ -1074,7 +1074,7 @@ export function ChecklistDocumentPage() {
                   toast.success(
                     next
                       ? `Assigned to ${memberLabel(next)}`
-                      : "Assignee cleared — anyone on the crew can complete this",
+                      : "Assignee cleared - anyone on the crew can complete this",
                   );
                 }
                 return ok;
@@ -1109,7 +1109,7 @@ export function ChecklistDocumentPage() {
           </header>
 
           {/* The write-up. Rich text, because what goes to the customer alongside
-              a tick list is prose — findings, what was replaced, what to watch.
+              a tick list is prose - findings, what was replaced, what to watch.
               It prints and shares with the record. */}
           <section className="mt-5">
             <div className="mb-1.5 flex items-center justify-between">
@@ -1118,7 +1118,7 @@ export function ChecklistDocumentPage() {
               </h2>
               {!checklist.notes_html && !sealed && (
                 <span className="text-[11px] text-muted-foreground">
-                  Optional — appears on the printout and the shared link
+                  Optional - appears on the printout and the shared link
                 </span>
               )}
             </div>
@@ -1128,7 +1128,7 @@ export function ChecklistDocumentPage() {
                   className="tiptap text-sm"
                   // Sealed records are read-only, and this is the author's own
                   // saved editor output rendered back to them. Anonymous
-                  // visitors get the server-sanitised copy instead — see
+                  // visitors get the server-sanitised copy instead - see
                   // apps/api/src/domains/projects/field-records.ts.
                   dangerouslySetInnerHTML={{ __html: checklist.notes_html }}
                 />
@@ -1192,7 +1192,7 @@ export function ChecklistDocumentPage() {
                          *
                          * The box stays small because the row is a document
                          * line, but a 20px tap target is the wrong size for the
-                         * device this is filled in on — a phone, outdoors,
+                         * device this is filled in on - a phone, outdoors,
                          * often through a glove. The transparent `before`
                          * pseudo-element doubles the hit area in every
                          * direction without moving a pixel of the layout; the
@@ -1239,7 +1239,7 @@ export function ChecklistDocumentPage() {
                                * space to break at. `break-word` permits a break
                                * but does NOT shrink the element's min-content
                                * width, so as a flex child the span still forced
-                               * the row open — 877px inside a 390px phone, the
+                               * the row open - 877px inside a 390px phone, the
                                * whole page scrolling sideways. `anywhere` is the
                                * one value that also reduces min-content, which
                                * is why the printed sheet already uses it.
@@ -1252,7 +1252,7 @@ export function ChecklistDocumentPage() {
                           {it.required && (
                             <span
                               className="shrink-0 rounded-full border border-amber-500/40 bg-amber-500/12 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-700 dark:text-amber-300"
-                              title="Required — the checklist can't be completed without it"
+                              title="Required - the checklist can't be completed without it"
                             >
                               Required
                             </span>
@@ -1298,7 +1298,7 @@ export function ChecklistDocumentPage() {
                                   <img src={url} alt="" className="h-full w-full object-cover" />
                                   {canFill && (
                                     // Visible on touch and reachable by keyboard
-                                    // — hover-only left no way to detach a photo
+                                    // - hover-only left no way to detach a photo
                                     // on a phone at all.
                                     <button
                                       onClick={() => void detachPhoto(ip.id)}
@@ -1397,12 +1397,12 @@ export function ChecklistDocumentPage() {
                   className="h-9 min-w-[7rem] flex-1 border-0 bg-transparent px-1 text-base shadow-none focus-visible:ring-0 sm:text-sm"
                 />
 
-                {/* Shown only once it is not the default, so the common case — a
-                    plain checkbox — costs nothing at rest. */}
+                {/* Shown only once it is not the default, so the common case - a
+                    plain checkbox - costs nothing at rest. */}
                 {draft.type !== "checkbox" && (
                   <button
                     type="button"
-                    title={`${TYPE_META[draft.type].label} — click to clear`}
+                    title={`${TYPE_META[draft.type].label} - click to clear`}
                     onClick={() => setDraft({ ...draft, type: "checkbox" })}
                     className={cn(
                       "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[10.5px] font-extrabold uppercase tracking-wide transition-opacity hover:opacity-80",
@@ -1476,8 +1476,8 @@ export function ChecklistDocumentPage() {
 
           {/*
             Where this checklist stands, and only then what can be done about it.
-            The items on this page save themselves — the header's SaveStatus is
-            the honest report of that — so the one terminal action is sealing
+            The items on this page save themselves - the header's SaveStatus is
+            the honest report of that - so the one terminal action is sealing
             the record, and it now states its own status rather than leaving a
             greyed-out button as the only clue. Pending / In progress / Complete
             are the same three words on a task and on a workflow.
@@ -1502,7 +1502,7 @@ export function ChecklistDocumentPage() {
               </span>
             )}
 
-            {/* Spelled out next to the button rather than hidden in a tooltip —
+            {/* Spelled out next to the button rather than hidden in a tooltip -
                 a disabled control with no explanation reads as a bug on a
                 phone, where there is nothing to hover. */}
             {!sealed && !rights.canComplete && rights.reason && (
@@ -1532,7 +1532,7 @@ export function ChecklistDocumentPage() {
         </div>
       </div>
 
-      {/* Paper. Mounted alongside the page, not instead of it — see
+      {/* Paper. Mounted alongside the page, not instead of it - see
           components/PrintDocument.tsx for why print inverts the visibility. */}
       {printRecord && (
         <PrintDocument>
@@ -1588,7 +1588,7 @@ export function ChecklistDocumentPage() {
           icon: TYPE_META[t].icon,
         }))}
         defaultType="checkbox"
-        description="One per line — they'll be appended to this checklist. Bullets and numbering are stripped automatically."
+        description="One per line - they'll be appended to this checklist. Bullets and numbering are stripped automatically."
       />
     </div>
   );

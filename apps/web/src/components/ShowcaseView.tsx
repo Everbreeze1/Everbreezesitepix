@@ -55,20 +55,20 @@ function platformLabel(platform: string): string {
 }
 
 /**
- * The showcase itself — a marketing piece for the company's work.
+ * The showcase itself - a marketing piece for the company's work.
  *
  * Design rule this follows throughout: borders and boxes read as a *document*,
  * whitespace and full-bleed photography read as *editorial*. So there is almost
- * no chrome here — photos sit directly on the page, type carries the hierarchy,
+ * no chrome here - photos sit directly on the page, type carries the hierarchy,
  * and the only strong colour is the company's own accent. That is the whole
  * difference between this and a report.
  *
  * Shared by the public share page (routes/share.showcases.$token.tsx), the
- * builder's live preview, and the portfolio site's project pages — so what the
+ * builder's live preview, and the portfolio site's project pages - so what the
  * user edits is exactly what a prospect sees. Never fork these call sites.
  *
  * Rich text goes through <RichText>, which parses a small known tag subset into
- * React elements rather than injecting HTML — this page is served to anonymous
+ * React elements rather than injecting HTML - this page is served to anonymous
  * visitors, so dangerouslySetInnerHTML is deliberately avoided.
  */
 export function ShowcaseView({
@@ -86,7 +86,7 @@ export function ShowcaseView({
   footer?: boolean;
   /**
    * Logo + company name over the cover photo. Off inside the portfolio site,
-   * where the sticky site header already carries the brand a few pixels above —
+   * where the sticky site header already carries the brand a few pixels above -
    * repeating it makes the masthead look like a duplicated banner.
    */
   brandInMasthead?: boolean;
@@ -104,7 +104,7 @@ export function ShowcaseView({
 
   return (
     <div className={cn("bg-white text-neutral-900 antialiased", minHeight && "min-h-screen")}>
-      {/* Masthead. Full-bleed photography with the headline sitting on it —
+      {/* Masthead. Full-bleed photography with the headline sitting on it -
           the single biggest lever on whether this reads as premium. */}
       <header className="relative isolate overflow-hidden">
         {s.cover_image_url ? (
@@ -153,7 +153,7 @@ export function ShowcaseView({
       <main>
         {!richIsEmpty(s.intro_html) && (
           <section className="mx-auto max-w-3xl px-6 py-20 lg:px-10 lg:py-28">
-            {/* Lead copy gets a genuinely larger measure and looser leading —
+            {/* Lead copy gets a genuinely larger measure and looser leading -
                 magazine standfirst, not body text. */}
             <RichText
               html={s.intro_html}
@@ -188,7 +188,7 @@ export function ShowcaseView({
           </section>
         )}
         {/* The ask sits right after the work, while the customer is still
-            looking at what they paid for — the whole reason review links
+            looking at what they paid for - the whole reason review links
             belong on this page rather than in a follow-up email. */}
         {showReviewCta && (
           <section className="mx-auto max-w-3xl px-6 pb-20 text-center lg:px-10 lg:pb-28">
@@ -297,7 +297,7 @@ function ShowcaseSection({
         <div className="mx-auto max-w-6xl px-6 lg:px-10">
           {hasHeading && (
             <div className="flex items-baseline gap-4">
-              {/* Numbered rail — a small magazine cue that costs nothing and
+              {/* Numbered rail - a small magazine cue that costs nothing and
                   instantly reads as "designed" rather than "generated". */}
               {total > 1 && (
                 <span
@@ -344,7 +344,7 @@ function ShowcaseSection({
 }
 
 function PhotoGallery({ items, layout }: { items: ShowcaseViewItem[]; layout: string }) {
-  // A single photo earns the full width of the page — cropping it into a
+  // A single photo earns the full width of the page - cropping it into a
   // one-third grid cell is what made this feel like a report.
   if (items.length === 1) {
     return (
@@ -354,7 +354,7 @@ function PhotoGallery({ items, layout }: { items: ShowcaseViewItem[]; layout: st
     );
   }
 
-  // Exactly two reads as a comparison — before/after, or a detail pair. Tight
+  // Exactly two reads as a comparison - before/after, or a detail pair. Tight
   // gap and equal heights so the eye moves between them rather than down.
   if (items.length === 2) {
     return (
@@ -384,7 +384,7 @@ function PhotoGallery({ items, layout }: { items: ShowcaseViewItem[]; layout: st
     );
   }
 
-  // "featured" leads with one photo bled to the full viewport width — the most
+  // "featured" leads with one photo bled to the full viewport width - the most
   // dramatic move available and the clearest signal this is a designed page.
   if (layout === "featured") {
     const [lead, ...rest] = items;

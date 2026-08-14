@@ -36,7 +36,7 @@ const pgArray = (values: string[]) =>
  * Prefers the IANA zone. A fixed offset cannot be right for a whole range:
  * `getTimezoneOffset()` reports whatever is in force *today*, so a viewer in
  * New York paging back from August to January buckets by UTC-4 when January is
- * really UTC-5 — every photo shot in the last hour of a day lands on the next
+ * really UTC-5 - every photo shot in the last hour of a day lands on the next
  * day. The day panel derives its window from a real local date and so gets it
  * right, which leaves the cell and the panel disagreeing about the same photo.
  */
@@ -55,7 +55,7 @@ function makeLocalDate(timeZone: string | undefined, tzOffsetMinutes: number) {
         return (iso: string) => fmt.format(new Date(iso));
       }
     } catch {
-      // Unknown zone — fall through to the offset.
+      // Unknown zone - fall through to the offset.
     }
   }
   const offsetMs = tzOffsetMinutes * 60_000;
@@ -100,7 +100,7 @@ export const listTimelineActivityInputSchema = z.object({
    * Minutes to subtract from UTC to reach the viewer's local time, i.e. exactly
    * what `new Date().getTimezoneOffset()` returns. Without this a photo taken
    * at 7pm local lands on the following UTC day and the calendar is off by one.
-   * Only a fallback now — see `timeZone`.
+   * Only a fallback now - see `timeZone`.
    */
   tzOffsetMinutes: z.number().int().min(-840).max(840).default(0),
   /** Month view needs a thumbnail per day; the year heatmap only needs counts. */
@@ -138,12 +138,12 @@ export async function listTimelineActivityService(
         ? "id, project_id, storage_path, thumb_path, image_url, taken_at, created_at"
         : "project_id, taken_at, created_at",
     )
-    // No `archived` filter — that column is the compression job's bookkeeping,
+    // No `archived` filter - that column is the compression job's bookkeeping,
     // not a user's decision to hide a photo. See the note in GalleryPage.
     .is("deleted_at", null)
     /*
      * `hidden` IS the user's decision, and this is the surface it is about.
-     * The bulk bar's Hide button says "N hidden from timeline" — this query
+     * The bulk bar's Hide button says "N hidden from timeline" - this query
      * builds that timeline's day counts, and it did not honour the flag, so
      * the toast promised something no query delivered. Hiding a photo did
      * nothing at all except badge it.
@@ -153,8 +153,8 @@ export async function listTimelineActivityService(
      */
     .eq("hidden", false)
     // Walkthrough frames used to be excluded here as "capture artefacts". They
-    // are a record of a day's work — often the only one, on a day the crew
-    // walked the site instead of shooting stills — so the heatmap counts them.
+    // are a record of a day's work - often the only one, on a day the crew
+    // walked the site instead of shooting stills - so the heatmap counts them.
     .gte("created_at", new Date(fromMs - slack).toISOString())
     .lt("created_at", new Date(toMs + slack).toISOString())
     .order("created_at", { ascending: false })
@@ -193,7 +193,7 @@ export async function listTimelineActivityService(
 
   // Cover photo per day, resolved only when the caller will render them. Rows
   // arrive in created_at order but buckets key off taken_at, so pick the newest
-  // by the same clock the day cell was built from — otherwise the cover is
+  // by the same clock the day cell was built from - otherwise the cover is
   // whichever photo happened to sync last.
   const covers = new Map<string, any>();
   if (data.withThumbnails) {

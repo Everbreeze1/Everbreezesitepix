@@ -52,7 +52,7 @@ function projectAddress(p: ProjectRow): string | null {
 }
 
 /**
- * Readable text colour for a coloured chip — tag colours span light yellows to
+ * Readable text colour for a coloured chip - tag colours span light yellows to
  * dark navies. Picks whichever of black/white has the higher WCAG contrast
  * ratio against the chip, rather than thresholding a perceived-brightness
  * approximation: the old 0.6 cutoff put white text on mid-tone tags, where
@@ -182,7 +182,7 @@ export function TagBoardDetailView({
     const toTag = allTags.find((t) => t.id === toTagId);
     if (!toTag) return;
 
-    // Optimistic — the board re-renders from projectTagMap immediately.
+    // Optimistic - the board re-renders from projectTagMap immediately.
     onTagMoved(projectId, fromTagId, toTag);
 
     try {
@@ -211,7 +211,7 @@ export function TagBoardDetailView({
       {columns.length === 0 ? (
         <div className="mt-8 text-center">
           <p className="text-sm text-muted-foreground">
-            This pipeline has no stages yet — add some tags to get started.
+            This pipeline has no stages yet - add some tags to get started.
           </p>
           <Button variant="outline" size="sm" className="mt-3" onClick={onManage}>
             <Settings2 className="mr-1.5 h-4 w-4" /> Manage Pipeline
@@ -397,14 +397,14 @@ function BoardCard({
     data: { projectId: project.id, fromTagId: tagId, projectName: project.name },
   });
   const addr = projectAddress(project);
-  // Days since last touch drives a colour cue — a board should surface what's
+  // Days since last touch drives a colour cue - a board should surface what's
   // gone quiet without the reader having to parse every timestamp.
   const daysStale = Math.floor(
     (Date.now() - new Date(project.updated_at).getTime()) / 86_400_000,
   );
 
   return (
-    // The whole card is the drag target — no hunting for a small handle, and it
+    // The whole card is the drag target - no hunting for a small handle, and it
     // works identically under touch. `attributes` also makes it keyboard-draggable.
     <div
       ref={setNodeRef}
@@ -412,7 +412,7 @@ function BoardCard({
       {...attributes}
       aria-label={`${project.name}. Press space to move between stages.`}
       className={cn(
-        // No `touch-action: none` here — TouchSensor's press-and-hold delay does
+        // No `touch-action: none` here - TouchSensor's press-and-hold delay does
         // the disambiguation, so a plain swipe over a card still scrolls.
         "group relative rounded-lg border border-border bg-card shadow-sm transition-shadow",
         "cursor-grab hover:border-primary/40 hover:shadow-md active:cursor-grabbing",

@@ -26,7 +26,7 @@ function isInIframe() {
 }
 
 // The mobile app isn't published to either store yet (still an internal
-// dev build) — keep this banner disabled rather than link to placeholder
+// dev build) - keep this banner disabled rather than link to placeholder
 // store listings. Re-enable once real App Store / Play Store URLs exist.
 const MOBILE_APP_PUBLISHED = false;
 

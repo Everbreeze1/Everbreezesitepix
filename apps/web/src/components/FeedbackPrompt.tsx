@@ -25,7 +25,7 @@ type Step = "ask" | "detail" | "done";
  * feature, ask once how it is going. One tap answers it; anything more is
  * optional.
  *
- * Deliberately conservative — see the cadence rules in lib/feedback.ts. It asks
+ * Deliberately conservative - see the cadence rules in lib/feedback.ts. It asks
  * about a given feature at most once ever, at most once per session, never
  * within COOLDOWN_DAYS of the last prompt, and backs off for two sessions if
  * dismissed. The point is to catch problems testing misses and gauge which
@@ -75,7 +75,7 @@ export function FeedbackPrompt() {
 
   const close = () => setVisible(false);
 
-  /** Both the X and "Not now" land here — declining is declining either way. */
+  /** Both the X and "Not now" land here - declining is declining either way. */
   const dismiss = () => {
     markPromptDismissed(user.id);
     logPromptEvent(user.id, feature.key, "dismissed");
@@ -103,7 +103,7 @@ export function FeedbackPrompt() {
       setStep("done");
       window.setTimeout(close, 2200);
     } catch (e: any) {
-      toast.error(e?.message ?? "Couldn't send that — try again.");
+      toast.error(e?.message ?? "Couldn't send that - try again.");
     } finally {
       setSending(false);
     }
@@ -133,7 +133,7 @@ export function FeedbackPrompt() {
 
       {step === "done" ? (
         <div className="py-2 pr-6">
-          <p className="text-sm font-bold text-foreground">Thanks — that helps.</p>
+          <p className="text-sm font-bold text-foreground">Thanks - that helps.</p>
           <p className="mt-1 text-xs text-muted-foreground">
             We read every one of these.
           </p>

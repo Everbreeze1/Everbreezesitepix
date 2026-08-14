@@ -1,15 +1,15 @@
 -- Checklists and workflows become printable, shareable documents.
 --
--- Both already carried the whole record — items, answers, photos, sign-offs —
+-- Both already carried the whole record - items, answers, photos, sign-offs -
 -- and had nowhere to send it. A checklist could only be read inside the app, in
 -- a modal, by its owner. This adds the three columns every other document-shaped
 -- thing in SitePix already has (project_pages, project_reports, walkthroughs):
 --
---   share_token  — the public link, issued up front like project_pages does
---   revoked_at   — the owner's switch for that link, defaulting to OFF
---   notes_html   — the rich-text write-up that turns a tick list into a document
+--   share_token  - the public link, issued up front like project_pages does
+--   revoked_at   - the owner's switch for that link, defaulting to OFF
+--   notes_html   - the rich-text write-up that turns a tick list into a document
 --
--- Idempotent. Safe to re-run — including the `revoked_at` backfill, which is
+-- Idempotent. Safe to re-run - including the `revoked_at` backfill, which is
 -- guarded so that re-running can never un-share a link an owner turned on.
 --
 -- RE-RUN THIS if you applied an earlier copy of this file: the first version
@@ -42,7 +42,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS project_checklists_share_token_key
 -- project_reports do) means every row is live from the moment the column
 -- exists. Opening a real shared link proved why that is wrong here: this
 -- migration backfills a token onto every checklist that already existed, so
--- "live by default" retroactively publishes the entire history — and the Share
+-- "live by default" retroactively publishes the entire history - and the Share
 -- button rendered "Shared" on a record nobody had ever shared, which is the UI
 -- stating something untrue. Tokens are unguessable UUIDs so nothing leaked, but
 -- publishing to the internet should be an act, not a default.
@@ -103,6 +103,6 @@ END $$;
 -- Both share routes go through the service-role client in
 -- apps/api/src/domains/projects/field-records.ts, which resolves the token,
 -- checks revoked_at, checks the project isn't trashed, and returns a
--- purpose-built payload. No `anon` grant is added here on purpose —
+-- purpose-built payload. No `anon` grant is added here on purpose -
 -- 20260811000000_lock_down_anon_reads.sql took those away deliberately.
 -- ============================================================

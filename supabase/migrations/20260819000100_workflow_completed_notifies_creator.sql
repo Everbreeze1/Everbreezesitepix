@@ -1,7 +1,7 @@
 -- Fix: a completed workflow told the wrong person, when nobody was assigned.
 --
 -- 20260819000000 gave checklists, tasks and workflows the same completion
--- notification, addressed to `COALESCE(assigned_by, <the record's owner>)` —
+-- notification, addressed to `COALESCE(assigned_by, <the record's owner>)` -
 -- the assignor, or whoever created the thing if it was never handed over.
 -- Checklists and tasks resolve that second half as `NEW.created_by`. Workflows
 -- did not, because that migration was written believing `project_workflows` had
@@ -13,14 +13,14 @@
 -- NULL. The claim in that comment was simply wrong.
 --
 -- What it costs: nothing while work is assigned, since `assigned_by` wins and
--- the fallback never runs. It only shows on an *unassigned* workflow — the case
+-- the fallback never runs. It only shows on an *unassigned* workflow - the case
 -- where someone picks up a run nobody handed out. There the report went to
 -- whoever owns the project rather than whoever set the workflow up, and on any
 -- team where a manager applies workflows to jobs they did not create, those are
 -- different people: the manager builds the run, the notification goes to the
 -- project's owner, and the manager hears nothing.
 --
--- It also broke the rule the feature exists to state — that this relationship
+-- It also broke the rule the feature exists to state - that this relationship
 -- reads the same on every kind of work. Two records could be closed the same
 -- way and notify different people for reasons nothing in the UI explained.
 --
@@ -49,7 +49,7 @@ END;
 $$;
 
 -- === VERIFY ================================================================
--- Expect `true` — the recipient is now the workflow's own creator, and the
+-- Expect `true` - the recipient is now the workflow's own creator, and the
 -- projects lookup is gone.
 SELECT pg_get_functiondef(oid) LIKE '%COALESCE(NEW.assigned_by, NEW.created_by)%'
          AS uses_workflow_creator,
@@ -59,7 +59,7 @@ FROM pg_proc
 WHERE proname = 'notify_workflow_completed'
   AND pronamespace = 'public'::regnamespace;
 
--- And that all three kinds now address the same person the same way — expect 3.
+-- And that all three kinds now address the same person the same way - expect 3.
 SELECT count(*) AS consistent_notifiers
 FROM pg_proc
 WHERE pronamespace = 'public'::regnamespace

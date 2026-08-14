@@ -69,7 +69,7 @@ function badRequest(message: string): never {
 /**
  * Picks a free slug for a brand new portfolio.
  *
- * Reads the whole slug column rather than probing one candidate at a time —
+ * Reads the whole slug column rather than probing one candidate at a time -
  * the table has one row per paying team, so this stays a few thousand short
  * strings for the foreseeable life of the feature and saves N round trips.
  */
@@ -95,7 +95,7 @@ async function pickPortfolioSlug(seed: string, teamId: string): Promise<string> 
  * not own a row (or, more importantly, a claimed slug).
  *
  * Defaults are seeded from the owner's profile so the first render of the
- * builder is a plausible site rather than a wall of empty inputs — the same
+ * builder is a plausible site rather than a wall of empty inputs - the same
  * reasoning as createShowcaseFromProject generating finished copy.
  */
 export async function getMyPortfolioService(ctx: AuthedContext): Promise<MyPortfolio> {
@@ -111,8 +111,8 @@ export async function getMyPortfolioService(ctx: AuthedContext): Promise<MyPortf
 
   let { data: row } = await db.from("portfolios").select("*").eq("team_id", teamId).maybeSingle();
 
-  // Create-on-read is an owner/admin privilege. Returning null here — rather
-  // than letting the insert fail on RLS — is what keeps a plain member's first
+  // Create-on-read is an owner/admin privilege. Returning null here - rather
+  // than letting the insert fail on RLS - is what keeps a plain member's first
   // visit an empty state instead of a red error box.
   if (!row && !canEdit) {
     const cards = await loadTeamShowcaseCards(db, teamId);
@@ -153,7 +153,7 @@ export async function getMyPortfolioService(ctx: AuthedContext): Promise<MyPortf
       .select("*")
       .single();
     if (error) {
-      // 23505 means another tab created it between our read and our insert —
+      // 23505 means another tab created it between our read and our insert -
       // re-read instead of surfacing a unique-violation to the user.
       if ((error as any).code === "23505") {
         const { data: existing } = await db
@@ -262,7 +262,7 @@ const optionalText = (max: number) =>
     .optional()
     .transform((v) => (v == null ? v : v.trim() === "" ? null : v.trim()));
 
-/** Deduped, trimmed, empties dropped — these render as filter chips. */
+/** Deduped, trimmed, empties dropped - these render as filter chips. */
 const tagList = (max: number) =>
   z
     .array(z.string().max(80))
@@ -304,7 +304,7 @@ export async function updatePortfolioService(
 ): Promise<{ ok: true; slug: string }> {
   // The Portfolio site is sold as a Team-tier feature, but the only gate used
   // to be the client-side `if (!isTeam)` on PortfolioPage. A hidden screen is
-  // not enforcement — this RPC was reachable on any plan.
+  // not enforcement - this RPC was reachable on any plan.
   await requireTeamPlan(ctx, "The Portfolio site");
   const teamId = await myTeamId(ctx);
   if (!teamId) badRequest("You need a team before you can publish a portfolio.");
@@ -315,7 +315,7 @@ export async function updatePortfolioService(
     if (!isValidPortfolioSlug(data.slug)) {
       badRequest(
         isReservedSlug(data.slug)
-          ? `"${data.slug}" is reserved — pick another address.`
+          ? `"${data.slug}" is reserved - pick another address.`
           : "Addresses can use lowercase letters, numbers and hyphens only.",
       );
     }
@@ -356,7 +356,7 @@ export async function updatePortfolioService(
 
   if (error) {
     if ((error as any).code === "23505") {
-      badRequest("That address is already taken — try another.");
+      badRequest("That address is already taken - try another.");
     }
     if ((error as any).code === "23514") {
       badRequest("Addresses can use lowercase letters, numbers and hyphens only.");

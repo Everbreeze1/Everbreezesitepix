@@ -99,7 +99,7 @@ export function TeamsPage() {
   }
 
   // Only the team owner can access the Teams settings page.
-  // Members/admins were invited — they shouldn't see plan, seats, or invites.
+  // Members/admins were invited - they shouldn't see plan, seats, or invites.
   if (data.myRole !== "owner") {
     return (
       <div className="mx-auto max-w-2xl px-4 pb-24 pt-16 text-center">
@@ -134,7 +134,7 @@ export function TeamsPage() {
 }
 
 // ----------------------------------------------------------------
-// Static design preview matching the Figma "Teams" mock — shown whenever
+// Static design preview matching the Figma "Teams" mock - shown whenever
 // the signed-in account has no team yet, so the sidebar's Teams link
 // always lands on the finished layout instead of the onboarding form.
 const DESIGN_PREVIEW_MEMBERS = [
@@ -331,8 +331,8 @@ function TeamDashboard({
         actions={
           <>
             {/*
-              No billing action here. Billing has one home — Settings → Billing
-              — and duplicating the Stripe portal on this page meant two places
+              No billing action here. Billing has one home - Settings → Billing
+              - and duplicating the Stripe portal on this page meant two places
               to keep in sync and two places for a user to look. This page is
               about people and seats; upgrade paths still point at /pricing.
             */}
@@ -359,7 +359,7 @@ function TeamDashboard({
             <div>
               {/*
                * Kept for Team too, unlike the coverage card. `memberLimit` here
-               * is not the 50 ceiling — it prefers `teams.member_limit`, which
+               * is not the 50 ceiling - it prefers `teams.member_limit`, which
                * billing sets to the number of seats actually purchased. A Team
                * customer who bought 6 is genuinely at cap at 6, and this banner
                * is the only thing explaining why the Invite buttons vanished.
@@ -431,7 +431,7 @@ function WorkspaceCoverageCard({
       <Users className="h-7 w-7 text-sidebar-ring" />
       {/*
        * Team hides the ceiling. Starter and Pro ship a handful of seats, so the
-       * remaining count is genuinely useful there — on Team it is a 50 that
+       * remaining count is genuinely useful there - on Team it is a 50 that
        * nobody is approaching, and showing it reads as a restriction on a plan
        * whose whole pitch is "add the crew". The cap still exists and is still
        * enforced server-side (PLAN_MEMBER_CAP); it just isn't advertised.
@@ -493,7 +493,7 @@ function InviteDialog({
        * Close on success, and say what happened in the toast.
        *
        * The dialog used to stay open with the email field reset to its
-       * placeholder AND a panel showing the raw invite URL — which read as a
+       * placeholder AND a panel showing the raw invite URL - which read as a
        * second modal appearing on top of the first. The link it showed is also
        * redundant: the invite now appears in Pending invites immediately, with
        * its own Copy link and Resend built from the same
@@ -546,7 +546,7 @@ function InviteDialog({
           <DialogDescription asChild>
             <p className="mt-5 font-manrope text-sm text-muted-foreground">
               Send an invitation to capture updates and collaborate on your projects.{" "}
-              {/* Replaced wholesale rather than just dropping {seatsLeft} — the
+              {/* Replaced wholesale rather than just dropping {seatsLeft} - the
                   count is fused into the sentence, so removing the number alone
                   would leave "…on your projects. seats left on the Team plan." */}
               {plan === "team"
@@ -669,7 +669,7 @@ function PendingInvites({
                         // is what made the UI claim delivery it hadn't achieved.
                         if ((res as any)?.emailSent)
                           toast.success(`Invite email re-sent to ${inv.email}`);
-                        else toast.warning("Couldn't email — share the link instead");
+                        else toast.warning("Couldn't email - share the link instead");
                       } catch (e: any) {
                         toast.error(e?.message ?? "Couldn't resend invite");
                       } finally {
@@ -836,7 +836,7 @@ function MembersList({
                     <button
                       type="button"
                       disabled
-                      title={`${roleLabel[m.role] ?? m.role} — no actions available`}
+                      title={`${roleLabel[m.role] ?? m.role} - no actions available`}
                       className="cursor-default rounded-xl bg-muted px-3 py-2 font-manrope text-xs font-extrabold text-muted-foreground/50"
                     >
                       Manage

@@ -31,7 +31,7 @@ interface Props {
   /** Right-side panel content (description, tasks, comments…). When provided,
    *  the lightbox goes edge-to-edge and the image takes the remaining space. */
   renderSidePanel?: (photo: LightboxPhoto) => React.ReactNode;
-  /** Share handler — rendered as a dedicated toolbar icon. */
+  /** Share handler - rendered as a dedicated toolbar icon. */
   onSharePhoto?: (photo: LightboxPhoto) => void;
 }
 
@@ -232,7 +232,7 @@ export function PhotoLightbox({
                   </div>
                 )}
 
-                {/* Zoom controls — bigger, more visible */}
+                {/* Zoom controls - bigger, more visible */}
                 <div className="absolute bottom-5 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/10 bg-black/70 p-1.5 shadow-xl backdrop-blur">
                   <button
                     type="button"

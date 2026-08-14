@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@sitepix/db";
 
-/** Set via env — Railway project vars in production, apps/api/.env locally. */
+/** Set via env - Railway project vars in production, apps/api/.env locally. */
 export function requireSitepixSupabaseUrl(): string {
   const url = process.env.SITEPIX_SUPABASE_URL;
   if (!url) throw new Error("Missing SITEPIX_SUPABASE_URL");
@@ -16,7 +16,7 @@ export function requireSitepixSupabasePublishableKey(): string {
 
 let _admin: SupabaseClient<Database> | undefined;
 
-/** Service-role client. Server-only — never ship to browsers. */
+/** Service-role client. Server-only - never ship to browsers. */
 export function getSupabaseAdmin(): SupabaseClient<Database> {
   if (_admin) return _admin;
   const key = process.env.SITEPIX_SUPABASE_SERVICE_ROLE_KEY;

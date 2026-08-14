@@ -59,7 +59,7 @@ export interface MyPortfolio {
    *
    * Optional on purpose: web and API deploy separately, so during a rolling
    * release this field is absent from an older API's response. Callers must
-   * treat `undefined` as *allowed* — RLS is the real enforcement, and failing
+   * treat `undefined` as *allowed* - RLS is the real enforcement, and failing
    * closed here would lock every owner out of their own portfolio for the
    * length of the deploy window.
    */
@@ -160,7 +160,7 @@ export interface PortfolioEmbedData {
   serviceTypes: string[];
 }
 
-/** Creates the team's portfolio on first call — safe to call on page load. */
+/** Creates the team's portfolio on first call - safe to call on page load. */
 export const getMyPortfolio = rpcOp<undefined, MyPortfolio>("getMyPortfolio");
 
 export const updatePortfolio = rpcOp<
@@ -199,7 +199,7 @@ export const rotatePortfolioEmbedKey = rpcOp<undefined, { embedKey: string }>(
   "rotatePortfolioEmbedKey",
 );
 
-/** Site-only fields on a showcase — its URL, facets, map pin and listing state. */
+/** Site-only fields on a showcase - its URL, facets, map pin and listing state. */
 export const updateShowcaseSite = rpcOp<
   {
     id: string;

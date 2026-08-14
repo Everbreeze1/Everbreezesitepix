@@ -15,9 +15,9 @@ export interface TeamMemberLite {
  * The one place the team roster is read.
  *
  * Several screens used to hand-roll this by querying `public.profiles` straight
- * from the browser. `profiles` has exactly ONE SELECT policy — "Users can view
+ * from the browser. `profiles` has exactly ONE SELECT policy - "Users can view
  * own profile" USING (auth.uid() = id), in
- * 20260618045310_profiles_company_fix.sql — so every one of those queries came
+ * 20260618045310_profiles_company_fix.sql - so every one of those queries came
  * back with a single row: the caller's own. Nothing errored, nothing spun,
  * nothing rendered an empty state. The assignee dropdown silently contained one
  * person (you), avatar stacks filled with "?", contributor filters listed
@@ -44,7 +44,7 @@ export function useTeamMembers() {
   });
 
   const members: TeamMemberLite[] = ((q.data as any)?.members ?? []).map((m: any) => ({
-    // `m.id` is the team_members ROW id — assignee and uploader columns hold
+    // `m.id` is the team_members ROW id - assignee and uploader columns hold
     // USER ids, so this must be `user_id`.
     user_id: m.user_id,
     full_name: m.profile?.full_name ?? null,
@@ -72,7 +72,7 @@ export function useTeamMembers() {
   return {
     members,
     myRole,
-    /** Workspace admin or project manager — allowed to close another crew member's work. */
+    /** Workspace admin or project manager - allowed to close another crew member's work. */
     isManager: isManagerRole(myRole),
     /** Pending invitees. They have no auth user yet, so they are NOT assignable. */
     pendingInvites: ((q.data as any)?.invites ?? []) as Array<{

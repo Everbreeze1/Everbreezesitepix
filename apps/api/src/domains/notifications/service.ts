@@ -12,7 +12,7 @@ export interface Notification {
     | "workflow_assigned"
     // The reporting-back half of an assignment: the assignor is told when the
     // work they handed out is closed, so they can review or reopen it. Raised
-    // by triggers, not by this service — see
+    // by triggers, not by this service - see
     // 20260819000000_assignment_and_completion.sql.
     | "task_completed"
     | "checklist_completed"
@@ -130,7 +130,7 @@ export async function markAllNotificationsReadService(ctx: ServiceContext) {
 /**
  * Server-side notification insert for event sources that already run through the
  * service layer (photo comment mentions, team invite acceptance) rather than a DB
- * trigger. Uses the service-role client, so it bypasses RLS by design — callers are
+ * trigger. Uses the service-role client, so it bypasses RLS by design - callers are
  * trusted server code, not user input.
  */
 export async function insertNotification(

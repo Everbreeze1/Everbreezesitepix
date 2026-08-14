@@ -10,8 +10,8 @@ import {
 } from "../apps/web/src/lib/assignment";
 
 /*
- * The completion rule is written twice — once as SQL triggers, once as the
- * TypeScript that decides whether the button is enabled — because the web app
+ * The completion rule is written twice - once as SQL triggers, once as the
+ * TypeScript that decides whether the button is enabled - because the web app
  * writes to these tables straight from the browser, so the database has to be
  * the enforcement and the UI has to agree with it or every refusal arrives as a
  * surprise toast.
@@ -23,7 +23,7 @@ import {
 
 const ROOT = resolve(__dirname, "..");
 const MIGRATION = join(ROOT, "supabase/migrations/20260819000000_assignment_and_completion.sql");
-/** In apply order — later files replace functions defined in earlier ones. */
+/** In apply order - later files replace functions defined in earlier ones. */
 const MIGRATIONS = [
   MIGRATION,
   join(ROOT, "supabase/migrations/20260819000100_workflow_completed_notifies_creator.sql"),
@@ -65,8 +65,8 @@ describe("who may mark work complete", () => {
 
   /*
    * The exact exchange this feature came from: "I am the manager. I assigned it
-   * to Jackson. But I am still able to mark complete." He keeps the ability —
-   * a tech can be unreachable — but delegating the work and then closing it
+   * to Jackson. But I am still able to mark complete." He keeps the ability -
+   * a tech can be unreachable - but delegating the work and then closing it
    * yourself is somebody else's name being signed, so it is an override and the
    * UI confirms it. A silent pass here would reproduce the original complaint.
    */
@@ -178,7 +178,7 @@ describe("the SQL half still says the same thing", () => {
   /*
    * The guard reads OLD so that one UPDATE cannot assign the work to itself and
    * close it in the same statement. Switching any of these to NEW reopens that
-   * hole silently — nothing else in the system would fail.
+   * hole silently - nothing else in the system would fail.
    */
   it("judges completion against OLD, never NEW", () => {
     const guards = sql.match(/may_complete_assignment\((NEW|OLD)\.[^)]*\)/g) ?? [];
@@ -211,14 +211,14 @@ describe("the SQL half still says the same thing", () => {
 
   /*
    * All three must address the same person the same way, which is the whole
-   * point of the feature — two records closed identically should not notify
+   * point of the feature - two records closed identically should not notify
    * different people for reasons nothing in the UI explains.
    *
    * `notify_workflow_completed` originally reached through `project_workflows`
    * to the PROJECT's owner, on the mistaken belief that the table had no
    * `created_by` of its own (it has had one, NOT NULL, since 20260616050717).
-   * That only bit unassigned workflows — where `assigned_by` is NULL and the
-   * fallback actually runs — but on a team where a manager applies workflows to
+   * That only bit unassigned workflows - where `assigned_by` is NULL and the
+   * fallback actually runs - but on a team where a manager applies workflows to
    * jobs they did not create, it sent the report to the wrong person entirely.
    * Fixed in 20260819000100; this reads the LAST definition of each function
    * across both files, so a future migration that regresses it fails here.
@@ -230,7 +230,7 @@ describe("the SQL half still says the same thing", () => {
       "notify_task_completed",
       "notify_workflow_completed",
     ]) {
-      // Anchored on CREATE OR REPLACE, not on `FUNCTION public.<fn>()` — the
+      // Anchored on CREATE OR REPLACE, not on `FUNCTION public.<fn>()` - the
       // latter also matches the trigger's `EXECUTE FUNCTION` clause, which
       // sits after the definition and would slice the wrong span.
       const last = combined.lastIndexOf(`CREATE OR REPLACE FUNCTION public.${fn}()`);
@@ -245,8 +245,8 @@ describe("the SQL half still says the same thing", () => {
   /*
    * 20260724010000 restricts creating a workflow to Team-plan workspaces with a
    * permissive INSERT policy. RLS ORs permissive policies together, so any
-   * second INSERT path on this table — a `FOR ALL` teammate policy carries one
-   * in its WITH CHECK — repeals that gate without touching it.
+   * second INSERT path on this table - a `FOR ALL` teammate policy carries one
+   * in its WITH CHECK - repeals that gate without touching it.
    */
   it("never grants teammates a second INSERT path into workflows", () => {
     const workflowPolicies =

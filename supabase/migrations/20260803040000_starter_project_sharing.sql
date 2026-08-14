@@ -2,22 +2,22 @@
 --
 -- 20260612193150_teams_plan.sql gated are_teammates() on plan IN ('pro','team'),
 -- so a Starter team could invite its one extra member but each person still saw
--- only their own projects — the seat was effectively useless. Client feedback:
+-- only their own projects - the seat was effectively useless. Client feedback:
 -- Starter is for small crews and those two people should work off the same
 -- project record.
 --
 -- Starter is inherently capped at 2 seats by teams.member_limit (kept in sync by
 -- teams_sync_member_limit_trg in the same migration), so opening this up cannot
--- turn into unbounded free team access — the plan ceiling is the limit, not this
+-- turn into unbounded free team access - the plan ceiling is the limit, not this
 -- predicate.
 --
 -- Scope: are_teammates() is the SELECT/UPDATE/DELETE predicate behind projects,
 -- photos, checklists, reports, tasks, photo_comments, ai_analyses and
 -- notifications, i.e. exactly "the project record". It is NOT what gates the
 -- paid features:
---   * Workflows stay Team-only    — public.is_team_plan()  (20260724010000)
+--   * Workflows stay Team-only    - public.is_team_plan()  (20260724010000)
 --   * Walkthroughs / watermark /
---     photo-in-chat stay Pro+     — getCallerTeamPlan().isPro (apps/api/src/lib/team-plan.ts)
+--     photo-in-chat stay Pro+     - getCallerTeamPlan().isPro (apps/api/src/lib/team-plan.ts)
 -- Those are separate predicates and are deliberately left untouched here.
 --
 -- Apply via the SitePix Supabase SQL editor (or `supabase db push`). Safe to re-run.

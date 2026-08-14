@@ -10,7 +10,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection, type Selection } from "@tiptap/pm/state";
 import { isPhotoSlot } from "./tiptap-project-image";
 
-/** A photo slot — or an already-filled photo — captured when the picker opened. */
+/** A photo slot - or an already-filled photo - captured when the picker opened. */
 export interface SlotTarget {
   pos: number;
   node: ProseMirrorNode;
@@ -31,7 +31,7 @@ function isSameImage(node: ProseMirrorNode | null | undefined, target: ProseMirr
  *
  * The position captured when the picker opened is only trusted while the same
  * image is still standing there. If the document shifted underneath the open
- * dialog — an undo, a reload, an edit elsewhere — the slot is found by identity
+ * dialog - an undo, a reload, an edit elsewhere - the slot is found by identity
  * instead, so a photo can never be written over some unrelated node that
  * happens to have inherited the position.
  *
@@ -39,8 +39,8 @@ function isSameImage(node: ProseMirrorNode | null | undefined, target: ProseMirr
  * four copies of the same SVG), so identity alone cannot pick between them.
  * The match nearest the captured position wins, on the grounds that a document
  * which shifted moved everything by roughly the same amount. Twins remain
- * genuinely ambiguous — nothing short of a persisted per-slot id could
- * separate them — but that only matters if the document changes while the
+ * genuinely ambiguous - nothing short of a persisted per-slot id could
+ * separate them - but that only matters if the document changes while the
  * picker is open, which no path in this app does.
  */
 export function findImagePos(doc: ProseMirrorNode, target: SlotTarget): number | null {
@@ -67,7 +67,7 @@ export function findImagePos(doc: ProseMirrorNode, target: SlotTarget): number |
  *
  * Inserting a photo slot row leaves the caret immediately after the slot, so
  * reaching for "Add photo" straight afterwards dropped the photo *next to* the
- * empty box rather than into it — the same stranded photo as the click-to-fill
+ * empty box rather than into it - the same stranded photo as the click-to-fill
  * bug, arrived at by a different button. A slot touching the insertion point is
  * a placeholder waiting for exactly this photo, so fill it rather than doubling
  * up. Anything further away is left alone: that is an ordinary insert.

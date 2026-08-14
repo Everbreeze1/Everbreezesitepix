@@ -8,7 +8,7 @@ export type BlueprintOriginState =
   | { kind: "loading" }
   /** Ledger readable, genuinely no blueprint applied. */
   | { kind: "none" }
-  /** The read failed — table absent on this environment, or a real error. */
+  /** The read failed - table absent on this environment, or a real error. */
   | { kind: "unavailable" }
   | { kind: "ok"; applications: BlueprintOriginApplication[] };
 
@@ -24,7 +24,7 @@ export interface ProjectBlueprintOriginResult {
  *
  * Before this there were two independent inline queries with different embeds
  * and two separate local row interfaces, and both collapsed every failure into
- * `null` — so "the ledger is not on this environment" and "no blueprint was
+ * `null` - so "the ledger is not on this environment" and "no blueprint was
  * applied" rendered identically, with nothing logged. Adding a third reader for
  * per-item badges would have tripled that.
  *
@@ -50,7 +50,7 @@ export function useProjectBlueprintOrigin(projectId: string): ProjectBlueprintOr
         const res = await getProjectBlueprintOrigin({ data: { projectId } });
         if (cancelled) return;
         if (res.status === "unavailable") {
-          // Never silent — this is the state that used to be invisible.
+          // Never silent - this is the state that used to be invisible.
           console.warn("[blueprint-origin] ledger unavailable on this environment", { projectId });
           setState({ kind: "unavailable" });
           setItemSources({});

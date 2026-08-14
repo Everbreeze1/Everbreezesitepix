@@ -24,7 +24,7 @@ import type {
  *   3. that link printed by the recipient
  *
  * That is the whole point of the component. Before this, a checklist could only
- * be read inside a modal by whoever owned it — so the record of what was
+ * be read inside a modal by whoever owned it - so the record of what was
  * checked on a job had no way out of the app at all, and the same record
  * rendered from two different code paths would have drifted into two different
  * documents within a release.
@@ -48,7 +48,7 @@ function typeLabel(kind: FieldRecordBody["kind"], type: string): string | null {
   return !label || type === "checkbox" ? null : label;
 }
 
-/** Dates on a compliance document are unambiguous — never "3 days ago". */
+/** Dates on a compliance document are unambiguous - never "3 days ago". */
 function docDate(iso: string | null | undefined, withTime = false): string | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -95,7 +95,7 @@ export function RecordDocument({
    * "Empty" has to be derived from this same list, not from `items.length > 0`.
    * A workflow template whose phases carry no steps yet made the sheet print
    * "Nothing has been added to this workflow yet" directly above Phase 1 and
-   * Phase 2 — two contradictory claims on a document going to a customer.
+   * Phase 2 - two contradictory claims on a document going to a customer.
    */
   const sections = record.sections.filter((s) => s.items.length > 0 || !!s.name);
   const isEmpty = sections.length === 0;
@@ -134,15 +134,15 @@ export function RecordDocument({
       <section className="record-doc__facts">
         <div>
           <div className="record-doc__fact-label">Project</div>
-          <div className="record-doc__fact-value">{project?.name ?? "—"}</div>
+          <div className="record-doc__fact-value">{project?.name ?? "-"}</div>
         </div>
         <div>
           <div className="record-doc__fact-label">Site</div>
-          <div className="record-doc__fact-value">{address ?? "—"}</div>
+          <div className="record-doc__fact-value">{address ?? "-"}</div>
         </div>
         <div>
           <div className="record-doc__fact-label">{completed ? "Completed" : "Started"}</div>
-          <div className="record-doc__fact-value">{completed ?? started ?? "—"}</div>
+          <div className="record-doc__fact-value">{completed ?? started ?? "-"}</div>
         </div>
         <div>
           <div className="record-doc__fact-label">
@@ -199,7 +199,7 @@ export function RecordDocument({
             {section.signoff ? (
               <div className="record-doc__signoff">
                 Signed off by{" "}
-                <span className="record-doc__signoff-name">{section.signoff.name || "—"}</span> ·{" "}
+                <span className="record-doc__signoff-name">{section.signoff.name || "-"}</span> ·{" "}
                 {docDate(section.signoff.at, true)}
               </div>
             ) : (
@@ -217,7 +217,7 @@ export function RecordDocument({
           No "SitePix" fallback.
           This sheet goes to the contractor's customer under the contractor's
           letterhead, so when neither a company name nor an author is on file the
-          honest footer is empty — printing OUR brand on THEIR compliance record
+          honest footer is empty - printing OUR brand on THEIR compliance record
           is worse than printing nothing. Caught by opening a real shared link:
           the account has a logo but no company name, so the fallback fired and
           the customer's copy was signed "SitePix".
@@ -226,7 +226,7 @@ export function RecordDocument({
         <span>
           {record.completedAt
             ? `Record sealed ${docDate(record.completedAt, true)}`
-            : "In progress — not yet complete"}
+            : "In progress - not yet complete"}
         </span>
       </footer>
     </article>
@@ -246,8 +246,8 @@ function RecordLine({
   /*
    * Which lines get an answer row.
    *
-   * A ticked checkbox needs none — the box *is* the answer, and printing
-   * "Answer: —" beside it is noise on every row of a punch list. Anything that
+   * A ticked checkbox needs none - the box *is* the answer, and printing
+   * "Answer: -" beside it is noise on every row of a punch list. Anything that
    * was designed to capture a value gets a row either way: filled in when there
    * is one, and a blank rule when there is not, so the printout still works as
    * the form somebody completes with a pen.

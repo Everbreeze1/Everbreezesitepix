@@ -19,7 +19,7 @@ import {
  *
  * Everything here runs on the service-role client, exactly like the existing
  * public report / page / showcase reads. The visibility rules therefore live in
- * ONE place — `visibleShowcaseRows` below — instead of being spread across RLS
+ * ONE place - `visibleShowcaseRows` below - instead of being spread across RLS
  * predicates that are hard to audit and easy to widen by accident.
  *
  * Nothing in this file returns a row id, storage path, team id or user id. The
@@ -59,7 +59,7 @@ export interface PublicPortfolio {
   status: "ok" | "not_found" | "unpublished";
   site: PublicPortfolioSite | null;
   showcases: PortfolioShowcaseCard[];
-  /** Service types actually present on published work — these are the filters. */
+  /** Service types actually present on published work - these are the filters. */
   serviceTypes: string[];
   /** Distinct "City, ST" strings, for the areas-served list. */
   locations: string[];
@@ -230,7 +230,7 @@ export async function getPublicPortfolioService(
   return {
     status: "ok",
     // Falls back to the newest project's cover so a portfolio always has a hero,
-    // even before the owner picks one — same reasoning as the showcase masthead.
+    // even before the owner picks one - same reasoning as the showcase masthead.
     site: toSite(row, heroUrl ?? showcases[0]?.cover_image_url ?? null),
     showcases,
     serviceTypes: Array.from(

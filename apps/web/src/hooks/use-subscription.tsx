@@ -109,7 +109,7 @@ export function useSubscription() {
   }, [user, fetchUsage]);
 
   // isPending (not isLoading) is what actually stays true for the entire
-  // window from "query disabled" through "fetch in flight" — isLoading is
+  // window from "query disabled" through "fetch in flight" - isLoading is
   // derived as isPending && isFetching in React Query v5, so it can read
   // false with data still undefined during the single render-frame gap
   // right as the query transitions from disabled to enabled. Trusting that
@@ -120,7 +120,7 @@ export function useSubscription() {
   const isActive = !!teamData?.isActive;
   const isInternal = !!teamData?.isInternal;
   // Internal/complimentary teams get full Team-tier access regardless of the
-  // raw plan column — mirrors the old owner/test-account allowlists this flag
+  // raw plan column - mirrors the old owner/test-account allowlists this flag
   // replaced, which granted unconditional full access, not just a paywall bypass.
   const tier: BillingTier = isInternal ? "team" : (teamData?.plan ?? "starter");
   const isTeam = isActive && tier === "team";
@@ -130,7 +130,7 @@ export function useSubscription() {
 
   // Auto Reports (AI reports generated from a walkthrough's spoken transcript
   // + captured photos) are Pro/Team only. Mirrors the server-side allowance in
-  // apps/api/src/domains/walkthroughs/auto-report-quota.ts — that module is the
+  // apps/api/src/domains/walkthroughs/auto-report-quota.ts - that module is the
   // enforcing authority; this is only what the UI displays.
   const autoReportsLimit = isTeam ? Infinity : isPro ? PRO_AUTO_REPORTS_PER_MONTH : 0;
   const autoReportsRemaining =
@@ -159,7 +159,7 @@ export function useSubscription() {
     // The manual photo-report builder is a Starter-tier tool. Pro/Team generate
     // documents with AI instead, so surfacing the manual builder to them is
     // clutter. Expressed as `!isPro` rather than `isStarter` so the button only
-    // ever *disappears* for Pro/Team — an inactive or still-loading
+    // ever *disappears* for Pro/Team - an inactive or still-loading
     // subscription keeps it rather than silently losing the feature.
     canUseManualPhotoReport: !isPro,
     limits,

@@ -232,7 +232,7 @@ export function PhotoCommentsPanel({
     }
   };
 
-  // No heading here — the parent Section already says "Comments"; the
+  // No heading here - the parent Section already says "Comments"; the
   // @-mention hint moved into that header's action slot.
   return (
     <div className="flex h-full min-h-0 flex-col text-white">

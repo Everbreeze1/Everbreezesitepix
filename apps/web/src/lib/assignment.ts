@@ -9,7 +9,7 @@
  * re-derived per feature.
  *
  * This module is the mirror of the triggers in
- * supabase/migrations/20260819000000_assignment_and_completion.sql —
+ * supabase/migrations/20260819000000_assignment_and_completion.sql -
  * `may_complete_assignment()` is the same four clauses in the same order. The
  * database is the enforcement (the web app writes to these tables directly, so
  * a check here is skippable); this exists so the button is disabled, and the
@@ -52,7 +52,7 @@ export const ASSIGNMENT_STATUS_META: Record<
  * Where a piece of work stands, from the two things every assignable record
  * has: whether it was closed, and how much of it has been answered.
  *
- * "In progress" keys off work done rather than off an assignee existing —
+ * "In progress" keys off work done rather than off an assignee existing -
  * assigning a checklist to someone does not make it started, and the crew
  * member who has ticked four of nine boxes has plainly started whether or not
  * anyone assigned it to them.
@@ -78,7 +78,7 @@ export interface AssignmentSubject {
 
 export interface AssignmentViewer {
   userId: string | null;
-  /** From `useTeamMembers().isManager` — the caller's own team role. */
+  /** From `useTeamMembers().isManager` - the caller's own team role. */
   isManager: boolean;
 }
 
@@ -86,7 +86,7 @@ export interface CompletionRights {
   /** May this viewer close the work at all? */
   canComplete: boolean;
   /**
-   * True when they can only do it because they are a manager — someone else is
+   * True when they can only do it because they are a manager - someone else is
    * assigned and it is not their own work. The action is allowed but it is
    * somebody else's name being overridden, so the UI confirms first.
    */
@@ -102,8 +102,8 @@ export interface CompletionRights {
  * or somebody else's?
  *
  * Free, with no ceremony:
- *   - nobody is assigned — unassigned work belongs to whoever picks it up
- *   - you are the assignee — you did it, and it timestamps to you
+ *   - nobody is assigned - unassigned work belongs to whoever picks it up
+ *   - you are the assignee - you did it, and it timestamps to you
  *
  * Allowed, but as an override the UI confirms first:
  *   - you assigned it to someone else
@@ -112,7 +112,7 @@ export interface CompletionRights {
  * The assignor counting as an override is the point of the whole feature and
  * not an oversight. The complaint that started it was precisely a manager who
  * had assigned a checklist to a tech and could still close it himself with
- * nothing marking that as unusual — so "I delegated this" is exactly the case
+ * nothing marking that as unusual - so "I delegated this" is exactly the case
  * that needs to be named out loud. They keep the ability, because a tech can be
  * unreachable and the record still has to close; what they lose is doing it
  * silently and having the record read as though the tech signed it off.
@@ -137,7 +137,7 @@ export function completionRights(
     return {
       canComplete: true,
       isOverride: true,
-      reason: `Assigned to ${who} — completing it will record you as the one who closed it.`,
+      reason: `Assigned to ${who} - completing it will record you as the one who closed it.`,
     };
   }
   return {
@@ -153,7 +153,7 @@ export function completionRights(
  * The assignor being able to review and reopen is the point of the notification
  * they get, and a crew member who closed something by mistake should be able to
  * take it back without hunting down a manager. Nothing is destroyed by
- * reopening — a checklist's snapshot is rebuilt the next time it closes.
+ * reopening - a checklist's snapshot is rebuilt the next time it closes.
  */
 export function canReopen(
   subject: AssignmentSubject & { createdBy?: string | null; completedBy?: string | null },
@@ -175,7 +175,7 @@ export function canReopen(
  *
  * Always written as a pair. `assigned_by` exists so completion can report back
  * to a person rather than guessing at `created_by`, and it is only true of the
- * assignment it was written with — clearing the assignee clears both.
+ * assignment it was written with - clearing the assignee clears both.
  */
 export function assignmentPatch(
   assigneeId: string | null,

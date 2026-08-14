@@ -17,13 +17,13 @@ import heroImg from "@/assets/hero-construction.png";
 export const Route = createFileRoute("/signup")({
   head: () => ({
     meta: [
-      { title: "Create account — Everbreeze SitePix" },
+      { title: "Create account - Everbreeze SitePix" },
       {
         name: "description",
         content:
           "Create your Everbreeze SitePix account. Capture, organize, and share construction job site photos with AI photo analysis. Plans start at $24/mo.",
       },
-      { property: "og:title", content: "Create account — Everbreeze SitePix" },
+      { property: "og:title", content: "Create account - Everbreeze SitePix" },
       {
         property: "og:description",
         content:
@@ -52,17 +52,17 @@ function SignupPage() {
   /*
    * Seconds until Supabase will accept another confirmation email for this
    * address. It enforces roughly a minute per address, so a "Resend" button
-   * offered immediately after signup is a button that always fails — the user
+   * offered immediately after signup is a button that always fails - the user
    * taps it and gets "you can only request this after 53 seconds", which reads
    * like a fault rather than a wait.
    */
   const [cooldown, setCooldown] = useState(0);
-  // Only offer social buttons the project has actually enabled — see the hook.
+  // Only offer social buttons the project has actually enabled - see the hook.
   const social = useAuthProviders();
 
   /*
    * Typed addresses arrive with stray whitespace far more often than you'd
-   * think — autofill, and mobile keyboards that append a space after an
+   * think - autofill, and mobile keyboards that append a space after an
    * autocomplete. Supabase stores the address verbatim, so " a@b.com " signs up
    * an account the user can then never log into, because they type it cleanly
    * the second time. Normalise once, here, and use it everywhere below.
@@ -93,7 +93,7 @@ function SignupPage() {
     });
     setLoading(false);
     if (error) {
-      // Never render the raw message — see lib/auth-errors.ts.
+      // Never render the raw message - see lib/auth-errors.ts.
       console.error("[signup] failed", error);
       return toast.error(authErrorMessage(error));
     }
@@ -133,7 +133,7 @@ function SignupPage() {
         return toast.error(authErrorMessage(error));
       }
       setCooldown(RESEND_COOLDOWN_SECONDS);
-      toast.success("Sent again — check your inbox.");
+      toast.success("Sent again - check your inbox.");
     } catch (e) {
       // Without this a thrown request (offline, DNS) left `resending` true and
       // the button stuck on "Sending…" with no explanation.
@@ -162,12 +162,12 @@ function SignupPage() {
 
   return (
     <div className="min-h-screen w-full bg-background lg:grid lg:grid-cols-2">
-      {/* LEFT — marketing panel (desktop only) */}
+      {/* LEFT - marketing panel (desktop only) */}
       <aside className="relative hidden overflow-hidden bg-sidebar text-sidebar-foreground lg:flex lg:flex-col lg:justify-between">
         {/*
           A CSS background, not an <img>, and deliberately so.
           The panel is `hidden lg:flex`, but display:none does NOT stop a browser
-          downloading an <img src> — so every phone visitor paid 1.9 MB for a
+          downloading an <img src> - so every phone visitor paid 1.9 MB for a
           decorative image they never see, on the signup page, before they have
           any reason to trust us with the wait. Background images inside a
           display:none subtree are never fetched, so this costs mobile nothing
@@ -196,7 +196,7 @@ function SignupPage() {
               Know what happened. <span className="text-sidebar-ring">Prove it.</span>
             </h1>
             <p className="font-manrope mt-6 text-base leading-7 text-sidebar-foreground/70">
-              Photos, walkthroughs, reports, and your project history — all in the same place.
+              Photos, walkthroughs, reports, and your project history - all in the same place.
             </p>
 
             <ul className="mt-8 space-y-3">
@@ -212,7 +212,7 @@ function SignupPage() {
         </div>
       </aside>
 
-      {/* RIGHT — form */}
+      {/* RIGHT - form */}
       <div className="flex min-h-screen flex-col items-center justify-center px-5 py-8 sm:px-8 lg:px-12">
         <div className="mx-auto flex w-full max-w-[448px] flex-1 flex-col justify-center lg:flex-none">
           <div className="mb-4 lg:hidden">
@@ -253,7 +253,7 @@ function SignupPage() {
                 Covers the duplicate-signup dead end. Supabase deliberately
                 answers a signup for an existing address with a success response
                 and a placeholder user, so that an attacker cannot use this form
-                to discover who has an account — which also means no email is
+                to discover who has an account - which also means no email is
                 sent and the person sits here waiting for one. We must not say
                 "that address is taken" without undoing that protection, so the
                 copy is conditional: it reads as generic advice to anyone who
@@ -264,7 +264,7 @@ function SignupPage() {
                 <Link to="/login" className="font-bold text-primary hover:underline">
                   Log in instead
                 </Link>{" "}
-                — no new link is sent for an existing account.
+                - no new link is sent for an existing account.
               </p>
 
               <div className="mt-8 space-y-3">

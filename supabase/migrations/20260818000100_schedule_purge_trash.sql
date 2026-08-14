@@ -3,7 +3,7 @@
 -- 20260818000000 fixed the authentication half: `get_cron_shared_secret` now
 -- exists, and POST /v1/hooks/purge-trash answers 200 to a correct secret
 -- (verified: {"ok":true,"photosPurged":0,"projectsPurged":0}). But nothing was
--- ever calling it — `cron.job` held exactly one row, `process-email-queue`.
+-- ever calling it - `cron.job` held exactly one row, `process-email-queue`.
 --
 -- So the endpoint was unreachable for two independent reasons, and fixing only
 -- the first would have left storage growing exactly as before while looking
@@ -18,7 +18,7 @@
 -- already in breach would make that worse to save storage that is at 0.016 of
 -- 100 GB. It stays unscheduled until that flag is deliberately turned on.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent — cron.schedule upserts
+-- Apply via the SitePix Supabase SQL editor. Idempotent - cron.schedule upserts
 -- by job name, so re-running re-points the same job rather than adding another.
 
 SET lock_timeout = '5s';
@@ -36,7 +36,7 @@ CREATE EXTENSION IF NOT EXISTS pg_net;
 --
 -- The secret is read from the vault INSIDE the command, not baked into the job
 -- definition. Rotating it then takes effect on the next run with no
--- rescheduling — and the secret never appears in `cron.job.command`, which is
+-- rescheduling - and the secret never appears in `cron.job.command`, which is
 -- readable by anyone who can select from that table.
 SELECT cron.schedule(
   'purge-trash',
@@ -63,7 +63,7 @@ WHERE jobname = 'purge-trash';
 
 -- 2. After the next 03:17 UTC run, this shows whether it actually fired and
 --    what it returned. `status` should be 'succeeded'.
---    (Empty until the first run — that is expected immediately after applying.)
+--    (Empty until the first run - that is expected immediately after applying.)
 SELECT j.jobname, r.status, r.return_message, r.start_time
 FROM cron.job_run_details r
 JOIN cron.job j ON j.jobid = r.jobid
@@ -71,7 +71,7 @@ WHERE j.jobname = 'purge-trash'
 ORDER BY r.start_time DESC
 LIMIT 5;
 
--- 3. The HTTP response pg_net recorded for that call — the endpoint's own
+-- 3. The HTTP response pg_net recorded for that call - the endpoint's own
 --    answer, which is where a 401 would show up if the secret ever drifts.
 SELECT id, status_code, content::text, created
 FROM net._http_response

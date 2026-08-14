@@ -18,12 +18,12 @@ import {
  * the buttons would then stay hidden after the providers were configured.
  *
  * `/auth/v1/settings` is a public endpoint that reports exactly what is turned
- * on, so the UI can follow the project's real configuration — buttons vanish
+ * on, so the UI can follow the project's real configuration - buttons vanish
  * while a provider is off and come back the moment it is enabled, with no
  * deploy.
  *
  * Fails closed: if the request errors, nothing social is offered and email
- * signup — which always works — is the only path shown.
+ * signup - which always works - is the only path shown.
  */
 export type SocialProvider = "google" | "apple";
 
@@ -64,7 +64,7 @@ export function useAuthProviders() {
         try {
           sessionStorage.setItem(CACHE_KEY, JSON.stringify(list));
         } catch {
-          /* private mode — the fetch above still works, just uncached */
+          /* private mode - the fetch above still works, just uncached */
         }
       } catch {
         // Fail closed rather than offering a button that 400s.
@@ -77,7 +77,7 @@ export function useAuthProviders() {
   }, []);
 
   return {
-    /** null while unknown — render nothing rather than guessing. */
+    /** null while unknown - render nothing rather than guessing. */
     providers: enabled,
     has: (p: SocialProvider) => !!enabled?.includes(p),
     any: !!enabled && enabled.length > 0,

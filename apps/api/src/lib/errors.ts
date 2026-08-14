@@ -28,7 +28,7 @@ function labelForPath(path: ZodIssue["path"]): string | null {
 /**
  * A one-line, human-readable summary of a validation failure.
  *
- * `ZodError.message` is `JSON.stringify(issues, null, 2)` — the raw issue array,
+ * `ZodError.message` is `JSON.stringify(issues, null, 2)` - the raw issue array,
  * newlines and all. Handlers used to forward it verbatim as the API's `message`,
  * and the web client pipes `message` straight into a toast, so clearing the
  * document title on a phone produced a red box reading
@@ -90,13 +90,13 @@ export function jsonFromUnknownError(err: unknown, fallbackStatus = 500): Respon
     return jsonError(err.status, "unauthorized", err.message);
   }
   /*
-   * Honour a `status` deliberately attached to a thrown Error — the codebase
+   * Honour a `status` deliberately attached to a thrown Error - the codebase
    * signals intentional client errors as `Object.assign(new Error(msg), {
    * status: 403 })` (auth gates, ownership checks, plan gates). Without this
    * branch every one of them collapsed to a generic 500 "internal_error", so a
    * "requires the Team plan" rejection reached the client looking like a server
    * crash: the wrong status for retries, and no clean message for the UI. Only
-   * 4xx is trusted here — a stray 5xx stays an opaque internal error and its
+   * 4xx is trusted here - a stray 5xx stays an opaque internal error and its
    * message is not forwarded.
    */
   const status = (err as { status?: unknown })?.status;

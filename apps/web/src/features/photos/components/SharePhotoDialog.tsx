@@ -100,7 +100,7 @@ export function SharePhotoDialog({ open, onClose, photoId }: Props) {
       });
       const r = row as ShareRow;
       setShares((s) => [r, ...s]);
-      // Copy link straight away — single fewer tap.
+      // Copy link straight away - single fewer tap.
       try {
         await navigator.clipboard.writeText(shareUrl(r.token));
         setCopiedId(r.id);

@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/sitepix/client";
 import { authErrorMessage } from "@/lib/auth-errors";
 
 export const Route = createFileRoute("/reset-password")({
-  head: () => ({ meta: [{ title: "Reset password — Everbreeze SitePix" }] }),
+  head: () => ({ meta: [{ title: "Reset password - Everbreeze SitePix" }] }),
   component: ResetPasswordPage,
 });
 

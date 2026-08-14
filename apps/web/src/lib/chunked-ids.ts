@@ -4,7 +4,7 @@
  * A PostgREST filter goes in the query string as `?id=in.(uuid,uuid,...)`, about
  * 37 bytes per id. Past roughly 670 ids the Supabase gateway rejects the request
  * URI outright and the user gets a raw PostgREST 400. "Select all" in the photo
- * grid has no upper bound, so on a real project — thousands of photos — every
+ * grid has no upper bound, so on a real project - thousands of photos - every
  * bulk action (hide, trash, move, tag) simply fails.
  *
  * 200 keeps a full batch near 7.4 KB of query string, which is well inside every
@@ -27,7 +27,7 @@ export function chunkIds(ids: readonly string[], size = CHUNK_SIZE): string[][] 
  * connection, and firing twenty concurrent writes is how you get a partial
  * update plus a hung UI.
  *
- * Not atomic across batches — a failure partway leaves earlier batches applied.
+ * Not atomic across batches - a failure partway leaves earlier batches applied.
  * That is still far better than the previous all-or-nothing failure above ~670
  * ids, but it means the caller should re-fetch rather than assume its optimistic
  * state is correct.

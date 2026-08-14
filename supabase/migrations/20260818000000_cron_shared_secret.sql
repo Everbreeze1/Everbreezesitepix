@@ -23,18 +23,18 @@
 -- action fails, no page errors, storage just never goes down.
 --
 -- It has not bitten yet only because the oldest trashed item is 36 days old and
--- the cutoff is 60 — the first genuinely overdue rows are ~24 days away.
+-- the cutoff is 60 - the first genuinely overdue rows are ~24 days away.
 --
 -- This file creates the missing secret and the missing function. It does NOT
 -- schedule anything; see the VERIFY block at the end for whether the jobs that
 -- call these endpoints exist.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent — safe to re-run, and
+-- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run, and
 -- re-running never rotates a secret that is already in use.
 
 SET lock_timeout = '5s';
 
--- === PART 1 — the secret =====================================================
+-- === PART 1 - the secret =====================================================
 -- Supabase provisions `supabase_vault` on every project; the guard is here so
 -- this file is honest about its dependency rather than assuming.
 CREATE EXTENSION IF NOT EXISTS supabase_vault WITH SCHEMA vault;
@@ -45,7 +45,7 @@ CREATE EXTENSION IF NOT EXISTS supabase_vault WITH SCHEMA vault;
 --
 -- Guarded on existence rather than written unconditionally: re-running this
 -- file must not rotate a secret that scheduled jobs are already sending, which
--- would silently break them again — the exact failure mode this migration
+-- would silently break them again - the exact failure mode this migration
 -- exists to end.
 DO $$
 BEGIN
@@ -58,7 +58,7 @@ BEGIN
   END IF;
 END $$;
 
--- === PART 2 — the function the API calls =====================================
+-- === PART 2 - the function the API calls =====================================
 -- SECURITY DEFINER because the caller (service_role, via PostgREST) has no
 -- business holding direct read access to the vault; it needs exactly this one
 -- secret and nothing else in there.
@@ -81,13 +81,13 @@ AS $$
   LIMIT 1;
 $$;
 
--- === PART 3 — who may call it ================================================
+-- === PART 3 - who may call it ================================================
 -- THE FIX IS THE GRANT, NOT THE POLICY (see 20260811000000).
 --
 -- CREATE FUNCTION grants EXECUTE to PUBLIC by default. On a SECURITY DEFINER
 -- function that returns a secret, that default would let any anonymous visitor
 -- with the publishable key read the cron secret over the REST API and then call
--- the purge endpoint themselves — an unauthenticated mass-delete. The revoke is
+-- the purge endpoint themselves - an unauthenticated mass-delete. The revoke is
 -- the whole security boundary here, so it is explicit and it names every role.
 REVOKE ALL ON FUNCTION public.get_cron_shared_secret() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_cron_shared_secret() TO service_role;
@@ -106,14 +106,14 @@ JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public' AND p.proname = 'get_cron_shared_secret';
 
 -- 2. The secret to paste into the scheduled jobs' `x-cron-secret` header.
---    Treat this output like a password — it authorises permanent deletion.
+--    Treat this output like a password - it authorises permanent deletion.
 SELECT decrypted_secret AS cron_shared_secret
 FROM vault.decrypted_secrets
 WHERE name = 'cron_shared_secret';
 
 -- 3. Are the jobs that call the endpoints actually scheduled?
 --    An empty result means the endpoints now *can* authenticate but nothing is
---    calling them — auth was only half the problem. Schedule them with
+--    calling them - auth was only half the problem. Schedule them with
 --    cron.schedule + net.http_post against:
 --      POST https://api.everbreezesitepix.com/v1/hooks/purge-trash
 --      POST https://api.everbreezesitepix.com/v1/hooks/archive-old-photos

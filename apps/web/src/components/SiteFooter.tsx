@@ -21,7 +21,7 @@ const footerColumns = [
   },
   {
     title: "Company",
-    // Points at the /contact page rather than a bare mailto: — the address
+    // Points at the /contact page rather than a bare mailto: - the address
     // itself is still a placeholder (see lib/contact.ts) and /help only exists
     // behind the app shell, so this is the one route every visitor can reach.
     links: [{ label: "Contact & support", to: "/contact" }],
@@ -43,10 +43,10 @@ export function SiteFooter() {
               </span>
             </Link>
             <p className="font-manrope mt-5 max-w-[358px] text-sm leading-6 text-sidebar-foreground/60">
-              SitePix helps construction teams capture the truth of every job — then puts it where
+              SitePix helps construction teams capture the truth of every job - then puts it where
               the whole team can use it.
             </p>
-            {/* Was mailto:hello@sitepix.com — a domain that isn't ours. Until a
+            {/* Was mailto:hello@sitepix.com - a domain that isn't ours. Until a
                 real mailbox is confirmed the placeholder renders as inert text
                 rather than a link that bounces. */}
             {supportMailto ? (

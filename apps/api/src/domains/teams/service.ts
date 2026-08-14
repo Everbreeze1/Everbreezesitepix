@@ -22,8 +22,8 @@ function effectiveMemberLimit(team: any): number {
 // ============================================================
 
 // ============================================================
-// Invite a teammate by email — enforces plan cap, emails them.
-// Plan itself is now Stripe-driven (see domains/billing) — never
+// Invite a teammate by email - enforces plan cap, emails them.
+// Plan itself is now Stripe-driven (see domains/billing) - never
 // user-settable directly.
 // ============================================================
 
@@ -40,24 +40,24 @@ function generateToken() {
  * `auth.admin.inviteUserByEmail`, which this used to depend on entirely, because
  * GoTrue was wrong for this job in both directions:
  *
- *   ALREADY-REGISTERED ADDRESS — GoTrue refuses outright and sends nothing. Any
+ *   ALREADY-REGISTERED ADDRESS - GoTrue refuses outright and sends nothing. Any
  *   address that had ever signed up hit this every single time, and the old code
  *   gave up there, so the invitee received nothing and the owner was left
  *   copying a raw 48-character token out of a code block. That is the "Invite
  *   link (email not sent)" box in the bug report.
  *
- *   BRAND-NEW ADDRESS — worse, and silent. GoTrue CREATES an auth user for the
+ *   BRAND-NEW ADDRESS - worse, and silent. GoTrue CREATES an auth user for the
  *   invited address. That account has no password, so the invitee cannot sign
  *   in; and when they follow the invite link and try to sign up,
  *   `acceptInviteSignupService` either trips its "an account already exists for
- *   this email — please sign in first" 409, or fails inside `createUser` with
+ *   this email - please sign in first" 409, or fails inside `createUser` with
  *   "already registered". Either way inviting someone who does not yet have an
  *   account created a ghost account that then blocked them from making a real
  *   one. Exactly the case a team invite exists to serve.
  *
  * `/invite/<token>` needs no GoTrue user at all: an existing user signs in and
  * accepts (`acceptInvite`), a new one sets a name and password in place
- * (`acceptInviteSignup`, which creates the account itself — unconfirmed, so the
+ * (`acceptInviteSignup`, which creates the account itself - unconfirmed, so the
  * ordinary confirmation mail still proves they own the inbox). One link, both
  * cases, and no dependency on the Auth Send Email hook.
  *
@@ -67,7 +67,7 @@ function generateToken() {
 /**
  * Who the invite is from.
  *
- * `label` is what the body copy says and keeps the old behaviour exactly —
+ * `label` is what the body copy says and keeps the old behaviour exactly -
  * name, else email, else "A teammate". `fullName` and `email` are handed on
  * separately because they end up in the From and Reply-To headers, where an
  * email address standing in for a missing name would read as a forgery rather
@@ -114,8 +114,8 @@ async function sendInviteEmail(opts: {
  * Ask GoTrue to mail the signup confirmation for an account created through
  * the invite flow. `auth.admin.createUser` never sends anything, so without
  * this an invitee would be left holding an unconfirmed account with no way to
- * confirm it. Routed through Supabase — and therefore through the same Send
- * Email hook the invite itself uses — rather than lib/send-email.ts, so it
+ * confirm it. Routed through Supabase - and therefore through the same Send
+ * Email hook the invite itself uses - rather than lib/send-email.ts, so it
  * lands in the pipeline that is already known to deliver.
  *
  * Best effort: a mail failure must not roll back an account that now exists.
@@ -141,13 +141,13 @@ async function sendSignupConfirmationEmail(email: string, origin: string) {
 
 /*
  * Per-token rate limits for the two PUBLIC invite ops (`lookupInvite`,
- * `acceptInviteSignup` — both registered with `pub()` in the RPC registry).
+ * `acceptInviteSignup` - both registered with `pub()` in the RPC registry).
  *
  * Their only credential is the token, and the limiter in rpc/handle.ts is
  * keyed on the caller's IP and shared across every op, so a caller rotating
  * addresses gets an effectively unlimited budget against one invite. Keying on
  * the token instead caps how hard a single invite can be hammered no matter
- * where the requests come from — enough to make a scripted retry loop against
+ * where the requests come from - enough to make a scripted retry loop against
  * a leaked or guessed token expensive.
  */
 const INVITE_LOOKUP_RATE = { limit: 30, windowMs: 60_000 };
@@ -167,7 +167,7 @@ function limitInviteOp(scope: string, token: string, rate: { limit: number; wind
  * Claim an invite atomically.
  *
  * Both accept paths used to read the row, check `accepted_at`, and only write
- * it several awaits later — so two concurrent requests carrying the same token
+ * it several awaits later - so two concurrent requests carrying the same token
  * both passed the check and both went on to join a team. This conditional
  * UPDATE is the whole guard: Postgres serialises it, exactly one caller gets a
  * row back and everyone else gets null. Expiry is folded into the same
@@ -348,10 +348,10 @@ export async function getMyTeamService(ctx: AuthedContext) {
     memberLimit,
     subscriptionStatus: (team?.subscription_status as string) ?? "inactive",
     isInternal,
-    // Same rule as getCallerTeamPlan — this is what `useSubscription` on the
+    // Same rule as getCallerTeamPlan - this is what `useSubscription` on the
     // web reads, so the two must agree or the UI hides what the server serves.
     isActive: isInternal || ACTIVE_SUBSCRIPTION_STATUSES.has(team?.subscription_status as string),
-    // Every plan shares the project record now, including Starter — small
+    // Every plan shares the project record now, including Starter - small
     // crews are the point of Starter's second seat, and a seat that can't see
     // the shared work is not a seat. Plans differ by seat count (Starter 2,
     // Pro/Team 50), enforced via teams.member_limit. Mirrors the DB predicate
@@ -426,7 +426,7 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
    * If the invite already exists, resend the email instead of blocking.
    *
    * `.maybeSingle()` returns `{ data: null, error: PGRST116 }` when more than
-   * one row matches, and this destructured only `data` — so the moment a race
+   * one row matches, and this destructured only `data` - so the moment a race
    * produced two open invites for one address, `dup` was null forever and every
    * later invite inserted yet another row instead of resending. `.limit(1)` with
    * a deterministic order makes the probe answer correctly even mid-cleanup, and
@@ -704,7 +704,7 @@ export async function acceptInviteService(ctx: AuthedContext, data: any) {
    *
    * Re-counting after the insert closes that: whoever ends up beyond the cap
    * sees it and gives the seat back. Concurrent accepts can both observe an
-   * over-cap count and both roll back — which errs toward refusing a seat
+   * over-cap count and both roll back - which errs toward refusing a seat
    * rather than selling one that wasn't paid for, and the invite is released so
    * either can simply try again.
    *
@@ -783,7 +783,7 @@ export async function acceptInviteSignupService(data: any) {
 
   if (existingProfile) {
     /*
-     * SECURITY — never modify an account that already exists.
+     * SECURITY - never modify an account that already exists.
      *
      * This operation is PUBLIC: it is registered with `pub()` in the RPC
      * registry, so there is no Authorization header and the caller has
@@ -795,9 +795,9 @@ export async function acceptInviteSignupService(data: any) {
      * The invite token is not a secret from the inviter, either:
      * `inviteMemberService` returns the inserted row with `select("*")` and
      * `getMyTeamService` selects `token` explicitly. So anyone who could
-     * invite an address — which is any signed-up user, since `createTeam`
+     * invite an address - which is any signed-up user, since `createTeam`
      * is ungated and the only restriction is that the target isn't already
-     * on a team — could read the token out of their own response, POST it
+     * on a team - could read the token out of their own response, POST it
      * here with a password of their choosing, and take over that account
      * along with every project, photo, report and share link on it. The
      * victim received no notification, because the "joined your team"
@@ -828,7 +828,7 @@ export async function acceptInviteSignupService(data: any) {
    * The `accepted_at` check above is a courtesy that produces a good error
    * message; it is not the guard. Everything between that read and this write
    * is an await, so two requests carrying the same token both got here and both
-   * created an account. `claimInvite` is the guard — one winner, everyone else
+   * created an account. `claimInvite` is the guard - one winner, everyone else
    * gets null. Any failure below releases the claim so a legitimate invitee
    * isn't left with a burned link.
    */
@@ -837,7 +837,7 @@ export async function acceptInviteSignupService(data: any) {
 
   try {
     /*
-     * SECURITY — do NOT pre-confirm this address.
+     * SECURITY - do NOT pre-confirm this address.
      *
      * This op is public and the invite token is its only credential, so the
      * caller has proven they hold a token, not that they can read the invited
@@ -850,7 +850,7 @@ export async function acceptInviteSignupService(data: any) {
      * Creating the user unconfirmed puts the invite path on exactly the same
      * footing as the ordinary /signup path: the account is inert until whoever
      * actually receives the mail clicks the confirmation link. A scraped token
-     * then buys a squatted, unusable login rather than a live account — and the
+     * then buys a squatted, unusable login rather than a live account - and the
      * confirmation mail lands in the victim's inbox, so they find out.
      */
     const { data: created, error: createErr } = await (supabaseAdmin as any).auth.admin.createUser({
@@ -893,7 +893,7 @@ export async function acceptInviteSignupService(data: any) {
         .single();
       if (insErr || !inserted) throw new Error(insErr?.message ?? "Could not join the team.");
 
-      // Confirm the seat after taking it — same check-then-act race as
+      // Confirm the seat after taking it - same check-then-act race as
       // acceptInviteService, and the same compensating rollback. Throwing here
       // lands in the catch below, which releases the invite so the person can
       // retry once a seat frees up.
@@ -913,7 +913,7 @@ export async function acceptInviteSignupService(data: any) {
     /*
      * Nothing durable survives a failure here except possibly the auth user,
      * and the 409 branch above tells that person to sign in and reopen the
-     * link — which needs the invite to still be open. So release it.
+     * link - which needs the invite to still be open. So release it.
      */
     await releaseInviteClaim(supabaseAdmin, (claimed as any).id);
     throw err;
@@ -939,7 +939,7 @@ export async function acceptInviteSignupService(data: any) {
   });
 
   // `emailConfirmationRequired` tells the client not to expect
-  // signInWithPassword to succeed yet — same state /signup reaches when
+  // signInWithPassword to succeed yet - same state /signup reaches when
   // `signUp` comes back without a session.
   return {
     ok: true,

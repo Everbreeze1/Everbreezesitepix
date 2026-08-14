@@ -9,13 +9,13 @@ export const Route = createFileRoute("/faq")({
   component: FAQPage,
   head: () => ({
     meta: [
-      { title: "FAQ — Everbreeze SitePix" },
+      { title: "FAQ - Everbreeze SitePix" },
       {
         name: "description",
         content:
-          "Answers to common questions about SitePix — the job site photo, checklist, workflow, and reporting app built for contractors and field teams.",
+          "Answers to common questions about SitePix - the job site photo, checklist, workflow, and reporting app built for contractors and field teams.",
       },
-      { property: "og:title", content: "FAQ — Everbreeze SitePix" },
+      { property: "og:title", content: "FAQ - Everbreeze SitePix" },
       {
         property: "og:description",
         content: "Everything you need to know about SitePix, from features to pricing.",
@@ -45,19 +45,19 @@ export const Route = createFileRoute("/faq")({
 const FAQS: { q: string; a: string }[] = [
   {
     q: "How is SitePix different from just using my phone?",
-    a: "Camera rolls and group chats lose photos. SitePix files every photo on the right project automatically — timestamped, GPS-tagged and searchable — so you can find any moment from any job in seconds, even years later.",
+    a: "Camera rolls and group chats lose photos. SitePix files every photo on the right project automatically - timestamped, GPS-tagged and searchable - so you can find any moment from any job in seconds, even years later.",
   },
   {
     q: "What is Breeze AI and what can it do?",
-    a: "Breeze AI runs in the background to auto-draft site logs from your photos, summarize walkthrough audio into reports, and enrich report captions. Ask it a question about a project and it answers from your photos and notes — no separate chatbot to learn.",
+    a: "Breeze AI runs in the background to auto-draft site logs from your photos, summarize walkthrough audio into reports, and enrich report captions. Ask it a question about a project and it answers from your photos and notes - no separate chatbot to learn.",
   },
   {
     q: "Do I need a credit card to start?",
-    a: "Yes — every SitePix plan, including Starter, is a paid subscription starting at $24/mo, so you'll add payment details when you sign up. You can cancel anytime from Settings.",
+    a: "Yes - every SitePix plan, including Starter, is a paid subscription starting at $24/mo, so you'll add payment details when you sign up. You can cancel anytime from Settings.",
   },
   {
     q: "Can I share photos with clients securely?",
-    a: "Yes. Generate a client-ready gallery or report and share it via a secure link — no login required on their end, and you control exactly what's visible.",
+    a: "Yes. Generate a client-ready gallery or report and share it via a secure link - no login required on their end, and you control exactly what's visible.",
   },
   {
     q: "Does it work offline on job sites?",

@@ -6,7 +6,7 @@ import { parseRich, type RichBlock, type InlineRun } from "@sitepix/shared";
 import { cn } from "@/lib/utils";
 
 interface Props {
-  /** Optional when `blocks` is supplied — one of the two must be. */
+  /** Optional when `blocks` is supplied - one of the two must be. */
   html?: string | null | undefined;
   className?: string;
   // Optional: render headings smaller (for captions / cover summary)
@@ -36,7 +36,7 @@ function BlockRender({ block, small }: { block: RichBlock; small: boolean }) {
   /*
    * In a report, ReportDocument splits on page breaks before calling this, so a
    * break never reaches here. It does on the surfaces that have no pages at all
-   * — showcases, portfolio, project pages — where the right rendering is
+   * - showcases, portfolio, project pages - where the right rendering is
    * nothing. Drawing a stray rule there would leak a report concept into
    * documents that have no concept of a page.
    */
@@ -66,7 +66,7 @@ function BlockRender({ block, small }: { block: RichBlock; small: boolean }) {
       </p>
     );
   }
-  // list — tight bullet-to-text spacing (custom marker via ::before for full control)
+  // list - tight bullet-to-text spacing (custom marker via ::before for full control)
   const ListTag = block.ordered ? "ol" : "ul";
   const listCls = block.ordered
     ? "ps-5 space-y-0.5 [counter-reset:li] [&>li]:relative [&>li]:pl-5 [&>li]:before:absolute [&>li]:before:left-0 [&>li]:before:text-neutral-500 [&>li]:before:content-[counter(li)_'.'] [&>li]:[counter-increment:li]"

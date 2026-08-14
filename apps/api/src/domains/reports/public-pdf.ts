@@ -332,7 +332,7 @@ export async function handleReportPdf(token: string): Promise<Response> {
         }
         y -= rows * cellH + (rows - 1) * gap + 12;
       } else if (rows >= 1) {
-        // Not enough space — push to a fresh page
+        // Not enough space - push to a fresh page
         page = pdf.addPage([PAGE_W, PAGE_H]);
         y = PAGE_H - MARGIN;
         drawRunningHeader(page, fonts.regular, safeTitle, "Cover photos", MARGIN, PAGE_W, MUTED);
@@ -375,7 +375,7 @@ export async function handleReportPdf(token: string): Promise<Response> {
     /*
      * Page boundaries come from `planSectionPages`, the same function
      * ReportDocument uses for the on-screen preview and the public share
-     * view — so what the author sees is what the client downloads. The
+     * view - so what the author sees is what the client downloads. The
      * old rule here was `!(i === 0 && py > PAGE_H * 0.55)`, a font-metrics
      * cursor test no DOM renderer could reproduce, which is why the two
      * disagreed about page count.
@@ -419,7 +419,7 @@ export async function handleReportPdf(token: string): Promise<Response> {
 
       /*
        * Reserve the footer band. `drawFooter` writes at y=24, so text
-       * allowed below MARGIN would collide with it — which is what used
+       * allowed below MARGIN would collide with it - which is what used
        * to happen two lines before the text went off-page entirely.
        */
       const BOTTOM = MARGIN + 12;
@@ -611,7 +611,7 @@ function flattenWords(
  * `drawRuns` used to take a bare `PDFPage`, which made it structurally
  * incapable of starting a new one: it decremented `y` with no comparison to the
  * bottom margin and kept calling `drawText` at ever-smaller coordinates. Past
- * roughly 600 words in a section body, lines were emitted at NEGATIVE y — which
+ * roughly 600 words in a section body, lines were emitted at NEGATIVE y - which
  * pdf-lib writes happily and every viewer clips to the MediaBox. The text was
  * simply gone from the client's PDF while the on-screen preview still showed
  * all of it, and the page count never grew to hint that anything was missing.
@@ -626,7 +626,7 @@ interface Surface {
   ensure(y: number, h: number): { page: PDFPage; y: number };
 }
 
-/** Never paginates — for captions and other bounded cells. */
+/** Never paginates - for captions and other bounded cells. */
 function fixedSurface(page: PDFPage): Surface {
   return { page, ensure: (y) => ({ page, y }) };
 }
@@ -728,7 +728,7 @@ function drawRichBlocks(surface: Surface, blocks: RichBlock[], opts: DrawBlocksO
         const markerFont = opts.fonts.regular;
         const markerWidth = markerFont.widthOfTextAtSize(marker, opts.baseSize);
         const markerX = b.ordered ? opts.x + (indent - 4) - markerWidth : opts.x + 2;
-        // Break lists between items, never between a bullet and its text —
+        // Break lists between items, never between a bullet and its text -
         // the marker and the first line have to land on the same page.
         const at = surface.ensure(y, opts.baseSize + opts.lineGap);
         y = at.y;
@@ -754,7 +754,7 @@ function drawRichBlocks(surface: Surface, blocks: RichBlock[], opts: DrawBlocksO
     } else if (b.type === "pageBreak") {
       /*
        * `planSectionPages` strips breaks before the section loop gets here, so
-       * this is unreachable on the normal path — but the chain must be total or
+       * this is unreachable on the normal path - but the chain must be total or
        * a break arriving by any other route would be silently skipped, which is
        * exactly the class of bug that made a long body vanish.
        */
@@ -1050,7 +1050,7 @@ function extractPlainText(html: string): string {
  * an upper bound on pathology, not a performance tuning knob.
  *
  * Without it a single stalled connection hangs the whole PDF request forever,
- * and this API runs as ONE Railway instance — so one wedged public share link
+ * and this API runs as ONE Railway instance - so one wedged public share link
  * can occupy the process while every other customer waits behind it. `fetch`
  * has no default timeout in Node.
  */

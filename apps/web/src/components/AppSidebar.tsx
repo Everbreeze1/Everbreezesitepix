@@ -54,8 +54,8 @@ const showcasesItem = { title: "Portfolio", url: "/showcases", icon: Layers } as
 const pricingItem = { title: "Upgrade", url: "/pricing", icon: Crown } as const;
 /*
  * Deleting is reversible for 60 days, but only if you can find where the
- * deleted things went. The trash screen has existed the whole time — route,
- * page, restore and purge, retention, a nightly sweep — reachable from exactly
+ * deleted things went. The trash screen has existed the whole time - route,
+ * page, restore and purge, retention, a nightly sweep - reachable from exactly
  * one place: a three-dot overflow menu on the Projects page. Nothing in the
  * sidebar, nothing on the dashboard, nothing on mobile. Someone who deletes a
  * project by mistake has no path back to it that they could reasonably guess,
@@ -108,13 +108,13 @@ export function AppSidebar() {
    * Dropping the row from the array is what produced "the Portfolio is still
    * not showing": a team on the Team plan whose `subscription_status` is
    * anything other than "active" (trialing, past_due, or simply never written)
-   * got no nav row, no page, and no explanation — while Templates, which
+   * got no nav row, no page, and no explanation - while Templates, which
    * checks `plan` alone, stayed visible right above it. Two gates of different
    * strictness reading as "half the app vanished".
    *
    * PortfolioPage already renders the upsell for a locked account, and this is
    * the rule that page states for its own tabs: "why can't I see Embeds?" is a
-   * worse question than "why is this read-only?" — only one answers itself.
+   * worse question than "why is this read-only?" - only one answers itself.
    * Nothing leaks by showing the row: the API and RLS gate on team membership.
    */
   const portfolioLocked = !(!!teamData?.isInternal || (!!teamData?.isActive && plan === "team"));
@@ -191,7 +191,7 @@ export function AppSidebar() {
                         {!collapsed && <span>{item.title}</span>}
                         {!collapsed && item.locked && (
                           // The name goes on a real text node, not as aria-label
-                          // on the <svg> — lucide spreads props straight onto the
+                          // on the <svg> - lucide spreads props straight onto the
                           // element, and an aria-label there is only reliably
                           // announced with role="img". The link still reads as
                           // "Portfolio, Team plan"; the icon is decoration.
@@ -228,7 +228,7 @@ export function AppSidebar() {
                           <item.icon className={iconBase} />
                           {/*
                             Collapsed to icons there is no room for a number, but
-                            "something is in here" still has to survive — so the
+                            "something is in here" still has to survive - so the
                             count becomes a dot. Without this the badge simply
                             vanishes for anyone who works with the rail closed.
                           */}

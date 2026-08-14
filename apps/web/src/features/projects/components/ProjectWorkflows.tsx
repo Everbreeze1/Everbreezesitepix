@@ -107,7 +107,7 @@ interface Workflow {
   completed_at: string | null;
   /**
    * Who is running this workflow, and who handed it to them. Workflows were the
-   * one assignable-shaped record with no assignee at all — see
+   * one assignable-shaped record with no assignee at all - see
    * 20260819000000_assignment_and_completion.sql, which also gave crew members
    * RLS reach into them, without which assigning one would show the assignee
    * nothing.
@@ -171,7 +171,7 @@ interface PhaseState {
   requiredTotal: number;
   requiredDone: number;
   signedOk: boolean;
-  /** Something mandatory is outstanding — the phase cannot be closed. */
+  /** Something mandatory is outstanding - the phase cannot be closed. */
   blocked: boolean;
   /** Nothing left to do here at all. */
   complete: boolean;
@@ -188,7 +188,7 @@ interface PhaseState {
  *    after it, and made the workflow impossible to finish.
  * 2. "Blocked" (required work outstanding) and "complete" (nothing left at all)
  *    are different questions. A phase of purely optional steps blocks nothing,
- *    but it still isn't done — so it keeps the cursor until the crew ticks it
+ *    but it still isn't done - so it keeps the cursor until the crew ticks it
  *    or moves past it, instead of being silently skipped.
  */
 function phaseState(ph: Phase, its: Item[]): PhaseState {
@@ -221,7 +221,7 @@ interface WorkflowState {
   signoffDone: number;
   phasesComplete: number;
   activePhaseId: string | null;
-  /** Every phase can be closed — the run is ready to be signed off as done. */
+  /** Every phase can be closed - the run is ready to be signed off as done. */
   canComplete: boolean;
   isComplete: boolean;
   tone: RunTone;
@@ -323,15 +323,15 @@ export function ProjectWorkflows({
   /**
    * Render one workflow's run instead of the list.
    *
-   * Which run is open is now a *route*, not local state — `WorkflowDocumentPage`
+   * Which run is open is now a *route*, not local state - `WorkflowDocumentPage`
    * passes the id from the URL. A workflow was never literally a modal, but it
    * had every other defect of one: no address, so it could not be linked to a
    * crew member, the browser Back button walked off the project entirely, and a
    * refresh dropped you back to the grid.
    *
    * The panel and the page deliberately share this component rather than each
-   * owning a data layer. Every mutation here — the optimistic tick, the phase
-   * sign-off, the reorder-and-renumber — is the kind of logic that quietly
+   * owning a data layer. Every mutation here - the optimistic tick, the phase
+   * sign-off, the reorder-and-renumber - is the kind of logic that quietly
    * diverges once it exists twice.
    */
   focusWorkflowId?: string | null;
@@ -342,7 +342,7 @@ export function ProjectWorkflows({
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  /** The share/notes columns do not exist yet — see RECORD_MIGRATION. */
+  /** The share/notes columns do not exist yet - see RECORD_MIGRATION. */
   const [pendingMigration, setPendingMigration] = useState(false);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -366,14 +366,14 @@ export function ProjectWorkflows({
         .then((r: any) => {
           if (r.error) throw r.error;
         }),
-    { onError: () => toast.error("Couldn't save that change — check your connection") },
+    { onError: () => toast.error("Couldn't save that change - check your connection") },
   );
 
   /**
    * `silent` keeps the panel mounted while it refreshes.
    *
    * Every write used to round-trip through a loud reload, which unmounted the
-   * open workflow and every phase inside it — losing scroll position, which
+   * open workflow and every phase inside it - losing scroll position, which
    * phases you had expanded, and any half-typed note. Only the very first load
    * is allowed to show a skeleton.
    */
@@ -451,7 +451,7 @@ export function ProjectWorkflows({
         );
         if (photoIds.length) {
           // Keep the storage path so PhotoThumb can sign the stored thumbnail
-          // on demand — that is what stops a tab left open past the old
+          // on demand - that is what stops a tab left open past the old
           // one-hour expiry from filling with broken images.
           //
           // But still batch-sign the original as the fallback. Photos uploaded
@@ -561,7 +561,7 @@ export function ProjectWorkflows({
   /*
    * The open run, resolved from the route rather than from a copy of the row.
    *
-   * A deleted workflow therefore disappears from this page on its own — holding
+   * A deleted workflow therefore disappears from this page on its own - holding
    * the object would have left an empty shell rendering the run of something
    * that no longer exists.
    */
@@ -582,7 +582,7 @@ export function ProjectWorkflows({
     });
 
   /*
-   * Project identity for the letterhead. Loaded only once a workflow is opened —
+   * Project identity for the letterhead. Loaded only once a workflow is opened -
    * the collapsed grid never prints, so the list view should not pay for a query
    * it cannot use.
    */
@@ -650,7 +650,7 @@ export function ProjectWorkflows({
   /**
    * The workflow's rich-text write-up.
    *
-   * Rides the debounced queue — it is prose, typed a character at a time — and
+   * Rides the debounced queue - it is prose, typed a character at a time - and
    * lands on the printed sheet and the shared link alongside the phases. A
    * workflow used to record what happened but never *why*, so the account that
    * actually goes to the customer lived in an email somewhere.
@@ -666,7 +666,7 @@ export function ProjectWorkflows({
    *
    * Takes the id as an argument rather than reading `applyId` from state. That
    * indirection existed only to serve a modal whose whole content was one
-   * `<Select>` — picking a template, confirming it, and then hunting for the card
+   * `<Select>` - picking a template, confirming it, and then hunting for the card
    * it produced. The header menu now names every template directly, so starting
    * one is a single click and this reads the id from that click.
    */
@@ -785,7 +785,7 @@ export function ProjectWorkflows({
     }
   };
 
-  /** Optimistic, with rollback — a tick has to land under your finger. */
+  /** Optimistic, with rollback - a tick has to land under your finger. */
   const toggleItem = async (it: Item) => {
     lastLocalEdit.current = Date.now();
     const next = it.completed_at ? null : new Date().toISOString();
@@ -801,7 +801,7 @@ export function ProjectWorkflows({
   };
 
   /**
-   * Typed text goes through the debounced queue, and — critically — updates
+   * Typed text goes through the debounced queue, and - critically - updates
    * local state too. It used to write straight to Postgres and update nothing,
    * so a required note item never registered as answered: the phase stayed
    * blocked and the workflow could never be finished.
@@ -851,7 +851,7 @@ export function ProjectWorkflows({
         .select("id, storage_path, thumb_path, image_url")
         .single();
       if (insErr || !row) {
-        // Reclaim the orphaned upload before bailing — no row will reference
+        // Reclaim the orphaned upload before bailing - no row will reference
         // it, so no delete path can ever find it again.
         void supabase.storage.from("site-photos").remove(photoObjectPaths(path, thumbPath));
         throw insErr ?? new Error("Couldn't save that photo");
@@ -960,7 +960,7 @@ export function ProjectWorkflows({
 
   /*
    * Who may close a given run. Distinct from `WorkflowState.canComplete`, which
-   * is about *readiness* — whether every required step and sign-off is done.
+   * is about *readiness* - whether every required step and sign-off is done.
    * A run can be ready and still not yours to close.
    */
   const viewer = { userId: user?.id ?? null, isManager };
@@ -973,14 +973,14 @@ export function ProjectWorkflows({
 
   /**
    * `project_workflows.completed_at` has existed since the first migration and
-   * was never written — "Complete" was only ever derived, so nothing recorded
+   * was never written - "Complete" was only ever derived, so nothing recorded
    * *when* a job's process was actually signed off as done.
    */
   const setWorkflowComplete = async (wf: Workflow, complete: boolean) => {
     /*
      * Closing is the assignee's call; reopening is anyone's, so the check only
      * guards the one direction. Same rule as checklists and tasks, from the
-     * same module — the client's requirement was that this relationship read
+     * same module - the client's requirement was that this relationship read
      * identically across every feature that has one.
      */
     if (complete) {
@@ -1018,7 +1018,7 @@ export function ProjectWorkflows({
     toast.success(
       complete
         ? wf.assigned_by && wf.assigned_by !== user?.id
-          ? `“${wf.name}” complete — ${assigneeLabel(members, wf.assigned_by)} has been notified`
+          ? `“${wf.name}” complete - ${assigneeLabel(members, wf.assigned_by)} has been notified`
           : `“${wf.name}” marked complete`
         : `“${wf.name}” reopened`,
     );
@@ -1029,7 +1029,7 @@ export function ProjectWorkflows({
    * Hand this workflow to someone.
    *
    * Written as a pair with `assigned_by` so completion has a person to report
-   * back to, and saved on a button rather than on change — putting a job on
+   * back to, and saved on a button rather than on change - putting a job on
    * somebody's plate and notifying them is not something to do on the way past
    * an open dropdown.
    */
@@ -1050,7 +1050,7 @@ export function ProjectWorkflows({
     toast.success(
       assigneeId
         ? `Assigned to ${assigneeLabel(members, assigneeId)}`
-        : "Assignee cleared — anyone on the crew can complete this",
+        : "Assignee cleared - anyone on the crew can complete this",
     );
     return true;
   };
@@ -1065,7 +1065,7 @@ export function ProjectWorkflows({
     if (
       !(await confirm({
         title: "Delete this workflow?",
-        description: `“${wf.name}” and its record on this project — ${parts.join(", ")} — will be permanently removed. Photos already taken stay in the project gallery.`,
+        description: `“${wf.name}” and its record on this project - ${parts.join(", ")} - will be permanently removed. Photos already taken stay in the project gallery.`,
         confirmText: "Delete workflow",
         variant: "destructive",
       }))
@@ -1096,7 +1096,7 @@ export function ProjectWorkflows({
   /**
    * Every template, named, one click from starting.
    *
-   * This replaced a dialog whose entire body was a `<Select>` of the same list —
+   * This replaced a dialog whose entire body was a `<Select>` of the same list -
    * open the modal, open the select, pick, confirm, close, find the card. The
    * menu is the select, so the confirm step and the modal both go away.
    */
@@ -1176,7 +1176,7 @@ export function ProjectWorkflows({
    */
   const focused = !!focusWorkflowId;
 
-  // A route pointing at a workflow that is gone — deleted on another device, or
+  // A route pointing at a workflow that is gone - deleted on another device, or
   // a stale link. Say so and offer the way back rather than rendering the grid
   // under a URL that promises one run.
   if (focused && !loading && !loadError && !open) {
@@ -1232,7 +1232,7 @@ export function ProjectWorkflows({
         <ErrorState
           className="mt-6"
           title="Couldn't load workflows"
-          description="You may be offline. Nothing has been lost — try again once you have a connection."
+          description="You may be offline. Nothing has been lost - try again once you have a connection."
           onRetry={() => void load()}
         />
       ) : open && openState ? (
@@ -1262,7 +1262,7 @@ export function ProjectWorkflows({
           icon={WorkflowIcon}
           className="mt-6"
           title="No workflow on this job yet"
-          description="Apply a template to track phases like Pre-Job, Install, Inspection and Handover — each with its own steps, photo prompts and sign-off. Print it or share the link when it's done."
+          description="Apply a template to track phases like Pre-Job, Install, Inspection and Handover - each with its own steps, photo prompts and sign-off. Print it or share the link when it's done."
           action={headerAction}
         />
       ) : (
@@ -1300,7 +1300,7 @@ export function ProjectWorkflows({
       )}
 
       {/* Paper, for whichever workflow is open. Mounted alongside the runner
-          rather than instead of it — see components/PrintDocument.tsx for why
+          rather than instead of it - see components/PrintDocument.tsx for why
           print inverts the visibility instead of hiding chrome piece by piece. */}
       {open && printRecord && (
         <PrintDocument>
@@ -1413,7 +1413,7 @@ function WorkflowRunner({
 }) {
   /**
    * Auto-advance: open the phase the crew is working, fold away the one it
-   * finished — but never out from under their hands.
+   * finished - but never out from under their hands.
    *
    * A note step counts as answered on its first character, so typing into one
    * completes its phase and moves the cursor to the next. Replacing the open
@@ -1466,7 +1466,7 @@ function WorkflowRunner({
           stats={
             <>
               {/* Where the run stands and whose it is, in the row that already
-                  answers "how far along is this" — the same three words a
+                  answers "how far along is this" - the same three words a
                   checklist and a task use. */}
               <AssignmentStatusPill
                 status={assignmentStatus({
@@ -1512,7 +1512,7 @@ function WorkflowRunner({
             <>
               {/* Print and Share sit in front of Mark complete on purpose: a
                   workflow is handed over more often than it is closed, and both
-                  work at any stage of the run — the sheet prints with unticked
+                  work at any stage of the run - the sheet prints with unticked
                   boxes and blank sign-off rules, which is exactly what a crew
                   carrying it around a site wants. Icon-only under `sm`, where
                   four labelled buttons wrap the header onto three rows. */}
@@ -1595,7 +1595,7 @@ function WorkflowRunner({
             state.isComplete ? (
               <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[11.5px] font-semibold text-emerald-700 dark:text-emerald-300">
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                Completed {new Date(workflow.completed_at!).toLocaleDateString()} — reopen it to
+                Completed {new Date(workflow.completed_at!).toLocaleDateString()} - reopen it to
                 make changes.
               </div>
             ) : !state.canComplete && state.requiredDone < state.requiredTotal ? (
@@ -1605,7 +1605,7 @@ function WorkflowRunner({
                 workflow can be closed.
               </div>
             ) : rights.reason ? (
-              /* Ready to close, but not by this person — or closable only as a
+              /* Ready to close, but not by this person - or closable only as a
                  manager override. Either way the button's state needs a
                  sentence next to it, since there is nothing to hover on a
                  phone. */
@@ -1620,7 +1620,7 @@ function WorkflowRunner({
 
       <div className="space-y-2.5 px-3 py-4 sm:px-5">
         {/* The write-up that travels with the record. Rich text, because what
-            reaches the customer alongside a phase list is prose — what was
+            reaches the customer alongside a phase list is prose - what was
             found, what was replaced, what to watch. A completed workflow shows
             it read-only: the record is closed. */}
         <section className="rounded-xl border border-border bg-background/60 p-3">
@@ -1635,7 +1635,7 @@ function WorkflowRunner({
               <div
                 className="tiptap text-sm"
                 // Read-only replay of the author's own saved editor output.
-                // Anonymous visitors get the server-sanitised copy instead —
+                // Anonymous visitors get the server-sanitised copy instead -
                 // see apps/api/src/domains/projects/field-records.ts.
                 dangerouslySetInnerHTML={{ __html: workflow.notes_html }}
               />
@@ -1726,7 +1726,7 @@ function PhaseCard({
   items: Item[];
   phaseState: PhaseState;
   isActive: boolean;
-  /** The whole workflow is closed — nothing here should invite an edit. */
+  /** The whole workflow is closed - nothing here should invite an edit. */
   locked: boolean;
   photos: Record<string, PhotoRef>;
   open: boolean;
@@ -1845,7 +1845,7 @@ function PhaseCard({
         <div id={panelId} className="space-y-2 border-t border-border/70 px-2.5 py-2.5 sm:px-3">
           {items.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-              No steps in this phase — it's a marker, nothing to tick off.
+              No steps in this phase - it's a marker, nothing to tick off.
             </p>
           ) : (
             items.map((it) =>
@@ -1949,7 +1949,7 @@ function PhaseCard({
       <Dialog open={signOpen} onOpenChange={setSignOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Sign off — {phase.name}</DialogTitle>
+            <DialogTitle>Sign off - {phase.name}</DialogTitle>
             <DialogDescription>
               This records your name and the current time against this phase. It can be cleared
               later, but the change is part of the job's record.
@@ -2019,7 +2019,7 @@ function CheckStep({
      * renders a Radix `<button>`, and nesting a button inside this row button
      * is invalid markup. The previous version dodged that by wrapping the
      * Radix control in a bare `<label>` with no `htmlFor`, which let a tap
-     * both forward to the button and fire natively — ticking, then unticking.
+     * both forward to the button and fire natively - ticking, then unticking.
      */
     <button
       type="button"
@@ -2138,7 +2138,7 @@ function PhotoStep({
 
       {/* Two inputs, not one. A single `capture="environment"` input under a
           button labelled "Take / upload photo" makes the library unreachable on
-          iOS Safari and Android Chrome — the upload half never worked. */}
+          iOS Safari and Android Chrome - the upload half never worked. */}
       <input
         ref={cameraRef}
         type="file"
@@ -2231,7 +2231,7 @@ function PhotoStep({
               width={1200}
               alt={item.label}
               className="object-contain"
-              // PhotoThumb observes this element, so it needs a real height —
+              // PhotoThumb observes this element, so it needs a real height -
               // `h-full` against an auto-height dialog would collapse it.
               wrapperClassName="h-[70vh] w-full rounded-xl bg-transparent"
             />

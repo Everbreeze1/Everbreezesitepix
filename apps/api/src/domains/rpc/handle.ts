@@ -180,7 +180,7 @@ export async function handleRpc(request: Request): Promise<Response> {
         errorCode: "validation_error",
       });
       return Response.json(
-        // NOT `err.message` — that is the raw issue array as JSON, and the web
+        // NOT `err.message` - that is the raw issue array as JSON, and the web
         // client renders `message` directly in a toast. The structured form
         // stays available under `details` for debugging.
         {

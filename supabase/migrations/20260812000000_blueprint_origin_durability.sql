@@ -12,7 +12,7 @@
 --      Templates screen creates blueprints with `team_id: team?.id ?? null`. So a
 --      blueprint authored by someone without a team is visible only to its
 --      author, while the PROJECT it was applied to is visible to every teammate
---      via are_teammates(). The teammate sees the project and zero ledger rows —
+--      via are_teammates(). The teammate sees the project and zero ledger rows -
 --      identical, on screen, to a project no blueprint ever touched.
 --      Provenance is a fact about the PROJECT, so it is now gated on the
 --      project, matching `projects` own RLS.
@@ -30,7 +30,7 @@
 --   3. PRE-LEDGER PROJECTS HAVE NO ORIGIN AT ALL. Every project set up before
 --      20260810000000 landed has no row and never will. Those can be partially
 --      reconstructed from project_checklists.template_id /
---      project_workflows.template_id — see the companion backfill file
+--      project_workflows.template_id - see the companion backfill file
 --      20260812000100_backfill_blueprint_origin.sql. Reconstructed rows are
 --      inferences, not observations, so `origin` marks them and the UI says
 --      "Detected from its checklists" rather than asserting an apply happened.
@@ -41,19 +41,19 @@
 --
 -- ANON GRANTS ARE REVOKED EXPLICITLY. Supabase ships
 -- `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon`, so a
--- newly created public table is readable by the publishable key — which is in
--- the browser bundle — the moment it exists. That is how `walkthroughs` and
+-- newly created public table is readable by the publishable key - which is in
+-- the browser bundle - the moment it exists. That is how `walkthroughs` and
 -- `team_invites` leaked (see 20260811000000). This ledger names project ids and
 -- blueprint names, so anon must not reach it.
 --
 -- Self-sufficient: re-declares the table, so this file also repairs an
 -- environment that never received 20260810000000.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent — safe to re-run.
+-- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run.
 
 SET lock_timeout = '5s';
 
--- === PART 1 — the table, for a database that never got 20260810000000 =======
+-- === PART 1 - the table, for a database that never got 20260810000000 =======
 
 CREATE TABLE IF NOT EXISTS public.project_blueprint_applications (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS public.project_blueprint_applications (
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 
--- === PART 2 — durability: name survives deletion, id survives deletion ======
+-- === PART 2 - durability: name survives deletion, id survives deletion ======
 
 ALTER TABLE public.project_blueprint_applications
   ADD COLUMN IF NOT EXISTS blueprint_name text,
@@ -100,7 +100,7 @@ BEGIN
       ALTER COLUMN blueprint_id DROP NOT NULL;
   END IF;
 
-  -- Find the FK by what it points at rather than by name — the name is only
+  -- Find the FK by what it points at rather than by name - the name is only
   -- predictable when Postgres generated it.
   SELECT con.conname INTO fk_name
     FROM pg_constraint con
@@ -130,7 +130,7 @@ UPDATE public.project_blueprint_applications a
  WHERE pt.id = a.blueprint_id
    AND a.blueprint_name IS NULL;
 
--- === PART 3 — grants, then RLS gated on the PROJECT ========================
+-- === PART 3 - grants, then RLS gated on the PROJECT ========================
 
 REVOKE ALL ON public.project_blueprint_applications FROM anon, PUBLIC;
 GRANT SELECT ON public.project_blueprint_applications TO authenticated;
@@ -139,7 +139,7 @@ GRANT ALL ON public.project_blueprint_applications TO service_role;
 ALTER TABLE public.project_blueprint_applications ENABLE ROW LEVEL SECURITY;
 
 -- Rows are written by the API with the service role, so there is deliberately
--- still no INSERT/UPDATE/DELETE policy — a client must not fabricate history.
+-- still no INSERT/UPDATE/DELETE policy - a client must not fabricate history.
 DROP POLICY IF EXISTS "Read blueprint applications via parent"
   ON public.project_blueprint_applications;
 DROP POLICY IF EXISTS "Read blueprint applications via project"
@@ -159,7 +159,7 @@ CREATE INDEX IF NOT EXISTS project_blueprint_applications_blueprint_idx
 CREATE INDEX IF NOT EXISTS project_blueprint_applications_project_idx
   ON public.project_blueprint_applications(project_id, created_at DESC);
 
--- === PART 4 — per-item provenance for reports ==============================
+-- === PART 4 - per-item provenance for reports ==============================
 -- project_checklists.template_id (20260611000428), project_workflows.template_id
 -- (20260616050717) and project_pages.source_template already exist. Reports were
 -- the one blueprint output with no pointer back to what created them, so a

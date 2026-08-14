@@ -1,5 +1,5 @@
 -- =============================================================================
--- Labels feature — safe, idempotent migration
+-- Labels feature - safe, idempotent migration
 -- Target: SitePix Supabase project (ulmgvtuqjlzzadlwtiog)
 -- Run in: Supabase Dashboard → SQL Editor (safe to re-run)
 -- =============================================================================
@@ -54,7 +54,7 @@ CREATE INDEX IF NOT EXISTS labels_team_idx ON public.labels(team_id);
 ALTER TABLE public.labels ENABLE ROW LEVEL SECURITY;
 
 -- ---------------------------------------------------------------------------
--- 2. RLS policies — adapt to whether team_members exists
+-- 2. RLS policies - adapt to whether team_members exists
 -- ---------------------------------------------------------------------------
 DO $$
 DECLARE
@@ -206,7 +206,7 @@ CREATE TRIGGER trg_labels_updated_at
   FOR EACH ROW EXECUTE FUNCTION public.touch_labels_updated_at();
 
 -- ---------------------------------------------------------------------------
--- 4. projects.labels (text[]) — only if public.projects exists
+-- 4. projects.labels (text[]) - only if public.projects exists
 -- ---------------------------------------------------------------------------
 DO $$
 BEGIN

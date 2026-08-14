@@ -1,4 +1,4 @@
--- NOTIFICATIONS — run this in the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- NOTIFICATIONS - run this in the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent, safe to re-run.
 
 -- =========================
@@ -26,7 +26,7 @@ CREATE INDEX IF NOT EXISTS notifications_recipient_created_idx
 CREATE INDEX IF NOT EXISTS notifications_recipient_unread_idx
   ON public.notifications(recipient_id) WHERE read_at IS NULL;
 
--- No INSERT/DELETE grant to `authenticated` at all — rows can only be created by a
+-- No INSERT/DELETE grant to `authenticated` at all - rows can only be created by a
 -- SECURITY DEFINER trigger function below, or by server code using the service-role
 -- key. UPDATE is column-scoped to `read_at` so a client can mark-read but can never
 -- rewrite title/body/actor_id even by calling supabase.from(...) directly.
@@ -53,7 +53,7 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 -- Fix: `tasks` was missed when teammate policies were added in 20260612191404_teams.sql.
 -- Every other shared table (projects, photos, videos, walkthroughs, project_checklists)
 -- got an additive "Teammates ..." policy there; tasks never did, so a task assigned to
--- a teammate is invisible to them (created_by-only RLS). Additive — existing owner-only
+-- a teammate is invisible to them (created_by-only RLS). Additive - existing owner-only
 -- policies remain, RLS unions them.
 -- =========================
 DROP POLICY IF EXISTS "Teammates view team tasks" ON public.tasks;
@@ -65,7 +65,7 @@ CREATE POLICY "Teammates update team tasks" ON public.tasks
   FOR UPDATE TO authenticated USING (public.are_teammates(auth.uid(), created_by));
 
 -- =========================
--- Shared insert helper — centralizes "never notify yourself / never notify a null
+-- Shared insert helper - centralizes "never notify yourself / never notify a null
 -- recipient" so every trigger and server call site gets it for free.
 -- =========================
 CREATE OR REPLACE FUNCTION public.create_notification(
@@ -141,6 +141,6 @@ CREATE TRIGGER checklists_notify_assignee
 
 -- Photo-comment mentions and team-invite-accepted notifications are inserted from
 -- application code (apps/api/src/domains/photos/comments.ts,
--- apps/api/src/domains/teams/service.ts) via the service-role key, not triggers here —
+-- apps/api/src/domains/teams/service.ts) via the service-role key, not triggers here -
 -- both of those write paths already run server-side via getSupabaseAdmin(), which
 -- carries no user JWT, so auth.uid() would be NULL inside a trigger fired by them.

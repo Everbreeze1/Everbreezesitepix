@@ -3,12 +3,12 @@
  *
  * Lifted out of combineProjectsService, which learned it the hard way: the check
  * there was originally `message.includes("does not exist")`, which never matches
- * what PostgREST actually returns — a missing table comes back as PGRST205
+ * what PostgREST actually returns - a missing table comes back as PGRST205
  * "Could not find the table 'public.x' in the schema cache", not as a Postgres
  * 42P01. The guard therefore never fired.
  *
  * It matters because this codebase genuinely runs against databases missing
- * tables that exist in the migration folder — see the header of
+ * tables that exist in the migration folder - see the header of
  * 20260811001000_schema_drift_repair.sql. Callers use this to degrade a
  * not-provisioned feature into a reported "unavailable" state rather than either
  * crashing or, worse, rendering it as empty.

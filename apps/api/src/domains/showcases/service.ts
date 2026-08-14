@@ -58,7 +58,7 @@ export interface ShowcaseDetail {
   cover_photo_id: string | null;
   cover_image_url: string | null;
   sections: ShowcaseSectionDetail[];
-  /** Portfolio-site metadata — edited separately via updateShowcaseSite. */
+  /** Portfolio-site metadata - edited separately via updateShowcaseSite. */
   slug: string | null;
   service_type: string | null;
   products_used: string[];
@@ -83,7 +83,7 @@ export interface ShowcaseCompany {
 
 /**
  * Showcase photos render up to full viewport width (the lead image bleeds edge
- * to edge), so this has to stay generous — the win is not serving thumbnails,
+ * to edge), so this has to stay generous - the win is not serving thumbnails,
  * it is not serving 4000px camera originals.
  */
 export const SHOWCASE_PHOTO_WIDTH = 1400;
@@ -123,7 +123,7 @@ export async function resolvePhotoUrls(
       thumb_path: string | null;
       image_url: string | null;
     }>) ?? [];
-  // A photo whose row is missing entirely (deleted, or the id never existed —
+  // A photo whose row is missing entirely (deleted, or the id never existed -
   // showcase_items.photo_id has no FK) never reaches `rows`, so it silently
   // has no entry in `out` and the caller's `?? ""` fallback kicks in. That's
   // fine; what must not happen is one bad `storage_path` poisoning every
@@ -178,7 +178,7 @@ export async function loadSections(
   const items = (itemRows as any[]) ?? [];
   const urlMap = await resolvePhotoUrls(items.map((i) => i.photo_id), SHOWCASE_PHOTO_WIDTH);
 
-  // Project names are looked up separately rather than via a PostgREST embed —
+  // Project names are looked up separately rather than via a PostgREST embed -
   // `project_id` is deliberately not a FK (see the migration), so an embed
   // cannot be resolved and would silently return nothing.
   const projectIds = Array.from(new Set(sections.map((s) => s.project_id).filter(Boolean)));
@@ -235,7 +235,7 @@ export async function listShowcasesService(ctx: AuthedContext): Promise<{ showca
     .eq("team_id", teamId)
     // Site order, not creation order: this list is now also the running order
     // of the portfolio's grid, so the two must agree or reordering looks
-    // broken. Matches compareCardRows — position only, newest as tie-break.
+    // broken. Matches compareCardRows - position only, newest as tie-break.
     .order("position", { ascending: true })
     .order("created_at", { ascending: false });
   const rows = (data as any[]) ?? [];
@@ -256,7 +256,7 @@ export async function listShowcasesService(ctx: AuthedContext): Promise<{ showca
   });
 
   // Thumbnails fall back to the showcase's first photo when no explicit cover
-  // was chosen — otherwise every card renders as an empty grey placeholder,
+  // was chosen - otherwise every card renders as an empty grey placeholder,
   // since nothing in the builder sets cover_photo_id.
   const thumbIdByShowcase = new Map<string, string>();
   rows.forEach((r) => {
@@ -348,7 +348,7 @@ export async function getShowcaseService(
  * portfolio site routes on slug, and a showcase that exists but is unreachable
  * is a bug the user can only discover by publishing and finding a 404.
  *
- * Reads the team's existing slugs in one query — a team's showcase count is
+ * Reads the team's existing slugs in one query - a team's showcase count is
  * small and bounded in practice, so this beats probing candidates serially.
  */
 async function nextShowcaseSlug(db: any, teamId: string, title: string): Promise<string> {
@@ -393,7 +393,7 @@ export const createShowcaseFromProjectInputSchema = z.object({
   maxPhotos: z.number().int().min(1).max(60).default(24),
 });
 
-/** Photos are already tagged before/progress/after — that ordering IS the story. */
+/** Photos are already tagged before/progress/after - that ordering IS the story. */
 const PHASE_SECTIONS: Array<{ phase: string; title: string; body: string }> = [
   { phase: "before", title: "Before", body: "<p>Where we started.</p>" },
   { phase: "progress", title: "The work", body: "<p>What it took to get there.</p>" },
@@ -404,7 +404,7 @@ const PHASE_SECTIONS: Array<{ phase: string; title: string; body: string }> = [
  * Builds a complete, publishable showcase from one project in a single call.
  *
  * The manual builder asks for a title, sections, photo picks and copy before
- * anything exists — which is why building one felt like assembling a report.
+ * anything exists - which is why building one felt like assembling a report.
  * Everything it asks for is already known: the project has a name and address,
  * and its photos are already phase-tagged. So generate the finished draft and
  * let the user edit it, rather than making them author it from an empty page.
@@ -424,14 +424,14 @@ export async function createShowcaseFromProjectService(
   if (!project) throw Object.assign(new Error("Project not found"), { status: 404 });
 
   // Walkthrough frames were excluded here as "working footage". On a project
-  // documented entirely by walkthrough — the technician walked it and snapped
-  // as they went — that left the builder claiming the project has no photos at
+  // documented entirely by walkthrough - the technician walked it and snapped
+  // as they went - that left the builder claiming the project has no photos at
   // all. The user curates the result anyway, so offer everything.
   const { data: photoRows } = await (ctx.supabase as any)
     .from("photos")
     .select("id, caption, phase, taken_at, created_at")
     .eq("project_id", data.projectId)
-    // No `archived` filter — that column is the compression job's bookkeeping,
+    // No `archived` filter - that column is the compression job's bookkeeping,
     // not a user's decision to hide a photo. See the note in GalleryPage.
     .order("taken_at", { ascending: true, nullsFirst: false })
     .limit(200);
@@ -442,7 +442,7 @@ export async function createShowcaseFromProjectService(
   }
 
   const address = [project.street, project.city, project.state].filter(Boolean).join(", ");
-  // "Completed" is the last time anyone photographed the job — the only date
+  // "Completed" is the last time anyone photographed the job - the only date
   // the data actually supports. Photos are ordered ascending, so take the tail.
   const lastShot = [...photos].reverse().find((p) => p.taken_at || p.created_at);
   const completedOn =
@@ -484,7 +484,7 @@ export async function createShowcaseFromProjectService(
       // striking once or twice and relentless four times over, so it is only
       // the default for short showcases.
       layout: sections.length <= 2 ? "featured" : "grid",
-      // A generated showcase should read as finished, not skeletal — an empty
+      // A generated showcase should read as finished, not skeletal - an empty
       // opening and close is most of what made the first draft feel unpolished.
       // This is a starting draft the user edits, not final copy.
       intro_html: `<p>A closer look at ${safeName}. Every photo below was taken on site by our crew.</p>`,
@@ -496,7 +496,7 @@ export async function createShowcaseFromProjectService(
       // Denormalised from the project on purpose: a published portfolio has to
       // keep rendering (and keep its map pin) after the project is deleted.
       slug: await nextShowcaseSlug(ctx.supabase, teamId, project.name ?? "project"),
-      summary: address ? `${project.name} — ${address}` : null,
+      summary: address ? `${project.name} - ${address}` : null,
       // A project's first tag is how teams already label the trade ("Roofing",
       // "Kitchen"), so it is the best available guess at a service type. The
       // user can correct it in the builder; guessing beats an empty facet that
@@ -601,7 +601,7 @@ export const setShowcaseSectionsInputSchema = z.object({
 });
 
 /**
- * Replace-all write of a showcase's whole body (sections + their photos) —
+ * Replace-all write of a showcase's whole body (sections + their photos) -
  * the same delete-then-insert shape as setShowcaseItems, so the builder can
  * save reordering, regrouping and removal in one round trip rather than
  * diffing on the client.
@@ -674,18 +674,18 @@ export async function setShowcaseItemsService(
   data: z.infer<typeof setShowcaseItemsInputSchema>,
 ): Promise<{ ok: true }> {
   /*
-   * SECURITY — validate photo ownership BEFORE touching anything.
+   * SECURITY - validate photo ownership BEFORE touching anything.
    *
    * `showcase_items.photo_id` has no foreign key, and the table's RLS only
    * asserts that the parent showcase belongs to the caller's team. It never
    * looks at the photo. `resolvePhotoUrls` then reads those ids with the
    * SERVICE-ROLE client, which bypasses the `photos` RLS that would otherwise
-   * hide them — so an unvalidated id here let any authenticated user point
+   * hide them - so an unvalidated id here let any authenticated user point
    * their own showcase at somebody else's photo and mint a signed URL for it,
    * renewable indefinitely. Photo ids are not secret: the public report and
    * walkthrough endpoints hand them out.
    *
-   * Reading through `ctx.supabase` IS the check — it is the caller's
+   * Reading through `ctx.supabase` IS the check - it is the caller's
    * RLS-scoped client, so ids they cannot see simply do not come back.
    *
    * This runs before the delete on purpose: a rejected request must not wipe
@@ -823,8 +823,8 @@ export async function getPublicShowcaseService(
      * devtools or curled the share link.
      *
      * The email is the worst of the three: `profiles.email` is the **account
-     * login address**, not a business contact — there is no separate field for
-     * one — so publishing it hands an attacker half of every credential-stuffing
+     * login address**, not a business contact - there is no separate field for
+     * one - so publishing it hands an attacker half of every credential-stuffing
      * attempt against this tenant. Name and logo stay regardless: they are the
      * branding on the showcase itself, and hiding them would blank the page.
      */

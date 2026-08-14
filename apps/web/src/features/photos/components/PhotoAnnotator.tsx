@@ -246,7 +246,7 @@ export function PhotoAnnotator({
   useEffect(() => {
     if (!open) return;
     // Reset state and load the image ONCE per open. Do not re-fire when the
-    // parent re-renders with a refreshed signed URL for the same photo — that
+    // parent re-renders with a refreshed signed URL for the same photo - that
     // would wipe in-progress annotations mid-edit.
     setImgReady(false);
     setShapes([]);
@@ -1009,7 +1009,7 @@ export function PhotoAnnotator({
 
             <div className="text-xs text-white/50">
               {polyDraft
-                ? `Line: ${polyDraft.points.length} pts — tap to add & label, double-tap to finish`
+                ? `Line: ${polyDraft.points.length} pts - tap to add & label, double-tap to finish`
                 : "Annotate"}
             </div>
 
@@ -1342,7 +1342,7 @@ export function PhotoAnnotator({
                       if (calibrate.unit === "m") inches = (v * 100) / 2.54;
                       setPxPerInch(pxLen / inches);
                       setCalibrate(null);
-                      toast.success("Scale calibrated — all measurements updated");
+                      toast.success("Scale calibrated - all measurements updated");
                     };
                     return (
                       <div
@@ -1429,10 +1429,10 @@ export function PhotoAnnotator({
               </div>
             )}
 
-            {/* Right vertical toolbar — premium glass panel, grouped */}
+            {/* Right vertical toolbar - premium glass panel, grouped */}
             <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex items-center pr-2 sm:pr-3">
               <div className="pointer-events-auto flex max-h-[calc(100dvh-100px)] w-[68px] flex-col items-stretch gap-3 overflow-y-auto rounded-[26px] border border-white/10 bg-gradient-to-b from-white/[0.09] to-white/[0.04] px-2 py-3 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-2xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden animate-in fade-in slide-in-from-right-2 duration-200">
-                {/* History group — pinned at top for prominence */}
+                {/* History group - pinned at top for prominence */}
                 <ToolGroup label="History">
                   <ToolBtn label="Undo" disabled={!pastRef.current.length} onClick={undo}>
                     <Undo2 className="h-5 w-5" />
@@ -1747,7 +1747,7 @@ export function PhotoAnnotator({
                   </ToolBtn>
                 </ToolGroup>
 
-                {/* Done — mini save button pinned at the bottom of the panel */}
+                {/* Done - mini save button pinned at the bottom of the panel */}
                 <button
                   type="button"
                   onClick={save}
@@ -2174,7 +2174,7 @@ function drawMeasure(
   const len = Math.hypot(dx, dy);
   if (len < 1) return;
   const angle = Math.atan2(dy, dx);
-  // Bold, highly visible line — techs need to see this clearly at a distance.
+  // Bold, highly visible line - techs need to see this clearly at a distance.
   const w = Math.max(8, width);
 
   // White halo behind the main stroke for contrast on any background
@@ -2204,7 +2204,7 @@ function drawMeasure(
   };
   cap(from);
   cap(to);
-  // Label — large, bold, easy to read at a glance
+  // Label - large, bold, easy to read at a glance
   const label = formatMeasure(len, pxPerInch);
   const mx = (from.x + to.x) / 2;
   const my = (from.y + to.y) / 2;

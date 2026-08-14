@@ -74,7 +74,7 @@ export function NewProjectPage() {
     Array<{ id: string; name: string; labels: string[] }>
   >([]);
   // "New project from this" on the Templates page arrives with the blueprint
-  // already chosen — the point of that button is that you do not have to find
+  // already chosen - the point of that button is that you do not have to find
   // it again in a dropdown.
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
     search.blueprint ?? "__none",
@@ -83,7 +83,7 @@ export function NewProjectPage() {
     selectedTemplateId === "__none" ? null : selectedTemplateId,
   );
 
-  // Load project templates the user can apply (Team plan only — Project
+  // Load project templates the user can apply (Team plan only - Project
   // Blueprints are a Team-tier differentiator).
   useEffect(() => {
     if (!isTeam) return;
@@ -185,7 +185,7 @@ export function NewProjectPage() {
         state: parts.state || f.state,
         zip: parts.zip || f.zip,
         formatted: first.formatted_address ?? "",
-        name: f.name || (parts.street ? `${parts.street} — Site visit` : f.name),
+        name: f.name || (parts.street ? `${parts.street} - Site visit` : f.name),
       }));
     } catch {
       // ignore
@@ -271,7 +271,7 @@ export function NewProjectPage() {
         const res = await applyTemplate(projectId, selectedTemplateId);
         // The catch below only fires for transport/HTTP throws (plan gate,
         // ownership). Per-item failures resolve successfully with a `failed`
-        // list, so they have to be inspected here or they are invisible — the
+        // list, so they have to be inspected here or they are invisible - the
         // page has just shown the user a preview promising these very items.
         if (res?.failed?.length) {
           const n = res.failed.length;
@@ -372,7 +372,7 @@ export function NewProjectPage() {
                   state: addr.state,
                   zip: addr.zip,
                   formatted: addr.formatted,
-                  name: f.name || (addr.street ? `${addr.street} — Site visit` : f.name),
+                  name: f.name || (addr.street ? `${addr.street} - Site visit` : f.name),
                 }));
                 if (addr.latitude != null && addr.longitude != null) {
                   void setLocation(addr.latitude, addr.longitude);
@@ -451,7 +451,7 @@ export function NewProjectPage() {
               id="name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder={form.street ? `${form.street} — Site visit` : "Auto-named from address"}
+              placeholder={form.street ? `${form.street} - Site visit` : "Auto-named from address"}
             />
           </div>
 
@@ -477,7 +477,7 @@ export function NewProjectPage() {
               </Select>
 
               {/* Picking a blueprint used to be a name in a dropdown and nothing
-                  else — you found out what it did after the project existed.
+                  else - you found out what it did after the project existed.
                   Same panel the blueprint's own page shows. */}
               {selectedTemplateId !== "__none" && (
                 <div className="pt-2">

@@ -54,7 +54,7 @@ interface ApplyResult {
  * Apply a blueprint to one or more existing projects.
  *
  * Blueprints could previously only be applied while creating a project, so an
- * authored blueprint had no visible route to the projects already running —
+ * authored blueprint had no visible route to the projects already running -
  * the "how do I actually use this?" gap. And a crew that standardises on a
  * blueprint mid-season wants it on the twelve jobs already open, not on the
  * next one only, which is why the target is a multi-select rather than a radio
@@ -193,7 +193,7 @@ export function ApplyBlueprintDialog({
   };
 
   /*
-   * The header used to read "Blueprint applied — Everything below now exists on
+   * The header used to read "Blueprint applied - Everything below now exists on
    * the projects listed." whenever `results` was set, including when every item
    * had failed. The red per-item panel was right there underneath contradicting
    * it. A summary that can be false is worse than no summary.
@@ -220,7 +220,7 @@ export function ApplyBlueprintDialog({
               : allErrored
                 ? "Nothing was created."
                 : anyDegraded
-                  ? "Some items couldn’t be created — they’re listed in red below."
+                  ? "Some items couldn’t be created - they’re listed in red below."
                   : "Everything below now exists on the projects listed."}
           </DialogDescription>
         </DialogHeader>
@@ -262,7 +262,7 @@ export function ApplyBlueprintDialog({
                             ? "Nothing to create"
                             : created
                                 .map(([key, n]) => {
-                                  // Matched on `countsKey`, not `plural` — the
+                                  // Matched on `countsKey`, not `plural` - the
                                   // display plural "label sets" never equalled
                                   // the wire key `label_sets`, so this lookup
                                   // missed and the raw key was printed instead.
@@ -273,7 +273,7 @@ export function ApplyBlueprintDialog({
                                   // Both branches go through `meta` now. The
                                   // plural branch used to echo the wire key
                                   // unconditionally, which only read as English
-                                  // by luck — every key but `label_sets` happens
+                                  // by luck - every key but `label_sets` happens
                                   // to be a word.
                                   if (!meta) return `${n} ${key}`;
                                   return `${n} ${n === 1 ? meta.label.toLowerCase() : meta.plural}`;
@@ -293,7 +293,7 @@ export function ApplyBlueprintDialog({
 
                   {r.ledgerRecorded === false && !r.error && (
                     <p className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11.5px] text-muted-foreground">
-                      <span className="font-bold text-amber-600 dark:text-amber-400">Note</span> —
+                      <span className="font-bold text-amber-600 dark:text-amber-400">Note</span> -
                       applied, but we couldn’t record which blueprint did it, so this project won’t
                       show its origin.
                     </p>
@@ -303,7 +303,7 @@ export function ApplyBlueprintDialog({
                     <ul className="mt-2 space-y-0.5 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2">
                       {r.failed.map((f, i) => (
                         <li key={`${f.kind}-${i}`} className="text-[11.5px] text-muted-foreground">
-                          <span className="font-bold capitalize text-destructive">{f.kind}</span> —{" "}
+                          <span className="font-bold capitalize text-destructive">{f.kind}</span> -{" "}
                           {f.reason}
                         </li>
                       ))}

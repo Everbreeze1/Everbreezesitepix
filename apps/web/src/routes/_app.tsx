@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_app")({
   component: AppLayout,
 });
 
-/** Just back from Stripe Checkout — the webhook needs a few seconds to
+/** Just back from Stripe Checkout - the webhook needs a few seconds to
  * land, so quietly re-check subscription status a few times instead of
  * waiting for the user to navigate away and back. */
 function useJustCheckedOut() {
@@ -61,7 +61,7 @@ function AppLayout() {
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background px-4 text-center">
         <p className="text-sm font-medium text-foreground">Couldn't verify your subscription.</p>
         <p className="max-w-sm text-sm text-muted-foreground">
-          This is usually a temporary connection problem — try again.
+          This is usually a temporary connection problem - try again.
         </p>
         <Button onClick={retrySub}>Retry</Button>
       </div>

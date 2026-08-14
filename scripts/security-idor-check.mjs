@@ -2,12 +2,12 @@
  * Live IDOR test: can an attacker read a photo they have no access to?
  *
  * Covers the two cross-account photo-access fixes:
- *   1. setShowcaseItems — pointing a showcase at a foreign photo id.
- *   2. getPublicProjectPage — embedding <img data-photo-id="foreign"> in a
+ *   1. setShowcaseItems - pointing a showcase at a foreign photo id.
+ *   2. getPublicProjectPage - embedding <img data-photo-id="foreign"> in a
  *      shared document so the public route signs it.
  *
  * And the project-level share link behind the printed QR code:
- *   3. setProjectShare / ensureProjectShare / getProjectShare — publishing a
+ *   3. setProjectShare / ensureProjectShare / getProjectShare - publishing a
  *      project the caller does not own, by the switch or by "opening its QR
  *      dialog", and stealing its token; plus the two properties that make the
  *      feature safe at all (a new project starts unshared, and an un-enabled
@@ -16,7 +16,7 @@
  * SAFETY: never touches the real .env account. It provisions its own victim +
  * attacker accounts and their data via the service role, runs the exploits
  * through the real API, then deletes everything it made. The victim photo uses
- * a distinctive storage_path marker so a leak is unambiguous — if that marker
+ * a distinctive storage_path marker so a leak is unambiguous - if that marker
  * appears in an attacker-reachable response, the photo leaked.
  */
 import { readFileSync } from "node:fs";
@@ -136,7 +136,7 @@ const run = async () => {
 
   const atkToken = await signIn(`atk_${stamp}@example.com`, "Attacker#Pass123");
   if (!atkToken) {
-    record("IDOR setup", false, "could not sign in the attacker — setup failure");
+    record("IDOR setup", false, "could not sign in the attacker - setup failure");
     return finish();
   }
   console.log(`  victim photo id ${victimPhoto.id} (marker ${MARKER})`);
@@ -150,7 +150,7 @@ const run = async () => {
     record(
       "Showcase IDOR",
       true,
-      `attacker could not even create a showcase (${showcase.status}: ${JSON.stringify(showcase.json).slice(0, 90)}) — the foreign-photo path is unreachable.`,
+      `attacker could not even create a showcase (${showcase.status}: ${JSON.stringify(showcase.json).slice(0, 90)}) - the foreign-photo path is unreachable.`,
     );
   } else {
     const setItems = await rpc(
@@ -159,7 +159,7 @@ const run = async () => {
       atkToken,
     );
     if (setItems.status === 200) {
-      // It was accepted — confirm whether the read actually leaks a signed URL.
+      // It was accepted - confirm whether the read actually leaks a signed URL.
       const got = await rpc("getShowcase", { id: showcase.json.id }, atkToken);
       const leaked = JSON.stringify(got.json).includes(MARKER);
       record(
@@ -189,7 +189,7 @@ const run = async () => {
     record(
       "Page-image IDOR",
       false,
-      `could not create a page (${pageRes.status}: ${JSON.stringify(pageRes.json).slice(0, 90)}) — setup failure`,
+      `could not create a page (${pageRes.status}: ${JSON.stringify(pageRes.json).slice(0, 90)}) - setup failure`,
     );
   } else {
     await rpc(
@@ -203,10 +203,10 @@ const run = async () => {
       record(
         "Page-image IDOR",
         false,
-        `could not enable sharing (${share.status}) — setup failure`,
+        `could not enable sharing (${share.status}) - setup failure`,
       );
     } else {
-      // The public, unauthenticated read — this is the attack surface.
+      // The public, unauthenticated read - this is the attack surface.
       const pub = await rpc("getPublicProjectPage", { token }, null);
       const body = JSON.stringify(pub.json);
       const leaked = body.includes(MARKER);
@@ -214,7 +214,7 @@ const run = async () => {
         "Page-image IDOR blocked",
         !leaked,
         leaked
-          ? "COMPROMISED: the public shared page resolved the victim's foreign photo — its storage marker appears in the response."
+          ? "COMPROMISED: the public shared page resolved the victim's foreign photo - its storage marker appears in the response."
           : `public page did NOT resolve the foreign photo (marker absent). status ${pub.status}.`,
       );
     }
@@ -226,7 +226,7 @@ const run = async () => {
    * RLS-scoped client, so an attacker naming a foreign `projectId` should match
    * zero rows. That is an assumption about the `projects` UPDATE policy, and it
    * is the highest-stakes one in the share feature: if it is wrong, anyone with
-   * an account can put someone else's job site — every photo, the address —
+   * an account can put someone else's job site - every photo, the address -
    * on a public URL, and the owner is never told.
    *
    * Checked in three parts, because "the write failed" is not the same as "the
@@ -242,7 +242,7 @@ const run = async () => {
     "Project-share hijack blocked",
     hijack.status !== 200,
     hijack.status === 200
-      ? `COMPROMISED: attacker enabled public sharing on the victim's project — token ${String(hijack.json?.shareToken).slice(0, 8)}…`
+      ? `COMPROMISED: attacker enabled public sharing on the victim's project - token ${String(hijack.json?.shareToken).slice(0, 8)}…`
       : `setProjectShare refused the foreign project with ${hijack.status}: ${JSON.stringify(hijack.json).slice(0, 90)}`,
   );
 
@@ -250,7 +250,7 @@ const run = async () => {
    * The same hijack through the door that publishes without being asked.
    *
    * `ensureProjectShare` is what the QR dialog opens with, and on a project
-   * nobody has decided about it turns the link on — which is precisely the
+   * nobody has decided about it turns the link on - which is precisely the
    * victim's state here. It gets its own probe rather than riding on
    * setProjectShare's: they are different statements with different WHERE
    * clauses, and this one publishes as a side effect of a read.
@@ -260,7 +260,7 @@ const run = async () => {
     "Project-share first-open publish blocked",
     autoPublish.status !== 200,
     autoPublish.status === 200
-      ? `COMPROMISED: attacker published the victim's project by "opening" its QR dialog — token ${String(autoPublish.json?.shareToken).slice(0, 8)}…`
+      ? `COMPROMISED: attacker published the victim's project by "opening" its QR dialog - token ${String(autoPublish.json?.shareToken).slice(0, 8)}…`
       : `ensureProjectShare refused the foreign project with ${autoPublish.status}: ${JSON.stringify(autoPublish.json).slice(0, 90)}`,
   );
 
@@ -270,7 +270,7 @@ const run = async () => {
     "Project share-token read blocked",
     steal.status !== 200,
     steal.status === 200
-      ? `COMPROMISED: attacker read the victim project's share token (${String(steal.json?.shareToken).slice(0, 8)}…) — enough to hand out the link.`
+      ? `COMPROMISED: attacker read the victim project's share token (${String(steal.json?.shareToken).slice(0, 8)}…) - enough to hand out the link.`
       : `getProjectShare refused the foreign project with ${steal.status}: ${JSON.stringify(steal.json).slice(0, 90)}`,
   );
 
@@ -285,7 +285,7 @@ const run = async () => {
     record(
       "Project share default-off",
       false,
-      "could not read share_token — is the migration applied?",
+      "could not read share_token - is the migration applied?",
     );
   } else {
     record(

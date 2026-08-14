@@ -3,7 +3,7 @@
 # Required service Variables (Variables tab):
 #   RAILPACK_CONFIG_FILE=apps/api/railpack.json
 #   RAILPACK_INSTALL_CMD=npm install
-# Delete RAILPACK_INSTALL_CMD=npm ci if present — npm ci causes EBUSY with Vite caches.
+# Delete RAILPACK_INSTALL_CMD=npm ci if present - npm ci causes EBUSY with Vite caches.
 
 [build]
 builder = "RAILPACK"

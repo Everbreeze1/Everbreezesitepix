@@ -47,7 +47,7 @@ export async function sharePhotoNative(opts: {
     /* ignore */
   }
 
-  // 3. Final fallback — copy link.
+  // 3. Final fallback - copy link.
   try {
     await navigator.clipboard.writeText(url);
     toast.success("Link copied to clipboard");

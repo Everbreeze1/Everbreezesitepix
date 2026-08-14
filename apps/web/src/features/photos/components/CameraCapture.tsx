@@ -106,7 +106,7 @@ export function CameraCapture({
   const [submitting, setSubmitting] = useState(false);
   const [annotating, setAnnotating] = useState(false);
   const [cropping, setCropping] = useState(false);
-  // Session capture strip (autoSave mode) — thumbnails of shots saved this session.
+  // Session capture strip (autoSave mode) - thumbnails of shots saved this session.
   const [sessionShots, setSessionShots] = useState<string[]>([]);
   const [savedFlash, setSavedFlash] = useState(false);
   const autoSaveTimer = useRef<number | null>(null);
@@ -135,7 +135,7 @@ export function CameraCapture({
 
   const toggleVoice = () => {
     if (!SR) {
-      toast.message("Voice input isn't supported in this browser — please type instead.");
+      toast.message("Voice input isn't supported in this browser - please type instead.");
       return;
     }
     if (listening) {
@@ -386,7 +386,7 @@ export function CameraCapture({
         setSessionShots((s) => [thumb, ...s].slice(0, 8));
         setSavedFlash(true);
         window.setTimeout(() => setSavedFlash(false), 700);
-        // Stream is already running in autoSave mode — nothing to restart.
+        // Stream is already running in autoSave mode - nothing to restart.
       } else {
         onClose();
       }
@@ -405,7 +405,7 @@ export function CameraCapture({
     const nextPreview = { dataUrl, blob: annotatedBlob, tag: preview.tag };
     setPreview(nextPreview);
     setAnnotating(false);
-    // In Measure mode the annotator IS the primary editor — commit straight
+    // In Measure mode the annotator IS the primary editor - commit straight
     // through so the user doesn't have to tap Save twice.
     if (mode === "measure" && canMeasure) {
       setSubmitting(true);
@@ -485,7 +485,7 @@ export function CameraCapture({
     setAnnotating(true);
   };
 
-  // Post-capture is now always manual — the preview stays open until the user
+  // Post-capture is now always manual - the preview stays open until the user
   // taps Save, so they can add tags, a description, or annotate first.
 
   return (
@@ -528,7 +528,7 @@ export function CameraCapture({
                   <div className="absolute inset-y-0 left-2/3 w-px bg-white/30" />
                 </div>
               )}
-              {/* Measure mode overlay — Pro/Team only */}
+              {/* Measure mode overlay - Pro/Team only */}
               {mode === "measure" && canMeasure && (
                 <>
                   <div className="pointer-events-none absolute left-1/2 top-16 z-10 -translate-x-1/2">
@@ -608,7 +608,7 @@ export function CameraCapture({
                   title={
                     torchSupported
                       ? "Flash will fire on capture"
-                      : "Screen flash (iOS) — fires on capture"
+                      : "Screen flash (iOS) - fires on capture"
                   }
                 >
                   {flashOn ? <Zap className="h-4 w-4" /> : <ZapOff className="h-4 w-4" />}
@@ -634,7 +634,7 @@ export function CameraCapture({
             </div>
           )}
 
-          {/* Bottom bar — capture or preview actions */}
+          {/* Bottom bar - capture or preview actions */}
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-4 pt-10">
             {!preview ? (
               <div className="flex flex-col items-center gap-3">
@@ -731,7 +731,7 @@ export function CameraCapture({
                   </div>
                 )}
 
-                {/* Before / After tag selector — only in before-after mode */}
+                {/* Before / After tag selector - only in before-after mode */}
                 {mode === "before-after" && (
                   <div className="flex items-center gap-2 rounded-full bg-black/50 p-1 backdrop-blur">
                     <button
@@ -844,12 +844,12 @@ export function CameraCapture({
                   <p className="text-[10px] text-white/60">
                     {mode === "scan"
                       ? "Scan mode · high-contrast document capture"
-                      : "Tap the shutter — add tags, notes, or annotate before saving"}
+                      : "Tap the shutter - add tags, notes, or annotate before saving"}
                   </p>
                 )}
               </div>
             ) : (
-              // Unified post-capture UI — clean bottom toolbar, tag sheet, prominent mic.
+              // Unified post-capture UI - clean bottom toolbar, tag sheet, prominent mic.
               <div className="mx-auto flex w-full max-w-md flex-col gap-3">
                 <div className="flex items-center justify-around gap-1 rounded-2xl bg-black/60 p-2 ring-1 ring-white/15 backdrop-blur">
                   <ToolbarButton
@@ -950,7 +950,7 @@ export function CameraCapture({
           </SheetHeader>
           <div className="mt-4 flex flex-wrap gap-2">
             {existingTags.length === 0 && (
-              <p className="text-sm text-white/60">No tags yet — add one below.</p>
+              <p className="text-sm text-white/60">No tags yet - add one below.</p>
             )}
             {existingTags.map((t) => {
               const on = selectedTags.includes(t);

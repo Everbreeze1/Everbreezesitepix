@@ -166,7 +166,7 @@ export function CollaboratorsPage() {
                 {members.length} {members.length === 1 ? "member" : "members"}
               </p>
               <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                All projects created by team members are visible here. Collaborate seamlessly —
+                All projects created by team members are visible here. Collaborate seamlessly -
                 every photo, walkthrough, and report stays in sync across the team.
               </p>
             </div>
@@ -179,13 +179,13 @@ export function CollaboratorsPage() {
         <StatCard
           icon={FolderKanban}
           label="Total Projects"
-          value={stats.data?.projects ?? "—"}
+          value={stats.data?.projects ?? "-"}
           loading={stats.isLoading}
         />
         <StatCard
           icon={Images}
           label="Photos Captured"
-          value={stats.data?.photos ?? "—"}
+          value={stats.data?.photos ?? "-"}
           loading={stats.isLoading}
         />
         <StatCard icon={Users} label="Team Members" value={members.length} />
@@ -255,7 +255,7 @@ export function CollaboratorsPage() {
                     </div>
                   </div>
                   <div className="shrink-0 text-right text-xs text-muted-foreground">
-                    {m.lastActivityAt ? relativeTime(m.lastActivityAt) : "—"}
+                    {m.lastActivityAt ? relativeTime(m.lastActivityAt) : "-"}
                   </div>
                 </li>
               );
@@ -293,7 +293,7 @@ export function CollaboratorsPage() {
             </ul>
           ) : (
             <p className="mt-3 text-sm text-muted-foreground">
-              No activity yet — once teammates upload photos, create tasks, or generate reports
+              No activity yet - once teammates upload photos, create tasks, or generate reports
               it'll show up here.
             </p>
           )}

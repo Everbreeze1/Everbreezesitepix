@@ -1,4 +1,4 @@
--- Report Builder MVP — run this against the SitePix Supabase project.
+-- Report Builder MVP - run this against the SitePix Supabase project.
 -- Adds cover-page toggles to project_reports and a sections table.
 
 -- ---------------------------------------------------------------------------

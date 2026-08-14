@@ -10,17 +10,17 @@ export const Route = createFileRoute("/how-it-works")({
   component: HowItWorksPage,
   head: () => ({
     meta: [
-      { title: "How It Works — Everbreeze SitePix" },
+      { title: "How It Works - Everbreeze SitePix" },
       {
         name: "description",
         content:
-          "SitePix fits the way crews already work. Snap a photo on site, let it organize itself, then share a clean gallery or report — no new process to learn.",
+          "SitePix fits the way crews already work. Snap a photo on site, let it organize itself, then share a clean gallery or report - no new process to learn.",
       },
-      { property: "og:title", content: "How It Works — Everbreeze SitePix" },
+      { property: "og:title", content: "How It Works - Everbreeze SitePix" },
       {
         property: "og:description",
         content:
-          "SitePix fits the way crews already work. Snap a photo on site, let it organize itself, then share a clean gallery or report — no new process to learn.",
+          "SitePix fits the way crews already work. Snap a photo on site, let it organize itself, then share a clean gallery or report - no new process to learn.",
       },
       { property: "og:url", content: "https://www.everbreezesitepix.com/how-it-works" },
     ],
@@ -37,7 +37,7 @@ const steps = [
   {
     step: "02",
     title: "It organizes itself",
-    desc: "Every photo lands on the right project automatically — sorted, searchable and mapped without a single tap of admin work.",
+    desc: "Every photo lands on the right project automatically - sorted, searchable and mapped without a single tap of admin work.",
   },
   {
     step: "03",
@@ -55,7 +55,7 @@ const collaborationPoints = [
   {
     icon: ShieldCheck,
     title: "Role-based access",
-    desc: "Give clients a curated gallery, subs their scope, and admins the full picture — with permissions you control.",
+    desc: "Give clients a curated gallery, subs their scope, and admins the full picture - with permissions you control.",
   },
   {
     icon: Bell,
@@ -79,7 +79,7 @@ function HowItWorksPage() {
             Snap it. Sort it. <span className="text-primary">Send it.</span>
           </h1>
           <p className="font-manrope mx-auto mt-6 max-w-xl text-lg leading-[29px] text-muted-foreground">
-            SitePix fits the way crews already work. No new process to learn — just open the app and
+            SitePix fits the way crews already work. No new process to learn - just open the app and
             capture.
           </p>
         </div>
@@ -142,7 +142,7 @@ function HowItWorksPage() {
               </h2>
               <p className="font-manrope mt-6 max-w-lg text-lg leading-[29px] text-muted-foreground">
                 From the superintendent to the office to the client, everyone works from the same
-                up-to-date project — no forwarding, no group chats, no guessing what happened on
+                up-to-date project - no forwarding, no group chats, no guessing what happened on
                 site.
               </p>
               <ul className="mt-10 space-y-6">

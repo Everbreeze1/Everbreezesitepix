@@ -151,12 +151,12 @@ const WALKTHROUGH_MAX_SECONDS: Record<string, number> = { pro: 600, team: 1200 }
 
 /**
  * Ceiling on a recording sent for transcription. The blob is base64-encoded
- * into a JSON body, which inflates it by 4/3, so 12.5 MB arrives as ~16.7 MB —
+ * into a JSON body, which inflates it by 4/3, so 12.5 MB arrives as ~16.7 MB -
  * already close to the model's inline-data request limit. Raising this number
  * does not buy longer transcripts; it just moves the failure to the provider.
  *
  * The audio sidecar is 8 kHz 16-bit mono PCM (~16 KB/s), so it fits for about
- * 13 minutes — enough for a 600s walkthrough but not the 1200s Team cap. Those
+ * 13 minutes - enough for a 600s walkthrough but not the 1200s Team cap. Those
  * get no transcript, and the caller now says so instead of leaving the report
  * mysteriously empty.
  */
@@ -211,7 +211,7 @@ export function ProjectDetailPage() {
   const [signed, setSigned] = useState<Record<string, string>>({});
   // Calendar tab. Its photos are a day at a time and loaded by the calendar
   // itself, so they get their own lightbox rather than being forced into the
-  // Photos tab's list — that one is paged and filtered and would not always
+  // Photos tab's list - that one is paged and filtered and would not always
   // contain the day you just opened.
   const [calendarMonth, setCalendarMonth] = useState<Date>(() => startOfMonth(new Date()));
   const [calendarDay, setCalendarDay] = useState<string | null>(null);
@@ -230,7 +230,7 @@ export function ProjectDetailPage() {
       created_at: string;
       duration_seconds: number;
       status: string;
-      /** 'recorded' | 'summary' — see 20260814000000_walkthrough_source.sql. */
+      /** 'recorded' | 'summary' - see 20260814000000_walkthrough_source.sql. */
       source: string;
       summary_markdown: string | null;
       share_token: string | null;
@@ -243,8 +243,8 @@ export function ProjectDetailPage() {
   >([]);
   /**
    * A walkthrough recording whose upload failed, held so it can be retried or
-   * downloaded. Memory-only and deliberately so — persisting tens of megabytes
-   * to IndexedDB is a bigger change than this needs — which is why the card and
+   * downloaded. Memory-only and deliberately so - persisting tens of megabytes
+   * to IndexedDB is a bigger change than this needs - which is why the card and
    * the unload prompt both push the user to act before navigating away.
    */
   const [pendingVideoUpload, setPendingVideoUpload] = useState<{
@@ -371,7 +371,7 @@ export function ProjectDetailPage() {
   async function generateReport() {
     if (!user) return;
     setCreatingReport(true);
-    const title = `${project?.name ?? "Project"} report — ${new Date().toLocaleDateString()}`;
+    const title = `${project?.name ?? "Project"} report - ${new Date().toLocaleDateString()}`;
     const { data, error } = await (supabase as any)
       .from("project_reports")
       .insert({
@@ -411,7 +411,7 @@ export function ProjectDetailPage() {
       )
       .eq("project_id", projectId)
       .order("created_at", { ascending: false })
-      // Kept in step with listProjectWalkthroughsService's limit — this RLS
+      // Kept in step with listProjectWalkthroughsService's limit - this RLS
       // fallback disagreeing with the server path would be a confusing bug.
       .limit(50);
     if (wtErr) throw wtErr;
@@ -535,8 +535,8 @@ export function ProjectDetailPage() {
      * above) on `phase = "walkthrough"` / a `/walkthroughs/` storage path,
      * which is what put a technician's site photos out of reach: they snapped
      * them on a walkthrough, then couldn't find them in the project's photos or
-     * add them to a report. `phase` survives as a provenance label — the grid
-     * tile below badges it, as does PhotoCarousel — it just no longer hides
+     * add them to a report. `phase` survives as a provenance label - the grid
+     * tile below badges it, as does PhotoCarousel - it just no longer hides
      * anything.
      */
     const photoList = (ph as Photo[]) ?? [];
@@ -544,7 +544,7 @@ export function ProjectDetailPage() {
 
     // The rest of this load is several independent tracks (AI analyses for
     // this project's photos, walkthroughs, videos, secondary feature counts,
-    // trash count) — none depend on each other, so run them concurrently
+    // trash count) - none depend on each other, so run them concurrently
     // instead of paying one round-trip's latency at a time. Each track keeps
     // its own existing error handling; allSettled means one track failing
     // can't wipe out data the others already fetched successfully.
@@ -907,7 +907,7 @@ export function ProjectDetailPage() {
     return sorted;
   }, [photos, phaseFilter, tagFilter, tagLogic, sortOrder]);
 
-  // Live counts for the current lightbox photo — used for toolbar badges.
+  // Live counts for the current lightbox photo - used for toolbar badges.
   const currentLightboxPhotoId =
     lightboxIndex !== null && filteredPhotos[lightboxIndex]
       ? filteredPhotos[lightboxIndex].id
@@ -1005,7 +1005,7 @@ export function ProjectDetailPage() {
        * Count what actually landed. `uploadOne` returns null on failure (and
        * has already shown its own error toast), so the old
        * `${incoming.length} photos added` was a straight lie whenever any file
-       * failed — including when ALL of them did. A field worker who uploads 20
+       * failed - including when ALL of them did. A field worker who uploads 20
        * photos, sees "20 photos added" and drives off site has lost the job
        * evidence and has no way to know.
        */
@@ -1019,7 +1019,7 @@ export function ProjectDetailPage() {
           incoming.length > 1 ? `None of the ${incoming.length} photos could be added` : "Photo could not be added",
         );
       } else if (failed > 0) {
-        toast.warning(`${added} of ${incoming.length} photos added — ${failed} failed`, {
+        toast.warning(`${added} of ${incoming.length} photos added - ${failed} failed`, {
           description: "Check your connection and try the missing ones again.",
         });
       } else {
@@ -1039,11 +1039,11 @@ export function ProjectDetailPage() {
   ) => {
     setUploading(true);
     try {
-      // Camera already drew watermark on the captured image — don't double-stamp,
+      // Camera already drew watermark on the captured image - don't double-stamp,
       // but still persist the phase tag.
       const photoId = await (async () => {
         if (!user) return null;
-        // Camera captures have no EXIF — try device geolocation, fall back to project coords.
+        // Camera captures have no EXIF - try device geolocation, fall back to project coords.
         const geo = await new Promise<{ lat: number | null; lng: number | null }>((resolve) => {
           if (typeof navigator === "undefined" || !navigator.geolocation) {
             resolve({ lat: null, lng: null });
@@ -1093,7 +1093,7 @@ export function ProjectDetailPage() {
           .single();
         if (insErr || !row) {
           toast.error(insErr?.message ?? "Upload failed");
-          // Reclaim the blob — the camera-capture path was missed by the
+          // Reclaim the blob - the camera-capture path was missed by the
           // original orphan fix, which only covered the file picker.
           void supabase.storage.from("site-photos").remove(photoObjectPaths(path, thumbPath));
           return null;
@@ -1156,8 +1156,8 @@ export function ProjectDetailPage() {
       } as any);
       if (insErr) {
         // Reclaim the blob, same as the photo paths. A video the DB never
-        // recorded is unreachable forever — every delete path keys off
-        // `videos.storage_path` — and videos are the largest objects the app
+        // recorded is unreachable forever - every delete path keys off
+        // `videos.storage_path` - and videos are the largest objects the app
         // stores, so a leaked one is the most expensive kind to strand.
         void supabase.storage.from("site-videos").remove([path]);
         throw new Error(insErr.message);
@@ -1190,7 +1190,7 @@ export function ProjectDetailPage() {
     if (walkRef.current?.id) {
       return walkRef.current.id;
     }
-    const title = `${project?.name ?? "Walkthrough"} — ${new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+    const title = `${project?.name ?? "Walkthrough"} - ${new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
     const commitCreated = (created: { id: string; createdAt?: string | null }) => {
       walkRef.current = {
         id: created.id,
@@ -1271,7 +1271,7 @@ export function ProjectDetailPage() {
         toast.error(
           fallbackError?.message ??
             error?.message ??
-            "Could not start walkthrough — check that you're signed in and have access to this project.",
+            "Could not start walkthrough - check that you're signed in and have access to this project.",
         );
       }
       return null;
@@ -1294,7 +1294,7 @@ export function ProjectDetailPage() {
   };
 
   /**
-   * A Summary is a walkthrough with no walk — the AI's notes on photos the user
+   * A Summary is a walkthrough with no walk - the AI's notes on photos the user
    * already has. It lands in this tab, counts toward this tab's badge, and
    * opens at /walkthroughs/$id.
    *
@@ -1463,7 +1463,7 @@ export function ProjectDetailPage() {
   /**
    * Upload a walkthrough recording and point its row at the stored object.
    *
-   * Throws on failure so both callers — the initial save and the manual retry —
+   * Throws on failure so both callers - the initial save and the manual retry -
    * can hold onto the blob. That matters more here than anywhere else in the
    * app: the recording only ever exists in memory, so a swallowed error is an
    * unrecoverable loss of someone's site visit.
@@ -1599,7 +1599,7 @@ export function ProjectDetailPage() {
   }) => {
     if (!user) {
       console.error("[walkthrough] finish called with no user");
-      toast.error("Couldn't save walkthrough — session expired. Please sign in again.");
+      toast.error("Couldn't save walkthrough - session expired. Please sign in again.");
       throw new Error("Missing user");
     }
     const wid = await ensureWalkthroughRow("finish");
@@ -1608,7 +1608,7 @@ export function ProjectDetailPage() {
         wid,
         user: !!user,
       });
-      toast.error("Couldn't save walkthrough — session expired. Please sign in again.");
+      toast.error("Couldn't save walkthrough - session expired. Please sign in again.");
       throw new Error("Missing walkthrough id or user");
     }
     const liveTranscript = (data.liveTranscript ?? "").trim();
@@ -1682,8 +1682,8 @@ export function ProjectDetailPage() {
       if (linkErr) throw linkErr;
       /*
        * Warns rather than throws, unlike the link upsert above. `phase` is a
-       * provenance label now, not a visibility switch — the frames are in the
-       * project's photos either way — so losing it costs a badge, and failing
+       * provenance label now, not a visibility switch - the frames are in the
+       * project's photos either way - so losing it costs a badge, and failing
        * the whole walkthrough over a badge would be the worse trade.
        */
       const { error: phaseErr } = await supabase
@@ -1844,7 +1844,7 @@ export function ProjectDetailPage() {
          */
         setPendingVideoUpload({ walkthroughId: wid, blob, mimeType });
         toast.error(
-          "Walkthrough saved, but the video didn't upload. It's still held in this tab — retry or download it before you leave.",
+          "Walkthrough saved, but the video didn't upload. It's still held in this tab - retry or download it before you leave.",
           {
             // Never auto-dismiss: this is the only prompt standing between the
             // user and a silently discarded recording.
@@ -1894,7 +1894,7 @@ export function ProjectDetailPage() {
     setWalkthroughOpen(false);
     walkRef.current = null;
     toast.success(
-      "Walkthrough saved — report is visible and will keep polishing in the background",
+      "Walkthrough saved - report is visible and will keep polishing in the background",
     );
     void load({ silent: true });
 
@@ -2112,7 +2112,7 @@ export function ProjectDetailPage() {
       return;
     }
 
-    // Open the player immediately with a loading state — never with the
+    // Open the player immediately with a loading state - never with the
     // misleading "still processing" copy.
     setPlayerVideo({
       url: null,
@@ -2202,7 +2202,7 @@ export function ProjectDetailPage() {
     }
   };
 
-  /** User dismissed the recorder without finishing — drop the empty walkthrough
+  /** User dismissed the recorder without finishing - drop the empty walkthrough
    *  so the project list doesn't accumulate ghost "Recording" tiles. */
   const onWalkthroughClose = async () => {
     const wid = walkRef.current?.id;
@@ -2244,7 +2244,7 @@ export function ProjectDetailPage() {
           const startMs = new Date(
             orphanRows[0]?.taken_at ?? orphanRows[0]?.created_at ?? Date.now(),
           ).getTime();
-          // Bail rather than mark the walkthrough ready without its photos —
+          // Bail rather than mark the walkthrough ready without its photos -
           // the summary below is built from these links, so a lost upsert would
           // publish a walkthrough whose photos silently aren't in it.
           const { error: linkErr } = await supabase.from("walkthrough_photos" as any).upsert(
@@ -2295,7 +2295,7 @@ export function ProjectDetailPage() {
         // Retiring the walkthrough is the whole point of this function. Its
         // error used to be discarded while `walkRef.current = null` ran anyway,
         // so a refused update stranded the walkthrough at `recording` forever
-        // and threw away the only handle we had to retry it — reinstating the
+        // and threw away the only handle we had to retry it - reinstating the
         // exact ghost tile this path exists to prevent.
         const { error: readyErr } = await supabase
           .from("walkthroughs" as any)
@@ -2303,7 +2303,7 @@ export function ProjectDetailPage() {
           .eq("id", wid)
           .eq("status", "recording");
         if (readyErr) {
-          toast.error("Couldn't finish that walkthrough — it's still recording");
+          toast.error("Couldn't finish that walkthrough - it's still recording");
           await load();
           return;
         }
@@ -2319,7 +2319,7 @@ export function ProjectDetailPage() {
        * This used to be followed by a branch that hard-deleted every linked
        * photo row and its storage blob. It was already unreachable for the
        * reason just stated, and it contradicted the rule this file now follows
-       * — a photo the user took is theirs, and closing a recorder is not a
+       * - a photo the user took is theirs, and closing a recorder is not a
        * request to destroy it. Removed rather than left as a trap for whoever
        * next adjusts the guard above.
        *
@@ -2357,11 +2357,11 @@ export function ProjectDetailPage() {
 
   // (AI report generation lives in the global sidebar, not this page.)
 
-  // Full-page panel view — replaces the project page when a tab is opened.
+  // Full-page panel view - replaces the project page when a tab is opened.
   // Walkthroughs, Checklists, Documents, Workflows, Tasks and Calendar render
   // inline instead (alongside the hero + tab nav), see below. Anything missing
   // from this list falls through to the full-page branch, which only knows how
-  // to draw Trash — so it would render as an empty page.
+  // to draw Trash - so it would render as an empty page.
   if (
     panel &&
     panel !== "walkthroughs" &&
@@ -2490,7 +2490,7 @@ export function ProjectDetailPage() {
                    * Origin is identity, not a statistic. This used to sit at the
                    * end of the metadata strip below, in 12px at 60% opacity
                    * behind three numeric stats, where it read as a footnote about
-                   * counts and wrapped onto its own line on a narrow viewport —
+                   * counts and wrapped onto its own line on a narrow viewport -
                    * "it's not readily apparent which blueprint has been applied"
                    * was a fair description of it. Renders nothing unless a
                    * blueprint really was applied.
@@ -2529,7 +2529,7 @@ export function ProjectDetailPage() {
             <div className="flex shrink-0 items-center gap-2">
               {/*
                 Generating a summary/log/report is a primary project action, so
-                it lives here rather than only inside the Documents tab — that
+                it lives here rather than only inside the Documents tab - that
                 tab is where finished work is stored, not where you go to make
                 it. Same menu component as Documents, so they can't drift.
               */}
@@ -2545,7 +2545,7 @@ export function ProjectDetailPage() {
               {/*
                 Starter-tier only. Pro/Team generate documents with AI via
                 "Create document", so the hand-built photo report is clutter
-                for them — see canUseManualPhotoReport in use-subscription.
+                for them - see canUseManualPhotoReport in use-subscription.
               */}
               {canUseManualPhotoReport && (
                 <Button
@@ -2666,7 +2666,7 @@ export function ProjectDetailPage() {
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               {/*
-                Summary keeps its original gate — any active plan — so filing it
+                Summary keeps its original gate - any active plan - so filing it
                 here does not take it away from Starter. Recording stays Pro-only
                 via canUseWalkthroughs.
               */}
@@ -2717,7 +2717,7 @@ export function ProjectDetailPage() {
                   </span>{" "}
                   is held in this browser tab and nowhere else.{" "}
                   {isOverUploadLimit(pendingVideoUpload.blob.size)
-                    ? "It is over the storage upload limit, so a retry will probably fail again — download it to keep a copy."
+                    ? "It is over the storage upload limit, so a retry will probably fail again - download it to keep a copy."
                     : "Retry the upload, or download it to keep a copy."}{" "}
                   Leaving this page discards it.
                 </p>
@@ -2884,7 +2884,7 @@ export function ProjectDetailPage() {
           />
         </div>
       )}
-      {/* The same calendar the gallery uses, scoped to this job — one
+      {/* The same calendar the gallery uses, scoped to this job - one
           implementation, so the two can't drift. */}
       {panel === "calendar" && (
         <div className="mt-9">
@@ -2930,7 +2930,7 @@ export function ProjectDetailPage() {
       {panel === "workflows" && (
         <div className="mt-9">
           {/* The Team check used to live only in the tab's click handler, but
-              `panel` comes from the URL — a bookmark or a back-nav rendered the
+              `panel` comes from the URL - a bookmark or a back-nav rendered the
               whole runner for a Starter user, who then hit the RLS policy as an
               unexplained failure. Gate the render, not just the click. */}
           {isTeam ? (
@@ -3262,7 +3262,7 @@ export function ProjectDetailPage() {
                             /*
                              * Walkthrough captures used to be filtered out of
                              * this grid entirely. Now that they belong here,
-                             * they need to be tellable apart — a walk can add
+                             * they need to be tellable apart - a walk can add
                              * dozens of frames at once, and "where did all
                              * these come from" is the next question after
                              * "where did my photos go".
@@ -3365,7 +3365,7 @@ export function ProjectDetailPage() {
             onRefresh={() => void load({ silent: true })}
           />
 
-          {/* Walkthrough Notes — rendered inside the three-dot menu modal below */}
+          {/* Walkthrough Notes - rendered inside the three-dot menu modal below */}
 
           {/* Site videos */}
           {videos.length > 0 && mediaType !== "photos" && (
@@ -3512,13 +3512,13 @@ export function ProjectDetailPage() {
         onFinish={onWalkthroughFinish}
         uploadProgress={videoUploadProgress}
         onContinueInBackground={() => {
-          // The user can safely leave the processing overlay — the upload and
+          // The user can safely leave the processing overlay - the upload and
           // report generation continue in the background. We just close the
           // recorder; they stay on the project page where the walkthrough
           // card will flip from "Generating" to "Ready" via realtime updates.
           setWalkthroughOpen(false);
           toast.message(
-            "Working in the background — your report will appear here when it's ready.",
+            "Working in the background - your report will appear here when it's ready.",
           );
         }}
       />

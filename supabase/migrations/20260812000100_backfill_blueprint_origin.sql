@@ -1,13 +1,13 @@
 -- Reconstruct blueprint origin for projects set up before the ledger existed.
 --
 -- OPT-IN AND MANUAL. This file is NOT idempotent in the usual "re-running
--- changes nothing" sense — it is guarded so a second run inserts nothing, but it
+-- changes nothing" sense - it is guarded so a second run inserts nothing, but it
 -- WRITES INFERRED HISTORY, and an inference is not an observation. Read the
 -- preview in PART 1, satisfy yourself the pairs are right, and only then run
 -- PART 2. Nothing else in the app depends on this having been run.
 --
 -- WHY IT IS POSSIBLE AT ALL: applying a blueprint copies checklists and
--- workflows while recording where each came from —
+-- workflows while recording where each came from -
 -- `project_checklists.template_id` (20260611000428:74) and
 -- `project_workflows.template_id` (20260616050717:128). A blueprint's contents
 -- are `project_template_items(project_template_id, kind, ref_id)`. Joining those
@@ -22,7 +22,7 @@
 --      recorded as 0 even when the blueprint created them. The popover will show
 --      fewer items than actually landed.
 --   2. `created_at` IS THE ARTIFACT'S TIMESTAMP, not the apply's. It is the
---      earliest created_at among the matched rows — close, but not the moment
+--      earliest created_at among the matched rows - close, but not the moment
 --      someone pressed Apply.
 --   3. A DIRECT TEMPLATE APPLY IS INDISTINGUISHABLE FROM A BLUEPRINT APPLY.
 --      `template_id` is also written when a checklist template is applied on its
@@ -36,7 +36,7 @@
 --
 -- Apply via the SitePix Supabase SQL editor. Requires 20260812000000 first.
 
--- === PART 1 — PREVIEW. Run this alone, read it, then decide. ===============
+-- === PART 1 - PREVIEW. Run this alone, read it, then decide. ===============
 
 WITH candidate AS (
   SELECT
@@ -88,12 +88,12 @@ SELECT p.name  AS project,
  ORDER BY c.first_at DESC;
 
 
--- === PART 2 — THE INSERT. Only after reading PART 1. =======================
+-- === PART 2 - THE INSERT. Only after reading PART 1. =======================
 -- Identical CTE. The NOT EXISTS guard makes a second run a no-op and stops this
 -- from ever duplicating a real, observed apply.
 --
 -- To be stricter about false positives, add `AND c.matched_items > 1` to the
--- final WHERE — see limitation 3 in the header.
+-- final WHERE - see limitation 3 in the header.
 
 /*  Uncomment to run.
 

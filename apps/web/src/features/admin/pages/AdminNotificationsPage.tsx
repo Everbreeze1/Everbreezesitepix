@@ -108,7 +108,7 @@ function ComposeCard({ onSent }: { onSent: () => void }) {
                         }}
                         className="block w-full px-3 py-2 text-left text-sm hover:bg-accent"
                       >
-                        {u.fullName ?? "—"} <span className="text-muted-foreground">({u.email})</span>
+                        {u.fullName ?? "-"} <span className="text-muted-foreground">({u.email})</span>
                       </button>
                     ))}
                   </div>

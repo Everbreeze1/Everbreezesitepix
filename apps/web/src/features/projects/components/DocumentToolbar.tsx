@@ -53,7 +53,7 @@ import { sectionHtml, photoRowHtml } from "@/lib/tiptap-photo-slot";
  * what the built-in ones contain. One component now backs both surfaces.
  *
  * Project-only actions (inserting a real project photo, the snippet library,
- * running header/footer) are optional — omit the handler and the control is
+ * running header/footer) are optional - omit the handler and the control is
  * hidden, which is how the template designer drops them without losing the
  * rest of the toolbar.
  */
@@ -116,7 +116,7 @@ function ToolbarButton({
 /**
  * Same hover explanation as ToolbarButton, but for controls that already
  * render their own element (a labelled Button, a dropdown trigger) instead of
- * a bare icon — so it wraps rather than renders the trigger.
+ * a bare icon - so it wraps rather than renders the trigger.
  */
 function ToolbarHint({
   label,
@@ -155,7 +155,7 @@ export function DocumentToolbar({
   onAddFooter,
 }: {
   editor: Editor;
-  /** Insert a real project photo. Omitted in the template designer — a template
+  /** Insert a real project photo. Omitted in the template designer - a template
       has no project to pull photos from; it uses photo *slots* instead. */
   onAddImage?: () => void;
   onOpenSnippets?: () => void;
@@ -379,7 +379,7 @@ export function DocumentToolbar({
           <ImagePlus />
         </ToolbarButton>
       )}
-      {/* One always-present table control — row/column actions enable once the cursor is inside a table, so the toolbar never shifts. */}
+      {/* One always-present table control - row/column actions enable once the cursor is inside a table, so the toolbar never shifts. */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <ToolbarButton label="Table" className={btnCls(inTable)}>
@@ -443,7 +443,7 @@ export function DocumentToolbar({
       )}
 
       <DropdownMenu>
-        {/* Labelled like Snippets — this is the other shortcut hub, and as a
+        {/* Labelled like Snippets - this is the other shortcut hub, and as a
             bare "+" nobody found what was inside it. */}
         <ToolbarHint label="Insert a section, photo row, header or footer">
           <DropdownMenuTrigger asChild>

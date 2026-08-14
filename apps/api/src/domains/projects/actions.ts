@@ -29,7 +29,7 @@ export async function combineProjectsService(
    * EVERY table with `project_id ... REFERENCES public.projects(id) ON DELETE
    * CASCADE` must be listed here.
    *
-   * This is not a "nice to have" list — the merge finishes by DELETEing the
+   * This is not a "nice to have" list - the merge finishes by DELETEing the
    * source project, so anything reachable by that cascade and *not* moved first
    * is destroyed. site logs, documents, document folders, pages and blueprint
    * applications were all missing, while the confirm dialog told the user their
@@ -60,7 +60,7 @@ export async function combineProjectsService(
   /*
    * Several tables above exist in the migration folder but not in production
    * (`project_label_events` is one), and skipping those is intended. The guard
-   * itself now lives in lib/postgrest.ts — the blueprint-origin read needs the
+   * itself now lives in lib/postgrest.ts - the blueprint-origin read needs the
    * identical test, and this is the check that was silently wrong once already.
    */
 

@@ -13,14 +13,14 @@ import { RecordDocument } from "./RecordDocument";
  * The shared-link view of a checklist or workflow.
  *
  * One component for both kinds because the payload is one shape and the
- * document renderer is one component — the two routes differ only in which RPC
+ * document renderer is one component - the two routes differ only in which RPC
  * resolves the token.
  *
  * No "Download PDF" button here, deliberately. Reports and documents have
  * server-rendered pdf-lib exports because they are page-composed artefacts whose
  * layout the server owns. A field record is a single flowing sheet, and the
  * browser's own Print → Save as PDF produces it from the same CSS the recipient
- * sees on screen — so there is one layout to keep correct instead of two that
+ * sees on screen - so there is one layout to keep correct instead of two that
  * can disagree about what was checked.
  */
 export function PublicRecordView({
@@ -95,7 +95,7 @@ export function PublicRecordView({
             Print / Save as PDF
           </Button>
         </div>
-        {/* White paper regardless of the visitor's theme — the document owns its
+        {/* White paper regardless of the visitor's theme - the document owns its
             own palette, so a dark-mode visitor still sees (and prints) a sheet. */}
         <div className="rounded-sm border border-border bg-white p-8 shadow-sm sm:p-12 print:border-none print:p-0 print:shadow-none">
           <RecordDocument

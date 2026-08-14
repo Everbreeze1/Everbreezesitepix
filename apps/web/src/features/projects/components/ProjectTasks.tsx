@@ -254,7 +254,7 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
    * Who may close a task here.
    *
    * Read out of the roster this panel already loads rather than through
-   * `useTeamMembers`, which would be a second fetch of the same rows — but the
+   * `useTeamMembers`, which would be a second fetch of the same rows - but the
    * rule itself comes from lib/assignment.ts, so a task, a checklist and a
    * workflow answer the question identically.
    */
@@ -323,7 +323,7 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
     }
     if (next === "done" && t.assigned_by && t.assigned_by !== user?.id) {
       toast.success(
-        `Task completed — ${memberName(memberById.get(t.assigned_by))} has been notified`,
+        `Task completed - ${memberName(memberById.get(t.assigned_by))} has been notified`,
       );
     }
   };
@@ -401,8 +401,8 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
                 e.stopPropagation();
                 void cycleStatus(t);
               }}
-              aria-label={`Status: ${STATUS_META[t.status].label} — click to advance`}
-              title={`Status: ${STATUS_META[t.status].label} — click to advance`}
+              aria-label={`Status: ${STATUS_META[t.status].label} - click to advance`}
+              title={`Status: ${STATUS_META[t.status].label} - click to advance`}
               className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[0.8px] transition ${
                 done
                   ? "border-[#34D399] bg-[#34D399] text-sidebar"
@@ -607,7 +607,7 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
 
       {/*
         Type-and-Enter beats a modal for a punch-list item. The full dialog is
-        still one click away for priority/assignee/due-date — this just removes
+        still one click away for priority/assignee/due-date - this just removes
         the modal from the 90% case, matching the inline add that already
         exists in the photo lightbox's task panel.
       */}
@@ -793,7 +793,7 @@ function TaskDialog({
         ? (selectedMember?.email ?? null)
         : assigneeEmail.trim() || null,
       /*
-       * Who handed it over — the half of the relationship the schema never
+       * Who handed it over - the half of the relationship the schema never
        * recorded, and the reason completion can now report back to a person
        * instead of guessing at `created_by`. Reassigning to someone new makes
        * the current user the assignor; leaving the same person in place keeps
@@ -824,7 +824,7 @@ function TaskDialog({
         String(error.message).includes("does not exist") ||
         String(error.message).includes("assignee_user_id")
       ) {
-        toast.error("Tasks table needs updating — run the latest SQL migration.");
+        toast.error("Tasks table needs updating - run the latest SQL migration.");
       } else {
         toast.error(error.message);
       }
@@ -875,7 +875,7 @@ function TaskDialog({
                   <SelectItem value="open">Open</SelectItem>
                   <SelectItem value="in_progress">In progress</SelectItem>
                   {/* Closing someone else's task is refused by the database, so
-                      it is not offered here either — the alternative is a save
+                      it is not offered here either - the alternative is a save
                       that fails after the dialog has collected every other
                       edit. */}
                   <SelectItem value="done" disabled={!canComplete && status !== "done"}>

@@ -33,7 +33,7 @@ export function ProjectTrash({ projectId, onChanged }: Props) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const confirm = useConfirm();
-  // Keeps the sidebar's Trash badge honest — see ProjectTrashPage.
+  // Keeps the sidebar's Trash badge honest - see ProjectTrashPage.
   const queryClient = useQueryClient();
   const refreshTrashBadge = useCallback(
     () => void queryClient.invalidateQueries({ queryKey: ["trash-counts"] }),

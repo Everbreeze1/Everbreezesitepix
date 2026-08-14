@@ -16,7 +16,7 @@ CREATE INDEX IF NOT EXISTS team_review_links_team_id_idx ON public.team_review_l
 
 -- Team members can see their own team's links (Settings UI); only
 -- owner/admin can write. Public reads for the share page go through the
--- service-role key (apps/api), not client RLS — the report share token
+-- service-role key (apps/api), not client RLS - the report share token
 -- itself is the authorization there, not team membership.
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.team_review_links TO authenticated;
 GRANT ALL ON public.team_review_links TO service_role;

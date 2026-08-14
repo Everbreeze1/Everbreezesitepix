@@ -6,8 +6,8 @@
  * Those templates could only ever be authored in SQL, so a user building their
  * own page had no way to lay out a section + photo row by hand. These helpers
  * emit byte-compatible markup so a slot inserted from the editor is
- * indistinguishable from a slot that came out of a seeded template — same SVG,
- * same width/height attrs — and therefore flows through the identical
+ * indistinguishable from a slot that came out of a seeded template - same SVG,
+ * same width/height attrs - and therefore flows through the identical
  * click-to-fill path in ProjectPageEditorPage (`isPhotoSlot` → picker →
  * `replaceImageAt`, which swaps the slot node for the photo and carries the
  * slot's dimensions across).
@@ -45,7 +45,7 @@ function slotImg(index: number, width: string): string {
  * A row of photo slots numbered from `startIndex`.
  *
  * Four-up renders as a 2x2 grid (two stacked 2-up paragraphs) rather than one
- * four-wide row — the same choice template 004 makes, so each photo stays a
+ * four-wide row - the same choice template 004 makes, so each photo stays a
  * readable size instead of being squeezed to a quarter of the page.
  */
 export function photoRowHtml(count: 1 | 2 | 3 | 4, startIndex: number): string {
@@ -61,7 +61,7 @@ export function photoRowHtml(count: 1 | 2 | 3 | 4, startIndex: number): string {
 }
 
 /**
- * A numbered report section: heading, italic summary line, and a body prompt —
+ * A numbered report section: heading, italic summary line, and a body prompt -
  * mirroring the structure of the seeded report templates. `photos` optionally
  * appends a slot row beneath it.
  */

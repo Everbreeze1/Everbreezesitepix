@@ -1,6 +1,6 @@
 -- One open invite per address per team.
 --
--- `team_invites` has no unique constraint on (team_id, email) — the only UNIQUE
+-- `team_invites` has no unique constraint on (team_id, email) - the only UNIQUE
 -- is `token` (20260612191404_teams.sql:58, 20260612234611_team_invites_fix.sql:43).
 -- The invite dialog's Enter handler was not guarded by `isPending`, and rpcOp
 -- mints a fresh Idempotency-Key per call, so two rapid submits both cleared the
@@ -18,19 +18,19 @@
 -- index that a case-sensitive `.eq()` would silently fail to use.
 --
 -- Creates no table, so the anon-revoke rule for migrations >= 20260811 does not
--- apply here — if a future edit adds one, it must REVOKE anon.
+-- apply here - if a future edit adds one, it must REVOKE anon.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent — safe to re-run.
+-- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run.
 
 SET lock_timeout = '5s';
 
--- === PART 1 — normalise, so the index and the .eq() lookup agree ============
+-- === PART 1 - normalise, so the index and the .eq() lookup agree ============
 
 UPDATE public.team_invites
    SET email = lower(btrim(email))
  WHERE email IS DISTINCT FROM lower(btrim(email));
 
--- === PART 2 — dedupe, or PART 3 cannot create the index ====================
+-- === PART 2 - dedupe, or PART 3 cannot create the index ====================
 -- Keep the newest open invite per (team_id, email). The older ones are what the
 -- race produced; they are indistinguishable to the invitee, and only one token
 -- can be redeemed anyway.
@@ -43,7 +43,7 @@ DELETE FROM public.team_invites t
    AND keep.email   = t.email
    AND (keep.created_at, keep.id) > (t.created_at, t.id);
 
--- === PART 3 — the constraint ===============================================
+-- === PART 3 - the constraint ===============================================
 -- Partial on purpose: an ACCEPTED invite is history, and must be allowed to
 -- coexist with a later re-invite of the same address (someone who left and came
 -- back).

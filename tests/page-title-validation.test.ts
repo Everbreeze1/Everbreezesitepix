@@ -8,7 +8,7 @@ import { validationMessage } from "../apps/api/src/lib/errors";
 
 /*
  * Renaming a document on a phone means tapping the title box, clearing it, then
- * waiting for the on-screen keyboard — the field sits empty for well over the
+ * waiting for the on-screen keyboard - the field sits empty for well over the
  * editor's 800ms autosave debounce. The editor used to send that empty string
  * as `title`, which failed `min(1)` and rejected the entire write, so the body
  * typed in the same window was dropped too and the user got the raw Zod issue
@@ -19,7 +19,7 @@ import { validationMessage } from "../apps/api/src/lib/errors";
  * everything else while a rename is in progress.
  */
 describe("project page title validation", () => {
-  it("rejects a blank title — the client must omit it, not send ''", () => {
+  it("rejects a blank title - the client must omit it, not send ''", () => {
     const res = updateProjectPageInputSchema.safeParse({
       pageId: "11111111-1111-4111-8111-111111111111",
       title: "",
@@ -69,7 +69,7 @@ describe("project page title validation", () => {
  * `[ { "code": "too_small", "minimum": 1, … "path": [ "title" ] } ]` in front of
  * a user standing on a job site.
  */
-describe("validationMessage — no raw Zod JSON reaches a toast", () => {
+describe("validationMessage - no raw Zod JSON reaches a toast", () => {
   function errorFor(input: unknown): ZodError {
     const res = updateProjectPageInputSchema.safeParse(input);
     if (res.success) throw new Error("expected the input to fail validation");

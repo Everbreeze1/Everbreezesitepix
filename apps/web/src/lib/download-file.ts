@@ -1,6 +1,6 @@
 /**
  * Triggers a browser download for an in-memory blob. Used to hand back a
- * recording whose upload failed — that blob exists nowhere else, so offering it
+ * recording whose upload failed - that blob exists nowhere else, so offering it
  * as a file is the only thing standing between a failed PUT and a lost
  * walkthrough.
  */

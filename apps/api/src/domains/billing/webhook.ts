@@ -23,7 +23,7 @@ const DUNNING_STATUSES = new Set(["past_due", "unpaid", "incomplete"]);
  * reaches the owner.
  */
 const DUNNING_NOTICE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
-/** Trial-ending notice fires once, 3 days out — one per trial is plenty. */
+/** Trial-ending notice fires once, 3 days out - one per trial is plenty. */
 const TRIAL_NOTICE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function updateTeamByLookup(lookup: TeamLookup, patch: Record<string, unknown>) {
@@ -51,7 +51,7 @@ async function findTeam(lookup: TeamLookup): Promise<BillingTeam | null> {
 
 /**
  * Resolve the team an invoice belongs to. Prefer the subscription id, but fall
- * back to the customer — `teams.stripe_subscription_id` is only written by
+ * back to the customer - `teams.stripe_subscription_id` is only written by
  * checkout.session.completed, so a subscription created any other way (Stripe
  * dashboard, a plan swapped in the billing portal) may not be on the row yet.
  * Both columns carry unique indexes, so either lookup is single-valued.
@@ -86,8 +86,8 @@ function formatAmount(amountCents: number, currency: string) {
  *
  * Stripe redelivers on any non-2xx and can deliver the same event twice, so
  * every handler here must be safe to run repeatedly. `notifications` has no
- * unique key to lean on and its `entity_id` is a uuid column — a Stripe id
- * cannot go in it — so the dedupe is a lookback on (recipient, type, title).
+ * unique key to lean on and its `entity_id` is a uuid column - a Stripe id
+ * cannot go in it - so the dedupe is a lookback on (recipient, type, title).
  * `admin_announcement` is likewise the only type the table's CHECK constraint
  * allows for a message that isn't hung off a task/checklist/comment/invite.
  */
@@ -118,7 +118,7 @@ async function notifyOwnerOnce(team: BillingTeam, title: string, body: string, w
  * Seats the customer actually bought, clamped to the plan's hard ceiling.
  *
  * Returns null when Stripe reports no usable quantity, which the caller treats
- * as "leave the existing limit alone" — guessing a seat count is worse than
+ * as "leave the existing limit alone" - guessing a seat count is worse than
  * keeping the previous one.
  */
 function purchasedSeats(subscription: Stripe.Subscription, plan: string | null): number | null {
@@ -134,7 +134,7 @@ function purchasedSeats(subscription: Stripe.Subscription, plan: string | null):
  * MUST be its own statement, separate from the `plan` write. The
  * `teams_sync_member_limit_trg` trigger (20260612193150_teams_plan.sql) is
  * `BEFORE INSERT OR UPDATE OF plan` and unconditionally overwrites
- * `NEW.member_limit` with the plan's ceiling — so setting both columns in one
+ * `NEW.member_limit` with the plan's ceiling - so setting both columns in one
  * UPDATE silently discards the quantity every time. Updating `member_limit`
  * alone does not name `plan`, so the trigger does not fire and this sticks.
  *
@@ -172,7 +172,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   /*
    * The seat count has to come from the subscription, and the checkout session
-   * does not carry line-item quantities — so fetch it. Best effort: the plan is
+   * does not carry line-item quantities - so fetch it. Best effort: the plan is
    * already active by this point, and failing the whole webhook (which makes
    * Stripe retry, re-running the activation above) is worse than falling back to
    * the plan ceiling. `customer.subscription.updated` fires for this
@@ -198,7 +198,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
   const lookup: TeamLookup = { column: "stripe_subscription_id", value: subscription.id };
   await updateTeamByLookup(lookup, patch);
-  // After the plan write, never before — writing `plan` re-fires the trigger
+  // After the plan write, never before - writing `plan` re-fires the trigger
   // that resets member_limit to the plan ceiling. This is also the path that
   // handles a customer adding or removing seats mid-cycle.
   await syncPurchasedSeats(lookup, purchasedSeats(subscription, plan));
@@ -212,7 +212,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
 }
 
 /*
- * Dunning — a renewal charge failed.
+ * Dunning - a renewal charge failed.
  *
  * Deliberately does NOT touch `plan`. Stripe keeps retrying the card on its
  * own schedule for the whole retry window and only fires
@@ -242,10 +242,10 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     : null;
   await notifyOwnerOnce(
     team,
-    "Payment failed — update your card",
+    "Payment failed - update your card",
     `We couldn't charge ${formatAmount(invoice.amount_due, invoice.currency)} for your ${team.plan} plan. ` +
       (retryAt
-        ? `We'll try again on ${retryAt} — update your payment method in Settings to avoid losing access.`
+        ? `We'll try again on ${retryAt} - update your payment method in Settings to avoid losing access.`
         : `Update your payment method in Settings to keep your team's access.`),
     DUNNING_NOTICE_WINDOW_MS,
   );
@@ -267,8 +267,8 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
   await updateTeamByLookup(lookup, { subscription_status: "active" });
   await notifyOwnerOnce(
     team,
-    "Payment received — your subscription is active",
-    `Thanks — ${formatAmount(invoice.amount_paid, invoice.currency)} was received and your ${team.plan} plan is active again.`,
+    "Payment received - your subscription is active",
+    `Thanks - ${formatAmount(invoice.amount_paid, invoice.currency)} was received and your ${team.plan} plan is active again.`,
     DUNNING_NOTICE_WINDOW_MS,
   );
 }

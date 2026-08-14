@@ -25,7 +25,7 @@ interface InviteEmailProps {
    * copy degrades to the generic wording.
    */
   teamName?: string;
-  /** Who sent it — a name if we have one, otherwise their email. */
+  /** Who sent it - a name if we have one, otherwise their email. */
   inviterName?: string;
   expiresInDays?: number;
 }
@@ -36,7 +36,7 @@ interface InviteEmailProps {
  * This started out as a branded card: navy banner with a wordmark, uppercase
  * accent eyebrow, 26px display heading, saturated blue CTA, tagline footer,
  * floating on a tinted canvas. Every one of those is a marketing-template
- * signal, and Gmail's tab classifier reads rendered structure — so the first
+ * signal, and Gmail's tab classifier reads rendered structure - so the first
  * mail a new user ever got from us landed in **Promotions**, next to Wayfair
  * and The Home Depot, where nobody looks for an invitation.
  *
@@ -45,7 +45,7 @@ interface InviteEmailProps {
  * aligned, one sentence of plain copy, a dark neutral button rather than a
  * bright brand-colour CTA, and no product pitch or tagline in the footer.
  *
- * Tab placement is a per-recipient ML guess, never a guarantee — this removes
+ * Tab placement is a per-recipient ML guess, never a guarantee - this removes
  * the signals we control, it does not "set" the tab. Keep that in mind before
  * adding a hero image, a logo band, a second CTA, or feature-benefit copy here:
  * each one buys back a bit of the Promotions risk.
@@ -114,7 +114,7 @@ export const InviteEmail = ({
           <Hr style={hr} />
 
           <Text style={footer}>
-            If you weren't expecting this invitation you can ignore this email — nothing will be
+            If you weren't expecting this invitation you can ignore this email - nothing will be
             created for you.{" "}
             <Link href={siteUrl} style={footerLink}>
               {siteName}
@@ -128,7 +128,7 @@ export const InviteEmail = ({
 
 export default InviteEmail;
 
-/* Brand tokens mirrored from apps/web/src/styles.css — --sidebar #101929.
+/* Brand tokens mirrored from apps/web/src/styles.css - --sidebar #101929.
    Email needs literal hex; there are no CSS variables.
 
    --sidebar-ring #2584f4 is deliberately absent from the button below: a large
@@ -184,7 +184,7 @@ const fallbackUrl = {
   margin: "0 0 20px",
   wordBreak: "break-all" as const,
 };
-/* Underlined and a muted blue — a link that looks like a link, not like the
+/* Underlined and a muted blue - a link that looks like a link, not like the
    accent-coloured "click here" of a campaign. */
 const fallbackLink = { color: "#1f5fa8", textDecoration: "underline" };
 const meta = {

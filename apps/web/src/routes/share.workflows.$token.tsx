@@ -4,7 +4,7 @@ import { PublicRecordView } from "@/features/projects/components/PublicRecordVie
 export const Route = createFileRoute("/share/workflows/$token")({
   head: () => ({
     meta: [
-      { title: "Shared workflow — SitePix" },
+      { title: "Shared workflow - SitePix" },
       { name: "description", content: "A workflow record shared from SitePix." },
       { name: "robots", content: "noindex,nofollow" },
     ],

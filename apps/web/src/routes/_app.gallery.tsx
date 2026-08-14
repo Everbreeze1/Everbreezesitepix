@@ -9,7 +9,7 @@ export type GallerySearch = {
 };
 
 export const Route = createFileRoute("/_app/gallery")({
-  head: () => ({ meta: [{ title: "Gallery — SitePix" }] }),
+  head: () => ({ meta: [{ title: "Gallery - SitePix" }] }),
   validateSearch: (s: Record<string, unknown>): GallerySearch => ({
     project: typeof s.project === "string" ? s.project : undefined,
     photo: typeof s.photo === "string" ? s.photo : undefined,

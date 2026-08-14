@@ -88,14 +88,14 @@ export async function purgePhotosService(
   data: z.infer<typeof purgePhotosInputSchema>,
 ) {
   // Chunked for the same reason as restore. RLS still scopes both statements to
-  // what the caller may touch — this runs on ctx.supabase, not the service role.
+  // what the caller may touch - this runs on ctx.supabase, not the service role.
   const rows = await selectIn<{ id: string; storage_path: string; thumb_path: string | null }>(
     data.photoIds,
     (idChunk) =>
       (ctx.supabase as any).from("photos").select("id, storage_path, thumb_path").in("id", idChunk),
     "purge photos lookup",
   );
-  // Originals and their stored thumbnails — a thumbnail left behind is
+  // Originals and their stored thumbnails - a thumbnail left behind is
   // unreachable once its row is gone, same as an orphaned original.
   const paths = allPhotoObjectPaths(rows);
   const ids = rows.map((r) => r.id);
@@ -205,14 +205,14 @@ export async function purgeProjectService(
   /*
    * Delete the children explicitly instead of trusting ON DELETE CASCADE.
    *
-   * `photos`, `videos` and `ai_analyses` predate the migrations folder — nothing
-   * in supabase/migrations creates them — and in this database they carry no
+   * `photos`, `videos` and `ai_analyses` predate the migrations folder - nothing
+   * in supabase/migrations creates them - and in this database they carry no
    * foreign key to `projects`. So the project row went away, the cascade never
    * ran, and their rows survived with their blobs already deleted: permanent
    * dead tiles in the Gallery that no UI can remove, because the project they
    * point at no longer exists.
    *
-   * Doing this explicitly is correct whether or not the FK is there — with a
+   * Doing this explicitly is correct whether or not the FK is there - with a
    * cascade it is a harmless no-op that runs microseconds earlier.
    *
    * Videos were worse than photos: their blobs were never removed at all, so
@@ -234,7 +234,7 @@ export async function purgeProjectService(
         .catch(() => {});
     }
   };
-  // Photos carry a second object each — their stored thumbnail.
+  // Photos carry a second object each - their stored thumbnail.
   await removeAll("site-photos", allPhotoObjectPaths(photos ?? []));
   await removeAll(
     "site-videos",

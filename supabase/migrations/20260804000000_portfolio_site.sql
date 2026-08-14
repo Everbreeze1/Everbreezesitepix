@@ -6,7 +6,7 @@
 --  It's like a mini site that should be created."
 --
 -- That is an information-architecture gap, not a styling one. A showcase today
--- is one long document delivered by a raw token URL — it has a beginning and an
+-- is one long document delivered by a raw token URL - it has a beginning and an
 -- end, no front door, no way to move between projects, and it is noindex. A site
 -- has a home page, rooms you can walk between, and a way back.
 --
@@ -32,7 +32,7 @@
 -- AccessExclusiveLock, the SQL editor runs the whole script as ONE transaction,
 -- and the live app reads these tables in the opposite order. Close any open
 -- SitePix tabs, then run the PARTS BELOW ONE AT A TIME. Everything is
--- idempotent, so re-running any part — or the whole file — is safe.
+-- idempotent, so re-running any part - or the whole file - is safe.
 --
 -- Apply via the SitePix Supabase SQL editor (or `supabase db push`).
 -- ---------------------------------------------------------------------------
@@ -40,8 +40,8 @@
 SET lock_timeout = '5s';
 
 
--- === PART 1 — the portfolios table =========================================
--- Minimal CREATE followed by ADD COLUMN IF NOT EXISTS — the same shape the
+-- === PART 1 - the portfolios table =========================================
+-- Minimal CREATE followed by ADD COLUMN IF NOT EXISTS - the same shape the
 -- issue_reports migration uses. This is NOT stylistic:
 --
 --   CREATE TABLE IF NOT EXISTS is a no-op on a table that already exists.
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS public.portfolios (
   -- portfolio" a safe upsert rather than a read-then-insert race.
   team_id       uuid NOT NULL UNIQUE REFERENCES public.teams(id) ON DELETE CASCADE,
   -- The public URL: /p/<slug>. Globally unique, lowercase, hyphenated. In the
-  -- CREATE rather than below because a portfolio without one is unroutable —
+  -- CREATE rather than below because a portfolio without one is unroutable -
   -- there is no sane "add it later" path for it.
   slug          text NOT NULL UNIQUE,
   created_at    timestamptz NOT NULL DEFAULT now(),
@@ -64,14 +64,14 @@ CREATE TABLE IF NOT EXISTS public.portfolios (
 );
 
 ALTER TABLE public.portfolios
-  -- Nullable here, and SET NULL in the repair block below — deliberately unlike
+  -- Nullable here, and SET NULL in the repair block below - deliberately unlike
   -- showcases.created_by. A showcase belongs to whoever built it, but the
   -- portfolio is the *company's* public website: cascading would delete a live
   -- marketing site (and free its slug for anyone to claim) the day the employee
   -- who first opened the page leaves. Attribution only; nothing reads it.
   ADD COLUMN IF NOT EXISTS created_by      uuid,
 
-  -- Branding. Seeded from the owner's profile on first create, but editable —
+  -- Branding. Seeded from the owner's profile on first create, but editable -
   -- the marketing name on a portfolio is often not the legal entity name.
   ADD COLUMN IF NOT EXISTS business_name   text,
   ADD COLUMN IF NOT EXISTS logo_url        text,
@@ -106,7 +106,7 @@ ALTER TABLE public.portfolios
   -- Embeds are keyed separately from the slug so the contractor can rotate the
   -- widget key (breaking third-party embeds) without changing their site URL,
   -- and so a scraped embed key never reveals the admin surface. UNIQUE lives in
-  -- the index below — a column-level UNIQUE cannot be re-run idempotently here.
+  -- the index below - a column-level UNIQUE cannot be re-run idempotently here.
   ADD COLUMN IF NOT EXISTS embed_key       uuid NOT NULL DEFAULT gen_random_uuid(),
 
   ADD COLUMN IF NOT EXISTS seo_title       text,
@@ -154,7 +154,7 @@ BEGIN
 END $$;
 
 -- slug and embed_key are both UNIQUE, and a UNIQUE constraint is already backed
--- by an index — so the plain indexes an earlier cut created were pure
+-- by an index - so the plain indexes an earlier cut created were pure
 -- duplication. Dropped rather than left to cost every write forever.
 DROP INDEX IF EXISTS public.portfolios_slug_idx;
 DROP INDEX IF EXISTS public.portfolios_embed_key_idx;
@@ -173,7 +173,7 @@ ALTER TABLE public.portfolios
   );
 
 
--- === PART 2 — site metadata on showcases ===================================
+-- === PART 2 - site metadata on showcases ===================================
 -- This is the statement most likely to deadlock, because showcases is read on
 -- every list-page load. Run it on its own if the whole file keeps failing.
 ALTER TABLE public.showcases
@@ -196,13 +196,13 @@ ALTER TABLE public.showcases
   ADD COLUMN IF NOT EXISTS position      int NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS completed_on  date;
 
--- Slugs are unique per team, not globally — two roofers may both have a
+-- Slugs are unique per team, not globally - two roofers may both have a
 -- "smith-residence". Partial so the many pre-existing NULL slugs don't collide.
 CREATE UNIQUE INDEX IF NOT EXISTS showcases_team_slug_idx
   ON public.showcases(team_id, slug) WHERE slug IS NOT NULL;
 
 -- Drives the site's ordered grid. Key order mirrors listShowcasesService and
--- compareCardRows exactly — `featured` is deliberately NOT in here. It used to
+-- compareCardRows exactly - `featured` is deliberately NOT in here. It used to
 -- lead the sort, which fought drag-to-reorder (a card dropped above a featured
 -- one snapped back on the next read), so ordering is now `position` alone and
 -- `featured` is just a badge. An index that disagrees with the query can't
@@ -212,7 +212,7 @@ CREATE INDEX IF NOT EXISTS showcases_site_order_idx
   ON public.showcases(team_id, on_site, position, created_at DESC);
 
 
--- === PART 3 — backfill slugs for existing showcases ========================
+-- === PART 3 - backfill slugs for existing showcases ========================
 -- Without this, every showcase created before today is unreachable on the site
 -- (the project route matches on slug).
 --
@@ -220,7 +220,7 @@ CREATE INDEX IF NOT EXISTS showcases_site_order_idx
 -- for a reason that a set-based version gets wrong: the de-duplication has to
 -- consider slugs that ALREADY exist, not just the ones being generated in this
 -- pass. PART 2 creates the UNIQUE index before this runs, and the app assigns
--- slugs to new showcases at creation — so if anyone creates a showcase between
+-- slugs to new showcases at creation - so if anyone creates a showcase between
 -- PART 2 and PART 3 (entirely possible; the app is live), a window function
 -- that only sees `slug IS NULL` rows will happily generate a duplicate and take
 -- the whole migration down with a 23505.
@@ -282,7 +282,7 @@ END $$;
 -- --- 5f: backfill map pins from the projects the work came from ---
 -- Showcases built before createShowcaseFromProject denormalised location have
 -- NULL city/state/lat/lng, so they never get a map pin and never count toward
--- "areas served" — the project map silently renders as nothing.
+-- "areas served" - the project map silently renders as nothing.
 --
 -- The coordinates already exist on the project (geocoded when its address was
 -- entered), so this copies them across the same way 5c backfills slugs.
@@ -307,7 +307,7 @@ WHERE p.showcase_id = s.id
   AND (s.latitude IS NULL OR s.longitude IS NULL OR s.city IS NULL OR s.state IS NULL);
 
 
--- === PART 4 — updated_at trigger ===========================================
+-- === PART 4 - updated_at trigger ===========================================
 -- Reuses the function the showcases table already installed.
 DROP TRIGGER IF EXISTS portfolios_updated_at_trg ON public.portfolios;
 CREATE TRIGGER portfolios_updated_at_trg
@@ -315,7 +315,7 @@ CREATE TRIGGER portfolios_updated_at_trg
   FOR EACH ROW EXECUTE FUNCTION public.showcases_set_updated_at();
 
 
--- === PART 5 — grants and row-level security ================================
+-- === PART 5 - grants and row-level security ================================
 -- Cheap locks only; safe to run any time.
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.portfolios TO authenticated;
 GRANT ALL ON public.portfolios TO service_role;
@@ -324,7 +324,7 @@ ALTER TABLE public.portfolios ENABLE ROW LEVEL SECURITY;
 
 -- Note there is deliberately NO anon policy. The public site is served by the
 -- service-role client in getPublicPortfolioService, exactly like the existing
--- public showcase/report/page reads — that keeps the "is it published?" check
+-- public showcase/report/page reads - that keeps the "is it published?" check
 -- in one auditable place instead of spread across RLS predicates.
 DROP POLICY IF EXISTS "Team members view their portfolio" ON public.portfolios;
 CREATE POLICY "Team members view their portfolio" ON public.portfolios
@@ -335,7 +335,7 @@ CREATE POLICY "Team members view their portfolio" ON public.portfolios
     )
   );
 
--- The portfolio is the company's public face, so writes are owner/admin only —
+-- The portfolio is the company's public face, so writes are owner/admin only -
 -- stricter than showcases, where any member may edit one they created.
 DROP POLICY IF EXISTS "Owners and admins manage the portfolio" ON public.portfolios;
 CREATE POLICY "Owners and admins manage the portfolio" ON public.portfolios

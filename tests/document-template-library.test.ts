@@ -7,7 +7,7 @@ import { bracketsToFillFields } from "../apps/api/src/domains/projects/pages";
 /*
  * The built-in template library is authored in SQL and never type-checked by
  * anything. A template only becomes wrong at the moment a tech applies it on a
- * roof — by which point the damage is a document handed to a customer with
+ * roof - by which point the damage is a document handed to a customer with
  * `{{client_name}}` printed in it, or a checklist with no tick boxes.
  *
  * These parse the seed migrations and put every template through the exact code
@@ -27,7 +27,7 @@ interface SeededTemplate {
   html: string;
 }
 
-/** SQL string literal — `''` is an escaped quote, not a terminator. */
+/** SQL string literal - `''` is an escaped quote, not a terminator. */
 function unquote(raw: string): string {
   return raw.replace(/''/g, "'");
 }
@@ -64,7 +64,7 @@ const asCreated = (html: string) => bracketsToFillFields(sanitizePageHtml(html))
 
 const count = (html: string, needle: string) => html.split(needle).length - 1;
 
-describe("the built-in template library — what the seed migrations contain", () => {
+describe("the built-in template library - what the seed migrations contain", () => {
   it("parses (guards the parser these tests depend on)", () => {
     expect(SEEDED.length).toBeGreaterThanOrEqual(21);
   });
@@ -83,7 +83,7 @@ describe("the built-in template library — what the seed migrations contain", (
   });
 
   it("uses one slug per template", () => {
-    // ON CONFLICT (slug) DO UPDATE — two rows sharing a slug means the second
+    // ON CONFLICT (slug) DO UPDATE - two rows sharing a slug means the second
     // silently overwrites the first and one template just never exists.
     const slugs = SEEDED.map((t) => t.slug);
     expect(slugs.length).toBe(new Set(slugs).size);
@@ -100,8 +100,8 @@ describe("the built-in template library — what the seed migrations contain", (
 
   it("puts every category in the picker's trade order", () => {
     /*
-     * A category the dialog does not know still renders — it sorts after the
-     * listed ones — but a trade landing below "Insurance & Adjusting" is
+     * A category the dialog does not know still renders - it sorts after the
+     * listed ones - but a trade landing below "Insurance & Adjusting" is
      * exactly the scannability problem the sections were built to fix.
      */
     const dialog = readFileSync(
@@ -109,7 +109,7 @@ describe("the built-in template library — what the seed migrations contain", (
       "utf8",
     );
     const order = /const CATEGORY_ORDER = \[([\s\S]*?)\]/.exec(dialog);
-    expect(order, "CATEGORY_ORDER not found — did the dialog change?").toBeTruthy();
+    expect(order, "CATEGORY_ORDER not found - did the dialog change?").toBeTruthy();
     const listed = [...order![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     for (const category of new Set(SEEDED.map((t) => t.category))) {
       expect(listed, `category ${category} is seeded but unranked in the dialog`).toContain(
@@ -120,7 +120,7 @@ describe("the built-in template library — what the seed migrations contain", (
 
   it("only uses merge tokens the resolver knows", () => {
     /*
-     * `resolvePageTokens` leaves an unrecognised token verbatim, on purpose —
+     * `resolvePageTokens` leaves an unrecognised token verbatim, on purpose -
      * so a typo'd `{{client_name}}` does not read as "needs filling in", it
      * reads as template source, printed in a document sent to a customer.
      */
@@ -143,7 +143,7 @@ describe("the built-in template library — what the seed migrations contain", (
   });
 });
 
-describe("the built-in template library — what survives being applied to a page", () => {
+describe("the built-in template library - what survives being applied to a page", () => {
   it("keeps every photo slot clickable", () => {
     // `isPhotoSlot` keys off the `data:image/svg+xml` src. Lose it and the
     // "Tap to add photo" box becomes a decorative image nothing can fill.
@@ -160,7 +160,7 @@ describe("the built-in template library — what survives being applied to a pag
      * The regression this exists for: `allowedAttributes` dropped `data-type`,
      * so `<ul data-type="taskList">` arrived as a plain `<ul>`. TipTap's task
      * list keys off that attribute and styles.css only draws a tick box for
-     * `ul[data-type="taskList"]` — so a trade checklist silently became
+     * `ul[data-type="taskList"]` - so a trade checklist silently became
      * bullets, permanently, since the sanitised HTML is what gets written.
      */
     for (const t of SEEDED) {

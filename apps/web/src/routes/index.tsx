@@ -25,14 +25,14 @@ import collaborationImg from "@/assets/collaboration-image.png";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Everbreeze SitePix — Capture & Share Job Site Photos" },
+      { title: "Everbreeze SitePix - Capture & Share Job Site Photos" },
       {
         name: "description",
         content:
           "Capture, organize, map, and share construction site photos with AI-powered walkthroughs, reports, checklists, and site logs.",
       },
       { property: "og:url", content: "https://www.everbreezesitepix.com/" },
-      { property: "og:title", content: "Everbreeze SitePix — Capture & Share Job Site Photos" },
+      { property: "og:title", content: "Everbreeze SitePix - Capture & Share Job Site Photos" },
       {
         property: "og:description",
         content:
@@ -76,7 +76,7 @@ const howItWorks = [
   {
     step: "02",
     title: "It organizes itself",
-    desc: "Every photo lands on the right project automatically — sorted, searchable and mapped without a single tap of admin work.",
+    desc: "Every photo lands on the right project automatically - sorted, searchable and mapped without a single tap of admin work.",
   },
   {
     step: "03",
@@ -94,7 +94,7 @@ const collaborationPoints = [
   {
     icon: ShieldCheck,
     title: "Role-based access",
-    desc: "Give clients a curated gallery, subs their scope, and admins the full picture — with permissions you control.",
+    desc: "Give clients a curated gallery, subs their scope, and admins the full picture - with permissions you control.",
   },
   {
     icon: Bell,
@@ -212,7 +212,7 @@ function Landing() {
 
           <h1 className="font-display mt-8 max-w-4xl text-4xl font-black uppercase leading-[0.95] tracking-[-0.03em] text-sidebar-foreground sm:text-6xl md:text-7xl lg:text-[96px]">
             Capture, organize &amp; share <span className="text-sidebar-ring">job site photos</span>{" "}
-            — powered by AI.
+            - powered by AI.
           </h1>
 
           <p className="font-manrope mt-7 max-w-2xl text-base text-sidebar-foreground/80 md:text-lg">
@@ -291,7 +291,7 @@ function Landing() {
                 The field moves fast. The paperwork never keeps up.
               </h2>
               <p className="font-manrope mt-6 max-w-lg text-lg leading-[29px] text-muted-foreground">
-                Crews take thousands of photos a month — scattered across phones, texts and inboxes.
+                Crews take thousands of photos a month - scattered across phones, texts and inboxes.
                 When you need proof, a progress update, or a client-ready gallery, it is nowhere to
                 be found.
               </p>
@@ -410,7 +410,7 @@ function Landing() {
                   Before &amp; after, on the record.
                 </h3>
                 <p className="font-manrope mt-4 text-base leading-[26px] text-sidebar-foreground/60">
-                  Progress documentation that protects your team — timestamped, GPS-tagged and
+                  Progress documentation that protects your team - timestamped, GPS-tagged and
                   impossible to dispute. Settle change orders and inspections with the photo, not
                   the argument.
                 </p>
@@ -485,7 +485,7 @@ function Landing() {
               </h2>
               <p className="font-manrope mt-6 max-w-lg text-lg leading-[29px] text-muted-foreground">
                 From the superintendent to the office to the client, everyone works from the same
-                up-to-date project — no forwarding, no group chats, no guessing what happened on
+                up-to-date project - no forwarding, no group chats, no guessing what happened on
                 site.
               </p>
               <ul className="mt-10 space-y-6">

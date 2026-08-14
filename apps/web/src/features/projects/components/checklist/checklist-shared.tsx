@@ -25,7 +25,7 @@ import type { ItemType } from "@/lib/checklist-items";
  * These used to be private helpers inside `ProjectChecklists.tsx`, back when the
  * only way to open a checklist was a dialog inside that panel. The record now
  * has its own route (`ChecklistDocumentPage`) so it can be printed and shared,
- * and both files need the same answer widget and the same photo picker — a
+ * and both files need the same answer widget and the same photo picker - a
  * second copy of either is a second definition of what a recorded answer is.
  */
 
@@ -55,7 +55,7 @@ export interface ItemPhoto {
   photo_id: string;
 }
 
-/** Every column a `ChecklistItem` needs — shared so the refetch and the
+/** Every column a `ChecklistItem` needs - shared so the refetch and the
  *  optimistic inserts can never select different shapes. */
 export const ITEM_COLUMNS =
   "id, checklist_id, position, label, required, completed_at, notes, item_type, description, response_value";
@@ -283,7 +283,7 @@ export function AttachItemPhotosDialog({
             .select("id")
             .single();
           if (insErr || !row) {
-            // Reclaim the orphaned upload — nothing references it, so no
+            // Reclaim the orphaned upload - nothing references it, so no
             // delete path can ever reach it and storage usage won't count it.
             void supabase.storage.from("site-photos").remove(photoObjectPaths(path, thumbPath));
             throw insErr ?? new Error("Upload failed");
@@ -344,11 +344,11 @@ export function AttachItemPhotosDialog({
       <DialogContent className="max-w-3xl p-6 sm:p-8">
         <DialogHeader>
           <DialogTitle className="truncate">
-            Attach photos{item ? ` — ${item.label}` : ""}
+            Attach photos{item ? ` - ${item.label}` : ""}
           </DialogTitle>
         </DialogHeader>
 
-        {/* Upload actions — always available */}
+        {/* Upload actions - always available */}
         <div className="flex flex-wrap items-center gap-2 rounded-xl border-[0.8px] border-dashed border-border bg-muted/30 p-3">
           <input
             ref={uploadInputRef}
@@ -401,7 +401,7 @@ export function AttachItemPhotosDialog({
           </div>
         ) : photos.length === 0 ? (
           <div className="rounded-xl border-[0.8px] border-dashed border-border bg-muted/20 py-8 text-center text-sm text-muted-foreground">
-            No photos in this project yet — upload or take one above to attach it to this item.
+            No photos in this project yet - upload or take one above to attach it to this item.
           </div>
         ) : (
           <>

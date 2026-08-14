@@ -8,12 +8,12 @@ export const PRO_AUTO_REPORTS_PER_MONTH = 100;
 export interface AutoReportQuota {
   tier: BillingTier;
   used: number;
-  /** `Infinity` on Team — unlimited. */
+  /** `Infinity` on Team - unlimited. */
   limit: number;
   remaining: number;
 }
 
-/** Start of the current UTC calendar month — the window the quota resets on. */
+/** Start of the current UTC calendar month - the window the quota resets on. */
 function monthStart(): string {
   const d = new Date();
   d.setUTCDate(1);
@@ -80,12 +80,12 @@ export async function assertAutoReportAllowed(
  *
  * `assertAutoReportAllowed` on its own is check-then-act with a 10-60 second
  * model call in the middle, so N concurrent requests all counted the same
- * `used` value, all passed, and all generated — a Pro account capped at 100
+ * `used` value, all passed, and all generated - a Pro account capped at 100
  * could run well past it just by clicking twice. Writing the ledger row first
  * and re-counting afterwards makes the row itself the reservation: whoever ends
  * up beyond the limit releases theirs and is refused.
  *
- * Returns the reservation id so the caller can release it if generation fails —
+ * Returns the reservation id so the caller can release it if generation fails -
  * nobody should burn quota on a report they never received.
  */
 export async function reserveAutoReport(
@@ -103,7 +103,7 @@ export async function reserveAutoReport(
 
   // Ledger unavailable: let the generation through rather than block paid work
   // on a bookkeeping table. Under-counting one report beats refusing a report
-  // the customer is entitled to — the same trade-off the old code made.
+  // the customer is entitled to - the same trade-off the old code made.
   if (error || !row) {
     console.warn("[walkthrough] failed to reserve Auto Report usage", {
       walkthroughId,
@@ -114,7 +114,7 @@ export async function reserveAutoReport(
   }
 
   // `auto_report_generations` is absent from the generated types, so the row
-  // shape has to be asserted through `unknown` — same gap as elsewhere.
+  // shape has to be asserted through `unknown` - same gap as elsewhere.
   const reservationId = (row as unknown as { id: string }).id;
   if (quota.limit !== Number.POSITIVE_INFINITY) {
     const after = await getAutoReportQuota(supabase, userId);
@@ -130,7 +130,7 @@ export async function reserveAutoReport(
   return { quota, reservationId };
 }
 
-/** Hand a reserved slot back — generation failed, so it was never consumed. */
+/** Hand a reserved slot back - generation failed, so it was never consumed. */
 export async function releaseAutoReport(reservationId: string | null): Promise<void> {
   if (!reservationId) return;
   const { error } = await getSupabaseAdmin()

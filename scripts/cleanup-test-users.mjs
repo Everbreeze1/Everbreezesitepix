@@ -31,4 +31,4 @@ while (page < 20) {
   }
   page++;
 }
-console.log(`\ndone — removed ${deleted} disposable test account(s)`);
+console.log(`\ndone - removed ${deleted} disposable test account(s)`);

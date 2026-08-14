@@ -5,7 +5,7 @@
 # repo stays clean, but Prettier does not: `.prettierrc` sets no `endOfLine`, so
 # it defaults to `lf` and flags every single line of every checked-out file.
 # `npm run lint` on Windows reported 82,024 errors, essentially all of them
-# `Delete ␍` — which makes the command useless locally, so real lint failures
+# `Delete ␍` - which makes the command useless locally, so real lint failures
 # hide in the noise and nobody notices when a new file is written with CRLF.
 #
 # It also explains why files show as modified with an empty `git diff`: the
@@ -13,7 +13,7 @@
 #
 # `text=auto eol=lf` tells git to normalise on commit (already happening) and to
 # check out LF on every platform (the part that was missing). Because the stored
-# objects are already LF, adding this changes no file content — it only affects
+# objects are already LF, adding this changes no file content - it only affects
 # what lands in the working tree from here on.
 #
 # To normalise files already checked out with CRLF, after committing this:
@@ -21,7 +21,7 @@
 # and commit whatever that stages (it should be nothing but line endings).
 * text=auto eol=lf
 
-# Binary — never touch these.
+# Binary - never touch these.
 *.png  binary
 *.jpg  binary
 *.jpeg binary

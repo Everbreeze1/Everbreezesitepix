@@ -29,7 +29,7 @@ export type RichBlock =
   | { type: "heading"; level: 1 | 2 | 3; runs: InlineRun[] }
   | { type: "paragraph"; runs: InlineRun[] }
   | { type: "list"; ordered: boolean; items: InlineRun[][] }
-  /** An explicit page boundary. Carries no content — see splitOnPageBreak. */
+  /** An explicit page boundary. Carries no content - see splitOnPageBreak. */
   | { type: "pageBreak" };
 
 // ---------------- tokenizer ----------------
@@ -80,7 +80,7 @@ export function parseRich(html: string | null | undefined): RichBlock[] {
   // Tiptap returns markup; plain strings are also fine.
   const looksLikeHtml = /<\/?[a-zA-Z]/.test(html);
   if (!looksLikeHtml) {
-    // Treat as plain text — split by newlines into paragraphs.
+    // Treat as plain text - split by newlines into paragraphs.
     return html
       .replace(/\r\n/g, "\n")
       .split(/\n+/)
@@ -203,7 +203,7 @@ export function parseRich(html: string | null | undefined): RichBlock[] {
           styleStack.italic++;
           break;
         default:
-          // unknown wrapper — ignored
+          // unknown wrapper - ignored
           break;
       }
       continue;
@@ -257,7 +257,7 @@ export function richToPlainText(html: string | null | undefined): string {
   const blocks = parseRich(html);
   const out: string[] = [];
   for (const b of blocks) {
-    // No text, and `b.runs` does not exist on it — reading it would throw.
+    // No text, and `b.runs` does not exist on it - reading it would throw.
     if (b.type === "pageBreak") continue;
     if (b.type === "list") {
       for (const it of b.items) out.push(it.map((r) => r.text).join(""));

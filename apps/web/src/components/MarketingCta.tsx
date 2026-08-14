@@ -24,7 +24,7 @@ export function MarketingCta() {
                 Bring every job into focus.
               </h2>
               <p className="font-manrope mt-5 max-w-[576px] text-base font-medium leading-7 text-white/85">
-                Start capturing a better record today. Plans start at $24/mo — pick the one that
+                Start capturing a better record today. Plans start at $24/mo - pick the one that
                 fits your crew and cancel anytime.
               </p>
             </div>

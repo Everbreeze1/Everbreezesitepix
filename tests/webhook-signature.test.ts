@@ -4,7 +4,7 @@ import { verifyStandardWebhook } from "../apps/api/src/lib/webhook-signature";
 
 /*
  * Supabase Auth's HTTP hook signs with Standard Webhooks rather than sending a
- * bearer token. Getting this wrong is invisible locally — the handler simply
+ * bearer token. Getting this wrong is invisible locally - the handler simply
  * 401s and Supabase reports a bare 500 on signup, with no indication that a
  * signature was involved. These tests pin the wire format.
  */
@@ -68,7 +68,7 @@ describe("verifyStandardWebhook", () => {
       "webhook-timestamp": String(ts),
       "webhook-signature": `v1,${sign("msg_1", ts, body)}`,
     });
-    // Same signature, different payload — this is the attack that matters:
+    // Same signature, different payload - this is the attack that matters:
     // swapping the recipient email on an otherwise valid request.
     const tampered = JSON.stringify({ user: { email: "attacker@evil.com" }, email_data: {} });
     expect(verifyStandardWebhook(r, tampered, SECRET)).toBe(false);

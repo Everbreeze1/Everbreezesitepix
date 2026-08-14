@@ -14,13 +14,13 @@ import {
 export const Route = createFileRoute("/terms-of-service")({
   head: () => ({
     meta: [
-      { title: "Terms of Service — Everbreeze SitePix" },
+      { title: "Terms of Service - Everbreeze SitePix" },
       {
         name: "description",
         content:
           "Terms of Service for Everbreeze SitePix. The agreement covering your subscription, your job site photos and reports, acceptable use, AI-generated output, and public share links.",
       },
-      { property: "og:title", content: "Terms of Service — Everbreeze SitePix" },
+      { property: "og:title", content: "Terms of Service - Everbreeze SitePix" },
       {
         property: "og:description",
         content:
@@ -34,7 +34,7 @@ export const Route = createFileRoute("/terms-of-service")({
 });
 
 /*
- * TEMPLATE — NOT LEGAL ADVICE. This page was drafted to describe what the
+ * TEMPLATE - NOT LEGAL ADVICE. This page was drafted to describe what the
  * product actually does; it has NOT been reviewed by a lawyer. Every `[[...]]`
  * placeholder must be filled in and the whole document reviewed by counsel
  * qualified in the governing jurisdiction before launch.
@@ -164,13 +164,13 @@ function TermsOfServicePage() {
               </p>
               <p>
                 You can cancel at any time from Settings. Cancellation stops future renewals and
-                takes effect at the end of the period you have already paid for — you keep access
+                takes effect at the end of the period you have already paid for - you keep access
                 until then.
               </p>
               <p>
                 <strong className="text-foreground">Refunds.</strong> Except where a refund is
                 required by law, fees already paid are non-refundable and we do not refund partial
-                periods or unused seats. We may, at our discretion, issue a refund or credit — for
+                periods or unused seats. We may, at our discretion, issue a refund or credit - for
                 example after a prolonged outage.
               </p>
               <p>
@@ -256,7 +256,7 @@ function TermsOfServicePage() {
             <p className="text-muted-foreground">
               You are photographing property that usually belongs to someone else. You are solely
               responsible for having the right to capture, upload and use every photo, video and
-              recording you put into the Services — including any permission required from the
+              recording you put into the Services - including any permission required from the
               property owner or occupier, your client, the general contractor, or anyone whose face,
               vehicle, documents or possessions appear in the frame, and any consent required to
               record audio during walkthroughs.
@@ -277,8 +277,8 @@ function TermsOfServicePage() {
               8. Public Share Links and Portfolio Pages
             </h2>
             <p className="text-muted-foreground">
-              The Services let you create links — to galleries, reports, project pages,
-              walkthroughs, portfolio sites and website embeds — that are viewable by anyone who has
+              The Services let you create links - to galleries, reports, project pages,
+              walkthroughs, portfolio sites and website embeds - that are viewable by anyone who has
               the URL, without signing in. That is the intended behaviour of the feature.
             </p>
             <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
@@ -288,7 +288,7 @@ function TermsOfServicePage() {
               </li>
               <li>
                 You decide what goes into a share link and are responsible for the consequences of
-                publishing it — including any client, personal or site-security information visible
+                publishing it - including any client, personal or site-security information visible
                 in the photos, captions or reports it contains.
               </li>
               <li>
@@ -333,7 +333,7 @@ function TermsOfServicePage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">10. Third-Party Services</h2>
             <p className="text-muted-foreground">
-              The Services depend on third-party providers — including cloud hosting and storage,
+              The Services depend on third-party providers - including cloud hosting and storage,
               payment processing, email delivery, mapping and geocoding, and AI providers. They are
               identified in our{" "}
               <Link to="/privacy-policy" className="text-primary hover:underline">
@@ -373,7 +373,7 @@ function TermsOfServicePage() {
             <p className="text-muted-foreground">
               You may stop using the Services and delete your account at any time from the Settings
               page. We may suspend or terminate your access if you materially breach these Terms, if
-              your subscription goes unpaid, or if we are required to by law — with notice where it
+              your subscription goes unpaid, or if we are required to by law - with notice where it
               is reasonable to give it.
             </p>
             <p className="text-muted-foreground mt-2">
@@ -396,7 +396,7 @@ function TermsOfServicePage() {
             <p className="text-muted-foreground">
               To the fullest extent permitted by law, the Services are provided &quot;as is&quot;
               and &quot;as available&quot;, without warranties of any kind, whether express, implied
-              or statutory — including implied warranties of merchantability, fitness for a
+              or statutory - including implied warranties of merchantability, fitness for a
               particular purpose, accuracy, and non-infringement. We do not warrant that the
               Services will be uninterrupted, error-free or secure, that stored content will never
               be lost or corrupted, or that AI output will be accurate or complete. Nothing in these
@@ -412,7 +412,7 @@ function TermsOfServicePage() {
               To the fullest extent permitted by law, neither party is liable for indirect,
               incidental, special, consequential or punitive damages, or for lost profits, lost
               revenue, lost business, loss of goodwill, or loss or corruption of data, arising out
-              of or relating to the Services — even if advised of the possibility.
+              of or relating to the Services - even if advised of the possibility.
             </p>
             <p className="text-muted-foreground mt-2">
               Our total aggregate liability arising out of or relating to the Services or these
@@ -456,7 +456,7 @@ function TermsOfServicePage() {
             <p className="text-muted-foreground">
               These Terms are governed by the laws of {GOVERNING_LAW}, without regard to
               conflict-of-law rules, and the courts of {GOVERNING_LAW} have exclusive jurisdiction
-              over any dispute arising out of or relating to them — except that either party may
+              over any dispute arising out of or relating to them - except that either party may
               seek injunctive relief in any court of competent jurisdiction to protect its
               intellectual property or confidential information. Nothing here removes any right you
               have to bring proceedings in your local courts where the law of your country of

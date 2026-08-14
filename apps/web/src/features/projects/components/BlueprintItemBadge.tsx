@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  * The blueprint pill on the project hero answers *how many* of each kind a
  * blueprint created and *which tab* they landed in. It cannot answer "is THIS
  * checklist one of them", because a blueprint-created row is byte-identical to
- * one someone typed by hand — which is the whole reason provenance was invisible.
+ * one someone typed by hand - which is the whole reason provenance was invisible.
  *
  * Driven by the ledger's `itemSources` map (source template id → blueprint), not
  * by `template_id !== null`. That distinction matters: `template_id` is also set

@@ -9,7 +9,7 @@ import { getPortfolioEmbed, type PortfolioEmbedData } from "@/lib/portfolio.func
 import { SITE_ORIGIN } from "@/lib/site-url";
 
 /**
- * The website gallery widget — /embed/gallery/<embed-key>.
+ * The website gallery widget - /embed/gallery/<embed-key>.
  *
  * Meant to be iframed into the contractor's own website (Wix, Squarespace,
  * WordPress, whatever), so it deliberately renders no chrome, no router links
@@ -31,7 +31,7 @@ export const Route = createFileRoute("/embed/gallery/$key")({
    * Echoes the params back untouched and clamps them at read time instead of
    * normalising here. Returning defaults would make the validated search differ
    * from the requested URL, and the router answers that with a 307 to the
-   * canonical form — an extra round trip on every single iframe load, before
+   * canonical form - an extra round trip on every single iframe load, before
    * the host page has rendered anything.
    */
   validateSearch: (search: Record<string, unknown>): GallerySearch => {

@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { rotatePortfolioEmbedKey, type PortfolioDetail } from "@/lib/portfolio.functions";
 
 /**
- * "Add it to your own website" — the third of CompanyCam's three ways to use a
+ * "Add it to your own website" - the third of CompanyCam's three ways to use a
  * portfolio, and the one that keeps working after a prospect leaves this site.
  *
  * The whole design goal is that the contractor never sees a decision they can
@@ -84,7 +84,7 @@ export function PortfolioEmbedsPanel({
     try {
       const res = await rotatePortfolioEmbedKey();
       onEmbedKeyChanged(res.embedKey);
-      toast.success("Embed key rotated — paste the new snippets on your site.");
+      toast.success("Embed key rotated - paste the new snippets on your site.");
     } catch (e: any) {
       toast.error(e?.message ?? "Could not rotate the key");
     } finally {
@@ -250,7 +250,7 @@ function EmbedCard({
       window.setTimeout(() => setCopied(false), 2000);
       toast.success("Snippet copied");
     } catch {
-      toast.error("Could not copy — select the snippet and copy it manually.");
+      toast.error("Could not copy - select the snippet and copy it manually.");
     }
   };
 
@@ -285,7 +285,7 @@ function EmbedCard({
         </pre>
       </div>
 
-      {/* Live preview of the real embed route — what they see here is literally
+      {/* Live preview of the real embed route - what they see here is literally
           what the iframe will render on their site, not a mock. */}
       <div className="mt-5 flex-1">
         <Label>Preview</Label>

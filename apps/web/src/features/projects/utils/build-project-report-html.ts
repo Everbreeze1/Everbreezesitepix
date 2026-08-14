@@ -70,7 +70,7 @@ function buildProjectReportHtml(args: {
     .join("");
 
   return `<!doctype html>
-<html><head><meta charset="utf-8"><title>${escHtml(project.name)} — Project Report</title>
+<html><head><meta charset="utf-8"><title>${escHtml(project.name)} - Project Report</title>
 <style>
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#111827;margin:0;background:#f3f4f6;}
   .toolbar{position:sticky;top:0;background:#fff;border-bottom:1px solid #e5e7eb;padding:10px 16px;display:flex;justify-content:flex-end;gap:8px;z-index:10;}

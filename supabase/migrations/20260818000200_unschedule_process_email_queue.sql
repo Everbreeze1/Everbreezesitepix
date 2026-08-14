@@ -7,11 +7,11 @@
 --   80494  404  <!DOCTYPE html><html lang="en">…  13:43:00
 --   80493  404  <!DOCTYPE html><html lang="en">…  13:42:00
 --
--- An HTML body, not JSON — it was reaching the web app's 404 page, not an API
+-- An HTML body, not JSON - it was reaching the web app's 404 page, not an API
 -- route. Nothing in this repository backs it:
 --
 --   * no `email_queue` table in any migration
---   * no `supabase/functions/` directory — this project has no edge functions
+--   * no `supabase/functions/` directory - this project has no edge functions
 --   * apps/api/src/server.ts exposes exactly two hooks, `purge-trash` and
 --     `archive-old-photos`; there is no email-queue route
 --
@@ -24,19 +24,19 @@
 -- edge function that has since been deleted.
 --
 -- The cost of leaving it: ~1,440 failed HTTP calls a day, each writing a row to
--- net._http_response — which is the same table a genuine 401 from the purge job
+-- net._http_response - which is the same table a genuine 401 from the purge job
 -- would appear in. It was already burying real results there.
 --
 -- REVERSIBILITY. The job's `command` is printed by PART 1 before PART 2 removes
 -- it, so the definition survives in this run's output. To restore it, re-run
 -- cron.schedule('process-email-queue', '* * * * *', <that command>).
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent — re-running after the
+-- Apply via the SitePix Supabase SQL editor. Idempotent - re-running after the
 -- job is gone is a no-op.
 
 SET lock_timeout = '5s';
 
--- === PART 1 — record what is about to be removed =============================
+-- === PART 1 - record what is about to be removed =============================
 -- Read this output before scrolling on. It is the only copy of the definition
 -- once PART 2 runs.
 SELECT jobid, jobname, schedule, active, command
@@ -56,7 +56,7 @@ BEGIN
   END IF;
 END $$;
 
--- === PART 2 — unschedule =====================================================
+-- === PART 2 - unschedule =====================================================
 -- Guarded: cron.unschedule() raises if the job does not exist, which would make
 -- this file fail on a second run rather than doing nothing.
 DO $$

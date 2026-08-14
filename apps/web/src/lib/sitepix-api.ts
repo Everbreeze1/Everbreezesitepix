@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/sitepix/client";
 
 /**
  * Browser client for SitePix `/v1`.
- * Privileged UI work should go through this — not createServerFn.
+ * Privileged UI work should go through this - not createServerFn.
  * Points at the standalone @sitepix/api deployment; falls back to same-origin
  * (the old colocated-Worker setup) when VITE_API_BASE_URL is unset.
  */

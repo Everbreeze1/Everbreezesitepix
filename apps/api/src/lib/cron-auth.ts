@@ -1,6 +1,6 @@
 import { getSupabaseAdmin } from "./supabase";
 
-/** Constant-time string compare (no Node crypto — safe for Worker + Vite graphs). */
+/** Constant-time string compare (no Node crypto - safe for Worker + Vite graphs). */
 function safeEqualString(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let out = 0;

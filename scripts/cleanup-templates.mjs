@@ -87,5 +87,5 @@ await page.waitForTimeout(5000);
 await page.screenshot({ path: `${SHOTS}/cleanup-final.png` });
 const body = await page.locator("body").innerText();
 const left = TARGETS.filter((t) => body.includes(t));
-console.log(left.length ? `STILL PRESENT: ${left.join(", ")}` : "CLEAN — no test templates remain");
+console.log(left.length ? `STILL PRESENT: ${left.join(", ")}` : "CLEAN - no test templates remain");
 await browser.close();

@@ -1,4 +1,4 @@
--- Job Showcases (Team tier): a curated, publicly shareable portfolio page —
+-- Job Showcases (Team tier): a curated, publicly shareable portfolio page -
 -- pick any photos across projects, caption them, pick a layout, publish.
 -- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog). Idempotent.
 

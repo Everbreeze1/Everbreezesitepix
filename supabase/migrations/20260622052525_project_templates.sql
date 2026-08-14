@@ -1,4 +1,4 @@
--- Project Templates MVP — run against the SitePix Supabase project.
+-- Project Templates MVP - run against the SitePix Supabase project.
 -- A "project template" is a reusable project blueprint owned by a team.
 -- For the MVP it can attach checklist templates; reports/documents come later.
 
@@ -71,7 +71,7 @@ CREATE INDEX IF NOT EXISTS project_templates_team_idx ON public.project_template
 CREATE INDEX IF NOT EXISTS project_templates_created_by_idx ON public.project_templates(created_by);
 
 -- ---------------------------------------------------------------------------
--- 2. project_template_checklists — attach checklist templates to a project template
+-- 2. project_template_checklists - attach checklist templates to a project template
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.project_template_checklists (
   id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),

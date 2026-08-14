@@ -13,7 +13,7 @@ interface VideoPlayerDialogProps {
 /**
  * Modal video preview. On mobile the dialog goes near-fullscreen so the
  * player is large and the native controls don't fight with the dialog's
- * own close button — we hide the default close and add our own top-left
+ * own close button - we hide the default close and add our own top-left
  * pill that stays clear of the volume/fullscreen icons on the right.
  */
 export function VideoPlayerDialog({
@@ -53,7 +53,7 @@ export function VideoPlayerDialog({
             </div>
           )}
 
-          {/* Custom close — top-left so it never overlaps the player's
+          {/* Custom close - top-left so it never overlaps the player's
               volume/fullscreen controls on the right. */}
           <button
             type="button"

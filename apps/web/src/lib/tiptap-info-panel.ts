@@ -1,7 +1,7 @@
 import { Node, mergeAttributes } from "@tiptap/core";
 
 /**
- * A shaded, rounded container for a group of blocks — the "card" treatment
+ * A shaded, rounded container for a group of blocks - the "card" treatment
  * used by generated photo reports for the document masthead and for each
  * photo + its caption.
  *

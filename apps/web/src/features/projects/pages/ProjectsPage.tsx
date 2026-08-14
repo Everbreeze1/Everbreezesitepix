@@ -112,11 +112,11 @@ interface ProjectRow {
  * Tabs are destinations, not refinements.
  *
  * This run used to be All / Active / Completed / Starred / Archived / Groups /
- * Pipelines — seven pills of two different kinds. Starred and Archived went
+ * Pipelines - seven pills of two different kinds. Starred and Archived went
  * first: they are refinements of whichever list you are already looking at
  * ("starred, active projects" was unreachable while they were mutually
  * exclusive tabs), so they became toggles in the Filters popover. Active and
- * Completed are the same species — predicates over the one projects array — so
+ * Completed are the same species - predicates over the one projects array - so
  * they followed, onto the hero stats rail (one click) and the Filters popover
  * (discoverable). What is left is the three things that are genuinely
  * different content: the project list, saved Groups, and Pipelines.
@@ -202,7 +202,7 @@ export function ProjectsPage() {
   /**
    * Archived is three-state, not a checkbox.
    *
-   * "include" is the old widening toggle — it lets an archived project still be
+   * "include" is the old widening toggle - it lets an archived project still be
    * found under Active or Completed, which a separate Archived tab never could.
    * But the hero stat rail needs "only": every stat there is a number you can
    * click, and a button reading "12 archived" that makes the list *grow* by 12
@@ -216,7 +216,7 @@ export function ProjectsPage() {
    * Tags, Labels, Assignees and Date each used to be their own 46px-tall button
    * beside the search box, so the toolbar read as five competing actions before
    * you had narrowed anything at all. They are panes of one "Filters" popover
-   * instead — same filters, one button, one count badge telling you whether
+   * instead - same filters, one button, one count badge telling you whether
    * anything is narrowing the list.
    */
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -236,7 +236,7 @@ export function ProjectsPage() {
   >([]);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
 
-  // Tag Boards — team-shared, auto-updating (any project matching the
+  // Tag Boards - team-shared, auto-updating (any project matching the
   // board's tag_ids), distinct from the manual per-user Groups above.
   const fetchBoards = listProjectBoards;
   const [boards, setBoards] = useState<ProjectBoard[]>([]);
@@ -326,7 +326,7 @@ export function ProjectsPage() {
     if (projects.length) {
       const ids = projects.map((p) => p.id);
 
-      // These three queries are independent of each other — run them as one
+      // These three queries are independent of each other - run them as one
       // round-trip instead of three sequential ones.
       const [{ data: ph }, { data: rep }, { data: cl }] = await Promise.all([
         supabase
@@ -404,13 +404,13 @@ export function ProjectsPage() {
       const uploaderIds = Array.from(new Set(Object.values(uploadersByProject).flat()));
 
       // These two depend on different results from the wave above, but not on
-      // each other — sign cover/sample paths and look up uploader profiles in
+      // each other - sign cover/sample paths and look up uploader profiles in
       // one round-trip instead of two.
       /*
        * Uploader names/avatars come from the team RPC, not from `profiles`.
        *
        * This used to be `.from("profiles").select(...).in("id", uploaderIds)`
-       * from the browser, and `profiles` lets you read only your OWN row — so
+       * from the browser, and `profiles` lets you read only your OWN row - so
        * the map held exactly one entry and every other uploader fell through to
        * the `{ name: null, avatar: null }` default below. On screen that was
        * your avatar plus a row of identical "?" bubbles, and a contributor
@@ -507,7 +507,7 @@ export function ProjectsPage() {
   };
 
   const qc = useQueryClient();
-  // These two useQuery calls are purely a scheduling gate — "do I actually
+  // These two useQuery calls are purely a scheduling gate - "do I actually
   // need to run load()/loadGroups() again, or is cached-and-fresh good
   // enough". A useEffect synced on each query's data (below) mirrors it into
   // local useState so a cache-hit remount (queryFn skipped) still
@@ -555,7 +555,7 @@ export function ProjectsPage() {
     if (boardsQuery.data) setBoards(boardsQuery.data);
   }, [boardsQuery.data]);
 
-  // Boards are tabs now, so one is always selected — keep the pointer valid as
+  // Boards are tabs now, so one is always selected - keep the pointer valid as
   // boards are created/renamed/deleted.
   useEffect(() => {
     if (boards.length === 0) {
@@ -595,7 +595,7 @@ export function ProjectsPage() {
   const filteredProjects = useMemo(() => {
     let list = allProjects;
     // "include" widens the list rather than replacing it, so an archived project
-    // can still be found under Active/Completed — the old Archived tab was a
+    // can still be found under Active/Completed - the old Archived tab was a
     // separate world you had to leave your view to visit. "only" is that world,
     // for when you deliberately went looking for it.
     if (archivedMode === "hide") list = list.filter((p) => !p.archived);
@@ -717,7 +717,7 @@ export function ProjectsPage() {
   const archivedCount = allProjects.filter((p) => p.archived).length;
 
   // Three destinations, one per kind of thing. Every pill carries an icon so
-  // the run reads as one navigation control — the same strip, now literally the
+  // the run reads as one navigation control - the same strip, now literally the
   // same component, that the project home page uses.
   const tabs = [
     { key: "projects", label: "Projects", count: activeCount, icon: LayoutGrid },
@@ -731,7 +731,7 @@ export function ProjectsPage() {
    * Status stats double as the status filter.
    *
    * These four numbers used to be tab labels. Reading the workload and cutting
-   * to it are the same gesture, so the number *is* the control — click "19
+   * to it are the same gesture, so the number *is* the control - click "19
    * active" to see the 19. That is what the pipeline view does well, and it is
    * why Active/Completed could leave the tab strip without going two clicks deep.
    */
@@ -817,11 +817,11 @@ export function ProjectsPage() {
   const bodyShownCount = tab === "groups" ? groups.length : filteredProjects.length;
   const bodyDescription =
     tab === "groups"
-      ? `${bodyShownCount} ${bodyShownCount === 1 ? "group" : "groups"} — related projects sharing photos, stats and views.`
+      ? `${bodyShownCount} ${bodyShownCount === 1 ? "group" : "groups"} - related projects sharing photos, stats and views.`
       : `${bodyShownCount} ${bodyShownCount === 1 ? "project" : "projects"} shown, most recently updated first.`;
 
   /**
-   * The toolbar is not a band of its own any more — these two render into the
+   * The toolbar is not a band of its own any more - these two render into the
    * section header's action slot, the way the project home page puts its
    * controls on the same line as the heading they act on.
    */
@@ -906,7 +906,7 @@ export function ProjectsPage() {
             {/*
                   Status used to be three tabs. It is a predicate over the one
                   project list, same as Starred and Archived, so it lives with
-                  them — reachable here, and one click away on the hero stats.
+                  them - reachable here, and one click away on the hero stats.
                 */}
             <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               Status
@@ -1028,7 +1028,7 @@ export function ProjectsPage() {
             <div className="max-h-60 overflow-y-auto pr-1">
               {allTags.length === 0 ? (
                 <div className="px-1 py-3 text-xs text-muted-foreground">
-                  No tags yet — create one on a project to filter by it here.
+                  No tags yet - create one on a project to filter by it here.
                 </div>
               ) : (
                 <div className="space-y-0.5">
@@ -1106,7 +1106,7 @@ export function ProjectsPage() {
             <div className="max-h-60 overflow-y-auto pr-1">
               {labelCatalog.rows.length === 0 ? (
                 <div className="px-1 py-3 text-xs text-muted-foreground">
-                  No labels yet — they’ll appear here after your first visit.
+                  No labels yet - they’ll appear here after your first visit.
                 </div>
               ) : (
                 <div className="space-y-0.5">
@@ -1160,7 +1160,7 @@ export function ProjectsPage() {
             <div className="max-h-60 overflow-y-auto pr-1">
               {contributorOptions.length === 0 ? (
                 <div className="px-1 py-3 text-xs text-muted-foreground">
-                  No contributors yet — upload photos to a project.
+                  No contributors yet - upload photos to a project.
                 </div>
               ) : (
                 contributorOptions.map((c) => {
@@ -1303,7 +1303,7 @@ export function ProjectsPage() {
         {/* Same container as the project home page, so the content edge does not
             jump when you click through from this list into a project. */}
         <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pt-10">
-          {/* Hero — same shell, ornament, badge and stats rail as the project home page. */}
+          {/* Hero - same shell, ornament, badge and stats rail as the project home page. */}
           <div className="relative overflow-hidden rounded-[32px] bg-sidebar">
             <div className="pointer-events-none absolute -right-24 -top-28 h-[288px] w-[288px] rounded-full border-[28px] border-sidebar-ring/20" />
             <div className="relative flex flex-col gap-7 p-6 sm:px-10 sm:py-9">
@@ -1357,7 +1357,7 @@ export function ProjectsPage() {
                 </div>
               </div>
 
-              {/* Stats rail — states the workload and cuts to it in the same click. */}
+              {/* Stats rail - states the workload and cuts to it in the same click. */}
               <div className="flex flex-col gap-4 border-t border-sidebar-border pt-5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="mr-1 text-[10px] font-extrabold uppercase tracking-[1.5px] text-sidebar-foreground/45">
@@ -1408,7 +1408,7 @@ export function ProjectsPage() {
             There used to be a full-width search/Filters band here, an
             "Active filters:" chip rail under it, a Recent activity rail under
             that, and then a second header that repeated the hero's own
-            "Workspace library" eyebrow — five bands before the first project.
+            "Workspace library" eyebrow - five bands before the first project.
             The project home page states the section and puts the controls that
             act on it on the same line, so this does too.
           */}
@@ -1431,7 +1431,7 @@ export function ProjectsPage() {
             {/*
               No header on the Pipelines tab: the pipeline strip below already
               names the active pipeline, and the board view names it a third
-              time. One title per screen — and it is why the search box and
+              time. One title per screen - and it is why the search box and
               Filters button, which do not act on a board, disappear here.
             */}
             <div className={tab === "boards" ? "mt-8" : "mt-5"}>
@@ -1445,7 +1445,7 @@ export function ProjectsPage() {
               ) : tab === "boards" ? (
                 <div>
                   {/*
-                    Pipeline strip — each pipeline is directly selectable, no
+                    Pipeline strip - each pipeline is directly selectable, no
                     drill-in/back step. "Manage" sits on the same line rather
                     than in a second header block below it.
                   */}
@@ -1522,7 +1522,7 @@ export function ProjectsPage() {
                     <EmptyState
                       icon={Layers}
                       title="No pipelines yet"
-                      description='A pipeline moves projects through stages by tag (e.g. "Lead", "Active", "Complete") — shared with your team and always up to date. Drag a card between stages to re-tag it.'
+                      description='A pipeline moves projects through stages by tag (e.g. "Lead", "Active", "Complete") - shared with your team and always up to date. Drag a card between stages to re-tag it.'
                       action={
                         <Button onClick={() => setCreateBoardOpen(true)}>
                           <Layers className="mr-2 h-4 w-4" /> New Pipeline
@@ -1706,7 +1706,7 @@ function ProjectsList({
         title={hasQueryOrFilter ? "No projects match" : "No projects yet"}
         description={
           hasQueryOrFilter
-            ? // Not "try another tab" — the other two tabs are Groups and
+            ? // Not "try another tab" - the other two tabs are Groups and
               // Pipelines, which show different things entirely. The only way
               // out of an empty list is to widen the search or drop a filter.
               "Try a different search term, or clear your filters to see everything again."

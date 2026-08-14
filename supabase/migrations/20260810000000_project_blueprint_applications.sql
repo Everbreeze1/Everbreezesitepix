@@ -6,7 +6,7 @@
 -- created by hand. Nothing recorded that a blueprint was the cause, so the
 -- Templates screen could not answer the two questions the client actually
 -- asked: "when I select a template, what happens to it?" and "how do we apply
--- them to projects?" — a blueprint you author had no visible trace anywhere.
+-- them to projects?" - a blueprint you author had no visible trace anywhere.
 --
 -- One row per apply. `counts` mirrors the shape applyProjectBlueprintService
 -- returns ({checklists, documents, reports, label_sets, workflows}) so the
@@ -35,7 +35,7 @@ ALTER TABLE public.project_blueprint_applications ENABLE ROW LEVEL SECURITY;
 
 -- Visibility follows the blueprint, matching project_template_items: if you can
 -- see the blueprint you can see what it has done. Rows are written by the API
--- with the service role, so there is deliberately no INSERT policy — a client
+-- with the service role, so there is deliberately no INSERT policy - a client
 -- must not be able to fabricate history.
 DROP POLICY IF EXISTS "Read blueprint applications via parent"
   ON public.project_blueprint_applications;

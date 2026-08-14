@@ -1,7 +1,7 @@
 import { rpcOp } from "./sitepix-api";
 
 /**
- * The public-share read side of the two field records — checklists and
+ * The public-share read side of the two field records - checklists and
  * workflows. Mirrors `apps/api/src/domains/projects/field-records.ts`.
  *
  * Only the *read* is an RPC. Issuing and revoking a link is a one-column write
@@ -28,11 +28,11 @@ export interface FieldRecordItem {
 
 export interface FieldRecordSection {
   id: string;
-  /** null for a checklist — one implicit, unnamed section. */
+  /** null for a checklist - one implicit, unnamed section. */
   name: string | null;
   description: string | null;
   notes: string | null;
-  /** Designed to be signed — drives whether the sheet prints a signature rule. */
+  /** Designed to be signed - drives whether the sheet prints a signature rule. */
   requiresSignoff: boolean;
   signoff: { name: string | null; at: string } | null;
   items: FieldRecordItem[];
@@ -78,7 +78,7 @@ export interface PublicFieldRecord {
  * record tables.
  *
  * Named here rather than typed into each screen so the "database is one
- * migration behind" state cannot go stale in one place and not the other — and
+ * migration behind" state cannot go stale in one place and not the other - and
  * so grepping this constant finds every surface that depends on it.
  */
 export const RECORD_MIGRATION = "20260816000000_checklist_workflow_documents.sql";

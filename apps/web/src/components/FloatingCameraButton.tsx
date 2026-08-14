@@ -47,7 +47,7 @@ export function FloatingCameraButton() {
           search: { camera: 1 } as any,
         });
       } else {
-        // No active project yet — send to the new-project flow; user can shoot
+        // No active project yet - send to the new-project flow; user can shoot
         // immediately after creating it.
         navigate({ to: "/projects/new" });
       }

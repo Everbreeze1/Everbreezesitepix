@@ -5,7 +5,7 @@ import type {} from "@tanstack/react-start";
  * The one file a contractor pastes into their own website.
  *
  * CompanyCam's pitch for the website gallery and map is "copy a snippet, paste
- * it, done — no coding". That only holds if the snippet is a single tag that
+ * it, done - no coding". That only holds if the snippet is a single tag that
  * needs no configuration and no follow-up CSS, so this script:
  *
  *   * finds its own <script> tag and builds the iframe next to it,
@@ -13,7 +13,7 @@ import type {} from "@tanstack/react-start";
  *   * listens for the height messages the embed posts and resizes to fit.
  *
  * Served as a route handler rather than a file in public/ so the widget origin
- * is derived from the request instead of hardcoded — that keeps preview
+ * is derived from the request instead of hardcoded - that keeps preview
  * deployments working, and means a self-hosted install needs no edit.
  *
  * Deliberately ES5-ish and dependency-free: this runs on whatever the host
@@ -37,7 +37,7 @@ const SCRIPT = String.raw`(function () {
   var self = findSelf();
   if (!self) return;
   // Guard against the snippet being pasted twice (common in page builders that
-  // duplicate blocks) — without it the visitor sees two galleries.
+  // duplicate blocks) - without it the visitor sees two galleries.
   if (self.getAttribute("data-sitepix-done") === "1") return;
   self.setAttribute("data-sitepix-done", "1");
 
@@ -89,7 +89,7 @@ const SCRIPT = String.raw`(function () {
   if (kind === "map") return;
 
   window.addEventListener("message", function (event) {
-    // The height is the only field trusted, and only from our own iframe —
+    // The height is the only field trusted, and only from our own iframe -
     // any other frame on the host page posting this shape is ignored.
     if (event.origin !== origin) return;
     if (!event.data || event.data.type !== MESSAGE_TYPE) return;

@@ -90,13 +90,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "apple-mobile-web-app-title", content: "SitePix" },
       { name: "application-name", content: "SitePix" },
       { name: "format-detection", content: "telephone=no" },
-      { title: "Everbreeze SitePix — Job Site Photos, Organized" },
+      { title: "Everbreeze SitePix - Job Site Photos, Organized" },
       {
         name: "description",
         content:
           "Capture, organize, and share construction job site photos in seconds. Built for contractors and field teams.",
       },
-      { property: "og:title", content: "Everbreeze SitePix — Job Site Photos, Organized" },
+      { property: "og:title", content: "Everbreeze SitePix - Job Site Photos, Organized" },
       {
         property: "og:description",
         content:
@@ -104,7 +104,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "Everbreeze SitePix — Job Site Photos, Organized" },
+      { name: "twitter:title", content: "Everbreeze SitePix - Job Site Photos, Organized" },
       {
         name: "twitter:description",
         content:

@@ -1,7 +1,7 @@
--- ASSIGNMENT — one relationship, spelled the same way on every kind of work.
+-- ASSIGNMENT - one relationship, spelled the same way on every kind of work.
 --
 -- Three tables hand work to a person: `project_checklists` (`assigned_to`),
--- `tasks` (`assignee_user_id`), and `project_workflows` — which carried no
+-- `tasks` (`assignee_user_id`), and `project_workflows` - which carried no
 -- assignee at all. Each recorded, at most, who the work went TO. None recorded
 -- who sent it.
 --
@@ -13,7 +13,7 @@
 -- So this migration adds `assigned_by` to all three, `assigned_to` to
 -- workflows, and then states the rule the relationship exists to express:
 --
---     the assignee marks it complete — the assignor is told, and can reopen it.
+--     the assignee marks it complete - the assignor is told, and can reopen it.
 --
 -- with a deliberate escape hatch: the assignor, and any workspace admin or
 -- project manager, may also close it. A crew member goes unreachable mid-job
@@ -21,7 +21,7 @@
 --
 -- === WHY THE RULE LIVES HERE, NOT IN REACT =================================
 -- The web app writes to these tables straight from the browser through the
--- Supabase client — there is no server handler in between (the RPC registry
+-- Supabase client - there is no server handler in between (the RPC registry
 -- carries only the two anonymous public-share readers). A check written in
 -- React is therefore a check any user can skip with a single
 -- `supabase.from('project_checklists').update({ completed_at: ... })` from the
@@ -31,7 +31,7 @@
 --
 -- Every guard is written `auth.uid() IS NOT NULL AND NOT allowed(...)`. Writes
 -- made with the service-role key carry no JWT, so `auth.uid()` is NULL for
--- them — the backfills in this file, the public-share readers in
+-- them - the backfills in this file, the public-share readers in
 -- apps/api/src/domains/projects/field-records.ts, and any future admin tooling
 -- must not be caught by a rule about which teammate did the tapping.
 --
@@ -68,7 +68,7 @@ COMMENT ON COLUMN public.project_workflows.assigned_by IS
   'Who handed this workflow to assigned_to. Notified on completion; may reopen it.';
 
 -- Backfill: work that is already assigned has an assignor, and on every row
--- that exists today it can only have been the person who created the record —
+-- that exists today it can only have been the person who created the record -
 -- nothing else was ever written. Rows with no assignee get no assignor, so the
 -- column stays honest: NULL means "never handed to anyone".
 UPDATE public.project_checklists
@@ -80,12 +80,12 @@ UPDATE public.tasks
  WHERE assignee_user_id IS NOT NULL AND assigned_by IS NULL;
 
 -- =========================================================================
--- 2. WORKFLOW RLS — teammates, which workflows never got
+-- 2. WORKFLOW RLS - teammates, which workflows never got
 -- =========================================================================
 -- 20260612191404_teams.sql gave every shared table an additive "Teammates ..."
 -- policy. It predates workflows (20260616050717) by four days and no later
 -- migration filled the gap, so `project_workflows` and its children are still
--- gated on `projects.created_by = auth.uid()` alone — exactly the bug that
+-- gated on `projects.created_by = auth.uid()` alone - exactly the bug that
 -- 20260728120000 had to fix for `tasks`.
 --
 -- Left alone, assigning a workflow would be a no-op with a notification
@@ -94,7 +94,7 @@ UPDATE public.tasks
 --
 -- Additive. The owner-only policies remain and RLS unions them.
 --
--- SELECT and UPDATE only, deliberately — the exact pair `tasks` was given, and
+-- SELECT and UPDATE only, deliberately - the exact pair `tasks` was given, and
 -- NOT `FOR ALL`.
 --
 -- A permissive `FOR ALL` policy here would have carried its own `WITH CHECK`,
@@ -180,7 +180,7 @@ CREATE POLICY "Teammates update team workflow items" ON public.project_workflow_
 -- 3. WHO MAY CLOSE A PIECE OF WORK
 -- =========================================================================
 
--- Workspace admin ('owner') or project manager ('admin') — the two roles the
+-- Workspace admin ('owner') or project manager ('admin') - the two roles the
 -- Settings page labels as management. `is_team_admin` already exists but takes
 -- a team id the callers here do not have, and has never been used by a policy.
 CREATE OR REPLACE FUNCTION public.is_team_manager(_user_id uuid)
@@ -198,14 +198,14 @@ $$;
 
 /*
  * The completion rule, in one place so checklists, tasks and workflows cannot
- * drift apart — the client's requirement was that the assignor/assignee
+ * drift apart - the client's requirement was that the assignor/assignee
  * relationship read the same across every feature that has one.
  *
  * Allowed to close:
- *   - nobody is assigned      — unassigned work belongs to whoever picks it up
- *   - the assignee            — they did it, and it timestamps to them
- *   - the assignor            — they own the outcome and can already reopen it
- *   - a manager               — the override, for when a tech is unavailable
+ *   - nobody is assigned      - unassigned work belongs to whoever picks it up
+ *   - the assignee            - they did it, and it timestamps to them
+ *   - the assignor            - they own the outcome and can already reopen it
+ *   - a manager               - the override, for when a tech is unavailable
  */
 CREATE OR REPLACE FUNCTION public.may_complete_assignment(
   _assigned_to uuid,
@@ -230,18 +230,18 @@ GRANT EXECUTE ON FUNCTION public.is_team_manager(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.may_complete_assignment(uuid, uuid, uuid) TO authenticated;
 
 -- =========================================================================
--- 4. ENFORCEMENT — BEFORE UPDATE, so a refused close never lands
+-- 4. ENFORCEMENT - BEFORE UPDATE, so a refused close never lands
 -- =========================================================================
 -- Only the transition into completion is guarded. Reopening is deliberately
 -- left open to anyone with write access: the assignor must be able to reopen
 -- (that is the reviewing half of the feature), and a crew member who closed
 -- something by mistake should be able to take it back without finding a
--- manager. Nothing is lost by reopening — the checklist snapshot is rebuilt on
+-- manager. Nothing is lost by reopening - the checklist snapshot is rebuilt on
 -- the next close.
 --
 -- The guard reads OLD, not NEW. An UPDATE can change several columns at once,
 -- so judging by NEW would let one statement hand the work to yourself and close
--- it in the same breath — `SET assigned_to = me, completed_at = now()` passes a
+-- it in the same breath - `SET assigned_to = me, completed_at = now()` passes a
 -- NEW-based check trivially, and RLS has no opinion about who may reassign. OLD
 -- asks the question that actually matters: whose was this before you touched
 -- it? No legitimate path is affected, because assigning and completing are
@@ -330,7 +330,7 @@ ALTER TABLE public.notifications ADD CONSTRAINT notifications_type_check CHECK (
 
 -- `entity_type`'s check was declared inline on the column in 20260728120000, so
 -- its name was generated by Postgres rather than chosen. `notifications_type_check`
--- is known-good — 20260728170000 dropped it by that name and succeeded — but
+-- is known-good - 20260728170000 dropped it by that name and succeeded - but
 -- nothing has ever proven the entity_type one, and guessing wrong here fails
 -- silently in the worst way: the DROP does nothing, the ADD succeeds under a
 -- fresh name, and the old constraint stays behind to reject every 'workflow'
@@ -355,7 +355,7 @@ BEGIN
 END $$;
 
 -- =========================================================================
--- 6. NOTIFY THE ASSIGNEE — workflows, matching tasks and checklists
+-- 6. NOTIFY THE ASSIGNEE - workflows, matching tasks and checklists
 -- =========================================================================
 
 CREATE OR REPLACE FUNCTION public.notify_workflow_assignee() RETURNS trigger
@@ -381,7 +381,7 @@ CREATE TRIGGER workflows_notify_assignee
   FOR EACH ROW EXECUTE FUNCTION public.notify_workflow_assignee();
 
 -- =========================================================================
--- 7. NOTIFY THE ASSIGNOR — the review-or-reopen half of the loop
+-- 7. NOTIFY THE ASSIGNOR - the review-or-reopen half of the loop
 -- =========================================================================
 -- Recipient is `assigned_by`, falling back to `created_by` for work that was
 -- never formally handed over. `create_notification` drops the row when the
@@ -472,7 +472,7 @@ CREATE TRIGGER workflows_notify_completed
 -- =========================================================================
 -- VERIFY
 -- =========================================================================
--- Columns — expect one row per table, all three `assigned_by` present.
+-- Columns - expect one row per table, all three `assigned_by` present.
 SELECT table_name, column_name
 FROM information_schema.columns
 WHERE table_schema = 'public'
@@ -481,7 +481,7 @@ WHERE table_schema = 'public'
     OR (table_name = 'project_workflows'  AND column_name IN ('assigned_to', 'assigned_by')))
 ORDER BY table_name, column_name;
 
--- Triggers — expect 6 enforce/notify-completed rows plus the assignee notifiers.
+-- Triggers - expect 6 enforce/notify-completed rows plus the assignee notifiers.
 SELECT c.relname AS table_name, t.tgname AS trigger_name
 FROM pg_trigger t
 JOIN pg_class c ON c.oid = t.tgrelid
@@ -493,7 +493,7 @@ WHERE NOT t.tgisinternal
   )
 ORDER BY c.relname, t.tgname;
 
--- Teammate reach into workflows — expect 6 rows: a view and an update policy on
+-- Teammate reach into workflows - expect 6 rows: a view and an update policy on
 -- each of the three workflow tables, and `cmd` never INSERT or ALL (see the
 -- note in section 2 about the Team-plan gate).
 SELECT tablename, policyname, cmd
@@ -503,7 +503,7 @@ WHERE schemaname = 'public'
   AND policyname LIKE 'Teammates%'
 ORDER BY tablename, cmd;
 
--- And the gate those policies must not have widened — expect exactly one
+-- And the gate those policies must not have widened - expect exactly one
 -- INSERT policy on project_workflows, still carrying is_team_plan().
 SELECT policyname, with_check
 FROM pg_policies
@@ -511,7 +511,7 @@ WHERE schemaname = 'public'
   AND tablename = 'project_workflows'
   AND cmd IN ('INSERT', 'ALL');
 
--- Assignment coverage — `assigned_by` must be non-NULL wherever work is assigned.
+-- Assignment coverage - `assigned_by` must be non-NULL wherever work is assigned.
 SELECT 'checklists' AS kind,
        count(*) FILTER (WHERE assigned_to IS NOT NULL)                          AS assigned,
        count(*) FILTER (WHERE assigned_to IS NOT NULL AND assigned_by IS NULL)  AS missing_assignor

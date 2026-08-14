@@ -46,7 +46,7 @@ const TEAM_SECTION = "Your Company";
 /**
  * Trade sections lead, general document shapes follow.
  *
- * The picker used to render every template as one flat scrolling list — thirty
+ * The picker used to render every template as one flat scrolling list - thirty
  * rows of near-identical names, alphabetical, with a team's own copies and
  * copies-of-copies at the top. Finding "the one an HVAC tech fills in on a
  * service call" meant reading all of it.
@@ -58,7 +58,7 @@ const TEAM_SECTION = "Your Company";
  *
  * The strings must match the `category` seeded in
  * supabase/migrations/*_document_templates_*_seed.sql. A category that is not
- * listed here still renders — it sorts alphabetically after these — so a new
+ * listed here still renders - it sorts alphabetically after these - so a new
  * seeded trade degrades to "in the right place-ish", never to "missing".
  */
 const CATEGORY_ORDER = [
@@ -93,7 +93,7 @@ function rank(category: string): number {
 
 /**
  * "HVAC Service Call Report" under the HVAC heading reads as "Service Call
- * Report" — the trade is already the row you are looking at.
+ * Report" - the trade is already the row you are looking at.
  *
  * Only the collapsed summary line is shortened. The template keeps its full
  * name everywhere else because that name becomes the created page's title, and
@@ -153,7 +153,7 @@ export function ChoosePageTemplateDialog({
     return templates.filter((t) => {
       if (filter === "team" && t.isExample) return false;
       if (filter === "example" && !t.isExample) return false;
-      // Match the trade and the summary too — searching "roof" or "invoice"
+      // Match the trade and the summary too - searching "roof" or "invoice"
       // should find a template whose name says neither.
       if (q) {
         const haystack = `${t.name} ${t.category ?? ""} ${t.description ?? ""}`.toLowerCase();
@@ -164,7 +164,7 @@ export function ChoosePageTemplateDialog({
   }, [templates, filter, search]);
 
   /**
-   * "Your Company" first, then the built-ins split by trade category — the
+   * "Your Company" first, then the built-ins split by trade category - the
    * category lives in the template's body rather than being spelled out in
    * every name, so the headings do that work instead.
    */
@@ -191,7 +191,7 @@ export function ChoosePageTemplateDialog({
 
   /*
    * Searching has to open what it found, or the results hide inside collapsed
-   * sections and the box reads as broken. Same for a single section — there is
+   * sections and the box reads as broken. Same for a single section - there is
    * nothing left to scan, so making the user click it is pure friction.
    *
    * `sections` is read through a ref and left out of the deps deliberately: it
@@ -221,7 +221,7 @@ export function ChoosePageTemplateDialog({
     }
   }
 
-  /** Straight to a new page, skipping the preview — the two-click path. */
+  /** Straight to a new page, skipping the preview - the two-click path. */
   function applyTemplate(id: string) {
     setUsingId(id);
     onUse(id);
@@ -272,7 +272,7 @@ export function ChoosePageTemplateDialog({
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search every trade — “panel”, “water heater”, “invoice”"
+                  placeholder="Search every trade - “panel”, “water heater”, “invoice”"
                   className="h-9 pl-8"
                 />
               </div>

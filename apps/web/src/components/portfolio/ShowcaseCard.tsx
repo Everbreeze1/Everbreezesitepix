@@ -9,7 +9,7 @@ import type { PortfolioShowcaseCard } from "@/lib/portfolio.functions";
  *
  * The whole tile is a single anchor rather than a div with an onClick, so
  * middle-click, "open in new tab" and keyboard focus all behave like the links
- * they look like — the same reasoning as the stretched link on the in-app
+ * they look like - the same reasoning as the stretched link on the in-app
  * showcase cards.
  *
  * `href` mode exists for the gallery embed, which renders inside an iframe on
@@ -63,7 +63,7 @@ export function ShowcaseCard({
             <span />
           )}
           {/* `featured` stopped controlling grid order once the owner could drag
-              the order themselves — it survives as this badge, which is the
+              the order themselves - it survives as this badge, which is the
               part customers actually see. */}
           {card.featured && (
             <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-neutral-900 shadow-sm">

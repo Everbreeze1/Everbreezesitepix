@@ -8,17 +8,17 @@ export const Route = createFileRoute("/features")({
   component: FeaturesPage,
   head: () => ({
     meta: [
-      { title: "Features — Everbreeze SitePix" },
+      { title: "Features - Everbreeze SitePix" },
       {
         name: "description",
         content:
-          "Capture, organize, share, and report on job site photos — everything a field crew needs to document a build, and nothing it doesn't.",
+          "Capture, organize, share, and report on job site photos - everything a field crew needs to document a build, and nothing it doesn't.",
       },
-      { property: "og:title", content: "Features — Everbreeze SitePix" },
+      { property: "og:title", content: "Features - Everbreeze SitePix" },
       {
         property: "og:description",
         content:
-          "Capture, organize, share, and report on job site photos — everything a field crew needs to document a build, and nothing it doesn't.",
+          "Capture, organize, share, and report on job site photos - everything a field crew needs to document a build, and nothing it doesn't.",
       },
       { property: "og:url", content: "https://www.everbreezesitepix.com/features" },
     ],
@@ -45,7 +45,7 @@ const features = [
   {
     icon: ShieldCheck,
     title: "Secure client sharing",
-    desc: "Share polished, watermarked photo galleries with clients and stakeholders — without exposing your whole library.",
+    desc: "Share polished, watermarked photo galleries with clients and stakeholders - without exposing your whole library.",
   },
   {
     icon: FileText,

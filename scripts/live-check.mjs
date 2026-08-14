@@ -6,7 +6,7 @@
  * action: no deletes, no archives, no share-link creation, no uploads. It only
  * navigates, scrolls, and measures.
  *
- * The geometry checks are the point — they verify the layout fixes from this
+ * The geometry checks are the point - they verify the layout fixes from this
  * session against a real rendered page, which no amount of reading source can
  * do. Run with: node scripts/live-check.mjs
  */

@@ -1,4 +1,4 @@
-// Where a report's pages begin — decided once, for every renderer.
+// Where a report's pages begin - decided once, for every renderer.
 //
 // A report is drawn three times: the builder's Preview tab and the public share
 // link both render `ReportDocument`, and the download renders pdf-lib in
@@ -8,8 +8,8 @@
 // font-metrics cursor test that no DOM renderer can reproduce, which meant the
 // page count moved when you added a sentence.
 //
-// `planSectionPages` is deliberately data-only — no font metrics, no measured
-// heights — so the browser and pdf-lib can both execute it and get identical
+// `planSectionPages` is deliberately data-only - no font metrics, no measured
+// heights - so the browser and pdf-lib can both execute it and get identical
 // answers. Anything that genuinely needs measurement (a paragraph overflowing
 // the bottom margin) stays inside the PDF renderer as *additional* pages; this
 // module fixes the boundaries the author asked for.
@@ -37,7 +37,7 @@ export const REPORT_PAGE = {
  * Split a block list at every explicit page break.
  *
  * Empty groups are dropped, so a leading break, a trailing break, or two in a
- * row never produce a blank page — an author pressing the button twice should
+ * row never produce a blank page - an author pressing the button twice should
  * not be punished with an empty sheet in the client's PDF.
  */
 export function splitOnPageBreak(blocks: RichBlock[]): RichBlock[][] {
@@ -64,7 +64,7 @@ export interface SectionPagePlan<P> {
  * The page boundaries for one section: its body split on explicit breaks, then
  * its photos batched `photosPerPage` at a time.
  *
- * A photos-only section stays a single page — that is the common "gallery
+ * A photos-only section stays a single page - that is the common "gallery
  * section", and forcing its first batch onto a second sheet would leave a page
  * holding nothing but a heading.
  */

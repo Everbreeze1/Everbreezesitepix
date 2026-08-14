@@ -20,7 +20,7 @@ interface Props {
   /** Toggle a tag name on/off for this photo. */
   onToggle: (tagName: string) => void | Promise<void>;
   /**
-   * Optional legacy props — kept for backwards compatibility with older callers.
+   * Optional legacy props - kept for backwards compatibility with older callers.
    * They are ignored: the picker always sources from the global/company tag library.
    */
   projectTags?: string[];

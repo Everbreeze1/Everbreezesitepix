@@ -3,7 +3,7 @@
  * renders one: the app page, the public share link, the printed sheet.
  *
  * Lives in `shared` because the *same* record is rendered twice from two
- * different sources — the web app reads live rows over RLS, the public share
+ * different sources - the web app reads live rows over RLS, the public share
  * route reads them with the service role and hands the browser a pre-baked
  * payload. Both must produce the same document, so the answer formatting and
  * the type labels are written once here rather than once per renderer.
@@ -15,7 +15,7 @@ export type ChecklistItemType = "checkbox" | "rating" | "text" | "pass_fail" | "
 /** Workflow step kinds. Mirrors `project_workflow_items.kind`. */
 export type WorkflowItemKind = "check" | "photo" | "note";
 
-/** Short, human labels for the printed record — no icons, no colours. */
+/** Short, human labels for the printed record - no icons, no colours. */
 export const CHECKLIST_TYPE_LABELS: Record<ChecklistItemType, string> = {
   checkbox: "Check",
   pass_fail: "Pass / Fail",
@@ -42,7 +42,7 @@ export function hasFieldResponse(value: unknown): boolean {
  * The stored shapes are what `ItemResponse` writes: "Pass"/"Fail" and
  * "Yes"/"No" as strings, ratings and numerics as numbers, text as a string.
  * Returns null when there is no answer, so callers can print an empty rule
- * instead of the word "null" — which is what a naive `String(value)` did.
+ * instead of the word "null" - which is what a naive `String(value)` did.
  */
 export function formatChecklistAnswer(
   itemType: ChecklistItemType | string | null | undefined,

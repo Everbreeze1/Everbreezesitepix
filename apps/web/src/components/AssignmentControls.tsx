@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Only the three fields a name needs. `TeamMemberLite` satisfies this, and so
- * do the trimmed-down rosters several panels already build for themselves —
+ * do the trimmed-down rosters several panels already build for themselves -
  * the picker has no business requiring an avatar it does not render.
  */
 export interface AssignableMember {
@@ -59,8 +59,8 @@ const UNASSIGNED = "__unassigned";
 /**
  * Pick an assignee, then save it.
  *
- * This used to write on change. Reassigning is not a filter — it moves a job
- * onto someone else's plate and fires a notification at them — and doing that
+ * This used to write on change. Reassigning is not a filter - it moves a job
+ * onto someone else's plate and fires a notification at them - and doing that
  * on the way past an open dropdown gave no moment to change your mind and no
  * confirmation that anything had happened. So the choice is held locally and
  * the Save button appears only once the selection differs from what is stored,

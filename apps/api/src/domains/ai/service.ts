@@ -91,7 +91,7 @@ export async function analyzePhotoService(ctx: AuthedContext, data: { photoId: s
           {
             role: "system",
             content:
-              "You are an expert construction/trades field inspector (electrical, HVAC, plumbing, roofing, structural). For the attached job-site photo: (1) extract the equipment BRAND, MODEL NUMBER and SERIAL NUMBER exactly as printed (leave empty if not visible — never guess); (2) capture any other readable text/labels/warnings into ocr_text; (3) identify visible defects (cracks, leaks, corrosion, wear, misalignment, missing parts, physical damage) with severity; (4) write a clear, safety-first field report; and (5) recommend practical next actions. Always call the report_site_analysis tool — never reply with free-form text.",
+              "You are an expert construction/trades field inspector (electrical, HVAC, plumbing, roofing, structural). For the attached job-site photo: (1) extract the equipment BRAND, MODEL NUMBER and SERIAL NUMBER exactly as printed (leave empty if not visible - never guess); (2) capture any other readable text/labels/warnings into ocr_text; (3) identify visible defects (cracks, leaks, corrosion, wear, misalignment, missing parts, physical damage) with severity; (4) write a clear, safety-first field report; and (5) recommend practical next actions. Always call the report_site_analysis tool - never reply with free-form text.",
           },
           {
             role: "user",
@@ -264,7 +264,7 @@ export async function chatWithAssistantService(
  * Every AI entry point must pass through here.
  *
  * These calls cost real money on our Gemini key, and the RPC endpoint is
- * reachable with nothing but a valid session — so a hidden button is not a
+ * reachable with nothing but a valid session - so a hidden button is not a
  * control. Three services (`summarizePhotosReport`, `draftReportNarrative`,
  * `extractPhotoText`) had no check at all, which let a cancelled account keep
  * generating reports and running OCR indefinitely.
@@ -274,7 +274,7 @@ export async function chatWithAssistantService(
  * cards in their retry window are not locked out. Only genuinely inactive
  * accounts are refused.
  *
- * @param feature Named in the error the user sees — "Auto-reports require…"
+ * @param feature Named in the error the user sees - "Auto-reports require…"
  *   was previously shown for OCR and site-log notes too.
  */
 async function requireActiveSub(
@@ -312,7 +312,7 @@ function describeTimeline(takenAt: Array<string | null>): string {
   const fmtTime = (d: Date) => d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 
   if (days.length === 1) {
-    return `All photos were captured on ${fmtDate(first)}, between ${fmtTime(first)} and ${fmtTime(last)} — a single visit.`;
+    return `All photos were captured on ${fmtDate(first)}, between ${fmtTime(first)} and ${fmtTime(last)} - a single visit.`;
   }
   return (
     `Photos span ${days.length} separate days, from ${fmtDate(first)} to ${fmtDate(last)}. ` +
@@ -330,7 +330,7 @@ function describeTimeline(takenAt: Array<string | null>): string {
  * material.
  *
  * Photos keep the user's chosen order (that's the document's order), but the
- * timeline is derived from real capture times and stated separately — so the
+ * timeline is derived from real capture times and stated separately - so the
  * model can narrate sequence without the document being reshuffled.
  */
 async function buildPhotoContext(
@@ -360,7 +360,7 @@ async function buildPhotoContext(
         .in("photo_id", photoIds)
         .eq("status", "completed"),
       (supabase as any).from("photo_tags").select("photo_id, tags(name)").in("photo_id", photoIds),
-      // Narration captured while walking the site — this is how a Report or
+      // Narration captured while walking the site - this is how a Report or
       // Site Log "pulls from a walkthrough": the spoken note rides on the photo.
       (supabase as any)
         .from("walkthrough_photos")
@@ -406,7 +406,7 @@ async function buildPhotoContext(
     const note = notesByPhoto.get(p.id);
     const comments = commentsByPhoto.get(p.id) ?? [];
     return [
-      `Photo ${i + 1}${cap ? ` — ${cap}` : ""}`,
+      `Photo ${i + 1}${cap ? ` - ${cap}` : ""}`,
       cap ? null : `(no caption recorded)`,
       proj
         ? `Project: ${proj.name}${
@@ -447,7 +447,7 @@ async function buildPhotoContext(
   };
 }
 
-/** Shared chat call — returns the assistant's message text. */
+/** Shared chat call - returns the assistant's message text. */
 async function chatComplete(system: string, user: string): Promise<string> {
   const ep = chatEndpoint(CHAT_MODEL);
   const res = await fetch(ep.url, {
@@ -473,10 +473,10 @@ async function chatComplete(system: string, user: string): Promise<string> {
 
 /**
  * SITE LOG voice: the technician's own quick record of a visit. Terse bullets,
- * minimal ceremony — explicitly not a customer-facing document.
+ * minimal ceremony - explicitly not a customer-facing document.
  */
 const SITE_LOG_SYSTEM =
-  "You are SitePix AI writing a technician's own SITE LOG — a fast internal record of a site visit, NOT a customer-facing report. " +
+  "You are SitePix AI writing a technician's own SITE LOG - a fast internal record of a site visit, NOT a customer-facing report. " +
   "Output Markdown with ONLY these sections: '## What was done' (3-6 terse bullets, fragments not full sentences, e.g. '- Replaced condensate pump, unit 4B'), " +
   "and '## Follow-ups' (bullets, ONLY if the source material explicitly mentions outstanding work; omit the whole section otherwise). " +
   "Do NOT write an intro, a title, a conclusion, or any prose paragraphs. Do NOT pad. Keep each bullet under 12 words where possible. " +
@@ -485,24 +485,24 @@ const SITE_LOG_SYSTEM =
 
 /**
  * REPORT voice: a formal, client-facing document. Produces the two narrative
- * bookends — an opening summary and a closing conclusion — which the page
+ * bookends - an opening summary and a closing conclusion - which the page
  * generator places around the photo sections.
  */
 const REPORT_SYSTEM =
   "You are SitePix AI drafting a formal, client-facing site REPORT. Produce EXACTLY two Markdown sections and nothing else:\n" +
   "## Executive Summary\n<2-4 full sentences describing the scope of the visit and what was documented>\n\n" +
   "## Conclusion\n<2-3 full sentences closing out the report: what the documentation shows overall and any stated next steps>\n\n" +
-  "Write in complete, professional prose — no bullets. Do NOT include a title, photo-by-photo notes, or any other section. " +
+  "Write in complete, professional prose - no bullets. Do NOT include a title, photo-by-photo notes, or any other section. " +
   "STYLE RULES: neutral and factual. Do NOT call things 'critical', 'code violations', or 'safety hazards'. Do NOT invent defects, " +
   "recommendations, findings, or risks that the source material does not state. If the source material is thin, keep it brief rather than embellishing.";
 
 /**
- * SUMMARY voice: a short shareable brief. Prose, not bullets — the "what
+ * SUMMARY voice: a short shareable brief. Prose, not bullets - the "what
  * happened here, in a paragraph" read. Distinct from Daily Log (terse internal
  * bullets) and from Report (a full formal document with a cover page).
  */
 const SUMMARY_SYSTEM =
-  "You are SitePix AI writing a brief SUMMARY of a set of site photos — a short, shareable recap someone can read in under a minute. " +
+  "You are SitePix AI writing a brief SUMMARY of a set of site photos - a short, shareable recap someone can read in under a minute. " +
   "Output Markdown with ONLY these sections: '## Overview' (2-4 sentences of flowing prose describing what was documented and when), " +
   "and '## Key Points' (3-5 short bullets covering the most notable items). " +
   "Do NOT include a title, a conclusion, or photo-by-photo commentary. " +
@@ -516,7 +516,7 @@ export async function summarizePhotosReportService(
   await requireActiveSub(ctx.supabase, ctx.userId, "Photo report summaries");
   // Site Log is the technician's own internal record, so team photo comments
   // are fair game here. They are deliberately NOT fed to the client-facing
-  // Report — internal @mention discussion must not leak into a deliverable.
+  // Report - internal @mention discussion must not leak into a deliverable.
   const isSummary = data.mode === "summary";
   // Daily Log is the technician's own internal record, so team photo comments
   // are fair game there. A Summary is shareable, so it gets the same treatment
@@ -556,7 +556,7 @@ export async function draftReportNarrativeService(
  * Pulls the body of a `## Heading` block out of the model's Markdown.
  *
  * The lookahead terminates at the next heading or at the absolute end of the
- * string — `$(?![\s\S])` rather than `\z`, which JavaScript does not support
+ * string - `$(?![\s\S])` rather than `\z`, which JavaScript does not support
  * (and which silently matched nothing, returning every section empty).
  */
 function extractSection(markdown: string, heading: string): string {
@@ -619,7 +619,7 @@ export async function describeSiteLogPhotosService(ctx: AuthedContext, data: { p
           messages: [
             { role: "system", content: "You write a concise site-log note for a construction/trades photo, grounded ONLY in the user-provided context (caption, tags, voice notes). Reply with 2-3 short factual sentences that restate/expand the provided context and describe what is plainly visible. Neutral tone. Do NOT invent defects, risks, code issues, or recommendations the user did not mention. No headings, no bullets, no markdown, no disclaimers." },
             { role: "user", content: [
-              { type: "text", text: `Photo ${i + 1} — user context: ${contextBits.join(" | ")}. Write the site-log note.` },
+              { type: "text", text: `Photo ${i + 1} - user context: ${contextBits.join(" | ")}. Write the site-log note.` },
               { type: "image_url", image_url: { url: await inlineImageAsDataUrl(item.url) } },
             ] },
           ],
@@ -680,7 +680,7 @@ export async function summarizeWalkthroughsReportService(
     body: JSON.stringify({
       model: ep.model,
       messages: [
-        { role: "system", content: "You are SitePix AI, summarizing one or more site walkthroughs into a clean recap — like a site log, not an engineering diagnosis. Structure the Markdown as: # Title, ## Summary (2-3 sentences describing what was walked), ## Highlights (bulleted list summarizing what the technician described, grouped by area/topic when natural), ## Follow-ups (only if the source material explicitly mentions them). STYLE RULES: Neutral, factual, summary-focused. Do NOT use language like 'critical', 'code violation', 'safety hazard', 'severity: high', or strong diagnostic opinions unless the speaker explicitly used those words. Do NOT invent findings, risks, or recommendations. Base every bullet on what is actually in the transcripts and prior summaries. Prefer short bullets and clean spacing over long paragraphs." },
+        { role: "system", content: "You are SitePix AI, summarizing one or more site walkthroughs into a clean recap - like a site log, not an engineering diagnosis. Structure the Markdown as: # Title, ## Summary (2-3 sentences describing what was walked), ## Highlights (bulleted list summarizing what the technician described, grouped by area/topic when natural), ## Follow-ups (only if the source material explicitly mentions them). STYLE RULES: Neutral, factual, summary-focused. Do NOT use language like 'critical', 'code violation', 'safety hazard', 'severity: high', or strong diagnostic opinions unless the speaker explicitly used those words. Do NOT invent findings, risks, or recommendations. Base every bullet on what is actually in the transcripts and prior summaries. Prefer short bullets and clean spacing over long paragraphs." },
         { role: "user", content: `${data.title ? `Report title: ${data.title}\n\n` : ""}Walkthroughs:\n\n${blocks}` },
       ],
     }),
@@ -723,7 +723,7 @@ export async function extractPhotoTextService(ctx: AuthedContext, data: { photoI
         {
           role: "system",
           content:
-            "You are an OCR engine. Extract ALL readable text from the image exactly as printed — labels, warnings, model numbers, handwriting, signage. Preserve line breaks. Do NOT add commentary, headings, translations, or explanations. If there is no readable text, reply with exactly: (no text found).",
+            "You are an OCR engine. Extract ALL readable text from the image exactly as printed - labels, warnings, model numbers, handwriting, signage. Preserve line breaks. Do NOT add commentary, headings, translations, or explanations. If there is no readable text, reply with exactly: (no text found).",
         },
         {
           role: "user",

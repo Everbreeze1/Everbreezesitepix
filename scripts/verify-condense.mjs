@@ -54,7 +54,7 @@ await page.keyboard.press("Escape").catch(() => {});
 
 /*
  * Nine items only give ~470px of scroll, which is not enough for the bar to
- * reach its dock line — so the interesting case (a long template, where the
+ * reach its dock line - so the interesting case (a long template, where the
  * bar is pinned for most of the scroll) needs more rows. Bulk-add via the
  * "Paste a list" dialog.
  */
@@ -83,7 +83,7 @@ await page.keyboard.press("Escape").catch(() => {});
 /** Measures the sticky bar and the first checklist row. */
 const measure = () =>
   page.evaluate(() => {
-    // Anchor on the title input, then walk up to its sticky ancestor —
+    // Anchor on the title input, then walk up to its sticky ancestor -
     // selecting "a sticky div containing an input" matched the rail's search
     // box instead, and "ul > li" matched the sidebar nav.
     const titleInput = document.querySelector('input[aria-label="Template name"]');
@@ -120,7 +120,7 @@ const atTop = await measure();
 await page.screenshot({ path: `${SHOTS}/condense-1-top.png` });
 
 // Scroll just far enough that the bar is docked while item 1 is still beside
-// it — the exact position where the old layout hid item 1.
+// it - the exact position where the old layout hid item 1.
 await page.evaluate(() => window.scrollTo(0, 520));
 await page.waitForTimeout(900);
 const scrolled = await measure();
@@ -139,7 +139,7 @@ console.log(`first row covered by bar while scrolled: ${scrolled.covered}`);
 
 /*
  * The regression is "item 1 can never be seen", not "item 1 passes under the
- * header while scrolling" — content sliding under a sticky bar is how sticky
+ * header while scrolling" - content sliding under a sticky bar is how sticky
  * bars work. So the assertions are:
  *   1. at rest (scroll 0) item 1 is fully clear of the bar, and
  *   2. the bar actually condenses once docked.
@@ -147,7 +147,7 @@ console.log(`first row covered by bar while scrolled: ${scrolled.covered}`);
  * to scroll to reveal it.
  */
 if (atTop.covered)
-  problems.push("item 1 is covered by the bar even at scroll 0 — the original bug");
+  problems.push("item 1 is covered by the bar even at scroll 0 - the original bug");
 if (scrolled.bar && atTop.bar && scrolled.bar.height >= atTop.bar.height)
   problems.push(`bar did not condense (${atTop.bar.height} -> ${scrolled.bar.height})`);
 if (scrolled.bar && scrolled.bar.top > 90)

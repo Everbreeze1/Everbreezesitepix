@@ -3,7 +3,7 @@
 -- Safe to re-run. Apply in the SitePix Supabase SQL editor.
 -- =============================================================================
 
--- 1. projects.completed_at — first moment a project got the "Complete" label.
+-- 1. projects.completed_at - first moment a project got the "Complete" label.
 DO $$
 BEGIN
   IF EXISTS (
@@ -18,7 +18,7 @@ BEGIN
   END IF;
 END $$;
 
--- 2. project_label_events — every time a label is applied to or removed
+-- 2. project_label_events - every time a label is applied to or removed
 --    from a project. Used to derive Start ("Lead" applied) and End ("Complete"
 --    applied) dates for the Projects home page filters.
 CREATE TABLE IF NOT EXISTS public.project_label_events (

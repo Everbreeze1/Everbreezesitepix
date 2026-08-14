@@ -101,7 +101,7 @@ const SidebarProvider = React.forwardRef<
         // inputs and Tiptap's contenteditable alike). Tiptap's keymap calls
         // preventDefault() but not stopPropagation(), so without this guard
         // the keystroke bolds the selection *and* toggles this sidebar at
-        // the same time — bold applies, and the nav visibly shifts under it.
+        // the same time - bold applies, and the nav visibly shifts under it.
         const target = event.target as HTMLElement | null;
         if (target?.closest('input, textarea, [contenteditable="true"]')) return;
         event.preventDefault();

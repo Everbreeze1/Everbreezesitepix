@@ -19,7 +19,7 @@ import { photoRowHtml } from "../apps/web/src/lib/tiptap-photo-slot";
 const schema = getSchema([Document, Paragraph, Text, ProjectImage]);
 
 /**
- * The `src` shape an unfilled slot carries — `isPhotoSlot` keys off this
+ * The `src` shape an unfilled slot carries - `isPhotoSlot` keys off this
  * prefix, so the row builder is asserted to still emit it.
  */
 function slotSrc(label: string): string {
@@ -48,12 +48,12 @@ function photo(id: string): ProseMirrorNode {
   });
 }
 
-/** doc(p(...children)) — a slot row is a single paragraph of inline images. */
+/** doc(p(...children)) - a slot row is a single paragraph of inline images. */
 function docOf(...children: ProseMirrorNode[]): ProseMirrorNode {
   return schema.nodes.doc.create(null, schema.nodes.paragraph.create(null, children));
 }
 
-describe("findImagePos — the clicked slot is the only place the photo may go", () => {
+describe("findImagePos - the clicked slot is the only place the photo may go", () => {
   it("finds the slot at the position captured when the picker opened", () => {
     const doc = docOf(slot(1), slot(2));
     // Paragraph opens at 0, so its inline children start at 1.
@@ -85,7 +85,7 @@ describe("findImagePos — the clicked slot is the only place the photo may go",
 
   it("picks the nearest twin when a row holds byte-identical slots", () => {
     // A seeded four-up row is four copies of the same SVG with the same alt,
-    // so identity alone cannot tell them apart — proximity has to.
+    // so identity alone cannot tell them apart - proximity has to.
     const twin = () =>
       schema.nodes.image.create({ src: slotSrc("Wide shot"), alt: "Wide shot", width: "48%" });
     const before = docOf(twin(), twin(), twin(), twin());
@@ -103,7 +103,7 @@ describe("findImagePos — the clicked slot is the only place the photo may go",
   });
 });
 
-describe("emptySlotNearSelection — the toolbar must not strand a photo beside a slot", () => {
+describe("emptySlotNearSelection - the toolbar must not strand a photo beside a slot", () => {
   /** A caret at `pos` in a document. */
   function withCaret(doc: ProseMirrorNode, pos: number): EditorState {
     return EditorState.create({
@@ -153,7 +153,7 @@ describe("emptySlotNearSelection — the toolbar must not strand a photo beside 
 
   it("does not reach past the neighbouring node", () => {
     const doc = docOf(slot(1), photo("a"));
-    // Caret after the real photo — the slot is two nodes away, leave it be.
+    // Caret after the real photo - the slot is two nodes away, leave it be.
     const state = withCaret(doc, 3);
     expect(emptySlotNearSelection(state.doc, state.selection)).toBe(null);
   });

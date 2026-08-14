@@ -3,7 +3,7 @@
 -- Review links already exist (team_review_links, configured in Settings) and
 -- already render on the public *report* page. The showcase is the better home
 -- for them: when a job finishes you send the customer a page of their finished
--- work, and that is the natural moment to ask — far better than a bare email.
+-- work, and that is the natural moment to ask - far better than a bare email.
 --
 -- It needs to be per-showcase rather than always-on because a showcase serves
 -- two jobs. A per-job page goes to a customer who just paid you, where the ask

@@ -144,13 +144,13 @@ export function MapPage() {
      * This used to be a single unbounded `select("project_id, image_url,
      * created_at, archived")` over every non-archived photo, on every visit to
      * the map, purely to derive three numbers per project. On a real contractor
-     * account — thousands of photos — that is megabytes of JSON transferred and
+     * account - thousands of photos - that is megabytes of JSON transferred and
      * parsed to render a handful of pins.
      *
      * Two bounded queries per project instead: the first returns the exact count
      * in the Content-Range header plus the newest row (for last activity), the
      * second the newest row that actually has a thumbnail. Both transfer at most
-     * one row, so the payload is now O(projects) rather than O(photos) — and
+     * one row, so the payload is now O(projects) rather than O(photos) - and
      * projects are what the map is already bounded by.
      *
      * A single GROUP BY would be better still, but PostgREST cannot aggregate
@@ -189,7 +189,7 @@ export function MapPage() {
     let resolved = all;
     if (missing.length > 0) {
       setGeocoding(missing.length);
-      // Geocode + persist each missing project independently and in parallel —
+      // Geocode + persist each missing project independently and in parallel -
       // these are separate rows with no shared state, so there's no need to
       // pay one round-trip's latency at a time.
       const geocoded = await Promise.all(
@@ -226,7 +226,7 @@ export function MapPage() {
   });
 
   // Local useState mirrors query.data so a cache-hit remount (queryFn skipped,
-  // data served straight from cache) still repopulates the map/list — a plain
+  // data served straight from cache) still repopulates the map/list - a plain
   // useState reset on mount would otherwise leave these empty until the next
   // refetch.
   useEffect(() => {
@@ -570,7 +570,7 @@ export function MapPage() {
                     </div>
                     <div className="font-manrope mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">
                       <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                      <span className="truncate">{formatAddress(p) || "—"}</span>
+                      <span className="truncate">{formatAddress(p) || "-"}</span>
                     </div>
                     {!hasCoords && (
                       <p className="mt-1.5 text-[11px] font-bold text-amber-600">Locating…</p>

@@ -67,7 +67,7 @@ export async function createCheckoutSessionService(
   data: z.infer<typeof createCheckoutSessionInputSchema>,
 ) {
   // The pricing page disables the stepper past each tier's cap, but this RPC
-  // is callable directly — without this a caller could buy 40 seats of Starter
+  // is callable directly - without this a caller could buy 40 seats of Starter
   // and land on a subscription the invite flow (PLAN_MEMBER_CAP) then refuses
   // to honour, i.e. paid-for seats that can never be filled.
   const seatCap = PLAN_MEMBER_CAP[data.plan as BillingPlan];
@@ -92,14 +92,14 @@ export async function createCheckoutSessionService(
     cancel_url: `${data.origin}/pricing`,
     metadata: { team_id: team.id, plan: data.plan, interval: data.interval, seats: String(data.seats) },
     subscription_data: {
-      // Every tier advertises the same free trial on /pricing — keep this in
+      // Every tier advertises the same free trial on /pricing - keep this in
       // sync with TRIAL_DAYS in apps/web/src/lib/pricing.ts.
       trial_period_days: TRIAL_DAYS,
       metadata: { team_id: team.id, plan: data.plan, interval: data.interval, seats: String(data.seats) },
     },
     // Our products don't have a Stripe tax_code assigned, which Managed
     // Payments (on by default for this account) requires. Disable it for
-    // this session rather than guessing a tax category — this SDK version
+    // this session rather than guessing a tax category - this SDK version
     // (17.x) predates the managed_payments param, hence the cast.
     managed_payments: { enabled: false },
   } as Stripe.Checkout.SessionCreateParams & { managed_payments: { enabled: boolean } });
@@ -114,7 +114,7 @@ export async function createBillingPortalSessionService(
 ) {
   const team = await requireOwnedTeam(ctx);
   if (!team.stripe_customer_id) {
-    throw new Error("No billing account yet — subscribe to a plan first.");
+    throw new Error("No billing account yet - subscribe to a plan first.");
   }
 
   const stripe = getStripe();

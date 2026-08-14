@@ -1,6 +1,6 @@
 /**
  * Standalone Node HTTP server for @sitepix/api.
- * Deployable independently of apps/web — run with `npm run dev` / `npm start`
+ * Deployable independently of apps/web - run with `npm run dev` / `npm start`
  * as a plain Node process (no Docker).
  */
 import "dotenv/config";
@@ -23,7 +23,7 @@ import {
  * Secrets with no safe fallback: Supabase (every route), Stripe (billing +
  * webhook signature checks) and Resend (auth + field-report email). Missing one
  * used to surface as a 500 on the first customer request; the process now
- * refuses to boot instead. That is the safe direction on Railway — a failed
+ * refuses to boot instead. That is the safe direction on Railway - a failed
  * boot fails the `/v1/health` healthcheck, so the deploy is never promoted and
  * the previous instance keeps serving.
  */
@@ -39,7 +39,7 @@ const REQUIRED_ENV = [
 ] as const;
 
 /**
- * Single-feature keys — the rest of the API works without them, so warn only.
+ * Single-feature keys - the rest of the API works without them, so warn only.
  *
  * GOOGLE_CLOUD_API_KEY (Google Cloud Text-to-Speech, domains/tts/synthesize.ts)
  * is deliberately not listed: the synthesizeBreezeSpeech RPC has no caller in
@@ -56,7 +56,7 @@ const OPTIONAL_ENV = [
 function checkEnv(): void {
   const missing = REQUIRED_ENV.filter((name) => !process.env[name]?.trim());
   if (missing.length) {
-    console.error(`sitepix-api: refusing to start — missing required env: ${missing.join(", ")}`);
+    console.error(`sitepix-api: refusing to start - missing required env: ${missing.join(", ")}`);
     console.error(
       "Set them in the Railway service's Variables tab (docs/ops.md), or apps/api/.env locally.",
     );
@@ -66,7 +66,7 @@ function checkEnv(): void {
   const degraded = OPTIONAL_ENV.filter((name) => !process.env[name]?.trim());
   if (degraded.length) {
     console.warn(
-      `sitepix-api: starting without ${degraded.join(", ")} — the features they back will fail closed.`,
+      `sitepix-api: starting without ${degraded.join(", ")} - the features they back will fail closed.`,
     );
   }
 
@@ -78,7 +78,7 @@ function checkEnv(): void {
   );
   if (missingPrices.length) {
     console.warn(
-      `sitepix-api: no monthly Stripe price id for ${missingPrices.join(", ")} — checkout for those plans will fail.`,
+      `sitepix-api: no monthly Stripe price id for ${missingPrices.join(", ")} - checkout for those plans will fail.`,
     );
   }
 }
@@ -86,8 +86,8 @@ function checkEnv(): void {
 checkEnv();
 
 /**
- * Railway does not reliably export NODE_ENV=production — it depends on the
- * builder — so keying the guard below on NODE_ENV alone would leave it inert in
+ * Railway does not reliably export NODE_ENV=production - it depends on the
+ * builder - so keying the guard below on NODE_ENV alone would leave it inert in
  * the one environment it exists to protect. Any of Railway's own injected
  * variables is proof enough that this is not a developer's laptop.
  */
@@ -101,17 +101,17 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
   .filter(Boolean);
 
 /**
- * `*` is a fine local-dev default but a dangerous production one — it lets any
+ * `*` is a fine local-dev default but a dangerous production one - it lets any
  * site read this API's responses. An unset allowlist in production is fatal for
  * the same reason the REQUIRED_ENV list is: `/v1/health` carries no `Origin`
  * header and answers 200 regardless, so merely refusing cross-origin calls
- * would let Railway promote a deploy whose every browser call is CORS-blocked —
+ * would let Railway promote a deploy whose every browser call is CORS-blocked -
  * the live site goes dark behind a green healthcheck. Failing the boot fails
  * the healthcheck instead, and the previous instance keeps serving.
  */
 if (isProduction && !allowedOrigins.length) {
   console.error(
-    "sitepix-api: refusing to start — ALLOWED_ORIGINS is unset in production. Set it in Railway to the apex + www origins (docs/ops.md).",
+    "sitepix-api: refusing to start - ALLOWED_ORIGINS is unset in production. Set it in Railway to the apex + www origins (docs/ops.md).",
   );
   process.exit(1);
 }
@@ -121,7 +121,7 @@ const corsOrigin: string | string[] = allowedOrigins.length ? allowedOrigins : "
 const app = new Hono();
 
 /**
- * Baseline security headers on **every** response — successes, `onError` 500s
+ * Baseline security headers on **every** response - successes, `onError` 500s
  * and `notFound` 404s alike, which is why they are applied after `next()` on
  * the outermost middleware rather than per route. Handler-owned headers
  * (Content-Type, Cache-Control, the rate-limit headers) are already set by then
@@ -133,7 +133,7 @@ app.use("*", async (c, next) => {
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   // Nothing here renders HTML, and the two PDF routes are opened as top-level
-  // tabs by apps/web (`window.open` / `target="_blank"`), never iframed — so a
+  // tabs by apps/web (`window.open` / `target="_blank"`), never iframed - so a
   // blanket DENY is safe. The deliberately-framed embed product is served by
   // apps/web, not by this API, so it is unaffected.
   headers.set("X-Frame-Options", "DENY");
@@ -151,7 +151,7 @@ app.use("*", async (c, next) => {
  * The PDF routes deliberately get a much weaker policy. They send
  * `Content-Disposition: inline`, so Chrome renders them through a generated
  * plugin document that `<embed>`s the file, and that embed is subject to the
- * PDF response's own CSP — `default-src 'none'` (which covers `object-src`) has
+ * PDF response's own CSP - `default-src 'none'` (which covers `object-src`) has
  * historically rendered such tabs blank. A PDF is not a document the browser
  * can be tricked into executing, so `frame-ancestors` is the only directive
  * that buys anything here anyway; the rest is risk without benefit on a
@@ -185,7 +185,7 @@ app.post("/v1/billing/webhook", (c) => handleStripeWebhook(c.req.raw));
 app.get("/v1/reports/:token/pdf", (c) => handleReportPdf(c.req.param("token")));
 app.get("/v1/walkthroughs/:token/pdf", (c) => handleWalkthroughPdf(c.req.param("token")));
 
-// Legacy aliases — kept for existing Supabase Auth Hook / cron configs. Do not use in new clients.
+// Legacy aliases - kept for existing Supabase Auth Hook / cron configs. Do not use in new clients.
 app.post("/api/auth/send-email", (c) => handleAuthSendEmail(c.req.raw));
 app.post("/api/email-report", (c) => handleFieldReportEmail(c.req.raw));
 app.post("/api/public/hooks/purge-trash", (c) => handlePurgeTrash(c.req.raw));
@@ -205,7 +205,7 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`sitepix-api listening on http://localhost:${info.port}`);
 });
 
-/** Upper bound on the drain — a walkthrough PDF render is the slowest request. */
+/** Upper bound on the drain - a walkthrough PDF render is the slowest request. */
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 let shuttingDown = false;
@@ -218,10 +218,10 @@ let shuttingDown = false;
 function shutdown(signal: NodeJS.Signals): void {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(`sitepix-api: ${signal} received — draining in-flight requests`);
+  console.log(`sitepix-api: ${signal} received - draining in-flight requests`);
 
   const force = setTimeout(() => {
-    console.error(`sitepix-api: drain exceeded ${SHUTDOWN_TIMEOUT_MS}ms — exiting anyway`);
+    console.error(`sitepix-api: drain exceeded ${SHUTDOWN_TIMEOUT_MS}ms - exiting anyway`);
     process.exit(1);
   }, SHUTDOWN_TIMEOUT_MS);
   // Don't let the timer itself hold the loop open once the drain is done.

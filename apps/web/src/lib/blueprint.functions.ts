@@ -14,7 +14,7 @@ export const applyProjectBlueprint = rpcOp<
     /** Items that could not be created. Empty on a fully clean apply. */
     failed: Array<{ kind: string; reason: string }>;
     /**
-     * False when the ledger row could not be written — the apply itself
+     * False when the ledger row could not be written - the apply itself
      * succeeded, but the project will not be able to show which blueprint made
      * it. Best-effort on the server, so this is the only signal.
      */

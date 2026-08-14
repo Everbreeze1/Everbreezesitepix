@@ -22,7 +22,7 @@ interface PortfolioUrls {
 /**
  * Published portfolio sites and their project pages.
  *
- * Being indexable is half of what a portfolio site is *for* — a contractor
+ * Being indexable is half of what a portfolio site is *for* - a contractor
  * ranks on "<trade> <city>" through project pages, and none of that happens if
  * Google is never told they exist. Failures are swallowed: a marketing sitemap
  * losing its long tail for one cache cycle beats returning a 500 to a crawler.

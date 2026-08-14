@@ -32,13 +32,13 @@ import { ensureProjectShare, setProjectShare } from "@/lib/project-shares.functi
  *
  *  2. The download itself never showed anyone what they were getting: a `data:`
  *     URL on a detached `<a download>`, which Safari does not treat as a
- *     download at all — it navigates, and macOS hands the result to Preview.
+ *     download at all - it navigates, and macOS hands the result to Preview.
  *     "It opens an odd file" is exactly what that looks like from the outside.
  *     The bytes now go through a Blob and an anchor that is actually in the
  *     document, and the code is on screen before anything is saved.
  *
  * Opening this dialog is what publishes the link, the first time and only the
- * first time — see `load`. A code that arrives dead is a code the owner has to
+ * first time - see `load`. A code that arrives dead is a code the owner has to
  * be told about, and asking someone who just opened *QR code for this job*
  * whether they meant it is a question with one answer. After that first open the
  * switch is theirs alone: a link they turn off is never turned back on by
@@ -46,7 +46,7 @@ import { ensureProjectShare, setProjectShare } from "@/lib/project-shares.functi
  * `ensureProjectShareService` and 20260818000300).
  *
  * The dialog shows one state at a time, and says each thing once. While the link
- * is off it is a greyed code and the button that turns it on — the switch, the
+ * is off it is a greyed code and the button that turns it on - the switch, the
  * link box, "Save PNG" and "Print sheet" all describe a code that leads nowhere,
  * and the caption under it said what the button already says. While it is on,
  * the ways to hand the link over are the ways a phone can actually hand it over:
@@ -62,7 +62,7 @@ function slugify(name: string): string {
  *
  * Chrome will download a `data:` href; Safari will not, and Firefox refuses a
  * detached anchor. An object URL from a Blob is the one form all three treat as
- * a file — which is the actual bug behind "Save QR code opens a PDF".
+ * a file - which is the actual bug behind "Save QR code opens a PDF".
  */
 function dataUrlToBlob(dataUrl: string): Blob {
   const [head, base64] = dataUrl.split(",");
@@ -114,7 +114,7 @@ export function ProjectQrDialog({
    *
    * Note what this cannot become. The menu mounts this dialog as
    * `{qrOpen && …}`, so it unmounts on close and every open starts from blank
-   * state — an "enable on open" effect written here would fire on *every* open,
+   * state - an "enable on open" effect written here would fire on *every* open,
    * not once, and would silently re-publish the photos of an owner who switched
    * the link off when the job finished, landing them in a success state
    * indistinguishable from the one they deliberately left.
@@ -177,7 +177,7 @@ export function ProjectQrDialog({
       const res = await setProjectShare({ data: { projectId, enable: next } });
       setToken(res.shareToken);
       setLive(!res.revokedAt);
-      toast.success(next ? "Link is live" : "Link turned off — the printed code stops working");
+      toast.success(next ? "Link is live" : "Link turned off - the printed code stops working");
     } catch (e: any) {
       toast.error(e?.message ?? "Could not change the link");
     } finally {
@@ -191,12 +191,12 @@ export function ProjectQrDialog({
       await navigator.clipboard.writeText(url);
       toast.success("Link copied");
     } catch {
-      toast.error("Couldn't copy — select the link and copy it manually");
+      toast.error("Couldn't copy - select the link and copy it manually");
     }
   }
 
   /**
-   * Hand the link to Messages, WhatsApp, Mail — whatever the phone offers.
+   * Hand the link to Messages, WhatsApp, Mail - whatever the phone offers.
    *
    * The link, not the QR image: the recipient is reading it on the device they
    * were sent it on, and a photo of a code they would have to scan with a
@@ -236,7 +236,7 @@ export function ProjectQrDialog({
           <DialogHeader>
             <DialogTitle>QR code for “{projectName}”</DialogTitle>
             <DialogDescription>
-              Scanning it opens this job’s photos in any browser — no app, no account, no sign-in.
+              Scanning it opens this job’s photos in any browser - no app, no account, no sign-in.
             </DialogDescription>
           </DialogHeader>
 
@@ -264,7 +264,7 @@ export function ProjectQrDialog({
           {/*
             Off: one sentence and the button that changes it. On: the switch that
             takes it back down, the link, and the ways to pass it on. Nothing
-            that describes a dead code — offering "Save PNG" on one is offering
+            that describes a dead code - offering "Save PNG" on one is offering
             to print a sign that sends customers to an error page.
           */}
           {live ? (
@@ -273,7 +273,7 @@ export function ProjectQrDialog({
                 <div className="min-w-0">
                   <p className="text-sm font-semibold">Anyone can scan it</p>
                   <p className="text-xs text-muted-foreground">
-                    Visitors see this job’s name, address and photos — nothing else, and nothing
+                    Visitors see this job’s name, address and photos - nothing else, and nothing
                     they can change.
                   </p>
                 </div>
@@ -305,7 +305,7 @@ export function ProjectQrDialog({
               )}
 
               <div className="flex flex-col gap-2 sm:flex-row">
-                {/* Only where the OS has a share sheet to open — see `canShare`. */}
+                {/* Only where the OS has a share sheet to open - see `canShare`. */}
                 {canShare && (
                   <Button className="flex-1" disabled={!url} onClick={() => void share()}>
                     <Share2 className="mr-2 h-4 w-4" />
@@ -330,7 +330,7 @@ export function ProjectQrDialog({
           ) : (
             <>
               {/*
-                Reaching this state now means the link was switched off — by
+                Reaching this state now means the link was switched off - by
                 this owner, or by the backfill that closed every project created
                 before first-open publishing existed. "Yet" would be a guess
                 about which; the sentence is true without it.
@@ -358,7 +358,7 @@ export function ProjectQrDialog({
       </Dialog>
 
       {/*
-        The printable sheet — a poster, not a screenshot of this dialog.
+        The printable sheet - a poster, not a screenshot of this dialog.
         PrintDocument hides every other body child while it is mounted, so the
         browser's own Ctrl+P produces the same page as the button.
       */}

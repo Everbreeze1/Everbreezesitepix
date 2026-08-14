@@ -61,7 +61,7 @@ import { ShowcaseShareDialog } from "@/features/showcases/components/ShowcaseSha
  * Naming rule this file follows: the *site* is the Portfolio; each thing in
  * this grid is a **project**. The first rename pass replaced "showcase" with
  * "portfolio" one-for-one, which left the word naming both the container and
- * its contents — "New portfolio" inside a tab called "Projects".
+ * its contents - "New portfolio" inside a tab called "Projects".
  *
  * The order here IS the order visitors see, so the grid is drag-sortable and
  * each card carries the two site controls that matter at a glance: whether the
@@ -131,7 +131,7 @@ export function ShowcasesPanel({
     }
   };
 
-  /** Loaded lazily when the dialog opens — the list itself doesn't need it. */
+  /** Loaded lazily when the dialog opens - the list itself doesn't need it. */
   const loadProjects = async () => {
     setProjectsLoading(true);
     try {
@@ -163,7 +163,7 @@ export function ShowcasesPanel({
     setCreating(true);
     try {
       const res = await createShowcaseFromProject({ data: { projectId } });
-      toast.success(`Project page built from ${res.photoCount} photos — edit anything you like.`);
+      toast.success(`Project page built from ${res.photoCount} photos - edit anything you like.`);
       setCreateOpen(false);
       navigate({ to: "/showcases/$showcaseId", params: { showcaseId: res.id } });
     } catch (e: any) {
@@ -187,7 +187,7 @@ export function ShowcasesPanel({
   /**
    * Persists the dragged order.
    *
-   * The list is reordered locally first and only reverted on failure — a card
+   * The list is reordered locally first and only reverted on failure - a card
    * that snaps back to where it was for the length of a round trip reads as
    * "the drag didn't take", which is the one thing a sortable grid must never
    * do. `onCountsChanged` is deliberately NOT called: it refetches the whole
@@ -293,7 +293,7 @@ export function ShowcasesPanel({
         <EmptyState
           icon={Layers}
           title="No projects yet"
-          description="Build your first project page from a finished job — it becomes a page on your public portfolio site."
+          description="Build your first project page from a finished job - it becomes a page on your public portfolio site."
           action={
             <Button onClick={openCreate}>
               <Plus className="mr-2 h-4 w-4" /> New project
@@ -348,7 +348,7 @@ export function ShowcasesPanel({
               record, so generating the finished draft beats asking the user to
               author it. */}
           <div>
-            {/* "a finished job", not "a project" — the thing being created is
+            {/* "a finished job", not "a project" - the thing being created is
                 itself called a project now, and this list is the source, not
                 the result. */}
             <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
@@ -419,7 +419,7 @@ export function ShowcasesPanel({
  *
  * The drag handle is an explicit grip rather than the whole card, because the
  * card is already a link to the builder and carries a switch, a star and a
- * menu — making the entire surface draggable would fight all four.
+ * menu - making the entire surface draggable would fight all four.
  */
 function SortableShowcaseCard({
   showcase: s,
@@ -457,7 +457,7 @@ function SortableShowcaseCard({
         // Lifted above its neighbours so it isn't clipped while crossing rows.
         // Must stay under AppHeader (sticky, z-20): the Card is `relative`, so
         // this z-index is live, and nothing between here and the root creates a
-        // stacking context — at 30 the dragged card painted over the app header.
+        // stacking context - at 30 the dragged card painted over the app header.
         zIndex: isDragging ? 5 : undefined,
       }}
       className={cn(
@@ -567,7 +567,7 @@ function SortableShowcaseCard({
                 disabled={busy}
                 onClick={() => onPatchSite({ featured: !s.featured })}
                 aria-label={s.featured ? "Remove featured badge" : "Add featured badge"}
-                title={s.featured ? "Featured — badged on the card" : "Badge as featured"}
+                title={s.featured ? "Featured - badged on the card" : "Badge as featured"}
               >
                 <Star className={cn("h-4 w-4", s.featured && "fill-current")} />
               </Button>

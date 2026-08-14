@@ -1,4 +1,4 @@
--- Text snippets shouldn't require a team — a solo user must be able to save
+-- Text snippets shouldn't require a team - a solo user must be able to save
 -- and reuse them. Makes team_id nullable and scopes RLS to "mine OR my team's".
 -- Apply via the SitePix Supabase SQL editor (or `supabase db push`). Idempotent.
 

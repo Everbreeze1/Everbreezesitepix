@@ -8,7 +8,7 @@ import sanitizeHtml from "sanitize-html";
  * on write (`updateProjectPageInputSchema` caps it at 2MB and nothing more), so
  * anything an authenticated user can PUT lands in the database verbatim. The
  * public share route injects it with `dangerouslySetInnerHTML`, which made this
- * stored XSS against whoever opens the shared link — typically the customer,
+ * stored XSS against whoever opens the shared link - typically the customer,
  * not the author. Sanitising on read closes it for every existing row at once,
  * without a migration and without trusting that every future write path
  * remembers to clean its input.
@@ -72,13 +72,13 @@ const OPTIONS: sanitizeHtml.IOptions = {
      * `<li data-type="taskItem" data-checked>`, and that markup IS the
      * checkbox: the extension keys off it, and styles.css only draws a tick
      * box for `ul[data-type="taskList"]`. Stripping it turned every checklist
-     * in a seeded template into plain bullets — silently, and permanently,
+     * in a seeded template into plain bullets - silently, and permanently,
      * because createPageFromTemplateService writes the sanitised HTML into
      * project_pages. A trade checklist that cannot be ticked is most of why
      * those templates exist, so these two names are allowed through.
      *
-     * They are inert data attributes on list tags with fixed names — no URL,
-     * no handler, nothing the renderer executes — so this does not widen the
+     * They are inert data attributes on list tags with fixed names - no URL,
+     * no handler, nothing the renderer executes - so this does not widen the
      * XSS surface the allow-list is here to close.
      */
     ul: ["data-type"],
@@ -104,7 +104,7 @@ const OPTIONS: sanitizeHtml.IOptions = {
   // cannot execute script, so this does not reopen the hole.
   allowedSchemesByTag: { img: ["http", "https", "data"] },
   allowProtocolRelative: false,
-  // Drop the contents of anything disallowed rather than leaving stray text —
+  // Drop the contents of anything disallowed rather than leaving stray text -
   // a stripped <script> should take its body with it.
   nonTextTags: ["style", "script", "textarea", "option", "noscript", "iframe", "object", "embed"],
   transformTags: {

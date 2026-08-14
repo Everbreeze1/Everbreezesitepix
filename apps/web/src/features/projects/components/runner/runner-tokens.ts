@@ -12,7 +12,7 @@
  *
  * `complete` is the loud one on purpose. The old checklist card gave
  * "In progress" a fully-saturated primary fill and finished work a pale wash,
- * so a wall of cards shouted about the unfinished ones. Workflows was worse —
+ * so a wall of cards shouted about the unfinished ones. Workflows was worse -
  * it coloured cards `index % 3`, so the palette encoded list position and one
  * variant used the sidebar's pinned-navy token, which vanishes on a dark page.
  */

@@ -20,8 +20,8 @@ function slotSvg(label: string): string {
 }
 
 /**
- * Replaces every real project photo with a generic numbered placeholder slot —
- * same art the seeded templates ship with — so saving a page as a template
+ * Replaces every real project photo with a generic numbered placeholder slot -
+ * same art the seeded templates ship with - so saving a page as a template
  * never leaks that project's photos to whoever else picks up the template.
  * Width/height are carried over from the original tag so the layout (a 2-up
  * or 4-up photo row) survives unchanged; only the pixels are removed.
@@ -127,7 +127,7 @@ export async function getDocumentTemplateService(
      * Sanitized on READ, not just on write.
      *
      * A template body is authored HTML that came from a project page, and page
-     * HTML is stored raw — sanitizePageHtml was only ever applied on the public
+     * HTML is stored raw - sanitizePageHtml was only ever applied on the public
      * share path (pages.ts:632). So a team member could save a page containing
      * script-bearing markup as a template, and every teammate who opened the
      * "Use template" preview would execute it: ChoosePageTemplateDialog.tsx:133
@@ -135,7 +135,7 @@ export async function getDocumentTemplateService(
      * shared team-wide.
      *
      * Sanitizing here rather than only at the insert also disarms rows that are
-     * already in the table — a write-side fix alone would leave any existing
+     * already in the table - a write-side fix alone would leave any existing
      * payload live forever.
      */
     html: sanitizePageHtml(parseBody(row.body).html),

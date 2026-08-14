@@ -9,7 +9,7 @@ import { ShowcaseCard } from "./ShowcaseCard";
 /**
  * A single project inside the portfolio site.
  *
- * The body is the existing <ShowcaseView> untouched — the brochure layout was
+ * The body is the existing <ShowcaseView> untouched - the brochure layout was
  * never the problem, it just had nowhere to live. What is added around it is
  * everything that makes it a page *of a site* rather than a standalone
  * document: a way back to the grid, a spec strip, the neighbouring projects,
@@ -89,7 +89,7 @@ export function PortfolioProject({ data }: { data: PublicPortfolioShowcase }) {
         }}
         reviewLinks={data.reviewLinks}
         // The site chrome already owns the brand, the contact band and the
-        // footer — letting the document render its own would show each of them
+        // footer - letting the document render its own would show each of them
         // twice on the way down the page.
         brandInMasthead={false}
         footer={false}
@@ -161,7 +161,7 @@ export function PortfolioProject({ data }: { data: PublicPortfolioShowcase }) {
       )}
 
       {/* Closing ask. Lives here rather than inside ShowcaseView so it sits
-          after the related work — the last thing on the page is the phone
+          after the related work - the last thing on the page is the phone
           number, not another project to get lost in. */}
       {(site.phone || site.email || site.cta_url) && (
         <section id="contact" className="scroll-mt-24" style={{ backgroundColor: accent }}>

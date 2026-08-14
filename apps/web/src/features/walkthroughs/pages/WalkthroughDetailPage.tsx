@@ -58,7 +58,7 @@ interface Walkthrough {
   project_id: string;
   title: string;
   status: string;
-  /** 'recorded' | 'summary' — see 20260814000000_walkthrough_source.sql. */
+  /** 'recorded' | 'summary' - see 20260814000000_walkthrough_source.sql. */
   source: string;
   started_at: string;
   duration_seconds: number;
@@ -128,7 +128,7 @@ export function WalkthroughDetailPage() {
     let vPath = (w as any).video_path as string | null;
     let vMime = (w as any).video_mime_type as string | null;
     // A summary has no recording, so the storage sweep below can only ever come
-    // back empty — skip it rather than issue a doomed list() on every load.
+    // back empty - skip it rather than issue a doomed list() on every load.
     if (!vPath && user?.id && (w as any).source !== "summary") {
       const prefix = `${user.id}/${(w as any).project_id}/walkthroughs`;
       const { data: objects, error: listErr } = await supabase.storage
@@ -254,7 +254,7 @@ export function WalkthroughDetailPage() {
   // poll the row so the page flips to the finished report automatically
   // without the user needing to refresh.
   useEffect(() => {
-    // A summary is written `ready` in one shot — there is no background
+    // A summary is written `ready` in one shot - there is no background
     // pipeline behind it, so there is nothing to poll for.
     if (!walk || walk.source === "summary" || walk.status === "ready" || walk.status === "failed")
       return;
@@ -286,7 +286,7 @@ export function WalkthroughDetailPage() {
     if (!walk) return;
     /*
      * A summary redraws from its linked photos and spends no Auto Report quota,
-     * so it must not pass through the quota gate below — that gate would show a
+     * so it must not pass through the quota gate below - that gate would show a
      * Pro paywall to a Starter user for regenerating something they own and
      * created on their current plan.
      */
@@ -307,7 +307,7 @@ export function WalkthroughDetailPage() {
       }
       return;
     }
-    // Client-side check is only for a fast, friendly upgrade prompt — the
+    // Client-side check is only for a fast, friendly upgrade prompt - the
     // server (assertAutoReportAllowed) is the actual enforcing authority.
     if (!canUseAutoReports || autoReportsRemaining <= 0) {
       setAutoReportUpgradeOpen(true);
@@ -355,7 +355,7 @@ export function WalkthroughDetailPage() {
     if (
       !(await confirm({
         // The linked photos are the user's own gallery photos, so say plainly
-        // that deleting a summary does not touch them — otherwise "cannot be
+        // that deleting a summary does not touch them - otherwise "cannot be
         // undone" reads as though the photos go too.
         description: isSummary
           ? "Delete this summary? Your photos are not affected. This cannot be undone."
@@ -397,14 +397,14 @@ export function WalkthroughDetailPage() {
 
   const displayTitle = (() => {
     const t = (walk.title ?? "").trim();
-    const generic = /^walkthrough\s*[—-]/i.test(t) || /^walkthrough$/i.test(t);
+    const generic = /^walkthrough\s*[--]/i.test(t) || /^walkthrough$/i.test(t);
     if (t && !generic) return t;
     const date = new Date(walk.started_at).toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
-    return projectName ? `${projectName} — ${date}` : `Walkthrough — ${date}`;
+    return projectName ? `${projectName} - ${date}` : `Walkthrough - ${date}`;
   })();
 
   const canNativeShare =
@@ -428,7 +428,7 @@ export function WalkthroughDetailPage() {
         await (navigator as any).share({ title: displayTitle, text: displayTitle, url });
         return;
       } catch {
-        // User cancelled — fall through to copy.
+        // User cancelled - fall through to copy.
       }
     }
     try {
@@ -461,7 +461,7 @@ export function WalkthroughDetailPage() {
     }
   };
 
-  // pt-only responsive scaling — `md:py-10` outranked the `pb-24` and made it
+  // pt-only responsive scaling - `md:py-10` outranked the `pb-24` and made it
   // dead at >=768px. Harmless here (the camera button is hidden on
   // /walkthroughs/), but the class should mean what it says.
   return (
@@ -647,7 +647,7 @@ export function WalkthroughDetailPage() {
           <h2 className="text-lg font-semibold">Report is being generated…</h2>
           <p className="max-w-md text-sm text-muted-foreground">
             We're transcribing your narration and writing the report. This usually takes under a
-            minute. You can safely leave this page — it will update automatically when the report is
+            minute. You can safely leave this page - it will update automatically when the report is
             ready.
           </p>
           <Button size="sm" variant="outline" onClick={() => void load()}>
@@ -665,8 +665,8 @@ export function WalkthroughDetailPage() {
           </h2>
           <p className="max-w-md text-sm text-muted-foreground">
             {isSummary
-              ? "Something went wrong while writing your summary. Your photos are safe — try generating again."
-              : "Something went wrong while creating your report. Your photos and narration are safe — try generating again."}
+              ? "Something went wrong while writing your summary. Your photos are safe - try generating again."
+              : "Something went wrong while creating your report. Your photos and narration are safe - try generating again."}
           </p>
           <Button size="sm" onClick={onRegenerate} disabled={regenerating}>
             {regenerating ? (
@@ -684,7 +684,7 @@ export function WalkthroughDetailPage() {
               No {isSummary ? "summary" : "report"} yet.
             </p>
             {/* A summary spends no Auto Report quota, so quoting the meter here
-                would tell the user a cost that does not exist — and quote a
+                would tell the user a cost that does not exist - and quote a
                 Pro-only allowance to a Starter user who can still do this. */}
             {!isSummary && canUseAutoReports && (
               <p className="mt-0.5 text-xs text-muted-foreground">

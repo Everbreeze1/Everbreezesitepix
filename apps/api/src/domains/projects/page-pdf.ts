@@ -5,7 +5,7 @@ import { getSupabaseAdmin } from "../../lib/supabase";
 import { resolvePageImages, resolveHeaderFooterTokens } from "./pages";
 
 // ============================================================
-// Minimal HTML parser — scoped to the constrained, well-formed subset of
+// Minimal HTML parser - scoped to the constrained, well-formed subset of
 // tags our own Tiptap editor ever produces (p/h1-3/strong/em/u/span/ul/ol/li/
 // img/table/a). Not a general HTML parser; malformed/foreign HTML is out of
 // scope since this editor is the only producer of the input.
@@ -131,7 +131,7 @@ function sanitizeForWinAnsi(s: string): string {
 /**
  * Embedded images, keyed by source URL, for the lifetime of one export.
  *
- * Panels are rendered twice — once against a scratch page purely to measure
+ * Panels are rendered twice - once against a scratch page purely to measure
  * how tall the shaded box needs to be, then again for real (see
  * `renderPanel`). Without this cache that would re-fetch and re-embed every
  * photo inside a panel, doubling both the network cost and the file size.
@@ -347,7 +347,7 @@ function collectInlineWords(node: HtmlNode, inherited: Style): Word[] {
 }
 
 /**
- * Images are inline nodes, so a paragraph may hold several of them — a photo
+ * Images are inline nodes, so a paragraph may hold several of them - a photo
  * strip. Render them side by side across the content width, mirroring the
  * editor. Slots that failed to embed (unfilled SVG placeholders, which pdf-lib
  * cannot read) are dropped, so they never reach a delivered document.
@@ -485,14 +485,14 @@ function readAlign(node: ElementNode): "left" | "center" | "right" {
   return (m?.[1] as "left" | "center" | "right" | undefined) ?? "left";
 }
 
-/** Panel chrome — matches `.tiptap [data-panel]` in apps/web/src/styles.css. */
+/** Panel chrome - matches `.tiptap [data-panel]` in apps/web/src/styles.css. */
 const PANEL_FILL = rgb(0.965, 0.972, 0.98);
 const PANEL_PAD_X = 14;
 const PANEL_PAD_Y = 12;
 const PANEL_GAP = 10;
 
 /**
- * A shaded card (the InfoPanel node — see apps/web/src/lib/tiptap-info-panel.ts).
+ * A shaded card (the InfoPanel node - see apps/web/src/lib/tiptap-info-panel.ts).
  *
  * pdf-lib has no z-ordering: whatever is drawn last sits on top, so the
  * background rectangle has to be drawn *before* its contents, which means
@@ -503,7 +503,7 @@ const PANEL_GAP = 10;
  * no extra network or file size.
  *
  * If the content is taller than the remaining space on the page, the box is
- * skipped and the children render unboxed — a card split across a page break
+ * skipped and the children render unboxed - a card split across a page break
  * would otherwise draw a rectangle that runs off the bottom.
  */
 async function renderPanel(layout: Layout, node: ElementNode) {
@@ -578,7 +578,7 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
     }
     case "p": {
       // An empty paragraph carrying `style="height: Npx"` (Spacer extension,
-      // see apps/web/src/lib/tiptap-spacer.ts) is deliberate blank space —
+      // see apps/web/src/lib/tiptap-spacer.ts) is deliberate blank space -
       // e.g. a title-page cover sized to occupy roughly a full page. Convert
       // CSS px (96/in) to PDF points (72/in) and advance the cursor by that
       // much instead of drawing a normal blank line.
@@ -622,7 +622,7 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
       return;
     }
     case "div": {
-      // The InfoPanel node — a shaded card. Any other div is a plain wrapper
+      // The InfoPanel node - a shaded card. Any other div is a plain wrapper
       // and falls through to the default child walk.
       if (node.attrs["data-panel"]) {
         await renderPanel(layout, node);
@@ -681,7 +681,7 @@ async function renderListItem(layout: Layout, li: ElementNode, ordered: boolean,
   if (layout.y === before) layout.y -= 14;
 }
 
-/** Header/footer are rendered as a single running line per page — flattens all inline text across the fragment. */
+/** Header/footer are rendered as a single running line per page - flattens all inline text across the fragment. */
 function wordsFromHtml(html: string | null | undefined): Word[] {
   if (!html) return [];
   const empty: Style = { bold: false, italic: false, underline: false, color: null, fontFamily: null, fontSize: null };

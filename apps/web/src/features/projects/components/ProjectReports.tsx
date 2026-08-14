@@ -130,7 +130,7 @@ export function ProjectReports({ projectId, projectName, projectPhotos }: Props)
   }, [user, projectId]);
 
   function openCreate() {
-    setDraftTitle(`${projectName} report — ${new Date().toLocaleDateString()}`);
+    setDraftTitle(`${projectName} report - ${new Date().toLocaleDateString()}`);
     setDraftPhotosPerPage(2);
     setDraftCoverEnabled(true);
     setDraftShowProject(true);

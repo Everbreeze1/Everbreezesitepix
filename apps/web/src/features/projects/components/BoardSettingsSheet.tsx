@@ -117,7 +117,7 @@ export function BoardSettingsSheet({
   async function handleDelete() {
     if (
       !(await confirm({
-        description: `Delete "${board.name}"? The projects and tags stay — only the pipeline is removed.`,
+        description: `Delete "${board.name}"? The projects and tags stay - only the pipeline is removed.`,
         variant: "destructive",
       }))
     )
@@ -157,7 +157,7 @@ export function BoardSettingsSheet({
 
           {columns.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-              No stages yet — add a tag below.
+              No stages yet - add a tag below.
             </p>
           ) : (
             <DndContext
@@ -241,7 +241,7 @@ function SortableColumnRow({ tag, onRemove }: { tag: TagRow; onRemove: () => voi
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       // `relative` is required for the z-index to apply at all: this row is a
-      // flex *container*, not a flex item, and its parent is a plain block — so
+      // flex *container*, not a flex item, and its parent is a plain block - so
       // a bare `z-10` was dropped and the dragged row was painted in DOM order,
       // letting later siblings' opaque backgrounds cut across it.
       className={`flex items-center gap-2 rounded-lg border border-border bg-card px-2 py-2 ${

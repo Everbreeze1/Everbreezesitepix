@@ -15,7 +15,7 @@ describe("authErrorMessage", () => {
     }
   });
 
-  it("does not leak a serialized object — the bug a user actually saw", () => {
+  it("does not leak a serialized object - the bug a user actually saw", () => {
     // The production signup failure rendered a toast reading literally `{}`.
     expect(authErrorMessage({ message: "{}" })).not.toContain("{}");
     expect(authErrorMessage({ message: "[object Object]" })).not.toContain("object Object");
@@ -66,7 +66,7 @@ describe("authErrorMessage", () => {
   it("suppresses stack traces and internal identifiers", () => {
     /*
      * The property that matters is that the raw string never reaches the user
-     * — not which safe copy replaces it. A snake_case identifier happens to
+     * - not which safe copy replaces it. A snake_case identifier happens to
      * match the infrastructure rule and gets the apology; a stack trace gets
      * the generic message. Both are acceptable, leaking either is not.
      */

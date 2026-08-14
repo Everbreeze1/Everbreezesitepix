@@ -69,8 +69,8 @@ const statusSchema = z.object({
  * (SelectPhotosForPageDialog's MAX_PHOTOS = 50) and the recorded-session title
  * bound (160).
  *
- * Unlike the schemas above — which are vestigial, since validation for the
- * recorded-walkthrough ops lives inline in registry.ts — these two are
+ * Unlike the schemas above - which are vestigial, since validation for the
+ * recorded-walkthrough ops lives inline in registry.ts - these two are
  * exported and parsed by the registry, matching the projects/pages and
  * blueprints convention rather than perpetuating the duplicated one.
  */
@@ -180,7 +180,7 @@ async function composeSummaryMarkdown(
     // the H1 below is the one the rest of the app reads.
     body = (res.markdown ?? "").replace(/^#\s+.*$/m, "").trim();
   } catch (e: any) {
-    // 403 is requireActiveSub refusing an inactive plan — that must not
+    // 403 is requireActiveSub refusing an inactive plan - that must not
     // silently produce a walkthrough row.
     if (e?.status === 403) throw e;
     aiFailed = e?.message ?? "AI unavailable";
@@ -200,12 +200,12 @@ async function composeSummaryMarkdown(
   // `photo:<id>` refs are how WalkthroughMarkdown resolves images and how the
   // public PDF finds them. cleanWalkthroughMarkdown strips this trailing
   // section on the detail and share pages so WalkthroughPhotoSteps owns the
-  // gallery there — it exists for the PDF and for raw-markdown consumers.
+  // gallery there - it exists for the PDF and for raw-markdown consumers.
   lines.push("", "## Photos");
   args.photos.forEach((p, i) => {
     lines.push("", `### Photo ${i + 1}`, "", `![Photo ${i + 1}](photo:${p.id})`);
     // Only real captions. An unedited upload's caption is its filename, and the
-    // PDF's cover-summary extractor pulls running prose out of this markdown —
+    // PDF's cover-summary extractor pulls running prose out of this markdown -
     // so "1 (9).jpg" would be printed as a sentence on a client-facing cover.
     // Same rule the PDF's own photo pages apply via looksLikeFilename().
     const caption = p.caption?.trim();
@@ -236,7 +236,7 @@ function extractWalkthroughIdFromPath(path: string | null | undefined) {
 /*
  * Which photos the two recovery scans are allowed to adopt into a walkthrough.
  *
- * The SQL half is a coarse prefilter — PostgREST's `or` takes bare operators,
+ * The SQL half is a coarse prefilter - PostgREST's `or` takes bare operators,
  * so it cannot express the caption rule below and would need a third round trip
  * to try. The JS half is the actual rule; run it on everything the scan returns.
  *
@@ -246,8 +246,8 @@ function extractWalkthroughIdFromPath(path: string | null | undefined) {
  * named "walkthrough-front-door.jpg". That photo was adopted into a fabricated
  * walkthrough and relabelled a capture frame, neither of which is reversible.
  *
- * The arm still earns its place — a capture uploaded before the
- * `/walkthroughs/{id}/` path convention has no other signal — so it is narrowed
+ * The arm still earns its place - a capture uploaded before the
+ * `/walkthroughs/{id}/` path convention has no other signal - so it is narrowed
  * to the exact name the recorder generates rather than dropped:
  * `walkthrough-${Date.now()}.jpg`, from WalkthroughRecorder's capturePhoto.
  */
@@ -293,7 +293,7 @@ async function recoverOrphanWalkthroughPhotosForProject(supabaseAdmin: any, args
     phase: string | null;
   }>;
 
-  // See WALKTHROUGH_CANDIDATE_SCAN — the query is a prefilter, this is the rule.
+  // See WALKTHROUGH_CANDIDATE_SCAN - the query is a prefilter, this is the rule.
   const candidateRows = allCandidateRows.filter(isWalkthroughCapture);
   if (candidateRows.length !== allCandidateRows.length) {
     console.log("[walkthrough] server orphan recovery ignored non-capture matches", {
@@ -344,7 +344,7 @@ async function recoverOrphanWalkthroughPhotosForProject(supabaseAdmin: any, args
     const endMs = new Date(endedAt).getTime();
     const durationSeconds = Math.max(1, Math.round(((Number.isFinite(endMs) ? endMs : Date.now()) - (Number.isFinite(startMs) ? startMs : Date.now())) / 1000));
     let walkthroughId = group.forcedId;
-    const title = `Recovered Walkthrough — ${new Date(startedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+    const title = `Recovered Walkthrough - ${new Date(startedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
 
     if (walkthroughId) {
       const { data: existing } = await supabaseAdmin
@@ -499,8 +499,8 @@ function buildFallbackAiReport(args: {
   photoCount: number;
 }): AiReportShape {
   const dateStr = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-  const title = args.walkTitle?.trim() || `${args.projectName ?? "Site"} Walkthrough Report — ${dateStr}`;
-  const subtitle = args.projectName ? `${args.projectName} — Field walkthrough summary` : "Field walkthrough summary";
+  const title = args.walkTitle?.trim() || `${args.projectName ?? "Site"} Walkthrough Report - ${dateStr}`;
+  const subtitle = args.projectName ? `${args.projectName} - Field walkthrough summary` : "Field walkthrough summary";
   const intro = args.transcript.trim()
     ? `<p>This report summarizes a recorded site walkthrough${args.projectName ? ` at ${escapeHtml(args.projectName)}` : ""}. It includes the technician's spoken narration organized into readable notes, along with ${args.photoCount} photo(s) captured during the walk.</p>`
     : `<p>This report summarizes a recorded site walkthrough${args.projectName ? ` at ${escapeHtml(args.projectName)}` : ""}. ${args.photoCount} photo(s) were captured during the walk.</p>`;
@@ -557,7 +557,7 @@ export async function createWalkthroughSessionService(ctx: AuthedContext, data: 
  * captures states something false about where they came from, and nothing in
  * this codebase ever writes phase back, so it is not correctable.
  *
- * `phase` is a label only. It no longer hides a photo from any surface — see
+ * `phase` is a label only. It no longer hides a photo from any surface - see
  * the note in ProjectDetailPage's `load`.
  */
 export async function generateWalkthroughSummaryService(
@@ -587,7 +587,7 @@ export async function generateWalkthroughSummaryService(
 
     // Only photos that really belong to this project and are not trashed.
     // Deliberately NOT filtered by uploaded_by, unlike
-    // ensureWalkthroughPhotoLinksService — the picker shows every project
+    // ensureWalkthroughPhotoLinksService - the picker shows every project
     // photo, so filtering to the caller would silently drop teammates' photos
     // from a summary the user watched themselves select. The project access
     // check above is the authorization.
@@ -610,7 +610,7 @@ export async function generateWalkthroughSummaryService(
 
     const title =
       data.title?.trim() ||
-      `Summary — ${new Date().toLocaleDateString(undefined, {
+      `Summary - ${new Date().toLocaleDateString(undefined, {
         month: "short",
         day: "numeric",
         year: "numeric",
@@ -656,7 +656,7 @@ export async function generateWalkthroughSummaryService(
       .upsert(linkRows as any, { onConflict: "walkthrough_id,photo_id", ignoreDuplicates: true });
     if (linkErr) {
       // A summary without its photos is a broken object and nothing recovers
-      // it — orphan recovery only sweeps phase/path-marked capture frames,
+      // it - orphan recovery only sweeps phase/path-marked capture frames,
       // which these deliberately are not. Roll the row back rather than leave
       // a husk sitting in the tab.
       console.error("[walkthrough] server summary link failed", linkErr, { walkthroughId, userId });
@@ -671,7 +671,7 @@ export async function generateWalkthroughSummaryService(
 /**
  * Re-draft an existing summary from the photos already linked to it. Shares
  * composeSummaryMarkdown with creation, and like creation it spends no Auto
- * Report quota — a summary never reserved one.
+ * Report quota - a summary never reserved one.
  */
 export async function regenerateWalkthroughSummaryService(
   ctx: AuthedContext,
@@ -688,7 +688,7 @@ export async function regenerateWalkthroughSummaryService(
     if (walkErr || !walk) throw new Error("Walkthrough not found");
     if ((walk as any).created_by !== userId) throw new Error("Not authorized");
     if ((walk as any).source !== "summary") {
-      throw new Error("This walkthrough was recorded — use Regenerate report instead.");
+      throw new Error("This walkthrough was recorded - use Regenerate report instead.");
     }
 
     const { data: links } = await supabaseAdmin
@@ -756,7 +756,7 @@ export async function saveWalkthroughPhotoService(ctx: AuthedContext, data: any)
     }
 
     /*
-     * SECURITY — the storage path is client-supplied and was written verbatim.
+     * SECURITY - the storage path is client-supplied and was written verbatim.
      * Every reader signs `photos.storage_path` with the service role, so a row
      * pointing at someone else's object becomes a permanent, renewable read
      * handle for their file. Uploads always land under `{userId}/{projectId}/`
@@ -825,7 +825,7 @@ export async function saveWalkthroughPhotoService(ctx: AuthedContext, data: any)
       await supabaseAdmin.from("photos").update({ phase: "walkthrough" } as any).eq("id", photoId);
       // Keep the photo row and return it. Finish/list recovery finds it again
       // by phase and attaches it to walkthrough_photos. Either way the photo is
-      // already in the project's gallery — an unlinked capture is a walkthrough
+      // already in the project's gallery - an unlinked capture is a walkthrough
       // that lost a frame, not a photo the user lost.
       return { photoId, linkPending: true };
     }
@@ -886,7 +886,7 @@ export async function finishWalkthroughSessionService(ctx: AuthedContext, data: 
       if (candidateErr) {
         console.error("[walkthrough] server orphan photo scan failed", candidateErr, { walkthroughId: data.walkthroughId, userId });
       } else {
-        // The time window bounds this scan but does not make it precise — a
+        // The time window bounds this scan but does not make it precise - a
         // camera upload during the recording is exactly what it would catch.
         // See WALKTHROUGH_CANDIDATE_SCAN.
         const candidateRows = ((candidates as any[]) ?? [])
@@ -1204,7 +1204,7 @@ function compactSpokenNote(transcript: string, maxWords = 120) {
  * slice the transcript proportionally by time (with a small look-back so
  * narration that *precedes* the shutter is included). If timing info is
  * missing we split evenly across `total` photos so each photo still gets
- * its own distinct span — never the whole transcript.
+ * its own distinct span - never the whole transcript.
  */
 function estimateSpokenNote(
   transcript: string,
@@ -1386,10 +1386,10 @@ export async function generateWalkthroughReportService(ctx: AuthedContext, data:
     if ((walk as any).created_by !== userId) throw new Error("Not authorized");
     // Before reserveAutoReport, deliberately: a summary must never burn an Auto
     // Report slot. It has no transcript to report on, and it is available on
-    // plans that have no Auto Report allowance at all — reserving here would
+    // plans that have no Auto Report allowance at all - reserving here would
     // throw the Pro paywall at a user for regenerating something they own.
     if ((walk as any).source === "summary") {
-      throw new Error("This is a summary — use Regenerate summary instead.");
+      throw new Error("This is a summary - use Regenerate summary instead.");
     }
 
     // Auto Reports are Pro/Team only and metered per user per month (Pro 100,
@@ -1472,14 +1472,14 @@ export async function generateWalkthroughReportService(ctx: AuthedContext, data:
       const meta = photoById.get(l.photo_id);
       const note = l.spoken_note ? `  spoken near this photo: "${l.spoken_note.trim()}"` : "";
       return `- Photo ${i + 1} (id=${l.photo_id}) captured at ${fmt(l.offset_seconds ?? 0)}${note}${
-        meta?.caption ? ` — caption: ${meta.caption}` : ""
+        meta?.caption ? ` - caption: ${meta.caption}` : ""
       }`;
     }).join("\n");
 
     const projectLine = projectRow
       ? `Project: ${(projectRow as any).name}${
           (projectRow as any).location || (projectRow as any).street
-            ? ` — ${(projectRow as any).location ?? [(projectRow as any).street, (projectRow as any).city, (projectRow as any).state].filter(Boolean).join(", ")}`
+            ? ` - ${(projectRow as any).location ?? [(projectRow as any).street, (projectRow as any).city, (projectRow as any).state].filter(Boolean).join(", ")}`
             : ""
         }`
       : "";
@@ -1499,7 +1499,7 @@ STRICT RULES:
 - Do NOT add interpretations, opinions, "technical observations", severity
   ratings, recommendations, next steps, risk callouts, or any advice that the
   speaker did not explicitly say.
-- Do NOT analyze, judge, or describe the photos themselves — you cannot see
+- Do NOT analyze, judge, or describe the photos themselves - you cannot see
   them. Only use the spoken notes tied to each photo.
 - Do NOT invent measurements, brand names, model numbers, defects, locations,
   dates, or any other facts.
@@ -1631,7 +1631,7 @@ ${hasSpeech
       })
       .eq("id", data.walkthroughId);
 
-      // The reservation taken above IS the meter — nothing more to record. It
+      // The reservation taken above IS the meter - nothing more to record. It
       // deliberately counts deterministic-fallback reports too (AI unavailable
       // / key missing): the user still received a generated report, and not
       // charging for it would let a degraded provider hand out unlimited free
@@ -1642,7 +1642,7 @@ ${hasSpeech
       console.log("[walkthrough] server report generation saved", { walkthroughId: data.walkthroughId, userId });
       return { markdown };
     } catch (err) {
-      // Generation failed, so the slot was never consumed — hand it back rather
+      // Generation failed, so the slot was never consumed - hand it back rather
       // than charging for a report the user never received.
       await releaseAutoReport(reservationId);
       throw err;
@@ -1678,7 +1678,7 @@ export async function setWalkthroughShareService(
 const publicSchema = z.object({ token: z.string().uuid() });
 
 /**
- * Read a published walkthrough by share token. No auth — uses the admin client
+ * Read a published walkthrough by share token. No auth - uses the admin client
  * because anonymous visitors are the target audience and RLS would block them.
  */
 export async function getPublicWalkthroughService(data: { token: string }) {
@@ -1714,8 +1714,8 @@ export async function getPublicWalkthroughService(data: { token: string }) {
 
     /*
      * Trashing the project revokes its shared walkthrough. Nothing on any public
-     * path filtered `deleted_at`, so a walkthrough — audio, transcript, every
-     * captured photo — kept serving after the job was deleted. Returned as the
+     * path filtered `deleted_at`, so a walkthrough - audio, transcript, every
+     * captured photo - kept serving after the job was deleted. Returned as the
      * same empty shape as an unknown token so the share page renders its normal
      * "not available" state rather than a half-populated one.
      */
@@ -1889,7 +1889,7 @@ export async function createReportFromWalkthroughService(ctx: AuthedContext, dat
     let ai: AiReportShape | null = null;
     if (apiKey) {
       const photoLines = photoList.map((p) =>
-        `- Photo index ${p.index} — captured at ${fmtDuration(p.offset)}${p.spoken_note ? ` — spoken: "${p.spoken_note.replace(/"/g, '\\"')}"` : ""}${p.caption ? ` — existing caption: ${p.caption}` : ""}`
+        `- Photo index ${p.index} - captured at ${fmtDuration(p.offset)}${p.spoken_note ? ` - spoken: "${p.spoken_note.replace(/"/g, '\\"')}"` : ""}${p.caption ? ` - existing caption: ${p.caption}` : ""}`
       ).join("\n");
 
       const userPrompt = `You are turning a recorded site walkthrough into a polished, client-ready project report.
@@ -1901,9 +1901,9 @@ Photos captured: ${photoList.length}
 
 STRICT RULES:
 - Base ALL content on the technician's spoken transcript and the spoken notes tied to each photo. Do not invent facts, measurements, brands, or defects.
-- Tone: neutral, factual, SUMMARY-focused — like a clean site log/recap, not an engineering diagnosis. Do NOT use language like "critical", "code violation", "safety hazard", "severity: high", or strong diagnostic opinions unless the speaker explicitly used those words. Do NOT invent risks, recommendations, or next steps.
+- Tone: neutral, factual, SUMMARY-focused - like a clean site log/recap, not an engineering diagnosis. Do NOT use language like "critical", "code violation", "safety hazard", "severity: high", or strong diagnostic opinions unless the speaker explicitly used those words. Do NOT invent risks, recommendations, or next steps.
 - Prefer short bullet points (<ul><li>) and tight sections over long paragraphs. Use clear section headings that reflect what the speaker actually covered.
-- Output MUST be valid JSON matching the schema below — no markdown fences, no commentary.
+- Output MUST be valid JSON matching the schema below - no markdown fences, no commentary.
 - Body fields must be safe HTML using only these tags: <p>, <br/>, <strong>, <em>, <ul>, <ol>, <li>, <h3>. No inline styles, no other tags.
 - Distribute photos across sections using their integer index (0..${Math.max(0, photoList.length - 1)}) in "photo_indices". Each photo index may appear in at most one section. Photos not assigned to any section will be appended automatically at the end.
 

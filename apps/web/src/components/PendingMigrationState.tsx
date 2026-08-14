@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * The database is behind the code — a column this screen selects does not exist
+ * The database is behind the code - a column this screen selects does not exist
  * yet because its migration has not been applied.
  *
  * A distinct state rather than a nicer `ErrorState` string, because the two are
@@ -38,7 +38,7 @@ export function PendingMigrationState({
       </h3>
       <p className="mt-1 max-w-md text-sm text-muted-foreground">
         {feature} needs columns that have not been added yet. Apply the pending migration, then
-        reload — nothing has been lost, and no existing data changes.
+        reload - nothing has been lost, and no existing data changes.
       </p>
       <code className="mt-3 block max-w-full overflow-x-auto rounded-lg border border-border bg-muted/50 px-3 py-2 text-left text-xs">
         supabase/migrations/{migration}
@@ -49,7 +49,7 @@ export function PendingMigrationState({
       </p>
       {onRetry && (
         <Button onClick={onRetry} variant="outline" size="sm" className="mt-5">
-          <RefreshCw className="mr-2 h-4 w-4" />I have applied it — retry
+          <RefreshCw className="mr-2 h-4 w-4" />I have applied it - retry
         </Button>
       )}
     </Card>

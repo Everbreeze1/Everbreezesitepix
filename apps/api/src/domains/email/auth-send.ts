@@ -30,8 +30,8 @@ const EMAIL_SUBJECTS: Record<string, string> = {
  * Every `email_action_type` GoTrue can send us.
  *
  * `email_change_current` / `email_change_new` were missing. With Supabase's
- * secure email change turned on, changing an address fires BOTH of those — one
- * asking the old address to approve, one asking the new address to confirm —
+ * secure email change turned on, changing an address fires BOTH of those - one
+ * asking the old address to approve, one asking the new address to confirm -
  * and an unmapped type returns 400 from this handler, so that mail is never
  * sent. The change then sits forever with `new_email` set and `email`
  * unchanged: the user is told to check their inbox, and nothing they can do
@@ -65,14 +65,14 @@ function redactEmail(email: string | null | undefined): string {
  * Build the GoTrue verify link that the email's button points at.
  *
  * `email_data.site_url` arrives from Supabase ALREADY pointing at the GoTrue
- * base — i.e. `https://<ref>.supabase.co/auth/v1`. Appending `/auth/v1/verify`
+ * base - i.e. `https://<ref>.supabase.co/auth/v1`. Appending `/auth/v1/verify`
  * to that produced
  *
  *     https://<ref>.supabase.co/auth/v1/auth/v1/verify?token=...
  *
  * which matches no route, so the request fell through to the API gateway and
  * came back as `{"message":"No API key found in request"}`. Every confirmation
- * link sent before this fix is dead in exactly that way — the misleading part
+ * link sent before this fix is dead in exactly that way - the misleading part
  * is that the error blames a missing apikey rather than the doubled path.
  *
  * The suffix is stripped rather than the base hard-coded, so this stays correct
@@ -90,7 +90,7 @@ export function buildConfirmationUrl(emailData: {
     .replace(/\/auth\/v1$/, "");
   /*
    * `email_change_current` / `email_change_new` are hook action types, not
-   * verify types — GoTrue's /verify only understands `email_change`. Passing
+   * verify types - GoTrue's /verify only understands `email_change`. Passing
    * the hook type straight through produced a link the endpoint rejects.
    */
   const action = emailData.email_action_type ?? "signup";
@@ -121,7 +121,7 @@ export async function handleAuthSendEmail(request: Request): Promise<Response> {
    * Two accepted auth schemes, because the caller differs by environment.
    *
    * Supabase Auth's HTTP hook signs the request per Standard Webhooks and
-   * sends `webhook-signature` — it never sends a bearer token. The secret it
+   * sends `webhook-signature` - it never sends a bearer token. The secret it
    * stores looks like `v1,whsec_<base64>`. Verifying only a bearer here meant
    * a correctly configured hook still 401'd, and Supabase surfaced that to the
    * user as a bare 500 on signup.
@@ -153,7 +153,7 @@ export async function handleAuthSendEmail(request: Request): Promise<Response> {
   /*
    * WHO the message goes to is not always `user.email`.
    *
-   * For an email change, `user.email` is still the OLD address — the change is
+   * For an email change, `user.email` is still the OLD address - the change is
    * pending precisely because the new one is unverified. Sending the
    * "confirm your new email" link there means the new address is never asked to
    * confirm, so `new_email` stays set, `email` never moves, and the change can
@@ -176,7 +176,7 @@ export async function handleAuthSendEmail(request: Request): Promise<Response> {
    * The pending address lives on the USER record as `user.new_email`, not on
    * email_data. GoTrue's Send Email payload carries `token_hash_new` for the
    * new address but no `new_email` field, so reading `email_data.new_email`
-   * found nothing — and falling back to `email_data.email` silently resolved
+   * found nothing - and falling back to `email_data.email` silently resolved
    * to the OLD address, which is how the confirmation kept going to the wrong
    * mailbox even after the routing fix.
    *
@@ -204,8 +204,8 @@ export async function handleAuthSendEmail(request: Request): Promise<Response> {
   /*
    * An email change under Supabase's "secure email change" needs BOTH addresses
    * to confirm, but GoTrue calls this hook only ONCE. It hands over two tokens
-   * — `token_hash` for the current address and `token_hash_new` for the new one
-   * — precisely because the integrator is expected to send both messages. We
+   * - `token_hash` for the current address and `token_hash_new` for the new one
+   * - precisely because the integrator is expected to send both messages. We
    * sent a single email, so exactly one half was ever confirmed: `new_email`
    * stayed set, `email` never moved, and the change could not complete no
    * matter what the user did.

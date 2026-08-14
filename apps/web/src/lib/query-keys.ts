@@ -14,7 +14,7 @@ export const qk = {
   projectsList: (userId: string) => ["projects-list", userId] as const,
   projectGroups: (userId: string) => ["project-groups", userId] as const,
   projectBoards: (userId: string) => ["project-boards", userId] as const,
-  /** Omit `filters` to get the base key — invalidating the base key clears
+  /** Omit `filters` to get the base key - invalidating the base key clears
    * every filter variant for that user, since React Query matches by key prefix. */
   galleryPhotos: (
     userId: string,

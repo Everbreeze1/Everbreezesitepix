@@ -21,11 +21,11 @@ export interface PlanPricing {
   /**
    * Hard seat ceiling. Mirrors PLAN_MEMBER_CAP in
    * apps/api/src/domains/teams/service.ts, which is what actually blocks
-   * invites — a plan can't be sold for more seats than it can hold.
+   * invites - a plan can't be sold for more seats than it can hold.
    */
   maxSeats: number;
   /**
-   * What this tier adds over the one below it — NOT its full feature list.
+   * What this tier adds over the one below it - NOT its full feature list.
    *
    * Stored as a delta so "what am I missing by staying on Starter?" is a real
    * computation (`gainsBetween`) rather than a hardcoded "Everything in X"
@@ -87,7 +87,7 @@ export const PLANS: PlanPricing[] = [
       "Workflows",
       "Project blueprints",
       // The Portfolio lock screen sends people here with "See Team plan", and
-      // this list is what they land on — it named every other Team feature
+      // this list is what they land on - it named every other Team feature
       // except the one they clicked for.
       "Portfolio site + website embeds",
       "Advanced roles & permissions",
@@ -97,7 +97,7 @@ export const PLANS: PlanPricing[] = [
   },
 ];
 
-/** Highest seat count any plan can hold — the stepper's ceiling. */
+/** Highest seat count any plan can hold - the stepper's ceiling. */
 export const MAX_SEATS = Math.max(...PLANS.map((p) => p.maxSeats));
 
 /** Cheapest to richest. Index doubles as the tier rank. */
@@ -126,7 +126,7 @@ export function displayFeatures(plan: PlanPricing): string[] {
 }
 
 /**
- * Everything gained by moving from `from` up to `to` — the concrete answer to
+ * Everything gained by moving from `from` up to `to` - the concrete answer to
  * "what am I missing out on?". Empty when `to` is not actually higher.
  */
 export function gainsBetween(from: BillingPlan | null, to: BillingPlan): string[] {
@@ -136,7 +136,7 @@ export function gainsBetween(from: BillingPlan | null, to: BillingPlan): string[
   return PLANS.slice(fromRank + 1, toRank + 1).flatMap((p) => p.adds);
 }
 
-/** Tiers strictly above the caller's current one — the real upgrade options. */
+/** Tiers strictly above the caller's current one - the real upgrade options. */
 export function higherTiers(current: BillingPlan | null): PlanPricing[] {
   const rank = current ? tierRank(current) : -1;
   return PLANS.slice(rank + 1);
@@ -159,7 +159,7 @@ export function exceedsSeatCap(plan: PlanPricing, seats: number): boolean {
 /**
  * What a crew of `seats` costs per month on this plan: the base price (which
  * already covers `includedSeats`) plus the per-seat rate for everyone beyond
- * that. Returns the monthly figure for the chosen interval — multiply by 12
+ * that. Returns the monthly figure for the chosen interval - multiply by 12
  * for the annual total.
  */
 export function monthlyTotal(plan: PlanPricing, seats: number, interval: BillingInterval): number {

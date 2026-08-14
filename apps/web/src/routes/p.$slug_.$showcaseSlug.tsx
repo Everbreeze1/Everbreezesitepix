@@ -10,7 +10,7 @@ import {
 import { absoluteUrl } from "@/lib/site-url";
 
 /**
- * One project inside the portfolio site — /p/<slug>/<project-slug>.
+ * One project inside the portfolio site - /p/<slug>/<project-slug>.
  *
  * Sibling of p.$slug.tsx rather than a child of it (note the trailing `_` on
  * the slug segment): the two pages share the chrome component, not a layout
@@ -18,7 +18,7 @@ import { absoluteUrl } from "@/lib/site-url";
  *
  * These pages are the SEO surface that matters. A contractor's site ranks on
  * "roof replacement <city>" through project pages like this one, not through
- * the home page — hence the per-project title, description and JSON-LD.
+ * the home page - hence the per-project title, description and JSON-LD.
  */
 export const Route = createFileRoute("/p/$slug_/$showcaseSlug")({
   loader: async ({ params }) => {
@@ -48,7 +48,7 @@ export const Route = createFileRoute("/p/$slug_/$showcaseSlug")({
     }
     const business = site.business_name?.trim() || "Our work";
     const location = [showcase.city, showcase.state].filter(Boolean).join(", ");
-    // Title reads "<Project> | <Service> in <City> | <Business>" — the shape
+    // Title reads "<Project> | <Service> in <City> | <Business>" - the shape
     // that actually matches how someone searches for a local trade.
     const title = [
       showcase.title,
@@ -103,7 +103,7 @@ function PortfolioProjectPage() {
             : "This project has been removed or is no longer listed."}
         </p>
         <Button asChild className="mt-6">
-          {/* Sends them to the portfolio rather than SitePix — if the site
+          {/* Sends them to the portfolio rather than SitePix - if the site
               exists, the visitor almost certainly wants the rest of its work. */}
           <Link to="/p/$slug" params={{ slug }}>
             See all work

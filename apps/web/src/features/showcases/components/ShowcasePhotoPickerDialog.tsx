@@ -36,14 +36,14 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onPick: (photos: PickedPhoto[]) => void;
-  /** Copy for the confirm button — the builder uses different verbs for
+  /** Copy for the confirm button - the builder uses different verbs for
    *  "add to this section" vs "build sections from projects". */
   confirmLabel?: string;
   title?: string;
   description?: string;
   /**
    * One photo at a time. Used for the portfolio hero and a showcase's cover,
-   * where "selected" means *this one*, not *these ones* — so picking a second
+   * where "selected" means *this one*, not *these ones* - so picking a second
    * photo replaces the first instead of adding to it, and the per-project
    * "Select all" is hidden because it cannot mean anything here.
    */
@@ -56,7 +56,7 @@ export function ShowcasePhotoPickerDialog({
   onPick,
   confirmLabel = "Add",
   title = "Add photos",
-  description = "Photos are grouped by project — use “Select all” to pull in a whole job at once.",
+  description = "Photos are grouped by project - use “Select all” to pull in a whole job at once.",
   singleSelect = false,
 }: Props) {
   const [loading, setLoading] = useState(false);
@@ -76,7 +76,7 @@ export function ShowcasePhotoPickerDialog({
     setLoading(true);
     try {
       // Project names are fetched separately rather than as a PostgREST embed
-      // (`project:projects(name)`) — the embed depends on a detectable FK and
+      // (`project:projects(name)`) - the embed depends on a detectable FK and
       // silently returns no rows when it can't be resolved, which left the
       // picker permanently empty.
       const { data, error } = await supabase
@@ -223,7 +223,7 @@ export function ShowcasePhotoPickerDialog({
             ) : groups.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
                 {photos.length === 0
-                  ? "No photos in your projects yet — upload some from a project first."
+                  ? "No photos in your projects yet - upload some from a project first."
                   : "No photos match your search."}
               </div>
             ) : (
@@ -264,7 +264,7 @@ export function ShowcasePhotoPickerDialog({
                                   : "border-transparent"
                               }`}
                             >
-                              {/* 300 photos as ~120px tiles — the clearest case
+                              {/* 300 photos as ~120px tiles - the clearest case
                                   in the app for thumbnails over originals. */}
                               <PhotoThumb
                                 storagePath={p.storage_path}

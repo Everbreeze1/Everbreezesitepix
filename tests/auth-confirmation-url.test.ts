@@ -4,7 +4,7 @@ import { buildConfirmationUrl } from "../apps/api/src/domains/email/auth-send";
 /*
  * The confirmation link is the one part of signup that nothing in this repo
  * exercises: it is built on the server, rendered into an email, and only fails
- * when a human clicks it — at which point Supabase reports
+ * when a human clicks it - at which point Supabase reports
  * `{"message":"No API key found in request"}`, which points at authentication
  * rather than at the doubled `/auth/v1/auth/v1/` path that actually caused it.
  */
@@ -73,7 +73,7 @@ describe("buildConfirmationUrl", () => {
   });
 });
 
-describe("buildConfirmationUrl — email change action types", () => {
+describe("buildConfirmationUrl - email change action types", () => {
   /*
    * Supabase's secure email change fires `email_change_current` (to the old
    * address) and `email_change_new` (to the new one). Those are hook action
@@ -101,7 +101,7 @@ describe("buildConfirmationUrl — email change action types", () => {
   });
 });
 
-describe("buildConfirmationUrl — email change carries the right token", () => {
+describe("buildConfirmationUrl - email change carries the right token", () => {
   /*
    * An email change mints two tokens: `token_hash` for the old address to
    * approve, `token_hash_new` for the new one to confirm. Handing the old

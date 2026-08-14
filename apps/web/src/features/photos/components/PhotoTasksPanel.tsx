@@ -132,7 +132,7 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
   const cycleStatus = async (t: Task) => {
     const next: Status = STATUS_ORDER[(STATUS_ORDER.indexOf(t.status) + 1) % 3];
 
-    // Same rule as the Tasks panel and the checklist page — the assignee closes
+    // Same rule as the Tasks panel and the checklist page - the assignee closes
     // their own work, and a manager may override. Checked here so the tap does
     // nothing visible rather than flashing a completed state that the database
     // then rejects.
@@ -194,7 +194,7 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
     }
   };
 
-  // No heading here — PhotoDetailsPanel already renders a "Tasks" section
+  // No heading here - PhotoDetailsPanel already renders a "Tasks" section
   // header above this slot, so titling it again produced the stacked
   // "TASKS / TASKS ON THIS PHOTO" pair seen in the lightbox.
   return (
@@ -243,7 +243,7 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
           </div>
         ) : tasks.length === 0 ? (
           <div className="py-4 text-center text-xs text-white/50">
-            No tasks yet — add one above.
+            No tasks yet - add one above.
           </div>
         ) : (
           tasks.map((t) => {

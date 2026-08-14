@@ -70,7 +70,7 @@ const WEEKDAYS = [
   { key: "sat", label: "S" },
 ];
 
-/** Local calendar day key. Deliberately not UTC — a photo taken at 9pm belongs
+/** Local calendar day key. Deliberately not UTC - a photo taken at 9pm belongs
  *  to the day the crew was on site, not to tomorrow in London. */
 const dayKey = (d: Date) => format(d, "yyyy-MM-dd");
 
@@ -90,7 +90,7 @@ const viewerTimeZone = (): string | undefined => {
  * Month view of the photo library, with a year heatmap behind the same header.
  *
  * The grid alone answered "what have we got", but nothing on the page answered
- * "what happened on the 12th" or "which weeks were busy" — the questions people
+ * "what happened on the 12th" or "which weeks were busy" - the questions people
  * actually bring to a field-photo archive. Each day cell is its own thumbnail,
  * so the month reads as a contact sheet of the job, and picking a day loads
  * that day's captures beside it.
@@ -101,7 +101,7 @@ const viewerTimeZone = (): string | undefined => {
  * page of photos counted in the browser. Counting client-side meant the page
  * had to pull every photo in the month up front, which both cost a large query
  * for 31 thumbnails and silently under-reported any month that overran the row
- * limit — the calendar's whole job is the counts, so a count that is quietly
+ * limit - the calendar's whole job is the counts, so a count that is quietly
  * short is worse than no calendar. The selected day's photos are then fetched
  * on their own, so the cost tracks what you actually open.
  *
@@ -209,7 +209,7 @@ export function PhotoCalendar({
   const daySigned = dayQuery.data?.signed ?? {};
 
   // Held in a ref so a parent passing an inline arrow doesn't re-fire this on
-  // every render — the effect should track the data, not the callback.
+  // every render - the effect should track the data, not the callback.
   const reportRef = useRef(onDayPhotosChange);
   reportRef.current = onDayPhotosChange;
   useEffect(() => {
@@ -306,7 +306,7 @@ export function PhotoCalendar({
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-          {/* A failed load must not read as an empty month — this whole view
+          {/* A failed load must not read as an empty month - this whole view
               exists to be trusted about counts. */}
           {activityQuery.isError ? (
             <span className="inline-flex items-center gap-1.5 text-[11.5px] font-bold text-destructive">
@@ -338,7 +338,7 @@ export function PhotoCalendar({
               )}
               {activityQuery.data?.capped && (
                 <span className="text-[11.5px] font-bold text-amber-600 dark:text-amber-400">
-                  Too much activity to count exactly — totals are a floor
+                  Too much activity to count exactly - totals are a floor
                 </span>
               )}
             </>
@@ -372,7 +372,7 @@ export function PhotoCalendar({
                   type="button"
                   disabled={outside}
                   onClick={() => onSelectDay(isSelected ? null : k)}
-                  aria-label={`${format(day, "EEEE d MMMM")} — ${count} photo${
+                  aria-label={`${format(day, "EEEE d MMMM")} - ${count} photo${
                     count === 1 ? "" : "s"
                   }`}
                   aria-pressed={isSelected}
@@ -528,7 +528,7 @@ export function PhotoCalendar({
                   </p>
                 )}
 
-                {/* Which jobs the day belonged to — the question a date alone
+                {/* Which jobs the day belonged to - the question a date alone
                     can't answer. */}
                 {showProjectBreakdown && (
                   <div className="mt-3 space-y-1 border-t border-border/60 pt-3">
@@ -599,7 +599,7 @@ function YearHeatmap({
                 {format(first, "MMMM")}
               </span>
               <span className="text-xs text-muted-foreground">
-                {monthTotal > 0 ? `${monthTotal.toLocaleString()} photos` : "—"}
+                {monthTotal > 0 ? `${monthTotal.toLocaleString()} photos` : "-"}
               </span>
             </div>
             <div className="mt-2.5 grid grid-cols-7 gap-1">
@@ -613,7 +613,7 @@ function YearHeatmap({
                 return (
                   <span
                     key={dayKey(d)}
-                    title={`${format(d, "d MMM")} — ${count} photo${count === 1 ? "" : "s"}`}
+                    title={`${format(d, "d MMM")} - ${count} photo${count === 1 ? "" : "s"}`}
                     className={cn("aspect-square rounded-[2px]", count === 0 && "bg-muted")}
                     style={
                       count > 0
@@ -639,7 +639,7 @@ function YearHeatmap({
  * One day's captures.
  *
  * Windowed on `taken_at` with a `created_at` fallback so it lines up exactly
- * with how the server buckets the day cells — otherwise a photo shot at 6pm and
+ * with how the server buckets the day cells - otherwise a photo shot at 6pm and
  * synced the next morning would be counted on one day and listed under another.
  * Walkthrough frames are dropped client-side rather than in the query, because
  * PostgREST allows only one top-level `or` group and the date window needs it.
@@ -663,12 +663,12 @@ async function loadDayPhotos(
     .select(
       "id, project_id, storage_path, thumb_path, image_url, caption, phase, tags, taken_at, created_at",
     )
-    // No `archived` filter — that column is the compression job's bookkeeping,
+    // No `archived` filter - that column is the compression job's bookkeeping,
     // not a user's decision to hide a photo. See the note in GalleryPage.
     .is("deleted_at", null)
     // `hidden` is the user's decision, and the calendar is the timeline the
     // Hide button names. The day counts above it come from
-    // listTimelineActivity, which filters the same way — if only one of the two
+    // listTimelineActivity, which filters the same way - if only one of the two
     // honoured it, opening a day would contradict its own count.
     .eq("hidden", false)
     .or(
@@ -685,7 +685,7 @@ async function loadDayPhotos(
 
   // A walkthrough happened on a day like anything else, so its frames count
   // toward that day. They used to be filtered out here on `phase` / storage
-  // path — see the note in ProjectDetailPage's `load`.
+  // path - see the note in ProjectDetailPage's `load`.
   const photos = ((data as CalendarPhoto[]) ?? []).sort(
     (a, b) => +new Date(shotAt(b)) - +new Date(shotAt(a)),
   );

@@ -36,10 +36,10 @@ export const Route = createFileRoute("/pricing")({
   component: PricingPage,
   head: () => ({
     meta: [
-      { title: "Pricing — Everbreeze SitePix" },
+      { title: "Pricing - Everbreeze SitePix" },
       {
         name: "description",
-        content: "Choose the SitePix plan that fits your crew — Starter, Pro, or Team.",
+        content: "Choose the SitePix plan that fits your crew - Starter, Pro, or Team.",
       },
     ],
   }),
@@ -81,7 +81,7 @@ function IntervalToggle({
 }
 
 /**
- * One stepper for the whole page — changing it re-prices every card at once,
+ * One stepper for the whole page - changing it re-prices every card at once,
  * so the comparison is always for the same crew size.
  */
 function CrewSizePicker({ seats, onChange }: { seats: number; onChange: (n: number) => void }) {
@@ -147,7 +147,7 @@ function PriceBlock({
           Up to {plan.maxSeats} user{plan.maxSeats === 1 ? "" : "s"}
         </p>
         <p className={`mt-2 font-manrope text-xs ${subtle}`}>
-          Not available for a crew of {seats} — choose Pro or Team.
+          Not available for a crew of {seats} - choose Pro or Team.
         </p>
       </div>
     );
@@ -212,7 +212,7 @@ function PricingPage() {
   return <AuthedPricingPage />;
 }
 
-/** Reached by anonymous visitors from the homepage/nav/footer — must render
+/** Reached by anonymous visitors from the homepage/nav/footer - must render
  * without any authenticated-app assumptions (no AppSidebar/AppHeader, no
  * authed RPC calls). CTAs route to signup; checkout only happens once the
  * visitor has an account and a team. */
@@ -292,12 +292,12 @@ interface MyTeamResult {
   isActive: boolean;
 }
 
-/** Reached by signed-in users — from Settings/Teams "Manage plan", or from
+/** Reached by signed-in users - from Settings/Teams "Manage plan", or from
  * the upgrade banner/gate dialog shown app-wide for a team with no active
  * subscription yet.
  *
  * Deliberately NOT the public page's three-column shelf. A signed-in visitor
- * is not choosing between three products from scratch — they hold a position
+ * is not choosing between three products from scratch - they hold a position
  * and are deciding whether to move up from it. So this leads with the plan
  * they're on and shows only genuine upgrades, each answering "what am I
  * missing?" with the concrete feature delta rather than a full list they'd
@@ -311,7 +311,7 @@ function AuthedPricingPage() {
   const qc = useQueryClient();
   const [interval, setInterval] = useState<BillingInterval>("monthly");
   // Null until the user touches the stepper, so the page opens priced for the
-  // crew the team actually has rather than for one person — a 6-person team
+  // crew the team actually has rather than for one person - a 6-person team
   // seeing a 1-seat price would be quoted a number they can never pay.
   const [seatsOverride, setSeatsOverride] = useState<number | null>(null);
   const { data, isLoading } = useQuery({
@@ -369,7 +369,7 @@ function AuthedPricingPage() {
                         </div>
                         {seatsOverride !== null && seatsOverride !== teamSeats && (
                           <p className="mt-3 font-manrope text-xs text-muted-foreground">
-                            Priced for {seatsOverride} user{seatsOverride === 1 ? "" : "s"} — your
+                            Priced for {seatsOverride} user{seatsOverride === 1 ? "" : "s"} - your
                             team has {teamSeats} today.
                           </p>
                         )}
@@ -395,7 +395,7 @@ function AuthedPricingPage() {
 
                     {atTopTier && (
                       <p className="mt-8 max-w-xl font-manrope text-sm text-muted-foreground">
-                        You're on the highest tier — every feature is unlocked. Manage seats,
+                        You're on the highest tier - every feature is unlocked. Manage seats,
                         payment method and invoices from{" "}
                         <Link to="/settings" className="font-bold text-primary hover:underline">
                           Settings
@@ -420,7 +420,7 @@ function CreateTeamPrompt({ onCreated }: { onCreated: () => void }) {
   const m = useMutation({
     mutationFn: () => createTeam({ data: { name: name.trim() } }),
     onSuccess: () => {
-      toast.success("Team created — pick a plan below");
+      toast.success("Team created - pick a plan below");
       onCreated();
     },
     onError: (e: any) => toast.error(e?.message ?? "Failed to create team"),
@@ -432,7 +432,7 @@ function CreateTeamPrompt({ onCreated }: { onCreated: () => void }) {
         Name your team to continue
       </h2>
       <p className="mt-1 font-manrope text-sm text-sidebar-foreground/60">
-        SitePix subscriptions are billed per team — you'll be the owner and can invite others
+        SitePix subscriptions are billed per team - you'll be the owner and can invite others
         after subscribing.
       </p>
       <div className="mt-5 flex flex-col gap-3 sm:flex-row">
@@ -481,7 +481,7 @@ function CurrentPlanPanel({
           <p className="mt-1 font-manrope text-sm text-muted-foreground">{plan.tagline}</p>
         </div>
         <div className="text-right">
-          {/* Past its own seat cap this plan has no price — quoting an
+          {/* Past its own seat cap this plan has no price - quoting an
               extrapolated one would invent a tier we don't sell. */}
           {exceedsSeatCap(plan, seats) ? (
             <p className="font-display text-lg font-bold tracking-tight text-foreground">
@@ -517,15 +517,15 @@ function PlanCard({
   interval: BillingInterval;
   seats: number;
   disabled: boolean;
-  /** Null when the team has no active subscription — then nothing is "extra". */
+  /** Null when the team has no active subscription - then nothing is "extra". */
   currentPlan: BillingPlan | null;
 }) {
   const capped = exceedsSeatCap(plan, seats);
-  // The concrete answer to "what am I missing?" — only what this tier adds
+  // The concrete answer to "what am I missing?" - only what this tier adds
   // beyond what the team already has, so there's nothing to diff by eye.
   const gains = gainsBetween(currentPlan, plan.id);
   const currentPricing = currentPlan ? planById(currentPlan) : undefined;
-  // Only meaningful while the current plan can actually seat this crew —
+  // Only meaningful while the current plan can actually seat this crew -
   // past its cap it has no price at this size, so there's nothing to diff.
   const currentIsPriceable = !!currentPricing && !exceedsSeatCap(currentPricing, seats);
   const delta =
@@ -565,7 +565,7 @@ function PlanCard({
         </p>
       )}
       {/* No delta to show because the current plan can't seat this crew at
-          all — which is itself the reason to move up, so say that instead. */}
+          all - which is itself the reason to move up, so say that instead. */}
       {!capped && currentPricing && !currentIsPriceable && (
         <p className="mt-2 font-manrope text-xs font-bold text-sidebar-ring">
           Your {currentPricing.name} plan holds only {currentPricing.maxSeats} user

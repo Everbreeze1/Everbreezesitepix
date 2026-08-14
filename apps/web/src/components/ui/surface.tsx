@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
  * The app's house surface language, in one place.
  *
  * The product surfaces (Projects, Project detail, Project documents) were built
- * with a distinct look — larger corner radius, a long soft shadow, translucent
+ * with a distinct look - larger corner radius, a long soft shadow, translucent
  * card fill, and a lift on hover. The Settings/Templates screens were built
  * later against plain shadcn defaults (`rounded-xl` + generic `shadow`), so
  * they read as a different product. These tokens let those screens adopt the
@@ -24,7 +24,7 @@ export const SURFACE_CARD_INTERACTIVE = cn(
 export const SURFACE_BUTTON = "h-8 gap-2 rounded-lg px-4 text-xs font-bold";
 
 /**
- * A section title inside a page that already has a `PageHeader` — the uppercase
+ * A section title inside a page that already has a `PageHeader` - the uppercase
  * micro-eyebrow plus display-font heading used by Project documents, scaled
  * down so it reads as a section rather than competing with the page title.
  */

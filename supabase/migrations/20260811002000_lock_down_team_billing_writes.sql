@@ -1,4 +1,4 @@
--- SECURITY — stop authenticated users writing their own billing state.
+-- SECURITY - stop authenticated users writing their own billing state.
 --
 -- THE BUG. 20260612191404_teams.sql:25 grants the table outright:
 --
@@ -21,27 +21,27 @@
 --
 -- and hand themselves the top tier permanently. Every server-side gate reads
 -- exactly those columns (lib/team-plan.ts getCallerTeamPlan), so this is not a
--- display bug — it is the whole paywall. `is_internal` is worse than `plan`: it
+-- display bug - it is the whole paywall. `is_internal` is worse than `plan`: it
 -- short-circuits the tier check entirely.
 --
 -- THE FIX IS THE GRANT, NOT THE POLICY, for the same reason as
 -- 20260811000000: a privilege that isn't granted cannot be re-opened by someone
 -- adding a policy later.
 --
--- NOTHING BREAKS. The browser never writes this table — `grep -rn 'from("teams")'
--- apps/web/src` returns nothing — and every write in apps/api goes through
+-- NOTHING BREAKS. The browser never writes this table - `grep -rn 'from("teams")'
+-- apps/web/src` returns nothing - and every write in apps/api goes through
 -- `getSupabaseAdmin()` (service role, which keeps its own GRANT ALL and bypasses
 -- RLS): createTeamService inserts, and the Stripe webhook is the only thing that
 -- ever sets plan/subscription_status. The two reads that DO use the caller's
--- client are both SELECTs — getMyTeamService (teams/service.ts:263) and
--- getCallerTeamPlan (lib/team-plan.ts:68) — so SELECT stays granted.
+-- client are both SELECTs - getMyTeamService (teams/service.ts:263) and
+-- getCallerTeamPlan (lib/team-plan.ts:68) - so SELECT stays granted.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent — safe to re-run.
+-- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run.
 
 SET lock_timeout = '5s';
 
 
--- === PART 1 — take the writes away from authenticated ======================
+-- === PART 1 - take the writes away from authenticated ======================
 -- SELECT is deliberately left in place; see above.
 REVOKE INSERT, UPDATE, DELETE ON public.teams FROM authenticated;
 
@@ -53,13 +53,13 @@ GRANT SELECT ON public.teams TO authenticated;
 GRANT ALL    ON public.teams TO service_role;
 
 
--- === PART 2 — defence in depth on the policies =============================
+-- === PART 2 - defence in depth on the policies =============================
 -- Redundant while PART 1 holds, and that is the point: if a future migration
 -- re-grants UPDATE without thinking (which is exactly how this bug arrived),
 -- these keep the blast radius to zero rather than restoring the hole.
 --
 -- The write policies are dropped rather than tightened. There is no legitimate
--- caller for them — the service role does not consult policies at all — so the
+-- caller for them - the service role does not consult policies at all - so the
 -- honest expression of the rule is "authenticated may only read this table".
 DROP POLICY IF EXISTS "Users create their own team" ON public.teams;
 DROP POLICY IF EXISTS "Owner updates their team"    ON public.teams;
@@ -84,7 +84,7 @@ WHERE schemaname = 'public' AND tablename = 'teams'
 ORDER BY policyname;
 
 
--- === AFTERWARDS — check whether anyone already used this ===================
+-- === AFTERWARDS - check whether anyone already used this ===================
 -- The hole was open for the life of the table, so a paid tier in the database
 -- is not proof of a payment. Any row here with a real plan but no Stripe
 -- subscription was either comped by hand (is_internal) or self-granted.

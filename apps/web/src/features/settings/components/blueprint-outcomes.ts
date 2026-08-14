@@ -16,7 +16,7 @@ export type BlueprintItemKind = "checklist" | "document" | "report" | "label_set
  *
  * "I don't know what happens when I select a template" is answered by pointing
  * at a tab the user has already seen. `tab` is the label on the project's own
- * PageTabStrip — Documents really is the tab keyed `reports`, so the mapping is
+ * PageTabStrip - Documents really is the tab keyed `reports`, so the mapping is
  * spelled out here once rather than guessed at each call site.
  */
 export type BlueprintDestination =
@@ -51,7 +51,7 @@ export const DESTINATION: Record<
     icon: FileText,
     blurb: "Editable pages with the project's details already filled in, ready to export",
   },
-  // Reports are workspace-level, not a project tab — they collect on the
+  // Reports are workspace-level, not a project tab - they collect on the
   // Reports screen. Saying "the project's Documents tab" here sent people to a
   // tab that would never show them.
   reports: {
@@ -71,7 +71,7 @@ export const DESTINATION: Record<
  * What each blueprint item turns into once it lands on a project.
  *
  * The library screens named the *template* type and stopped there, which is why
- * "I don't know what happens when I select a template" was a fair complaint —
+ * "I don't know what happens when I select a template" was a fair complaint -
  * nothing told you a workflow becomes a live, phase-by-phase run the crew works
  * through, or that a document becomes a site log with the project's details
  * already filled in.
@@ -80,12 +80,12 @@ export const DESTINATION: Record<
  * That contract broke the one time the two could differ: the service counts
  * label sets under `label_sets`, the display plural is "label sets", the lookup
  * matched on `plural` and missed, and the result screen fell back to printing
- * the raw key — the "1 label_sets" in the bug report. They are now separate
+ * the raw key - the "1 label_sets" in the bug report. They are now separate
  * fields, because a display string and a wire key have no reason to agree.
  *
  * `countsKey` must stay in step with `counts` in applyProjectBlueprintService.
  * It is also the key persisted into `project_blueprint_applications.counts`, so
- * it is not free to rename — historical ledger rows carry the old keys.
+ * it is not free to rename - historical ledger rows carry the old keys.
  */
 export const KIND_OUTCOME: Record<
   BlueprintItemKind,

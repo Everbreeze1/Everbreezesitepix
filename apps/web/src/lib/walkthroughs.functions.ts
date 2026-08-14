@@ -23,7 +23,7 @@ import type {
  * declared `unknown`, which pushed every call site into `any`-style property
  * access that the compiler could not check.
  *
- * `import type` only — this never pulls apps/api into the client bundle.
+ * `import type` only - this never pulls apps/api into the client bundle.
  */
 type Result<T extends (...args: never[]) => unknown> = Awaited<ReturnType<T>>;
 
@@ -122,7 +122,7 @@ export const createReportFromWalkthrough = rpcOp<
 >("createReportFromWalkthrough");
 
 /**
- * Creates a WALKTHROUGH row, not a project page — a Summary is the AI's notes
+ * Creates a WALKTHROUGH row, not a project page - a Summary is the AI's notes
  * on a set of photos, which is a walkthrough with no walk. It lands in the
  * Walkthroughs tab and opens at /walkthroughs/$id. See
  * supabase/migrations/20260814000000_walkthrough_source.sql.

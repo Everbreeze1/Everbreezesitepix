@@ -293,7 +293,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
     /*
      * Deliberately lands on the empty state rather than inserting a blank row.
      *
-     * It used to `addItem("checkbox", id, 0)` here — one database round trip
+     * It used to `addItem("checkbox", id, 0)` here - one database round trip
      * for a nameless row, focused before the author had decided anything, which
      * silently framed "build a template" as twenty more of the same. The empty
      * state now offers "Paste a list" as its primary action and "Add one item"
@@ -404,7 +404,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
    * The next free position, from max+1 rather than the array's length.
    *
    * Length is only correct while positions are a gapless 0..n-1 run, and
-   * `deleteItem` doesn't renumber the survivors — so deleting a middle item and
+   * `deleteItem` doesn't renumber the survivors - so deleting a middle item and
    * adding another handed the new row a number one of its siblings already
    * held, and two items then sorted arbitrarily against each other.
    */
@@ -415,8 +415,8 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
 
   /**
    * Push a set of rows down one slot to open a gap, locally first and then on
-   * the server. Both insert-below paths — `duplicateItem` and `addItem`'s
-   * `after` option — go through here, so "make room at N+1" has exactly one
+   * the server. Both insert-below paths - `duplicateItem` and `addItem`'s
+   * `after` option - go through here, so "make room at N+1" has exactly one
    * implementation rather than two that can drift.
    *
    * The gaps `deleteItem` leaves behind can't cause a collision: a displaced
@@ -426,7 +426,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
    *
    * Every result is checked and the writes report through the shared status
    * line, the way `handleDragEnd` already does it. `duplicateItem` used to fire
-   * them bare — and since the query builder resolves to `{ error }` instead of
+   * them bare - and since the query builder resolves to `{ error }` instead of
    * rejecting, a failed shift left the screen showing an order the database
    * didn't have, with no toast, until the next load put two rows on one number.
    */
@@ -447,12 +447,12 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
       if (bad) throw (bad as any).error;
     });
     // Refetch rather than roll back: these are independent requests, so a
-    // failure can be partial — some rows moved, some didn't — and no local undo
+    // failure can be partial - some rows moved, some didn't - and no local undo
     // is right for both. `runImmediate` has already surfaced the error.
     if (!ok) {
       // Flush before refetching. `load()` replaces `items` from the database
       // but leaves the autosave queue holding its pending patch, which then
-      // lands afterwards with no re-render — so a label the user was mid-way
+      // lands afterwards with no re-render - so a label the user was mid-way
       // through typing would disappear from the screen and still be saved.
       // `selectTemplate` flushes ahead of a swap for the same reason.
       await save.flush();
@@ -462,8 +462,8 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
 
   /**
    * One insert at a time. `addItem` computes the new position from the render
-   * closure, so two invocations inside a single round trip — Enter key
-   * auto-repeat, or an impatient double-press — both read the same `items` and
+   * closure, so two invocations inside a single round trip - Enter key
+   * auto-repeat, or an impatient double-press - both read the same `items` and
    * both land on `after.position + 1`, reintroducing exactly the duplicate
    * positions the rest of this file works to prevent.
    */
@@ -642,7 +642,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
           backLabel="Settings"
           eyebrow="Workspace tools"
           title="Checklist templates"
-          description="Reusable inspection and service checklists — checkboxes, ratings, measurements, and pass/fail results."
+          description="Reusable inspection and service checklists - checkboxes, ratings, measurements, and pass/fail results."
           actions={headerActions}
         />
       )}
@@ -744,7 +744,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
                       selected.archived ? (
                         <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-[11.5px] font-semibold text-muted-foreground">
                           <Archive className="h-3.5 w-3.5" />
-                          Archived — it won't show up when adding a checklist to a project.
+                          Archived - it won't show up when adding a checklist to a project.
                         </div>
                       ) : null
                     }
@@ -810,7 +810,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
                       <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center">
                         <p className="text-sm font-semibold text-foreground">No items yet</p>
                         <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-                          Most checklists already exist somewhere — a spec, an email, a punch list.
+                          Most checklists already exist somewhere - a spec, an email, a punch list.
                           Paste it in and every line becomes an item.
                         </p>
                         <div className="mt-4 flex flex-wrap justify-center gap-2">
@@ -855,7 +855,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
                     )}
 
                     {/* Two visible controls and an overflow, the same shape as
-                        the in-project composer — the crew filling a checklist
+                        the in-project composer - the crew filling a checklist
                         in and the manager who authored it should not be
                         learning two different bars. "Add typed item" used to be
                         a third full-width button spelling out what the ⋯ menu
@@ -1039,7 +1039,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
           icon: TYPE_META[t].icon,
         }))}
         defaultType="checkbox"
-        description={`One per line — they'll be appended to “${selected?.name ?? "this template"}”. Bullets and numbering are stripped automatically.`}
+        description={`One per line - they'll be appended to “${selected?.name ?? "this template"}”. Bullets and numbering are stripped automatically.`}
       />
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
@@ -1091,7 +1091,7 @@ function ItemRow({
   });
   const inputRef = useRef<HTMLInputElement>(null);
   const removed = useRef(false);
-  // Helper text is opt-in per item — an always-present empty textarea under
+  // Helper text is opt-in per item - an always-present empty textarea under
   // every row was most of what made this list feel like a form to survive.
   const [showHelp, setShowHelp] = useState(!!item.description);
 
@@ -1112,7 +1112,7 @@ function ItemRow({
   };
 
   /**
-   * Discard a never-named row, but only once focus actually leaves it —
+   * Discard a never-named row, but only once focus actually leaves it -
    * otherwise reaching for the type chip on a row you just added would delete
    * it out from under you.
    */
@@ -1133,7 +1133,7 @@ function ItemRow({
         // `z-30` and did nothing at all, so the row being dragged was painted
         // in plain DOM order and the rows below it clipped its lift shadow.
         // The value has to stay under the sticky BuilderTitleBar (z-10) and
-        // AppHeader (z-20) — at z-30 it would have floated over both.
+        // AppHeader (z-20) - at z-30 it would have floated over both.
         isDragging && "relative z-[5] opacity-90 shadow-[0px_14px_28px_-18px_rgba(16,25,41,0.55)]",
       )}
     >
@@ -1147,7 +1147,7 @@ function ItemRow({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              title={`${meta.label} — click to change`}
+              title={`${meta.label} - click to change`}
               className={cn(
                 "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[10.5px] font-extrabold uppercase tracking-wide transition-opacity hover:opacity-80",
                 meta.tint,
@@ -1204,7 +1204,7 @@ function ItemRow({
         {/* Badge the exception, not the rule: most items are optional, so an
             always-on OPTIONAL pill was a uniform badge on twenty rows carrying
             no information. Marking one required moved into the ⋯ menu below
-            rather than behind a hover-reveal — `group-hover` compiles inside
+            rather than behind a hover-reveal - `group-hover` compiles inside
             `@media (hover: hover)`, so on a tablet the control would have been
             permanently invisible, and it is the only way to set this flag. */}
         {item.required && <RequiredToggle required onToggle={(v) => onChange({ required: v })} />}
@@ -1243,7 +1243,7 @@ function ItemRow({
         </DropdownMenu>
       </div>
 
-      {/* Indent lines up with the type chip — the chip's width varies by label. */}
+      {/* Indent lines up with the type chip - the chip's width varies by label. */}
       {(showHelp || item.description) && (
         <div className="pl-[52px] pr-9">
           <QuietTextarea

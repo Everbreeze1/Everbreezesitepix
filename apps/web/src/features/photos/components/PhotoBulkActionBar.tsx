@@ -175,7 +175,7 @@ export function PhotoBulkActionBar(props: Props) {
   const doHideToggle = () =>
     withBusy("hide", async () => {
       const next = !allHidden;
-      // Batched — "Select all" is unbounded and a single `.in()` past ~670 ids
+      // Batched - "Select all" is unbounded and a single `.in()` past ~670 ids
       // is rejected by the gateway on URI length. See lib/chunked-ids.ts.
       await mutateByIds(selectedIds, (idChunk) =>
         (supabase as any).from("photos").update({ hidden: next }).in("id", idChunk),
@@ -644,13 +644,13 @@ function ReportBulkDialog({
   const [reportId, setReportId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  // Photos per section — also drives the report's photos-per-page layout
+  // Photos per section - also drives the report's photos-per-page layout
   // (clamped to 1..4 for PDF layout density).
   const [perSection, setPerSection] = useState<number>(4);
 
   useEffect(() => {
     if (!mode) return;
-    setTitle(`Report — ${new Date().toLocaleDateString()}`);
+    setTitle(`Report - ${new Date().toLocaleDateString()}`);
     setReportId("");
     setPerSection(4);
     if (mode === "template" || mode === "existing") {
@@ -757,8 +757,8 @@ function ReportBulkDialog({
       await insertSections(rid, nextPos);
       toast.success(
         mode === "existing"
-          ? "Added to report — opening builder…"
-          : "Report created — opening builder…",
+          ? "Added to report - opening builder…"
+          : "Report created - opening builder…",
       );
       onClose();
       navigate({

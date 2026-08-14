@@ -3,11 +3,11 @@ import { parseRich, richIsEmpty, richToPlainText } from "../packages/shared/src/
 import { splitOnPageBreak, planSectionPages } from "../packages/shared/src/report-pagination";
 
 /*
- * A report is rendered three times — the builder's Preview tab, the public
+ * A report is rendered three times - the builder's Preview tab, the public
  * share link (literally the same component), and the pdf-lib download. They
  * used to decide page boundaries independently: the preview drew exactly one
  * page per section with no way to split a long one, while the PDF used
- * `!(i === 0 && py > PAGE_H * 0.55)` — a font-metrics cursor test no DOM
+ * `!(i === 0 && py > PAGE_H * 0.55)` - a font-metrics cursor test no DOM
  * renderer can reproduce, so the page count moved when you added a sentence.
  *
  * `planSectionPages` is the single rule both now execute. It is deliberately
@@ -60,7 +60,7 @@ describe("splitOnPageBreak", () => {
   });
 });
 
-describe("planSectionPages — the one page rule both renderers execute", () => {
+describe("planSectionPages - the one page rule both renderers execute", () => {
   const photos = (n: number) => Array.from({ length: n }, (_, i) => ({ photo_id: `p${i}` }));
 
   it("a plain section is one page", () => {
@@ -105,7 +105,7 @@ describe("planSectionPages — the one page rule both renderers execute", () => 
     expect(pages.map((p) => p.photos.length)).toEqual([2, 2, 1]);
   });
 
-  it("is deterministic — no font metrics, so browser and pdf-lib agree", () => {
+  it("is deterministic - no font metrics, so browser and pdf-lib agree", () => {
     const input = { body: "<p>a</p><hr><p>b</p>", photos: photos(3), photosPerPage: 1 } as const;
     const a = planSectionPages({ ...input, photos: [...input.photos] });
     const b = planSectionPages({ ...input, photos: [...input.photos] });

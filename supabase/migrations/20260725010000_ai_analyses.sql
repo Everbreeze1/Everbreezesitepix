@@ -1,6 +1,6 @@
 -- ai_analyses does not exist on the live database at all, even though
 -- apps/api/src/domains/ai/service.ts has depended on it since analyzePhotoService
--- was written — every "Analyze with AI" request currently fails at the first
+-- was written - every "Analyze with AI" request currently fails at the first
 -- INSERT. This restores it, mirroring the teammate-visibility pattern used for
 -- photos in 20260612191404_teams.sql (are_teammates() joined through the photo's
 -- project). Apply manually in the Supabase SQL editor (or `supabase db push`).

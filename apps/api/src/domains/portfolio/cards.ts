@@ -56,7 +56,7 @@ export interface ShowcaseCardRow {
  * fought the drag-to-reorder UI: dropping an ordinary project above a featured
  * one wrote the position the user asked for, then the next read hoisted the
  * featured row back to the top and the card appeared to snap back. One
- * ordering rule the user controls directly beats two that disagree — so
+ * ordering rule the user controls directly beats two that disagree - so
  * `featured` is now purely a badge on the card.
  */
 export function compareCardRows(a: ShowcaseCardRow, b: ShowcaseCardRow): number {
@@ -73,7 +73,7 @@ export function compareCardRows(a: ShowcaseCardRow, b: ShowcaseCardRow): number 
  * builder is required to set `cover_photo_id` and a grid of grey placeholders
  * is the fastest way to make a portfolio look broken.
  *
- * `db` is whichever client the caller is authorised with — the user's for the
+ * `db` is whichever client the caller is authorised with - the user's for the
  * builder, the service-role one for the public site.
  */
 export async function loadShowcaseCards(

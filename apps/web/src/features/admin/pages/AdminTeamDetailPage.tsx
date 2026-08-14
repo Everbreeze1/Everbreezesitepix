@@ -50,7 +50,7 @@ export function AdminTeamDetailPage() {
       </div>
 
       <p className="mt-4 rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-xs text-muted-foreground">
-        Read-only inspection view — for support debugging. You are not signed in as this team and
+        Read-only inspection view - for support debugging. You are not signed in as this team and
         cannot take actions on its behalf here.
       </p>
 
@@ -63,8 +63,8 @@ export function AdminTeamDetailPage() {
             {data.members.map((m) => (
               <div key={m.id} className="flex items-center justify-between border-t border-border pt-2 text-sm first:border-t-0 first:pt-0">
                 <div>
-                  <p className="font-medium text-foreground">{m.fullName ?? "—"}</p>
-                  <p className="text-xs text-muted-foreground">{m.email ?? "—"}</p>
+                  <p className="font-medium text-foreground">{m.fullName ?? "-"}</p>
+                  <p className="text-xs text-muted-foreground">{m.email ?? "-"}</p>
                 </div>
                 <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold capitalize text-muted-foreground">
                   {m.role}

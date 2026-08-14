@@ -25,11 +25,11 @@ const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : us
  * nothing looked editable until you clicked it, controls for a single row were
  * strung across one cramped line, and the only reordering tool was "delete it
  * and add it again in the right place". These primitives give both screens the
- * same, deliberately physical editing surface — fields that announce
+ * same, deliberately physical editing surface - fields that announce
  * themselves, rows you can grab, and one status line that tells the truth.
  *
  * This lives outside `features/` because the in-project *runners*
- * (`features/projects/components/runner`) share the honest-save half of it —
+ * (`features/projects/components/runner`) share the honest-save half of it -
  * `useAutosave` and `SaveStatus`, plus the quiet fields. Authoring a template
  * and filling one in should not look like two different products, and the two
  * halves importing across a feature boundary is how they drifted apart before.
@@ -54,8 +54,8 @@ export function BuilderLayout({
   return (
     <div className="mt-6 gap-5 md:grid md:grid-cols-[minmax(0,272px)_minmax(0,1fr)] md:items-start">
       {/* Same app-header offset as the title bar, so the two panes pin flush.
-          This read 98px — the 82px header offset added on top of a pre-existing
-          `top-4` instead of replacing it — which left the rail docking 16px
+          This read 98px - the 82px header offset added on top of a pre-existing
+          `top-4` instead of replacing it - which left the rail docking 16px
           below the canvas once you scrolled. */}
       <div className={cn("md:sticky md:top-[82px] md:block", pane === "list" ? "block" : "hidden")}>
         {rail}
@@ -193,13 +193,13 @@ export function BuilderCanvas({
    * Deliberately NOT `overflow-hidden`.
    *
    * `overflow: hidden` makes this card a scroll container, and `position:
-   * sticky` resolves against its nearest scrollport — so the title bar stuck to
+   * sticky` resolves against its nearest scrollport - so the title bar stuck to
    * the CARD instead of the page. As you scrolled, the bar slid down over the
    * card's own first rows: checklist item 1 disappeared behind it and item 2
    * was cut in half, while `top-[82px]` never actually took effect. That is the
    * bug this screen was reported for.
    *
-   * The card is only rounded, not clipping anything that needs it — the title
+   * The card is only rounded, not clipping anything that needs it - the title
    * bar carries its own `rounded-t-2xl` so its fill still follows the corners,
    * and every other child sits inside padding.
    */
@@ -208,7 +208,7 @@ export function BuilderCanvas({
 
 /**
  * Sticky editor header: the template's identity, its live stats, the save
- * state, and the destructive-ish actions — all in one bar that stays put while
+ * state, and the destructive-ish actions - all in one bar that stays put while
  * you scroll a long template, so "did that save?" is never a scroll away.
  */
 export function BuilderTitleBar({
@@ -240,7 +240,7 @@ export function BuilderTitleBar({
    * Condense once the bar docks.
    *
    * At full height this bar is ~220px, and with AppHeader above it that parked
-   * roughly 300px of a 900px viewport permanently over the list — the first
+   * roughly 300px of a 900px viewport permanently over the list - the first
    * item was completely hidden and the second was cut in half. The header even
    * advertised "1 required" while covering the required item.
    *
@@ -268,13 +268,13 @@ export function BuilderTitleBar({
     <>
       <div ref={sentinelRef} aria-hidden className="h-px" />
       {/* top-[82px], not top-0: the page is the scroll container and AppHeader
-          is `sticky top-0 h-[82px]`, so top-0 parked this bar underneath it —
+          is `sticky top-0 h-[82px]`, so top-0 parked this bar underneath it -
           the save status it exists to keep in view was hidden behind the app
           chrome. */}
       <div
         className={cn(
           // `rounded-t-2xl` replaces the clipping the card used to do with
-          // `overflow-hidden` — which broke this bar's stickiness entirely.
+          // `overflow-hidden` - which broke this bar's stickiness entirely.
           "sticky top-[82px] z-10 rounded-t-2xl border-b border-border/60 bg-gradient-to-b from-card via-card to-card/95 px-4 backdrop-blur transition-[padding] duration-150 sm:px-6",
           condensed ? "py-2" : "pb-3 pt-4 sm:pt-5",
         )}
@@ -312,7 +312,7 @@ export function BuilderTitleBar({
               />
             </div>
           </div>
-          {/* The save state is the one thing that must survive condensing —
+          {/* The save state is the one thing that must survive condensing -
               "did that save?" being a scroll away is what this bar exists to
               prevent. Only ever one of the two is rendered. */}
           {condensed && (
@@ -367,7 +367,7 @@ export function SaveStatus({ state }: { state: SaveState }) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2 py-0.5 text-[11.5px] font-bold text-destructive">
         <TriangleAlert className="h-3.5 w-3.5" />
-        Not saved — check your connection
+        Not saved - check your connection
       </span>
     );
   if (state === "saved")
@@ -393,7 +393,7 @@ export const QuietInput = forwardRef<HTMLInputElement, ComponentProps<"input">>(
 );
 QuietInput.displayName = "QuietInput";
 
-/** Textarea that grows with its content — no scrollbars inside a one-line note. */
+/** Textarea that grows with its content - no scrollbars inside a one-line note. */
 export const QuietTextarea = forwardRef<HTMLTextAreaElement, ComponentProps<"textarea">>(
   ({ className, value, ...props }, ref) => {
     const innerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -454,7 +454,7 @@ export function DragHandle({
   );
 }
 
-/** A dashed "add something here" target — the row-level counterpart to EmptyState. */
+/** A dashed "add something here" target - the row-level counterpart to EmptyState. */
 export function AddTarget({
   children,
   onClick,
@@ -496,7 +496,7 @@ export function RequiredToggle({
       type="button"
       onClick={() => onToggle(!required)}
       aria-pressed={required}
-      title={required ? "Required — crews can't finish without it" : "Optional"}
+      title={required ? "Required - crews can't finish without it" : "Optional"}
       className={cn(
         "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide transition-colors",
         required

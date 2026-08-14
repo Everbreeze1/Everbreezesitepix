@@ -79,7 +79,7 @@ export function WalkthroughPhotoSteps({
   /**
    * "summary": no recording behind these photos, so there are no offsets to
    * show and no narration that could be missing. The default keeps the
-   * recorded rendering byte-identical — this component is also the public
+   * recorded rendering byte-identical - this component is also the public
    * share page's gallery.
    */
   variant?: "recorded" | "summary";
@@ -104,8 +104,8 @@ export function WalkthroughPhotoSteps({
           {steps.length} {steps.length === 1 ? "photo" : "photos"}
         </span>
       </div>
-      {/* Photo and its note are fused into one card — image on top, note directly
-          beneath with no gap — rather than a side-by-side layout that collapses
+      {/* Photo and its note are fused into one card - image on top, note directly
+          beneath with no gap - rather than a side-by-side layout that collapses
           into an unrelated-looking stack on narrow screens. The offset badge on
           the photo (not a "Photo N" label) is enough to place it in the walk. */}
       {/* items-start only for summaries. A recorded walkthrough gives every tile
@@ -178,7 +178,7 @@ export function WalkthroughMarkdown({
 }: {
   markdown: string;
   photoUrls: Record<string, string>;
-  /** "summary": there was no narration to organize — see WalkthroughPhotoSteps. */
+  /** "summary": there was no narration to organize - see WalkthroughPhotoSteps. */
   variant?: "recorded" | "summary";
 }) {
   const trimmed = (markdown ?? "").trim();
@@ -198,8 +198,8 @@ export function WalkthroughMarkdown({
       </div>
       {/*
         `wt-markdown` carries the real styling (see styles.css). The prose-*
-        classes this used to rely on are a no-op — @tailwindcss/typography is
-        not installed — so headings rendered at body size and bullets lost their
+        classes this used to rely on are a no-op - @tailwindcss/typography is
+        not installed - so headings rendered at body size and bullets lost their
         markers, which Tailwind's preflight strips. Same fix, and same reason,
         as the explicit `.tiptap` rules.
       */}

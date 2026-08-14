@@ -1,11 +1,11 @@
--- Templates redesign — new template kinds.
+-- Templates redesign - new template kinds.
 -- Run against the SitePix Supabase project.
 --
 -- Adds three new template kinds so users can build reusable blueprints beyond
 -- checklists/workflows:
---   1. label_sets       — named bundles of labels (name + color) applied to projects
---   2. report_templates — reusable report structure (title, subtitle, sections)
---   3. document_templates — Word-style rich documents with placeholder fields
+--   1. label_sets       - named bundles of labels (name + color) applied to projects
+--   2. report_templates - reusable report structure (title, subtitle, sections)
+--   3. document_templates - Word-style rich documents with placeholder fields
 --
 -- All three follow the same team-scoped RLS pattern as project_templates.
 -- Idempotent: safe to re-run.

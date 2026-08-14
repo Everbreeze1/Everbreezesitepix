@@ -1,7 +1,7 @@
 -- Platform-wide admin access (distinct from team_role, which is per-team).
--- Deliberately a separate table rather than a profiles.is_admin column —
+-- Deliberately a separate table rather than a profiles.is_admin column -
 -- easier to audit who has access and to revoke it.
--- Bootstrap: the first row must be inserted manually in the SQL editor —
+-- Bootstrap: the first row must be inserted manually in the SQL editor -
 -- see docs/ops.md. No UI can grant the first admin (chicken-and-egg).
 -- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog). Idempotent.
 
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.platform_admins (
   granted_at timestamptz NOT NULL DEFAULT now()
 );
 
--- No client access at all — every read/write goes through the service-role
+-- No client access at all - every read/write goes through the service-role
 -- key from apps/api's admin domain (requirePlatformAdmin()). Never exposed
 -- to `authenticated` so a compromised browser session can't self-grant.
 GRANT ALL ON public.platform_admins TO service_role;

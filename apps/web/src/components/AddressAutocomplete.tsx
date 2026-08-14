@@ -156,7 +156,7 @@ export function AddressAutocomplete({
       )}
       {error && (
         <p className="mt-1 text-[11px] text-muted-foreground">
-          Address autocomplete unavailable — type the address manually.
+          Address autocomplete unavailable - type the address manually.
         </p>
       )}
     </div>
