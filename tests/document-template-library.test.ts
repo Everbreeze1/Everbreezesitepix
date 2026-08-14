@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { sanitizePageHtml } from "../apps/api/src/domains/projects/sanitize-page-html";
-import { bracketsToFillFields } from "../apps/api/src/domains/projects/pages";
+import { bracketsToFillFields, SUPPORTED_TOKENS } from "../apps/api/src/domains/projects/pages";
 
 /*
  * The built-in template library is authored in SQL and never type-checked by
@@ -120,25 +120,70 @@ describe("the built-in template library - what the seed migrations contain", () 
 
   it("only uses merge tokens the resolver knows", () => {
     /*
-     * `resolvePageTokens` leaves an unrecognised token verbatim, on purpose -
-     * so a typo'd `{{client_name}}` does not read as "needs filling in", it
-     * reads as template source, printed in a document sent to a customer.
+     * A token outside `SUPPORTED_TOKENS` still degrades to a labelled blank
+     * rather than printing as `{{whatever}}` - but the label is guessed from
+     * the token name, so `{{jobsite_addr}}` reads as "Jobsite addr" in a
+     * document sent to a customer. The library gets the curated labels.
      */
-    const pages = readFileSync(join(ROOT, "apps/api/src/domains/projects/pages.ts"), "utf8");
-    const body = pages.slice(pages.indexOf("async function loadTokenValues"));
-    const known = new Set(
-      [...body.slice(0, body.indexOf("export async function")).matchAll(/^\s{4}(\w+):/gm)].map(
-        (m) => m[1],
-      ),
-    );
-    expect(known.has("project_name"), "token extraction failed").toBe(true);
+    expect(SUPPORTED_TOKENS.has("project_name"), "token set is empty").toBe(true);
 
     for (const t of SEEDED) {
       for (const [, token] of t.html.matchAll(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi)) {
-        expect(known.has(token.toLowerCase()), `${t.slug} uses unknown token {{${token}}}`).toBe(
-          true,
-        );
+        expect(
+          SUPPORTED_TOKENS.has(token.toLowerCase()),
+          `${t.slug} uses unknown token {{${token}}}`,
+        ).toBe(true);
       }
+    }
+  });
+});
+
+/*
+ * The presets in DocumentTemplatesManager are the other half of the library:
+ * "New template" and "Load sample site logs" write these bodies straight into
+ * `document_templates`, and they are never parsed by anything above.
+ *
+ * They are how the bug arrived. `sitelog_walkthrough` merges {{weather}},
+ * {{client_name}}, {{project_number}} and {{prepared_by_title}} - four fields
+ * `loadTokenValues` had never heard of - so applying it to a project produced a
+ * document with all four printed as raw `{{tokens}}`, which is what the client
+ * reported. The seed migrations were covered by the test above; these were not.
+ */
+const MANAGER = readFileSync(
+  join(ROOT, "apps/web/src/features/settings/components/DocumentTemplatesManager.tsx"),
+  "utf8",
+);
+
+describe("the style presets the Templates page writes", () => {
+  const presets = [...MANAGER.matchAll(/key: "(\w+)",[\s\S]*?html: `([\s\S]*?)`,\n  \},/g)].map(
+    (m) => ({ key: m[1], html: m[2] }),
+  );
+
+  it("parses (guards the parser these tests depend on)", () => {
+    expect(presets.length).toBeGreaterThanOrEqual(9);
+    expect(presets.some((p) => p.key === "sitelog_walkthrough")).toBe(true);
+  });
+
+  it("only uses merge tokens the resolver knows", () => {
+    for (const p of presets) {
+      for (const [, token] of p.html.matchAll(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi)) {
+        expect(
+          SUPPORTED_TOKENS.has(token.toLowerCase()),
+          `preset ${p.key} uses unknown token {{${token}}}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("offers every placeholder the page advertises", () => {
+    // The Fields panel lists these as insertable, so each has to be a field
+    // the resolver can fill or ask for.
+    const advertised = [...MANAGER.matchAll(/\{ token: "(\w+)", label: "/g)].map((m) => m[1]);
+    expect(advertised.length).toBeGreaterThan(0);
+    for (const token of advertised) {
+      expect(SUPPORTED_TOKENS.has(token), `placeholder ${token} is offered but unsupported`).toBe(
+        true,
+      );
     }
   });
 });

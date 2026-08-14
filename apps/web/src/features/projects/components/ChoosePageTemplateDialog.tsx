@@ -35,9 +35,10 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   listDocumentTemplates,
-  getDocumentTemplate,
+  previewDocumentTemplate,
   type DocumentTemplateSummary,
 } from "@/lib/project-pages.functions";
+import { fillTemplatePreview } from "@/lib/template-preview";
 
 type Filter = "all" | "team" | "example";
 
@@ -107,12 +108,13 @@ function withoutTradePrefix(name: string, heading: string): string {
 export function ChoosePageTemplateDialog({
   open,
   onOpenChange,
-  applying,
+  projectId,
   onUse,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  applying: boolean;
+  /** Whose data the preview resolves against. */
+  projectId: string;
   onUse: (templateId: string) => void;
 }) {
   const [templates, setTemplates] = useState<DocumentTemplateSummary[]>([]);
@@ -123,7 +125,6 @@ export function ChoosePageTemplateDialog({
   const [preview, setPreview] = useState<{ id: string; name: string; html: string } | null>(null);
   /** Per-row, not global: a slow preview must not blank the list behind it. */
   const [previewingId, setPreviewingId] = useState<string | null>(null);
-  const [usingId, setUsingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -132,7 +133,6 @@ export function ChoosePageTemplateDialog({
     setPreview(null);
     setSearch("");
     setOpenSections([]);
-    setUsingId(null);
     (async () => {
       try {
         const res = await listDocumentTemplates();
@@ -209,11 +209,18 @@ export function ChoosePageTemplateDialog({
 
   const allExpanded = sections.length > 0 && sections.every(([h]) => openSections.includes(h));
 
+  /*
+   * Previews the finished document, not the template source. This used to show
+   * the raw body, so a template the user was deciding on read as
+   * `{{project_name}} - Walkthrough Log` and the dialog had to explain in its
+   * own subtitle that those fill in later. Resolving against the project the
+   * dialog is already open inside means it simply says what it will say.
+   */
   async function openPreview(id: string) {
     setPreviewingId(id);
     try {
-      const t = await getDocumentTemplate({ data: { templateId: id } });
-      setPreview({ id: t.id, name: t.name, html: t.html });
+      const t = await previewDocumentTemplate({ data: { templateId: id, projectId } });
+      setPreview({ id: t.id, name: t.name, html: fillTemplatePreview(t.html, t.fields, {}) });
     } catch (e: any) {
       toast.error(e?.message ?? "Could not open template");
     } finally {
@@ -221,28 +228,16 @@ export function ChoosePageTemplateDialog({
     }
   }
 
-  /** Straight to a new page, skipping the preview - the two-click path. */
-  function applyTemplate(id: string) {
-    setUsingId(id);
-    onUse(id);
-  }
-
   return (
-    <Dialog open={open} onOpenChange={(v) => !applying && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[85vh] max-w-3xl flex-col gap-0 overflow-hidden p-0">
         {preview ? (
           <>
             <div className="flex items-center justify-between border-b py-4 pl-6 pr-16">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setPreview(null)}
-                disabled={applying}
-              >
+              <Button variant="ghost" size="sm" onClick={() => setPreview(null)}>
                 <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
               </Button>
-              <Button size="sm" onClick={() => applyTemplate(preview.id)} disabled={applying}>
-                {applying && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+              <Button size="sm" onClick={() => onUse(preview.id)}>
                 Use Template
               </Button>
             </div>
@@ -261,8 +256,8 @@ export function ChoosePageTemplateDialog({
             <DialogHeader className="border-b px-6 pb-4 pt-5 text-left">
               <DialogTitle>Choose Page Template</DialogTitle>
               <DialogDescription>
-                Open your trade to see its templates. Merge fields like{" "}
-                <code>{"{{project_name}}"}</code> fill in automatically.
+                Open your trade to see its templates. Preview one to see it with this
+                project&rsquo;s details already in place.
               </DialogDescription>
             </DialogHeader>
 
@@ -369,7 +364,6 @@ export function ChoosePageTemplateDialog({
                               <button
                                 type="button"
                                 onClick={() => openPreview(t.id)}
-                                disabled={applying}
                                 className="flex min-w-0 flex-1 items-center gap-3 text-left"
                               >
                                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10">
@@ -398,12 +392,8 @@ export function ChoosePageTemplateDialog({
                                 size="sm"
                                 variant="secondary"
                                 className="shrink-0"
-                                onClick={() => applyTemplate(t.id)}
-                                disabled={applying}
+                                onClick={() => onUse(t.id)}
                               >
-                                {applying && usingId === t.id && (
-                                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                                )}
                                 Use
                               </Button>
                             </div>

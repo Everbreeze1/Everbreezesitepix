@@ -244,10 +244,14 @@ export async function listProjectDocumentTreeService(
 // ============================================================
 
 /**
- * Human-readable stand-in for a known token with no data behind it yet, e.g.
+ * Human-readable stand-in for a token with no value behind it yet, e.g.
  * `[Company name]`. Reads as a normal mail-merge placeholder (the convention
  * Word/Docs use) rather than `{{company}}`, which looks like leaked template
  * source to anyone previewing the document.
+ *
+ * This map is also the list of fields a template may reference - see
+ * {@link SUPPORTED_TOKENS}, which `tests/document-template-library.test.ts`
+ * checks the whole library against.
  */
 const PLACEHOLDER_LABELS: Record<string, string> = {
   company: "Company name",
@@ -256,18 +260,68 @@ const PLACEHOLDER_LABELS: Record<string, string> = {
   company_phone: "Company phone",
   project_name: "Project name",
   project_address: "Project address",
+  project_number: "Project number",
+  client_name: "Client name",
+  client_contact: "Client contact",
   prepared_by: "Prepared by",
+  prepared_by_title: "Job title",
+  weather: "Weather",
   date: "Date",
 };
 
 /**
- * Resolves `{{token}}` merge fields against live project/company data. A
- * *known* token with no data behind it renders as `[Field name]`. A token
- * that isn't recognized at all is left verbatim as `{{token}}` - that case
- * means the template itself is wrong (typo, or references a field we don't
- * support), which is worth surfacing differently than "just needs filling in".
+ * Tokens no table holds a value for. They are asked for when the document is
+ * created ("Use in a project") and typed into it afterwards, so they resolve to
+ * a click-to-type blank rather than to a merge pill that could never fill
+ * itself in.
+ *
+ * The template library has used all five since it shipped - the daily log asks
+ * for the weather, the walkthrough log for the client and the project number -
+ * while `loadTokenValues` only ever knew the eight below it. An unrecognised
+ * token was left verbatim, so a document created from those templates arrived
+ * with `{{weather}}` and `{{client_name}}` printed in it.
  */
-async function loadTokenValues(
+const PROMPT_TOKENS = new Set([
+  "project_number",
+  "client_name",
+  "client_contact",
+  "prepared_by_title",
+  "weather",
+]);
+
+/** Fields a template is allowed to reference: everything with a label. */
+export const SUPPORTED_TOKENS: ReadonlySet<string> = new Set(Object.keys(PLACEHOLDER_LABELS));
+
+/** `Project number` for a field we know, `Some other field` for anything else. */
+export function fieldLabel(token: string): string {
+  const known = PLACEHOLDER_LABELS[token];
+  if (known) return known;
+  const words = token.replace(/_+/g, " ").trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : token;
+}
+
+/** Where a field's value comes from, so an empty one can say so. */
+export type TokenSource = "auto" | "settings" | "manual";
+
+const SETTINGS_TOKENS = new Set([
+  "company",
+  "company_name",
+  "company_address",
+  "company_phone",
+  "prepared_by",
+]);
+
+export function tokenSource(token: string): TokenSource {
+  if (SETTINGS_TOKENS.has(token)) return "settings";
+  if (SUPPORTED_TOKENS.has(token) && !PROMPT_TOKENS.has(token)) return "auto";
+  return "manual";
+}
+
+/**
+ * The subset of {@link PLACEHOLDER_LABELS} that resolves from stored data.
+ * A token absent from the result has nothing behind it and has to be typed.
+ */
+export async function loadTokenValues(
   projectId: string,
   createdBy: string,
 ): Promise<Record<string, string | null | undefined>> {
@@ -305,20 +359,32 @@ async function loadTokenValues(
   };
 }
 
+/**
+ * Resolves `{{token}}` merge fields against stored project/company data, plus
+ * any values supplied for this one use - the "Use in a project" step collects
+ * the fields nothing can auto-fill (weather, client name, project number).
+ *
+ * Anything still without a value becomes `[Field name]`, which
+ * `bracketsToFillFields` turns into a click-to-type blank. Nothing is left as
+ * `{{token}}`: a curly-brace token in a finished document reads as leaked
+ * template source, and the person it reads that way to is the customer.
+ */
 export async function resolvePageTokens(
   html: string | null,
   projectId: string,
   createdBy: string,
+  overrides: Record<string, string> = {},
 ): Promise<string | null> {
   if (!html || !html.includes("{{")) return html;
   const values = await loadTokenValues(projectId, createdBy);
 
-  return html.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (match, rawKey: string) => {
+  return html.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (_match, rawKey: string) => {
     const key = rawKey.toLowerCase();
-    if (!(key in values)) return match;
-    const value = values[key];
-    if (value) return value;
-    return `[${PLACEHOLDER_LABELS[key] ?? key}]`;
+    const value = overrides[key]?.trim() || values[key];
+    // Escaped rather than spliced in raw: these are user-controlled strings
+    // going into HTML, and a project named `Smith & Sons <Roofing>` used to
+    // break the document it was merged into. `tokensToPills` already escapes.
+    return value ? escapeHtmlText(value) : `[${fieldLabel(key)}]`;
   });
 }
 
@@ -368,8 +434,18 @@ export function bracketsToFillFields(html: string | null): string | null {
 }
 
 /**
- * Expresses `{{token}}` as a token pill carrying its resolved value, for the
- * editor. Unknown tokens are left verbatim so a template typo stays visible.
+ * Expresses `{{token}}` the way the editor should show it:
+ *
+ *  - a merge field with stored data behind it becomes a read-only pill carrying
+ *    its resolved value, empty-styled while the setting is still blank, so
+ *    filling that setting in later updates every page at once;
+ *  - a prompt field, and anything the label map does not recognise, becomes a
+ *    click-to-type blank. There is nothing to merge from, so a pill would be a
+ *    box the user can look at but never fill.
+ *
+ * The second branch also repairs documents created before the resolver knew
+ * these fields: they hold a literal `{{weather}}`, and reopening one now turns
+ * it into the blank it should always have been.
  */
 export async function tokensToPills(
   html: string | null,
@@ -378,11 +454,13 @@ export async function tokensToPills(
 ): Promise<string | null> {
   if (!html || !html.includes("{{")) return html;
   const values = await loadTokenValues(projectId, createdBy);
-  return html.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (match, rawKey: string) => {
+  return html.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (_match, rawKey: string) => {
     const key = rawKey.toLowerCase();
-    if (!(key in values)) return match;
+    if (!(key in values)) {
+      return `<span data-fill-field data-label="${escapeAttr(fieldLabel(key))}"></span>`;
+    }
     const value = values[key];
-    const label = value || PLACEHOLDER_LABELS[key] || key;
+    const label = value || fieldLabel(key);
     const empty = value ? "" : ` data-empty="true"`;
     return `<span data-token="${escapeAttr(key)}" data-label="${escapeAttr(label)}"${empty}>${escapeHtmlText(label)}</span>`;
   });
@@ -498,7 +576,7 @@ export async function getProjectPageService(
   const tokenValues = await loadTokenValues(row.project_id, row.created_by);
   const tokens: Record<string, { label: string; empty: boolean }> = {};
   for (const [key, value] of Object.entries(tokenValues)) {
-    tokens[key] = { label: value || PLACEHOLDER_LABELS[key] || key, empty: !value };
+    tokens[key] = { label: value || fieldLabel(key), empty: !value };
   }
   return {
     page: { ...row, content_html: contentHtml, header_html: headerHtml, footer_html: footerHtml },
@@ -681,7 +759,17 @@ export async function getPublicProjectPageService(
   // this page's own project - otherwise a `data-photo-id` the author pasted in
   // by hand would be signed regardless of who owns the photo.
   const [contentHtml, headerHtml, footerHtml] = await Promise.all([
-    resolvePageImages(row.content_html, supa, row.project_id).then(stripPhotoSlots),
+    /*
+     * The body's merge fields resolve here too, not only the header and footer.
+     *
+     * The editor stores the canonical `{{token}}` form (see `pillsToTokens`), so
+     * any page that has been opened and autosaved once carries them in its body -
+     * and this is the copy the customer opens. They printed as `{{company_name}}`,
+     * which is template source, in the one place it must never appear.
+     */
+    resolvePageTokens(row.content_html, row.project_id, row.created_by)
+      .then((h) => resolvePageImages(h ?? row.content_html, supa, row.project_id))
+      .then(stripPhotoSlots),
     resolveHeaderFooterTokens(row.header_html, row.project_id, row.created_by).then((h) =>
       h ? resolvePageImages(h, supa, row.project_id).then(stripPhotoSlots) : h,
     ),

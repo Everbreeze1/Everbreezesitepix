@@ -534,6 +534,26 @@
   padding-left: 0;
   padding-right: 0;
 }
+/* ---- Template preview -----------------------------------------------------
+   The "Use in a project" step renders the template with this project's values
+   already in place, so the user chooses against the finished document instead
+   of against its source. A value still missing shows as the labelled blank the
+   document will really contain - never as `{{token}}`. */
+.tpl-filled {
+  border-radius: 0.25rem;
+  padding: 0.05rem 0.3rem;
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  color: color-mix(in oklab, var(--primary) 85%, var(--foreground));
+  font-weight: 600;
+}
+.tpl-blank {
+  display: inline-block;
+  min-width: 4rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px dashed color-mix(in oklab, var(--primary) 45%, var(--border));
+  border-radius: 0.25rem;
+  color: var(--muted-foreground);
+}
 /* Merge fields resolve from project/company data, so they are read-only pills
    rather than something to type into. */
 .tiptap-token {

@@ -232,6 +232,9 @@ export async function applyProjectBlueprintService(
           projectId: data.projectId,
           templateId: it.ref_id,
           resolveTokens: true,
+          // Nothing to prompt with on a blueprint apply: whatever the project
+          // cannot fill in arrives as a labelled blank in the document.
+          values: {},
         });
         counts.documents++;
       } else if (it.kind === "report") {

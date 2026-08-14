@@ -97,6 +97,23 @@ const OPTIONS: sanitizeHtml.IOptions = {
      * executes.
      */
     div: ["data-panel"],
+    /*
+     * The two placeholder kinds, both of them `<span>` markup that only means
+     * anything because of its data attribute (apps/web/src/lib/tiptap-fill-field.ts):
+     *
+     *   data-fill-field / data-label - a click-to-type blank, e.g. `[Client Name]`
+     *   data-token / data-empty      - a merge field pill, e.g. `{{project_name}}`
+     *
+     * Stripping them cost a document its blanks at exactly the moment it was
+     * meant to become reusable: `savePageAsTemplateService` sanitises on the way
+     * in, so "Save as a New Template" turned every field in the document into an
+     * anonymous empty span. Applying that template then produced unlabelled
+     * boxes, which is the opposite of what saving it was for.
+     *
+     * Inert data attributes with fixed names on a fixed tag, same reasoning as
+     * the task-list and panel names above: no URL, nothing the renderer executes.
+     */
+    span: ["data-fill-field", "data-label", "data-token", "data-empty"],
     // `class` carries the editor's own formatting (the `tiptap prose` styles);
     // `style` is separately restricted by `allowedStyles` below. No other
     // attribute survives, which is what removes every `on*` handler.

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import type { AuthedContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";
-import { resolvePageImages, resolveHeaderFooterTokens } from "./pages";
+import { resolvePageImages, resolveHeaderFooterTokens, resolvePageTokens } from "./pages";
 
 // ============================================================
 // Minimal HTML parser - scoped to the constrained, well-formed subset of
@@ -773,7 +773,12 @@ export async function generatePagePdfService(
   if (error || !row) throw new Error("Page not found");
 
   const [contentHtml, headerHtml, footerHtml] = await Promise.all([
-    resolvePageImages(row.content_html, ctx.supabase),
+    // Body merge fields resolve for the PDF too. The editor saves them back as
+    // `{{token}}` (pillsToTokens), so without this an exported document printed
+    // `{{company_name}}` wherever a field had been inserted.
+    resolvePageTokens(row.content_html, row.project_id, row.created_by).then((h) =>
+      resolvePageImages(h ?? row.content_html, ctx.supabase),
+    ),
     resolveHeaderFooterTokens(row.header_html, row.project_id, row.created_by).then((h) =>
       h ? resolvePageImages(h, ctx.supabase) : h,
     ),
@@ -803,7 +808,9 @@ export async function getPublicProjectPagePdfService(
   // without validating them. Unscoped, a pasted foreign id would be signed
   // into the public PDF regardless of who owns that photo.
   const [contentHtml, headerHtml, footerHtml] = await Promise.all([
-    resolvePageImages(row.content_html, supa, row.project_id),
+    resolvePageTokens(row.content_html, row.project_id, row.created_by).then((h) =>
+      resolvePageImages(h ?? row.content_html, supa, row.project_id),
+    ),
     resolveHeaderFooterTokens(row.header_html, row.project_id, row.created_by).then((h) =>
       h ? resolvePageImages(h, supa, row.project_id) : h,
     ),

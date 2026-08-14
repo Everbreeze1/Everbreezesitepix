@@ -116,12 +116,34 @@ describe("sanitizePageHtml - preserves legitimate document content", () => {
     expect(sanitizePageHtml(html)).toBe(html);
   });
 
+  /*
+   * `savePageAsTemplateService` sanitises on the way in, so this function is
+   * what a document goes through to become a reusable template. Stripping these
+   * cost it every placeholder at exactly that moment: a click-to-type blank
+   * arrived as an anonymous empty span, and applying the template produced
+   * unlabelled boxes instead of "Client name" and "Weather".
+   */
+  it("keeps the placeholder markup that survives into a saved template", () => {
+    const html =
+      '<p><span data-fill-field="" data-label="Client Name"></span>' +
+      '<span data-token="project_name" data-label="Buddy">Buddy</span>' +
+      '<span data-token="company_name" data-label="Company name" data-empty="true">Company name</span></p>';
+    const out = sanitizePageHtml(html);
+    // Emitted bare rather than `=""`, which is the form TipTap's `parseHTML`
+    // selector (`span[data-fill-field]`) matches either way.
+    expect(out).toContain("<span data-fill-field ");
+    expect(out).toContain('data-label="Client Name"');
+    expect(out).toContain('data-token="project_name"');
+    expect(out).toContain('data-empty="true"');
+  });
+
   it("still strips data attributes it has no reason to trust", () => {
-    // The task-list allowance is two named attributes on two list tags, not an
-    // open door to `data-*`.
+    // The task-list and placeholder allowances are named attributes on named
+    // tags, not an open door to `data-*`.
     const out = sanitizePageHtml('<p data-anything="x">hi</p><ul data-checked="x"><li>a</li></ul>');
     expect(out).not.toContain("data-anything");
     expect(out).not.toContain("<ul data-checked");
+    expect(sanitizePageHtml('<span data-onload="x">hi</span>')).not.toContain("data-onload");
   });
 
   it("passes through null and empty input untouched", () => {

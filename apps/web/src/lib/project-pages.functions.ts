@@ -134,8 +134,31 @@ export const getDocumentTemplate = rpcOp<
   { id: string; name: string; html: string; fields: string[] }
 >("getDocumentTemplate");
 
+/** Where an empty field's value would come from, so the input can say so. */
+export type TemplateFieldSource = "auto" | "settings" | "manual";
+
+export interface TemplateFieldPreview {
+  token: string;
+  label: string;
+  /** Resolved from the project/company. null means it has to be typed in. */
+  value: string | null;
+  source: TemplateFieldSource;
+}
+
+export const previewDocumentTemplate = rpcOp<
+  { templateId: string; projectId: string },
+  { id: string; name: string; html: string; fields: TemplateFieldPreview[] }
+>("previewDocumentTemplate");
+
 export const createPageFromTemplate = rpcOp<
-  { projectId: string; templateId: string; folderId?: string | null; resolveTokens?: boolean },
+  {
+    projectId: string;
+    templateId: string;
+    folderId?: string | null;
+    resolveTokens?: boolean;
+    /** Values for the fields the project cannot fill in by itself, keyed by token. */
+    values?: Record<string, string>;
+  },
   { page: { id: string; title: string; updated_at: string } }
 >("createPageFromTemplate");
 

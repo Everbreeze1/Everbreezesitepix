@@ -11,14 +11,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import {
-  createProjectPage,
-  generateProjectPage,
-  createPageFromTemplate,
-} from "@/lib/project-pages.functions";
+import { createProjectPage, generateProjectPage } from "@/lib/project-pages.functions";
 import { generateWalkthroughSummary } from "@/lib/walkthroughs.functions";
 import { SelectPhotosForPageDialog } from "@/features/projects/components/SelectPhotosForPageDialog";
 import { ChoosePageTemplateDialog } from "@/features/projects/components/ChoosePageTemplateDialog";
+import { UseTemplateDialog } from "@/features/projects/components/UseTemplateDialog";
 import { PhotosPerPagePicker } from "@/features/projects/components/PhotosPerPagePicker";
 import { clampPhotosPerPage, useProfile } from "@/hooks/use-profile";
 import { useTemplateGate } from "@/features/projects/components/use-template-gate";
@@ -79,7 +76,8 @@ export function GenerateDocumentMenu({
    */
   const [photosPerPage, setPhotosPerPage] = useState<1 | 2 | 3 | 4>(2);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
-  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  /** Chosen template, waiting on the fill-in step before anything is created. */
+  const [useTemplateId, setUseTemplateId] = useState<string | null>(null);
   const [summaryPickerOpen, setSummaryPickerOpen] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
 
@@ -149,17 +147,14 @@ export function GenerateDocumentMenu({
     }
   }
 
-  async function handleUseTemplate(templateId: string) {
-    setApplyingTemplate(true);
-    try {
-      const res = await createPageFromTemplate({ data: { projectId, templateId, folderId } });
-      setTemplatePickerOpen(false);
-      openPage(res.page.id);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Could not apply template");
-    } finally {
-      setApplyingTemplate(false);
-    }
+  /*
+   * Hands off to the fill-in step rather than creating the page here. Applying
+   * on the click meant the merge fields nothing could resolve landed in the
+   * document as raw `{{tokens}}`, to be hunted down in the rich text editor.
+   */
+  function handleUseTemplate(templateId: string) {
+    setTemplatePickerOpen(false);
+    setUseTemplateId(templateId);
   }
 
   return (
@@ -302,8 +297,19 @@ export function GenerateDocumentMenu({
       <ChoosePageTemplateDialog
         open={templatePickerOpen}
         onOpenChange={setTemplatePickerOpen}
-        applying={applyingTemplate}
+        projectId={projectId}
         onUse={handleUseTemplate}
+      />
+
+      <UseTemplateDialog
+        templateId={useTemplateId}
+        project={{ id: projectId, name: null }}
+        folderId={folderId}
+        onOpenChange={(o) => !o && setUseTemplateId(null)}
+        onCreated={(_projectId, pageId) => {
+          setUseTemplateId(null);
+          openPage(pageId);
+        }}
       />
     </>
   );

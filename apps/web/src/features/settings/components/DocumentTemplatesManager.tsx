@@ -75,7 +75,8 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { createPageFromTemplate, getDocumentTemplate } from "@/lib/project-pages.functions";
+import { getDocumentTemplate } from "@/lib/project-pages.functions";
+import { UseTemplateDialog } from "@/features/projects/components/UseTemplateDialog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -125,7 +126,9 @@ const PLACEHOLDERS: { token: string; label: string; group: string }[] = [
   { token: "client_contact", label: "Client contact", group: "Project" },
   { token: "date", label: "Today's date", group: "General" },
   { token: "prepared_by", label: "Prepared by", group: "General" },
-  { token: "prepared_by_title", label: "Author title", group: "General" },
+  // Labels match apps/api/.../pages.ts PLACEHOLDER_LABELS: the same field is
+  // named to the author here and to the reader in the document itself.
+  { token: "prepared_by_title", label: "Job title", group: "General" },
   { token: "weather", label: "Weather", group: "General" },
   { token: "company_name", label: "Company name", group: "Company" },
   { token: "company_address", label: "Company address", group: "Company" },
@@ -629,7 +632,16 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     [],
   );
   const [projectsLoading, setProjectsLoading] = useState(false);
-  const [applying, setApplying] = useState(false);
+  /*
+   * Step two: the project is chosen, and now the fields nothing can auto-fill
+   * get asked for against a preview of the finished document. Picking a project
+   * used to create the page immediately and drop the author into the editor to
+   * repair whatever came out of it.
+   */
+  const [useIn, setUseIn] = useState<{
+    template: DocumentTemplate;
+    project: { id: string; name: string };
+  } | null>(null);
 
   const openUse = (t: DocumentTemplate) => {
     setUseFor(t);
@@ -656,25 +668,10 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     })();
   };
 
-  const applyToProject = async (projectId: string) => {
+  const chooseProject = (project: { id: string; name: string }) => {
     if (!useFor) return;
-    setApplying(true);
-    try {
-      const res = await createPageFromTemplate({
-        data: { projectId, templateId: useFor.id },
-      });
-      setUseFor(null);
-      // Straight into the new page: the point of "use" is to end up editing the
-      // document, not back on a settings screen wondering if it worked.
-      navigate({
-        to: "/projects/$projectId/pages/$pageId",
-        params: { projectId, pageId: res.page.id },
-      });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Could not use this template");
-    } finally {
-      setApplying(false);
-    }
+    setUseIn({ template: useFor, project });
+    setUseFor(null);
   };
 
   useEffect(() => {
@@ -900,9 +897,11 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
         <div>
           <p className="font-semibold">How to use a template</p>
           <p className="mt-0.5 text-blue-900/80 dark:text-blue-200/80">
-            Hit <strong>Use in a project</strong> on any template below and pick the job - the
-            document is created with its fields already filled in. They&rsquo;re also available
-            inside a project under <strong>Documents → Create → More Templates</strong>.
+            Hit <strong>Use in a project</strong> on any template below and pick the job. You
+            get a preview with that project&rsquo;s details already merged in, plus a box for
+            each thing it can&rsquo;t know, so the document arrives finished. They&rsquo;re also
+            available inside a project under{" "}
+            <strong>Documents → Create → More Templates</strong>.
           </p>
         </div>
       </div>
@@ -1030,8 +1029,8 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
             <DialogTitle className="truncate">Use “{useFor?.name}”</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Pick a project and we&rsquo;ll create the document there with its fields already
-            filled in from that project.
+            Pick a project. The next step fills in everything that project knows and asks you
+            for the rest, before the document is created.
           </p>
           {projectsLoading ? (
             <div className="flex justify-center py-8">
@@ -1047,9 +1046,8 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                 <button
                   key={p.id}
                   type="button"
-                  disabled={applying}
-                  onClick={() => applyToProject(p.id)}
-                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition hover:border-primary/50 hover:bg-accent disabled:opacity-60"
+                  onClick={() => chooseProject({ id: p.id, name: p.name })}
+                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition hover:border-primary/50 hover:bg-accent"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold text-foreground">{p.name}</p>
@@ -1057,17 +1055,29 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                       <p className="truncate text-xs text-muted-foreground">{p.location}</p>
                     )}
                   </div>
-                  {applying ? (
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
-                  ) : (
-                    <FilePlus2 className="h-4 w-4 shrink-0 text-primary" />
-                  )}
+                  <FilePlus2 className="h-4 w-4 shrink-0 text-primary" />
                 </button>
               ))}
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Step two: fill the blanks against a preview, then create. */}
+      <UseTemplateDialog
+        templateId={useIn?.template.id ?? null}
+        project={useIn?.project ?? null}
+        onOpenChange={(o) => !o && setUseIn(null)}
+        onCreated={(projectId, pageId) => {
+          setUseIn(null);
+          // Straight into the new page: the point of "use" is to end up with the
+          // document open, not back on a settings screen wondering if it worked.
+          navigate({
+            to: "/projects/$projectId/pages/$pageId",
+            params: { projectId, pageId },
+          });
+        }}
+      />
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -1498,7 +1508,7 @@ function DocumentEditorSurface({
                     <Sparkles className="h-3.5 w-3.5" />
                     {previewFill === "sample"
                       ? "Preview with example values. Real project data fills in when used."
-                      : "Preview with placeholders. They stay as {{tokens}} until applied to a project."}
+                      : "Preview with placeholders. Each one fills in from the project, or becomes a blank to type into."}
                   </div>
                   <div className="inline-flex rounded-md border bg-background p-0.5">
                     <button

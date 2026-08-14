@@ -210,6 +210,8 @@ import {
   getDocumentTemplateInputSchema,
   getDocumentTemplateService,
   listDocumentTemplatesService,
+  previewDocumentTemplateInputSchema,
+  previewDocumentTemplateService,
   savePageAsTemplateInputSchema,
   savePageAsTemplateService,
 } from "../projects/page-templates";
@@ -928,6 +930,12 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   getDocumentTemplate: authed(
     (d) => getDocumentTemplateInputSchema.parse(d),
     getDocumentTemplateService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  // What "Use in a project" asks before it creates anything: the body, plus
+  // every merge field paired with the value that project fills it with.
+  previewDocumentTemplate: authed(
+    (d) => previewDocumentTemplateInputSchema.parse(d),
+    previewDocumentTemplateService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   createPageFromTemplate: authed(
     (d) => createPageFromTemplateInputSchema.parse(d),
