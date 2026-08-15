@@ -2408,3 +2408,48 @@ describe("family: every AI prose boundary folds the dashes, and only prose does"
     expect(sql).toContain("2014");
   });
 });
+
+describe("family: identity rendered from a stale fallback", () => {
+  /*
+   * The dashboard greeted the user by `user_metadata.full_name` while the
+   * profile row was still loading, then swapped in the real name a moment
+   * later. The auth copy is written once at signup and once at invite accept
+   * and is never rewritten, so anyone who renamed themselves in Settings
+   * watched their old name flash on every sign-in.
+   *
+   * The rule the family reduces to: `profiles` is the only authority for a
+   * person's name on screen, and a surface that does not know it yet says
+   * nothing rather than guessing.
+   */
+
+  it("no web surface reads a name off the session", () => {
+    const offenders = ALL_WEB_FILES.filter((f) =>
+      /user_metadata/.test(stripComments(readFileSync(f, "utf8"))),
+    ).map((f) => f.slice(WEB.length + 1).replace(/\\/g, "/"));
+    // SettingsPage compares against it to keep the auth copy in step; that is a
+    // write path, not a render path, so it is allowed to name it.
+    expect(offenders).toEqual(["features/settings/pages/SettingsPage.tsx"]);
+  });
+
+  it("renaming yourself rewrites the auth copy too", () => {
+    const src = stripComments(read("apps/web/src/features/settings/pages/SettingsPage.tsx"));
+    expect(src).toMatch(/auth\.updateUser\(\{\s*data:\s*\{\s*full_name/);
+  });
+
+  it("the greeting has no stand-in name at all", () => {
+    const src = stripComments(read("apps/web/src/features/projects/pages/DashboardPage.tsx"));
+    expect(src).toMatch(/const firstName = profile\?\.full_name/);
+    // The old chain ended in the email local part and the word "there".
+    expect(src).not.toMatch(/email\?\.split\("@"\)/);
+    // Unknown is a state the heading renders, not a value it invents.
+    expect(src).toMatch(/profileLoading/);
+  });
+
+  it("the profile store keeps a per-user snapshot so a known name paints first", () => {
+    const src = stripComments(read("apps/web/src/hooks/use-profile.tsx"));
+    expect(src).toMatch(/useSyncExternalStore/);
+    expect(src).toMatch(/sitepix-profile:\$\{userId\}/);
+    // Signing out has to drop it, or the next person inherits the last one's.
+    expect(src).toMatch(/if \(state\.userId\) writeSnapshot\(state\.userId, null\)/);
+  });
+});
