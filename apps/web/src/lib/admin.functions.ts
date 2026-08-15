@@ -97,11 +97,31 @@ export interface PlatformTeam {
   profileCompletedAt: string | null;
 }
 
+/**
+ * One company's setup answers, as the detail view reads them.
+ *
+ * Mirrors `businessProfile` on `PlatformTeamDetail` in
+ * apps/api/src/domains/admin/teams.ts. `goals` is the one that earns this
+ * panel: it is the only column recording what a customer's actual problem is,
+ * and a list-level industry count cannot show it.
+ */
+export interface PlatformBusinessProfile {
+  industry: string | null;
+  trades: string[];
+  teamSize: string | null;
+  projectVolume: string | null;
+  goals: string[];
+  heardFrom: string | null;
+  serviceArea: string | null;
+  completedAt: string | null;
+}
+
 export interface PlatformTeamDetail {
   id: string;
   name: string;
   plan: string;
   subscriptionStatus: string;
+  businessProfile: PlatformBusinessProfile;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
   isInternal: boolean;
