@@ -1,21 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowLeft,
-  Briefcase,
-  Building2,
-  ClipboardList,
-  Droplets,
-  FileText,
-  HardHat,
-  Loader2,
-  Search,
-  ShieldCheck,
-  Sparkles,
-  Waves,
-  Wind,
-  Zap,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowLeft, FileText, Loader2, Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -39,12 +23,11 @@ import {
   type DocumentTemplateSummary,
 } from "@/lib/project-pages.functions";
 import { fillTemplatePreview } from "@/lib/template-preview";
+import { categoryIcon, categoryRank, TEAM_SECTION } from "@/lib/template-categories";
 
 type Filter = "all" | "team" | "example";
 
-const TEAM_SECTION = "Your Company";
-
-/**
+/*
  * Trade sections lead, general document shapes follow.
  *
  * The picker used to render every template as one flat scrolling list - thirty
@@ -54,43 +37,11 @@ const TEAM_SECTION = "Your Company";
  *
  * So the first question the dialog asks is now "what trade are you", answered
  * by nine collapsed rows you can take in at a glance, and only the section you
- * open lists templates. That makes the order here load-bearing: a plumber must
- * not have to scroll past insurance and field admin to reach Plumbing.
- *
- * The strings must match the `category` seeded in
- * supabase/migrations/*_document_templates_*_seed.sql. A category that is not
- * listed here still renders - it sorts alphabetically after these - so a new
- * seeded trade degrades to "in the right place-ish", never to "missing".
+ * open lists templates. That makes the trade order load-bearing: a plumber must
+ * not have to scroll past insurance and field admin to reach Plumbing. It lives
+ * in @/lib/template-categories, shared with the Templates page that authors the
+ * library, so the two screens cannot group the same templates differently.
  */
-const CATEGORY_ORDER = [
-  "Electrical",
-  "HVAC",
-  "Plumbing",
-  "Roofing & Exterior",
-  "Restoration",
-  "Cleaning",
-  "Field Reports",
-  "Field Admin",
-  "Insurance & Adjusting",
-];
-
-const CATEGORY_ICON: Record<string, LucideIcon> = {
-  [TEAM_SECTION]: Building2,
-  Electrical: Zap,
-  HVAC: Wind,
-  Plumbing: Droplets,
-  "Roofing & Exterior": HardHat,
-  Restoration: Waves,
-  Cleaning: Sparkles,
-  "Field Reports": ClipboardList,
-  "Field Admin": Briefcase,
-  "Insurance & Adjusting": ShieldCheck,
-};
-
-function rank(category: string): number {
-  const i = CATEGORY_ORDER.indexOf(category);
-  return i === -1 ? CATEGORY_ORDER.length : i;
-}
 
 /**
  * "HVAC Service Call Report" under the HVAC heading reads as "Service Call
@@ -182,7 +133,7 @@ export function ChoosePageTemplateDialog({
       else byCategory.set(key, [t]);
     }
     for (const [cat, items] of Array.from(byCategory.entries()).sort(
-      (a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]),
+      (a, b) => categoryRank(a[0]) - categoryRank(b[0]) || a[0].localeCompare(b[0]),
     )) {
       groups.push([cat, items]);
     }
@@ -328,7 +279,7 @@ export function ChoosePageTemplateDialog({
                   className="space-y-2"
                 >
                   {sections.map(([heading, items]) => {
-                    const Icon = CATEGORY_ICON[heading] ?? FileText;
+                    const Icon = categoryIcon(heading);
                     return (
                       <AccordionItem
                         key={heading}

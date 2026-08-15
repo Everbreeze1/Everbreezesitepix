@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -22,12 +22,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { EmptyState } from "@/components/EmptyState";
 import {
-  SectionHeading,
-  SURFACE_BUTTON,
-  SURFACE_CARD_INTERACTIVE,
-} from "@/components/ui/surface";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { EmptyState } from "@/components/EmptyState";
+import { SectionHeading, SURFACE_BUTTON, SURFACE_CARD_INTERACTIVE } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -68,6 +71,7 @@ import {
   Download,
   ChevronDown,
   ArrowLeft,
+  Check,
   LayoutTemplate,
   FilePlus2,
   PanelRightOpen,
@@ -77,6 +81,12 @@ import {
 import { toast } from "sonner";
 import { getDocumentTemplate } from "@/lib/project-pages.functions";
 import { UseTemplateDialog } from "@/features/projects/components/UseTemplateDialog";
+import {
+  CATEGORY_ORDER,
+  GENERAL_CATEGORY,
+  categoryIcon,
+  categoryRank,
+} from "@/lib/template-categories";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -108,6 +118,20 @@ interface DocBody {
   style: DocStyle;
   html: string;
   description?: string;
+  /**
+   * The trade this document belongs to - "HVAC", "Plumbing", and the rest of
+   * @/lib/template-categories. Built-ins are seeded with one; a team's own
+   * template has one only if its author picked a trade, and reads as General
+   * until they do.
+   */
+  category?: string;
+}
+
+/** The editor dialog's working copy, before it is written back to the row. */
+interface EditorState {
+  template: DocumentTemplate | null;
+  name: string;
+  body: DocBody;
 }
 
 interface Props {
@@ -227,11 +251,12 @@ const STYLE_PRESETS: {
     html: `<h1>{{project_name}} - Field Report</h1>
 <p><em>{{date}} · Prepared by {{prepared_by}}</em></p>
 <h2>Overview</h2>
-<p>Summary of site conditions observed at {{project_address}}.</p>
+<p><strong>Site:</strong> {{project_address}}</p>
+<p>[Overall condition of the site]</p>
 <h2>Findings</h2>
-<ul><li>Item one</li><li>Item two</li></ul>
+<ul><li>[What you found]</li><li>[What you found]</li></ul>
 <h2>Recommendations</h2>
-<ol><li>First action</li><li>Second action</li></ol>`,
+<ol><li>[What should happen, and by when]</li><li>[What should happen, and by when]</li></ol>`,
   },
   {
     key: "letter",
@@ -242,7 +267,7 @@ const STYLE_PRESETS: {
 <p>{{client_name}}<br>{{project_address}}</p>
 <p><strong>Re: {{project_name}}</strong></p>
 <p>Dear {{client_name}},</p>
-<p>Write your message here…</p>
+<p>[Write your message here]</p>
 <p>Sincerely,</p>
 <p>{{prepared_by}}<br>{{prepared_by_title}}<br>{{company_name}}</p>`,
   },
@@ -254,9 +279,9 @@ const STYLE_PRESETS: {
     html: `<h1>{{project_name}} - Checklist Summary</h1>
 <p><em>Completed {{date}} · {{prepared_by}}</em></p>
 <h2>Completed items</h2>
-<ul><li>Item one</li><li>Item two</li></ul>
+<ul><li>[What was completed]</li><li>[What was completed]</li></ul>
 <h2>Outstanding</h2>
-<ul><li>Follow-up needed</li></ul>`,
+<ul><li>[What is still open, and who owns it]</li></ul>`,
   },
   {
     key: "memo",
@@ -269,7 +294,7 @@ const STYLE_PRESETS: {
 <strong>Date:</strong> {{date}}<br>
 <strong>Re:</strong> {{project_name}}</p>
 <hr>
-<p>Write your memo body here…</p>`,
+<p>[Write your memo here]</p>`,
   },
   {
     key: "walkthrough",
@@ -282,13 +307,13 @@ const STYLE_PRESETS: {
 <ul><li>{{prepared_by}} ({{prepared_by_title}})</li><li>{{client_name}}</li></ul>
 <h2>Route & Observations</h2>
 <h3>Area 1</h3>
-<p>Describe conditions, progress, and any concerns observed.</p>
+<p>[Conditions, progress and any concerns]</p>
 <h3>Area 2</h3>
-<p>Describe conditions, progress, and any concerns observed.</p>
+<p>[Conditions, progress and any concerns]</p>
 <h2>Action Items</h2>
-<ol><li>Follow-up task one</li><li>Follow-up task two</li></ol>
+<ol><li>[Follow-up task and who owns it]</li><li>[Follow-up task and who owns it]</li></ol>
 <h2>Next Steps</h2>
-<p>Summarize the plan through the next walkthrough.</p>`,
+<p>[The plan through to the next walkthrough]</p>`,
   },
   {
     key: "sitelog",
@@ -305,27 +330,27 @@ const STYLE_PRESETS: {
 <strong>Project #:</strong> {{project_number}}</p>
 <h2>Crew on site</h2>
 <ul>
-  <li>Trade / company - number of workers - hours</li>
-  <li>Trade / company - number of workers - hours</li>
+  <li>[Trade or company, workers, hours]</li>
+  <li>[Trade or company, workers, hours]</li>
 </ul>
 <h2>Work performed today</h2>
 <ol>
-  <li>Describe the first task completed and its location.</li>
-  <li>Describe the second task completed and its location.</li>
-  <li>Describe any inspections or milestones reached.</li>
+  <li>[First task completed, and where]</li>
+  <li>[Second task completed, and where]</li>
+  <li>[Inspections or milestones reached]</li>
 </ol>
 <h2>Deliveries & equipment</h2>
 <ul>
-  <li>Material or equipment - supplier - quantity</li>
+  <li>[Material or equipment, supplier, quantity]</li>
 </ul>
 <h2>Issues, delays & safety</h2>
-<blockquote><p>Record any RFIs, blockers, incidents, or safety observations here. Note who was informed and the follow-up action taken.</p></blockquote>
+<blockquote><p>[RFIs, blockers, incidents, who was told, action taken]</p></blockquote>
 <h2>Photos referenced</h2>
-<p>List key photos captured today with brief captions.</p>
+<p>[Key photos from today, with captions]</p>
 <h2>Plan for tomorrow</h2>
 <ul>
-  <li>Priority task and responsible trade</li>
-  <li>Coordination items or deliveries expected</li>
+  <li>[Priority task and responsible trade]</li>
+  <li>[Coordination items or deliveries expected]</li>
 </ul>
 <hr>
 <p><em>Signed: {{prepared_by}} - {{date}}</em></p>`,
@@ -340,17 +365,18 @@ const STYLE_PRESETS: {
 <p><em>{{prepared_by}} · {{company_name}}</em></p>
 <hr>
 <h2>Summary</h2>
-<p>Brief overview of what happened on site today at {{project_address}}. Weather was {{weather}}.</p>
+<p><strong>Site:</strong> {{project_address}} · <strong>Weather:</strong> {{weather}}</p>
+<p>[What happened on site today]</p>
 <h2>Work completed</h2>
 <ul>
-  <li>Task one - location / trade</li>
-  <li>Task two - location / trade</li>
-  <li>Task three - location / trade</li>
+  <li>[Task, location, trade]</li>
+  <li>[Task, location, trade]</li>
+  <li>[Task, location, trade]</li>
 </ul>
 <h2>Photos &amp; notes</h2>
-<blockquote><p>Attach the day's photos and add a short caption for each. Highlight anything worth flagging for the client or the team.</p></blockquote>
+<blockquote><p>[Caption each photo, and flag anything the client should see]</p></blockquote>
 <h2>Notes for tomorrow</h2>
-<p>Anything the crew or client should know before the next shift.</p>
+<p>[What the crew or client should know before the next shift]</p>
 <hr>
 <p><em>Prepared by {{prepared_by}} - {{date}}</em></p>`,
   },
@@ -368,35 +394,34 @@ const STYLE_PRESETS: {
 <ul>
   <li>{{prepared_by}} - {{prepared_by_title}} ({{company_name}})</li>
   <li>{{client_name}} - Owner representative</li>
-  <li>Additional attendee - role</li>
+  <li>[Additional attendee, role]</li>
 </ul>
 <h2>2. Scope of walkthrough</h2>
-<p>Describe the areas covered, the purpose of the visit, and any specific items requested by the client.</p>
+<p>[Areas covered, purpose, anything the client asked for]</p>
 <h2>3. Findings by area</h2>
-<h3>Area A - e.g. Ground floor</h3>
+<h3>Area A - [e.g. Ground floor]</h3>
 <ul>
-  <li><strong>Observation:</strong> what was seen</li>
-  <li><strong>Status:</strong> on track / delayed / needs attention</li>
+  <li><strong>Observation:</strong> [what was seen]</li>
+  <li><strong>Status:</strong> [on track / delayed / needs attention]</li>
 </ul>
-<h3>Area B - e.g. Mechanical room</h3>
+<h3>Area B - [e.g. Mechanical room]</h3>
 <ul>
-  <li><strong>Observation:</strong> what was seen</li>
-  <li><strong>Status:</strong> on track / delayed / needs attention</li>
+  <li><strong>Observation:</strong> [what was seen]</li>
+  <li><strong>Status:</strong> [on track / delayed / needs attention]</li>
 </ul>
 <h2>4. Photo notes</h2>
-<blockquote><p>Reference each photo by number and add a one-line caption describing what it shows and why it matters.</p></blockquote>
 <ol>
-  <li>Photo 1 - caption</li>
-  <li>Photo 2 - caption</li>
-  <li>Photo 3 - caption</li>
+  <li>[Photo 1, what it shows and why it matters]</li>
+  <li>[Photo 2, what it shows and why it matters]</li>
+  <li>[Photo 3, what it shows and why it matters]</li>
 </ol>
 <h2>5. Action items</h2>
 <ol>
-  <li>Action - <strong>Owner:</strong> name - <strong>Due:</strong> date</li>
-  <li>Action - <strong>Owner:</strong> name - <strong>Due:</strong> date</li>
+  <li>[Action] - <strong>Owner:</strong> [Name] - <strong>Due:</strong> [Date]</li>
+  <li>[Action] - <strong>Owner:</strong> [Name] - <strong>Due:</strong> [Date]</li>
 </ol>
 <h2>6. Next walkthrough</h2>
-<p>Proposed date, attendees, and focus areas for the next visit.</p>
+<p>[Proposed date, attendees and focus areas]</p>
 <hr>
 <p><em>Signed: {{prepared_by}} - {{date}}</em></p>`,
   },
@@ -412,45 +437,44 @@ const STYLE_PRESETS: {
 <hr>
 <h2>1. Systems inspected</h2>
 <ul>
-  <li>Air handling unit(s) - location / tag</li>
-  <li>Ductwork run(s) - floor / zone</li>
-  <li>Piping / refrigerant lines - segment</li>
-  <li>Controls &amp; thermostats - zone</li>
+  <li>Air handling unit(s) - [location / tag]</li>
+  <li>Ductwork run(s) - [floor / zone]</li>
+  <li>Piping / refrigerant lines - [segment]</li>
+  <li>Controls &amp; thermostats - [zone]</li>
 </ul>
 <h2>2. Technical observations</h2>
 <h3>Mechanical</h3>
 <ul>
-  <li>Component - measurement / reading - status</li>
-  <li>Component - measurement / reading - status</li>
+  <li>[Component, measurement or reading, status]</li>
+  <li>[Component, measurement or reading, status]</li>
 </ul>
 <h3>Electrical &amp; controls</h3>
 <ul>
-  <li>Panel / circuit - observation</li>
-  <li>Sensor / control - observation</li>
+  <li>Panel / circuit - [observation]</li>
+  <li>Sensor / control - [observation]</li>
 </ul>
 <h3>Structural / rough-in</h3>
 <ul>
-  <li>Framing, penetrations, hangers - observation</li>
+  <li>Framing, penetrations, hangers - [observation]</li>
 </ul>
 <h2>3. Progress vs. schedule</h2>
-<blockquote><p>Summarize percent complete for each system and call out anything ahead of or behind the baseline schedule.</p></blockquote>
 <ol>
-  <li>HVAC rough-in - % complete - on track / behind</li>
-  <li>Duct insulation - % complete - on track / behind</li>
-  <li>Startup &amp; commissioning - % complete - on track / behind</li>
+  <li>HVAC rough-in - [% complete] - [on track / behind]</li>
+  <li>Duct insulation - [% complete] - [on track / behind]</li>
+  <li>Startup &amp; commissioning - [% complete] - [on track / behind]</li>
 </ol>
 <h2>4. Deficiencies &amp; safety</h2>
 <ul>
-  <li>Deficiency - location - severity - corrective action</li>
-  <li>Safety observation - corrective action</li>
+  <li>[Deficiency, location, severity, corrective action]</li>
+  <li>[Safety observation, corrective action]</li>
 </ul>
 <h2>5. Recommendations</h2>
 <ol>
-  <li>Recommendation - responsible party - target date</li>
-  <li>Recommendation - responsible party - target date</li>
+  <li>[Recommendation, responsible party, target date]</li>
+  <li>[Recommendation, responsible party, target date]</li>
 </ol>
 <h2>6. Photos referenced</h2>
-<p>Attach labeled photos of each system inspected, with tags matching the observations above.</p>
+<p>[Photos of each system, tagged to the observations above]</p>
 <hr>
 <p><em>Report prepared by {{prepared_by}} ({{prepared_by_title}}) - {{date}}</em></p>`,
   },
@@ -465,9 +489,15 @@ function parseBody(raw: any): DocBody {
       style: (raw.style as DocStyle) ?? "report",
       html: raw.html,
       description: raw.description ?? "",
+      category: typeof raw.category === "string" && raw.category ? raw.category : undefined,
     };
   }
   return { style: "report", html: "", description: "" };
+}
+
+/** The section heading a template files under. Same key the picker groups by. */
+function templateCategory(t: DocumentTemplate): string {
+  return parseBody(t.body).category ?? GENERAL_CATEGORY;
 }
 
 function extractFields(html: string): string[] {
@@ -657,20 +687,19 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   const [items, setItems] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
-  const [editor, setEditor] = useState<{
-    template: DocumentTemplate | null;
-    name: string;
-    body: DocBody;
-  } | null>(null);
+  /** Which trade section is on screen. `null` = every one of them. */
+  const [trade, setTrade] = useState<string | null>(null);
+  const [editor, setEditor] = useState<EditorState | null>(null);
   const [saving, setSaving] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newStyle, setNewStyle] = useState<DocStyle>("report");
+  const [newCategory, setNewCategory] = useState<string>(GENERAL_CATEGORY);
   /** Template awaiting a project to be applied to. */
   const [useFor, setUseFor] = useState<DocumentTemplate | null>(null);
-  const [projects, setProjects] = useState<Array<{ id: string; name: string; location: string | null }>>(
-    [],
-  );
+  const [projects, setProjects] = useState<
+    Array<{ id: string; name: string; location: string | null }>
+  >([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
   /*
    * Step two: the project is chosen, and now the fields nothing can auto-fill
@@ -737,6 +766,49 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     [items, showArchived],
   );
 
+  /**
+   * The library split by trade, which is how a crew actually looks for a
+   * document: this page used to be one flat grid of thirty cards where an
+   * electrician's panel inspection sat between a water heater install and a
+   * cleaning invoice.
+   *
+   * Sections follow the picker's trade order, so the sheet a tech finds under
+   * HVAC in a project is under HVAC here too. Within a section the team's own
+   * templates come first - those are the editable ones - then the read-only
+   * built-ins, each alphabetically.
+   */
+  const sections = useMemo<Array<[string, DocumentTemplate[]]>>(() => {
+    const byCategory = new Map<string, DocumentTemplate[]>();
+    for (const t of visible) {
+      const key = templateCategory(t);
+      const list = byCategory.get(key);
+      if (list) list.push(t);
+      else byCategory.set(key, [t]);
+    }
+    for (const list of byCategory.values()) {
+      list.sort((a, b) => {
+        const aExample = a.team_id === null;
+        const bExample = b.team_id === null;
+        if (aExample !== bExample) return aExample ? 1 : -1;
+        return a.name.localeCompare(b.name);
+      });
+    }
+    return Array.from(byCategory.entries()).sort(
+      (a, b) => categoryRank(a[0]) - categoryRank(b[0]) || a[0].localeCompare(b[0]),
+    );
+  }, [visible]);
+
+  /*
+   * A filter that outlives its section is a page that looks empty: archive the
+   * last plumbing template while Plumbing is selected and every card
+   * disappears with no way back except a reload.
+   */
+  useEffect(() => {
+    if (trade && !sections.some(([heading]) => heading === trade)) setTrade(null);
+  }, [sections, trade]);
+
+  const shownSections = trade ? sections.filter(([heading]) => heading === trade) : sections;
+
   async function createTemplate() {
     if (!newName.trim()) {
       toast.error("Give your template a name");
@@ -747,6 +819,9 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
       style: preset.key,
       html: preset.html,
       description: "",
+      // General is the absence of a trade, not a trade of its own - storing it
+      // would file the template under a category the picker does not rank.
+      category: newCategory === GENERAL_CATEGORY ? undefined : newCategory,
     };
     const { data, error } = await supabase
       .from("document_templates" as any)
@@ -767,6 +842,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     setCreateOpen(false);
     setNewName("");
     setNewStyle("report");
+    setNewCategory(GENERAL_CATEGORY);
     setItems((prev) => [data as unknown as DocumentTemplate, ...prev]);
     setEditor({
       template: data as unknown as DocumentTemplate,
@@ -811,6 +887,14 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   }
 
   async function loadSampleSiteLogs() {
+    // Each sample lands in the section a crew would look for it under, rather
+    // than three unfiled cards in General - the HVAC log especially, which has
+    // a trade printed in its own name.
+    const sampleTrades: Partial<Record<DocStyle, string>> = {
+      sitelog_basic: "Field Reports",
+      sitelog_walkthrough: "Field Reports",
+      sitelog_hvac: "HVAC",
+    };
     const sampleKeys: DocStyle[] = ["sitelog_basic", "sitelog_walkthrough", "sitelog_hvac"];
     const rows = sampleKeys
       .map((k) => STYLE_PRESETS.find((p) => p.key === k)!)
@@ -818,7 +902,12 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
         name: p.label.replace(" (sample)", ""),
         team_id: teamId,
         created_by: user?.id,
-        body: { style: p.key, html: p.html, description: p.description } as any,
+        body: {
+          style: p.key,
+          html: p.html,
+          description: p.description,
+          category: sampleTrades[p.key],
+        } as any,
         fields: extractFields(p.html),
       }));
     const { data, error } = await supabase
@@ -874,6 +963,31 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     toast.success("Duplicated");
   }
 
+  /**
+   * Refile a template under another trade, from the card.
+   *
+   * The editor has the same control, but reaching it means opening a
+   * full-screen document editor and saving it to move one card - which is a
+   * lot of ceremony for the templates that predate trades and sit in General.
+   *
+   * The stored body is spread rather than rebuilt from `parseBody`, which only
+   * knows four keys: anything else a template carries has to survive being
+   * refiled.
+   */
+  async function assignTrade(t: DocumentTemplate, category: string | null) {
+    const raw =
+      t.body && typeof t.body === "object" ? { ...(t.body as Record<string, unknown>) } : {};
+    if (category) raw.category = category;
+    else delete raw.category;
+    const { error } = await supabase
+      .from("document_templates" as any)
+      .update({ body: raw as any })
+      .eq("id", t.id);
+    if (error) return toast.error(error.message);
+    setItems((prev) => prev.map((i) => (i.id === t.id ? { ...i, body: raw } : i)));
+    toast.success(`Filed under ${category ?? GENERAL_CATEGORY}`);
+  }
+
   async function toggleArchive(t: DocumentTemplate) {
     const { error } = await supabase
       .from("document_templates" as any)
@@ -884,7 +998,13 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   }
 
   async function remove(t: DocumentTemplate) {
-    if (!(await confirm({ description: `Delete "${t.name}"? This can't be undone.`, variant: "destructive" }))) return;
+    if (
+      !(await confirm({
+        description: `Delete "${t.name}"? This can't be undone.`,
+        variant: "destructive",
+      }))
+    )
+      return;
     const { error } = await supabase
       .from("document_templates" as any)
       .delete()
@@ -937,14 +1057,57 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
         <div>
           <p className="font-semibold">How to use a template</p>
           <p className="mt-0.5 text-blue-900/80 dark:text-blue-200/80">
-            Hit <strong>Use in a project</strong> on any template below and pick the job. You
-            get a preview with that project&rsquo;s details already merged in, plus a box for
-            each thing it can&rsquo;t know, so the document arrives finished. They&rsquo;re also
-            available inside a project under{" "}
-            <strong>Documents → Create → More Templates</strong>.
+            Hit <strong>Use in a project</strong> on any template below and pick the job. You get a
+            preview with that project&rsquo;s details already merged in, plus a box for each thing
+            it can&rsquo;t know, so the document arrives finished. They&rsquo;re also available
+            inside a project under <strong>Documents → Create → More Templates</strong>.
           </p>
         </div>
       </div>
+
+      {/* Trade filter. Nine sections is a long page to scroll, so a sparky can
+          cut it to the one that is theirs. Hidden when everything on the page
+          is one trade already, where it would only ever be a no-op. */}
+      {sections.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-[10px] font-extrabold uppercase tracking-[1.4px] text-muted-foreground">
+            Trade
+          </span>
+          <button
+            type="button"
+            onClick={() => setTrade(null)}
+            className={cn(
+              "rounded-full px-3 py-1.5 text-xs font-bold transition",
+              trade === null
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-accent",
+            )}
+          >
+            All trades
+            <span className="ml-1.5 opacity-70">{visible.length}</span>
+          </button>
+          {sections.map(([heading, list]) => {
+            const Icon = categoryIcon(heading);
+            return (
+              <button
+                key={heading}
+                type="button"
+                onClick={() => setTrade(heading === trade ? null : heading)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition",
+                  trade === heading
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-accent",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {heading}
+                <span className="opacity-70">{list.length}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {visible.length === 0 ? (
         <EmptyState
@@ -960,103 +1123,125 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
           }
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {visible.map((t) => {
-            const body = parseBody(t.body);
-            const preset = STYLE_PRESETS.find((p) => p.key === body.style) ?? STYLE_PRESETS[0];
-            const Icon = preset.icon;
-            // Built-in examples (no team, no owner) are read-only for everyone -
-            // RLS rejects writes to them, so only Duplicate is offered.
-            const isExample = t.team_id === null;
-            return (
-              <Card
-                key={t.id}
-                className={cn(SURFACE_CARD_INTERACTIVE, "flex flex-col gap-3.5 p-5")}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-start gap-2.5">
-                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-                      <Icon className="h-[18px] w-[18px]" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="truncate text-[15px] font-bold tracking-tight text-foreground">
-                        {t.name}
+        shownSections.map(([heading, list]) => {
+          const TradeIcon = categoryIcon(heading);
+          return (
+            <section key={heading} className="space-y-3">
+              <div className="flex items-center gap-2.5">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  <TradeIcon className="h-4 w-4" />
+                </span>
+                <h3 className="text-sm font-bold tracking-tight text-foreground">{heading}</h3>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+                  {list.length}
+                </span>
+                <span className="h-px flex-1 bg-border/60" />
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {list.map((t) => {
+                  const body = parseBody(t.body);
+                  const preset =
+                    STYLE_PRESETS.find((p) => p.key === body.style) ?? STYLE_PRESETS[0];
+                  const Icon = preset.icon;
+                  // Built-in examples (no team, no owner) are read-only for everyone -
+                  // RLS rejects writes to them, so only Duplicate is offered.
+                  const isExample = t.team_id === null;
+                  return (
+                    <Card
+                      key={t.id}
+                      className={cn(SURFACE_CARD_INTERACTIVE, "flex flex-col gap-3.5 p-5")}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-2.5">
+                          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                            <Icon className="h-[18px] w-[18px]" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-[15px] font-bold tracking-tight text-foreground">
+                              {t.name}
+                            </div>
+                            <div className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
+                              {preset.label} · {t.fields.length} placeholder
+                              {t.fields.length === 1 ? "" : "s"}
+                            </div>
+                            {/* The trade, changeable in place. Read-only on the
+                                built-ins, which RLS will not let anyone
+                                rewrite anyway. */}
+                            <TradeChip
+                              category={body.category ?? GENERAL_CATEGORY}
+                              editable={canManage && !isExample}
+                              onChange={(next) => void assignTrade(t, next)}
+                            />
+                          </div>
+                        </div>
+                        {isExample ? (
+                          <Badge variant="outline" className="shrink-0 text-[10px]">
+                            Example
+                          </Badge>
+                        ) : t.archived ? (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Archived
+                          </Badge>
+                        ) : null}
                       </div>
-                      <div className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
-                        {preset.label} · {t.fields.length} placeholder
-                        {t.fields.length === 1 ? "" : "s"}
+                      <div className="rounded-lg border border-border/60 bg-muted/40 p-3 text-[11px] leading-relaxed text-muted-foreground line-clamp-3">
+                        {templateSnippet(body.html)}
                       </div>
-                    </div>
-                  </div>
-                  {isExample ? (
-                    <Badge variant="outline" className="shrink-0 text-[10px]">
-                      Example
-                    </Badge>
-                  ) : t.archived ? (
-                    <Badge variant="secondary" className="text-[10px]">
-                      Archived
-                    </Badge>
-                  ) : null}
-                </div>
-                <div className="rounded-lg border border-border/60 bg-muted/40 p-3 text-[11px] leading-relaxed text-muted-foreground line-clamp-3">
-                  {templateSnippet(body.html)}
-                </div>
-                <div className="mt-auto flex flex-wrap gap-1 border-t border-border/60 pt-3">
-                  {/* The primary verb. Without it the Templates page could only
+                      <div className="mt-auto flex flex-wrap gap-1 border-t border-border/60 pt-3">
+                        {/* The primary verb. Without it the Templates page could only
                       author templates, never apply one - which is exactly why
                       "not sure how to use that template again" came back as
                       feedback. Available on examples too: using one doesn't
                       write to it, so the read-only rule doesn't apply. */}
-                  <Button size="sm" onClick={() => openUse(t)}>
-                    <FilePlus2 className="mr-1 h-3.5 w-3.5" /> Use in a project
-                  </Button>
-                  {canManage && !isExample && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void openForEdit(t)}
-                    >
-                      <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
-                    </Button>
-                  )}
-                  {canManage && (
-                    <Button
-                      size="sm"
-                      variant={isExample ? "outline" : "ghost"}
-                      onClick={() => duplicate(t)}
-                    >
-                      <Copy className="mr-1 h-3.5 w-3.5" />
-                      {isExample ? "Duplicate to edit" : "Duplicate"}
-                    </Button>
-                  )}
-                  {canManage && !isExample && (
-                    <Button size="sm" variant="ghost" onClick={() => toggleArchive(t)}>
-                      {t.archived ? (
-                        <>
-                          <ArchiveRestore className="mr-1 h-3.5 w-3.5" /> Restore
-                        </>
-                      ) : (
-                        <>
-                          <Archive className="mr-1 h-3.5 w-3.5" /> Archive
-                        </>
-                      )}
-                    </Button>
-                  )}
-                  {canManage && !isExample && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => remove(t)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+                        <Button size="sm" onClick={() => openUse(t)}>
+                          <FilePlus2 className="mr-1 h-3.5 w-3.5" /> Use in a project
+                        </Button>
+                        {canManage && !isExample && (
+                          <Button size="sm" variant="outline" onClick={() => void openForEdit(t)}>
+                            <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                          </Button>
+                        )}
+                        {canManage && (
+                          <Button
+                            size="sm"
+                            variant={isExample ? "outline" : "ghost"}
+                            onClick={() => duplicate(t)}
+                          >
+                            <Copy className="mr-1 h-3.5 w-3.5" />
+                            {isExample ? "Duplicate to edit" : "Duplicate"}
+                          </Button>
+                        )}
+                        {canManage && !isExample && (
+                          <Button size="sm" variant="ghost" onClick={() => toggleArchive(t)}>
+                            {t.archived ? (
+                              <>
+                                <ArchiveRestore className="mr-1 h-3.5 w-3.5" /> Restore
+                              </>
+                            ) : (
+                              <>
+                                <Archive className="mr-1 h-3.5 w-3.5" /> Archive
+                              </>
+                            )}
+                          </Button>
+                        )}
+                        {canManage && !isExample && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => remove(t)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })
       )}
 
       {/* Use-in-a-project picker */}
@@ -1066,8 +1251,8 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
             <DialogTitle className="truncate">Use “{useFor?.name}”</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Pick a project. The next step fills in everything that project knows and asks you
-            for the rest, before the document is created.
+            Pick a project. The next step fills in everything that project knows and asks you for
+            the rest, before the document is created.
           </p>
           {projectsLoading ? (
             <div className="flex justify-center py-8">
@@ -1137,6 +1322,27 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
             </div>
             <div>
               <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Trade
+              </label>
+              <Select value={newCategory} onValueChange={setNewCategory}>
+                <SelectTrigger className="mt-1 h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={GENERAL_CATEGORY}>{GENERAL_CATEGORY}</SelectItem>
+                  {CATEGORY_ORDER.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Which section it files under, here and in the project template picker.
+              </p>
+            </div>
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Start from a style
               </label>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -1202,6 +1408,68 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Trade chip - the card's "which section am I in", and how to change it
+// ---------------------------------------------------------------------------
+function TradeChip({
+  category,
+  editable,
+  onChange,
+}: {
+  category: string;
+  editable: boolean;
+  /** `null` files it back under General, which stores no category at all. */
+  onChange: (category: string | null) => void;
+}) {
+  const Icon = categoryIcon(category);
+  const face = (
+    <>
+      <Icon className="h-3 w-3" />
+      {category}
+    </>
+  );
+  if (!editable) {
+    return (
+      <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
+        {face}
+      </span>
+    );
+  }
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          title="Change which trade this files under"
+          className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground transition hover:bg-accent hover:text-foreground"
+        >
+          {face}
+          <ChevronDown className="h-3 w-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-52">
+        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          File under
+        </DropdownMenuLabel>
+        {[GENERAL_CATEGORY, ...CATEGORY_ORDER].map((c) => {
+          const RowIcon = categoryIcon(c);
+          return (
+            <DropdownMenuItem
+              key={c}
+              onSelect={() => onChange(c === GENERAL_CATEGORY ? null : c)}
+              className="flex items-center gap-2"
+            >
+              <RowIcon className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="flex-1">{c}</span>
+              {c === category && <Check className="h-3.5 w-3.5 text-primary" />}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -1347,8 +1615,13 @@ function DocumentEditorSurface({
   onSave,
   onClose,
 }: {
-  editor: { template: DocumentTemplate | null; name: string; body: DocBody };
-  setEditor: (v: { template: DocumentTemplate | null; name: string; body: DocBody }) => void;
+  editor: EditorState;
+  /*
+   * The setter itself, not a value-only wrapper: TipTap's onUpdate closure and
+   * the header controls both write to this state, and a value update from a
+   * stale closure would quietly revert whatever the other one just changed.
+   */
+  setEditor: Dispatch<SetStateAction<EditorState | null>>;
   saving: boolean;
   onSave: () => void;
   onClose: () => void;
@@ -1408,7 +1681,7 @@ function DocumentEditorSurface({
     content: editor.body.html || "<p></p>",
     onUpdate: ({ editor: e }) => {
       const html = e.getHTML();
-      setEditor({ ...editor, body: { ...editor.body, html } });
+      setEditor((prev) => (prev ? { ...prev, body: { ...prev.body, html } } : prev));
     },
   });
 
@@ -1483,7 +1756,10 @@ function DocumentEditorSurface({
         <div className="mx-2 h-6 w-px bg-border" />
         <Input
           value={editor.name}
-          onChange={(e) => setEditor({ ...editor, name: e.target.value })}
+          onChange={(e) => {
+            const name = e.target.value;
+            setEditor((prev) => (prev ? { ...prev, name } : prev));
+          }}
           className="h-8 max-w-xs font-medium"
           placeholder="Untitled document"
         />
@@ -1491,6 +1767,33 @@ function DocumentEditorSurface({
           <stylePreset.icon className="h-3 w-3" />
           {stylePreset.label}
         </Badge>
+        {/* The trade it files under. Saved with the body, so it takes effect on
+            Save alongside everything else the editor changes. */}
+        <Select
+          value={editor.body.category ?? GENERAL_CATEGORY}
+          onValueChange={(v) =>
+            setEditor((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    body: { ...prev.body, category: v === GENERAL_CATEGORY ? undefined : v },
+                  }
+                : prev,
+            )
+          }
+        >
+          <SelectTrigger className="h-8 w-[164px] text-xs" title="Which trade this files under">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={GENERAL_CATEGORY}>{GENERAL_CATEGORY}</SelectItem>
+            {CATEGORY_ORDER.map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <span className="hidden text-xs text-muted-foreground lg:inline">
           {stylePreset.description}
         </span>

@@ -46,7 +46,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -75,6 +77,7 @@ import { LabelsManager } from "@/features/settings/components/LabelsManager";
 import { LabelSetsManager } from "@/features/settings/components/LabelSetsManager";
 import { ReportTemplatesManager } from "@/features/settings/components/ReportTemplatesManager";
 import { DocumentTemplatesManager } from "@/features/settings/components/DocumentTemplatesManager";
+import { GENERAL_CATEGORY, categoryRank } from "@/lib/template-categories";
 
 import { ensureLabel, useLabelCatalog } from "@/hooks/use-label-catalog";
 
@@ -196,6 +199,34 @@ const KIND_META: Record<
   label_set: { label: KIND_OUTCOME.label_set.label, icon: Tag, tint: KIND_OUTCOME.label_set.tint },
 };
 
+/**
+ * One pickable template in the "add a section" dropdown.
+ *
+ * `category` is the trade, and only document templates carry one - it is what
+ * groups that dropdown, the same way the Documents tab and the in-project
+ * picker group. Without it, choosing a document meant reading two dozen
+ * near-identical names in one alphabetical run.
+ */
+interface LibraryEntry {
+  id: string;
+  name: string;
+  category?: string | null;
+}
+
+/** The library split into trade sections, in the shared trade order. */
+function byTrade(entries: LibraryEntry[]): Array<[string, LibraryEntry[]]> {
+  const groups = new Map<string, LibraryEntry[]>();
+  for (const e of entries) {
+    const key = e.category || GENERAL_CATEGORY;
+    const list = groups.get(key);
+    if (list) list.push(e);
+    else groups.set(key, [e]);
+  }
+  return Array.from(groups.entries()).sort(
+    (a, b) => categoryRank(a[0]) - categoryRank(b[0]) || a[0].localeCompare(b[0]),
+  );
+}
+
 /** Which library tab authors a given blueprint section kind. */
 const KIND_TAB: Record<TemplateItemKind, TemplateTabKey> = {
   checklist: "checklists",
@@ -238,7 +269,7 @@ export function TemplatesPage() {
   const [tplItems, setTplItems] = useState<TemplateItem[]>([]);
   const [addKind, setAddKind] = useState<TemplateItemKind | "">("");
   const [addRefId, setAddRefId] = useState("");
-  const [docTpls, setDocTpls] = useState<Array<{ id: string; name: string }>>([]);
+  const [docTpls, setDocTpls] = useState<LibraryEntry[]>([]);
   const [reportTpls, setReportTpls] = useState<Array<{ id: string; name: string }>>([]);
   const [labelSetTpls, setLabelSetTpls] = useState<Array<{ id: string; name: string }>>([]);
   const [workflowTpls, setWorkflowTpls] = useState<Array<{ id: string; name: string }>>([]);
@@ -322,7 +353,11 @@ export function TemplatesPage() {
         .order("position", { ascending: true }),
       supabase
         .from("document_templates" as any)
-        .select("id, name, archived")
+        // `body->>category`, not `body`: the trade is one short string, and the
+        // bodies behind these rows are tens of kilobytes of document HTML each.
+        // Selecting the whole column to read one key off it would pull the
+        // entire built-in library down on every visit to this page.
+        .select("id, name, archived, category:body->>category")
         .eq("archived", false)
         .order("name"),
       supabase
@@ -346,7 +381,13 @@ export function TemplatesPage() {
     setChecklistTemplates(((chkRes.data as any[]) ?? []) as ChecklistTemplate[]);
     setAttached(((attRes.data as any[]) ?? []) as AttachedChecklist[]);
     setTplItems(((itemsRes.data as any[]) ?? []) as TemplateItem[]);
-    setDocTpls(((docRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
+    setDocTpls(
+      ((docRes.data as any[]) ?? []).map((x: any) => ({
+        id: x.id,
+        name: x.name,
+        category: x.category ?? null,
+      })),
+    );
     setReportTpls(((repRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
     setLabelSetTpls(((lsRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
     setWorkflowTpls(((wfRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
@@ -453,7 +494,7 @@ export function TemplatesPage() {
   const selected = templates.find((t) => t.id === selectedId) ?? null;
 
   const libFor = useCallback(
-    (k: TemplateItemKind): Array<{ id: string; name: string }> =>
+    (k: TemplateItemKind): LibraryEntry[] =>
       k === "checklist"
         ? checklistTemplates.map((c) => ({ id: c.id, name: c.name }))
         : k === "document"
@@ -1089,11 +1130,26 @@ export function TemplatesPage() {
                       />
                     </SelectTrigger>
                     <SelectContent>
-                      {available.map((x) => (
-                        <SelectItem key={x.id} value={x.id}>
-                          {x.name}
-                        </SelectItem>
-                      ))}
+                      {/* Documents are the one library big enough to need trade
+                          headings - two dozen of them, named alike. The other
+                          kinds stay a plain list rather than growing a single
+                          "General" heading over everything. */}
+                      {addKind === "document"
+                        ? byTrade(available).map(([heading, items]) => (
+                            <SelectGroup key={heading}>
+                              <SelectLabel>{heading}</SelectLabel>
+                              {items.map((x) => (
+                                <SelectItem key={x.id} value={x.id}>
+                                  {x.name}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          ))
+                        : available.map((x) => (
+                            <SelectItem key={x.id} value={x.id}>
+                              {x.name}
+                            </SelectItem>
+                          ))}
                     </SelectContent>
                   </Select>
                 );
