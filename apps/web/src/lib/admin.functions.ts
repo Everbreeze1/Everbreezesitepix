@@ -61,10 +61,7 @@ export const sendAdminNotification = rpcOp<
     title: string;
     body?: string | null;
     linkPath?: string | null;
-    target:
-      | { type: "all" }
-      | { type: "team"; teamId: string }
-      | { type: "user"; userId: string };
+    target: { type: "all" } | { type: "team"; teamId: string } | { type: "user"; userId: string };
   },
   { sentTo: number }
 >("sendAdminNotification");
@@ -81,6 +78,23 @@ export interface PlatformTeam {
   photoCount: number;
   storageBytes: number;
   createdAt: string;
+  /**
+   * The business profile from the account setup wizard, mirroring
+   * `PlatformTeam` in apps/api/src/domains/admin/teams.ts. Ids rather than
+   * labels - the admin table resolves them through the same packages/shared
+   * lists the wizard renders, so relabelling an industry needs no backfill.
+   *
+   * All null or empty until a company answers, which is itself the number
+   * worth knowing: how many signups never told us what they do.
+   */
+  industry: string | null;
+  trades: string[];
+  teamSize: string | null;
+  projectVolume: string | null;
+  goals: string[];
+  heardFrom: string | null;
+  serviceArea: string | null;
+  profileCompletedAt: string | null;
 }
 
 export interface PlatformTeamDetail {
@@ -112,9 +126,10 @@ export const getPlatformTeamDetail = rpcOp<{ teamId: string }, PlatformTeamDetai
   "getPlatformTeamDetail",
 );
 
-export const syncTeamBilling = rpcOp<{ teamId: string }, { subscriptionStatus: string; plan: string }>(
-  "syncTeamBilling",
-);
+export const syncTeamBilling = rpcOp<
+  { teamId: string },
+  { subscriptionStatus: string; plan: string }
+>("syncTeamBilling");
 
 export interface AdminAuditLogRow {
   id: string;

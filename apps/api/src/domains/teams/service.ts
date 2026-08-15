@@ -386,6 +386,148 @@ export async function createTeamService(ctx: AuthedContext, data: any) {
   return { team };
 }
 
+// ============================================================
+// The business profile: what trade this company is in, how big
+// they are, what they came here to fix.
+// ============================================================
+
+/**
+ * Save the answers from the account setup wizard.
+ *
+ * Creates the team if the caller has none. That is not a convenience: a trial
+ * account has no team until somebody visits Teams or Pricing, so for most
+ * people the first time we ask "what is your company called" IS the setup
+ * wizard, and making them create a team first to answer a question about their
+ * company would be the same friction moved one screen earlier.
+ *
+ * Two shapes of caller, one op:
+ *
+ *   * no team yet    - create it from `companyName`, caller becomes owner, then
+ *                      write the profile onto it;
+ *   * owner or admin - update in place.
+ *
+ * A plain member is refused. The profile is company-wide, and a crew member
+ * changing the company's industry from their phone would silently re-order the
+ * template library for everyone they work with.
+ *
+ * `teams` is service-role-only (20260811002000), so every write here goes
+ * through the admin client by necessity. That makes the ownership check above
+ * the only thing standing between a member and the row - it is load-bearing,
+ * not defensive.
+ *
+ * Every field is optional and only what is present is written, so the wizard's
+ * steps can save as they go and a skipped step leaves what was already there
+ * alone rather than blanking it.
+ */
+export async function saveCompanyProfileService(ctx: AuthedContext, data: any) {
+  const { userId } = ctx;
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: membership } = await supabaseAdmin
+    .from("team_members" as any)
+    .select("team_id, role")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  let teamId: string | null = (membership as any)?.team_id ?? null;
+
+  if (!teamId) {
+    const name = String(data.companyName ?? "").trim();
+    if (!name) throw new Error("Tell us your company name to finish setting up.");
+
+    const { data: team, error: teamErr } = await supabaseAdmin
+      .from("teams" as any)
+      .insert({ name, owner_id: userId, plan: "starter" })
+      .select("id")
+      .single();
+    if (teamErr || !team) throw new Error(teamErr?.message ?? "Failed to create your company");
+    teamId = (team as any).id as string;
+
+    const { error: memErr } = await supabaseAdmin
+      .from("team_members" as any)
+      .insert({ team_id: teamId, user_id: userId, role: "owner" });
+    if (memErr) throw new Error(memErr.message);
+  } else {
+    const role = (membership as any).role;
+    if (role !== "owner" && role !== "admin") {
+      throw new Error("Only owners and admins can change the company profile.");
+    }
+  }
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (typeof data.companyName === "string" && data.companyName.trim()) {
+    patch.name = data.companyName.trim();
+  }
+  for (const key of [
+    "industry",
+    "team_size",
+    "project_volume",
+    "heard_from",
+    "service_area",
+  ] as const) {
+    // `null` is a real answer here - it is how "actually, don't record that"
+    // gets back out of the row - so only `undefined` means "not in this save".
+    if (data[key] !== undefined) patch[key] = data[key];
+  }
+  for (const key of ["trades", "goals"] as const) {
+    if (data[key] !== undefined) patch[key] = data[key] ?? [];
+  }
+
+  /*
+   * Stamped on the server, from the answers, rather than sent by the client.
+   * The wizard's last step and the Settings form both save through here, so a
+   * profile filled in from Settings counts as done and the dashboard card
+   * stops asking - which is what someone who just filled it in expects.
+   *
+   * Only ever set, never cleared: emptying a field later does not make the
+   * account un-set-up, and re-showing the "finish setting up" card to someone
+   * who did would read as the save having failed.
+   */
+  const { data: current } = await supabaseAdmin
+    .from("teams" as any)
+    .select("industry, team_size, profile_completed_at")
+    .eq("id", teamId)
+    .maybeSingle();
+
+  const industry = patch.industry !== undefined ? patch.industry : (current as any)?.industry;
+  const teamSize = patch.team_size !== undefined ? patch.team_size : (current as any)?.team_size;
+  if (industry && teamSize && !(current as any)?.profile_completed_at) {
+    patch.profile_completed_at = new Date().toISOString();
+  }
+
+  const { data: team, error } = await supabaseAdmin
+    .from("teams" as any)
+    .update(patch)
+    .eq("id", teamId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+
+  return { team };
+}
+
+/**
+ * Stop the dashboard asking this person to finish setting up.
+ *
+ * Per user, not per team: two admins on the same account get their own answer
+ * to "not now", because one of them dismissing a banner is not a decision they
+ * made on the other's behalf.
+ *
+ * Stored rather than kept in localStorage so it survives the phone-then-laptop
+ * pattern that is most of how this product is used. A dismissal that only
+ * holds on the device it happened on is a card that comes back every time they
+ * pick up the other device.
+ */
+export async function dismissSetupPromptService(ctx: AuthedContext) {
+  const { supabase, userId } = ctx;
+  const { error } = await supabase
+    .from("profiles" as any)
+    .update({ setup_prompt_dismissed_at: new Date().toISOString() })
+    .eq("id", userId);
+  if (error) throw new Error(error.message);
+  return { dismissed: true };
+}
+
 export async function inviteMemberService(ctx: AuthedContext, data: any) {
   const { userId } = ctx;
   const supabaseAdmin = getSupabaseAdmin();

@@ -57,6 +57,27 @@ export {
   type DraftReportSection,
 } from "./report-autostructure";
 export {
+  INDUSTRIES,
+  INDUSTRY_IDS,
+  TEAM_SIZES,
+  TEAM_SIZE_IDS,
+  PROJECT_VOLUMES,
+  PROJECT_VOLUME_IDS,
+  COMPANY_GOALS,
+  COMPANY_GOAL_IDS,
+  HEARD_FROM,
+  HEARD_FROM_IDS,
+  findIndustry,
+  industryLabel,
+  tradeCategoryFor,
+  recommendedCategories,
+  choiceLabel,
+  isBusinessProfileComplete,
+  type Industry,
+  type Choice,
+  type BusinessProfile,
+} from "./industries";
+export {
   PHOTO_ROW_WIDTH,
   PHOTO_ROW_HEIGHT,
   photoWidthFor,

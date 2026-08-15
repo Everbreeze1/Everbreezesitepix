@@ -16,6 +16,8 @@ export {
   acceptInvite,
   acceptInviteSignup,
   lookupInvite,
+  saveCompanyProfile,
+  dismissSetupPrompt,
 } from "@/lib/teams.functions";
 export type {
   ProjectContributor,

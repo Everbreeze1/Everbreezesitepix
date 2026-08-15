@@ -1,4 +1,11 @@
 import { z } from "zod";
+import {
+  COMPANY_GOAL_IDS,
+  HEARD_FROM_IDS,
+  INDUSTRY_IDS,
+  PROJECT_VOLUME_IDS,
+  TEAM_SIZE_IDS,
+} from "@sitepix/shared";
 import { AuthError, type ServiceContext } from "../../lib/user-context";
 import { geocodeAddressInputSchema, geocodeAddressService } from "../maps/geocode";
 import { synthesizeBreezeSpeechService, synthesizeSpeechInputSchema } from "../tts/synthesize";
@@ -66,6 +73,7 @@ import {
   acceptInviteService,
   acceptInviteSignupService,
   createTeamService,
+  dismissSetupPromptService,
   getMyTeamService,
   getProjectContributorsService,
   getTeamActivityService,
@@ -75,6 +83,7 @@ import {
   removeMemberService,
   resendInviteService,
   revokeInviteService,
+  saveCompanyProfileService,
   updateMemberRoleService,
 } from "../teams/service";
 import {
@@ -450,6 +459,55 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     (d) => z.object({ name: z.string().trim().min(1).max(80) }).parse(d),
     createTeamService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
+  /*
+   * The setup wizard saves per step, so every field is optional and only what
+   * is sent gets written. `.nullable()` is meaningful and separate from
+   * optional: null clears an answer, absent leaves it alone.
+   *
+   * The enums come from packages/shared, the same list the wizard renders, so
+   * the server cannot drift into accepting an industry the UI stopped offering
+   * or rejecting one it started to.
+   */
+  saveCompanyProfile: authed(
+    (d) =>
+      z
+        .object({
+          companyName: z.string().trim().min(1).max(80).optional(),
+          industry: z
+            .enum(INDUSTRY_IDS as [string, ...string[]])
+            .nullable()
+            .optional(),
+          trades: z
+            .array(z.enum(INDUSTRY_IDS as [string, ...string[]]))
+            .max(INDUSTRY_IDS.length)
+            .optional(),
+          team_size: z
+            .enum(TEAM_SIZE_IDS as [string, ...string[]])
+            .nullable()
+            .optional(),
+          project_volume: z
+            .enum(PROJECT_VOLUME_IDS as [string, ...string[]])
+            .nullable()
+            .optional(),
+          goals: z
+            .array(z.enum(COMPANY_GOAL_IDS as [string, ...string[]]))
+            .max(COMPANY_GOAL_IDS.length)
+            .optional(),
+          heard_from: z
+            .enum(HEARD_FROM_IDS as [string, ...string[]])
+            .nullable()
+            .optional(),
+          service_area: z.string().trim().max(120).nullable().optional(),
+        })
+        .parse(d),
+    saveCompanyProfileService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  dismissSetupPrompt: {
+    handle: async (ctx) => {
+      if (!ctx) throw Object.assign(new Error("Unauthorized"), { status: 401 });
+      return dismissSetupPromptService(ctx);
+    },
+  },
   createCheckoutSession: authed(
     (d) => createCheckoutSessionInputSchema.parse(d),
     createCheckoutSessionService as (ctx: ServiceContext, data: never) => Promise<unknown>,

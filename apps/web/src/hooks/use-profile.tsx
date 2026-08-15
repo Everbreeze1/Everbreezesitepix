@@ -30,6 +30,15 @@ export interface CompanyProfile {
    * and the generated row types are still generated from that schema.
    */
   job_title?: string | null;
+  /**
+   * When this person last said "not now" to the account setup card.
+   *
+   * Per user rather than per team on purpose - see
+   * 20260827000000_team_business_profile.sql. Optional for the same reason as
+   * `job_title`: a database that predates that migration does not return the
+   * column, and `useCompanySetup` reads a missing one as "never dismissed".
+   */
+  setup_prompt_dismissed_at?: string | null;
 }
 
 /** Clamp any stored or user-supplied density into the 1-4 the renderers accept. */
