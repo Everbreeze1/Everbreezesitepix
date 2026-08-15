@@ -19,13 +19,29 @@
 // client receives a PDF that reads as boilerplate. The heading tells the author
 // what belongs there; the body is theirs.
 
-/** Categories mirror the document template library so one vocabulary covers both. */
+/**
+ * Categories mirror the document template library so one vocabulary covers
+ * both, and `makeCategoryRank` can order every Templates tab from the single
+ * answer a company gives the account setup wizard.
+ *
+ * Every value here must also appear in CATEGORY_ORDER in
+ * apps/web/src/lib/template-categories.ts. `tests/report-starters.test.ts`
+ * checks that, and checks that each industry with a trade section of its own
+ * has at least one starter filed under it - a company told their templates now
+ * lead, opening a picker where nothing moved, is worse than never having been
+ * asked.
+ */
 export type ReportStarterCategory =
   | "Field Reports"
   | "Insurance & Adjusting"
+  | "Electrical"
+  | "HVAC"
+  | "Plumbing"
+  | "Construction"
   | "Roofing & Exterior"
   | "Restoration"
   | "Cleaning"
+  | "Real Estate"
   | "Field Admin";
 
 export interface ReportStarterCover {
@@ -117,6 +133,144 @@ export const REPORT_STARTERS: readonly ReportStarter[] = [
     photosPerPage: 2,
     cover: FULL_COVER,
     sections: ["Work completed", "Final condition", "Outstanding items", "Handover notes"],
+  },
+
+  /*
+   * Per-trade starters.
+   *
+   * The six above are report SHAPES - a visit, a before-and-after, a log - and
+   * they stay, because plenty of work is shape-shaped. What was missing is the
+   * report a specific trade actually files, so an electrician picking "Start
+   * from" saw four general shapes and a damage assessment, and built the same
+   * headings by hand on every job.
+   *
+   * One per trade that has a section of its own, matching the document library.
+   */
+  {
+    id: "electrical-service",
+    name: "Electrical Service Report",
+    description:
+      "The service call write-up: reported fault, what you found, readings, and what you fixed.",
+    category: "Electrical",
+    photosPerPage: 2,
+    cover: FULL_COVER,
+    sections: [
+      "Reported problem",
+      "What we found",
+      "Readings and tests",
+      "Work performed",
+      "Safety items to flag",
+      "Recommended follow-up",
+    ],
+  },
+  {
+    id: "hvac-service",
+    name: "HVAC Service Report",
+    description:
+      "Diagnosis, readings and repair for a service call, in the order a tech works through it.",
+    category: "HVAC",
+    photosPerPage: 2,
+    cover: FULL_COVER,
+    sections: [
+      "Reported problem",
+      "System and equipment",
+      "Readings",
+      "Diagnosis",
+      "Work performed",
+      "Recommendations",
+    ],
+  },
+  {
+    id: "plumbing-service",
+    name: "Plumbing Service Report",
+    description:
+      "Leak or fixture work: where it was, what caused it, the repair, and proof it holds.",
+    category: "Plumbing",
+    photosPerPage: 2,
+    cover: FULL_COVER,
+    sections: [
+      "Reported problem",
+      "What we found",
+      "Repair performed",
+      "Pressure test and checks",
+      "Water damage to make good",
+      "Recommended follow-up",
+    ],
+  },
+  {
+    id: "construction-progress",
+    name: "Construction Progress Report",
+    description:
+      "The periodic report a client or lender signs off on: what got built, and what it cost.",
+    category: "Construction",
+    photosPerPage: 3,
+    cover: FULL_COVER,
+    sections: [
+      "Summary",
+      "Progress by trade",
+      "Evidence of work claimed",
+      "Schedule",
+      "Issues and delays",
+      "Next period",
+    ],
+  },
+  {
+    id: "roof-inspection",
+    name: "Roof Inspection Report",
+    description:
+      "Condition survey of a roof system, with the deficiency list a quote can be written from.",
+    category: "Roofing & Exterior",
+    photosPerPage: 2,
+    cover: FULL_COVER,
+    sections: [
+      "Roof details",
+      "Covering and flashing",
+      "Drainage and penetrations",
+      "Deficiencies",
+      "Remaining life and recommendation",
+    ],
+  },
+  {
+    id: "restoration-drying",
+    name: "Restoration Drying Log",
+    description:
+      "Daily drying record for a mitigation job: readings, equipment, and the clearance at the end.",
+    category: "Restoration",
+    photosPerPage: 3,
+    cover: FULL_COVER,
+    sections: [
+      "Cause of loss",
+      "Affected areas",
+      "Equipment in place",
+      "Daily moisture readings",
+      "Clearance",
+    ],
+  },
+  {
+    id: "cleaning-signoff",
+    name: "Cleaning Sign-Off",
+    description: "Proof-of-work for a clean, room by room, with the photos an invoice rests on.",
+    category: "Cleaning",
+    photosPerPage: 3,
+    cover: FULL_COVER,
+    sections: ["Scope of clean", "Before", "Areas completed", "After", "Notes for next visit"],
+  },
+  {
+    id: "property-condition",
+    name: "Property Condition Report",
+    description:
+      "Whole-property survey for an owner, buyer or tenancy, with a prioritised defect list.",
+    category: "Real Estate",
+    photosPerPage: 2,
+    cover: FULL_COVER,
+    sections: [
+      "Property details",
+      "Exterior",
+      "Interior",
+      "Services",
+      "Defects by priority",
+      "Summary and recommendation",
+    ],
   },
 ] as const;
 

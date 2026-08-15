@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   Trash2,
@@ -84,6 +84,10 @@ import {
 import { restrictToVerticalAxis } from "@/components/builder/builder-tokens";
 import { useAutosave } from "@/components/builder/use-autosave";
 import { KIND_META, KIND_ORDER, type ItemKind } from "@/lib/workflow-items";
+import { GENERAL_CATEGORY, categoryIcon, makeCategoryRank } from "@/lib/template-categories";
+import { TradeSelect } from "@/components/builder/TradeSelect";
+import { useCompanySetup } from "@/hooks/use-company-setup";
+import { tradeCategoryFor } from "@sitepix/shared";
 
 interface Template {
   id: string;
@@ -91,6 +95,14 @@ interface Template {
   description: string | null;
   archived: boolean;
   created_at: string;
+  /**
+   * The trade this workflow belongs to, or null for one filed under nothing.
+   *
+   * Optional rather than merely nullable, same as the checklist column: a
+   * database that predates 20260829000000_workflow_report_template_trades.sql
+   * does not return it, and every reader treats a missing one as "General".
+   */
+  category?: string | null;
 }
 interface Phase {
   id: string;
@@ -113,10 +125,19 @@ interface Item {
  * Blank-canvas templates are where this builder used to lose people: you got a
  * "Phase 1" with nothing in it and no sense of what a good workflow looks like.
  * Starters mirror the checklist designer and give the crew something to shape.
+ *
+ * `category` is the same vocabulary as the document and checklist libraries,
+ * from @/lib/template-categories, so one answer in the setup wizard orders
+ * every tab. The three original starters are shapes rather than trades - an
+ * install, a service call, an inspection - which is why they sit under Field
+ * Reports and Field Admin; the ones below them are written for a specific
+ * trade's sequence and are filed under it.
  */
 const STARTER_WORKFLOWS: {
   name: string;
   description: string;
+  /** A category from CATEGORY_ORDER, or undefined for a genuinely general one. */
+  category?: string;
   phases: {
     name: string;
     description?: string;
@@ -126,6 +147,7 @@ const STARTER_WORKFLOWS: {
 }[] = [
   {
     name: "Install job",
+    category: "Field Admin",
     description: "Pre-job walkthrough through customer handover, with sign-off at each gate.",
     phases: [
       {
@@ -171,6 +193,7 @@ const STARTER_WORKFLOWS: {
   },
   {
     name: "Service call",
+    category: "Field Admin",
     description: "A single-visit troubleshoot-and-repair loop.",
     phases: [
       {
@@ -203,6 +226,7 @@ const STARTER_WORKFLOWS: {
   },
   {
     name: "Inspection & report",
+    category: "Field Reports",
     description: "Walk the site, document each area, hand over a signed report.",
     phases: [
       {
@@ -229,6 +253,397 @@ const STARTER_WORKFLOWS: {
           { kind: "check", label: "Findings summarised", required: true },
           { kind: "check", label: "Recommendations listed", required: true },
           { kind: "note", label: "Next steps agreed with customer" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Electrical fit-out",
+    category: "Electrical",
+    description: "Rough-in, inspection hold point, then trim out and energise.",
+    phases: [
+      {
+        name: "Rough-in",
+        description: "Everything that has to be right before it disappears behind a wall.",
+        items: [
+          { kind: "check", label: "Circuit layout matches drawings", required: true },
+          { kind: "check", label: "Boxes set to finished wall depth", required: true },
+          { kind: "check", label: "Cable secured and protected", required: true },
+          { kind: "photo", label: "Open walls before close-up", required: true },
+          { kind: "note", label: "Deviations from drawings" },
+        ],
+      },
+      {
+        name: "Inspection hold",
+        description: "Nothing gets covered until this passes.",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Rough-in inspection booked", required: true },
+          { kind: "check", label: "Inspection passed", required: true },
+          { kind: "photo", label: "Inspection notice or sticker" },
+          { kind: "note", label: "Corrections required" },
+        ],
+      },
+      {
+        name: "Trim out",
+        items: [
+          { kind: "check", label: "Devices and plates fitted", required: true },
+          { kind: "check", label: "Terminations torqued to spec", required: true },
+          { kind: "check", label: "Panel schedule filled in", required: true },
+          { kind: "photo", label: "Finished panel", required: true },
+        ],
+      },
+      {
+        name: "Energise & hand over",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Insulation resistance test passed", required: true },
+          { kind: "check", label: "RCD / GFCI trip tests passed", required: true },
+          { kind: "check", label: "Every circuit energised and proved", required: true },
+          { kind: "check", label: "Certificate issued to customer", required: true },
+          { kind: "note", label: "Handover notes" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "HVAC install & commission",
+    category: "HVAC",
+    description: "Set the equipment, prove the refrigerant side, commission and hand over.",
+    phases: [
+      {
+        name: "Set equipment",
+        items: [
+          { kind: "check", label: "Old unit removed and disposed of", required: true },
+          { kind: "check", label: "Pad or hangers level and secure", required: true },
+          { kind: "photo", label: "Unit in position", required: true },
+          { kind: "check", label: "Clearances meet manufacturer spec", required: true },
+        ],
+      },
+      {
+        name: "Connections",
+        items: [
+          { kind: "check", label: "Line set brazed under nitrogen", required: true },
+          { kind: "check", label: "Pressure test held", required: true },
+          { kind: "check", label: "System evacuated to spec", required: true },
+          { kind: "check", label: "Condensate routed and trapped", required: true },
+          { kind: "photo", label: "Line set and electrical connections" },
+        ],
+      },
+      {
+        name: "Commission",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Charge weighed in and verified", required: true },
+          { kind: "check", label: "Supply and return temps recorded", required: true },
+          { kind: "check", label: "Static pressure within range", required: true },
+          { kind: "check", label: "Thermostat programmed", required: true },
+          { kind: "note", label: "Commissioning readings" },
+        ],
+      },
+      {
+        name: "Hand over",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Customer shown controls and filter change", required: true },
+          { kind: "check", label: "Warranty registered", required: true },
+          { kind: "photo", label: "Finished installation", required: true },
+          { kind: "note", label: "Follow-up or service plan agreed" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Plumbing rough-in to final",
+    category: "Plumbing",
+    description: "Rough-in, pressure test, fixture set, and a final that actually holds.",
+    phases: [
+      {
+        name: "Rough-in",
+        items: [
+          { kind: "check", label: "Supply and waste routed to drawings", required: true },
+          { kind: "check", label: "Falls and venting correct", required: true },
+          { kind: "check", label: "Pipe supported and protected", required: true },
+          { kind: "photo", label: "Open walls and floor before close-up", required: true },
+        ],
+      },
+      {
+        name: "Pressure test",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "System pressurised to spec", required: true },
+          { kind: "check", label: "Held for the required period", required: true },
+          { kind: "photo", label: "Gauge reading at start and end", required: true },
+          { kind: "note", label: "Leaks found and corrected" },
+        ],
+      },
+      {
+        name: "Fixture set",
+        items: [
+          { kind: "check", label: "Fixtures set level and sealed", required: true },
+          { kind: "check", label: "Shut-offs fitted and operating", required: true },
+          { kind: "check", label: "Traps and tailpieces correct", required: true },
+          { kind: "photo", label: "Each fixture installed" },
+        ],
+      },
+      {
+        name: "Final",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Every fixture run and checked for leaks", required: true },
+          { kind: "check", label: "Hot water temperature verified", required: true },
+          { kind: "check", label: "Work area cleaned", required: true },
+          { kind: "note", label: "Customer walkthrough notes" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Construction phase handover",
+    category: "Construction",
+    description: "Pre-construction record, in-progress evidence, punch list, then keys.",
+    phases: [
+      {
+        name: "Pre-construction",
+        items: [
+          { kind: "check", label: "Existing conditions photographed", required: true },
+          { kind: "photo", label: "Neighbouring property condition", required: true },
+          { kind: "check", label: "Utilities located and marked", required: true },
+          { kind: "check", label: "Site set up, fenced and signed", required: true },
+        ],
+      },
+      {
+        name: "In progress",
+        items: [
+          { kind: "photo", label: "Work claimed this period", required: true },
+          { kind: "check", label: "Inspections booked and passed", required: true },
+          { kind: "note", label: "Delays, RFIs and what is being done" },
+        ],
+      },
+      {
+        name: "Punch list",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "All trades walked their own scope", required: true },
+          { kind: "photo", label: "Outstanding items", required: true },
+          { kind: "check", label: "Items blocking handover closed", required: true },
+          { kind: "note", label: "Open items and who owns them" },
+        ],
+      },
+      {
+        name: "Handover",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Certificates, manuals and as-builts issued", required: true },
+          { kind: "check", label: "Keys and access codes transferred", required: true },
+          { kind: "check", label: "Client walked the property", required: true },
+          { kind: "note", label: "Warranty period and contact" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Tenancy turnover",
+    category: "Real Estate",
+    description: "Move-out, make-ready, re-let: the evidence trail a deposit dispute needs.",
+    phases: [
+      {
+        name: "Move-out inspection",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Meters read and recorded", required: true },
+          { kind: "check", label: "Keys and fobs returned", required: true },
+          { kind: "photo", label: "Every room, condition on exit", required: true },
+          { kind: "note", label: "Damage beyond fair wear and tear" },
+        ],
+      },
+      {
+        name: "Make ready",
+        items: [
+          { kind: "check", label: "Repairs completed", required: true },
+          { kind: "check", label: "Property professionally cleaned", required: true },
+          { kind: "check", label: "Smoke and CO alarms tested", required: true },
+          { kind: "photo", label: "Each room ready to let", required: true },
+        ],
+      },
+      {
+        name: "Re-let",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Marketing photos taken", required: true },
+          { kind: "check", label: "Listing published", required: true },
+          { kind: "check", label: "Move-in inspection booked", required: true },
+          { kind: "note", label: "New tenancy details" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Recurring clean",
+    category: "Cleaning",
+    description: "Arrival, the round, then the proof photos a client can be invoiced on.",
+    phases: [
+      {
+        name: "Arrival",
+        items: [
+          { kind: "check", label: "Site access confirmed", required: true },
+          { kind: "photo", label: "Before, each main area", required: true },
+          { kind: "check", label: "Any damage on arrival noted", required: true },
+        ],
+      },
+      {
+        name: "The round",
+        items: [
+          { kind: "check", label: "Kitchen and appliances", required: true },
+          { kind: "check", label: "Bathrooms and sanitaryware", required: true },
+          { kind: "check", label: "Floors and surfaces", required: true },
+          { kind: "check", label: "Waste removed and bins relined", required: true },
+          { kind: "check", label: "Consumables restocked" },
+          { kind: "note", label: "Areas skipped, and why" },
+        ],
+      },
+      {
+        name: "Sign off",
+        requires_signoff: true,
+        items: [
+          { kind: "photo", label: "After, each main area", required: true },
+          { kind: "check", label: "Client walked the work" },
+          { kind: "note", label: "Anything to flag for next visit" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Water damage mitigation",
+    category: "Restoration",
+    description: "Emergency response, drying, daily readings, then a clearance you can bill on.",
+    phases: [
+      {
+        name: "Emergency response",
+        items: [
+          { kind: "check", label: "Source of water stopped", required: true },
+          { kind: "check", label: "Category and class determined", required: true },
+          { kind: "photo", label: "Affected areas on arrival", required: true },
+          { kind: "check", label: "Standing water extracted", required: true },
+          { kind: "note", label: "Cause of loss" },
+        ],
+      },
+      {
+        name: "Set up drying",
+        items: [
+          { kind: "check", label: "Non-salvageable material removed", required: true },
+          { kind: "check", label: "Air movers and dehumidifiers placed", required: true },
+          { kind: "check", label: "Containment set where required" },
+          { kind: "photo", label: "Equipment in position", required: true },
+        ],
+      },
+      {
+        name: "Daily monitoring",
+        items: [
+          { kind: "check", label: "Moisture readings taken", required: true },
+          { kind: "check", label: "Equipment checked and adjusted", required: true },
+          { kind: "note", label: "Readings and drying progress" },
+        ],
+      },
+      {
+        name: "Clearance",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Dry standard met on every material", required: true },
+          { kind: "check", label: "Equipment removed", required: true },
+          { kind: "photo", label: "Final condition", required: true },
+          { kind: "check", label: "Customer signed off on completion", required: true },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Roof replacement",
+    category: "Roofing & Exterior",
+    description: "Tear-off through final inspection, with the deck photos a warranty needs.",
+    phases: [
+      {
+        name: "Tear-off",
+        items: [
+          { kind: "photo", label: "Roof before work", required: true },
+          { kind: "check", label: "Property and landscaping protected", required: true },
+          { kind: "check", label: "Old covering removed", required: true },
+          { kind: "photo", label: "Deck exposed", required: true },
+        ],
+      },
+      {
+        name: "Deck & underlayment",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Damaged decking replaced", required: true },
+          { kind: "check", label: "Ice and water shield fitted where required", required: true },
+          { kind: "check", label: "Underlayment laid to spec", required: true },
+          { kind: "photo", label: "Underlayment before covering", required: true },
+          { kind: "note", label: "Decking replaced, and how much" },
+        ],
+      },
+      {
+        name: "Covering & flashing",
+        items: [
+          { kind: "check", label: "Covering installed to manufacturer spec", required: true },
+          { kind: "check", label: "Flashings and penetrations sealed", required: true },
+          { kind: "check", label: "Ridge and ventilation fitted", required: true },
+          { kind: "photo", label: "Completed roof", required: true },
+        ],
+      },
+      {
+        name: "Final",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Gutters cleared and site magnet-swept", required: true },
+          { kind: "check", label: "Final inspection passed", required: true },
+          { kind: "check", label: "Warranty issued to customer", required: true },
+          { kind: "note", label: "Handover notes" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Claim from first notice to estimate",
+    category: "Insurance & Adjusting",
+    description: "First contact, site documentation, scope, then the estimate the carrier gets.",
+    phases: [
+      {
+        name: "First notice",
+        items: [
+          { kind: "check", label: "Policyholder contacted", required: true },
+          { kind: "check", label: "Coverage confirmed", required: true },
+          { kind: "check", label: "Site visit scheduled", required: true },
+          { kind: "note", label: "Reported cause of loss" },
+        ],
+      },
+      {
+        name: "Site documentation",
+        items: [
+          { kind: "photo", label: "Overview of each affected area", required: true },
+          { kind: "photo", label: "Close-ups of the damage", required: true },
+          { kind: "check", label: "Measurements taken", required: true },
+          { kind: "check", label: "Cause of loss confirmed on site", required: true },
+          { kind: "note", label: "Observations and pre-existing damage" },
+        ],
+      },
+      {
+        name: "Scope",
+        items: [
+          { kind: "check", label: "Line-item scope written", required: true },
+          { kind: "check", label: "Contents inventory taken" },
+          { kind: "check", label: "Emergency mitigation documented" },
+          { kind: "note", label: "Items in dispute" },
+        ],
+      },
+      {
+        name: "Estimate & submit",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Estimate prepared", required: true },
+          { kind: "check", label: "Policyholder walked through it", required: true },
+          { kind: "check", label: "Submitted to carrier", required: true },
+          { kind: "note", label: "Next steps and review date" },
         ],
       },
     ],
@@ -261,6 +676,18 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   /** Row to focus after an insert, so adding a step drops you straight into it. */
   const [focusItemId, setFocusItemId] = useState<string | null>(null);
+
+  /*
+   * The company's trade, from the account setup wizard. Orders the rail and the
+   * Starters dialog, so this tab answers the same question the Documents and
+   * Checklists tabs do.
+   */
+  const { profile: company } = useCompanySetup();
+  const rank = useMemo(
+    () => makeCategoryRank(company.industry, company.trades),
+    [company.industry, company.trades],
+  );
+  const ownTrade = tradeCategoryFor(company.industry);
   const [focusPhaseId, setFocusPhaseId] = useState<string | null>(null);
 
   const save = useAutosave(
@@ -279,7 +706,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
     setLoading(true);
     const { data: tpls } = await supabase
       .from(TABLES.templates as any)
-      .select("id, name, description, archived, created_at")
+      .select("id, name, description, archived, created_at, category")
       .order("created_at", { ascending: true });
     const list = ((tpls as any[]) ?? []) as Template[];
     setTemplates(list);
@@ -330,6 +757,44 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
       );
   }, [templates, showArchived, search]);
 
+  /*
+   * The rail, split by trade. Same shape and the same ordering function as the
+   * Documents and Checklists tabs, so a company that told us their trade sees
+   * it first here too. General leads because that is where a workflow written
+   * before trades existed sits, and it is the team's own work.
+   */
+  const railSections = useMemo<Array<[string, Template[]]>>(() => {
+    const byTrade = new Map<string, Template[]>();
+    for (const t of visibleTemplates) {
+      const key = t.category || GENERAL_CATEGORY;
+      const list = byTrade.get(key);
+      if (list) list.push(t);
+      else byTrade.set(key, [t]);
+    }
+    return [...byTrade.entries()].sort(
+      (a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]),
+    );
+  }, [visibleTemplates, rank]);
+
+  /**
+   * The starter library, their trade first.
+   *
+   * An uncategorised starter sorts last rather than through `rank`, which puts
+   * General at the very top: correct in the rail, where General is the team's
+   * own work, and backwards here, where it would push a trade-less starter
+   * above the one written for their trade.
+   */
+  const starterOrder = useMemo(
+    () =>
+      [...STARTER_WORKFLOWS].sort(
+        (a, b) =>
+          (a.category ? rank(a.category) : Number.MAX_SAFE_INTEGER) -
+            (b.category ? rank(b.category) : Number.MAX_SAFE_INTEGER) ||
+          a.name.localeCompare(b.name),
+      ),
+    [rank],
+  );
+
   const selected = templates.find((t) => t.id === selectedId) ?? null;
   const selectedPhases = useMemo(
     () =>
@@ -373,11 +838,17 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
   const createTemplate = async (
     name: string,
     description: string | null,
+    category?: string | null,
   ): Promise<string | null> => {
     if (!user) return null;
     const { data, error } = await supabase
       .from(TABLES.templates as any)
-      .insert({ created_by: user.id, name: name.trim(), description: description?.trim() || null })
+      .insert({
+        created_by: user.id,
+        name: name.trim(),
+        description: description?.trim() || null,
+        category: category ?? null,
+      })
       .select("id")
       .single();
     if (error || !data) {
@@ -407,7 +878,9 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
   const createFromStarter = async (starter: (typeof STARTER_WORKFLOWS)[number]) => {
     setCreating(true);
     try {
-      const id = await createTemplate(starter.name, starter.description);
+      // The starter's trade travels with it, so the copy lands under the right
+      // heading instead of in General for the author to refile by hand.
+      const id = await createTemplate(starter.name, starter.description, starter.category ?? null);
       if (!id) return;
       /*
        * Both inserts below used to discard their error, and a dropped phase
@@ -462,7 +935,7 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
   };
 
   const duplicateTemplate = async (t: Template) => {
-    const id = await createTemplate(`${t.name} (copy)`, t.description);
+    const id = await createTemplate(`${t.name} (copy)`, t.description, t.category ?? null);
     if (!id) return;
     const tPhases = phases
       .filter((p) => p.template_id === t.id)
@@ -926,19 +1399,33 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
                   No workflows match “{search}”.
                 </li>
               ) : (
-                visibleTemplates.map((t) => {
-                  const c = countsFor(t.id);
-                  return (
-                    <BuilderRailItem
-                      key={t.id}
-                      active={selectedId === t.id}
-                      name={t.name}
-                      archived={t.archived}
-                      meta={`${c.phases} phase${c.phases === 1 ? "" : "s"} · ${c.items} step${c.items === 1 ? "" : "s"}`}
-                      onSelect={() => void selectTemplate(t.id)}
-                    />
-                  );
-                })
+                railSections.map(([heading, list]) => (
+                  <Fragment key={heading}>
+                    {railSections.length > 1 && (
+                      <li className="flex items-center gap-1.5 px-3 pb-1 pt-3 text-[10px] font-extrabold uppercase tracking-[1.2px] text-muted-foreground">
+                        {heading}
+                        {heading === ownTrade && (
+                          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary">
+                            Yours
+                          </span>
+                        )}
+                      </li>
+                    )}
+                    {list.map((t) => {
+                      const c = countsFor(t.id);
+                      return (
+                        <BuilderRailItem
+                          key={t.id}
+                          active={selectedId === t.id}
+                          name={t.name}
+                          archived={t.archived}
+                          meta={`${c.phases} phase${c.phases === 1 ? "" : "s"} · ${c.items} step${c.items === 1 ? "" : "s"}`}
+                          onSelect={() => void selectTemplate(t.id)}
+                        />
+                      );
+                    })}
+                  </Fragment>
+                ))
               )}
             </BuilderRail>
           }
@@ -978,6 +1465,31 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
                             {stats.signoffs} sign-off{stats.signoffs === 1 ? "" : "s"}
                           </StatChip>
                         )}
+                        {/* Refiled in place, beside the other facts about the
+                            workflow. Same control and same reasoning as the
+                            Checklists tab. */}
+                        <TradeSelect
+                          value={selected.category ?? null}
+                          onChange={(v) => {
+                            // A menu pick, not typing, so it is written
+                            // straight through rather than debounced - the
+                            // rail has to re-group the moment it changes or
+                            // the workflow appears to have moved nowhere.
+                            setTemplates((prev) =>
+                              prev.map((t) => (t.id === selected.id ? { ...t, category: v } : t)),
+                            );
+                            void supabase
+                              .from(TABLES.templates as any)
+                              .update({ category: v })
+                              .eq("id", selected.id)
+                              .then((r: any) => {
+                                if (r.error) {
+                                  toast.error(r.error.message);
+                                  void load();
+                                }
+                              });
+                          }}
+                        />
                       </>
                     }
                     banner={
@@ -1197,11 +1709,28 @@ export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean
             </DialogDescription>
           </DialogHeader>
           <div className="grid max-h-[60vh] gap-3 overflow-y-auto sm:grid-cols-3">
-            {STARTER_WORKFLOWS.map((s) => {
+            {/* Sorted, not grouped: their trade first, then the rest. Headings
+                would cost more room than they save at this many cards, but
+                which card is FIRST still matters. */}
+            {starterOrder.map((s) => {
               const steps = s.phases.reduce((n, p) => n + p.items.length, 0);
+              const TradeIcon = categoryIcon(s.category ?? GENERAL_CATEGORY);
               return (
                 <Card key={s.name} className={cn(SURFACE_CARD, "flex flex-col p-4")}>
-                  <div className="font-display text-lg font-bold tracking-[-0.3px]">{s.name}</div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-display text-lg font-bold tracking-[-0.3px]">{s.name}</div>
+                    {s.category === ownTrade && (
+                      <span className="mt-1 shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.6px] text-primary">
+                        Your trade
+                      </span>
+                    )}
+                  </div>
+                  {s.category && (
+                    <div className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
+                      <TradeIcon className="h-3 w-3" />
+                      {s.category}
+                    </div>
+                  )}
                   <p className="mt-1 flex-1 text-xs leading-relaxed text-muted-foreground">
                     {s.description}
                   </p>
