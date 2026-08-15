@@ -1178,28 +1178,36 @@ export async function resendMemberConfirmationService(
   const { userId } = ctx;
   const supabaseAdmin = getSupabaseAdmin();
 
+  /*
+   * Statuses on the throws, unlike the older ops in this file which let a bare
+   * Error surface as a 500. A refusal is not a server fault, and reading it as
+   * one turns every denied click into noise in whatever watches for 5xx.
+   */
+  const forbidden = () => Object.assign(new Error("Forbidden"), { status: 403 });
+
   const { data: caller } = await supabaseAdmin
     .from("team_members" as any)
     .select("team_id, role")
     .eq("user_id", userId)
     .maybeSingle();
-  if (!caller) throw new Error("Forbidden");
-  if ((caller as any).role !== "owner" && (caller as any).role !== "admin")
-    throw new Error("Forbidden");
+  if (!caller) throw forbidden();
+  if ((caller as any).role !== "owner" && (caller as any).role !== "admin") throw forbidden();
 
   const { data: member } = await supabaseAdmin
     .from("team_members" as any)
     .select("id, team_id, user_id")
     .eq("id", data.memberId)
     .maybeSingle();
-  if (!member) throw new Error("Member not found");
-  if ((member as any).team_id !== (caller as any).team_id) throw new Error("Forbidden");
+  if (!member) throw Object.assign(new Error("Member not found"), { status: 404 });
+  // Same 403 as a role failure: which teams exist is not this caller's business.
+  if ((member as any).team_id !== (caller as any).team_id) throw forbidden();
 
   const { data: target } = await supabaseAdmin.auth.admin.getUserById(
     (member as any).user_id as string,
   );
   const email = (target?.user as any)?.email as string | undefined;
-  if (!email) throw new Error("That member has no email address on file.");
+  if (!email)
+    throw Object.assign(new Error("That member has no email address on file."), { status: 422 });
   if ((target?.user as any)?.email_confirmed_at) {
     return { ok: true, alreadyConfirmed: true, emailSent: false };
   }
