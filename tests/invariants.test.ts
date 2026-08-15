@@ -647,6 +647,50 @@ describe("family: people-lists must not read profiles from the browser", () => {
     expect(src).toMatch(/getMyTeam/);
     expect(src).not.toMatch(/from\(\s*["']profiles["']/);
   });
+
+  /*
+   * The same failure with a different source. `getProjectContributors` counts
+   * who has ALREADY uploaded a photo, opened a task or written a report on a
+   * project - an activity list, never a roster. The photo lightbox built its
+   * assignee dropdown and its @-mention list out of it, so from a photo you
+   * could only assign work to the one or two people who had already touched
+   * that job, while the project's own Tasks tab (which reads getMyTeam) offered
+   * the whole crew. Nothing errored and the list was not empty, so it read as a
+   * working feature: "I can't assign tasks to team mates. I don't see team
+   * mates populated."
+   *
+   * Contributors stay merged in on top of the roster - somebody who uploaded
+   * photos and has since left the team still has to render with a name against
+   * the work they hold - but they may not BE the list.
+   */
+  const PHOTO_PEOPLE_PANELS = [
+    "apps/web/src/features/photos/components/PhotoTasksPanel.tsx",
+    "apps/web/src/features/photos/components/PhotoCommentsPanel.tsx",
+  ];
+
+  it("the photo panels pick people from the roster, not from project contributors", () => {
+    for (const rel of PHOTO_PEOPLE_PANELS) {
+      const src = stripComments(read(rel));
+      expect(src, rel).toMatch(/useAssignableTeammates\(\s*contributors\s*\)/);
+    }
+    // The raw prop reaching the picker/mention list is the bug itself.
+    expect(stripComments(read(PHOTO_PEOPLE_PANELS[0]))).not.toMatch(
+      /contributors=\{\s*contributors\s*\}/,
+    );
+    expect(stripComments(read(PHOTO_PEOPLE_PANELS[1]))).not.toMatch(
+      /return\s+contributors\s*\n?\s*\.filter/,
+    );
+  });
+
+  it("the assignable-teammates hook is the roster plus contributors, in that order", () => {
+    const src = stripComments(read("apps/web/src/hooks/use-assignable-teammates.ts"));
+    expect(src).toMatch(/useTeamMembers/);
+    // Roster first, contributors merged over it: a contributor id already in
+    // the roster must not replace the live profile with the stale copy.
+    expect(src.indexOf("of members")).toBeLessThan(src.indexOf("of contributors"));
+    // Pending invitees have no auth user, so they are not assignable.
+    expect(src).not.toMatch(/pendingInvites/);
+  });
 });
 
 describe("family: an email that did not send must not be reported as success", () => {

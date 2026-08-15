@@ -13,6 +13,7 @@ import {
   type PhotoComment,
 } from "@/lib/photo-comments.functions";
 import { formatRelativeTime } from "@/lib/format-time";
+import { useAssignableTeammates } from "@/hooks/use-assignable-teammates";
 
 export interface CommentContributor {
   userId: string;
@@ -78,6 +79,15 @@ export function PhotoCommentsPanel({
   const [mentioned, setMentioned] = useState<Set<string>>(new Set());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+
+  /*
+   * @ offers the whole crew, not only the people who have already uploaded
+   * something to this project. `contributors` counts activity; the roster is
+   * what "teammate" means. See use-assignable-teammates.ts.
+   */
+  const { teammates, isLoading: teammatesLoading } = useAssignableTeammates(contributors);
+  const mentionable = teammates;
+  const mentionablePending = contributorsLoading || teammatesLoading;
 
   const list = listPhotoComments;
   const create = createPhotoComment;
@@ -171,7 +181,7 @@ export function PhotoCommentsPanel({
   const mentionMatches = useMemo(() => {
     if (mentionQuery === null) return [];
     const q = mentionQuery;
-    return contributors
+    return mentionable
       .filter((c) => c.userId !== currentUserId)
       .filter((c) => {
         if (!q) return true;
@@ -179,7 +189,7 @@ export function PhotoCommentsPanel({
         return n.includes(q);
       })
       .slice(0, 6);
-  }, [mentionQuery, contributors, currentUserId]);
+  }, [mentionQuery, mentionable, currentUserId]);
 
   const insertMention = (c: CommentContributor) => {
     const name = c.fullName ?? c.email ?? "teammate";
@@ -287,19 +297,23 @@ export function PhotoCommentsPanel({
 
       <div className="relative mt-2">
         {mentionQuery !== null &&
-          (mentionMatches.length > 0 || contributorsLoading || contributors.length === 0) && (
+          (mentionMatches.length > 0 || mentionablePending || mentionable.length === 0) && (
             <div className="absolute bottom-full left-0 z-10 mb-1.5 w-64 overflow-hidden rounded-xl border border-white/10 bg-neutral-900 shadow-xl">
               <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/50">
                 Mention teammate
               </div>
-              {contributorsLoading && (
+              {mentionablePending && mentionable.length === 0 && (
                 <div className="flex items-center gap-2 px-2 py-2 text-xs text-white/60">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Loading teammates…
                 </div>
               )}
-              {!contributorsLoading && mentionMatches.length === 0 && (
-                <div className="px-2 py-2 text-xs text-white/50">No teammates match</div>
+              {!(mentionablePending && mentionable.length === 0) && mentionMatches.length === 0 && (
+                <div className="px-2 py-2 text-xs text-white/50">
+                  {mentionable.length === 0
+                    ? "No teammates yet. Invite your crew from the Teams page."
+                    : "No teammates match"}
+                </div>
               )}
               {mentionMatches.map((c) => {
                 const name = c.fullName ?? c.email ?? "Teammate";

@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTeamMembers } from "@/hooks/use-team-members";
+import { useAssignableTeammates } from "@/hooks/use-assignable-teammates";
 import { completionRights } from "@/lib/assignment";
 import type { CommentContributor } from "@/features/photos/components/PhotoCommentsPanel";
 
@@ -63,11 +64,19 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
   const [saving, setSaving] = useState(false);
   const { isManager } = useTeamMembers();
 
+  /*
+   * The whole crew, not only the people who have already touched this project.
+   * `contributors` is an activity count and was never a roster, which is why the
+   * dropdown here listed one or two names while the project's Tasks tab listed
+   * everyone. See use-assignable-teammates.ts.
+   */
+  const { teammates, isLoading: teammatesLoading } = useAssignableTeammates(contributors);
+
   const contribById = useMemo(() => {
     const m = new Map<string, CommentContributor>();
-    contributors.forEach((c) => m.set(c.userId, c));
+    teammates.forEach((c) => m.set(c.userId, c));
     return m;
-  }, [contributors]);
+  }, [teammates]);
 
   const load = async () => {
     setLoading(true);
@@ -216,7 +225,8 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
         <AssigneePicker
           value={assignee}
           onChange={setAssignee}
-          contributors={contributors}
+          contributors={teammates}
+          loading={teammatesLoading}
           compact
         />
         <Button
@@ -271,7 +281,8 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
                 <AssigneePicker
                   value={t.assignee_user_id ?? ""}
                   onChange={(v) => void reassign(t, v || null)}
-                  contributors={contributors}
+                  contributors={teammates}
+                  loading={teammatesLoading}
                   currentLabel={
                     c ? (c.fullName ?? c.email ?? "Assigned") : (t.assignee_email ?? "")
                   }
@@ -299,12 +310,14 @@ function AssigneePicker({
   contributors,
   compact = false,
   currentLabel,
+  loading = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   contributors: CommentContributor[];
   compact?: boolean;
   currentLabel?: string;
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -369,9 +382,28 @@ function AssigneePicker({
               Unassign
             </button>
           )}
-          {filtered.length === 0 ? (
+          {loading && contributors.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 px-2 py-3 text-[11px] text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Loading teammates…
+            </div>
+          ) : filtered.length === 0 ? (
+            /*
+             * Two different nothings: nobody matches what was typed, versus
+             * there is nobody to match. The second used to read "No teammates
+             * found" as well, which is what an empty roster looked like when
+             * the list was built from project contributors.
+             */
             <div className="px-2 py-2 text-center text-[11px] text-muted-foreground">
-              No teammates found
+              {contributors.length === 0 ? (
+                <>
+                  No teammates yet.
+                  <br />
+                  Invite your crew from the Teams page.
+                </>
+              ) : (
+                "No teammates match"
+              )}
             </div>
           ) : (
             filtered.map((c) => (
