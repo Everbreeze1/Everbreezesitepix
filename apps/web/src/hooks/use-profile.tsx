@@ -19,6 +19,17 @@ export interface CompanyProfile {
    * 20260821000000_report_photos_per_page_default.sql has no value yet.
    */
   report_photos_per_page: number | null;
+  /**
+   * The author's job title, merged into documents as `{{prepared_by_title}}`.
+   * This field existed in the Settings form long before it existed here - it
+   * was kept in localStorage, so it could never reach a document, a PDF, or
+   * another device.
+   *
+   * Optional, not just nullable: a database that predates
+   * 20260823000000_project_client_fields.sql does not return the column at all,
+   * and the generated row types are still generated from that schema.
+   */
+  job_title?: string | null;
 }
 
 /** Clamp any stored or user-supplied density into the 1-4 the renderers accept. */

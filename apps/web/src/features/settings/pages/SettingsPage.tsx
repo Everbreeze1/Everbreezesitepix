@@ -48,6 +48,7 @@ import { getMyTeam, createBillingPortalSession } from "@/features/settings/api";
 import { listReviewLinks, setReviewLinks, type ReviewLink } from "@/lib/review-links.functions";
 import { useStorageUsage, formatBytes } from "@/hooks/use-storage-usage";
 import { SUPPORT_EMAIL, mailtoHref } from "@/lib/contact";
+import { writeWithNewColumns, PROFILE_JOB_KEYS } from "@/lib/merge-field-columns";
 import { cn } from "@/lib/utils";
 
 type SectionId =
@@ -441,6 +442,17 @@ function ProfileSection() {
     } catch {}
   }, [user, profile?.full_name]);
 
+  /*
+   * The job title is the one entry in `extras` that is no longer local: it is
+   * merged into documents as `{{prepared_by_title}}`, so it has to live on the
+   * profile. The stored copy wins over whatever localStorage still holds, and
+   * `save` writes it back - which quietly migrates anyone whose title only ever
+   * existed in this browser.
+   */
+  useEffect(() => {
+    if (profile?.job_title) setExtras((e) => ({ ...e, jobTitle: profile.job_title ?? "" }));
+  }, [profile?.job_title]);
+
   useEffect(() => {
     setFullName(profile?.full_name ?? "");
   }, [profile?.full_name]);
@@ -449,12 +461,17 @@ function ProfileSection() {
     if (!user) return;
     setSaving(true);
     const composedName = `${extras.firstName} ${extras.lastName}`.trim() || fullName || null;
-    const { error } = await supabase
-      .from("profiles")
-      .upsert(
-        { id: user.id, email: user.email ?? null, full_name: composedName },
-        { onConflict: "id" },
-      );
+    const { error } = await writeWithNewColumns(
+      {
+        id: user.id,
+        email: user.email ?? null,
+        full_name: composedName,
+        job_title: extras.jobTitle.trim() || null,
+      },
+      PROFILE_JOB_KEYS,
+      (row) => supabase.from("profiles").upsert(row as any, { onConflict: "id" }),
+      "Saved without your job title",
+    );
     if (!error) {
       localStorage.setItem(EXTRAS_KEY(user.id), JSON.stringify(extras));
       toast.success("Profile updated");
