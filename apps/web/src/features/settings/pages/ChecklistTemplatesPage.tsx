@@ -82,12 +82,8 @@ import {
 import { restrictToVerticalAxis } from "@/components/builder/builder-tokens";
 import { useAutosave } from "@/components/builder/use-autosave";
 import { TYPE_META, TYPE_ORDER, type ItemType } from "@/lib/checklist-items";
-import {
-  CATEGORY_ORDER,
-  GENERAL_CATEGORY,
-  categoryIcon,
-  makeCategoryRank,
-} from "@/lib/template-categories";
+import { GENERAL_CATEGORY, categoryIcon, makeCategoryRank } from "@/lib/template-categories";
+import { TradeSelect } from "@/components/builder/TradeSelect";
 import { useCompanySetup } from "@/hooks/use-company-setup";
 import { tradeCategoryFor } from "@sitepix/shared";
 
@@ -1602,50 +1598,5 @@ function PreviewRow({ item }: { item: TemplateItem }) {
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * Which trade a checklist is filed under, changed in place.
- *
- * A dropdown rather than free text: the strings have to match the ones the
- * rail groups by and the document library uses, or a typo creates a heading of
- * one. `null` is a real choice - "General" is where a checklist that belongs
- * to no particular trade should sit, and the rail puts that group first
- * because it is the team's own work.
- */
-function TradeSelect({
-  value,
-  onChange,
-}: {
-  value: string | null;
-  onChange: (v: string | null) => void;
-}) {
-  const Icon = categoryIcon(value ?? GENERAL_CATEGORY);
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] font-bold text-muted-foreground transition hover:bg-accent hover:text-foreground"
-        >
-          <Icon className="h-3 w-3" />
-          {value ?? GENERAL_CATEGORY}
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
-        <DropdownMenuLabel>File under</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {[GENERAL_CATEGORY, ...CATEGORY_ORDER].map((c) => {
-          const RowIcon = categoryIcon(c);
-          return (
-            <DropdownMenuItem key={c} onSelect={() => onChange(c === GENERAL_CATEGORY ? null : c)}>
-              <RowIcon className="mr-2 h-4 w-4" />
-              {c}
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

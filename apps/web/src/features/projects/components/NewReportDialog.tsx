@@ -25,8 +25,11 @@ import {
   getReportStarter,
   parseReportTemplateStructure,
   sanitizeCaption,
+  tradeCategoryFor,
   type ReportStarter,
 } from "@sitepix/shared";
+import { makeCategoryRank } from "@/lib/template-categories";
+import { useCompanySetup } from "@/hooks/use-company-setup";
 import { PhotosPerPagePicker } from "@/features/projects/components/PhotosPerPagePicker";
 import { useTemplateGate } from "@/features/projects/components/use-template-gate";
 import { cn } from "@/lib/utils";
@@ -101,6 +104,23 @@ export function NewReportDialog({
   const navigate = useNavigate();
   const { isPro } = useSubscription();
   const { locked: templatesLocked, promptUpgrade } = useTemplateGate();
+
+  /*
+   * The starter library, the company's own trade first.
+   *
+   * Sorted rather than grouped: this dialog is a grid of cards inside a report
+   * flow, not a library browser, and headings here would push the first card
+   * below the fold. Which card leads is the part that matters, and after the
+   * setup wizard that is the one written for their trade.
+   */
+  const { profile: company } = useCompanySetup();
+  const ownTrade = tradeCategoryFor(company.industry);
+  const starters = useMemo(() => {
+    const rank = makeCategoryRank(company.industry, company.trades);
+    return [...REPORT_STARTERS].sort(
+      (a, b) => rank(a.category) - rank(b.category) || a.name.localeCompare(b.name),
+    );
+  }, [company.industry, company.trades]);
 
   const attached = attachPhotos ?? [];
 
@@ -312,7 +332,7 @@ export function NewReportDialog({
                   active={choice.kind === "blank"}
                   onClick={() => setChoice({ kind: "blank" })}
                 />
-                {REPORT_STARTERS.map((t) => (
+                {starters.map((t) => (
                   <StartCard
                     key={t.id}
                     title={t.name}
@@ -320,6 +340,7 @@ export function NewReportDialog({
                     icon={<LayoutTemplate className="h-4 w-4" />}
                     meta={`${t.sections.length} sections · ${t.photosPerPage} per page`}
                     category={t.category}
+                    ownTrade={t.category === ownTrade}
                     locked={templatesLocked}
                     active={choice.kind === "starter" && choice.id === t.id}
                     onClick={() => pickStarter(t)}
@@ -452,6 +473,7 @@ function StartCard({
   icon,
   meta,
   category,
+  ownTrade,
   locked,
   active,
   onClick,
@@ -461,6 +483,8 @@ function StartCard({
   icon: React.ReactNode;
   meta?: string;
   category?: string;
+  /** This card is the company's own trade, so its badge says so. */
+  ownTrade?: boolean;
   locked?: boolean;
   active: boolean;
   onClick: () => void;
@@ -486,7 +510,10 @@ function StartCard({
           {(meta || category) && (
             <div className="mt-1.5 flex flex-wrap items-center gap-1">
               {category && (
-                <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
+                <Badge
+                  variant={ownTrade ? "default" : "secondary"}
+                  className="h-4 px-1.5 text-[10px]"
+                >
                   {category}
                 </Badge>
               )}

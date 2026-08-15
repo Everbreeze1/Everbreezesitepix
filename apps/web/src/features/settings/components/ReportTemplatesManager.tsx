@@ -53,11 +53,15 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   parseReportTemplateStructure,
+  tradeCategoryFor,
   type ReportCoverStyle,
   type ReportSectionLayout,
   type ReportTemplateSection,
   type ReportTemplateStructure,
 } from "@sitepix/shared";
+import { GENERAL_CATEGORY, makeCategoryRank } from "@/lib/template-categories";
+import { TradeSelect } from "@/components/builder/TradeSelect";
+import { useCompanySetup } from "@/hooks/use-company-setup";
 
 /*
  * The shape of `report_templates.sections` now lives in @sitepix/shared, because
@@ -81,6 +85,13 @@ interface ReportTemplate {
   archived: boolean;
   created_at: string;
   updated_at: string;
+  /**
+   * The trade this template is filed under, or null for one filed under
+   * nothing. Optional as well as nullable: a database that predates
+   * 20260829000000_workflow_report_template_trades.sql does not return it, and
+   * every reader treats a missing one as "General".
+   */
+  category?: string | null;
 }
 
 const COVER_STYLES: {
@@ -159,7 +170,9 @@ export function ReportTemplatesManager({ teamId, canManage }: Props) {
     setLoading(true);
     const { data, error } = await supabase
       .from("report_templates" as any)
-      .select("id, team_id, created_by, name, subtitle, sections, archived, created_at, updated_at")
+      .select(
+        "id, team_id, created_by, name, subtitle, sections, archived, created_at, updated_at, category",
+      )
       .order("created_at", { ascending: true });
     if (error) toast.error(error.message ?? "Failed to load report templates");
     setRows((data ?? []) as unknown as ReportTemplate[]);
@@ -169,10 +182,27 @@ export function ReportTemplatesManager({ teamId, canManage }: Props) {
     void load();
   }, []);
 
-  const visible = useMemo(
-    () => rows.filter((r) => (showArchived ? true : !r.archived)),
-    [rows, showArchived],
-  );
+  /*
+   * Ordered by trade, the company's own first, then by creation date within a
+   * trade - the order this list has always had.
+   *
+   * A flat list rather than headed sections: this panel is a narrow column
+   * beside a live preview, and headings in it would push the preview's
+   * companion list past the fold on a laptop. The trade is on each row instead,
+   * which is enough to scan by when the order already groups them.
+   */
+  const { profile: company } = useCompanySetup();
+  const ownTrade = tradeCategoryFor(company.industry);
+  const visible = useMemo(() => {
+    const rank = makeCategoryRank(company.industry, company.trades);
+    return rows
+      .filter((r) => (showArchived ? true : !r.archived))
+      .sort(
+        (a, b) =>
+          rank(a.category || GENERAL_CATEGORY) - rank(b.category || GENERAL_CATEGORY) ||
+          a.created_at.localeCompare(b.created_at),
+      );
+  }, [rows, showArchived, company.industry, company.trades]);
 
   useEffect(() => {
     if (!selectedId && visible.length > 0) setSelectedId(visible[0].id);
@@ -373,12 +403,20 @@ export function ReportTemplatesManager({ teamId, canManage }: Props) {
                         </Badge>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <span className="capitalize">{struct.coverStyle} cover</span>
                       <span>·</span>
                       <span>
                         {struct.items.length} section{struct.items.length === 1 ? "" : "s"}
                       </span>
+                      {r.category && (
+                        <Badge
+                          variant={r.category === ownTrade ? "default" : "secondary"}
+                          className="h-4 px-1.5 text-[10px]"
+                        >
+                          {r.category}
+                        </Badge>
+                      )}
                     </div>
                   </button>
                 </li>
@@ -390,14 +428,41 @@ export function ReportTemplatesManager({ teamId, canManage }: Props) {
 
       <div className="space-y-4">
         {selected ? (
-          <TemplatePreview
-            template={selected}
-            canManage={canManage}
-            onEdit={() => openEdit(selected.id)}
-            onDuplicate={() => void duplicate(selected)}
-            onToggleArchive={() => void toggleArchive(selected)}
-            onDelete={() => void remove(selected)}
-          />
+          <>
+            {canManage && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">Trade</span>
+                {/* Same control as the Checklists and Workflows builders, so a
+                    template is refiled the same way wherever you are. */}
+                <TradeSelect
+                  value={selected.category ?? null}
+                  onChange={(v) => {
+                    setRows((prev) =>
+                      prev.map((r) => (r.id === selected.id ? { ...r, category: v } : r)),
+                    );
+                    void supabase
+                      .from("report_templates" as any)
+                      .update({ category: v })
+                      .eq("id", selected.id)
+                      .then((res: any) => {
+                        if (res.error) {
+                          toast.error(res.error.message);
+                          void load();
+                        }
+                      });
+                  }}
+                />
+              </div>
+            )}
+            <TemplatePreview
+              template={selected}
+              canManage={canManage}
+              onEdit={() => openEdit(selected.id)}
+              onDuplicate={() => void duplicate(selected)}
+              onToggleArchive={() => void toggleArchive(selected)}
+              onDelete={() => void remove(selected)}
+            />
+          </>
         ) : (
           <Card
             className={`${SURFACE_CARD} flex flex-col items-center justify-center gap-2 p-16 text-center`}

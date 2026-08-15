@@ -160,7 +160,11 @@ describe("the Checklists tab reads the company's trade", () => {
   });
 
   it("lets an author refile a checklist without leaving the editor", () => {
-    expect(PAGE).toMatch(/function TradeSelect\(/);
+    // The control is shared with the Workflows and report-template builders -
+    // three copies of one dropdown is how their trade lists drift apart. See
+    // tests/trade-starters.test.ts, which holds all three to the shared one.
+    expect(PAGE).toMatch(/from "@\/components\/builder\/TradeSelect"/);
+    expect(PAGE).toMatch(/<TradeSelect/);
   });
 
   it("selects the column it groups by", () => {
