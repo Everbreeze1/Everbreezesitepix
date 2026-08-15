@@ -2499,3 +2499,23 @@ describe("family: a teammate who accepted but never confirmed", () => {
     expect(src).not.toMatch(/!m\.emailConfirmed\b/);
   });
 });
+
+describe("family: a refusal reported as a server fault", () => {
+  /*
+   * The team ops throw bare Errors, which the RPC layer can only report as 500.
+   * A caller who is not allowed to do something is then indistinguishable from
+   * a broken server: the UI says "internal error" and anything watching 5xx
+   * counts every denied click as an outage.
+   *
+   * Verified live against the running API: 403, 404, 401 respectively.
+   */
+  it("resendMemberConfirmation refuses with a status, not a 500", () => {
+    const src = stripComments(read("apps/api/src/domains/teams/service.ts"));
+    const start = src.indexOf("export async function resendMemberConfirmationService");
+    const body = src.slice(start, src.indexOf("export async function", start + 10));
+    expect(body).toMatch(/new Error\("Forbidden"\), \{ status: 403 \}/);
+    expect(body).toMatch(/new Error\("Member not found"\), \{ status: 404 \}/);
+    // A bare `throw new Error` here would surface as a 500 again.
+    expect(body).not.toMatch(/throw new Error\(/);
+  });
+});
