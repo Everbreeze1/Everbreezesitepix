@@ -47,6 +47,7 @@ import {
   updateMemberRole,
   leaveTeam,
   resendInvite,
+  resendMemberConfirmation,
 } from "@/features/teams/api";
 import { relativeTime } from "@sitepix/shared";
 
@@ -719,6 +720,41 @@ function MembersList({
   const updateRole = updateMemberRole;
   const [confirmRemove, setConfirmRemove] = useState<any | null>(null);
   const [query, setQuery] = useState("");
+  const [resendingId, setResendingId] = useState<string | null>(null);
+
+  /*
+   * Someone who accepted their invite but never confirmed their email is on the
+   * team and cannot sign in. Nothing said so, which is how a new hire ends up
+   * "added" for days while the owner waits for them to start using it.
+   *
+   * `emailConfirmed` is null when the lookup itself failed - unknown, so no
+   * claim is made either way.
+   */
+  const resendConfirmation = async (m: any) => {
+    setResendingId(m.id);
+    try {
+      const res: any = await resendMemberConfirmation({
+        data: {
+          memberId: m.id,
+          origin: typeof window !== "undefined" ? window.location.origin : undefined,
+        },
+      });
+      if (res?.alreadyConfirmed) {
+        toast.success("They have already confirmed. Nothing to send.");
+      } else if (res?.emailSent) {
+        toast.success(`Confirmation email sent to ${m.profile?.email ?? "them"}`);
+      } else {
+        toast.warning("Could not send the confirmation email", {
+          description: "Check the email settings, then try again.",
+        });
+      }
+      onChange();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to send");
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -764,6 +800,8 @@ function MembersList({
             const email = m.profile?.email;
             const canEdit = myRole === "owner" && m.role !== "owner";
             const canRemove = (myRole === "owner" || myRole === "admin") && m.role !== "owner";
+            const unconfirmed = m.emailConfirmed === false;
+            const canResend = myRole === "owner" || myRole === "admin";
             return (
               <li key={m.id} className="flex items-center justify-between gap-4 p-5">
                 <div className="flex min-w-0 items-center gap-4">
@@ -774,18 +812,39 @@ function MembersList({
                     {initials(m.profile?.full_name, email)}
                   </span>
                   <div className="min-w-0">
-                    <div className="truncate font-manrope text-sm font-extrabold text-foreground">
-                      {name}
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-manrope text-sm font-extrabold text-foreground">
+                        {name}
+                      </span>
+                      {unconfirmed && (
+                        <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 font-manrope text-[10px] font-extrabold uppercase tracking-[0.5px] text-amber-600 dark:text-amber-400">
+                          Email not confirmed
+                        </span>
+                      )}
                     </div>
                     <div className="mt-0.5 truncate font-manrope text-xs text-muted-foreground">
                       {roleTitle[m.role] ?? roleLabel[m.role] ?? m.role}
-                      {m.created_at && (
-                        <> · Active {relativeTime(m.created_at).replace("just now", "now")}</>
+                      {unconfirmed ? (
+                        <> · Cannot sign in until they confirm their email</>
+                      ) : (
+                        m.created_at && (
+                          <> · Active {relativeTime(m.created_at).replace("just now", "now")}</>
+                        )
                       )}
                     </div>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
+                  {unconfirmed && canResend && (
+                    <button
+                      type="button"
+                      disabled={resendingId === m.id}
+                      onClick={() => resendConfirmation(m)}
+                      className="rounded-xl bg-primary/10 px-3 py-2 font-manrope text-xs font-extrabold text-primary transition hover:bg-primary/15 disabled:opacity-60"
+                    >
+                      {resendingId === m.id ? "Sending…" : "Resend confirmation"}
+                    </button>
+                  )}
                   {canEdit || canRemove ? (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

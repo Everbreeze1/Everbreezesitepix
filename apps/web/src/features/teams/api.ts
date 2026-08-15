@@ -11,6 +11,7 @@ export {
   updateMemberRole,
   leaveTeam,
   resendInvite,
+  resendMemberConfirmation,
   getTeamActivity,
   getProjectContributors,
   acceptInvite,
