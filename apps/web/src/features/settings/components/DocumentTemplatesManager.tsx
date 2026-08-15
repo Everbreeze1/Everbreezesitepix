@@ -519,6 +519,46 @@ function escapeAttr(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 }
 
+/**
+ * Fields the seeded SQL library merges that the authoring list above has no
+ * entry for. `{{company}}` is the big one - 30 uses across the built-ins - and
+ * it is deliberately not in PLACEHOLDERS, which would offer the author two
+ * identical "Company name" chips inserting different tokens.
+ */
+const SNIPPET_ALIASES: Record<string, string> = { company: "Company name" };
+
+/** Mirrors `fieldLabel` in apps/api/.../pages.ts, for text the server never sees. */
+function snippetLabel(token: string): string {
+  const known = LABEL_BY_TOKEN[token] ?? SNIPPET_ALIASES[token];
+  if (known) return known;
+  const words = token.replace(/_+/g, " ").trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : token;
+}
+
+/**
+ * The grey summary line on a template card.
+ *
+ * Reads as prose rather than as source. Stripping tags alone left the card
+ * previewing `{{project_name}} &nbsp;-&nbsp; Walkthrough Log`, which is both
+ * the merge syntax and a raw entity, on the one screen whose whole job is
+ * helping someone recognise a document by sight.
+ */
+function templateSnippet(html: string): string {
+  const text = html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (_m, raw: string) => snippetLabel(raw.toLowerCase()))
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;|&apos;/gi, "'")
+    // Last, so an escaped entity like `&amp;nbsp;` is not decoded twice.
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.slice(0, 180) || "Empty document";
+}
+
 // ---------------------------------------------------------------------------
 // Placeholder decoration - styles {{token}} as an editable pill in the editor.
 // The raw text stays fully selectable/deletable; we only add a class so it
@@ -959,10 +999,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                   ) : null}
                 </div>
                 <div className="rounded-lg border border-border/60 bg-muted/40 p-3 text-[11px] leading-relaxed text-muted-foreground line-clamp-3">
-                  {body.html
-                    .replace(/<[^>]+>/g, " ")
-                    .trim()
-                    .slice(0, 180) || "Empty document"}
+                  {templateSnippet(body.html)}
                 </div>
                 <div className="mt-auto flex flex-wrap gap-1 border-t border-border/60 pt-3">
                   {/* The primary verb. Without it the Templates page could only
