@@ -23,6 +23,7 @@ import { BlueprintOutcomePreview } from "@/features/settings/components/Blueprin
 import { useBlueprintContents } from "@/hooks/use-blueprint-contents";
 import { toast } from "sonner";
 import { qk } from "@/lib/query-keys";
+import { writeWithNewColumns, PROJECT_CLIENT_KEYS } from "@/lib/merge-field-columns";
 
 interface AddrParts {
   street: string;
@@ -69,6 +70,11 @@ export function NewProjectPage() {
     state: "",
     zip: "",
     formatted: "",
+    // Merge fields. Captured here so the job's first document does not have to
+    // ask for them; equally editable later from the project's Edit dialog.
+    client_name: "",
+    client_contact: "",
+    project_number: "",
   });
   const [projectTemplates, setProjectTemplates] = useState<
     Array<{ id: string; name: string; labels: string[] }>
@@ -246,9 +252,10 @@ export function NewProjectPage() {
     if (!user) return;
     const name = form.name.trim() || form.street.trim() || "Untitled project";
     setSaving(true);
-    const { data, error } = await supabase
-      .from("projects")
-      .insert({
+    // Retried without the client columns if this database predates them, so
+    // creating a project never fails over a field the user may not have filled.
+    const { data, error } = await writeWithNewColumns(
+      {
         created_by: user.id,
         name,
         street: form.street.trim() || null,
@@ -258,9 +265,19 @@ export function NewProjectPage() {
         latitude: coords?.lat ?? null,
         longitude: coords?.lng ?? null,
         status: "active",
-      } as any)
-      .select("id")
-      .single();
+        client_name: form.client_name.trim() || null,
+        client_contact: form.client_contact.trim() || null,
+        project_number: form.project_number.trim() || null,
+      },
+      PROJECT_CLIENT_KEYS,
+      (row) =>
+        supabase
+          .from("projects")
+          .insert(row as any)
+          .select("id")
+          .single(),
+      "Project created without the client details",
+    );
     if (error || !data) {
       setSaving(false);
       return toast.error(error?.message ?? "Could not create project");
@@ -453,6 +470,61 @@ export function NewProjectPage() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder={form.street ? `${form.street} - Site visit` : "Auto-named from address"}
             />
+          </div>
+
+          {/* Merge fields. Every document template asks for these; filling them
+              in once here means the job's documents arrive already complete. */}
+          <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Client &amp; job details{" "}
+              <span className="normal-case text-muted-foreground/70">
+                (optional, fills documents in for you)
+              </span>
+            </Label>
+            <div className="space-y-1">
+              <Label
+                htmlFor="np-client"
+                className="text-[11px] uppercase tracking-wide text-muted-foreground"
+              >
+                Client name
+              </Label>
+              <Input
+                id="np-client"
+                value={form.client_name}
+                placeholder="e.g. Sarah Whitfield"
+                onChange={(e) => setForm({ ...form, client_name: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label
+                  htmlFor="np-client-contact"
+                  className="text-[11px] uppercase tracking-wide text-muted-foreground"
+                >
+                  Client contact
+                </Label>
+                <Input
+                  id="np-client-contact"
+                  value={form.client_contact}
+                  placeholder="Email or phone"
+                  onChange={(e) => setForm({ ...form, client_contact: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label
+                  htmlFor="np-number"
+                  className="text-[11px] uppercase tracking-wide text-muted-foreground"
+                >
+                  Project number
+                </Label>
+                <Input
+                  id="np-number"
+                  value={form.project_number}
+                  placeholder="e.g. PRJ-00421"
+                  onChange={(e) => setForm({ ...form, project_number: e.target.value })}
+                />
+              </div>
+            </div>
           </div>
 
           {(projectTemplates.length > 0 || selectedTemplateId !== "__none") && (

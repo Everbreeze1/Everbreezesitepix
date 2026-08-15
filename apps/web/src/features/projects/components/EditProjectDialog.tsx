@@ -24,6 +24,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { softDeleteProject } from "@/lib/trash.functions";
 import { toast } from "sonner";
 import { MapPin, Trash2 } from "lucide-react";
+import { writeWithNewColumns, PROJECT_CLIENT_KEYS } from "@/lib/merge-field-columns";
 
 export interface EditableProject {
   id: string;
@@ -37,6 +38,15 @@ export interface EditableProject {
   latitude?: number | null;
   longitude?: number | null;
   status: string;
+  /*
+   * Merge fields. Every document template asks for these, and before they had
+   * a home here the "Use in a project" step asked for them again on every
+   * document for the same job. Optional because a database that predates
+   * 20260823000000_project_client_fields.sql simply will not return them.
+   */
+  client_name?: string | null;
+  client_contact?: string | null;
+  project_number?: string | null;
 }
 
 interface Props {
@@ -58,6 +68,9 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
     latitude: project.latitude ?? (null as number | null),
     longitude: project.longitude ?? (null as number | null),
     status: project.status,
+    client_name: project.client_name ?? "",
+    client_contact: project.client_contact ?? "",
+    project_number: project.project_number ?? "",
   });
   const [saving, setSaving] = useState(false);
   const [trashing, setTrashing] = useState(false);
@@ -78,11 +91,22 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
       latitude: form.latitude,
       longitude: form.longitude,
       status: form.status,
+      client_name: form.client_name.trim() || null,
+      client_contact: form.client_contact.trim() || null,
+      project_number: form.project_number.trim() || null,
     };
-    const { error } = await supabase
-      .from("projects")
-      .update(patch as any)
-      .eq("id", project.id);
+    // Retried without the client columns if this database predates them, so a
+    // rename does not fail because of a field the user never touched.
+    const { error } = await writeWithNewColumns(
+      patch,
+      PROJECT_CLIENT_KEYS,
+      (row) =>
+        supabase
+          .from("projects")
+          .update(row as any)
+          .eq("id", project.id),
+      "Saved without the client details",
+    );
     setSaving(false);
     if (error) return toast.error(error.message);
     toast.success("Project updated");
@@ -228,6 +252,46 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
               GPS: {Number(form.latitude).toFixed(5)}, {Number(form.longitude).toFixed(5)}
             </p>
           )}
+
+          {/* Merge fields. Filled in once here, they stop every document
+              created for this job asking for them again. */}
+          <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Client &amp; job details
+              <span className="ml-1.5 font-normal normal-case tracking-normal">
+                fill documents in automatically
+              </span>
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="ep-client">Client name</Label>
+              <Input
+                id="ep-client"
+                value={form.client_name}
+                placeholder="e.g. Sarah Whitfield"
+                onChange={(e) => setForm({ ...form, client_name: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="ep-client-contact">Client contact</Label>
+                <Input
+                  id="ep-client-contact"
+                  value={form.client_contact}
+                  placeholder="Email or phone"
+                  onChange={(e) => setForm({ ...form, client_contact: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ep-number">Project number</Label>
+                <Input
+                  id="ep-number"
+                  value={form.project_number}
+                  placeholder="e.g. PRJ-00421"
+                  onChange={(e) => setForm({ ...form, project_number: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="ep-desc">Description</Label>

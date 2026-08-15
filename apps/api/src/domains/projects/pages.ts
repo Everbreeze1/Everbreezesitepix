@@ -275,19 +275,16 @@ const PLACEHOLDER_LABELS: Record<string, string> = {
  * a click-to-type blank rather than to a merge pill that could never fill
  * itself in.
  *
- * The template library has used all five since it shipped - the daily log asks
- * for the weather, the walkthrough log for the client and the project number -
- * while `loadTokenValues` only ever knew the eight below it. An unrecognised
- * token was left verbatim, so a document created from those templates arrived
- * with `{{weather}}` and `{{client_name}}` printed in it.
+ * Only the weather is left. It is genuinely per-visit - the same job has a
+ * different answer on Tuesday - so storing it on the project would be wrong,
+ * and asking once per document is the right amount of asking.
+ *
+ * The client's name, contact, project number and job title used to be in here
+ * too, which meant retyping all four on every document for the same job. They
+ * have columns now (20260823000000_project_client_fields.sql) and merge like
+ * any other field.
  */
-const PROMPT_TOKENS = new Set([
-  "project_number",
-  "client_name",
-  "client_contact",
-  "prepared_by_title",
-  "weather",
-]);
+const PROMPT_TOKENS = new Set(["weather"]);
 
 /** Fields a template is allowed to reference: everything with a label. */
 export const SUPPORTED_TOKENS: ReadonlySet<string> = new Set(Object.keys(PLACEHOLDER_LABELS));
@@ -303,18 +300,65 @@ export function fieldLabel(token: string): string {
 /** Where a field's value comes from, so an empty one can say so. */
 export type TokenSource = "auto" | "settings" | "manual";
 
+/** Fields that live on the profile, so an empty one is fixed in Settings once. */
 const SETTINGS_TOKENS = new Set([
   "company",
   "company_name",
   "company_address",
   "company_phone",
   "prepared_by",
+  "prepared_by_title",
 ]);
 
 export function tokenSource(token: string): TokenSource {
   if (SETTINGS_TOKENS.has(token)) return "settings";
   if (SUPPORTED_TOKENS.has(token) && !PROMPT_TOKENS.has(token)) return "auto";
   return "manual";
+}
+
+/**
+ * True when Postgres says the column simply is not there (SQLSTATE 42703).
+ *
+ * Distinguished from every other failure on purpose: a missing column is a
+ * migration that has not been applied yet, which this code can work around. Any
+ * other error is a real fault and must keep propagating.
+ */
+export function isMissingColumn(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { code?: string; message?: string };
+  return e.code === "42703" || /column .* does not exist/i.test(e.message ?? "");
+}
+
+/*
+ * The client/job columns are read through a fallback.
+ *
+ * They arrive in 20260823000000_project_client_fields.sql, and migrations here
+ * are applied by hand against the live database. Selecting a column that is not
+ * there yet is not a soft failure - PostgREST answers 42703 and the whole call
+ * throws, which would take document creation down for everyone until someone
+ * ran the SQL. This repo has been there already: restore_missing_columns.sql
+ * exists because live code referenced columns the database did not have.
+ *
+ * So ask for the new columns, and if the database has never heard of them, fall
+ * back to the set that has always existed. Deliberately NOT cached in a
+ * module-level flag: the cost is one wasted round trip per call, only in the
+ * window before the migration lands, and in exchange applying the migration
+ * takes effect immediately instead of after an API restart.
+ *
+ * Both helpers can be deleted, and their selects inlined, once the migration is
+ * applied everywhere.
+ */
+async function selectWithFallback(
+  admin: any,
+  table: string,
+  id: string,
+  extended: string,
+  base: string,
+): Promise<Record<string, any> | null> {
+  const first = await admin.from(table).select(extended).eq("id", id).maybeSingle();
+  if (!isMissingColumn(first.error)) return first.data;
+  const fallback = await admin.from(table).select(base).eq("id", id).maybeSingle();
+  return fallback.data;
 }
 
 /**
@@ -326,17 +370,21 @@ export async function loadTokenValues(
   createdBy: string,
 ): Promise<Record<string, string | null | undefined>> {
   const admin = getSupabaseAdmin();
-  const [{ data: project }, { data: profile }] = await Promise.all([
-    (admin as any)
-      .from("projects")
-      .select("name, street, city, state")
-      .eq("id", projectId)
-      .maybeSingle(),
-    (admin as any)
-      .from("profiles")
-      .select("full_name, company, company_address, company_phone")
-      .eq("id", createdBy)
-      .maybeSingle(),
+  const [project, profile] = await Promise.all([
+    selectWithFallback(
+      admin,
+      "projects",
+      projectId,
+      "name, street, city, state, client_name, client_contact, project_number",
+      "name, street, city, state",
+    ),
+    selectWithFallback(
+      admin,
+      "profiles",
+      createdBy,
+      "full_name, company, company_address, company_phone, job_title",
+      "full_name, company, company_address, company_phone",
+    ),
   ]);
   const address = project
     ? [project.street, project.city, project.state].filter(Boolean).join(", ")
@@ -354,7 +402,11 @@ export async function loadTokenValues(
     company_phone: profile?.company_phone,
     project_name: project?.name,
     project_address: address,
+    project_number: project?.project_number,
+    client_name: project?.client_name,
+    client_contact: project?.client_contact,
     prepared_by: profile?.full_name,
+    prepared_by_title: profile?.job_title,
     date: today,
   };
 }

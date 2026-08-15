@@ -133,9 +133,17 @@ export function UseTemplateDialog({
                         placeholder={placeholderFor(f)}
                         onChange={(e) => setValues((v) => ({ ...v, [f.token]: e.target.value }))}
                       />
+                      {/* Where to put it so it is never asked for again. An
+                          empty field here means its home is empty too, and the
+                          user has no way of knowing that home exists. */}
                       {f.source === "settings" && (
                         <span className="block text-[11px] text-muted-foreground">
                           Set this once under Settings and every document picks it up.
+                        </span>
+                      )}
+                      {f.source === "auto" && (
+                        <span className="block text-[11px] text-muted-foreground">
+                          Save it on the project and it fills in by itself next time.
                         </span>
                       )}
                     </label>
