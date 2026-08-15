@@ -474,6 +474,17 @@ function ProfileSection() {
     );
     if (!error) {
       localStorage.setItem(EXTRAS_KEY(user.id), JSON.stringify(extras));
+      /*
+       * Keep the auth copy of the name in step with the row we just wrote. It
+       * is set once at signup (and once at invite accept) and was never updated
+       * again, so an account that renamed itself here kept its original name on
+       * the session forever - which is how a signup name resurfaces months
+       * later in anything that only has the session to read. Best effort: the
+       * profile row is the authority, so a failure here is not worth a toast.
+       */
+      if (composedName && composedName !== (user.user_metadata?.full_name as string | undefined)) {
+        await supabase.auth.updateUser({ data: { full_name: composedName } });
+      }
       toast.success("Profile updated");
       await reload();
     } else {

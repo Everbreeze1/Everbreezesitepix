@@ -9,6 +9,7 @@ import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { supabase } from "@/integrations/sitepix/client";
 import { getMyTeam } from "@/lib/teams.functions";
 import { CaptureUpdateDialog } from "@/components/CaptureUpdateDialog";
+import { AccountSetupCard } from "@/features/settings/components/AccountSetupCard";
 import type { ProjectPickerRow } from "@/features/projects/components/CreateGroupDialog";
 import { qk } from "@/lib/query-keys";
 
@@ -57,7 +58,7 @@ function projectLocation(p: ProjectRow): string | null {
 export function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { profile } = useProfile();
+  const { profile, loading: profileLoading } = useProfile();
   const { guard } = useSubscriptionGate();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [activeCards, setActiveCards] = useState<ActiveProjectCard[]>([]);
@@ -67,11 +68,19 @@ export function DashboardPage() {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [captureOpen, setCaptureOpen] = useState(false);
 
-  const firstName =
-    profile?.full_name?.split(" ")[0] ??
-    (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
-    user?.email?.split("@")[0] ??
-    "there";
+  /*
+   * The profile row is the only thing allowed to name the person here.
+   *
+   * This used to fall back to `user_metadata.full_name` and then to the email
+   * local part while the profile was loading. Neither is kept in step with
+   * Settings: the auth copy is whatever was typed at signup and is never
+   * rewritten. So a user who had since renamed themselves got greeted by the
+   * signup name for a beat, and watched it change once the row arrived.
+   *
+   * Null while the row is still on its way, and the heading renders that state
+   * rather than inventing a name for it.
+   */
+  const firstName = profile?.full_name?.trim().split(/\s+/)[0] || null;
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -363,6 +372,10 @@ export function DashboardPage() {
 
   return (
     <div className="min-h-full bg-background px-6 pb-24 pt-6 sm:px-10 sm:pt-10">
+      {/* Above the greeting, and only until it is answered or dismissed - see
+          AccountSetupCard, which renders nothing in every other case. */}
+      <AccountSetupCard className="mb-5" />
+
       {/* Greeting hero */}
       <div className="relative overflow-hidden rounded-[32px] border border-border bg-card p-8 sm:p-10">
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary/10 blur-[64px]" />
@@ -371,8 +384,22 @@ export function DashboardPage() {
             <p className="font-manrope text-xs font-extrabold uppercase tracking-[1.92px] text-primary">
               {today}
             </p>
-            <h1 className="font-display mt-4 text-5xl font-bold leading-none tracking-[-2.1px] text-foreground sm:text-6xl">
-              {greeting}, {firstName}.
+            <h1
+              aria-busy={!firstName && profileLoading}
+              className="font-display mt-4 text-5xl font-bold leading-none tracking-[-2.1px] text-foreground sm:text-6xl"
+            >
+              {/*
+               * Three states, and the name only ever appears once it is known.
+               * The unknown one drops the punctuation rather than holding a
+               * shimmer block where the name goes: at this size the block is
+               * wide enough to wrap onto its own line, and a heading that
+               * reflows as it resolves trades one distraction for another.
+               */}
+              {firstName
+                ? `${greeting}, ${firstName}.`
+                : profileLoading
+                  ? greeting
+                  : `${greeting}.`}
             </h1>
             <p className="font-manrope mt-5 text-sm leading-6 text-muted-foreground">
               Your crews are documenting steadily. Here is the field record that needs your
