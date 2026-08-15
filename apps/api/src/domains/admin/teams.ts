@@ -17,6 +17,24 @@ export interface PlatformTeam {
   photoCount: number;
   storageBytes: number;
   createdAt: string;
+  /*
+   * The business profile, from the account setup wizard. Null until a company
+   * answers, which is most of the point of surfacing it here: "which
+   * industries are actually signing up, and how many of them never told us"
+   * is not answerable from billing rows.
+   *
+   * Ids, not labels. The admin UI resolves them through the same
+   * packages/shared list the wizard renders, so a relabelled industry reads
+   * correctly here without a backfill.
+   */
+  industry: string | null;
+  trades: string[];
+  teamSize: string | null;
+  projectVolume: string | null;
+  goals: string[];
+  heardFrom: string | null;
+  serviceArea: string | null;
+  profileCompletedAt: string | null;
 }
 
 export const listPlatformTeamsInputSchema = z.object({
@@ -34,7 +52,10 @@ export async function listPlatformTeamsService(
 
   let query = (admin as any)
     .from("teams")
-    .select("id, name, plan, subscription_status, stripe_customer_id, is_internal, created_at")
+    .select(
+      "id, name, plan, subscription_status, stripe_customer_id, is_internal, created_at, " +
+        "industry, trades, team_size, project_volume, goals, heard_from, service_area, profile_completed_at",
+    )
     .order("created_at", { ascending: false })
     .limit(data.limit + 1);
   if (data.cursor) query = query.lt("created_at", data.cursor);
@@ -74,7 +95,10 @@ export async function listPlatformTeamsService(
   const projectIds = projects.map((p) => p.id as string);
 
   const { data: photoRows } = projectIds.length
-    ? await (admin as any).from("photos").select("project_id, size_bytes").in("project_id", projectIds)
+    ? await (admin as any)
+        .from("photos")
+        .select("project_id, size_bytes")
+        .in("project_id", projectIds)
     : { data: [] };
   const photos = (photoRows as any[]) ?? [];
   const photoCountByTeam = new Map<string, number>();
@@ -99,6 +123,14 @@ export async function listPlatformTeamsService(
       photoCount: photoCountByTeam.get(t.id) ?? 0,
       storageBytes: storageBytesByTeam.get(t.id) ?? 0,
       createdAt: t.created_at,
+      industry: t.industry ?? null,
+      trades: Array.isArray(t.trades) ? t.trades : [],
+      teamSize: t.team_size ?? null,
+      projectVolume: t.project_volume ?? null,
+      goals: Array.isArray(t.goals) ? t.goals : [],
+      heardFrom: t.heard_from ?? null,
+      serviceArea: t.service_area ?? null,
+      profileCompletedAt: t.profile_completed_at ?? null,
     })),
     nextCursor: hasMore ? page[page.length - 1].created_at : null,
   };
@@ -140,7 +172,9 @@ export async function getPlatformTeamDetailService(
 
   const { data: team, error: teamError } = await (admin as any)
     .from("teams")
-    .select("id, name, plan, subscription_status, stripe_customer_id, stripe_subscription_id, is_internal, created_at")
+    .select(
+      "id, name, plan, subscription_status, stripe_customer_id, stripe_subscription_id, is_internal, created_at",
+    )
     .eq("id", data.teamId)
     .single();
   if (teamError || !team) throw new Error("Team not found");
@@ -168,7 +202,10 @@ export async function getPlatformTeamDetailService(
   const projectIds = projects.map((p) => p.id as string);
 
   const { data: photoRows } = projectIds.length
-    ? await (admin as any).from("photos").select("project_id, size_bytes").in("project_id", projectIds)
+    ? await (admin as any)
+        .from("photos")
+        .select("project_id, size_bytes")
+        .in("project_id", projectIds)
     : { data: [] };
   const photos = (photoRows as any[]) ?? [];
   const photoCountByProject = new Map<string, number>();

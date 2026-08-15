@@ -16,6 +16,8 @@ import type {
   resendInviteService,
   getTeamActivityService,
   getProjectContributorsService,
+  saveCompanyProfileService,
+  dismissSetupPromptService,
 } from "@sitepix/api";
 
 export type { ProjectContributor, TeamActivityItem, TeamMemberContribution };
@@ -26,6 +28,32 @@ type Result<T extends (...args: never[]) => unknown> = Awaited<ReturnType<T>>;
 export const getMyTeam = rpcOp<undefined, Result<typeof getMyTeamService>>("getMyTeam");
 
 export const createTeam = rpcOp<{ name: string }, Result<typeof createTeamService>>("createTeam");
+
+/**
+ * The account setup answers. Every field optional - the wizard saves a step at
+ * a time, and Settings saves one field at a time, so a partial payload has to
+ * mean "change these" and not "these are all the answers now".
+ *
+ * `companyName` creates the team when the caller has none, which is the usual
+ * case: a trial account has no team row until something makes one.
+ */
+export const saveCompanyProfile = rpcOp<
+  {
+    companyName?: string;
+    industry?: string | null;
+    trades?: string[];
+    team_size?: string | null;
+    project_volume?: string | null;
+    goals?: string[];
+    heard_from?: string | null;
+    service_area?: string | null;
+  },
+  Result<typeof saveCompanyProfileService>
+>("saveCompanyProfile");
+
+export const dismissSetupPrompt = rpcOp<undefined, Result<typeof dismissSetupPromptService>>(
+  "dismissSetupPrompt",
+);
 
 export const inviteMember = rpcOp<
   {

@@ -123,6 +123,8 @@ export {
   resendInviteService,
   getTeamActivityService,
   getProjectContributorsService,
+  saveCompanyProfileService,
+  dismissSetupPromptService,
 } from "./domains/teams/service";
 export type {
   TeamMemberContribution,

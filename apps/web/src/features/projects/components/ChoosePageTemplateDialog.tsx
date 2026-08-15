@@ -23,7 +23,9 @@ import {
   type DocumentTemplateSummary,
 } from "@/lib/project-pages.functions";
 import { fillTemplatePreview } from "@/lib/template-preview";
-import { categoryIcon, categoryRank, TEAM_SECTION } from "@/lib/template-categories";
+import { categoryIcon, makeCategoryRank, TEAM_SECTION } from "@/lib/template-categories";
+import { useCompanySetup } from "@/hooks/use-company-setup";
+import { tradeCategoryFor } from "@sitepix/shared";
 
 type Filter = "all" | "team" | "example";
 
@@ -36,11 +38,16 @@ type Filter = "all" | "team" | "example";
  * service call" meant reading all of it.
  *
  * So the first question the dialog asks is now "what trade are you", answered
- * by nine collapsed rows you can take in at a glance, and only the section you
- * open lists templates. That makes the trade order load-bearing: a plumber must
- * not have to scroll past insurance and field admin to reach Plumbing. It lives
- * in @/lib/template-categories, shared with the Templates page that authors the
- * library, so the two screens cannot group the same templates differently.
+ * by eleven collapsed rows you can take in at a glance, and only the section
+ * you open lists templates. That makes the trade order load-bearing: a plumber
+ * must not have to scroll past insurance and field admin to reach Plumbing. It
+ * lives in @/lib/template-categories, shared with the Templates page that
+ * authors the library, so the two screens cannot group the same templates
+ * differently.
+ *
+ * And once the company has answered the setup wizard, the order stops being a
+ * guess: `makeCategoryRank` lifts their own trades to the top and the first one
+ * opens itself, so the sheet they fill in every day is the sheet they land on.
  */
 
 /**
@@ -76,6 +83,16 @@ export function ChoosePageTemplateDialog({
   const [preview, setPreview] = useState<{ id: string; name: string; html: string } | null>(null);
   /** Per-row, not global: a slow preview must not blank the list behind it. */
   const [previewingId, setPreviewingId] = useState<string | null>(null);
+  /*
+   * The company's own trades, which decide the section order. Cached by
+   * react-query under the same key the rest of the app uses, so opening this
+   * dialog costs no extra request in the normal case.
+   */
+  const { profile: company } = useCompanySetup();
+  const rank = useMemo(
+    () => makeCategoryRank(company.industry, company.trades),
+    [company.industry, company.trades],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -133,12 +150,26 @@ export function ChoosePageTemplateDialog({
       else byCategory.set(key, [t]);
     }
     for (const [cat, items] of Array.from(byCategory.entries()).sort(
-      (a, b) => categoryRank(a[0]) - categoryRank(b[0]) || a[0].localeCompare(b[0]),
+      (a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]),
     )) {
       groups.push([cat, items]);
     }
     return groups.filter(([, items]) => items.length > 0);
-  }, [visible]);
+  }, [visible, rank]);
+
+  /**
+   * The heading to open on arrival: the company's own trade, when the library
+   * has anything filed under it.
+   *
+   * Null for a company that has not answered the setup wizard, and null for the
+   * two industries with no trade section of their own - see `tradeCategoryFor`.
+   * Both cases fall back to the old behaviour of opening nothing, which is the
+   * right answer when we genuinely do not know.
+   */
+  const ownTrade = useMemo(() => {
+    const trade = tradeCategoryFor(company.industry);
+    return trade && sections.some(([heading]) => heading === trade) ? trade : null;
+  }, [sections, company.industry]);
 
   /*
    * Searching has to open what it found, or the results hide inside collapsed
@@ -155,8 +186,12 @@ export function ChoosePageTemplateDialog({
   const query = search.trim();
   useEffect(() => {
     const headings = sectionsRef.current.map(([heading]) => heading);
-    setOpenSections(query || headings.length === 1 ? headings : []);
-  }, [query, filter, templates]);
+    if (query || headings.length === 1) return setOpenSections(headings);
+    // Their own trade, already open. One click saved on the screen a tech
+    // opens several times a day, and it also answers "did my setup answers
+    // actually do anything" without them having to look for it.
+    setOpenSections(ownTrade ? [ownTrade] : []);
+  }, [query, filter, templates, ownTrade]);
 
   const allExpanded = sections.length > 0 && sections.every(([h]) => openSections.includes(h));
 
@@ -292,8 +327,15 @@ export function ChoosePageTemplateDialog({
                               <Icon className="h-4 w-4 text-primary" />
                             </span>
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-bold text-foreground">
-                                {heading}
+                              <span className="flex items-center gap-2">
+                                <span className="truncate text-sm font-bold text-foreground">
+                                  {heading}
+                                </span>
+                                {heading === ownTrade && (
+                                  <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.6px] text-primary">
+                                    Your trade
+                                  </span>
+                                )}
                               </span>
                               {/* Derived from the templates themselves rather than
                                   hardcoded copy, so it cannot drift from the seed. */}

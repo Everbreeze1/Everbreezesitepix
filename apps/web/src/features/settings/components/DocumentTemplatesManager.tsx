@@ -85,8 +85,10 @@ import {
   CATEGORY_ORDER,
   GENERAL_CATEGORY,
   categoryIcon,
-  categoryRank,
+  makeCategoryRank,
 } from "@/lib/template-categories";
+import { useCompanySetup } from "@/hooks/use-company-setup";
+import { tradeCategoryFor } from "@sitepix/shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -689,6 +691,16 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   const [showArchived, setShowArchived] = useState(false);
   /** Which trade section is on screen. `null` = every one of them. */
   const [trade, setTrade] = useState<string | null>(null);
+  /*
+   * The company's own trades, from the account setup wizard. They reorder the
+   * sections below and decide which chip the trade filter opens on, so a
+   * cleaning contractor stops finding their templates seventh.
+   */
+  const { profile: company } = useCompanySetup();
+  const rank = useMemo(
+    () => makeCategoryRank(company.industry, company.trades),
+    [company.industry, company.trades],
+  );
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [saving, setSaving] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -794,9 +806,21 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
       });
     }
     return Array.from(byCategory.entries()).sort(
-      (a, b) => categoryRank(a[0]) - categoryRank(b[0]) || a[0].localeCompare(b[0]),
+      (a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]),
     );
-  }, [visible]);
+  }, [visible, rank]);
+
+  /**
+   * The company's own trade, when the library has anything filed under it.
+   *
+   * Same source as the in-project picker, so the heading badged "Your trade"
+   * here is the one that opens itself there. Null for a company that has not
+   * answered, and for the two industries with no trade section of their own.
+   */
+  const ownTrade = useMemo(() => {
+    const trade = tradeCategoryFor(company.industry);
+    return trade && sections.some(([heading]) => heading === trade) ? trade : null;
+  }, [sections, company.industry]);
 
   /*
    * A filter that outlives its section is a page that looks empty: archive the
@@ -1065,9 +1089,13 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
         </div>
       </div>
 
-      {/* Trade filter. Nine sections is a long page to scroll, so a sparky can
+      {/* Trade filter. Eleven sections is a long page to scroll, so a sparky can
           cut it to the one that is theirs. Hidden when everything on the page
-          is one trade already, where it would only ever be a no-op. */}
+          is one trade already, where it would only ever be a no-op.
+
+          The chips follow `sections`, which the business profile reorders, so
+          the company's own trade is the first one after "All trades" rather
+          than wherever the fixed order happens to put it. */}
       {sections.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="mr-1 text-[10px] font-extrabold uppercase tracking-[1.4px] text-muted-foreground">
@@ -1103,6 +1131,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                 <Icon className="h-3.5 w-3.5" />
                 {heading}
                 <span className="opacity-70">{list.length}</span>
+                {heading === ownTrade && <span aria-label="Your trade">★</span>}
               </button>
             );
           })}
@@ -1135,6 +1164,11 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                 <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
                   {list.length}
                 </span>
+                {heading === ownTrade && (
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.6px] text-primary">
+                    Your trade
+                  </span>
+                )}
                 <span className="h-px flex-1 bg-border/60" />
               </div>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

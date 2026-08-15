@@ -206,7 +206,14 @@ describe("the Templates page files the library by trade", () => {
       expect(src, `${file} does not read the shared trade order`).toMatch(
         /from "@\/lib\/template-categories"/,
       );
-      expect(src, `${file} does not sort sections by trade`).toMatch(/categoryRank\(/);
+      /*
+       * `categoryRank` is the fixed order; `makeCategoryRank` is the same
+       * order with the company's own trades lifted to the front, and the two
+       * template screens use it once the setup wizard has been answered.
+       * Either counts as "sorts by trade" - what must not happen is a screen
+       * ordering the library some third way.
+       */
+      expect(src, `${file} does not sort sections by trade`).toMatch(/categoryRank\(/i);
     }
   });
 

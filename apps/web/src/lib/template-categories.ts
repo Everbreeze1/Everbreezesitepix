@@ -4,7 +4,9 @@ import {
   ClipboardList,
   Droplets,
   FileText,
+  Hammer,
   HardHat,
+  Home,
   ShieldCheck,
   Sparkles,
   Waves,
@@ -12,6 +14,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
+import { recommendedCategories } from "@sitepix/shared";
 
 /**
  * The trade a document template belongs to.
@@ -30,9 +33,11 @@ export const CATEGORY_ORDER = [
   "Electrical",
   "HVAC",
   "Plumbing",
+  "Construction",
   "Roofing & Exterior",
   "Restoration",
   "Cleaning",
+  "Real Estate",
   "Field Reports",
   "Field Admin",
   "Insurance & Adjusting",
@@ -56,9 +61,11 @@ export const CATEGORY_ICON: Record<string, LucideIcon> = {
   Electrical: Zap,
   HVAC: Wind,
   Plumbing: Droplets,
+  Construction: Hammer,
   "Roofing & Exterior": HardHat,
   Restoration: Waves,
   Cleaning: Sparkles,
+  "Real Estate": Home,
   "Field Reports": ClipboardList,
   "Field Admin": Briefcase,
   "Insurance & Adjusting": ShieldCheck,
@@ -77,4 +84,35 @@ export function categoryRank(category: string): number {
   if (category === GENERAL_CATEGORY) return -1;
   const i = CATEGORY_ORDER.indexOf(category);
   return i === -1 ? CATEGORY_ORDER.length : i;
+}
+
+/**
+ * The same sort, but with the company's own trades lifted to the front.
+ *
+ * `CATEGORY_ORDER` is a fixed opinion about which trades matter most, and it
+ * has to be, because it is what a brand new account with no answers sees. Once
+ * a company has told us they are a cleaning contractor, that opinion is simply
+ * wrong for them: their templates sat seventh, below three trades they will
+ * never open.
+ *
+ * `industry` is the id they picked, `trades` the extra ones - both from
+ * packages/shared, both stored on the team. With neither, this is exactly
+ * `categoryRank`, which is why every caller can use it unconditionally.
+ *
+ * The team's own work still outranks everything - a recommendation is a good
+ * guess about the built-in library, and a template they wrote themselves is
+ * not a guess. So General keeps the top, recommended trades take -1000 upward
+ * beneath it, and every remaining trade keeps its `CATEGORY_ORDER` position.
+ */
+export function makeCategoryRank(
+  industry: string | null | undefined,
+  trades: readonly string[] | null | undefined,
+): (category: string) => number {
+  const recommended = recommendedCategories(industry, trades ?? []);
+  if (recommended.length === 0) return categoryRank;
+  return (category: string) => {
+    if (category === GENERAL_CATEGORY) return -2000;
+    const i = recommended.indexOf(category);
+    return i === -1 ? categoryRank(category) : -1000 + i;
+  };
 }

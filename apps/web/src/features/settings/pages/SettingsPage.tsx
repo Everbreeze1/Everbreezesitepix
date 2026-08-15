@@ -49,6 +49,7 @@ import { listReviewLinks, setReviewLinks, type ReviewLink } from "@/lib/review-l
 import { useStorageUsage, formatBytes } from "@/hooks/use-storage-usage";
 import { SUPPORT_EMAIL, mailtoHref } from "@/lib/contact";
 import { writeWithNewColumns, PROFILE_JOB_KEYS } from "@/lib/merge-field-columns";
+import { BusinessProfileSection } from "@/features/settings/components/BusinessProfileSection";
 import { cn } from "@/lib/utils";
 
 type SectionId =
@@ -1075,6 +1076,9 @@ function CompanySection({
 
   return (
     <>
+      {/* Who the business is, before the branding it puts on documents. */}
+      <BusinessProfileSection />
+
       <div className="flex flex-col gap-5 rounded-2xl bg-accent p-5 sm:flex-row sm:items-center">
         <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[21.6px] bg-card shadow-sm">
           {profile?.company_logo_url ? (

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { listPlatformTeams, syncTeamBilling } from "@/lib/admin.functions";
 import { formatBytes } from "@/hooks/use-storage-usage";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { TEAM_SIZES, choiceLabel, industryLabel } from "@sitepix/shared";
 
 function statusBadgeClass(status: string): string {
   if (status === "active" || status === "trialing") return "bg-emerald-500/10 text-emerald-600";
@@ -30,6 +31,25 @@ export function AdminTeamsPage() {
   const teams = data?.teams ?? [];
   const totalStorage = teams.reduce((sum, t) => sum + t.storageBytes, 0);
   const activeCount = teams.filter((t) => t.subscriptionStatus === "active").length;
+
+  /*
+   * Who is actually signing up, by trade.
+   *
+   * This is the question the business profile was added to answer, so it gets
+   * its own panel rather than being something you reconstruct by reading the
+   * table. Counted over the page in view, and labelled as such: the list is
+   * cursor-paginated, and a total that silently means "the first fifty" is
+   * worse than no total.
+   */
+  const byIndustry = (() => {
+    const counts = new Map<string, number>();
+    for (const t of teams) {
+      const key = t.industry ?? "__none";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  })();
+  const answered = teams.filter((t) => t.industry).length;
 
   const handleSync = async (teamId: string) => {
     setSyncingId(teamId);
@@ -58,7 +78,9 @@ export function AdminTeamsPage() {
           <p className="mt-1 text-2xl font-extrabold text-foreground">{activeCount}</p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Projects</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            Projects
+          </p>
           <p className="mt-1 text-2xl font-extrabold text-foreground">
             {teams.reduce((sum, t) => sum + t.projectCount, 0)}
           </p>
@@ -67,9 +89,37 @@ export function AdminTeamsPage() {
           <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
             Storage used
           </p>
-          <p className="mt-1 text-2xl font-extrabold text-foreground">{formatBytes(totalStorage)}</p>
+          <p className="mt-1 text-2xl font-extrabold text-foreground">
+            {formatBytes(totalStorage)}
+          </p>
         </div>
       </div>
+
+      {teams.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-border bg-card p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              Industry mix
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {answered} of {teams.length} shown have completed the setup wizard
+            </p>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {byIndustry.map(([id, count]) => (
+              <span
+                key={id}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${
+                  id === "__none" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"
+                }`}
+              >
+                {id === "__none" ? "Not answered" : (industryLabel(id) ?? id)}
+                <span className="opacity-70">{count}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="relative mt-6 max-w-sm">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -94,6 +144,8 @@ export function AdminTeamsPage() {
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="pb-2 pr-4">Team</th>
+                  <th className="pb-2 pr-4">Industry</th>
+                  <th className="pb-2 pr-4">Size</th>
                   <th className="pb-2 pr-4">Plan</th>
                   <th className="pb-2 pr-4">Status</th>
                   <th className="pb-2 pr-4">Members</th>
@@ -120,6 +172,12 @@ export function AdminTeamsPage() {
                         </span>
                       )}
                     </td>
+                    <td className="py-2 pr-4 text-muted-foreground">
+                      {industryLabel(t.industry) ?? <span className="opacity-50">-</span>}
+                    </td>
+                    <td className="py-2 pr-4 text-muted-foreground">
+                      {choiceLabel(TEAM_SIZES, t.teamSize) ?? <span className="opacity-50">-</span>}
+                    </td>
                     <td className="py-2 pr-4 capitalize text-muted-foreground">{t.plan}</td>
                     <td className="py-2 pr-4">
                       <span
@@ -130,7 +188,9 @@ export function AdminTeamsPage() {
                     </td>
                     <td className="py-2 pr-4 text-muted-foreground">{t.memberCount}</td>
                     <td className="py-2 pr-4 text-muted-foreground">{t.projectCount}</td>
-                    <td className="py-2 pr-4 text-muted-foreground">{formatBytes(t.storageBytes)}</td>
+                    <td className="py-2 pr-4 text-muted-foreground">
+                      {formatBytes(t.storageBytes)}
+                    </td>
                     <td className="py-2 pr-4 text-muted-foreground">
                       {new Date(t.createdAt).toLocaleDateString()}
                     </td>
