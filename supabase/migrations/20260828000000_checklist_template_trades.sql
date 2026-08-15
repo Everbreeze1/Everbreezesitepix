@@ -1,0 +1,54 @@
+-- Checklists get a trade, the same way documents already have one.
+--
+-- 20260820000000 and 20260827000100 filed the document library by trade, and
+-- 20260827000000 let a company say which trade is theirs. Both stopped at the
+-- Documents tab. The Templates page has seven of them, so a company that
+-- answered "we are electricians", watched their document templates jump to the
+-- top, and then clicked Checklists found one flat alphabetical list again -
+-- which reads as the setting not having worked rather than as a tab we had not
+-- got to yet.
+--
+-- One nullable column. Null means "not filed", which is what every existing
+-- row honestly is, and the page groups those under General rather than hiding
+-- them.
+--
+-- WHY NOT A SEED, the way document templates are done. `checklist_templates`
+-- is per-user: `created_by` is NOT NULL and all four policies are
+-- `auth.uid() = created_by`, so there is no such thing as an ownerless
+-- built-in here and no row this migration could insert that anyone would be
+-- allowed to read. The equivalent library lives in `STARTER_TEMPLATES` in
+-- apps/web/src/features/settings/pages/ChecklistTemplatesPage.tsx and is
+-- copied into a user's own rows on demand. That is where the per-trade
+-- starters are added, in the same change as this column.
+--
+-- The strings written here are the categories from
+-- apps/web/src/lib/template-categories.ts - the same vocabulary the document
+-- library uses, deliberately, so "Electrical" means one thing across the whole
+-- Templates page and `makeCategoryRank` can order both tabs from one answer.
+--
+-- Additive and nullable, so every existing row stays valid and no current
+-- query changes meaning. The column inherits the table's existing RLS, so
+-- there is nothing to grant.
+--
+-- Idempotent - ADD COLUMN IF NOT EXISTS. Safe to re-run.
+-- Apply manually in the Supabase SQL editor (or `supabase db push`).
+
+ALTER TABLE public.checklist_templates
+  ADD COLUMN IF NOT EXISTS category TEXT;
+
+-- === VERIFY ================================================================
+-- Expect one row, nullable.
+--
+-- SELECT column_name, data_type, is_nullable
+--   FROM information_schema.columns
+--  WHERE table_schema = 'public'
+--    AND table_name = 'checklist_templates'
+--    AND column_name = 'category';
+--
+-- How teams have filed them, once the tab has been used.
+--
+-- SELECT coalesce(category, 'General') AS trade, count(*)
+--   FROM public.checklist_templates
+--  WHERE archived = false
+--  GROUP BY 1
+--  ORDER BY 2 DESC;

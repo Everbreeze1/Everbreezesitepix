@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   Plus,
@@ -82,6 +82,14 @@ import {
 import { restrictToVerticalAxis } from "@/components/builder/builder-tokens";
 import { useAutosave } from "@/components/builder/use-autosave";
 import { TYPE_META, TYPE_ORDER, type ItemType } from "@/lib/checklist-items";
+import {
+  CATEGORY_ORDER,
+  GENERAL_CATEGORY,
+  categoryIcon,
+  makeCategoryRank,
+} from "@/lib/template-categories";
+import { useCompanySetup } from "@/hooks/use-company-setup";
+import { tradeCategoryFor } from "@sitepix/shared";
 
 interface Template {
   id: string;
@@ -89,6 +97,14 @@ interface Template {
   description: string | null;
   archived: boolean;
   created_at: string;
+  /**
+   * The trade this checklist belongs to, or null for one filed under nothing.
+   *
+   * Optional rather than merely nullable: a database that predates
+   * 20260828000000_checklist_template_trades.sql does not return the column at
+   * all, and every reader here treats a missing one as "General".
+   */
+  category?: string | null;
 }
 interface TemplateItem {
   id: string;
@@ -100,13 +116,34 @@ interface TemplateItem {
   description: string | null;
 }
 
+/**
+ * The checklist library, and the trade each one belongs to.
+ *
+ * These are not database rows. `checklist_templates` is per-user - `created_by`
+ * is NOT NULL and every policy is `auth.uid() = created_by` - so there is no
+ * ownerless built-in to seed, the way the document library has. A starter is
+ * copied into the user's own rows when they pick it.
+ *
+ * `category` is the same vocabulary the document library uses, from
+ * @/lib/template-categories, so a company that said "we are plumbers" gets
+ * Plumbing first on this tab and the Documents tab from the one answer.
+ *
+ * Four of these predate trades and covered restoration, HVAC, roofing and a
+ * catch-all. An electrician, plumber, GC, agent or cleaner opening Starters
+ * found nothing addressed to their work and built every checklist by hand, so
+ * the six below them exist for exactly the reason the trade document templates
+ * do. `tests/checklist-starters.test.ts` holds them to one per trade.
+ */
 const STARTER_TEMPLATES: {
   name: string;
   description: string;
+  /** A category from CATEGORY_ORDER, or undefined for a genuinely general one. */
+  category?: string;
   items: { label: string; item_type: ItemType; required?: boolean; description?: string }[];
 }[] = [
   {
     name: "Damage Assessment",
+    category: "Restoration",
     description: "Rate condition of key building elements (1 = poor, 5 = excellent).",
     items: [
       { label: "Overall structural condition", item_type: "rating", required: true },
@@ -120,6 +157,7 @@ const STARTER_TEMPLATES: {
   },
   {
     name: "HVAC Inspection",
+    category: "HVAC",
     description: "Standard HVAC service call inspection.",
     items: [
       { label: "Thermostat operating correctly", item_type: "pass_fail", required: true },
@@ -135,6 +173,7 @@ const STARTER_TEMPLATES: {
   },
   {
     name: "Roof Inspection",
+    category: "Roofing & Exterior",
     description: "Visual inspection of roof system.",
     items: [
       { label: "Overall roof condition", item_type: "rating", required: true },
@@ -148,6 +187,7 @@ const STARTER_TEMPLATES: {
   },
   {
     name: "General Service Call",
+    category: "Field Reports",
     description: "Catch-all checklist for any field visit.",
     items: [
       { label: "Arrived on site", item_type: "checkbox", required: true },
@@ -159,6 +199,121 @@ const STARTER_TEMPLATES: {
       { label: "Customer satisfaction", item_type: "rating" },
       { label: "Follow-up needed?", item_type: "yes_no" },
       { label: "Visit summary", item_type: "text" },
+    ],
+  },
+  {
+    name: "Electrical Service Call",
+    category: "Electrical",
+    description: "Troubleshoot and repair: isolation, readings, terminations, test under load.",
+    items: [
+      { label: "Power isolated and locked out", item_type: "checkbox", required: true },
+      { label: "Reported fault confirmed on site", item_type: "yes_no", required: true },
+      { label: "Supply voltage (V)", item_type: "numeric", required: true },
+      { label: "Load current (A)", item_type: "numeric" },
+      { label: "Insulation resistance acceptable", item_type: "pass_fail" },
+      { label: "Terminations torqued to spec", item_type: "checkbox" },
+      { label: "Earth / ground continuity", item_type: "pass_fail", required: true },
+      { label: "RCD / GFCI trip test", item_type: "pass_fail" },
+      { label: "Circuit tested under load", item_type: "checkbox", required: true },
+      { label: "Panel labelled and cover refitted", item_type: "checkbox" },
+      { label: "Safety issues to flag to customer", item_type: "text" },
+    ],
+  },
+  {
+    name: "Plumbing Service Call",
+    category: "Plumbing",
+    description: "Leak and fixture work: isolation, pressure, the repair, and proof it holds.",
+    items: [
+      { label: "Water isolated at stop tap", item_type: "checkbox", required: true },
+      { label: "Leak located", item_type: "yes_no", required: true },
+      { label: "Leak source and location", item_type: "text", required: true },
+      { label: "Static water pressure (PSI / bar)", item_type: "numeric" },
+      { label: "Hot water temperature", item_type: "numeric" },
+      { label: "Shut-off valves operate", item_type: "pass_fail" },
+      { label: "Repair completed", item_type: "checkbox", required: true },
+      { label: "Pressure test held after repair", item_type: "pass_fail", required: true },
+      { label: "Drains run clear", item_type: "pass_fail" },
+      { label: "Water damage to make good", item_type: "yes_no" },
+      { label: "Parts used", item_type: "text" },
+    ],
+  },
+  {
+    name: "Punch List Walk",
+    category: "Construction",
+    description: "Close-out walk before handover: what is outstanding and what blocks keys.",
+    items: [
+      { label: "All trades have walked their own scope", item_type: "checkbox", required: true },
+      { label: "Mechanical, electrical, plumbing commissioned", item_type: "pass_fail" },
+      {
+        label: "Test and inspection certificates collected",
+        item_type: "checkbox",
+        required: true,
+      },
+      { label: "Manuals, warranties and as-builts handed over", item_type: "checkbox" },
+      { label: "Open items remaining", item_type: "numeric", required: true },
+      { label: "Items blocking handover", item_type: "numeric", required: true },
+      { label: "Finish quality overall", item_type: "rating" },
+      { label: "Site cleaned and waste removed", item_type: "checkbox" },
+      { label: "Keys, fobs and access codes transferred", item_type: "checkbox" },
+      { label: "Client walked the property", item_type: "yes_no", required: true },
+      { label: "Outstanding work and who owns it", item_type: "text" },
+    ],
+  },
+  {
+    name: "Move-In / Move-Out Inspection",
+    category: "Real Estate",
+    description: "Tenancy condition record: meters, keys, room grades, deposit-relevant damage.",
+    items: [
+      { label: "Move-out inspection (No = move-in)", item_type: "yes_no", required: true },
+      { label: "Electricity meter reading", item_type: "numeric", required: true },
+      { label: "Gas meter reading", item_type: "numeric" },
+      { label: "Water meter reading", item_type: "numeric" },
+      { label: "Keys and fobs handed over", item_type: "numeric", required: true },
+      { label: "Kitchen condition", item_type: "rating", required: true },
+      { label: "Bathroom condition", item_type: "rating", required: true },
+      { label: "Living areas condition", item_type: "rating" },
+      { label: "Bedrooms condition", item_type: "rating" },
+      { label: "Smoke and CO alarms tested", item_type: "pass_fail", required: true },
+      { label: "Damage beyond fair wear and tear", item_type: "yes_no", required: true },
+      { label: "Damage detail and estimated cost", item_type: "text" },
+      { label: "Tenant comments", item_type: "text" },
+    ],
+  },
+  {
+    name: "Cleaning Job Sign-Off",
+    category: "Cleaning",
+    description: "Room-by-room quality check with the proof photos a client can be invoiced on.",
+    items: [
+      { label: "Arrived and site access confirmed", item_type: "checkbox", required: true },
+      { label: "Before photos taken", item_type: "checkbox", required: true },
+      { label: "Kitchen and appliances", item_type: "rating", required: true },
+      { label: "Bathrooms and sanitaryware", item_type: "rating", required: true },
+      { label: "Floors vacuumed and mopped", item_type: "pass_fail" },
+      { label: "Surfaces, glass and mirrors", item_type: "pass_fail" },
+      { label: "Waste removed and bins relined", item_type: "checkbox" },
+      { label: "Consumables restocked", item_type: "checkbox" },
+      { label: "Areas skipped, and why", item_type: "text" },
+      { label: "After photos taken", item_type: "checkbox", required: true },
+      { label: "Client walked the work", item_type: "yes_no" },
+    ],
+  },
+  {
+    name: "Claim Site Documentation",
+    category: "Insurance & Adjusting",
+    description: "First visit on a claim: cause, extent, what is salvageable, what is urgent.",
+    items: [
+      { label: "Policyholder present", item_type: "yes_no", required: true },
+      { label: "Cause of loss identified", item_type: "yes_no", required: true },
+      { label: "Cause of loss, in your words", item_type: "text", required: true },
+      { label: "Date the loss occurred", item_type: "text" },
+      { label: "Affected rooms or areas", item_type: "numeric", required: true },
+      { label: "Overall extent of damage", item_type: "rating", required: true },
+      { label: "Property safe to occupy", item_type: "yes_no", required: true },
+      { label: "Emergency mitigation required", item_type: "yes_no", required: true },
+      { label: "Contents salvageable", item_type: "pass_fail" },
+      { label: "Overview photos taken", item_type: "checkbox", required: true },
+      { label: "Close-up damage photos taken", item_type: "checkbox", required: true },
+      { label: "Recommended next step", item_type: "text" },
     ],
   },
 ];
@@ -187,6 +342,18 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
   const [focusItemId, setFocusItemId] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
 
+  /*
+   * The company's trade, from the account setup wizard. It orders the rail and
+   * the Starters dialog, so this tab answers the same question the Documents
+   * tab does rather than being the one place the answer stopped mattering.
+   */
+  const { profile: company } = useCompanySetup();
+  const rank = useMemo(
+    () => makeCategoryRank(company.industry, company.trades),
+    [company.industry, company.trades],
+  );
+  const ownTrade = tradeCategoryFor(company.industry);
+
   /**
    * One save model for everything on this screen. Name and description used to
    * sit behind an Edit → Save → Cancel round trip while the items below them
@@ -210,7 +377,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
     setLoading(true);
     const { data: tpls } = await supabase
       .from(TABLES.templates as any)
-      .select("id, name, description, archived, created_at")
+      .select("id, name, description, archived, created_at, category")
       .order("created_at", { ascending: true });
     const list = ((tpls as any[]) ?? []) as Template[];
     setTemplates(list);
@@ -248,6 +415,50 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
       );
   }, [templates, showArchived, search]);
 
+  /*
+   * The rail, split by trade rather than one flat alphabetical run.
+   *
+   * Same reasoning and the same ordering function as the Documents tab: a
+   * company that told us their trade sees it first, and General - which is
+   * where every checklist made before trades existed sits - stays at the top
+   * because it holds their own work.
+   *
+   * Rendered as headings inside the rail only when there is more than one
+   * group, since a single "Electrical" heading over the whole list is a row of
+   * chrome that says nothing.
+   */
+  const railSections = useMemo<Array<[string, Template[]]>>(() => {
+    const byTrade = new Map<string, Template[]>();
+    for (const t of visibleTemplates) {
+      const key = t.category || GENERAL_CATEGORY;
+      const list = byTrade.get(key);
+      if (list) list.push(t);
+      else byTrade.set(key, [t]);
+    }
+    return [...byTrade.entries()].sort(
+      (a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]),
+    );
+  }, [visibleTemplates, rank]);
+
+  /**
+   * The starter library, their trade first. Stable order within a trade.
+   *
+   * An uncategorised starter sorts last rather than through `rank`, which puts
+   * General at the very top - correct in the rail, where General holds the
+   * team's own checklists, and exactly backwards here, where it would push a
+   * trade-less starter above the one written for their trade.
+   */
+  const starterOrder = useMemo(
+    () =>
+      [...STARTER_TEMPLATES].sort(
+        (a, b) =>
+          (a.category ? rank(a.category) : Number.MAX_SAFE_INTEGER) -
+            (b.category ? rank(b.category) : Number.MAX_SAFE_INTEGER) ||
+          a.name.localeCompare(b.name),
+      ),
+    [rank],
+  );
+
   const selected = templates.find((t) => t.id === selectedId) ?? null;
   const selectedItems = useMemo(
     () => items.filter((i) => i.template_id === selectedId).sort((a, b) => a.position - b.position),
@@ -264,11 +475,20 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
     setPane("editor");
   };
 
-  const createTemplate = async (name: string, description: string | null) => {
+  const createTemplate = async (
+    name: string,
+    description: string | null,
+    category?: string | null,
+  ) => {
     if (!user) return null;
     const { data, error } = await supabase
       .from(TABLES.templates as any)
-      .insert({ created_by: user.id, name: name.trim(), description: description?.trim() || null })
+      .insert({
+        created_by: user.id,
+        name: name.trim(),
+        description: description?.trim() || null,
+        category: category ?? null,
+      })
       .select("id")
       .single();
     if (error || !data) {
@@ -310,7 +530,9 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
   const createFromStarter = async (s: (typeof STARTER_TEMPLATES)[number]) => {
     setCreating(true);
     try {
-      const id = await createTemplate(s.name, s.description);
+      // The starter's trade comes with it, so a copied checklist lands under
+      // the right heading instead of in General for the author to refile.
+      const id = await createTemplate(s.name, s.description, s.category ?? null);
       if (!id) return;
       const { error } = await supabase.from(TABLES.items as any).insert(
         s.items.map((it, idx) => ({
@@ -334,7 +556,7 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
   };
 
   const duplicateTemplate = async (t: Template) => {
-    const id = await createTemplate(`${t.name} (copy)`, t.description);
+    const id = await createTemplate(`${t.name} (copy)`, t.description, t.category ?? null);
     if (!id) return;
     const its = items.filter((i) => i.template_id === t.id).sort((a, b) => a.position - b.position);
     if (its.length) {
@@ -693,19 +915,33 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
                   No templates match “{search}”.
                 </li>
               ) : (
-                visibleTemplates.map((t) => {
-                  const count = items.filter((i) => i.template_id === t.id).length;
-                  return (
-                    <BuilderRailItem
-                      key={t.id}
-                      active={selectedId === t.id}
-                      name={t.name}
-                      archived={t.archived}
-                      meta={`${count} item${count === 1 ? "" : "s"}`}
-                      onSelect={() => void selectTemplate(t.id)}
-                    />
-                  );
-                })
+                railSections.map(([heading, list]) => (
+                  <Fragment key={heading}>
+                    {railSections.length > 1 && (
+                      <li className="flex items-center gap-1.5 px-3 pb-1 pt-3 text-[10px] font-extrabold uppercase tracking-[1.2px] text-muted-foreground">
+                        {heading}
+                        {heading === ownTrade && (
+                          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary">
+                            Yours
+                          </span>
+                        )}
+                      </li>
+                    )}
+                    {list.map((t) => {
+                      const count = items.filter((i) => i.template_id === t.id).length;
+                      return (
+                        <BuilderRailItem
+                          key={t.id}
+                          active={selectedId === t.id}
+                          name={t.name}
+                          archived={t.archived}
+                          meta={`${count} item${count === 1 ? "" : "s"}`}
+                          onSelect={() => void selectTemplate(t.id)}
+                        />
+                      );
+                    })}
+                  </Fragment>
+                ))
               )}
             </BuilderRail>
           }
@@ -738,6 +974,32 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
                           </StatChip>
                         )}
                         {typeCount > 1 && <StatChip>{typeCount} answer types</StatChip>}
+                        {/* Refiled in place, next to the other facts about the
+                            template. Opening a settings panel to change which
+                            heading a checklist appears under would be more
+                            ceremony than the change deserves. */}
+                        <TradeSelect
+                          value={selected.category ?? null}
+                          onChange={(v) => {
+                            // Written straight through rather than debounced:
+                            // it is a menu pick, not typing, and the rail has
+                            // to re-group the moment it changes or the
+                            // template appears to have moved nowhere.
+                            setTemplates((prev) =>
+                              prev.map((t) => (t.id === selected.id ? { ...t, category: v } : t)),
+                            );
+                            void supabase
+                              .from(TABLES.templates as any)
+                              .update({ category: v })
+                              .eq("id", selected.id)
+                              .then((r: any) => {
+                                if (r.error) {
+                                  toast.error(r.error.message);
+                                  void load();
+                                }
+                              });
+                          }}
+                        />
                       </>
                     }
                     banner={
@@ -987,44 +1249,67 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
               Each one comes fully populated. Rename, reorder, or delete anything after.
             </DialogDescription>
           </DialogHeader>
+          {/*
+            Sorted, not grouped. Ten cards is short enough to scan in one pass,
+            so headings would cost more space than they save - but which card is
+            FIRST still matters, and after the setup wizard that is the one for
+            their trade. Same ordering function as the rail and the Documents
+            tab, so all three agree.
+          */}
           <div className="grid max-h-[60vh] gap-3 overflow-y-auto sm:grid-cols-2">
-            {STARTER_TEMPLATES.map((s) => (
-              <Card key={s.name} className={cn(SURFACE_CARD, "flex flex-col p-4")}>
-                <div className="font-display text-lg font-bold tracking-[-0.3px]">{s.name}</div>
-                <p className="mt-1 flex-1 text-xs leading-relaxed text-muted-foreground">
-                  {s.description}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-1">
-                  {[...new Set(s.items.map((i) => i.item_type))].map((t) => {
-                    const m = TYPE_META[t];
-                    const I = m.icon;
-                    return (
-                      <span
-                        key={t}
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold",
-                          m.tint,
-                        )}
-                      >
-                        <I className="h-3 w-3" />
-                        {m.short}
+            {starterOrder.map((s) => {
+              const TradeIcon = categoryIcon(s.category ?? GENERAL_CATEGORY);
+              return (
+                <Card key={s.name} className={cn(SURFACE_CARD, "flex flex-col p-4")}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-display text-lg font-bold tracking-[-0.3px]">{s.name}</div>
+                    {s.category === ownTrade && (
+                      <span className="mt-1 shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.6px] text-primary">
+                        Your trade
                       </span>
-                    );
-                  })}
-                </div>
-                <div className="mt-3 text-[11px] font-semibold text-muted-foreground">
-                  {s.items.length} items · {s.items.filter((i) => i.required).length} required
-                </div>
-                <Button
-                  size="sm"
-                  className="mt-3 w-full"
-                  onClick={() => void createFromStarter(s)}
-                  disabled={creating}
-                >
-                  Use this template
-                </Button>
-              </Card>
-            ))}
+                    )}
+                  </div>
+                  {s.category && (
+                    <div className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
+                      <TradeIcon className="h-3 w-3" />
+                      {s.category}
+                    </div>
+                  )}
+                  <p className="mt-1 flex-1 text-xs leading-relaxed text-muted-foreground">
+                    {s.description}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {[...new Set(s.items.map((i) => i.item_type))].map((t) => {
+                      const m = TYPE_META[t];
+                      const I = m.icon;
+                      return (
+                        <span
+                          key={t}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold",
+                            m.tint,
+                          )}
+                        >
+                          <I className="h-3 w-3" />
+                          {m.short}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 text-[11px] font-semibold text-muted-foreground">
+                    {s.items.length} items · {s.items.filter((i) => i.required).length} required
+                  </div>
+                  <Button
+                    size="sm"
+                    className="mt-3 w-full"
+                    onClick={() => void createFromStarter(s)}
+                    disabled={creating}
+                  >
+                    Use this template
+                  </Button>
+                </Card>
+              );
+            })}
           </div>
         </DialogContent>
       </Dialog>
@@ -1317,5 +1602,50 @@ function PreviewRow({ item }: { item: TemplateItem }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Which trade a checklist is filed under, changed in place.
+ *
+ * A dropdown rather than free text: the strings have to match the ones the
+ * rail groups by and the document library uses, or a typo creates a heading of
+ * one. `null` is a real choice - "General" is where a checklist that belongs
+ * to no particular trade should sit, and the rail puts that group first
+ * because it is the team's own work.
+ */
+function TradeSelect({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (v: string | null) => void;
+}) {
+  const Icon = categoryIcon(value ?? GENERAL_CATEGORY);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] font-bold text-muted-foreground transition hover:bg-accent hover:text-foreground"
+        >
+          <Icon className="h-3 w-3" />
+          {value ?? GENERAL_CATEGORY}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        <DropdownMenuLabel>File under</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {[GENERAL_CATEGORY, ...CATEGORY_ORDER].map((c) => {
+          const RowIcon = categoryIcon(c);
+          return (
+            <DropdownMenuItem key={c} onSelect={() => onChange(c === GENERAL_CATEGORY ? null : c)}>
+              <RowIcon className="mr-2 h-4 w-4" />
+              {c}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

@@ -218,6 +218,24 @@ describe("the screens that read the business profile", () => {
     expect(registry).toMatch(/from "@sitepix\/shared"/);
   });
 
+  it("reads the answers back out where an admin can see them", () => {
+    /*
+     * `goals` is the only column that records what a customer's problem is, in
+     * words they picked themselves. It shipped write-only: the wizard wrote it
+     * and nothing anywhere displayed it, which makes asking the question a
+     * cost with no return.
+     */
+    const api = read("apps/api/src/domains/admin/teams.ts");
+    expect(api).toMatch(/businessProfile:/);
+    // Both admin reads carry it: the list, for the industry mix, and the
+    // detail, for one company's answers.
+    expect([...api.matchAll(/goals: Array\.isArray\(/g)]).toHaveLength(2);
+
+    const page = read("apps/web/src/features/admin/pages/AdminTeamDetailPage.tsx");
+    expect(page).toMatch(/BusinessProfilePanel/);
+    expect(page, "the goals a company picked are never rendered").toMatch(/COMPANY_GOALS/);
+  });
+
   it("checks the caller may answer for the company", () => {
     // The profile is company-wide and the write goes through the admin client,
     // so this check is the only thing between a crew member and the row.

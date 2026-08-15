@@ -145,6 +145,27 @@ export interface PlatformTeamDetail {
   stripeSubscriptionId: string | null;
   isInternal: boolean;
   createdAt: string;
+  /**
+   * What this company said they do and what they came here to fix.
+   *
+   * The list view counts industries; this is where you read one company's
+   * actual answers, `goals` above all. That column is the only place the
+   * product records what a customer's problem is in their own words, and until
+   * it was shown here it went in and never came back out.
+   *
+   * Ids rather than labels, resolved through packages/shared by the page - see
+   * the same field on `PlatformTeam`.
+   */
+  businessProfile: {
+    industry: string | null;
+    trades: string[];
+    teamSize: string | null;
+    projectVolume: string | null;
+    goals: string[];
+    heardFrom: string | null;
+    serviceArea: string | null;
+    completedAt: string | null;
+  };
   members: Array<{ id: string; fullName: string | null; email: string | null; role: string }>;
   projects: Array<{
     id: string;
@@ -173,7 +194,8 @@ export async function getPlatformTeamDetailService(
   const { data: team, error: teamError } = await (admin as any)
     .from("teams")
     .select(
-      "id, name, plan, subscription_status, stripe_customer_id, stripe_subscription_id, is_internal, created_at",
+      "id, name, plan, subscription_status, stripe_customer_id, stripe_subscription_id, is_internal, created_at, " +
+        "industry, trades, team_size, project_volume, goals, heard_from, service_area, profile_completed_at",
     )
     .eq("id", data.teamId)
     .single();
@@ -227,6 +249,16 @@ export async function getPlatformTeamDetailService(
     stripeSubscriptionId: team.stripe_subscription_id,
     isInternal: team.is_internal,
     createdAt: team.created_at,
+    businessProfile: {
+      industry: team.industry ?? null,
+      trades: Array.isArray(team.trades) ? team.trades : [],
+      teamSize: team.team_size ?? null,
+      projectVolume: team.project_volume ?? null,
+      goals: Array.isArray(team.goals) ? team.goals : [],
+      heardFrom: team.heard_from ?? null,
+      serviceArea: team.service_area ?? null,
+      completedAt: team.profile_completed_at ?? null,
+    },
     members: members.map((m) => ({
       id: m.user_id,
       fullName: profileById.get(m.user_id)?.full_name ?? null,
