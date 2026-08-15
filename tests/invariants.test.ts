@@ -2453,3 +2453,49 @@ describe("family: identity rendered from a stale fallback", () => {
     expect(src).toMatch(/if \(state\.userId\) writeSnapshot\(state\.userId, null\)/);
   });
 });
+
+describe("family: a teammate who accepted but never confirmed", () => {
+  /*
+   * `acceptInviteSignup` deliberately creates the account unconfirmed, and the
+   * new member joins the team in the same request. So a person can be listed as
+   * a teammate and still be unable to sign in, waiting on a GoTrue confirmation
+   * mail that nothing in the product could ask for again: `resendInvite` throws
+   * on a spent invite, and that invite is spent by definition.
+   *
+   * The invariant: the team list has to say when an account is in that state,
+   * and an owner or admin has to be able to send the mail again.
+   */
+  const SERVICE = "apps/api/src/domains/teams/service.ts";
+  const REGISTRY = "apps/api/src/domains/rpc/registry.ts";
+  const PAGE = "apps/web/src/features/teams/pages/TeamsPage.tsx";
+
+  it("the team listing reports confirmation state per member", () => {
+    const src = stripComments(read(SERVICE));
+    expect(src).toMatch(/emailConfirmed:/);
+    expect(src).toMatch(/auth\.admin\.getUserById/);
+  });
+
+  it("resending is registered and scoped to a member id", () => {
+    const src = stripComments(read(REGISTRY));
+    expect(src).toMatch(/resendMemberConfirmation:\s*authed\(/);
+    expect(src).toMatch(/memberId: z\.string\(\)\.uuid\(\)/);
+  });
+
+  it("only an owner or admin of that member's own team can trigger it", () => {
+    const src = stripComments(read(SERVICE));
+    const start = src.indexOf("export async function resendMemberConfirmationService");
+    expect(start, "service not found").toBeGreaterThan(-1);
+    const body = src.slice(start, src.indexOf("export async function", start + 10));
+    // Role check, same-team check, and no mail for an account already confirmed.
+    expect(body).toMatch(/role !== "owner" && \(caller as any\)\.role !== "admin"/);
+    expect(body).toMatch(/team_id !== \(caller as any\)\.team_id/);
+    expect(body).toMatch(/email_confirmed_at/);
+  });
+
+  it("the badge distinguishes unconfirmed from unknown", () => {
+    const src = stripComments(read(PAGE));
+    // `!m.emailConfirmed` would accuse every member the lookup failed for.
+    expect(src).toMatch(/m\.emailConfirmed === false/);
+    expect(src).not.toMatch(/!m\.emailConfirmed\b/);
+  });
+});

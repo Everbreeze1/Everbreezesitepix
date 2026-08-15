@@ -14,6 +14,7 @@ import type {
   acceptInviteService,
   acceptInviteSignupService,
   resendInviteService,
+  resendMemberConfirmationService,
   getTeamActivityService,
   getProjectContributorsService,
   saveCompanyProfileService,
@@ -96,6 +97,16 @@ export const resendInvite = rpcOp<
   { inviteId: string; origin?: string },
   Result<typeof resendInviteService>
 >("resendInvite", { idempotent: true });
+
+/**
+ * For a member who accepted their invite but never confirmed their email.
+ * `resendInvite` refuses those - the invite is spent - so this asks GoTrue for
+ * the confirmation mail again instead.
+ */
+export const resendMemberConfirmation = rpcOp<
+  { memberId: string; origin?: string },
+  Result<typeof resendMemberConfirmationService>
+>("resendMemberConfirmation", { idempotent: true });
 
 /*
  * These two were declared as bare arrays, but both services return a wrapper

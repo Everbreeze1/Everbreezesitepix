@@ -82,6 +82,7 @@ import {
   lookupInviteService,
   removeMemberService,
   resendInviteService,
+  resendMemberConfirmationService,
   revokeInviteService,
   saveCompanyProfileService,
   updateMemberRoleService,
@@ -595,6 +596,17 @@ export const rpcRegistry: Record<string, RpcEntry> = {
         })
         .parse(d),
     resendInviteService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  resendMemberConfirmation: authed(
+    (d) =>
+      z
+        .object({
+          memberId: z.string().uuid(),
+          origin: z.string().url().max(300).optional(),
+        })
+        .parse(d),
+    resendMemberConfirmationService as (ctx: ServiceContext, data: never) => Promise<unknown>,
     { idempotent: true },
   ),
   getTeamActivity: {

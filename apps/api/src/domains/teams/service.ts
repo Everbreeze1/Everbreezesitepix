@@ -329,9 +329,36 @@ export async function getMyTeamService(ctx: AuthedContext) {
     profiles = Object.fromEntries((profs ?? []).map((p: any) => [p.id, p]));
   }
 
+  /*
+   * Whether each member has actually confirmed their email.
+   *
+   * An invitee who accepts through `acceptInviteSignup` gets an account that is
+   * deliberately created unconfirmed (see the SECURITY note there), joins the
+   * team immediately, and then cannot sign in until they click the confirmation
+   * mail. Until now the team list showed them exactly like everyone else, so an
+   * owner whose new hire never got that mail had no way to see why - the person
+   * is "on the team" and simply cannot get in.
+   *
+   * One admin lookup per member. Teams are capped in the low tens by
+   * `effectiveMemberLimit`, and this is a page that loads once.
+   */
+  const confirmed = new Map<string, boolean>();
+  await Promise.all(
+    userIds.map(async (id: string) => {
+      try {
+        const { data } = await supabaseAdmin.auth.admin.getUserById(id);
+        confirmed.set(id, !!(data?.user as any)?.email_confirmed_at);
+      } catch {
+        // Unknown is not the same as unconfirmed: leave it out rather than
+        // accuse a working account of being stuck.
+      }
+    }),
+  );
+
   const members = (membersRes.data ?? []).map((m: any) => ({
     ...m,
     profile: profiles[m.user_id] ?? null,
+    emailConfirmed: confirmed.has(m.user_id) ? confirmed.get(m.user_id)! : null,
   }));
 
   const team = (teamRes.data ?? null) as any;
@@ -1131,6 +1158,55 @@ export async function resendInviteService(ctx: AuthedContext, data: any) {
   });
 
   return { ok: true, emailSent: emailRes.sent, emailVia: emailRes.via };
+}
+
+/**
+ * Send the signup confirmation again to a member who never confirmed.
+ *
+ * `resendInviteService` cannot help these people: their invite is spent, so it
+ * throws "already accepted". What they are missing is the GoTrue confirmation
+ * mail, and nothing in the product could ask for it again - the account sat
+ * unconfirmed and unusable with the owner unable to do anything but guess.
+ *
+ * Owner or admin of that member's own team only, and refuses on an account that
+ * is already confirmed so this cannot be used to mail an arbitrary teammate.
+ */
+export async function resendMemberConfirmationService(
+  ctx: AuthedContext,
+  data: { memberId: string; origin?: string },
+) {
+  const { userId } = ctx;
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: caller } = await supabaseAdmin
+    .from("team_members" as any)
+    .select("team_id, role")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!caller) throw new Error("Forbidden");
+  if ((caller as any).role !== "owner" && (caller as any).role !== "admin")
+    throw new Error("Forbidden");
+
+  const { data: member } = await supabaseAdmin
+    .from("team_members" as any)
+    .select("id, team_id, user_id")
+    .eq("id", data.memberId)
+    .maybeSingle();
+  if (!member) throw new Error("Member not found");
+  if ((member as any).team_id !== (caller as any).team_id) throw new Error("Forbidden");
+
+  const { data: target } = await supabaseAdmin.auth.admin.getUserById(
+    (member as any).user_id as string,
+  );
+  const email = (target?.user as any)?.email as string | undefined;
+  if (!email) throw new Error("That member has no email address on file.");
+  if ((target?.user as any)?.email_confirmed_at) {
+    return { ok: true, alreadyConfirmed: true, emailSent: false };
+  }
+
+  const origin = data.origin?.replace(/\/+$/, "") || "https://everbreezesitepix.com";
+  const res = await sendSignupConfirmationEmail(email, origin);
+  return { ok: true, alreadyConfirmed: false, emailSent: res.sent };
 }
 
 export async function getTeamActivityService(ctx: AuthedContext) {
