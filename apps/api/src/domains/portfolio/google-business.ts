@@ -573,8 +573,18 @@ async function upsertGoogleReviewLink(
 /**
  * Re-reads the listing so the star rating on the site is not a fossil.
  *
- * Only the cached numbers move: a refresh must never quietly rewrite the
- * business name or phone number the owner has since corrected by hand.
+ * Only the cached numbers and the two review URLs move: a refresh must never
+ * quietly rewrite the business name or phone number the owner has since
+ * corrected by hand.
+ *
+ * The review URLs are not "cached numbers" though, and they are the reason this
+ * also re-syncs team_review_links. The portfolio row and that table hold the
+ * same ask for two different audiences - the site for prospects, the job report
+ * for customers - and updating one without the other points a business's two
+ * review buttons at two different URLs. That is not hypothetical: connecting on
+ * a deployment without the `googleMapsLinks` entitlement stores a constructed
+ * URL, and the first refresh after that entitlement appears would upgrade the
+ * site and leave every report behind.
  */
 export async function refreshGoogleBusinessService(
   ctx: AuthedContext,
@@ -607,6 +617,8 @@ export async function refreshGoogleBusinessService(
       google_synced_at: new Date().toISOString(),
     })
     .eq("team_id", teamId);
+
+  await upsertGoogleReviewLink(db, teamId, profile);
 
   return { ok: true, profile };
 }
