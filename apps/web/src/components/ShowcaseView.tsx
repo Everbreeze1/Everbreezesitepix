@@ -152,9 +152,17 @@ export function ShowcaseView({
 
       <main>
         {!richIsEmpty(s.intro_html) && (
-          <section className="mx-auto max-w-3xl px-6 py-20 lg:px-10 lg:py-28">
+          <section className="mx-auto max-w-3xl px-6 py-14 lg:px-10 lg:py-20">
             {/* Lead copy gets a genuinely larger measure and looser leading -
-                magazine standfirst, not body text. */}
+                magazine standfirst, not body text.
+
+                On the spacing: py-20/28 was a magazine's rhythm applied to a
+                contractor's content. A glossy spread can afford a screen of air
+                before the first paragraph because forty pages follow it; a job
+                with two sections and nine photos cannot, and the client's read
+                of the result was "there is a lot of white space". Trimmed by
+                about a third throughout this file, which pulls the first
+                photograph back above the fold without cramping the copy. */}
             <RichText
               html={s.intro_html}
               className="text-pretty [&_p]:text-xl [&_p]:leading-[1.7] [&_p]:text-neutral-700 lg:[&_p]:text-2xl"
@@ -163,7 +171,7 @@ export function ShowcaseView({
         )}
 
         {visibleSections.length === 0 ? (
-          <p className="py-28 text-center text-sm text-neutral-400">
+          <p className="py-20 text-center text-sm text-neutral-400">
             This project doesn&rsquo;t have any work in it yet.
           </p>
         ) : (
@@ -180,7 +188,7 @@ export function ShowcaseView({
         )}
 
         {!richIsEmpty(s.outro_html) && (
-          <section className="mx-auto max-w-3xl px-6 py-20 text-center lg:px-10 lg:py-28">
+          <section className="mx-auto max-w-3xl px-6 py-14 text-center lg:px-10 lg:py-20">
             <RichText
               html={s.outro_html}
               className="text-pretty [&_p]:text-xl [&_p]:leading-[1.7] [&_p]:text-neutral-700 lg:[&_p]:text-2xl"
@@ -191,8 +199,8 @@ export function ShowcaseView({
             looking at what they paid for - the whole reason review links
             belong on this page rather than in a follow-up email. */}
         {showReviewCta && (
-          <section className="mx-auto max-w-3xl px-6 pb-20 text-center lg:px-10 lg:pb-28">
-            <div className="rounded-2xl border border-neutral-200 px-8 py-12">
+          <section className="mx-auto max-w-3xl px-6 pb-14 text-center lg:px-10 lg:pb-20">
+            <div className="rounded-2xl border border-neutral-200 px-8 py-10">
               <p
                 className="text-[11px] font-semibold uppercase tracking-[0.24em]"
                 style={{ color: accent }}
@@ -227,7 +235,7 @@ export function ShowcaseView({
 
       {hasContact && (
         <section style={{ backgroundColor: accent }}>
-          <div className="mx-auto max-w-6xl px-6 py-20 text-center text-white lg:px-10 lg:py-24">
+          <div className="mx-auto max-w-6xl px-6 py-14 text-center text-white lg:px-10 lg:py-20">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/65">
               Get in touch
             </p>
@@ -292,7 +300,7 @@ function ShowcaseSection({
   const hasBody = !richIsEmpty(section.body_html);
 
   return (
-    <section className="py-14 lg:py-20">
+    <section className="py-10 lg:py-14">
       {(hasHeading || hasBody) && (
         <div className="mx-auto max-w-6xl px-6 lg:px-10">
           {hasHeading && (

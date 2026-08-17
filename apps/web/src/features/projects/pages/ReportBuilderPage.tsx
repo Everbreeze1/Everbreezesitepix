@@ -57,6 +57,7 @@ import { toast } from "sonner";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { ReportDocument, type ReportDocModel } from "@/components/ReportDocument";
 import { PhotosPerPagePicker } from "@/features/projects/components/PhotosPerPagePicker";
+import { ReviewAskStatus } from "@/features/projects/components/ReviewAskStatus";
 import { sanitizeCaption } from "@sitepix/shared";
 
 // ---------- types ----------
@@ -583,6 +584,10 @@ export function ReportBuilderPage() {
           </Button>
         </div>
       </div>
+
+      {/* Under the share row rather than beside it: this is about what the
+          customer will see after Copy link is pressed, not another control. */}
+      {!report.revoked_at && <ReviewAskStatus />}
 
       {preview && previewDoc ? (
         <div className="rounded-lg bg-muted/30 p-4 sm:p-8">
