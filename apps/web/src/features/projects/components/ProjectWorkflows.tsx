@@ -122,6 +122,22 @@ interface Workflow {
   notes_html: string | null;
   share_token: string | null;
   revoked_at: string | null;
+  /**
+   * 'workflow' or 'walkthrough' (20260908000000).
+   *
+   * A walkthrough template applied from a blueprint instantiates into this same
+   * table - see the walkthrough branch of applyProjectBlueprintService for why -
+   * and this column is what stops the project then calling a shot list a
+   * workflow. Optional as well as nullable: a database still waiting for the
+   * migration returns neither, and everything there is a workflow.
+   */
+  source_kind?: string | null;
+  /**
+   * Which walkthrough template produced this run, when `source_kind` says it is
+   * one. Separate from `template_id` because that column carries a foreign key
+   * to `workflow_templates`.
+   */
+  walkthrough_template_id?: string | null;
 }
 interface Phase {
   id: string;
@@ -402,20 +418,33 @@ export function ProjectWorkflows({
     async ({ silent = false }: { silent?: boolean } = {}) => {
       if (!silent) setLoading(true);
       try {
-        const [wfRes, tplRes] = await Promise.all([
+        const WF_COLUMNS =
+          "id, project_id, template_id, name, description, started_at, completed_at, assigned_to, assigned_by, notes_html, share_token, revoked_at";
+        const readWorkflows = (columns: string) =>
           supabase
             .from(TABLES.workflows as any)
-            .select(
-              "id, project_id, template_id, name, description, started_at, completed_at, assigned_to, assigned_by, notes_html, share_token, revoked_at",
-            )
+            .select(columns)
             .eq("project_id", projectId)
-            .order("started_at", { ascending: true }),
+            .order("started_at", { ascending: true });
+
+        let [wfRes, tplRes] = await Promise.all([
+          readWorkflows(`${WF_COLUMNS}, source_kind, walkthrough_template_id`),
           supabase
             .from("workflow_templates" as any)
             .select("id, name, description, category")
             .eq("archived", false)
             .order("name", { ascending: true }),
         ]);
+        /*
+         * The two walkthrough columns arrive with 20260908000000, and PostgREST
+         * rejects the whole select over one unknown column. Without this retry
+         * the panel would throw on a database still waiting for the migration
+         * and the project would show "Workflows could not load" - breaking
+         * something that worked, to add a label.
+         */
+        if (wfRes.error) {
+          wfRes = await readWorkflows(WF_COLUMNS);
+        }
         // Swallowing read errors made an offline crew see "No workflow on this
         // project yet" and add a second copy of one they already had.
         if (wfRes.error) throw wfRes.error;
@@ -1290,10 +1319,22 @@ export function ProjectWorkflows({
         <RunnerGrid>
           {workflows.map((w) => {
             const st = states.get(w.id)!;
+            /*
+             * A walkthrough is a shot list, not a phased run, so it says so and
+             * counts in shots. It instantiates into these same tables - see the
+             * walkthrough branch of applyProjectBlueprintService - and without
+             * this the project would call the crew's shot list a workflow with
+             * one phase, which is true of the storage and false of the thing.
+             */
+            const isWalkthrough = w.source_kind === "walkthrough";
+            // Keyed on whichever column carries this run's provenance. A
+            // walkthrough's ref_id is `walkthrough_template_id`; `template_id`
+            // is null on it, so the badge would never have resolved.
+            const sourceRef = isWalkthrough ? w.walkthrough_template_id : w.template_id;
             return (
               <RunnerCard
                 key={w.id}
-                icon={WorkflowIcon}
+                icon={isWalkthrough ? Camera : WorkflowIcon}
                 tone={st.tone}
                 title={w.name}
                 statusLabel={st.statusLabel}
@@ -1301,12 +1342,20 @@ export function ProjectWorkflows({
                   <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                     <span>
                       {st.total === 0
-                        ? "No steps in this workflow"
-                        : `${st.done} of ${st.total} steps · ${st.phasesComplete}/${st.phases.length} phases`}
+                        ? isWalkthrough
+                          ? "No shots in this walkthrough"
+                          : "No steps in this workflow"
+                        : isWalkthrough
+                          ? `${st.done} of ${st.total} shots captured`
+                          : `${st.done} of ${st.total} steps · ${st.phasesComplete}/${st.phases.length} phases`}
                     </span>
-                    <BlueprintItemBadge
-                      source={w.template_id ? blueprintSources?.[w.template_id] : null}
-                    />
+                    {isWalkthrough && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-teal-500/10 px-1.5 py-0.5 text-[10.5px] font-bold text-teal-600 dark:text-teal-400">
+                        <Camera className="h-2.5 w-2.5" />
+                        Walkthrough
+                      </span>
+                    )}
+                    <BlueprintItemBadge source={sourceRef ? blueprintSources?.[sourceRef] : null} />
                   </span>
                 }
                 done={st.done}

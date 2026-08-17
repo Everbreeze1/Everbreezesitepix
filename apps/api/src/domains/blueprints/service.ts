@@ -94,18 +94,33 @@ export async function applyProjectBlueprintService(
     reports: 0,
     label_sets: 0,
     workflows: 0,
+    walkthroughs: 0,
   };
   const failed: Array<{ kind: string; reason: string }> = [];
 
   // Blueprint labels → merge onto project. `name` is read here too and stored on
   // the ledger row, so the history can still say which blueprint set a project up
-  // after that blueprint has been deleted (20260812000000).
-  const { data: tpl } = await supabaseAdmin
+  // after that blueprint has been deleted (20260812000000). `version` is the
+  // bundle's edit counter (20260908000000) and gets stamped onto the ledger, so
+  // "which shape of this blueprint made this project" survives later edits to it.
+  const TEMPLATE_BASE = "name, labels";
+  let { data: tpl, error: tplErr } = await supabaseAdmin
     .from("project_templates" as any)
-    .select("name, labels")
+    .select(`${TEMPLATE_BASE}, version`)
     .eq("id", data.blueprintId)
     .single();
+  if (tplErr && isMissingColumn(tplErr)) {
+    // 20260908000000 pending here. The version is provenance, not the work, so
+    // it must not be able to stop a blueprint from being applied.
+    console.warn("blueprint apply: reading template without version", tplErr.message);
+    ({ data: tpl, error: tplErr } = await supabaseAdmin
+      .from("project_templates" as any)
+      .select(TEMPLATE_BASE)
+      .eq("id", data.blueprintId)
+      .single());
+  }
   const blueprintName: string | null = ((tpl as any)?.name as string | null) ?? null;
+  const blueprintVersion: number | null = ((tpl as any)?.version as number | undefined) ?? null;
   const tplLabels: string[] = ((tpl as any)?.labels as string[] | null) ?? [];
   if (tplLabels.length) {
     // This is a merge implemented as an overwrite, so the READ has to be
@@ -147,13 +162,43 @@ export async function applyProjectBlueprintService(
     .select("kind, ref_id, position")
     .eq("project_template_id", data.blueprintId)
     .order("position", { ascending: true });
-  const allItems = [
+  const requested = [
     ...legacyChecklists,
     ...((items as any[]) ?? []).map((i) => ({
       kind: i.kind as string,
       ref_id: i.ref_id as string,
     })),
   ];
+
+  /*
+   * "zero-to-one workflow", from the spec.
+   *
+   * A workflow becomes the project's status tracker, and a project has one
+   * status. Two of them applied side by side leaves the project with two
+   * competing trackers and no rule saying which one is authoritative.
+   *
+   * The blueprint builder stops you attaching a second, but it is not the only
+   * writer: a duplicated blueprint, a hand-run insert, or a row that predates
+   * the rule can all get here. Enforced rather than assumed, and the extras are
+   * REPORTED - dropping them silently would leave the caller's preview
+   * promising a workflow that was never created.
+   */
+  const SINGLETON_KINDS = new Set(["workflow"]);
+  const seenSingleton = new Set<string>();
+  const allItems: typeof requested = [];
+  for (const it of requested) {
+    if (SINGLETON_KINDS.has(it.kind)) {
+      if (seenSingleton.has(it.kind)) {
+        failed.push({
+          kind: it.kind,
+          reason: `A blueprint applies at most one ${it.kind}, and this one holds more than one. Only the first was applied.`,
+        });
+        continue;
+      }
+      seenSingleton.add(it.kind);
+    }
+    allItems.push(it);
+  }
 
   const today = new Date().toLocaleDateString(undefined, {
     year: "numeric",
@@ -424,6 +469,112 @@ export async function applyProjectBlueprintService(
           }
         }
         counts.workflows++;
+      } else if (it.kind === "walkthrough") {
+        /*
+         * A walkthrough template is a shot list, and a shot list on a project is
+         * an ordered run of capture steps the crew ticks off. That is exactly
+         * `project_workflow_items`, which already carries kind, photo_id,
+         * completed_at and completed_by and is already rendered and written by
+         * the project's Workflows tab - see the long note at the top of
+         * 20260908000000 for why this reuses that table rather than growing a
+         * second one shaped the same.
+         *
+         * `source_kind` is what keeps it a walkthrough after it lands. Without
+         * it the project would call a shot list a workflow forever after.
+         */
+        const { data: wt, error: wtErr } = await supabaseAdmin
+          .from("walkthrough_templates" as any)
+          .select("name, description")
+          .eq("id", it.ref_id)
+          .single();
+        if (wtErr) throw new Error(wtErr.message);
+        if (!wt) continue;
+
+        const { data: shots, error: shotsErr } = await supabaseAdmin
+          .from("walkthrough_template_shots" as any)
+          .select("label, description, capture, required, position")
+          .eq("template_id", it.ref_id)
+          .order("position", { ascending: true });
+        if (shotsErr) throw new Error(shotsErr.message);
+
+        const { data: created, error: createdErr } = await supabaseAdmin
+          .from("project_workflows" as any)
+          .insert({
+            project_id: data.projectId,
+            // NOT `template_id`: that column has a foreign key to
+            // `workflow_templates`, so a walkthrough template's id is rejected
+            // outright there. 20260908000000 adds this one for the purpose.
+            walkthrough_template_id: it.ref_id,
+            source_kind: "walkthrough",
+            name: (wt as any).name,
+            description: (wt as any).description ?? null,
+            created_by: ctx.userId,
+          } as any)
+          .select("id")
+          .single();
+        if (createdErr) throw new Error(createdErr.message);
+        if (!created) continue;
+
+        /*
+         * One phase, holding every shot.
+         *
+         * A walkthrough is a single pass through a site, not a sequence of
+         * gated stages - splitting it into phases would invent structure the
+         * author never wrote. The phase is named after the template so the run
+         * reads as itself rather than as an unnamed container, and
+         * `requires_signoff` stays false: a shot list records what was
+         * captured, it does not gate anything.
+         */
+        const { data: phase, error: phaseErr } = await supabaseAdmin
+          .from("project_workflow_phases" as any)
+          .insert({
+            workflow_id: (created as any).id,
+            name: (wt as any).name,
+            position: 0,
+            description: (wt as any).description ?? null,
+            requires_signoff: false,
+          } as any)
+          .select("id")
+          .single();
+        if (phaseErr) throw new Error(phaseErr.message);
+        if (!phase) throw new Error("Failed to create the walkthrough's phase");
+
+        /*
+         * `capture` → `kind`. Both vocabularies are closed sets and they are
+         * deliberately not the same words, so the mapping is written out rather
+         * than passed through: a shot asks for a photo, a clip, or a written
+         * note, and the run records a photo step, a photo step, or a note step.
+         *
+         * 'video' maps to 'photo' because `project_workflow_items.kind` has
+         * only the three values in its CHECK and a video capture still resolves
+         * to "attach the media you took here". The instruction to film rather
+         * than photograph lives in the label, which carries it verbatim.
+         */
+        const KIND_FOR_CAPTURE: Record<string, string> = {
+          photo: "photo",
+          video: "photo",
+          note: "note",
+        };
+        const shotRows = ((shots as any[]) ?? []).map((s: any, idx: number) => ({
+          phase_id: (phase as any).id,
+          // Renumbered from zero, same reason as the checklist branch: the
+          // select is already ordered, and carrying stored numbers across
+          // propagates any gaps into the new run.
+          position: idx,
+          kind: KIND_FOR_CAPTURE[s.capture as string] ?? "photo",
+          // The shot's own description is folded into the label because
+          // `project_workflow_items` has nowhere else to put it, and losing it
+          // would strip the shot of the one thing that says what to aim at.
+          label: s.description ? `${s.label} - ${s.description}` : s.label,
+          required: !!s.required,
+        }));
+        if (shotRows.length) {
+          const { error: shotInsertErr } = await supabaseAdmin
+            .from("project_workflow_items" as any)
+            .insert(shotRows);
+          if (shotInsertErr) throw shotInsertErr;
+        }
+        counts.walkthroughs++;
       }
     } catch (e) {
       // One bad item must not abort the rest of the blueprint, but it also
@@ -459,14 +610,39 @@ export async function applyProjectBlueprintService(
       // 20260812000100, which the project header labels differently because an
       // inference must not be presented as an observation.
       origin: "applied",
+      /*
+       * The version of the bundle this project actually received
+       * (20260908000000). The items above are copies, so a later edit to the
+       * blueprint cannot reach them - this column is what makes that auditable
+       * rather than merely true, which is the spec's "store a blueprint_version
+       * or snapshot the component data onto the project-level instance".
+       */
+      blueprint_version: blueprintVersion,
     } as any);
+  /*
+   * A ladder, not a single fallback. PostgREST rejects the whole row over one
+   * unknown column, so a database missing a column has to be retried with less;
+   * but the columns arrive in two different migrations, and collapsing straight
+   * to `ledgerBase` would throw away `blueprint_name` and `origin` on a database
+   * that has 20260812000000 and is only waiting for 20260908000000. Each rung
+   * drops exactly the newest thing and keeps everything older.
+   */
+  if (ledgerErr && isMissingColumn(ledgerErr)) {
+    console.warn("blueprint ledger: retrying without blueprint_version", ledgerErr.message);
+    ({ error: ledgerErr } = await supabaseAdmin
+      .from("project_blueprint_applications" as any)
+      .insert({
+        ...ledgerBase,
+        blueprint_name: blueprintName,
+        origin: "applied",
+      } as any));
+  }
   if (ledgerErr && isMissingColumn(ledgerErr)) {
     /*
-     * 20260812000000 has not been applied here yet. PostgREST rejects the whole
-     * row over one unknown column, so without this retry adding those two
-     * columns to the insert would have STOPPED provenance being recorded on any
-     * database still waiting for the migration - breaking something that worked.
-     * Write what this database can hold; the origin still gets recorded.
+     * 20260812000000 has not been applied here yet either. Write what this
+     * database can hold; without this rung, adding provenance columns to the
+     * insert would have STOPPED provenance being recorded on an old database,
+     * breaking something that worked.
      */
     console.warn("blueprint ledger: retrying without blueprint_name/origin", ledgerErr.message);
     ({ error: ledgerErr } = await supabaseAdmin
@@ -501,6 +677,11 @@ export type BlueprintOriginApplication = {
   blueprintVisible: boolean;
   /** Reconstructed by the 20260812000100 backfill rather than observed. */
   inferred: boolean;
+  /**
+   * The bundle version this project received (20260908000000). Null on rows
+   * written before that column existed, and on databases still without it.
+   */
+  version: number | null;
   appliedAt: string;
   counts: Record<string, number>;
   failedCount: number;
@@ -556,11 +737,23 @@ export async function getProjectBlueprintOriginService(
   // from the lookup below and every row reads as a real apply, which is exactly
   // what it was before `origin` existed.
   const LEDGER_BASE = "blueprint_id, counts, failed_count, created_at";
+  const LEDGER_V2 = `${LEDGER_BASE}, blueprint_name, origin`;
   let { data: rows, error } = await supabaseAdmin
     .from("project_blueprint_applications" as any)
-    .select(`${LEDGER_BASE}, blueprint_name, origin`)
+    .select(`${LEDGER_V2}, blueprint_version`)
     .eq("project_id", data.projectId)
     .order("created_at", { ascending: true });
+  // Same two-rung ladder as the write above, and for the same reason: dropping
+  // straight to LEDGER_BASE would lose the names and the inferred flag on a
+  // database that has them and is only missing the version.
+  if (error && isMissingColumn(error)) {
+    console.warn("blueprint origin: reading without blueprint_version", error.message);
+    ({ data: rows, error } = await supabaseAdmin
+      .from("project_blueprint_applications" as any)
+      .select(LEDGER_V2)
+      .eq("project_id", data.projectId)
+      .order("created_at", { ascending: true }));
+  }
   if (error && isMissingColumn(error)) {
     console.warn("blueprint origin: reading without blueprint_name/origin", error.message);
     ({ data: rows, error } = await supabaseAdmin
@@ -584,6 +777,7 @@ export async function getProjectBlueprintOriginService(
     failed_count: number | null;
     created_at: string;
     origin: string | null;
+    blueprint_version: number | null;
   }>;
   if (!ledger.length) return { status: "ok", applications: [], itemSources: {} };
 
@@ -622,6 +816,7 @@ export async function getProjectBlueprintOriginService(
       r.blueprint_name ?? (r.blueprint_id ? (nameFallback.get(r.blueprint_id) ?? null) : null),
     blueprintVisible: !!r.blueprint_id && visible.has(r.blueprint_id),
     inferred: r.origin === "inferred",
+    version: r.blueprint_version ?? null,
     appliedAt: r.created_at,
     counts: r.counts ?? {},
     failedCount: r.failed_count ?? 0,

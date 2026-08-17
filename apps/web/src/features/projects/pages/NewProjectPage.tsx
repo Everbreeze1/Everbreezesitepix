@@ -1,29 +1,48 @@
 import { useNavigate, Link, useSearch } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, LocateFixed, Loader2, MapPin, LayoutTemplate } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  FilePlus2,
+  Loader2,
+  LocateFixed,
+  MapPin,
+  LayoutTemplate,
+  Pencil,
+  Star,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
+import { useCompanySetup } from "@/hooks/use-company-setup";
 import { applyProjectBlueprint } from "@/lib/blueprint.functions";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { BlueprintOutcomePreview } from "@/features/settings/components/BlueprintOutcomePreview";
 import { useBlueprintContents } from "@/hooks/use-blueprint-contents";
+import { GENERAL_CATEGORY, makeCategoryRank } from "@/lib/template-categories";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { qk } from "@/lib/query-keys";
 import { writeWithNewColumns, PROJECT_CLIENT_KEYS } from "@/lib/merge-field-columns";
+
+/** The "no blueprint" sentinel. Radix rejects an empty string as a value. */
+const NO_BLUEPRINT = "__none";
+
+interface BlueprintOption {
+  id: string;
+  name: string;
+  labels: string[];
+  category: string | null;
+  /** The one blueprint a new project of this trade starts from. */
+  isDefault: boolean;
+}
 
 interface AddrParts {
   street: string;
@@ -76,43 +95,140 @@ export function NewProjectPage() {
     client_contact: "",
     project_number: "",
   });
-  const [projectTemplates, setProjectTemplates] = useState<
-    Array<{ id: string; name: string; labels: string[] }>
-  >([]);
+  const [projectTemplates, setProjectTemplates] = useState<BlueprintOption[]>([]);
+  const [blueprintsLoaded, setBlueprintsLoaded] = useState(false);
   // "New project from this" on the Templates page arrives with the blueprint
   // already chosen - the point of that button is that you do not have to find
   // it again in a dropdown.
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
-    search.blueprint ?? "__none",
+    search.blueprint ?? NO_BLUEPRINT,
   );
   const blueprint = useBlueprintContents(
-    selectedTemplateId === "__none" ? null : selectedTemplateId,
+    selectedTemplateId === NO_BLUEPRINT ? null : selectedTemplateId,
   );
+
+  /*
+   * Step one is choosing a blueprint, per the spec: "User starts a new project.
+   * First step is 'Choose a Blueprint' (or 'Start blank')."
+   *
+   * It used to be the last field on the form, a bare name in a dropdown below
+   * the map and the client details, which is the opposite of what the spec asks
+   * for: the decision that determines the whole shape of the project was made
+   * after every smaller decision had been.
+   *
+   * `arrivedWithBlueprint` skips the step for a link that has already made the
+   * choice. The step also skips itself when there is nothing to choose between,
+   * which `beginAtChooser` decides once the library has actually loaded - a
+   * chooser rendered before then would flash an empty list and then fill in.
+   */
+  const arrivedWithBlueprint = !!search.blueprint;
+  const [step, setStep] = useState<"blueprint" | "details">(
+    arrivedWithBlueprint ? "details" : "blueprint",
+  );
+
+  const company = useCompanySetup();
 
   // Load project templates the user can apply (Team plan only - Project
   // Blueprints are a Team-tier differentiator).
   useEffect(() => {
-    if (!isTeam) return;
+    if (!isTeam) {
+      setBlueprintsLoaded(true);
+      return;
+    }
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      /*
+       * `category` and `default_for_category` arrive with 20260908000000, and
+       * PostgREST rejects the whole select over one unknown column. Without the
+       * retry, a database still waiting for that migration would show NO
+       * blueprints here at all - the chooser would be empty and the user would
+       * conclude they had none.
+       */
+      const COLUMNS = "id, name, labels, archived";
+      let { data, error } = await supabase
         .from("project_templates" as any)
-        .select("id, name, labels, archived")
+        .select(`${COLUMNS}, category, default_for_category`)
         .eq("archived", false)
         .order("name", { ascending: true });
+      if (error) {
+        ({ data, error } = await supabase
+          .from("project_templates" as any)
+          .select(COLUMNS)
+          .eq("archived", false)
+          .order("name", { ascending: true }));
+      }
       if (cancelled) return;
       setProjectTemplates(
         ((data as any[]) ?? []).map((t) => ({
           id: t.id,
           name: t.name,
           labels: (t.labels as string[] | null) ?? [],
+          category: (t.category as string | null) ?? null,
+          isDefault: !!t.default_for_category,
         })),
       );
+      setBlueprintsLoaded(true);
     })();
     return () => {
       cancelled = true;
     };
   }, [isTeam]);
+
+  /** Blueprints in the order this company should see them: their trade first. */
+  const rank = useMemo(
+    () => makeCategoryRank(company.profile.industry, company.profile.trades),
+    [company.profile.industry, company.profile.trades],
+  );
+  const orderedBlueprints = useMemo(
+    () =>
+      [...projectTemplates].sort(
+        (a, b) =>
+          // The default for a trade leads its group: it is the one-tap answer,
+          // and burying it alphabetically among its siblings is what makes a
+          // default worth nothing.
+          rank(a.category || GENERAL_CATEGORY) - rank(b.category || GENERAL_CATEGORY) ||
+          Number(b.isDefault) - Number(a.isDefault) ||
+          a.name.localeCompare(b.name),
+      ),
+    [projectTemplates, rank],
+  );
+
+  /**
+   * The blueprint a new project should start on.
+   *
+   * "Consider a default Blueprint per project category so most projects can be
+   * created in one tap." The company's own trade wins; a default filed under
+   * some other trade is still better than nothing, because someone deliberately
+   * marked it as how their jobs start.
+   */
+  const suggestedId = useMemo(() => {
+    const defaults = orderedBlueprints.filter((b) => b.isDefault);
+    if (!defaults.length) return null;
+    const forOurTrade = defaults.find(
+      (b) => b.category && rank(b.category) < rank(GENERAL_CATEGORY),
+    );
+    return (forOurTrade ?? defaults[0]).id;
+  }, [orderedBlueprints, rank]);
+
+  // Preselect the suggestion, once, and only when the user has not already
+  // chosen. A later re-run must not overwrite a deliberate pick.
+  const suggestionApplied = useRef(false);
+  useEffect(() => {
+    if (suggestionApplied.current || arrivedWithBlueprint) return;
+    if (!suggestedId) return;
+    suggestionApplied.current = true;
+    setSelectedTemplateId(suggestedId);
+  }, [suggestedId, arrivedWithBlueprint]);
+
+  /*
+   * Nothing to choose between is not a step, it is a pause. A user with no
+   * blueprints - which is every user below the Team plan - would otherwise meet
+   * a full-screen chooser offering one option called "Start blank".
+   */
+  const beginAtChooser = blueprintsLoaded && projectTemplates.length > 0;
+  useEffect(() => {
+    if (blueprintsLoaded && !beginAtChooser && step === "blueprint") setStep("details");
+  }, [blueprintsLoaded, beginAtChooser, step]);
 
   // Load Maps JS
   useEffect(() => {
@@ -283,7 +399,7 @@ export function NewProjectPage() {
       return toast.error(error?.message ?? "Could not create project");
     }
     const projectId = (data as any).id as string;
-    if (selectedTemplateId && selectedTemplateId !== "__none") {
+    if (selectedTemplateId && selectedTemplateId !== NO_BLUEPRINT) {
       try {
         const res = await applyTemplate(projectId, selectedTemplateId);
         // The catch below only fires for transport/HTTP throws (plan gate,
@@ -317,6 +433,146 @@ export function NewProjectPage() {
     void qc.invalidateQueries({ queryKey: qk.mapProjects(user.id) });
     navigate({ to: "/projects/$projectId", params: { projectId } });
   };
+
+  const selectedBlueprint =
+    selectedTemplateId === NO_BLUEPRINT
+      ? null
+      : (projectTemplates.find((t) => t.id === selectedTemplateId) ?? null);
+
+  /*
+   * Step one: choose a blueprint, or start blank.
+   *
+   * Two panes rather than a dropdown, because the spec asks for a preview -
+   * "show what a project would look like if this Blueprint were applied" - and
+   * a name in a list cannot carry that. The same BlueprintOutcomePreview runs
+   * on the blueprint's own page and inside the apply dialog, so the promise
+   * made here is literally the same picture the other two screens make.
+   */
+  if (step === "blueprint") {
+    return (
+      <div className="min-h-[calc(100dvh-3.5rem)] bg-background md:min-h-[calc(100dvh-4rem)]">
+        <div className="flex items-center gap-2 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
+          <Button asChild variant="ghost" size="icon" className="h-9 w-9">
+            <Link to="/projects">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-base font-semibold leading-tight">Start a project</h1>
+            <p className="text-[11px] text-muted-foreground">
+              Step 1 of 2 - choose how this job gets set up
+            </p>
+          </div>
+        </div>
+
+        <div className="container mx-auto max-w-5xl px-4 py-5">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,340px)_1fr]">
+            {/* The choices */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setSelectedTemplateId(NO_BLUEPRINT)}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition",
+                  selectedTemplateId === NO_BLUEPRINT
+                    ? "border-primary bg-primary/[0.06]"
+                    : "border-border/60 bg-card hover:border-border",
+                )}
+              >
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                  <FilePlus2 className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold">Start blank</span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    Just the project. Add checklists and documents later.
+                  </span>
+                </span>
+                {selectedTemplateId === NO_BLUEPRINT && (
+                  <Check className="h-4 w-4 shrink-0 text-primary" />
+                )}
+              </button>
+
+              <p className="px-1 pt-1.5 font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+                Blueprints
+              </p>
+
+              <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-0.5">
+                {orderedBlueprints.map((t) => {
+                  const on = selectedTemplateId === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setSelectedTemplateId(t.id)}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition",
+                        on
+                          ? "border-primary bg-primary/[0.06]"
+                          : "border-border/60 bg-card hover:border-border",
+                      )}
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                        <LayoutTemplate className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-bold">{t.name}</span>
+                          {t.isDefault && (
+                            <Star
+                              className="h-3 w-3 shrink-0 text-primary"
+                              aria-label="Default for this trade"
+                            />
+                          )}
+                        </span>
+                        <span className="block truncate text-[11px] text-muted-foreground">
+                          {t.category ?? GENERAL_CATEGORY}
+                          {t.labels.length ? ` · ${t.labels.join(", ")}` : ""}
+                        </span>
+                      </span>
+                      {on && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* The preview */}
+            <div className="space-y-3">
+              <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+                What this creates
+              </p>
+              {selectedTemplateId === NO_BLUEPRINT ? (
+                <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
+                  <p className="text-sm font-semibold">An empty project</p>
+                  <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
+                    You can apply a blueprint to it at any point afterwards, from the Templates
+                    screen. Nothing here is a one-time decision.
+                  </p>
+                </div>
+              ) : blueprint.loading ? (
+                <div className="flex items-center gap-2 px-1 py-6 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading what this creates…
+                </div>
+              ) : (
+                <BlueprintOutcomePreview
+                  items={blueprint.items}
+                  labels={blueprint.labels}
+                  projectName={null}
+                />
+              )}
+
+              <Button className="w-full" onClick={() => setStep("details")}>
+                {selectedBlueprint ? `Continue with "${selectedBlueprint.name}"` : "Continue blank"}
+                <ArrowRight className="ml-1.5 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col md:h-[calc(100dvh-4rem)]">
@@ -528,47 +784,47 @@ export function NewProjectPage() {
             </div>
           </div>
 
-          {(projectTemplates.length > 0 || selectedTemplateId !== "__none") && (
-            <div className="space-y-1">
-              <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-                <LayoutTemplate className="h-3 w-3" />
-                Apply project blueprint{" "}
-                <span className="normal-case text-muted-foreground/70">(optional)</span>
-              </Label>
-              <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="No blueprint" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none">No blueprint</SelectItem>
-                  {projectTemplates.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Picking a blueprint used to be a name in a dropdown and nothing
-                  else - you found out what it did after the project existed.
-                  Same panel the blueprint's own page shows. */}
-              {selectedTemplateId !== "__none" && (
-                <div className="pt-2">
-                  {blueprint.loading ? (
-                    <div className="flex items-center gap-2 px-1 py-2 text-xs text-muted-foreground">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Loading what this creates…
-                    </div>
-                  ) : (
-                    <BlueprintOutcomePreview
-                      items={blueprint.items}
-                      labels={blueprint.labels}
-                      projectName={form.name.trim() || form.street.trim() || null}
-                      dense
-                    />
-                  )}
-                </div>
-              )}
+          {/* The blueprint was chosen in step one, so what belongs here is the
+              decision as a fact and a way back to it - not the same picker
+              again. `beginAtChooser` is false when there was no step one to go
+              back to, in which case this row stays out of the way entirely. */}
+          {beginAtChooser && (
+            <div className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5">
+              <span
+                className={cn(
+                  "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
+                  selectedBlueprint
+                    ? "bg-primary/10 text-primary"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {selectedBlueprint ? (
+                  <LayoutTemplate className="h-4 w-4" />
+                ) : (
+                  <FilePlus2 className="h-4 w-4" />
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">
+                  {selectedBlueprint?.name ?? "Starting blank"}
+                </span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {selectedBlueprint
+                    ? blueprint.loading
+                      ? "Loading what this creates…"
+                      : `${blueprint.items.length} item${blueprint.items.length === 1 ? "" : "s"} will be created on this project`
+                    : "No checklists, documents or workflows will be added"}
+                </span>
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 shrink-0 rounded-lg text-xs font-bold"
+                onClick={() => setStep("blueprint")}
+              >
+                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                Change
+              </Button>
             </div>
           )}
 

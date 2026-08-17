@@ -25,6 +25,9 @@ import {
   ArrowDown,
   History,
   Rocket,
+  Camera,
+  Eye,
+  Star,
   Workflow as WorkflowIcon,
 } from "lucide-react";
 import { ChecklistTemplatesPage } from "@/features/settings/pages/ChecklistTemplatesPage";
@@ -70,12 +73,22 @@ import { SURFACE_CARD } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import { LabelChip, LabelPicker } from "@/features/photos/components/LabelPicker";
 import { ApplyBlueprintDialog } from "@/features/settings/components/ApplyBlueprintDialog";
+import { BlueprintOutcomePreview } from "@/features/settings/components/BlueprintOutcomePreview";
 import {
   DESTINATION,
   KIND_OUTCOME,
   KIND_ORDER,
+  SINGLETON_KINDS,
   destinationTotals,
+  type BlueprintItemKind,
 } from "@/features/settings/components/blueprint-outcomes";
+import { WalkthroughTemplatesManager } from "@/features/settings/components/WalkthroughTemplatesManager";
+import {
+  BLUEPRINT_STARTERS,
+  type BlueprintStarter,
+} from "@/features/settings/components/blueprint-starters";
+import { installBlueprintStarter } from "@/features/settings/components/install-blueprint-starter";
+import { CATEGORY_ORDER } from "@/lib/template-categories";
 import { LabelsManager } from "@/features/settings/components/LabelsManager";
 import { LabelSetsManager } from "@/features/settings/components/LabelSetsManager";
 import { ReportTemplatesManager } from "@/features/settings/components/ReportTemplatesManager";
@@ -92,6 +105,7 @@ export const TEMPLATE_TAB_KEYS = [
   "blueprints",
   "checklists",
   "workflows",
+  "walkthroughs",
   "documents",
   "reports",
   "label-sets",
@@ -115,6 +129,16 @@ interface ProjectTemplate {
   labels: string[] | null;
   archived: boolean;
   created_at: string;
+  /** The trade this blueprint is for, from CATEGORY_ORDER. Null means General. */
+  category: string | null;
+  /** The one blueprint a new project of this trade starts from. */
+  default_for_category: boolean;
+  /**
+   * Bumped by a trigger whenever the bundle gains or loses a section
+   * (20260908000000). Stamped onto each apply so a project can say which shape
+   * of the blueprint made it.
+   */
+  version: number;
 }
 interface ChecklistTemplate {
   id: string;
@@ -129,7 +153,14 @@ interface AttachedChecklist {
   position: number;
 }
 
-type TemplateItemKind = "checklist" | "document" | "report" | "label_set" | "workflow";
+/**
+ * Aliased to the shared union rather than restated.
+ *
+ * This file used to declare its own copy of the five kinds. That copy is what a
+ * sixth kind has to be remembered in, and forgetting it is silent: the page
+ * renders, the picker just never offers walkthroughs.
+ */
+type TemplateItemKind = BlueprintItemKind;
 interface TemplateItem {
   id: string;
   project_template_id: string;
@@ -198,6 +229,11 @@ const KIND_META: Record<
     icon: FileText,
     tint: KIND_OUTCOME.document.tint,
   },
+  walkthrough: {
+    label: KIND_OUTCOME.walkthrough.label,
+    icon: Camera,
+    tint: KIND_OUTCOME.walkthrough.tint,
+  },
   report: { label: KIND_OUTCOME.report.label, icon: Newspaper, tint: KIND_OUTCOME.report.tint },
   label_set: { label: KIND_OUTCOME.label_set.label, icon: Tag, tint: KIND_OUTCOME.label_set.tint },
 };
@@ -230,10 +266,19 @@ function byTrade(entries: LibraryEntry[]): Array<[string, LibraryEntry[]]> {
   );
 }
 
+/**
+ * Blank option value for the trade selects.
+ *
+ * Radix Select rejects an empty string as an item value, so "no trade" needs a
+ * sentinel; it is translated back to null on every write.
+ */
+const NO_CATEGORY = "__none";
+
 /** Which library tab authors a given blueprint section kind. */
 const KIND_TAB: Record<TemplateItemKind, TemplateTabKey> = {
   checklist: "checklists",
   workflow: "workflows",
+  walkthrough: "walkthroughs",
   document: "documents",
   report: "reports",
   label_set: "label-sets",
@@ -276,14 +321,18 @@ export function TemplatesPage() {
   const [reportTpls, setReportTpls] = useState<Array<{ id: string; name: string }>>([]);
   const [labelSetTpls, setLabelSetTpls] = useState<Array<{ id: string; name: string }>>([]);
   const [workflowTpls, setWorkflowTpls] = useState<Array<{ id: string; name: string }>>([]);
+  const [walkthroughTpls, setWalkthroughTpls] = useState<LibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
   const [checklistTemplates, setChecklistTemplates] = useState<ChecklistTemplate[]>([]);
   const [attached, setAttached] = useState<AttachedChecklist[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(search.blueprint ?? null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [startersOpen, setStartersOpen] = useState(false);
+  const [installing, setInstalling] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newCategory, setNewCategory] = useState<string>(NO_CATEGORY);
   const [newLabels, setNewLabels] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -303,6 +352,8 @@ export function TemplatesPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [editCategory, setEditCategory] = useState<string>(NO_CATEGORY);
+  const [editDefault, setEditDefault] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
   const loadApplications = useCallback(async () => {
@@ -337,51 +388,83 @@ export function TemplatesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [tplRes, chkRes, attRes, itemsRes, docRes, repRes, lsRes, wfRes] = await Promise.all([
-      supabase
+    const [tplRes, chkRes, attRes, itemsRes, docRes, repRes, lsRes, wfRes, wtRes] =
+      await Promise.all([
+        supabase
+          .from("project_templates" as any)
+          .select(
+            "id, team_id, created_by, name, description, labels, archived, created_at, category, default_for_category, version",
+          )
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("checklist_templates" as any)
+          .select("id, name, description, archived")
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("project_template_checklists" as any)
+          .select("id, project_template_id, checklist_template_id, position")
+          .order("position", { ascending: true }),
+        supabase
+          .from("project_template_items" as any)
+          .select("id, project_template_id, kind, ref_id, position")
+          .order("position", { ascending: true }),
+        supabase
+          .from("document_templates" as any)
+          // `body->>category`, not `body`: the trade is one short string, and the
+          // bodies behind these rows are tens of kilobytes of document HTML each.
+          // Selecting the whole column to read one key off it would pull the
+          // entire built-in library down on every visit to this page.
+          // `copiedFrom` comes along for the same price and keeps this dropdown
+          // agreeing with the two screens that list the library - see `docTpls`.
+          .select("id, name, archived, category:body->>category, copiedFrom:body->>copiedFrom")
+          .eq("archived", false)
+          .order("name"),
+        supabase
+          .from("report_templates" as any)
+          .select("id, name, archived")
+          .eq("archived", false)
+          .order("name"),
+        supabase
+          .from("label_sets" as any)
+          .select("id, name, archived")
+          .eq("archived", false)
+          .order("name"),
+        supabase
+          .from("workflow_templates" as any)
+          .select("id, name, archived")
+          .eq("archived", false)
+          .order("name"),
+        supabase
+          .from("walkthrough_templates" as any)
+          .select("id, name, archived, category")
+          .eq("archived", false)
+          .order("name"),
+      ]);
+    /*
+     * The blueprint read is the one that can fail over a pending migration:
+     * 20260908000000 adds three columns to `project_templates`, and PostgREST
+     * rejects the whole select over one unknown column. Falling back to the old
+     * column list keeps the page working on a database that has not been
+     * migrated yet, rather than showing an empty blueprint library and no
+     * explanation for it.
+     */
+    let tplRows = (tplRes.data as any[]) ?? [];
+    if (tplRes.error) {
+      const { data: legacyRows, error: legacyErr } = await supabase
         .from("project_templates" as any)
         .select("id, team_id, created_by, name, description, labels, archived, created_at")
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("checklist_templates" as any)
-        .select("id, name, description, archived")
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("project_template_checklists" as any)
-        .select("id, project_template_id, checklist_template_id, position")
-        .order("position", { ascending: true }),
-      supabase
-        .from("project_template_items" as any)
-        .select("id, project_template_id, kind, ref_id, position")
-        .order("position", { ascending: true }),
-      supabase
-        .from("document_templates" as any)
-        // `body->>category`, not `body`: the trade is one short string, and the
-        // bodies behind these rows are tens of kilobytes of document HTML each.
-        // Selecting the whole column to read one key off it would pull the
-        // entire built-in library down on every visit to this page.
-        // `copiedFrom` comes along for the same price and keeps this dropdown
-        // agreeing with the two screens that list the library - see `docTpls`.
-        .select("id, name, archived, category:body->>category, copiedFrom:body->>copiedFrom")
-        .eq("archived", false)
-        .order("name"),
-      supabase
-        .from("report_templates" as any)
-        .select("id, name, archived")
-        .eq("archived", false)
-        .order("name"),
-      supabase
-        .from("label_sets" as any)
-        .select("id, name, archived")
-        .eq("archived", false)
-        .order("name"),
-      supabase
-        .from("workflow_templates" as any)
-        .select("id, name, archived")
-        .eq("archived", false)
-        .order("name"),
-    ]);
-    const list = ((tplRes.data as any[]) ?? []) as ProjectTemplate[];
+        .order("created_at", { ascending: true });
+      if (legacyErr) toast.error(legacyErr.message ?? "Couldn't load blueprints");
+      tplRows = (legacyRows as any[]) ?? [];
+    }
+    // Defaulted here, once, so nothing downstream has to cope with the columns
+    // being absent.
+    const list = tplRows.map((t: any) => ({
+      ...t,
+      category: (t.category as string | null) ?? null,
+      default_for_category: !!t.default_for_category,
+      version: (t.version as number | undefined) ?? 1,
+    })) as ProjectTemplate[];
     setTemplates(list);
     setChecklistTemplates(((chkRes.data as any[]) ?? []) as ChecklistTemplate[]);
     setAttached(((attRes.data as any[]) ?? []) as AttachedChecklist[]);
@@ -406,6 +489,16 @@ export function TemplatesPage() {
     setReportTpls(((repRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
     setLabelSetTpls(((lsRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
     setWorkflowTpls(((wfRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
+    // Absent rather than empty on a database still waiting for 20260908000000:
+    // the read errors, `data` is null, and the picker simply offers no
+    // walkthroughs. The library tab says so in full.
+    setWalkthroughTpls(
+      ((wtRes.data as any[]) ?? []).map((x: any) => ({
+        id: x.id,
+        name: x.name,
+        category: x.category ?? null,
+      })),
+    );
     setSelectedId((cur) => {
       if (cur && list.find((t) => t.id === cur)) return cur;
       if (!list.length) return null;
@@ -509,17 +602,27 @@ export function TemplatesPage() {
   const selected = templates.find((t) => t.id === selectedId) ?? null;
 
   const libFor = useCallback(
-    (k: TemplateItemKind): LibraryEntry[] =>
-      k === "checklist"
-        ? checklistTemplates.map((c) => ({ id: c.id, name: c.name }))
-        : k === "document"
-          ? docTpls
-          : k === "report"
-            ? reportTpls
-            : k === "label_set"
-              ? labelSetTpls
-              : workflowTpls,
-    [checklistTemplates, docTpls, reportTpls, labelSetTpls, workflowTpls],
+    (k: TemplateItemKind): LibraryEntry[] => {
+      switch (k) {
+        case "checklist":
+          return checklistTemplates.map((c) => ({ id: c.id, name: c.name }));
+        case "document":
+          return docTpls;
+        case "report":
+          return reportTpls;
+        case "label_set":
+          return labelSetTpls;
+        case "walkthrough":
+          return walkthroughTpls;
+        case "workflow":
+          return workflowTpls;
+      }
+    },
+    // A switch, not a nested ternary. The chain had "everything else is a
+    // workflow" as its final branch, so adding a sixth kind would silently have
+    // offered the workflow library under the walkthrough heading. This form
+    // makes the compiler demand a branch per kind instead.
+    [checklistTemplates, docTpls, reportTpls, labelSetTpls, walkthroughTpls, workflowTpls],
   );
 
   /**
@@ -604,6 +707,7 @@ export function TemplatesPage() {
           name: newName.trim(),
           description: newDesc.trim() || null,
           labels: newLabels,
+          category: newCategory === NO_CATEGORY ? null : newCategory,
         })
         .select("id")
         .single();
@@ -612,6 +716,7 @@ export function TemplatesPage() {
       toast.success("Blueprint created");
       setNewName("");
       setNewDesc("");
+      setNewCategory(NO_CATEGORY);
       setNewLabels([]);
       setCreateOpen(false);
       setSelectedId((data as any).id);
@@ -623,22 +728,86 @@ export function TemplatesPage() {
     }
   };
 
+  /**
+   * Installs a pre-built blueprint, building any component it needs first.
+   *
+   * The result is reported in full rather than as a bare success: the installer
+   * may have created checklists and walkthroughs in the user's libraries, which
+   * is a change to two other tabs and should not be silent, and it may have
+   * skipped a piece, which would otherwise show up only as a blueprint with
+   * fewer sections than the card promised.
+   */
+  const installStarter = async (starter: BlueprintStarter) => {
+    if (!user) return;
+    setInstalling(starter.name);
+    try {
+      const res = await installBlueprintStarter(starter, user.id, teamData?.team?.id ?? null);
+      if ("error" in res) {
+        toast.error(res.error);
+        return;
+      }
+      setStartersOpen(false);
+      setSelectedId(res.blueprintId);
+      await load();
+
+      const builtLine = res.created.length
+        ? `Also added ${res.created.length} piece${res.created.length === 1 ? "" : "s"} to your libraries.`
+        : "";
+      if (res.skipped.length) {
+        toast.warning(
+          `"${starter.name}" added with ${res.attached} of ${starter.pieces.length} sections`,
+          {
+            description: [builtLine, ...res.skipped.map((s) => `${s.name}: ${s.reason}`)]
+              .filter(Boolean)
+              .join(" "),
+          },
+        );
+      } else {
+        toast.success(`"${starter.name}" added`, {
+          description: builtLine || undefined,
+        });
+      }
+    } finally {
+      setInstalling(null);
+    }
+  };
+
   const openEdit = (t: ProjectTemplate) => {
     setEditName(t.name);
     setEditDesc(t.description ?? "");
+    setEditCategory(t.category ?? NO_CATEGORY);
+    setEditDefault(t.default_for_category);
     setEditOpen(true);
   };
 
   const saveEdit = async () => {
     if (!selected || !editName.trim()) return;
     setSavingEdit(true);
+    const category = editCategory === NO_CATEGORY ? null : editCategory;
     const { error } = await supabase
       .from("project_templates" as any)
-      .update({ name: editName.trim(), description: editDesc.trim() || null })
+      .update({
+        name: editName.trim(),
+        description: editDesc.trim() || null,
+        category,
+        // A blueprint with no trade cannot be the default FOR a trade, so the
+        // flag is forced off rather than left dangling when the trade is
+        // cleared. The partial unique index ignores null categories, so a
+        // dangling true would be storable and unreachable.
+        default_for_category: category ? editDefault : false,
+      })
       .eq("id", selected.id);
     setSavingEdit(false);
     if (error) {
-      toast.error("Failed to save");
+      // The message matters here: the one error this update can realistically
+      // hit is the partial unique index rejecting a second default for the same
+      // trade, and "Failed to save" gives the user nothing to act on.
+      const duplicate = (error as { code?: string }).code === "23505";
+      toast.error(
+        duplicate
+          ? `Another blueprint is already the default for ${category}. Clear that one first.`
+          : (error.message ?? "Failed to save"),
+      );
       return;
     }
     toast.success("Blueprint updated");
@@ -656,6 +825,11 @@ export function TemplatesPage() {
         name: `${t.name} (copy)`,
         description: t.description,
         labels: t.labels ?? [],
+        category: t.category,
+        // Deliberately NOT copied. Two blueprints cannot both be the default
+        // for a trade, and the partial unique index would reject the insert -
+        // so a duplicate that carried the flag could not be created at all.
+        default_for_category: false,
       })
       .select("id")
       .single();
@@ -741,6 +915,18 @@ export function TemplatesPage() {
 
   const addOfKind = async (k: TemplateItemKind, refId: string) => {
     if (!selectedId || !refId) return;
+    /*
+     * The dropdown already disables a singleton kind that is taken, but this is
+     * the writer and the dropdown is not the only way in - two tabs open on the
+     * same blueprint is enough. Checked here so the rule holds regardless of
+     * which surface asked.
+     */
+    if (SINGLETON_KINDS.has(k) && sections.some((s) => s.kind === k && !s.missing)) {
+      toast.error(
+        `This blueprint already has a ${KIND_META[k].label.toLowerCase()}. Remove it first to swap in another.`,
+      );
+      return;
+    }
     if (k === "checklist") {
       // New checklist links go into the generic table too. The legacy table is
       // read for what is already there, never written to again.
@@ -883,6 +1069,7 @@ export function TemplatesPage() {
     blueprints: templates.filter((t) => !t.archived).length,
     checklists: checklistTemplates.filter((c) => !c.archived).length,
     workflows: workflowTpls.length,
+    walkthroughs: walkthroughTpls.length,
     documents: docTpls.length,
     reports: reportTpls.length,
     "label-sets": labelSetTpls.length,
@@ -997,6 +1184,12 @@ export function TemplatesPage() {
               count: tabCounts.workflows,
               icon: WorkflowIcon,
             },
+            {
+              key: "walkthroughs",
+              label: "Walkthroughs",
+              count: tabCounts.walkthroughs,
+              icon: Camera,
+            },
             { key: "documents", label: "Documents", count: tabCounts.documents, icon: FileText },
             { key: "reports", label: "Reports", count: tabCounts.reports, icon: Newspaper },
             {
@@ -1029,6 +1222,7 @@ export function TemplatesPage() {
               showArchived={showArchived}
               onToggleArchived={() => setShowArchived((s) => !s)}
               onCreate={() => setCreateOpen(true)}
+              onStarters={() => setStartersOpen(true)}
               sections={sections}
               previewItems={previewItems}
               reordering={reordering}
@@ -1054,6 +1248,7 @@ export function TemplatesPage() {
 
           {tab === "checklists" && <ChecklistTemplatesPage embedded />}
           {tab === "workflows" && <WorkflowTemplatesPage embedded />}
+          {tab === "walkthroughs" && <WalkthroughTemplatesManager canManage={canManage} />}
           {tab === "documents" && (
             <DocumentTemplatesManager teamId={teamData?.team?.id ?? null} canManage={canManage} />
           )}
@@ -1209,6 +1404,28 @@ export function TemplatesPage() {
               </div>
               <div>
                 <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Trade (optional)
+                </label>
+                <Select value={newCategory} onValueChange={setNewCategory}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_CATEGORY}>{GENERAL_CATEGORY}</SelectItem>
+                    {CATEGORY_ORDER.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Files this blueprint under a trade, and lets a new project of that trade start
+                  from it in one tap.
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Labels (optional)
                 </label>
                 <div className="mt-1 min-h-[44px] rounded-md border border-input bg-background px-2 py-2">
@@ -1235,6 +1452,72 @@ export function TemplatesPage() {
                 Create
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Pre-built blueprints.
+       *
+       * "Ship 2-3 pre-built Blueprints by trade so companies see the pattern
+       * before building their own, rather than starting from a blank screen."
+       * Each card installs a whole job setup, building any checklist, workflow,
+       * walkthrough or report it needs in the matching library first - so what
+       * arrives is a bundle of real, editable components, not a special kind of
+       * blueprint with content hidden inside it. */}
+      {canManage && (
+        <Dialog open={startersOpen} onOpenChange={(o) => !installing && setStartersOpen(o)}>
+          <DialogContent className="max-h-[85vh] max-w-lg overflow-hidden p-0">
+            <DialogHeader className="border-b border-border px-5 py-4">
+              <DialogTitle>Start from a pre-built blueprint</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[60vh] space-y-2 overflow-y-auto px-5 py-4">
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                Each of these bundles pieces from your libraries. Anything you don’t have yet gets
+                built there first, so you can edit every piece afterwards like any other.
+              </p>
+              {BLUEPRINT_STARTERS.map((s) => {
+                const busy = installing === s.name;
+                return (
+                  <button
+                    key={s.name}
+                    disabled={!!installing}
+                    onClick={() => void installStarter(s)}
+                    className="flex w-full items-start gap-3 rounded-xl border border-border/60 bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40 disabled:opacity-50"
+                  >
+                    <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                      {busy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <LayoutTemplate className="h-4 w-4" />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-bold">{s.name}</span>
+                      <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground">
+                        {s.description}
+                      </span>
+                      <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        {s.pieces.map((p, i) => {
+                          const Icon = KIND_META[p.kind].icon;
+                          return (
+                            <span
+                              key={`${p.kind}-${i}`}
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold",
+                                KIND_META[p.kind].tint,
+                              )}
+                            >
+                              <Icon className="h-2.5 w-2.5" />
+                              {p.name}
+                            </span>
+                          );
+                        })}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </DialogContent>
         </Dialog>
       )}
@@ -1268,6 +1551,51 @@ export function TemplatesPage() {
                   className="mt-1"
                 />
               </div>
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Trade
+                </label>
+                <Select value={editCategory} onValueChange={setEditCategory}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_CATEGORY}>{GENERAL_CATEGORY}</SelectItem>
+                    {CATEGORY_ORDER.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* The one-tap default. Disabled rather than hidden when no trade
+                  is set, because "why can't I tick this" is answered by the
+                  line under it, whereas a control that vanishes is not. */}
+              <label
+                className={cn(
+                  "flex items-start gap-2.5 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5",
+                  editCategory === NO_CATEGORY && "opacity-60",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-border"
+                  checked={editDefault}
+                  disabled={editCategory === NO_CATEGORY}
+                  onChange={(e) => setEditDefault(e.target.checked)}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">
+                    Default for {editCategory === NO_CATEGORY ? "this trade" : editCategory}
+                  </span>
+                  <span className="block text-[11px] leading-snug text-muted-foreground">
+                    {editCategory === NO_CATEGORY
+                      ? "Pick a trade above to make this the one a new project of that trade starts from."
+                      : "A new project starts pre-selected on this blueprint. Only one blueprint per trade can be the default."}
+                  </span>
+                </span>
+              </label>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditOpen(false)}>
@@ -1320,6 +1648,7 @@ function BlueprintsTab(props: {
   showArchived: boolean;
   onToggleArchived: () => void;
   onCreate: () => void;
+  onStarters: () => void;
   sections: SectionRow[];
   previewItems: Array<{ kind: TemplateItemKind; name: string }>;
   reordering: boolean;
@@ -1356,6 +1685,7 @@ function BlueprintsTab(props: {
     showArchived,
     onToggleArchived,
     onCreate,
+    onStarters,
     sections,
     previewItems,
     reordering,
@@ -1375,6 +1705,22 @@ function BlueprintsTab(props: {
     onUpgrade,
   } = props;
 
+  /*
+   * Preview mode, from the spec: "show what a project would look like if this
+   * Blueprint were applied."
+   *
+   * Collapsed by default because the Contents list below is the working view -
+   * this is the answer to "what will this DO", which is a question you ask
+   * before you apply, not while you are assembling. Opening it renders exactly
+   * the panel the apply dialog and the new-project chooser render, so the three
+   * places that make this promise cannot describe the same blueprint
+   * differently.
+   *
+   * Declared above the early returns below: a hook after them would be a
+   * conditional one.
+   */
+  const [previewOpen, setPreviewOpen] = useState(false);
+
   if (loading) {
     return (
       <Card className="flex items-center justify-center p-16">
@@ -1384,7 +1730,7 @@ function BlueprintsTab(props: {
   }
 
   if (templates.length === 0) {
-    return <BlueprintsIntro canManage={canManage} onCreate={onCreate} />;
+    return <BlueprintsIntro canManage={canManage} onCreate={onCreate} onStarters={onStarters} />;
   }
 
   const hasContent = previewItems.length > 0 || (selected?.labels?.length ?? 0) > 0;
@@ -1429,15 +1775,25 @@ function BlueprintsTab(props: {
               </button>
             </div>
             {canManage && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 rounded-lg px-2 text-xs font-bold"
-                onClick={onCreate}
-              >
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                New
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 rounded-lg px-2 text-xs font-bold"
+                  onClick={onStarters}
+                >
+                  Starters
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 rounded-lg px-2 text-xs font-bold"
+                  onClick={onCreate}
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  New
+                </Button>
+              </div>
             )}
           </div>
           {visibleTemplates.length === 0 ? (
@@ -1548,8 +1904,25 @@ function BlueprintsTab(props: {
                  * full, within one screen: the section count heads the Contents
                  * card, the apply count heads the Track record card. Each fact
                  * is now written once, in the card that acts on it. */}
-                <p className="mt-2.5 text-xs text-muted-foreground">
-                  Created {timeAgo(selected.created_at)}
+                {/* Trade, default flag and version live on one line under the
+                    name. The version is the spec's audit half: the bundle is
+                    already copied on apply, so this number is what lets a
+                    project say which shape of the blueprint made it. */}
+                <p className="mt-2.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+                  <span>{selected.category ?? GENERAL_CATEGORY}</span>
+                  <span aria-hidden>·</span>
+                  <span>v{selected.version}</span>
+                  <span aria-hidden>·</span>
+                  <span>Created {timeAgo(selected.created_at)}</span>
+                  {selected.default_for_category && selected.category && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-bold text-primary"
+                      title={`New ${selected.category} projects start from this blueprint`}
+                    >
+                      <Star className="h-2.5 w-2.5" />
+                      Default for {selected.category}
+                    </span>
+                  )}
                 </p>
               </div>
 
@@ -1685,46 +2058,94 @@ function BlueprintsTab(props: {
                   {sections.length} section{sections.length === 1 ? "" : "s"}, applied in this order
                 </p>
               </div>
-              {canManage && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" className="rounded-lg">
-                      <Plus className="mr-1.5 h-4 w-4" />
-                      Add section
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-64">
-                    {KIND_ORDER.map((k) => {
-                      const Icon = KIND_META[k].icon;
-                      return (
-                        <DropdownMenuItem
-                          key={k}
-                          className="items-start gap-2"
-                          onClick={() => onPickKind(k)}
-                        >
-                          <span
-                            className={cn(
-                              "mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded",
-                              KIND_META[k].tint,
-                            )}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-lg"
+                  onClick={() => setPreviewOpen((v) => !v)}
+                  disabled={!hasContent}
+                  title={hasContent ? undefined : "Add at least one section or label first"}
+                  aria-expanded={previewOpen}
+                >
+                  <Eye className="mr-1.5 h-4 w-4" />
+                  {previewOpen ? "Hide preview" : "Preview"}
+                </Button>
+                {canManage && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" className="rounded-lg">
+                        <Plus className="mr-1.5 h-4 w-4" />
+                        Add section
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-64">
+                      {KIND_ORDER.map((k) => {
+                        const Icon = KIND_META[k].icon;
+                        /*
+                         * "zero-to-one workflow", from the spec. A workflow
+                         * becomes the project's status tracker and a project has
+                         * one status, so a second one has no meaning. Disabled
+                         * with the reason on the row rather than hidden: a kind
+                         * that vanishes from the menu reads as a bug, and the
+                         * author would go looking for it.
+                         */
+                        const taken =
+                          SINGLETON_KINDS.has(k) &&
+                          sections.some((s) => s.kind === k && !s.missing);
+                        return (
+                          <DropdownMenuItem
+                            key={k}
+                            className="items-start gap-2"
+                            disabled={taken}
+                            onClick={() => onPickKind(k)}
                           >
-                            <Icon className="h-3.5 w-3.5" />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block text-sm font-semibold">
-                              {KIND_META[k].label}
+                            <span
+                              className={cn(
+                                "mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded",
+                                KIND_META[k].tint,
+                              )}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
                             </span>
-                            <span className="block text-[11px] leading-snug text-muted-foreground">
-                              {KIND_OUTCOME[k].becomes}
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold">
+                                {KIND_META[k].label}
+                              </span>
+                              <span className="block text-[11px] leading-snug text-muted-foreground">
+                                {taken
+                                  ? `Already in this blueprint. A blueprint carries at most one ${KIND_META[k].label.toLowerCase()}.`
+                                  : KIND_OUTCOME[k].becomes}
+                              </span>
                             </span>
-                          </span>
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             </div>
+
+            {/* The full picture, on request. */}
+            {previewOpen && hasContent && (
+              <div className="mt-4 rounded-xl border border-border/60 bg-muted/20 p-3">
+                <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+                  A project with this blueprint applied
+                </p>
+                <BlueprintOutcomePreview
+                  className="mt-2"
+                  items={previewItems}
+                  labels={selected.labels ?? []}
+                  projectName={null}
+                  dense
+                />
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                  Everything here is copied onto the project at the moment you apply it. Editing
+                  this blueprint afterwards leaves those projects exactly as they are.
+                </p>
+              </div>
+            )}
 
             {/* "What happens when I apply this", in one row instead of a
                 panel: the project tabs that gain something, and how much. */}
@@ -1960,12 +2381,20 @@ function BlueprintsTab(props: {
  * going to look?" is not a question an empty list with a Create button
  * answers. Three steps, in the order the user will do them.
  */
-function BlueprintsIntro({ canManage, onCreate }: { canManage: boolean; onCreate: () => void }) {
+function BlueprintsIntro({
+  canManage,
+  onCreate,
+  onStarters,
+}: {
+  canManage: boolean;
+  onCreate: () => void;
+  onStarters: () => void;
+}) {
   const steps = [
     {
       icon: LayoutTemplate,
       title: "Build the pieces",
-      body: "Checklists, workflows, documents, reports and label sets - each on its own tab above. Anything you save from a project lands there too.",
+      body: "Checklists, workflows, walkthroughs, documents, reports and label sets - each on its own tab above. Anything you save from a project lands there too.",
     },
     {
       icon: FolderOpen,
@@ -2003,15 +2432,25 @@ function BlueprintsIntro({ canManage, onCreate }: { canManage: boolean; onCreate
         title="No project blueprints yet"
         description={
           canManage
-            ? "Create one to standardise how a job gets set up - then apply it to any project in a click."
+            ? "Start from a pre-built one to see the shape of it, or build your own - then apply it to any project in a click."
             : "Ask your account owner or an admin to create one."
         }
         action={
           canManage ? (
-            <Button onClick={onCreate}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New blueprint
-            </Button>
+            /* Pre-built first. A blank screen with a Create button is exactly
+               the starting point the spec asks us to stop shipping, and the
+               starters land a whole worked example - blueprint, checklist,
+               workflow, walkthrough and report - in one press. */
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button onClick={onStarters}>
+                <Rocket className="mr-1.5 h-4 w-4" />
+                Start from a pre-built blueprint
+              </Button>
+              <Button variant="outline" onClick={onCreate}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                Blank blueprint
+              </Button>
+            </div>
           ) : null
         }
       />
