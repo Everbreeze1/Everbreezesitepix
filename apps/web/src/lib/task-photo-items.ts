@@ -150,6 +150,26 @@ export function taskPhotoItemErrorMessage(
   return FRIENDLY_BY_CODE[code] ?? "Could not save that change. Reload and try again.";
 }
 
+/**
+ * The distinct photos a task covers, in the order it lists them.
+ *
+ * The one place the deduplication lives, because every reader and writer of
+ * `photo_ids` needs it and each one that forgot broke differently:
+ *
+ *   counting   a duplicate inflated the denominator here but not in SQL, so the
+ *              task read done and came back in progress
+ *   writing    two rows with the same conflict target in one upsert is a hard
+ *              21000 from Postgres, so the task could not be closed at all
+ *   rendering  duplicate React keys, and two rows sharing one note field
+ *
+ * `photo_ids` is a plain `uuid[]` with nothing enforcing uniqueness, so this is a
+ * property of the column and not of any one screen. Call this rather than reaching
+ * for the raw array.
+ */
+export function taskPhotoIds(photoIds: string[] | null | undefined): string[] {
+  return Array.from(new Set(photoIds ?? []));
+}
+
 export interface TaskPhotoProgress {
   /** Photos the task covers, from `photo_ids`. */
   total: number;
@@ -180,7 +200,7 @@ export function taskPhotoProgress(
    * put it back to in progress. Counting distinct photos is also simply what
    * "which photos are handled" means.
    */
-  const ids = Array.from(new Set(photoIds ?? []));
+  const ids = taskPhotoIds(photoIds);
   const total = ids.length;
   /*
    * Counted over `photo_ids` rather than over the item rows, matching the SQL.
@@ -251,7 +271,7 @@ export function photoPositionInTask(
 ): string | null {
   // Deduplicated for the same reason `taskPhotoProgress` is: the position and
   // the total both have to be counted in photos, or "Photo 3 of 2" is reachable.
-  const ids = Array.from(new Set(photoIds ?? []));
+  const ids = taskPhotoIds(photoIds);
   if (ids.length <= 1) return null;
   const position = ids.indexOf(photoId);
   if (position < 0) return null;
@@ -278,7 +298,7 @@ export function taskWorkSummary(
 ): TaskWorkSummary {
   // Deduplicated, so a photo listed twice is not reported as two outstanding
   // jobs or its note read out twice. Same rule as `taskPhotoProgress`.
-  const ids = Array.from(new Set(photoIds ?? []));
+  const ids = taskPhotoIds(photoIds);
   const notes: string[] = [];
   let doneWithoutNote = 0;
   let remaining = 0;
@@ -316,4 +336,30 @@ export function taskPhotoItemPatch(
     status,
     note: note?.trim() ? note.trim() : null,
   };
+}
+
+/**
+ * Every photo on a task, as rows for one upsert. Use this rather than mapping
+ * `photo_ids` directly.
+ *
+ * Deduplicated, and that is the entire point. These go out as a single
+ * `INSERT ... ON CONFLICT DO UPDATE`, and Postgres refuses a statement that would
+ * touch the same conflict target twice - `ON CONFLICT DO UPDATE command cannot
+ * affect row a second time`, a hard 21000. So a task whose `photo_ids` happened to
+ * name one photo twice could not be closed by "mark the whole task done" at all,
+ * with an error that reads like a database fault rather than anything a user did.
+ *
+ * `photo_ids` is a uuid[] with nothing enforcing uniqueness, so this is the same
+ * hazard `taskPhotoProgress` deduplicates for, at the write end instead of the
+ * read end.
+ */
+export function taskPhotoItemRows(
+  taskId: string,
+  photoIds: string[] | null | undefined,
+  status: TaskPhotoStatus,
+  noteFor?: (photoId: string) => string | null | undefined,
+): ReturnType<typeof taskPhotoItemPatch>[] {
+  return taskPhotoIds(photoIds).map((photoId) =>
+    taskPhotoItemPatch(taskId, photoId, status, noteFor?.(photoId) ?? null),
+  );
 }

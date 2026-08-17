@@ -6,8 +6,10 @@ import {
   isMissingTaskPhotoItems,
   photoIsDone,
   photoPositionInTask,
+  taskPhotoIds,
   taskPhotoItemErrorMessage,
   taskPhotoItemPatch,
+  taskPhotoItemRows,
   taskPhotoProgress,
   taskStatusFromPhotos,
   taskWorkSummary,
@@ -206,6 +208,73 @@ describe("what was done and what needs to get done", () => {
       doneWithoutNote: 0,
       remaining: 2,
     });
+  });
+});
+
+describe("one upsert may not touch the same photo twice", () => {
+  /*
+   * These rows go out as a single `INSERT ... ON CONFLICT DO UPDATE`, and Postgres
+   * rejects a statement that would hit the same conflict target twice with a hard
+   * 21000, `ON CONFLICT DO UPDATE command cannot affect row a second time`. So a
+   * task whose `photo_ids` named one photo twice could not be closed by "mark the
+   * whole task done" at all, and the error read like a database fault.
+   */
+  it("builds one row per distinct photo", () => {
+    const rows = taskPhotoItemRows("t", ["a", "b", "a", "b", "a"], "done");
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.photo_id)).toEqual(["a", "b"]);
+    expect(new Set(rows.map((r) => `${r.task_id}:${r.photo_id}`)).size).toBe(rows.length);
+  });
+
+  it("keeps each photo's own note", () => {
+    const notes: Record<string, string> = { a: "Resealed", b: "Replaced" };
+    const rows = taskPhotoItemRows("t", ["a", "b"], "done", (id) => notes[id]);
+    expect(rows.map((r) => r.note)).toEqual(["Resealed", "Replaced"]);
+  });
+
+  it("copes with an empty or absent array", () => {
+    expect(taskPhotoItemRows("t", [], "done")).toEqual([]);
+    expect(taskPhotoItemRows("t", null, "open")).toEqual([]);
+    expect(taskPhotoItemRows("t", undefined, "open")).toEqual([]);
+  });
+
+  it("is what the bulk write paths actually call", () => {
+    /*
+     * Mapping `photo_ids` directly is the shape of the bug, so the two places
+     * that close every photo at once are pinned to the helper. A third caller
+     * added later that maps the array by hand reintroduces it silently.
+     */
+    for (const file of [
+      "apps/web/src/features/projects/components/ProjectTasks.tsx",
+      "apps/web/src/features/projects/pages/GroupPage.tsx",
+    ]) {
+      const source = read(file);
+      expect(source).toContain("taskPhotoItemRows(");
+      expect(source).not.toMatch(/photo_?[Ii]ds[^\n]*\.map\(\(photoId\)/);
+    }
+  });
+});
+
+describe("the distinct photos a task covers", () => {
+  it("is the one spelling of the dedupe", () => {
+    expect(taskPhotoIds(["a", "b", "a"])).toEqual(["a", "b"]);
+    expect(taskPhotoIds([])).toEqual([]);
+    expect(taskPhotoIds(null)).toEqual([]);
+    expect(taskPhotoIds(undefined)).toEqual([]);
+  });
+
+  it("keeps the order the task lists them in", () => {
+    // The checklist numbers its rows off this, and `photoPositionInTask` reports
+    // "Photo N of M" off the same array, so the two have to agree.
+    expect(taskPhotoIds(["c", "a", "c", "b"])).toEqual(["c", "a", "b"]);
+  });
+
+  it("is what the checklist renders, so no two rows share a React key", () => {
+    // Duplicate keys made React reuse one row, so a duplicated photo's two rows
+    // shared a single note field, under a label that counted the photo once.
+    const checklist = read("apps/web/src/features/projects/components/TaskPhotoChecklist.tsx");
+    expect(checklist).toContain("taskPhotoIds(photoIds)");
+    expect(checklist).not.toContain("photoIds.map(");
   });
 });
 
@@ -595,7 +664,9 @@ describe("the two panels write the photo, not the task", () => {
     const groupPage = read("apps/web/src/features/projects/pages/GroupPage.tsx");
     const groupsApi = read("apps/api/src/domains/projects/groups.ts");
     expect(groupPage).toContain("TASK_PHOTO_ITEMS_TABLE");
-    expect(groupPage).toContain("taskPhotoItemPatch");
+    // Via the row builder, which is what keeps a duplicated photo id from making
+    // the upsert touch one row twice.
+    expect(groupPage).toContain("taskPhotoItemRows(");
     expect(groupsApi).toMatch(/\.select\("id, project_id[^"]*photo_ids/);
   });
 

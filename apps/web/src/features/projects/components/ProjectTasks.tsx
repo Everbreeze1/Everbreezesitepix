@@ -52,7 +52,9 @@ import {
   indexTaskPhotoItems,
   isMissingTaskPhotoItems,
   taskPhotoItemErrorMessage,
+  taskPhotoIds,
   taskPhotoItemPatch,
+  taskPhotoItemRows,
   taskPhotoProgress,
   taskStatusFromPhotos,
   taskWorkSummary,
@@ -473,10 +475,12 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
 
   /** Every outstanding photo at once, for "mark the whole task done". */
   const writeAllPhotoItems = async (t: Task, status: "open" | "done") => {
-    const rows = (t.photo_ids ?? []).map((photoId) => {
-      const existing = itemsFor(t.id)?.get(photoId) ?? null;
-      return taskPhotoItemPatch(t.id, photoId, status, existing?.note ?? null);
-    });
+    const rows = taskPhotoItemRows(
+      t.id,
+      t.photo_ids,
+      status,
+      (photoId) => itemsFor(t.id)?.get(photoId)?.note ?? null,
+    );
     if (rows.length === 0) return true;
 
     const { error } = await supabase
@@ -1178,7 +1182,14 @@ function TaskDialog({
   const [dueDate, setDueDate] = useState(task?.due_date ?? "");
   const [priority, setPriority] = useState<Priority>(task?.priority ?? "normal");
   const [status, setStatus] = useState<Status>(task?.status ?? "open");
-  const [photoIds, setPhotoIds] = useState<string[]>(task?.photo_ids ?? seedPhotoIds);
+  /*
+   * Deduplicated on the way in, which heals the row as well as the screen. A
+   * legacy `photo_ids` naming one photo twice gave this dialog two chips with the
+   * same React key and a count that disagreed with the breakdown below it - and
+   * because the array is sent back on every save, cleaning it here means opening
+   * the task once is enough to fix the stored value for good.
+   */
+  const [photoIds, setPhotoIds] = useState<string[]>(taskPhotoIds(task?.photo_ids ?? seedPhotoIds));
   const [saving, setSaving] = useState(false);
 
   /*

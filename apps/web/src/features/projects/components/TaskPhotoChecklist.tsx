@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Circle, Loader2, StickyNote } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { photoIsDone, taskPhotoProgress, type TaskPhotoItem } from "@/lib/task-photo-items";
+import {
+  photoIsDone,
+  taskPhotoIds,
+  taskPhotoProgress,
+  type TaskPhotoItem,
+} from "@/lib/task-photo-items";
 
 /**
  * The photos a task covers, each with its own state.
@@ -65,8 +70,17 @@ export function TaskPhotoChecklist({
 }: Props) {
   const progress = taskPhotoProgress(photoIds, items);
   const photoById = new Map(photos.map((p) => [p.id, p]));
+  /*
+   * Distinct, so the list agrees with the bar above it. `photo_ids` has no
+   * uniqueness behind it, and rendering one row per array slot meant a duplicated
+   * id produced two rows keyed the same - React reuses one of them, so the pair
+   * shared a single note field - under a label that counted the photo once. The
+   * numbering follows this array too, which is what keeps "Photo 2" here and
+   * `photoPositionInTask`'s "Photo 2 of 2" describing the same picture.
+   */
+  const ids = taskPhotoIds(photoIds);
 
-  if (photoIds.length === 0) return null;
+  if (ids.length === 0) return null;
 
   return (
     <div className={className}>
@@ -83,7 +97,7 @@ export function TaskPhotoChecklist({
       </div>
 
       <ul className="space-y-1.5">
-        {photoIds.map((photoId, index) => {
+        {ids.map((photoId, index) => {
           const photo = photoById.get(photoId);
           const item = items?.get(photoId) ?? null;
           const done = photoIsDone(items, photoId);
