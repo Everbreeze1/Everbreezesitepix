@@ -9,17 +9,14 @@ export const ANNUAL_DISCOUNT = 0.2;
 export const TRIAL_DAYS = 14;
 
 /**
- * Stands in for "add as many users as you want" on Pro and Team.
- *
- * Deliberately a number rather than Infinity: checkout has to hand Stripe a
- * seat quantity, and an unbounded one turns a mis-typed crew size into a
- * five-figure invoice. 999 is far past any real crew, so it reads as no limit
- * while staying a quantity we can actually bill.
+ * The ceiling Pro and Team stop at. Enforced, but deliberately not advertised
+ * (see `advertiseSeatCap`): a crew of 51 is an Enterprise conversation, not a
+ * plan comparison.
  *
  * Mirrored by PLAN_MEMBER_CAP in apps/api/src/lib/team-plan.ts and by the
  * teams_sync_member_limit() trigger in supabase/migrations.
  */
-export const UNLIMITED_SEATS = 999;
+export const SELF_SERVE_SEAT_CAP = 50;
 
 export interface PlanPricing {
   id: BillingPlan;
@@ -36,9 +33,19 @@ export interface PlanPricing {
    * apps/api/src/domains/teams/service.ts, which is what actually blocks
    * invites - a plan can't be sold for more seats than it can hold.
    *
-   * `UNLIMITED_SEATS` means "add as many as you want" (Pro and Team).
    */
   maxSeats: number;
+  /**
+   * Whether `maxSeats` belongs on the card.
+   *
+   * Starter's cap IS the offer - a crew of 3 has to know before they buy, and
+   * it is the reason to look at Pro. Pro and Team stop at 50 as well, but that
+   * number is an operational limit rather than a product boundary: nobody
+   * picks between those two tiers on it, and printing it turns "add the crew"
+   * into "up to 50 only". Past 50 the answer is Enterprise, which the band
+   * under the cards already points at.
+   */
+  advertiseSeatCap: boolean;
   /**
    * What this tier adds over the one below it - NOT its full feature list.
    *
@@ -75,8 +82,9 @@ export const PLANS: PlanPricing[] = [
     // add-on", and it is the second user in a different sense too: an Admin
     // plus one Technician, never two Admins.
     includedSeats: 1,
-    additionalSeatMonthly: 15,
+    additionalSeatMonthly: 19,
     maxSeats: 2,
+    advertiseSeatCap: true,
     adds: [
       "Photo & video capture",
       // Already recorded on every photo and already stamped on reports, and
@@ -102,8 +110,9 @@ export const PLANS: PlanPricing[] = [
     // cliff is the whole reason this tier gets repriced.
     basePriceMonthly: 79,
     includedSeats: 3,
-    additionalSeatMonthly: 20,
-    maxSeats: UNLIMITED_SEATS,
+    additionalSeatMonthly: 24,
+    maxSeats: SELF_SERVE_SEAT_CAP,
+    advertiseSeatCap: false,
     popular: true,
     adds: [
       // `are_teammates()` gates on plan IN ('pro','team') - see
@@ -127,10 +136,11 @@ export const PLANS: PlanPricing[] = [
     name: "Team",
     audience: "For Multi-Crew Operations",
     tagline: "Improve margins and reduce rework as you grow.",
-    basePriceMonthly: 199,
-    includedSeats: 6,
-    additionalSeatMonthly: 28,
-    maxSeats: UNLIMITED_SEATS,
+    basePriceMonthly: 179,
+    includedSeats: 3,
+    additionalSeatMonthly: 24,
+    maxSeats: SELF_SERVE_SEAT_CAP,
+    advertiseSeatCap: false,
     adds: [
       "Workflows & project blueprints",
       // The Portfolio lock screen sends people here with "See Team plan", and
@@ -139,25 +149,16 @@ export const PLANS: PlanPricing[] = [
       "Client-facing Portfolio site + website embeds",
       "Advanced roles & permissions",
       "Unlimited Auto Reports",
-      "Highest storage",
+      // "Highest storage" deliberately absent. The tier does get the largest
+      // allowance (see use-storage-usage), but nobody shops on a number they
+      // cannot picture, and it invited "how many GB?" every time it appeared.
+      // Enforced in the backend, not sold on the card.
     ],
   },
 ];
 
-/**
- * Ceiling for the pricing page's crew stepper.
- *
- * NOT a plan limit - Pro and Team sell past it. It is just the largest crew the
- * calculator will quote, because a stepper you have to click 900 times is not a
- * calculator. Past this, the price is still base + rate x seats; the customer
- * simply adds the seats from Settings rather than from the marketing page.
- */
-export const MAX_SEATS = 100;
-
-/** Pro and Team: no ceiling worth naming, so don't name one. */
-export function hasUnlimitedSeats(plan: PlanPricing): boolean {
-  return plan.maxSeats >= UNLIMITED_SEATS;
-}
+/** Highest seat count any plan can hold - the stepper's ceiling. */
+export const MAX_SEATS = Math.max(...PLANS.map((p) => p.maxSeats));
 
 /**
  * True when the plan actually sells seats past what the base covers. False on
