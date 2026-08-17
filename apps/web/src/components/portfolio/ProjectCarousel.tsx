@@ -32,7 +32,16 @@ export function ProjectCarousel({
   accent: string;
 }) {
   const [index, setIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
+  /**
+   * Two independent reasons to stop, deliberately not one flag.
+   *
+   * They unset on different events - a pointer leaving, a tab coming back - and
+   * collapsing them means either can clear the other: mouseleave would restart
+   * a carousel in a hidden tab, and returning to the tab would restart one the
+   * visitor is still hovering to read.
+   */
+  const [engaged, setEngaged] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const root = useRef<HTMLDivElement | null>(null);
   const count = cards.length;
 
@@ -50,22 +59,35 @@ export function ProjectCarousel({
     [count],
   );
 
+  /*
+   * Tab visibility, tracked on its own and always listening.
+   *
+   * It used to be registered inside the autoplay effect below, which was a
+   * one-way trapdoor: hiding the tab set the flag, the effect re-ran, took its
+   * early return, and tore down the very listener that would have cleared the
+   * flag on the way back. The carousel then sat frozen for the rest of the
+   * visit. An effect that owns a listener must not be one that can decline to
+   * run.
+   */
   useEffect(() => {
-    if (paused || count < 2) return;
+    if (typeof document === "undefined") return;
+    const onVisibility = () => setHidden(document.hidden);
+    onVisibility();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  useEffect(() => {
+    // A carousel advancing in a background tab burns through the whole set, so
+    // the visitor comes back to slide nine of nine with no idea what they
+    // missed.
+    if (engaged || hidden || count < 2) return;
     if (typeof window === "undefined") return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
 
     const timer = window.setInterval(() => setIndex((i) => (i + 1) % count), 6500);
-    // A carousel advancing in a background tab burns through the whole set, so
-    // the visitor comes back to slide nine of nine with no idea what they
-    // missed.
-    const onVisibility = () => setPaused(document.hidden);
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [paused, count]);
+    return () => window.clearInterval(timer);
+  }, [engaged, hidden, count]);
 
   const touchX = useRef<number | null>(null);
 
@@ -79,11 +101,11 @@ export function ProjectCarousel({
       aria-roledescription="carousel"
       aria-label="Finished projects"
       className="relative isolate overflow-hidden bg-neutral-950"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocusCapture={() => setPaused(true)}
+      onMouseEnter={() => setEngaged(true)}
+      onMouseLeave={() => setEngaged(false)}
+      onFocusCapture={() => setEngaged(true)}
       onBlurCapture={(e) => {
-        if (!root.current?.contains(e.relatedTarget as Node | null)) setPaused(false);
+        if (!root.current?.contains(e.relatedTarget as Node | null)) setEngaged(false);
       }}
       onKeyDown={(e) => {
         if (e.key === "ArrowRight") {

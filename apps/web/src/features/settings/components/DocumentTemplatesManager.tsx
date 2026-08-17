@@ -88,21 +88,21 @@ import {
   makeCategoryRank,
 } from "@/lib/template-categories";
 import { useCompanySetup } from "@/hooks/use-company-setup";
+import { nextCopyName } from "@/lib/duplicate-name";
 import { tradeCategoryFor } from "@sitepix/shared";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-type DocStyle =
-  | "report"
-  | "letter"
-  | "checklist"
-  | "memo"
-  | "walkthrough"
-  | "sitelog"
-  | "sitelog_basic"
-  | "sitelog_walkthrough"
-  | "sitelog_hvac";
+/**
+ * The starting layouts "New template" offers.
+ *
+ * Rows written before a given rewrite can hold a style this union has dropped
+ * ("sitelog_basic" and friends, which were the three sample-site-log bodies).
+ * Nothing breaks: `parseBody` casts whatever is stored, and every lookup here
+ * falls back to `STYLE_PRESETS[0]`.
+ */
+type DocStyle = "report" | "letter" | "checklist" | "memo" | "walkthrough" | "sitelog";
 
 interface DocumentTemplate {
   id: string;
@@ -203,31 +203,6 @@ const RELEVANT_BY_STYLE: Record<string, string[]> = {
     "prepared_by_title",
     "company_name",
   ],
-  sitelog_basic: [
-    "project_name",
-    "project_address",
-    "date",
-    "weather",
-    "prepared_by",
-    "company_name",
-  ],
-  sitelog_walkthrough: [
-    "project_name",
-    "project_address",
-    "date",
-    "weather",
-    "prepared_by",
-    "client_name",
-  ],
-  sitelog_hvac: [
-    "project_name",
-    "project_address",
-    "project_number",
-    "date",
-    "prepared_by",
-    "prepared_by_title",
-    "company_name",
-  ],
 };
 
 function getRelevantPlaceholders(style: string, detected: string[]): Placeholder[] {
@@ -238,6 +213,51 @@ function getRelevantPlaceholders(style: string, detected: string[]): Placeholder
     .filter((p): p is Placeholder => Boolean(p));
 }
 
+/*
+ * Photo slots, byte-identical to the ones the seeded library ships (see
+ * supabase/migrations/*_document_templates_*_seed.sql).
+ *
+ * `isPhotoSlot` in the project page editor keys off the `data:image/svg+xml`
+ * src, so a slot written here is the same tap-to-fill target as a slot that
+ * came out of SQL. Written out in full rather than built by a helper because
+ * tests/document-template-library.test.ts reads these bodies out of this file
+ * as text, and a function call is not something it can evaluate.
+ */
+const PHOTO_SLOT =
+  "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'240'%20height%3D'260'%3E%3Crect%20x%3D'0.5'%20y%3D'0.5'%20width%3D'239'%20height%3D'259'%20rx%3D'8'%20fill%3D'rgb(246%2C247%2C249)'%20stroke%3D'rgb(199%2C205%2C214)'%20stroke-dasharray%3D'6%205'%2F%3E%3Ctext%20x%3D'120'%20y%3D'124'%20font-family%3D'sans-serif'%20font-size%3D'13'%20font-weight%3D'700'%20fill%3D'rgb(100%2C108%2C124)'%20text-anchor%3D'middle'%3EPhoto%3C%2Ftext%3E%3Ctext%20x%3D'120'%20y%3D'144'%20font-family%3D'sans-serif'%20font-size%3D'11'%20fill%3D'rgb(150%2C158%2C172)'%20text-anchor%3D'middle'%3ETap%20to%20add%20photo%3C%2Ftext%3E%3C%2Fsvg%3E";
+const PHOTO_SLOT_BEFORE =
+  "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'240'%20height%3D'260'%3E%3Crect%20x%3D'0.5'%20y%3D'0.5'%20width%3D'239'%20height%3D'259'%20rx%3D'8'%20fill%3D'rgb(246%2C247%2C249)'%20stroke%3D'rgb(199%2C205%2C214)'%20stroke-dasharray%3D'6%205'%2F%3E%3Ctext%20x%3D'120'%20y%3D'124'%20font-family%3D'sans-serif'%20font-size%3D'13'%20font-weight%3D'700'%20fill%3D'rgb(100%2C108%2C124)'%20text-anchor%3D'middle'%3EBefore%3C%2Ftext%3E%3Ctext%20x%3D'120'%20y%3D'144'%20font-family%3D'sans-serif'%20font-size%3D'11'%20fill%3D'rgb(150%2C158%2C172)'%20text-anchor%3D'middle'%3ETap%20to%20add%20photo%3C%2Ftext%3E%3C%2Fsvg%3E";
+const PHOTO_SLOT_AFTER =
+  "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'240'%20height%3D'260'%3E%3Crect%20x%3D'0.5'%20y%3D'0.5'%20width%3D'239'%20height%3D'259'%20rx%3D'8'%20fill%3D'rgb(246%2C247%2C249)'%20stroke%3D'rgb(199%2C205%2C214)'%20stroke-dasharray%3D'6%205'%2F%3E%3Ctext%20x%3D'120'%20y%3D'124'%20font-family%3D'sans-serif'%20font-size%3D'13'%20font-weight%3D'700'%20fill%3D'rgb(100%2C108%2C124)'%20text-anchor%3D'middle'%3EAfter%3C%2Ftext%3E%3Ctext%20x%3D'120'%20y%3D'144'%20font-family%3D'sans-serif'%20font-size%3D'11'%20fill%3D'rgb(150%2C158%2C172)'%20text-anchor%3D'middle'%3ETap%20to%20add%20photo%3C%2Ftext%3E%3C%2Fsvg%3E";
+const PHOTO_SLOT_WIDE =
+  "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'720'%20height%3D'300'%3E%3Crect%20x%3D'0.5'%20y%3D'0.5'%20width%3D'719'%20height%3D'299'%20rx%3D'8'%20fill%3D'rgb(246%2C247%2C249)'%20stroke%3D'rgb(199%2C205%2C214)'%20stroke-dasharray%3D'6%205'%2F%3E%3Ctext%20x%3D'360'%20y%3D'144'%20font-family%3D'sans-serif'%20font-size%3D'13'%20font-weight%3D'700'%20fill%3D'rgb(100%2C108%2C124)'%20text-anchor%3D'middle'%3EPhoto%3C%2Ftext%3E%3Ctext%20x%3D'360'%20y%3D'164'%20font-family%3D'sans-serif'%20font-size%3D'11'%20fill%3D'rgb(150%2C158%2C172)'%20text-anchor%3D'middle'%3ETap%20to%20add%20photo%3C%2Ftext%3E%3C%2Fsvg%3E";
+
+/**
+ * The layouts behind "New template".
+ *
+ * These are held to the same standard as the seeded library, and the reason is
+ * a client's words about this exact screen: the built-ins "look nice and
+ * editable" while the templates a team owns "are terrible". Both sets sit in
+ * one grid, so the difference was the whole impression of the page.
+ *
+ * The old bodies were a run of bare headings over `<ul>` bullets. The library
+ * next to them opens with a titled cover line, states the job in a key/value
+ * table, and lays out grids to fill and photo slots to tap. What follows is
+ * that same shape, so a team's own first template arrives looking like the
+ * library it sits beside rather than like a draft of it.
+ *
+ * The house style, matched deliberately:
+ *   - `<h1>` naming the document, then the project line, then a grey meta line;
+ *   - `<hr>`, then a key/value table for the facts about the visit;
+ *   - grey italic guidance above a section, never filler prose inside it;
+ *   - `[Bracketed prompts]` in cells, which `bracketsToFillFields` turns into
+ *     click-to-type blanks when the document is created;
+ *   - photo slots and a sign-off table where the document is one someone hands
+ *     over.
+ *
+ * No newlines inside a `<table>`: the HTML parser foster-parents stray text out
+ * of table markup, which quietly relocates it above the table.
+ */
 const STYLE_PRESETS: {
   key: DocStyle;
   label: string;
@@ -249,27 +269,41 @@ const STYLE_PRESETS: {
     key: "report",
     label: "Report",
     icon: Newspaper,
-    description: "Formal report with sections and findings.",
-    html: `<h1>{{project_name}} - Field Report</h1>
-<p><em>{{date}} · Prepared by {{prepared_by}}</em></p>
+    description: "Findings and recommendations, with photos and a sign-off.",
+    html: `<h1>Field Report</h1>
+<p><strong>{{project_name}}</strong> &nbsp;·&nbsp; {{project_address}}</p>
+<p><span style="color: rgb(120,128,142)">{{date}} &nbsp;·&nbsp; Prepared by {{prepared_by}} &nbsp;·&nbsp; {{company_name}}</span></p>
+<hr>
+<table><tbody><tr><th><p>Report #</p></th><td><p>[Report #]</p></td></tr><tr><th><p>Visit type</p></th><td><p>[Routine / callout / follow-up]</p></td></tr><tr><th><p>Site contact</p></th><td><p>[Name and number]</p></td></tr><tr><th><p>Weather</p></th><td><p>{{weather}}</p></td></tr></tbody></table>
 <h2>Overview</h2>
-<p><strong>Site:</strong> {{project_address}}</p>
-<p>[Overall condition of the site]</p>
-<h2>Findings</h2>
-<ul><li>[What you found]</li><li>[What you found]</li></ul>
+<p><em><span style="color: rgb(140,148,162)">Why you were on site, who you met, and the overall condition.</span></em></p>
+<p></p>
+<h2>What we found</h2>
+<table><tbody><tr><th><p>Location</p></th><th><p>What we found</p></th><th><p>Priority</p></th></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
+<p><img src="${PHOTO_SLOT}" width="32%" height="260" alt="Finding 1"><img src="${PHOTO_SLOT}" width="32%" height="260" alt="Finding 2"><img src="${PHOTO_SLOT}" width="32%" height="260" alt="Finding 3"></p>
 <h2>Recommendations</h2>
-<ol><li>[What should happen, and by when]</li><li>[What should happen, and by when]</li></ol>`,
+<table><tbody><tr><th><p>#</p></th><th><p>What should happen</p></th><th><p>Owner</p></th><th><p>By when</p></th></tr><tr><td><p>1</p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p>2</p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p>3</p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
+<hr>
+<h2>Sign-off</h2>
+<table><tbody><tr><th><p></p></th><th><p>Name</p></th><th><p>Date</p></th><th><p>Signature</p></th></tr><tr><td><p><strong>Prepared by</strong></p></td><td><p>{{prepared_by}}</p></td><td><p>{{date}}</p></td><td><p></p></td></tr><tr><td><p><strong>Client</strong></p></td><td><p>{{client_name}}</p></td><td><p></p></td><td><p></p></td></tr></tbody></table>`,
   },
   {
     key: "letter",
     label: "Letter",
     icon: FileSignature,
-    description: "Professional letter with header and sign-off.",
-    html: `<p>{{date}}</p>
-<p>{{client_name}}<br>{{project_address}}</p>
+    description: "Letterhead, the ask set out in a table, and a signature block.",
+    html: `<p><span style="color: rgb(120,128,142)">{{company_name}} &nbsp;·&nbsp; {{company_address}} &nbsp;·&nbsp; {{company_phone}}</span></p>
+<hr>
+<p>{{date}}</p>
+<p><strong>{{client_name}}</strong><br>{{client_contact}}<br>{{project_address}}</p>
 <p><strong>Re: {{project_name}}</strong></p>
 <p>Dear {{client_name}},</p>
-<p>[Write your message here]</p>
+<p><em><span style="color: rgb(140,148,162)">One line on why you are writing, then the detail below.</span></em></p>
+<p>[Why you are writing]</p>
+<p></p>
+<h2>What we are asking for</h2>
+<table><tbody><tr><th><p>Item</p></th><th><p>Detail</p></th><th><p>By when</p></th></tr><tr><td><p>[Item]</p></td><td><p>[Detail]</p></td><td><p>[Date]</p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
+<p>Please come back to us with anything you need from our side.</p>
 <p>Sincerely,</p>
 <p>{{prepared_by}}<br>{{prepared_by_title}}<br>{{company_name}}</p>`,
   },
@@ -277,208 +311,85 @@ const STYLE_PRESETS: {
     key: "checklist",
     label: "Checklist summary",
     icon: FileCheck2,
-    description: "Recap format for completed checklists.",
-    html: `<h1>{{project_name}} - Checklist Summary</h1>
-<p><em>Completed {{date}} · {{prepared_by}}</em></p>
-<h2>Completed items</h2>
-<ul><li>[What was completed]</li><li>[What was completed]</li></ul>
-<h2>Outstanding</h2>
-<ul><li>[What is still open, and who owns it]</li></ul>`,
+    description: "Tick boxes for what was done, a table for what is still open.",
+    html: `<h1>Checklist Summary</h1>
+<p><strong>{{project_name}}</strong> &nbsp;·&nbsp; {{project_address}}</p>
+<p><span style="color: rgb(120,128,142)">{{date}} &nbsp;·&nbsp; Completed by {{prepared_by}} &nbsp;·&nbsp; {{company_name}}</span></p>
+<hr>
+<h2>Completed</h2>
+<p><em><span style="color: rgb(140,148,162)">Tick what was done. Add a line for anything the list did not cover.</span></em></p>
+<ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>[First item]</p></li><li data-type="taskItem" data-checked="false"><p>[Second item]</p></li><li data-type="taskItem" data-checked="false"><p>[Third item]</p></li><li data-type="taskItem" data-checked="false"><p>[Fourth item]</p></li></ul>
+<p><img src="${PHOTO_SLOT}" width="48%" height="260" alt="Work completed"><img src="${PHOTO_SLOT}" width="48%" height="260" alt="Work completed"></p>
+<h2>Still open</h2>
+<table><tbody><tr><th><p>Item</p></th><th><p>Why it is open</p></th><th><p>Owner</p></th><th><p>By when</p></th></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
+<hr>
+<p><span style="color: rgb(120,128,142)">Signed {{prepared_by}}, {{prepared_by_title}} &nbsp;·&nbsp; {{date}}</span></p>`,
   },
   {
     key: "memo",
     label: "Memo",
     icon: FileText,
-    description: "Short internal memo layout.",
+    description: "Short internal note with a header block and an action list.",
     html: `<h1>Memorandum</h1>
-<p><strong>To:</strong> {{client_name}}<br>
-<strong>From:</strong> {{prepared_by}}<br>
-<strong>Date:</strong> {{date}}<br>
-<strong>Re:</strong> {{project_name}}</p>
+<table><tbody><tr><th><p>To</p></th><td><p>{{client_name}}</p></td></tr><tr><th><p>From</p></th><td><p>{{prepared_by}}, {{prepared_by_title}}</p></td></tr><tr><th><p>Date</p></th><td><p>{{date}}</p></td></tr><tr><th><p>Re</p></th><td><p>{{project_name}}</p></td></tr></tbody></table>
 <hr>
-<p>[Write your memo here]</p>`,
+<p><em><span style="color: rgb(140,148,162)">Lead with the decision or the ask. Detail underneath it.</span></em></p>
+<p>[The point of this memo]</p>
+<p></p>
+<h2>Actions</h2>
+<table><tbody><tr><th><p>Action</p></th><th><p>Owner</p></th><th><p>By when</p></th></tr><tr><td><p>[Action]</p></td><td><p>[Owner]</p></td><td><p>[Date]</p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>`,
   },
   {
     key: "walkthrough",
     label: "Walkthrough report",
     icon: Footprints,
-    description: "Structured walkthrough with observations by area.",
-    html: `<h1>{{project_name}} - Walkthrough Report</h1>
-<p><em>{{date}} · Led by {{prepared_by}} · Weather: {{weather}}</em></p>
+    description: "Area-by-area observations with before and after photos.",
+    html: `<h1>Walkthrough Report</h1>
+<p><strong>{{project_name}}</strong> &nbsp;·&nbsp; {{project_address}}</p>
+<p><span style="color: rgb(120,128,142)">{{date}} &nbsp;·&nbsp; Led by {{prepared_by}} &nbsp;·&nbsp; {{company_name}}</span></p>
+<hr>
+<table><tbody><tr><th><p>Project #</p></th><td><p>{{project_number}}</p></td></tr><tr><th><p>Weather</p></th><td><p>{{weather}}</p></td></tr><tr><th><p>Purpose</p></th><td><p>[Progress / handover / snag review]</p></td></tr></tbody></table>
 <h2>Attendees</h2>
-<ul><li>{{prepared_by}} ({{prepared_by_title}})</li><li>{{client_name}}</li></ul>
-<h2>Route & Observations</h2>
-<h3>Area 1</h3>
-<p>[Conditions, progress and any concerns]</p>
-<h3>Area 2</h3>
-<p>[Conditions, progress and any concerns]</p>
-<h2>Action Items</h2>
-<ol><li>[Follow-up task and who owns it]</li><li>[Follow-up task and who owns it]</li></ol>
-<h2>Next Steps</h2>
-<p>[The plan through to the next walkthrough]</p>`,
+<table><tbody><tr><th><p>Name</p></th><th><p>Role</p></th><th><p>Company</p></th></tr><tr><td><p>{{prepared_by}}</p></td><td><p>{{prepared_by_title}}</p></td><td><p>{{company_name}}</p></td></tr><tr><td><p>{{client_name}}</p></td><td><p>[Role]</p></td><td><p>[Company]</p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
+<h2>Area 1</h2>
+<p><em><span style="color: rgb(140,148,162)">Name the area, then what you saw and whether it is on track.</span></em></p>
+<table><tbody><tr><th><p>Area</p></th><td><p>[Area]</p></td></tr><tr><th><p>Observation</p></th><td><p>[What was seen]</p></td></tr><tr><th><p>Status</p></th><td><p>[On track / delayed / needs attention]</p></td></tr></tbody></table>
+<p><img src="${PHOTO_SLOT_BEFORE}" width="48%" height="260" alt="Area 1 before"><img src="${PHOTO_SLOT_AFTER}" width="48%" height="260" alt="Area 1 after"></p>
+<h2>Area 2</h2>
+<table><tbody><tr><th><p>Area</p></th><td><p>[Area]</p></td></tr><tr><th><p>Observation</p></th><td><p>[What was seen]</p></td></tr><tr><th><p>Status</p></th><td><p>[On track / delayed / needs attention]</p></td></tr></tbody></table>
+<p><img src="${PHOTO_SLOT_BEFORE}" width="48%" height="260" alt="Area 2 before"><img src="${PHOTO_SLOT_AFTER}" width="48%" height="260" alt="Area 2 after"></p>
+<h2>Action items</h2>
+<table><tbody><tr><th><p>#</p></th><th><p>Action</p></th><th><p>Owner</p></th><th><p>By when</p></th></tr><tr><td><p>1</p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p>2</p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p>3</p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
+<h2>Next walkthrough</h2>
+<table><tbody><tr><th><p>Date</p></th><td><p>[Date]</p></td></tr><tr><th><p>Focus</p></th><td><p>[Areas to cover next]</p></td></tr></tbody></table>
+<hr>
+<p><span style="color: rgb(120,128,142)">Signed {{prepared_by}} &nbsp;·&nbsp; {{date}}</span></p>`,
   },
   {
     key: "sitelog",
     label: "Site log",
     icon: ClipboardList,
-    description: "Daily site log with crew, work performed, and notes.",
-    html: `<h1>{{project_name}}</h1>
-<p><strong>Daily Site Log</strong> · {{date}}</p>
-<p><em>Prepared by {{prepared_by}}, {{prepared_by_title}} · {{company_name}}</em></p>
+    description: "Daily record of crew, deliveries, progress, delays and photos.",
+    html: `<h1>Daily Site Log</h1>
+<p><strong>{{project_name}}</strong> &nbsp;·&nbsp; {{project_address}}</p>
+<p><span style="color: rgb(120,128,142)">{{date}} &nbsp;·&nbsp; Prepared by {{prepared_by}} &nbsp;·&nbsp; {{company_name}}</span></p>
 <hr>
-<h2>Site conditions</h2>
-<p><strong>Location:</strong> {{project_address}}<br>
-<strong>Weather:</strong> {{weather}}<br>
-<strong>Project #:</strong> {{project_number}}</p>
+<table><tbody><tr><th><p>Project #</p></th><td><p>{{project_number}}</p></td></tr><tr><th><p>Weather</p></th><td><p>{{weather}}</p></td></tr><tr><th><p>Hours on site</p></th><td><p>[Start and finish]</p></td></tr><tr><th><p>Supervisor</p></th><td><p>[Name]</p></td></tr></tbody></table>
 <h2>Crew on site</h2>
-<ul>
-  <li>[Trade or company, workers, hours]</li>
-  <li>[Trade or company, workers, hours]</li>
-</ul>
-<h2>Work performed today</h2>
-<ol>
-  <li>[First task completed, and where]</li>
-  <li>[Second task completed, and where]</li>
-  <li>[Inspections or milestones reached]</li>
-</ol>
-<h2>Deliveries & equipment</h2>
-<ul>
-  <li>[Material or equipment, supplier, quantity]</li>
-</ul>
-<h2>Issues, delays & safety</h2>
-<blockquote><p>[RFIs, blockers, incidents, who was told, action taken]</p></blockquote>
-<h2>Photos referenced</h2>
-<p>[Key photos from today, with captions]</p>
+<table><tbody><tr><th><p>Trade</p></th><th><p>Company</p></th><th><p>Headcount</p></th><th><p>Hours</p></th></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
+<h2>Work performed</h2>
+<table><tbody><tr><th><p>Area</p></th><th><p>What was done</p></th><th><p>% done</p></th></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
+<p><img src="${PHOTO_SLOT}" width="32%" height="260" alt="Progress 1"><img src="${PHOTO_SLOT}" width="32%" height="260" alt="Progress 2"><img src="${PHOTO_SLOT}" width="32%" height="260" alt="Progress 3"></p>
+<h2>Deliveries and equipment</h2>
+<table><tbody><tr><th><p>Time</p></th><th><p>Item</p></th><th><p>Qty</p></th><th><p>Received by</p></th></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
+<h2>Delays, issues and safety</h2>
+<p><em><span style="color: rgb(140,148,162)">Anything that cost time, and who was told about it.</span></em></p>
+<table><tbody><tr><th><p>Issue</p></th><th><p>Raised with</p></th><th><p>Time lost</p></th></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
+<p><img src="${PHOTO_SLOT_WIDE}" width="100%" height="300" alt="Site conditions"></p>
 <h2>Plan for tomorrow</h2>
-<ul>
-  <li>[Priority task and responsible trade]</li>
-  <li>[Coordination items or deliveries expected]</li>
-</ul>
+<table><tbody><tr><th><p>Priority</p></th><th><p>Trade responsible</p></th></tr><tr><td><p>[Task]</p></td><td><p>[Trade]</p></td></tr><tr><td><p></p></td><td><p></p></td></tr></tbody></table>
 <hr>
-<p><em>Signed: {{prepared_by}} - {{date}}</em></p>`,
-  },
-  {
-    key: "sitelog_basic",
-    label: "Basic site log (sample)",
-    icon: ClipboardList,
-    description: "Simple daily summary with photos and notes.",
-    html: `<h1>{{project_name}}</h1>
-<p><strong>Daily Site Log</strong> - {{date}}</p>
-<p><em>{{prepared_by}} · {{company_name}}</em></p>
-<hr>
-<h2>Summary</h2>
-<p><strong>Site:</strong> {{project_address}} · <strong>Weather:</strong> {{weather}}</p>
-<p>[What happened on site today]</p>
-<h2>Work completed</h2>
-<ul>
-  <li>[Task, location, trade]</li>
-  <li>[Task, location, trade]</li>
-  <li>[Task, location, trade]</li>
-</ul>
-<h2>Photos &amp; notes</h2>
-<blockquote><p>[Caption each photo, and flag anything the client should see]</p></blockquote>
-<h2>Notes for tomorrow</h2>
-<p>[What the crew or client should know before the next shift]</p>
-<hr>
-<p><em>Prepared by {{prepared_by}} - {{date}}</em></p>`,
-  },
-  {
-    key: "sitelog_walkthrough",
-    label: "Detailed walkthrough log (sample)",
-    icon: Footprints,
-    description: "Structured walkthrough with findings, action items, and photo notes.",
-    html: `<h1>{{project_name}} - Walkthrough Log</h1>
-<p><strong>Date:</strong> {{date}} · <strong>Weather:</strong> {{weather}}</p>
-<p><strong>Led by:</strong> {{prepared_by}}, {{prepared_by_title}} · <strong>Client:</strong> {{client_name}}</p>
-<p><strong>Location:</strong> {{project_address}} · <strong>Project #:</strong> {{project_number}}</p>
-<hr>
-<h2>1. Attendees</h2>
-<ul>
-  <li>{{prepared_by}} - {{prepared_by_title}} ({{company_name}})</li>
-  <li>{{client_name}} - Owner representative</li>
-  <li>[Additional attendee, role]</li>
-</ul>
-<h2>2. Scope of walkthrough</h2>
-<p>[Areas covered, purpose, anything the client asked for]</p>
-<h2>3. Findings by area</h2>
-<h3>Area A - [e.g. Ground floor]</h3>
-<ul>
-  <li><strong>Observation:</strong> [what was seen]</li>
-  <li><strong>Status:</strong> [on track / delayed / needs attention]</li>
-</ul>
-<h3>Area B - [e.g. Mechanical room]</h3>
-<ul>
-  <li><strong>Observation:</strong> [what was seen]</li>
-  <li><strong>Status:</strong> [on track / delayed / needs attention]</li>
-</ul>
-<h2>4. Photo notes</h2>
-<ol>
-  <li>[Photo 1, what it shows and why it matters]</li>
-  <li>[Photo 2, what it shows and why it matters]</li>
-  <li>[Photo 3, what it shows and why it matters]</li>
-</ol>
-<h2>5. Action items</h2>
-<ol>
-  <li>[Action] - <strong>Owner:</strong> [Name] - <strong>Due:</strong> [Date]</li>
-  <li>[Action] - <strong>Owner:</strong> [Name] - <strong>Due:</strong> [Date]</li>
-</ol>
-<h2>6. Next walkthrough</h2>
-<p>[Proposed date, attendees and focus areas]</p>
-<hr>
-<p><em>Signed: {{prepared_by}} - {{date}}</em></p>`,
-  },
-  {
-    key: "sitelog_hvac",
-    label: "HVAC / construction log (sample)",
-    icon: FileCheck2,
-    description: "Technical observations, system progress, and recommendations.",
-    html: `<h1>{{project_name}} - HVAC / Construction Log</h1>
-<p><strong>Date:</strong> {{date}} · <strong>Project #:</strong> {{project_number}}</p>
-<p><strong>Inspector:</strong> {{prepared_by}}, {{prepared_by_title}} · {{company_name}}</p>
-<p><strong>Site:</strong> {{project_address}} · <strong>Conditions:</strong> {{weather}}</p>
-<hr>
-<h2>1. Systems inspected</h2>
-<ul>
-  <li>Air handling unit(s) - [location / tag]</li>
-  <li>Ductwork run(s) - [floor / zone]</li>
-  <li>Piping / refrigerant lines - [segment]</li>
-  <li>Controls &amp; thermostats - [zone]</li>
-</ul>
-<h2>2. Technical observations</h2>
-<h3>Mechanical</h3>
-<ul>
-  <li>[Component, measurement or reading, status]</li>
-  <li>[Component, measurement or reading, status]</li>
-</ul>
-<h3>Electrical &amp; controls</h3>
-<ul>
-  <li>Panel / circuit - [observation]</li>
-  <li>Sensor / control - [observation]</li>
-</ul>
-<h3>Structural / rough-in</h3>
-<ul>
-  <li>Framing, penetrations, hangers - [observation]</li>
-</ul>
-<h2>3. Progress vs. schedule</h2>
-<ol>
-  <li>HVAC rough-in - [% complete] - [on track / behind]</li>
-  <li>Duct insulation - [% complete] - [on track / behind]</li>
-  <li>Startup &amp; commissioning - [% complete] - [on track / behind]</li>
-</ol>
-<h2>4. Deficiencies &amp; safety</h2>
-<ul>
-  <li>[Deficiency, location, severity, corrective action]</li>
-  <li>[Safety observation, corrective action]</li>
-</ul>
-<h2>5. Recommendations</h2>
-<ol>
-  <li>[Recommendation, responsible party, target date]</li>
-  <li>[Recommendation, responsible party, target date]</li>
-</ol>
-<h2>6. Photos referenced</h2>
-<p>[Photos of each system, tagged to the observations above]</p>
-<hr>
-<p><em>Report prepared by {{prepared_by}} ({{prepared_by_title}}) - {{date}}</em></p>`,
+<p><span style="color: rgb(120,128,142)">Signed {{prepared_by}}, {{prepared_by_title}} &nbsp;·&nbsp; {{date}}</span></p>`,
   },
 ];
 
@@ -910,41 +821,22 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     }
   }
 
-  async function loadSampleSiteLogs() {
-    // Each sample lands in the section a crew would look for it under, rather
-    // than three unfiled cards in General - the HVAC log especially, which has
-    // a trade printed in its own name.
-    const sampleTrades: Partial<Record<DocStyle, string>> = {
-      sitelog_basic: "Field Reports",
-      sitelog_walkthrough: "Field Reports",
-      sitelog_hvac: "HVAC",
-    };
-    const sampleKeys: DocStyle[] = ["sitelog_basic", "sitelog_walkthrough", "sitelog_hvac"];
-    const rows = sampleKeys
-      .map((k) => STYLE_PRESETS.find((p) => p.key === k)!)
-      .map((p) => ({
-        name: p.label.replace(" (sample)", ""),
-        team_id: teamId,
-        created_by: user?.id,
-        body: {
-          style: p.key,
-          html: p.html,
-          description: p.description,
-          category: sampleTrades[p.key],
-        } as any,
-        fields: extractFields(p.html),
-      }));
-    const { data, error } = await supabase
-      .from("document_templates" as any)
-      .insert(rows)
-      .select();
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    toast.success("Sample site log templates added");
-    setItems((prev) => [...((data ?? []) as unknown as DocumentTemplate[]), ...prev]);
-  }
+  /*
+   * The sample-site-logs button used to sit here. It wrote three team-owned
+   * copies of the preset bodies - a basic log, a walkthrough log and an HVAC
+   * log - and it is where the templates the client called terrible came from.
+   *
+   * Every one of the three is covered better by a built-in the library already
+   * ships: Daily Site Report and Site Visit Report under Field Reports, and the
+   * HVAC service and maintenance sheets under HVAC. So the button's only real
+   * effect was to drop worse duplicates of existing cards into General, owned
+   * by the team and therefore the only ones on the page carrying an Edit and a
+   * delete. Two tiers of quality in one grid, with the worse tier the one that
+   * looked editable.
+   *
+   * Anyone wanting an editable copy of a sample now hits "Duplicate to edit" on
+   * the built-in itself, which starts them from the good body.
+   */
 
   async function persist() {
     if (!editor?.template) return;
@@ -969,12 +861,25 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   }
 
   async function duplicate(t: DocumentTemplate) {
+    /*
+     * Numbered against the whole library rather than a blind " (copy)" suffix.
+     * The client's report was of "massive duplication" in this grid, and a
+     * suffix that stacks is half of how it reads: "HVAC Service Call Report",
+     * "... (copy)" and "... (copy) (copy)" are three cards for one document,
+     * and nothing about the names says which is which. See nextCopyName.
+     *
+     * `items` and not `visible`, so an archived row still reserves its name -
+     * a collision the user cannot see is still a collision.
+     */
     const { data, error } = await supabase
       .from("document_templates" as any)
       .insert({
         // Never inherit a null team_id from an example - the copy must belong
         // to the caller's team so it is editable.
-        name: `${t.name} (copy)`,
+        name: nextCopyName(
+          t.name,
+          items.map((i) => i.name),
+        ),
         team_id: teamId ?? null,
         created_by: user?.id,
         body: t.body,
@@ -1062,11 +967,6 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
             >
               {showArchived ? "Hide archived" : "Show archived"}
             </Button>
-            {canManage && (
-              <Button variant="outline" className={SURFACE_BUTTON} onClick={loadSampleSiteLogs}>
-                <Sparkles className="h-4 w-4" /> Load sample site logs
-              </Button>
-            )}
             {canManage && (
               <Button className={SURFACE_BUTTON} onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4" /> New template
@@ -1920,11 +1820,29 @@ function DocumentEditorSurface({
               </>
             ) : (
               <div className="doc-page">
-                {/* Quick fields - side-by-side inputs above the document.
-                  Editing here instantly updates the matching placeholder in
-                  the document body (via PlaceholderChips widget decorations). */}
+                {/*
+                  Quick fields - the narrow-screen home for the same values the
+                  Fields panel holds. Editing either updates the matching
+                  placeholder in the document live (PlaceholderChips widget
+                  decorations); both write the one `sampleOverrides` map.
+
+                  `md:hidden` against the panel's `hidden md:block` is what stops
+                  them rendering together, and that pairing is the fix for the
+                  screenshot the client sent. Above `md` this strip laid all nine
+                  placeholders out in a four-column grid *inside the paper*,
+                  directly above a toolbar, while the panel listed the very same
+                  nine down the right-hand side - two sets of inputs for one set
+                  of values, filling the top third of the window and pushing the
+                  document itself below the fold. "Very bad looking. Crowded."
+
+                  The panel wins the wide breakpoint because it is the superset
+                  (detected placeholders as well as the suggested ones), it can
+                  be dismissed from the header, and it sits beside the document
+                  rather than on top of it. This strip wins the narrow one,
+                  where the panel is not rendered at all.
+                */}
                 {quickFields.length > 0 && (
-                  <div className="rounded-t-lg border-b border-gray-200 bg-blue-50/60 px-4 py-3">
+                  <div className="rounded-t-lg border-b border-gray-200 bg-blue-50/60 px-4 py-3 md:hidden">
                     <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-blue-900/70">
                       <Sparkles className="h-3 w-3" /> Quick fields
                       <span className="ml-1 font-normal normal-case tracking-normal text-blue-900/50">
@@ -1975,7 +1893,7 @@ function DocumentEditorSurface({
           </div>
         </div>
         {sidePanel && mode === "edit" && (
-          <aside className="hidden w-72 shrink-0 overflow-y-auto border-l bg-muted/30 md:block">
+          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l bg-muted/30 md:block">
             <div className="p-4">
               <div className="mb-3 flex items-center justify-between">
                 <div className="text-sm font-semibold">Fields for {stylePreset.label}</div>
@@ -2020,11 +1938,18 @@ function DocumentEditorSurface({
                       </div>
                     );
                   }
+                  /*
+                    One column, not two. The panel is 320px wide, so two columns
+                    gave each field about 130px - enough to truncate "Project
+                    address" in its own label and to hide the end of whatever was
+                    typed into it. Nine of those stacked in a 2-up grid is the
+                    right-hand half of the client's screenshot.
+                  */
                   return (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-2">
                       {editableTokens.map((token) => (
                         <div key={token} className="space-y-0.5">
-                          <label className="text-[10px] font-medium text-muted-foreground">
+                          <label className="text-[11px] font-medium text-muted-foreground">
                             {LABEL_BY_TOKEN[token] ?? token}
                           </label>
                           <input
