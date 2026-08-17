@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight, CalendarDays, MapPin, Package, Wrench } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarDays, MapPin, Package, Star, Wrench } from "lucide-react";
 import { ShowcaseView } from "@/components/ShowcaseView";
+import { cn } from "@/lib/utils";
 import { readableTextOn, withAlpha } from "@/lib/contrast";
 import type { PublicPortfolioShowcase } from "@/lib/portfolio.functions";
 import { DEFAULT_ACCENT, PortfolioChrome } from "./PortfolioChrome";
@@ -76,7 +77,22 @@ export function PortfolioProject({ data }: { data: PublicPortfolioShowcase }) {
           outro_html: s.outro_html,
           accent_color: accent,
           show_contact: false,
-          show_reviews: s.show_reviews,
+          /*
+            Always off here, whatever the showcase itself says.
+
+            A showcase serves two audiences and the review CTA only works for
+            one of them. Shared straight from a finished job it reaches the
+            customer who just paid you, and "happy with the work?" is exactly
+            right. Reached through the portfolio it is a prospect who has never
+            hired you, and asking them to review work they didn't buy reads as
+            a mistake - which it is. `showcases.show_reviews` defaults to true
+            for the per-job case, so inheriting it here pointed a write-a-review
+            button at every stranger browsing the site.
+
+            Proof, not the ask, is what belongs on this page. That is the strip
+            below.
+          */
+          show_reviews: false,
           cover_image_url: s.cover_image_url,
           sections: s.sections,
         }}
@@ -87,7 +103,6 @@ export function PortfolioProject({ data }: { data: PublicPortfolioShowcase }) {
           address: site.address,
           email: site.email,
         }}
-        reviewLinks={data.reviewLinks}
         // The site chrome already owns the brand, the contact band and the
         // footer - letting the document render its own would show each of them
         // twice on the way down the page.
@@ -95,6 +110,8 @@ export function PortfolioProject({ data }: { data: PublicPortfolioShowcase }) {
         footer={false}
         minHeight={false}
       />
+
+      <ReviewProof site={site} accent={accent} reviewLinks={data.reviewLinks} />
 
       {meta.length > 0 && (
         <section className="border-t border-neutral-100 bg-neutral-50">
@@ -201,6 +218,70 @@ export function PortfolioProject({ data }: { data: PublicPortfolioShowcase }) {
         </section>
       )}
     </PortfolioChrome>
+  );
+}
+
+/**
+ * Social proof on a project page: the rating, and a way to go read it.
+ *
+ * The prospect's version of the review section. They have just scrolled a whole
+ * job in photographs and are deciding whether these people are real, so this
+ * sits immediately after the work and immediately before the neighbouring
+ * projects. It is one line rather than the home page's full band, because the
+ * argument has already been made once and repeating it at that size would push
+ * the next project below the fold.
+ */
+function ReviewProof({
+  site,
+  accent,
+  reviewLinks,
+}: {
+  site: PublicPortfolioShowcase["site"];
+  accent: string;
+  reviewLinks: PublicPortfolioShowcase["reviewLinks"];
+}) {
+  if (!site?.show_reviews) return null;
+  const rating = site.google_rating;
+  const readUrl = site.google_reviews_url;
+  // Without a rating to lead with, the only thing left is a link labelled with
+  // a platform name, which is a weaker claim than the photographs above it.
+  if (rating == null && reviewLinks.length === 0) return null;
+
+  return (
+    <section className="border-t border-neutral-100 bg-white">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-6 gap-y-3 px-6 py-8 text-center lg:px-10">
+        {rating != null ? (
+          <p className="inline-flex items-center gap-2 text-sm text-neutral-600">
+            <span className="inline-flex gap-0.5 text-amber-400">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <Star
+                  key={i}
+                  className={cn("h-4 w-4", i < Math.round(rating) ? "fill-current" : "opacity-25")}
+                />
+              ))}
+            </span>
+            <span className="font-black text-neutral-900">{rating.toFixed(1)}</span>
+            {site.google_review_count ? (
+              <>from {site.google_review_count.toLocaleString()} Google reviews</>
+            ) : (
+              <>on Google</>
+            )}
+          </p>
+        ) : (
+          <p className="text-sm text-neutral-600">See what our customers say.</p>
+        )}
+
+        <a
+          href={readUrl ?? reviewLinks[0]?.url ?? "#"}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 text-sm font-bold underline-offset-4 hover:underline"
+          style={{ color: accent }}
+        >
+          Read our reviews <ArrowRight className="h-3.5 w-3.5" />
+        </a>
+      </div>
+    </section>
   );
 }
 
