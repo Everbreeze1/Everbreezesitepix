@@ -25,7 +25,6 @@ import {
   displayFeatures,
   exceedsSeatCap,
   gainsBetween,
-  hasUnlimitedSeats,
   higherTiers,
   monthlyRate,
   monthlyTotal,
@@ -173,10 +172,10 @@ function PriceBlock({
           Additional Users: ${monthlyRate(plan.additionalSeatMonthly, interval)} each
           {/* The ceiling belongs next to the add-on price, not further down.
               Starter sells a second seat and then stops, and a crew reading
-              only "$15 each" plans a third hire this tier will never seat. */}
-          {hasUnlimitedSeats(plan)
-            ? ", add as many as you need"
-            : `, capped at ${plan.maxSeats} users`}
+              only "$19 each" plans a third hire this tier will never seat.
+              Pro and Team stop at 50 too, but that is enforcement, not an
+              offer - see `advertiseSeatCap`. */}
+          {plan.advertiseSeatCap ? `, capped at ${plan.maxSeats} users` : ""}
         </p>
       ) : (
         /* Only reachable if a plan's cap and its included count ever match:
@@ -536,8 +535,11 @@ function CurrentPlanPanel({
             </p>
           )}
           <p className="mt-1 font-manrope text-xs text-muted-foreground">
-            {plan.includedSeats} user{plan.includedSeats === 1 ? "" : "s"} included ·{" "}
-            {hasUnlimitedSeats(plan) ? "add as many as you need" : `up to ${plan.maxSeats}`}
+            {plan.includedSeats} user{plan.includedSeats === 1 ? "" : "s"} included
+            {/* Same rule as the public cards: name Starter's ceiling, because
+                it is the reason to move up, and stay quiet about Pro's and
+                Team's, which are enforcement rather than an offer. */}
+            {plan.advertiseSeatCap ? ` · up to ${plan.maxSeats}` : ""}
           </p>
           <Button
             asChild

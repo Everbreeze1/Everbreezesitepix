@@ -648,8 +648,19 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
         `Starter is limited to ${cap} users (you + 1). Upgrade to Pro or Team to invite more.`,
       );
     }
+    // Two different walls wearing the same number. `cap` is normally the seat
+    // count this team actually bought, and the fix is to buy another one. At
+    // PLAN_MEMBER_CAP it is the tier's own ceiling instead, and there is no
+    // larger plan to sell them - telling a 50-user Team to "upgrade" points at
+    // nothing. That is the Enterprise conversation.
+    if (cap >= PLAN_MEMBER_CAP[plan]) {
+      throw new Error(
+        `${PLAN_MEMBER_CAP[plan]} users is the most a self-serve plan holds. ` +
+          `Contact support about Enterprise access for a larger crew.`,
+      );
+    }
     throw new Error(
-      `Your team is at its ${cap}-user limit. Upgrade or remove a member to add more.`,
+      `Your team is using all ${cap} of its seats. Add a seat from Settings, or remove a member.`,
     );
   }
 
