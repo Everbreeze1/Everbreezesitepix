@@ -167,6 +167,21 @@
   font-family: var(--font-manrope);
 }
 
+/*
+ * The public portfolio's display face.
+ *
+ * Headings on a contractor's mini-site are short and shouted - "PROJECTS WE'VE
+ * FINISHED", a job title, a town. A condensed grotesque at 900 sets those two
+ * sizes larger in the same column than Inter can, which is the whole difference
+ * between a page that looks designed and a page that looks like a form printed
+ * out. Its own utility rather than reusing `font-display` because the app
+ * chrome and the customer-facing site are allowed to diverge later.
+ */
+@utility font-portfolio-display {
+  font-family: var(--font-display);
+  font-feature-settings: "ss01";
+}
+
 @keyframes marquee {
   from {
     transform: translateX(0);

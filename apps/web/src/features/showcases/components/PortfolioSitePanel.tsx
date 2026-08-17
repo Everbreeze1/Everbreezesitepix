@@ -36,7 +36,7 @@ export function PortfolioSitePanel({
   onStartGuided?: () => void;
 }) {
   const site = usePortfolioSiteDraft(portfolio, onSaved);
-  const ctx: StepCtx = { ...site, serviceTypes, layout: "editor" };
+  const ctx: StepCtx = { ...site, serviceTypes, layout: "editor", portfolio, onSaved };
   const { draft, dirty, saving, save } = site;
   const [activeId, setActiveId] = useState(SITE_STEPS[0].id);
 
@@ -46,7 +46,7 @@ export function PortfolioSitePanel({
   );
   const step = SITE_STEPS[index];
   const Fields = step.Fields;
-  const progress = siteProgress(draft);
+  const progress = siteProgress(draft, portfolio);
 
   // The wizard builds its own draft from the saved row, so anything unsaved
   // here has to be committed on the way out or it vanishes on the hand-off.
@@ -128,7 +128,7 @@ export function PortfolioSitePanel({
               >
                 <s.icon className="h-4 w-4 shrink-0" />
                 <span className="truncate">{s.label}</span>
-                {s.isDone(draft) && (
+                {s.isDone(draft, portfolio) && (
                   <Check
                     className={cn(
                       "ml-auto hidden h-3.5 w-3.5 shrink-0 lg:block",
@@ -192,6 +192,8 @@ export function PortfolioSitePanel({
               heroPreview={site.heroPreview}
               focus={step.previewFocus}
               projectCount={projectCount}
+              googleRating={portfolio.google_rating}
+              googleReviewCount={portfolio.google_review_count}
             />
           </div>
         </div>

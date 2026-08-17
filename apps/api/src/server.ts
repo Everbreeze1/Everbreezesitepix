@@ -50,7 +50,7 @@ const REQUIRED_ENV = [
  */
 const OPTIONAL_ENV = [
   "GEMINI_API_KEY", // photo + walkthrough AI, incl. speech-to-text
-  "GOOGLE_MAPS_API_KEY", // server-side geocoding
+  "GOOGLE_MAPS_API_KEY", // server-side geocoding + Places lookup for Google Business Profile
 ] as const;
 
 function checkEnv(): void {

@@ -47,6 +47,15 @@ export interface PublicPortfolioSite {
   show_reviews: boolean;
   seo_title: string | null;
   seo_description: string | null;
+  /**
+   * The public half of a connected Google Business Profile. Only the rating,
+   * the count and the two links are exposed - place_id is an internal handle
+   * and belongs in the admin surface, not on an anonymous page.
+   */
+  google_rating: number | null;
+  google_review_count: number | null;
+  google_reviews_url: string | null;
+  google_review_ask_url: string | null;
 }
 
 export interface PortfolioReviewLink {
@@ -110,7 +119,7 @@ export interface PortfolioEmbedData {
 }
 
 const PORTFOLIO_COLUMNS =
-  "id, team_id, slug, business_name, logo_url, accent_color, hero_headline, hero_subhead, hero_photo_id, about_html, services, service_areas, phone, email, address, website_url, cta_label, cta_url, show_map, show_reviews, published, seo_title, seo_description";
+  "id, team_id, slug, business_name, logo_url, accent_color, hero_headline, hero_subhead, hero_photo_id, about_html, services, service_areas, phone, email, address, website_url, cta_label, cta_url, show_map, show_reviews, published, seo_title, seo_description, google_rating, google_review_count, google_reviews_url, google_review_ask_url";
 
 function toSite(row: any, heroImageUrl: string | null): PublicPortfolioSite {
   return {
@@ -134,6 +143,13 @@ function toSite(row: any, heroImageUrl: string | null): PublicPortfolioSite {
     show_reviews: row.show_reviews ?? true,
     seo_title: row.seo_title ?? null,
     seo_description: row.seo_description ?? null,
+    // Gated by the same switch as the review links: a site with reviews turned
+    // off must not still be advertising a star rating.
+    google_rating:
+      row.show_reviews === false || row.google_rating == null ? null : Number(row.google_rating),
+    google_review_count: row.show_reviews === false ? null : (row.google_review_count ?? null),
+    google_reviews_url: row.show_reviews === false ? null : (row.google_reviews_url ?? null),
+    google_review_ask_url: row.show_reviews === false ? null : (row.google_review_ask_url ?? null),
   };
 }
 

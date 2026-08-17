@@ -269,6 +269,14 @@ import {
   updateShowcaseSiteService,
 } from "../portfolio/service";
 import {
+  connectGoogleBusinessInputSchema,
+  connectGoogleBusinessService,
+  disconnectGoogleBusinessService,
+  lookupGoogleBusinessInputSchema,
+  lookupGoogleBusinessService,
+  refreshGoogleBusinessService,
+} from "../portfolio/google-business";
+import {
   getPortfolioEmbedService,
   getPublicPortfolioService,
   getPublicPortfolioShowcaseService,
@@ -1107,6 +1115,26 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     (d) => updateShowcaseSiteInputSchema.parse(d),
     updateShowcaseSiteService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
+  lookupGoogleBusiness: authed(
+    (d) => lookupGoogleBusinessInputSchema.parse(d),
+    lookupGoogleBusinessService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  connectGoogleBusiness: authed(
+    (d) => connectGoogleBusinessInputSchema.parse(d),
+    connectGoogleBusinessService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  refreshGoogleBusiness: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return refreshGoogleBusinessService(ctx);
+    },
+  },
+  disconnectGoogleBusiness: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return disconnectGoogleBusinessService(ctx);
+    },
+  },
   reorderPortfolioShowcases: authed(
     (d) => reorderPortfolioShowcasesInputSchema.parse(d),
     reorderPortfolioShowcasesService as (ctx: ServiceContext, data: never) => Promise<unknown>,

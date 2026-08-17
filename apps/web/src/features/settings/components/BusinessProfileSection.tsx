@@ -34,6 +34,37 @@ export function BusinessProfileSection() {
   const industry = findIndustry(profile.industry);
   const recommended = recommendedCategories(profile.industry, profile.trades);
 
+  /*
+   * Say nothing until the team has actually arrived.
+   *
+   * The team query takes a few seconds on a cold Settings load, and without
+   * this the panel spent that time telling a company that IS set up "Not set
+   * up yet, so the template library is in its default order" - next to a
+   * button offering to set it up again. Measured at ~5s in a real browser, so
+   * it was not a flicker; it was the state most people would see and act on.
+   *
+   * Same rule as the dashboard greeting: a surface that does not know yet says
+   * nothing rather than guessing. AccountSetupCard already gates on `loading`
+   * for the same reason.
+   */
+  if (setup.loading) {
+    return (
+      <div className="rounded-2xl border border-border bg-card/60 p-5">
+        <div className="flex items-center gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+            <Building2 className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="font-manrope text-base font-extrabold text-foreground">
+              Business profile
+            </div>
+            <div className="mt-2 h-3 w-52 animate-pulse rounded-full bg-muted" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="rounded-2xl border border-border bg-card/60 p-5">

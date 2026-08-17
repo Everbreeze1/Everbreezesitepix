@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { Mail, MapPin, Menu, Phone, X } from "lucide-react";
+import { Mail, MapPin, Menu, Phone, Star, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { readableTextOn } from "@/lib/contrast";
 import type { PublicPortfolioSite } from "@/lib/portfolio.functions";
@@ -25,20 +25,29 @@ export function PortfolioChrome({
   site,
   /** True on the site's home page: nav uses in-page anchors instead of links. */
   isHome,
+  /**
+   * Whether the home page draws a reviews section. Only the home page knows -
+   * it owns the review links - so the nav row is opt-in rather than guessed,
+   * and a link to an anchor that isn't on the page never gets rendered.
+   */
+  hasReviews,
   children,
 }: {
   site: PublicPortfolioSite;
   isHome: boolean;
+  hasReviews?: boolean;
   children: ReactNode;
 }) {
   const accent = site.accent_color || DEFAULT_ACCENT;
   const base = `/p/${site.slug}`;
   const name = site.business_name?.trim() || "Our work";
+  const showReviews = hasReviews ?? !!(site.show_reviews && site.google_reviews_url);
 
   const sections = [
     { id: "work", label: "Work", show: true },
     { id: "about", label: "About", show: !!site.about_html?.trim() },
     { id: "areas", label: "Areas served", show: site.service_areas.length > 0 || site.show_map },
+    { id: "reviews", label: "Reviews", show: showReviews },
     { id: "contact", label: "Contact", show: !!(site.phone || site.email || site.address) },
   ].filter((s) => s.show);
 
@@ -113,7 +122,7 @@ function SiteHeader({
               {(site.business_name?.trim() || "W").slice(0, 1).toUpperCase()}
             </span>
           )}
-          <span className="truncate text-sm font-extrabold tracking-tight lg:text-base">
+          <span className="font-portfolio-display truncate text-lg font-extrabold uppercase tracking-tight lg:text-xl">
             {site.business_name?.trim() || "Our work"}
           </span>
         </Link>
@@ -228,7 +237,7 @@ function SiteFooter({
   const year = new Date().getFullYear();
   return (
     <footer className="border-t border-neutral-200 bg-neutral-50">
-      <div className="mx-auto max-w-6xl px-6 py-14 lg:px-10 lg:py-16">
+      <div className="mx-auto max-w-6xl px-6 py-12 lg:px-10 lg:py-14">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-2">
             <div className="flex items-center gap-2.5">
@@ -242,12 +251,41 @@ function SiteFooter({
                   {name.slice(0, 1).toUpperCase()}
                 </span>
               )}
-              <span className="text-base font-extrabold tracking-tight">{name}</span>
+              <span className="font-portfolio-display text-xl font-extrabold uppercase tracking-tight">
+                {name}
+              </span>
             </div>
-            {site.hero_subhead && (
+
+            {/*
+              The hero sub-headline used to be repeated here, and the client
+              caught it: they had written a job title into that field and found
+              it presented as the company's strapline at the bottom of every
+              page. It is copy written for one specific spot - big type over a
+              photograph - and it does not survive being moved. The trades list
+              is what a footer actually wants in that slot, and it is the only
+              place on the page where it reads as a summary rather than a menu.
+            */}
+            {site.services.length > 0 && (
               <p className="mt-4 max-w-sm text-pretty text-sm leading-relaxed text-neutral-500">
-                {site.hero_subhead}
+                {site.services.join(" · ")}
               </p>
+            )}
+
+            {site.google_rating != null && (
+              <a
+                href={site.google_reviews_url ?? "#reviews"}
+                target={site.google_reviews_url ? "_blank" : undefined}
+                rel={site.google_reviews_url ? "noreferrer" : undefined}
+                className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-neutral-700 hover:text-neutral-950"
+              >
+                <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                {site.google_rating.toFixed(1)}
+                <span className="font-semibold text-neutral-400">
+                  {site.google_review_count
+                    ? `(${site.google_review_count.toLocaleString()} Google reviews)`
+                    : "on Google"}
+                </span>
+              </a>
             )}
           </div>
 

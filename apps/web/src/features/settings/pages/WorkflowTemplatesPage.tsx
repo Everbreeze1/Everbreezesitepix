@@ -604,6 +604,68 @@ const STARTER_WORKFLOWS: {
     ],
   },
   {
+    name: "Landscape installation",
+    category: "Landscaping",
+    description: "Clear and prepare, build and plant, then establish before you walk away.",
+    phases: [
+      {
+        name: "Site preparation",
+        description: "Everything that decides whether the planting lives.",
+        items: [
+          { kind: "photo", label: "Site before work", required: true },
+          { kind: "check", label: "Existing vegetation cleared", required: true },
+          { kind: "check", label: "Levels and falls set", required: true },
+          { kind: "check", label: "Drainage installed or confirmed", required: true },
+          { kind: "check", label: "Soil improved and graded", required: true },
+          { kind: "note", label: "Ground conditions found" },
+        ],
+      },
+      {
+        name: "Hard landscaping",
+        items: [
+          { kind: "check", label: "Edging and paths set out", required: true },
+          { kind: "check", label: "Bases compacted", required: true },
+          { kind: "check", label: "Surfaces laid and jointed", required: true },
+          { kind: "photo", label: "Hard landscaping complete" },
+        ],
+      },
+      {
+        name: "Irrigation",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Zones laid out to plan", required: true },
+          { kind: "check", label: "Pressure tested before backfill", required: true },
+          { kind: "photo", label: "Trenches open before backfill", required: true },
+          { kind: "check", label: "Controller programmed", required: true },
+          { kind: "note", label: "Zone run times set" },
+        ],
+      },
+      {
+        name: "Planting",
+        items: [
+          { kind: "check", label: "Plants set out and approved before planting", required: true },
+          { kind: "check", label: "Planted to correct depth and spacing", required: true },
+          { kind: "check", label: "Turf laid and rolled", required: true },
+          { kind: "check", label: "Mulch applied", required: true },
+          { kind: "photo", label: "Planting complete", required: true },
+          { kind: "note", label: "Substitutions made, and why" },
+        ],
+      },
+      {
+        name: "Handover & establishment",
+        requires_signoff: true,
+        items: [
+          { kind: "check", label: "Site cleared of surplus and waste", required: true },
+          { kind: "check", label: "Client shown the irrigation controller", required: true },
+          { kind: "check", label: "Plant list and care notes handed over", required: true },
+          { kind: "check", label: "Establishment schedule agreed", required: true },
+          { kind: "photo", label: "Finished scheme", required: true },
+          { kind: "note", label: "Warranty terms and first return visit" },
+        ],
+      },
+    ],
+  },
+  {
     name: "Claim from first notice to estimate",
     category: "Insurance & Adjusting",
     description: "First contact, site documentation, scope, then the estimate the carrier gets.",

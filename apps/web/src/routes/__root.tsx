@@ -119,7 +119,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap",
+        // Inter is what `--font-sans` has always named, but it was never
+        // actually fetched - every screen has been rendering in whatever the
+        // OS calls sans-serif, which is most of why the generated portfolio
+        // sites read as unstyled next to the type on the rest of the app.
+        href: "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap",
       },
       { rel: "manifest", href: "/manifest.json" },
       { rel: "icon", type: "image/png", sizes: "192x192", href: "/icon-192.png" },
