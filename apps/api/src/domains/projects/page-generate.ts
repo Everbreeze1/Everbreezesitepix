@@ -8,6 +8,7 @@ import {
   photoPageGroups,
   photoWidthFor,
 } from "@sitepix/shared";
+import { existingPageTitles, projectDocumentTitle, uniqueDocumentTitle } from "./page-title";
 
 /**
  * Minimal Markdown → HTML for the constrained subset our AI prompts emit.
@@ -268,13 +269,30 @@ export async function generateProjectPageService(
     | 3
     | 4;
 
-  const defaultTitle =
+  /*
+   * A generated document is the most client-facing thing this app produces and
+   * it was the worst named: "Report - 8/17/2026" says nothing about which site
+   * it covers, and `renderPagePdf` turns exactly this string into the download
+   * filename, so a customer received `Report_-_8_17_2026.pdf`. Two jobs visited
+   * the same morning produced the same filename twice.
+   *
+   * `projectDocumentTitle` puts the site in front of it, and the numbering
+   * covers the second daily log of one day - the date alone cannot tell those
+   * apart. Same rule as a document created from a template, deliberately: the
+   * two sit in the same list.
+   */
+  const kind =
     data.template === "daily_log"
       ? `Daily Log - ${new Date().toLocaleDateString()}`
       : data.template === "summary"
         ? `Summary - ${new Date().toLocaleDateString()}`
         : `Report - ${new Date().toLocaleDateString()}`;
-  const title = data.title?.trim() || defaultTitle;
+  const title =
+    data.title?.trim() ||
+    uniqueDocumentTitle(
+      projectDocumentTitle(projectName, kind),
+      await existingPageTitles(ctx, data.projectId),
+    );
 
   // Captions already recorded in the field become the document's comment
   // lines. `.in()` returns rows in arbitrary order, so re-key by id and walk
@@ -283,7 +301,12 @@ export async function generateProjectPageService(
     .from("photos")
     .select("id, caption, taken_at, created_at")
     .in("id", data.photoIds);
-  type PhotoRow = { id: string; caption: string | null; taken_at: string | null; created_at: string | null };
+  type PhotoRow = {
+    id: string;
+    caption: string | null;
+    taken_at: string | null;
+    created_at: string | null;
+  };
   const rowById = new Map<string, PhotoRow>(
     ((photoRows as PhotoRow[]) ?? []).map((r) => [r.id, r]),
   );

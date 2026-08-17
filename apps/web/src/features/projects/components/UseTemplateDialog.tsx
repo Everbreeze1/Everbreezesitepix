@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { FilePlus2, Loader2, Sparkles, Wand2 } from "lucide-react";
+import { FilePlus2, FileSignature, Loader2, Sparkles, Wand2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +50,14 @@ export function UseTemplateDialog({
   const [template, setTemplate] = useState<{ name: string; html: string } | null>(null);
   const [fields, setFields] = useState<TemplateFieldPreview[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
+  /**
+   * What the document will be filed as. Prefilled with the project's name and
+   * the template's, which is the whole point of asking here: the title used to
+   * be the template's name alone, so a project's Documents tab listed
+   * "HVAC Service Call Report" with nothing to say which visit it was, and the
+   * crew retyped it by hand on every one.
+   */
+  const [title, setTitle] = useState("");
 
   const projectId = project?.id ?? null;
 
@@ -60,12 +68,14 @@ export function UseTemplateDialog({
     setTemplate(null);
     setFields([]);
     setValues({});
+    setTitle("");
     (async () => {
       try {
         const res = await previewDocumentTemplate({ data: { templateId, projectId } });
         if (cancelled) return;
         setTemplate({ name: res.name, html: res.html });
         setFields(res.fields);
+        setTitle(res.suggestedTitle);
       } catch (e: any) {
         if (!cancelled) toast.error(e?.message ?? "Could not open this template");
       } finally {
@@ -89,7 +99,15 @@ export function UseTemplateDialog({
     setCreating(true);
     try {
       const res = await createPageFromTemplate({
-        data: { projectId, templateId, folderId: folderId ?? null, values: typedValues(values) },
+        data: {
+          projectId,
+          templateId,
+          folderId: folderId ?? null,
+          // Cleared to nothing, so let the server name it rather than failing
+          // the schema's `min(1)` on an empty string.
+          title: title.trim() || undefined,
+          values: typedValues(values),
+        },
       });
       onCreated(projectId, res.page.id);
     } catch (e: any) {
@@ -119,6 +137,24 @@ export function UseTemplateDialog({
         ) : (
           <div className="flex min-h-0 flex-1 flex-col md:flex-row">
             <div className="shrink-0 space-y-5 overflow-y-auto border-b p-5 md:w-80 md:border-b-0 md:border-r">
+              {/* First, above the merge fields: it is the one thing on this
+                  screen that decides how the document is found again. */}
+              <label className="block space-y-1">
+                <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <FileSignature className="h-3.5 w-3.5" /> Document name
+                </span>
+                <Input
+                  className="h-9 font-semibold"
+                  value={title}
+                  placeholder={template?.name ?? "New document"}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+                <span className="block text-[11px] text-muted-foreground">
+                  Named after this project so it is not filed under the template&rsquo;s name.
+                  Change it here or later.
+                </span>
+              </label>
+
               {blanks.length > 0 ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -178,7 +214,12 @@ export function UseTemplateDialog({
 
             <div className="min-h-0 flex-1 overflow-y-auto bg-muted/30 p-6">
               <div className="mx-auto max-w-[720px] rounded-sm border border-border bg-card p-10 shadow-sm">
-                <h2 className="mb-4 text-2xl font-extrabold text-foreground">{template?.name}</h2>
+                {/* The title box above, not the template's name: the preview is
+                    the document being created, and the heading is the first
+                    place its name is worth seeing. */}
+                <h2 className="mb-4 text-2xl font-extrabold text-foreground">
+                  {title.trim() || template?.name}
+                </h2>
                 <div
                   className="tiptap prose prose-sm max-w-none"
                   dangerouslySetInnerHTML={{ __html: previewHtml }}

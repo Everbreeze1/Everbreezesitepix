@@ -155,7 +155,18 @@ export interface TemplateFieldPreview {
 
 export const previewDocumentTemplate = rpcOp<
   { templateId: string; projectId: string },
-  { id: string; name: string; html: string; fields: TemplateFieldPreview[] }
+  {
+    id: string;
+    name: string;
+    html: string;
+    fields: TemplateFieldPreview[];
+    /**
+     * The project's name and the template's, already numbered past anything the
+     * project holds. The template's own name alone is what used to be stored,
+     * and it said nothing about which job the document belonged to.
+     */
+    suggestedTitle: string;
+  }
 >("previewDocumentTemplate");
 
 export const createPageFromTemplate = rpcOp<
@@ -163,6 +174,8 @@ export const createPageFromTemplate = rpcOp<
     projectId: string;
     templateId: string;
     folderId?: string | null;
+    /** Omitted lets the server name it after the project and the template. */
+    title?: string;
     resolveTokens?: boolean;
     /** Values for the fields the project cannot fill in by itself, keyed by token. */
     values?: Record<string, string>;

@@ -1,8 +1,15 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "../../lib/supabase";
+import { isMissingColumn } from "../../lib/postgrest";
 import type { AuthedContext } from "../../lib/user-context";
 import { sanitizePageHtml } from "./sanitize-page-html";
+import {
+  copyDocumentTitle,
+  existingPageTitles,
+  projectDocumentTitle,
+  uniqueDocumentTitle,
+} from "./page-title";
 
 const IMG_TAG_RE = /<img\b[^>]*\bdata-photo-id="([0-9a-fA-F-]{36})"[^>]*>/g;
 
@@ -317,17 +324,19 @@ export function tokenSource(token: string): TokenSource {
 }
 
 /**
- * True when Postgres says the column simply is not there (SQLSTATE 42703).
+ * True when the column simply is not there yet.
  *
- * Distinguished from every other failure on purpose: a missing column is a
- * migration that has not been applied yet, which this code can work around. Any
- * other error is a real fault and must keep propagating.
+ * Re-exported from lib/postgrest rather than defined here. This file had its own
+ * copy that knew only SQLSTATE 42703, which is what Postgres raises for a select
+ * list naming a column it has not got. Current PostgREST answers a WRITE naming an
+ * unknown column from its own schema cache instead, as PGRST204, and never reaches
+ * Postgres at all - so the two spellings disagreed about the same situation, and
+ * the version in lib/postgrest is the one that learned it the hard way.
+ *
+ * `selectWithFallback` below only reads, so the narrow copy happened to work here.
+ * One spelling means the next caller does not have to find that out.
  */
-export function isMissingColumn(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const e = error as { code?: string; message?: string };
-  return e.code === "42703" || /column .* does not exist/i.test(e.message ?? "");
-}
+export { isMissingColumn };
 
 /*
  * The client/job columns are read through a fallback.
@@ -569,13 +578,27 @@ export async function createProjectPageService(
     ? [project.street, project.city, project.state].filter(Boolean).join(", ")
     : "";
   const contentHtml = blankTemplateHtml(data.template, project?.name ?? "", address);
-  const title =
-    data.title?.trim() ||
-    (data.template === "daily_log"
+  /*
+   * The project leads here too, so a blank page is not the fourth "Untitled" in
+   * the list and the PDF it exports to is not `Untitled.pdf`. The word itself
+   * stays: it is the app saying this document has no name yet, and that is
+   * still true of a page nobody has typed a title into.
+   *
+   * Same helper as the template and AI routes - one rule for what a document in
+   * a project is called, applied wherever one gets made.
+   */
+  const kind =
+    data.template === "daily_log"
       ? `Daily Log - ${new Date().toLocaleDateString()}`
       : data.template === "summary"
         ? `Summary - ${new Date().toLocaleDateString()}`
-        : "Untitled");
+        : "Untitled";
+  const title =
+    data.title?.trim() ||
+    uniqueDocumentTitle(
+      projectDocumentTitle(project?.name, kind),
+      await existingPageTitles(ctx, data.projectId),
+    );
 
   const { data: row, error } = await (ctx.supabase as any)
     .from("project_pages")
@@ -736,13 +759,23 @@ export async function duplicateProjectPageService(
     .single();
   if (fetchError || !source) throw new Error("Page not found");
 
+  /*
+   * Capped, and numbered against what the project already holds. Duplicating the
+   * same document twice used to leave two rows both called "Copy of X", which is
+   * the confusion this whole rule exists to remove, one level in.
+   */
+  const title = uniqueDocumentTitle(
+    copyDocumentTitle(source.title),
+    await existingPageTitles(ctx, source.project_id),
+  );
+
   const { data: row, error } = await (ctx.supabase as any)
     .from("project_pages")
     .insert({
       project_id: source.project_id,
       folder_id: source.folder_id,
       created_by: ctx.userId,
-      title: `Copy of ${source.title}`,
+      title,
       content_html: source.content_html,
       header_html: source.header_html,
       footer_html: source.footer_html,

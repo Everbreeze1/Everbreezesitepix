@@ -17,6 +17,7 @@ import { getMyTeam, createTeam, createCheckoutSession } from "@/features/teams/a
 import type { BillingPlan } from "@/features/teams/api";
 import {
   ANNUAL_DISCOUNT,
+  ENTERPRISE,
   MAX_SEATS,
   PLANS,
   TRIAL_DAYS,
@@ -24,10 +25,12 @@ import {
   displayFeatures,
   exceedsSeatCap,
   gainsBetween,
+  hasUnlimitedSeats,
   higherTiers,
   monthlyRate,
   monthlyTotal,
   planById,
+  sellsExtraSeats,
   type BillingInterval,
   type PlanPricing,
 } from "@/lib/pricing";
@@ -165,9 +168,24 @@ function PriceBlock({
       <p className={`mt-2 font-manrope text-xs font-bold ${strong}`}>
         {plan.includedSeats} User{plan.includedSeats === 1 ? "" : "s"} Included
       </p>
-      <p className={`font-manrope text-xs ${subtle}`}>
-        Additional Users: ${monthlyRate(plan.additionalSeatMonthly, interval)} each
-      </p>
+      {sellsExtraSeats(plan) ? (
+        <p className={`font-manrope text-xs ${subtle}`}>
+          Additional Users: ${monthlyRate(plan.additionalSeatMonthly, interval)} each
+          {/* The ceiling belongs next to the add-on price, not further down.
+              Starter sells a second seat and then stops, and a crew reading
+              only "$15 each" plans a third hire this tier will never seat. */}
+          {hasUnlimitedSeats(plan)
+            ? ", add as many as you need"
+            : `, capped at ${plan.maxSeats} users`}
+        </p>
+      ) : (
+        /* Only reachable if a plan's cap and its included count ever match:
+           there is no add-on to price, and "$0 each" would advertise a seat
+           that cannot be bought at any price. */
+        <p className={`font-manrope text-xs ${subtle}`}>
+          Capped at {plan.maxSeats} users, no add-ons
+        </p>
+      )}
       <p className={`font-manrope text-xs ${subtle}`}>
         USD / Billed {interval === "annual" ? "Annually" : "Monthly"}
       </p>
@@ -247,10 +265,18 @@ function PublicPricingPage() {
             return (
               <div
                 key={plan.id}
-                className={`flex flex-col rounded-[28px] border p-7 transition-opacity ${
-                  capped ? "border-border bg-card opacity-60" : "border-border bg-card"
-                }`}
+                className={`relative flex flex-col rounded-[28px] border p-7 transition-opacity ${
+                  capped ? "opacity-60" : ""
+                } ${plan.popular ? "border-primary shadow-sm" : "border-border"} bg-card`}
               >
+                {/* Only meaningful while the plan is actually on offer - a
+                    "Most popular" flag on a card reading "Not available for a
+                    crew of 8" is pointing at something you cannot buy. */}
+                {plan.popular && !capped && (
+                  <span className="absolute -top-3 left-7 inline-flex rounded-full bg-primary px-3 py-1 font-manrope text-[11px] font-extrabold uppercase tracking-wider text-primary-foreground">
+                    Most popular
+                  </span>
+                )}
                 <p className="font-display text-2xl font-bold text-foreground">{plan.name}</p>
                 <span className="mt-2 inline-flex w-fit rounded-full bg-foreground px-3 py-1 font-manrope text-[11px] font-bold text-background">
                   {plan.audience}
@@ -277,6 +303,24 @@ function PublicPricingPage() {
               </div>
             );
           })}
+        </div>
+
+        {/* Pro and Team sell any number of seats, so this is not a seat
+            ceiling anyone has hit - it is the band of asks (API, SSO, a named
+            contact) that no self-serve tier answers, and which otherwise leave
+            with no next step on this page. */}
+        <div className="mt-8 flex flex-col items-start justify-between gap-4 rounded-[28px] border border-border bg-card p-6 sm:flex-row sm:items-center sm:p-7">
+          <p className="font-manrope text-sm text-muted-foreground">
+            <span className="font-extrabold text-foreground">{ENTERPRISE.headline}</span>{" "}
+            {ENTERPRISE.summary}
+          </p>
+          <Button
+            asChild
+            variant="outline"
+            className="h-11 shrink-0 rounded-lg font-manrope text-sm font-bold"
+          >
+            <Link to="/contact">{ENTERPRISE.cta}</Link>
+          </Button>
         </div>
       </main>
       <SiteFooter />
@@ -494,8 +538,8 @@ function CurrentPlanPanel({
             </p>
           )}
           <p className="mt-1 font-manrope text-xs text-muted-foreground">
-            {plan.includedSeats} user{plan.includedSeats === 1 ? "" : "s"} included · up to{" "}
-            {plan.maxSeats}
+            {plan.includedSeats} user{plan.includedSeats === 1 ? "" : "s"} included ·{" "}
+            {hasUnlimitedSeats(plan) ? "add as many as you need" : `up to ${plan.maxSeats}`}
           </p>
           <Button asChild variant="outline" size="sm" className="mt-3 rounded-lg font-manrope font-bold">
             <Link to="/settings">Manage billing</Link>

@@ -9,11 +9,17 @@ export type BillingTier = "starter" | "pro" | "team";
  * Mirrors `maxSeats` in apps/web/src/lib/pricing.ts, which is what the pricing
  * page's seat stepper disables against. Keep the two in sync: the web value
  * decides what a visitor can *ask* for, this one decides what we'll *honour*.
+ *
+ * Pro and Team are sold as "add as many users as you want", so their number is
+ * UNLIMITED_SEATS (999) from pricing.ts rather than a real ceiling. It stays a
+ * number on purpose: every seat is still billed, and an unbounded quantity
+ * turns one mis-typed crew size into a five-figure invoice. Written as a
+ * literal here so this file has no cross-app import.
  */
 export const PLAN_MEMBER_CAP: Record<BillingTier, number> = {
   starter: 2,
-  pro: 50,
-  team: 50,
+  pro: 999,
+  team: 999,
 };
 
 /**
