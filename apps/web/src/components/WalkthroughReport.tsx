@@ -1,7 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import { Check, ImageOff, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cleanCaption } from "@sitepix/shared";
+import { cleanCaption, cleanWalkthroughMarkdown } from "@sitepix/shared";
 import { cn } from "@/lib/utils";
 
 export interface WalkthroughPhotoStep {
@@ -19,18 +19,12 @@ const formatOffset = (seconds: number) =>
     .toString()
     .padStart(2, "0")}`;
 
-export function cleanWalkthroughMarkdown(markdown: string) {
-  return (
-    markdown
-      .replace(/\n## (?:Additional Photos|Photos)\n[\s\S]*$/i, "")
-      .replace(/!\[[^\]]*\]\(photo:[^)\s]+\)/g, "")
-      // The page renders the walkthrough title in its own header card, so drop
-      // the leading H1 the AI emits to avoid a duplicated title in the body.
-      .replace(/^\s*#\s+.+\n+/, "")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim()
-  );
-}
+/**
+ * Re-exported from @sitepix/shared, where it moved so the walkthrough PDF can
+ * apply the identical reduction. It could not before: it ran its own extractor,
+ * and the printed summary differed from the one approved on screen.
+ */
+export { cleanWalkthroughMarkdown };
 
 export function estimateWalkthroughNote(
   transcript: string | null | undefined,

@@ -1,77 +1,21 @@
 import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 import { summarizePhotosReportService, draftReportNarrativeService } from "../ai/service";
-import { PHOTO_ROW_HEIGHT, cleanCaption, photoPageGroups, photoWidthFor } from "@sitepix/shared";
+import {
+  PHOTO_ROW_HEIGHT,
+  cleanCaption,
+  markdownToHtml,
+  photoPageGroups,
+  photoWidthFor,
+} from "@sitepix/shared";
 
 /**
- * Minimal Markdown → HTML for the constrained subset our AI prompts emit
- * (headings, bullets, bold/italic, paragraphs). Deliberately not a general
- * Markdown parser - adding one would mean a new runtime dependency for a
- * handful of block types we fully control via the system prompt.
+ * Minimal Markdown → HTML for the constrained subset our AI prompts emit.
+ * It lives in @sitepix/shared now, because the walkthrough PDF needs the same
+ * conversion to draw a summary's headings and bullets. Re-exported so this
+ * module's existing importers do not have to care where it moved to.
  */
-export function markdownToHtml(md: string): string {
-  const escape = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  const inline = (s: string) =>
-    escape(s)
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/(^|[^*])\*([^*]+?)\*/g, "$1<em>$2</em>")
-      .replace(/`(.+?)`/g, "<code>$1</code>");
-
-  const out: string[] = [];
-  let listType: "ul" | "ol" | null = null;
-
-  const closeList = () => {
-    if (listType) {
-      out.push(`</${listType}>`);
-      listType = null;
-    }
-  };
-
-  for (const rawLine of md.split(/\r?\n/)) {
-    const line = rawLine.trimEnd();
-    if (!line.trim()) {
-      closeList();
-      continue;
-    }
-
-    const heading = /^(#{1,3})\s+(.*)$/.exec(line);
-    if (heading) {
-      closeList();
-      const level = heading[1].length;
-      out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
-      continue;
-    }
-
-    const bullet = /^[-*]\s+(.*)$/.exec(line);
-    if (bullet) {
-      if (listType !== "ul") {
-        closeList();
-        out.push("<ul>");
-        listType = "ul";
-      }
-      out.push(`<li><p>${inline(bullet[1])}</p></li>`);
-      continue;
-    }
-
-    const numbered = /^\d+\.\s+(.*)$/.exec(line);
-    if (numbered) {
-      if (listType !== "ol") {
-        closeList();
-        out.push("<ol>");
-        listType = "ol";
-      }
-      out.push(`<li><p>${inline(numbered[1])}</p></li>`);
-      continue;
-    }
-
-    closeList();
-    out.push(`<p>${inline(line.trim())}</p>`);
-  }
-  closeList();
-  return out.join("");
-}
+export { markdownToHtml };
 
 /**
  * Photos are persisted as `data-photo-id` only - `src` is re-signed on every

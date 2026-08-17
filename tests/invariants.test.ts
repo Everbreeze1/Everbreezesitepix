@@ -766,13 +766,19 @@ describe("family: the PDF text renderer must be able to start a new page", () =>
    * The fix is the `Surface` indirection: it owns the page, so it can swap in a
    * fresh one mid-paragraph. Captions keep a non-paginating `fixedSurface`
    * because they draw into fixed-size photo cells.
+   *
+   * The renderer now lives in lib/pdf-rich.ts. It used to be private to the
+   * report PDF, which is the second half of the same bug: the walkthrough PDF
+   * could not reach it, so it kept a flat `drawWrapped` of its own and printed
+   * summaries with no headings, no bullet markers and a clipped tail. Every PDF
+   * that draws prose has to draw it through this module.
    */
-  const PDF = "apps/api/src/domains/reports/public-pdf.ts";
+  const PDF = "apps/api/src/lib/pdf-rich.ts";
 
   it("drawRuns and drawRichBlocks take a Surface, not a PDFPage", () => {
     const src = read(PDF);
     expect(src).toMatch(/function drawRuns\(surface: Surface/);
-    expect(src).toMatch(/function drawRichBlocks\(surface: Surface/);
+    expect(src).toMatch(/function drawRichBlocks\(\s*surface: Surface/);
     expect(src).not.toMatch(/function drawRuns\(page: PDFPage/);
     expect(src).not.toMatch(/function drawRichBlocks\(page: PDFPage/);
   });
@@ -791,9 +797,33 @@ describe("family: the PDF text renderer must be able to start a new page", () =>
 
   it("photo captions keep a non-paginating surface", () => {
     // Paginating mid-cell would tear a photo grid across sheets.
-    const src = read(PDF);
-    expect(src).toMatch(/function fixedSurface/);
-    expect(src).toMatch(/drawRichBlocks\(fixedSurface\(page\)/);
+    expect(read(PDF)).toMatch(/function fixedSurface/);
+    expect(read("apps/api/src/domains/reports/public-pdf.ts")).toMatch(
+      /drawRichBlocks\(fixedSurface\(page\)/,
+    );
+  });
+
+  it("both PDF exports draw their prose through it", () => {
+    for (const f of [
+      "apps/api/src/domains/reports/public-pdf.ts",
+      "apps/api/src/domains/walkthroughs/public-pdf.ts",
+    ]) {
+      expect(read(f)).toMatch(/from "\.\.\/\.\.\/lib\/pdf-rich"/);
+    }
+  });
+
+  it("the walkthrough summary is not flattened back into plain wrapped text", () => {
+    /*
+     * The shape of the client's complaint, stated as code: "It looks nice on
+     * the modal ... but when I click PDF it's all very unformatted". The
+     * culprits were an `extractSummaryText` that deleted every heading and
+     * bullet marker, and a `drawWrapped(page, summaryText, ...)` that could not
+     * start a second page for what was left.
+     */
+    const src = stripComments(read("apps/api/src/domains/walkthroughs/public-pdf.ts"));
+    expect(src).not.toMatch(/extractSummaryText/);
+    expect(src).toMatch(/walkthroughSummaryBlocks/);
+    expect(src).toMatch(/drawRichBlocks\(surface/);
   });
 });
 
