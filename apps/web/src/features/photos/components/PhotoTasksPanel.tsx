@@ -25,6 +25,7 @@ import {
   TASK_PHOTO_ITEM_COLUMNS,
   isMissingTaskPhotoItems,
   photoPositionInTask,
+  taskPhotoItemErrorMessage,
   taskPhotoItemPatch,
   taskStatusFromPhotos,
   type TaskPhotoItem,
@@ -312,7 +313,7 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
 
     if (error) {
       if (isMissingTaskPhotoItems(error)) setItemsReady(false);
-      else toast.error(error.message);
+      else toast.error(taskPhotoItemErrorMessage(error));
       setItemIndex(beforeIndex);
       setTasks((arr) => arr.map((x) => (x.id === t.id ? { ...x, status: beforeStatus } : x)));
       void load();

@@ -6,6 +6,7 @@ import {
   isMissingTaskPhotoItems,
   photoIsDone,
   photoPositionInTask,
+  taskPhotoItemErrorMessage,
   taskPhotoItemPatch,
   taskPhotoProgress,
   taskStatusFromPhotos,
@@ -290,6 +291,55 @@ describe("telling 'no table yet' apart from 'the database said no'", () => {
     ).toBe(false);
   });
 
+  /*
+   * "Unfriendly info" is the client's own phrase for raw identifiers on screen,
+   * and a foreign key constraint name on a field phone is the worst case of it.
+   */
+  it("shows the trigger's own sentence when there is one", () => {
+    expect(
+      taskPhotoItemErrorMessage({ code: "23503", message: "That photo is not part of this task." }),
+    ).toBe("That photo is not part of this task.");
+    expect(
+      taskPhotoItemErrorMessage({
+        code: "23514",
+        message:
+          "Only the assignee, the person who assigned it, or a manager can mark this photo done.",
+      }),
+    ).toBe("Only the assignee, the person who assigned it, or a manager can mark this photo done.");
+  });
+
+  it("never puts a constraint name in front of a crew member", () => {
+    const fk = taskPhotoItemErrorMessage({
+      code: "23503",
+      message:
+        'insert or update on table "task_photo_items" violates foreign key constraint "task_photo_items_photo_id_fkey"',
+    });
+    expect(fk).toBe("That photo is no longer part of this task. Reload and try again.");
+
+    const rls = taskPhotoItemErrorMessage({
+      code: "42501",
+      message: 'new row violates row-level security policy for table "task_photo_items"',
+    });
+    expect(rls).toContain("no longer have access");
+
+    for (const shown of [fk, rls]) {
+      expect(shown).not.toContain("task_photo_items");
+      expect(shown).not.toContain("constraint");
+      expect(shown).not.toContain("violates");
+    }
+  });
+
+  it("falls back to something actionable for a refusal it has no copy for", () => {
+    const shown = taskPhotoItemErrorMessage({
+      code: "22P02",
+      message: 'invalid input syntax for type uuid: "nope"',
+    });
+    expect(shown).toBe("Could not save that change. Reload and try again.");
+    expect(taskPhotoItemErrorMessage(null)).toBe(
+      "Could not save that change. Reload and try again.",
+    );
+  });
+
   it("still copes with an error object carrying no code", () => {
     expect(isMissingTaskPhotoItems({ message: "...does not exist" })).toBe(true);
     expect(isMissingTaskPhotoItems({ message: "Failed to fetch" })).toBe(false);
@@ -380,6 +430,56 @@ describe("the SQL half still says the same thing", () => {
       );
     }
     expect(sql).toContain("Migration finished with triggers still disabled");
+  });
+
+  it("raises exactly the sentences the client passes through", () => {
+    /*
+     * `taskPhotoItemErrorMessage` allow-lists these word for word, so a reworded
+     * RAISE here would silently start showing the generic fallback instead. Both
+     * halves are pinned rather than one, for the same reason the rollup is.
+     */
+    for (const sentence of [
+      "That photo is not part of this task.",
+      "Only the assignee, the person who assigned it, or a manager can mark this photo done.",
+    ]) {
+      expect(sql).toContain(`RAISE EXCEPTION '${sentence}'`);
+      expect(read("apps/web/src/lib/task-photo-items.ts")).toContain(sentence);
+    }
+  });
+
+  it("recovers a completion date instead of restamping it to now()", () => {
+    /*
+     * Purging one photo off a fully closed task takes it through 'not done' and
+     * back inside one statement: the foreign key cascade drops that photo's item
+     * row and the rollup demotes while `photo_ids` still names it, then the
+     * section 5 trigger prunes the id and the status recomputes honestly. Both
+     * ends correct, and a bare `COALESCE(completed_at, now())` in the middle moved
+     * the date to the purge. The item rows still hold the real one.
+     */
+    expect(sql).toContain("public.task_photo_completed_at(uuid, uuid[])");
+    // Every place that writes a TASK's completed_at - the rollup, the photo_ids
+    // sync and the reconcile - has to go through it.
+    const taskPromotions = [...sql.matchAll(/completed_at\s*:?=\s*CASE[\s\S]*?END/g)];
+    expect(taskPromotions).toHaveLength(3);
+    for (const m of taskPromotions) {
+      expect(m[0]).toContain("task_photo_completed_at");
+    }
+    /*
+     * The one deliberate exception, and the reason the assertion above is scoped
+     * to CASE blocks: an ITEM row's own stamp is `now()` because the tick is
+     * happening now. Recovering a date from siblings would be wrong there.
+     */
+    expect(sql).toContain("NEW.completed_at := COALESCE(NEW.completed_at, now());");
+  });
+
+  it("keeps both SECURITY DEFINER readers off the authenticated role", () => {
+    for (const fn of [
+      "public.task_photo_rollup_status(uuid, uuid[], text)",
+      "public.task_photo_completed_at(uuid, uuid[])",
+    ]) {
+      expect(sql).toContain(`REVOKE ALL ON FUNCTION ${fn}`);
+      expect(sql).not.toContain(`GRANT EXECUTE ON FUNCTION ${fn}`);
+    }
   });
 
   it("keeps the rollup helper off the authenticated role", () => {

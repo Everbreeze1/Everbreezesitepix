@@ -98,6 +98,58 @@ export function isMissingTaskPhotoItems(
   return /does not exist|schema cache/i.test(message);
 }
 
+/**
+ * Copy for the refusals that are Postgres talking to a developer rather than to
+ * the person holding the phone. Keyed by SQLSTATE.
+ */
+const FRIENDLY_BY_CODE: Record<string, string> = {
+  // The photo left the task while this screen was open - someone edited its
+  // photos, or it was purged from the trash.
+  "23503": "That photo is no longer part of this task. Reload and try again.",
+  // RLS: the policies read team membership off the parent task, so this is what
+  // a lapsed teammate gets.
+  "42501": "You no longer have access to this task. Ask whoever owns the project to re-share it.",
+  "23505": "Someone else just recorded that photo. Reload to see where the task stands.",
+};
+
+/**
+ * The sentences the migration's own triggers RAISE, written for the person
+ * reading them. Add to this list when a trigger there gains another one - the
+ * migration text is asserted against it in tests/task-photo-completion.test.ts,
+ * so a reworded RAISE fails there rather than quietly showing the fallback.
+ */
+const TRIGGER_SENTENCES = [
+  "That photo is not part of this task.",
+  "Only the assignee, the person who assigned it, or a manager can mark this photo done.",
+];
+
+/**
+ * What to show when the database refuses one of these writes.
+ *
+ * An allow-list, not a filter. The first attempt asked whether the message looked
+ * like Postgres describing its own insides - constraint names, the word "violates"
+ * - and passed anything else through. That leaks by default: it let
+ * `invalid input syntax for type uuid: "nope"` onto the screen because the phrase
+ * was not on the list, and no list of Postgres phrasings is ever finished.
+ *
+ * Inverted, the failure mode inverts with it. A refusal this does not recognise
+ * gets a plain sentence instead of raw schema, which is the right way round for
+ * copy a crew member reads in the field: `insert or update on table
+ * "task_photo_items" violates foreign key constraint "task_photo_items_photo_id_fkey"`
+ * is exactly the raw-identifiers-on-screen the client has objected to before.
+ *
+ * The cost is that a new trigger sentence shows the generic line until it is added
+ * above. That is a worse message, not a leak.
+ */
+export function taskPhotoItemErrorMessage(
+  error: { message?: string; code?: string } | null | undefined,
+): string {
+  const message = String(error?.message ?? "").trim();
+  if (TRIGGER_SENTENCES.includes(message)) return message;
+  const code = String(error?.code ?? "");
+  return FRIENDLY_BY_CODE[code] ?? "Could not save that change. Reload and try again.";
+}
+
 export interface TaskPhotoProgress {
   /** Photos the task covers, from `photo_ids`. */
   total: number;

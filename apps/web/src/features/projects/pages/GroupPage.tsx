@@ -80,6 +80,7 @@ import {
   TASK_PHOTO_ITEM_COLUMNS,
   indexTaskPhotoItems,
   isMissingTaskPhotoItems,
+  taskPhotoItemErrorMessage,
   taskPhotoItemPatch,
   taskPhotoProgress,
   type TaskPhotoItem,
@@ -308,7 +309,7 @@ export function GroupPage() {
         .from(TASK_PHOTO_ITEMS_TABLE)
         .upsert(rows, { onConflict: "task_id,photo_id" });
       if (itemError && !isMissingTaskPhotoItems(itemError)) {
-        toast.error(itemError.message || "Could not update task");
+        toast.error(taskPhotoItemErrorMessage(itemError));
         void load();
         return;
       }
