@@ -179,19 +179,6 @@ function timeAgo(iso: string) {
   return `${Math.floor(mo / 12)}y ago`;
 }
 
-/**
- * Separator for a run of small facts on one line ("5 sections · never applied
- * · created 3d ago").
- *
- * Three characters, and the last one is invisible in an editor, so: an ordinary
- * space, U+00B7 MIDDLE DOT, then U+00A0 NO-BREAK SPACE. The no-break space ties
- * the dot to the word after it, so the line may wrap in front of a separator
- * but never behind one, and no line ends on a dangling dot. That is exactly
- * what a 420px screen did to this line back when each fact was its own flex
- * child: "5 sections ·" / "never applied ·" / "created just now".
- */
-const META_SEP = " · ";
-
 const KIND_META: Record<
   TemplateItemKind,
   { label: string; icon: typeof ClipboardList; tint: string }
@@ -901,13 +888,6 @@ export function TemplatesPage() {
     "label-sets": labelSetTpls.length,
     labels: labelCatalog.rows.length,
   };
-  const buildingBlocks =
-    tabCounts.checklists +
-    tabCounts.workflows +
-    tabCounts.documents +
-    tabCounts.reports +
-    tabCounts["label-sets"];
-
   if (teamLoading) {
     return (
       <div className="container mx-auto max-w-5xl px-4 pt-10">
@@ -977,33 +957,18 @@ export function TemplatesPage() {
               </div>
             </div>
 
-            {/* Stats rail - states what the library holds and cuts to it. */}
-            <div className="flex flex-col gap-4 border-t border-sidebar-border pt-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="mr-1 text-[10px] font-extrabold uppercase tracking-[1.5px] text-sidebar-foreground/45">
-                  Library
-                </span>
-                <span className="text-xs font-bold text-sidebar-foreground">
-                  {tabCounts.blueprints} {tabCounts.blueprints === 1 ? "blueprint" : "blueprints"}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-5 text-xs font-bold text-sidebar-foreground/60">
-                <button
-                  type="button"
-                  onClick={() => setTab("checklists")}
-                  className="inline-flex items-center gap-2 rounded-md transition hover:text-sidebar-foreground"
-                >
-                  <LayoutTemplate className="h-4 w-4 text-sidebar-ring" />
-                  {buildingBlocks} reusable pieces
-                </button>
-                {applications !== null && (
-                  <span className="inline-flex items-center gap-2">
-                    <Rocket className="h-4 w-4 text-sidebar-ring" />
-                    {applications.length} applied to projects
-                  </span>
-                )}
-              </div>
-            </div>
+            {/*
+             * No stats rail here, deliberately, though Projects and the project
+             * home page both carry one.
+             *
+             * On those screens the rail earns its space: every figure in it is a
+             * filter, and clicking one cuts the list below to it. This page's
+             * rail was three inert figures, and the PageTabStrip twelve pixels
+             * underneath it already showed all three - "Library 2 blueprints" is
+             * the first tab's count, and "33 reusable pieces" was the sum of the
+             * other five. A band of numbers restating the band of numbers below
+             * it is the "way too much information" complaint in one element.
+             */}
           </div>
         </div>
 
@@ -1441,31 +1406,39 @@ function BlueprintsTab(props: {
           />
         </div>
 
-        {/* Secondary on purpose. The hero above this already carries a primary
-            "New blueprint", and two filled buttons one scroll apart read as two
-            different actions until you read both labels. */}
-        {canManage && (
-          <Button
-            variant="outline"
-            className="h-9 w-full justify-center rounded-xl"
-            onClick={onCreate}
-          >
-            <Plus className="mr-1.5 h-4 w-4" />
-            New blueprint
-          </Button>
-        )}
-
+        {/* Create lives in the list header, not in a full-width button of its
+            own above it. The hero already carries a primary "New blueprint" a
+            couple of hundred pixels up, so this was the same action twice on
+            one screen, the second time in a block as heavy as the list. */}
         <div className={cn(SURFACE_CARD, "overflow-hidden")}>
-          <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
-            <span className="text-xs font-bold text-muted-foreground">
-              {visibleTemplates.length} blueprint{visibleTemplates.length === 1 ? "" : "s"}
-            </span>
-            <button
-              className="text-xs font-bold text-muted-foreground hover:text-foreground"
-              onClick={onToggleArchived}
-            >
-              {showArchived ? "Hide archived" : "Show archived"}
-            </button>
+          <div className="flex items-center justify-between gap-2 border-b border-border/60 py-1.5 pl-3 pr-1.5">
+            <div className="flex min-w-0 items-center gap-2.5">
+              {/* The count only while a search is narrowing the list, which is
+                  the one case the tab strip's "Project blueprints 2" cannot
+                  speak to. Unfiltered it was a third copy of that number. */}
+              {search.trim() !== "" && (
+                <span className="text-xs font-bold text-muted-foreground">
+                  {visibleTemplates.length} match{visibleTemplates.length === 1 ? "" : "es"}
+                </span>
+              )}
+              <button
+                className="truncate text-xs font-bold text-muted-foreground hover:text-foreground"
+                onClick={onToggleArchived}
+              >
+                {showArchived ? "Hide archived" : "Show archived"}
+              </button>
+            </div>
+            {canManage && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 rounded-lg px-2 text-xs font-bold"
+                onClick={onCreate}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                New
+              </Button>
+            )}
           </div>
           {visibleTemplates.length === 0 ? (
             <p className="px-3 py-8 text-center text-xs text-muted-foreground">
@@ -1568,24 +1541,15 @@ function BlueprintsTab(props: {
                     {selected.description}
                   </p>
                 )}
-                {/* One line, no icons. Three icon-and-label pairs for three
-                    numbers read as three controls until you look twice.
-                    One text node rather than flex children, joined on a
-                    no-break space so a separator can never be left stranded at
-                    the end of a wrapped line - which is what a phone did with
-                    "5 sections ·" / "never applied ·" / "created just now". */}
+                {/* Created date only.
+                 *
+                 * This line used to read "5 sections · never applied · created
+                 * just now", and both of the first two are stated again, in
+                 * full, within one screen: the section count heads the Contents
+                 * card, the apply count heads the Track record card. Each fact
+                 * is now written once, in the card that acts on it. */}
                 <p className="mt-2.5 text-xs text-muted-foreground">
-                  {[
-                    `${sections.length} section${sections.length === 1 ? "" : "s"}`,
-                    ...(applicationsAvailable
-                      ? [
-                          selectedApplications.length === 0
-                            ? "never applied"
-                            : `applied ${selectedApplications.length}×`,
-                        ]
-                      : []),
-                    `created ${timeAgo(selected.created_at)}`,
-                  ].join(META_SEP)}
+                  Created {timeAgo(selected.created_at)}
                 </p>
               </div>
 
@@ -1920,14 +1884,25 @@ function BlueprintsTab(props: {
            * genuinely never been applied.
            */}
           <div className={cn(SURFACE_CARD, "p-5")}>
-            <h3 className="text-sm font-bold tracking-tight">Where it has been used</h3>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <h3 className="text-sm font-bold tracking-tight">Where it has been used</h3>
+              {/* The count lives with the list it counts. The blueprint's own
+                  header used to carry it as well, one card up. */}
+              {applicationsAvailable && selectedApplications.length > 0 && (
+                <span className="text-[11.5px] text-muted-foreground">
+                  applied {selectedApplications.length}×
+                </span>
+              )}
+            </div>
+            {/* Nothing to show is one quiet line, not a 90px dashed box drawn
+                around a sentence saying there is nothing to show. */}
             {!applicationsAvailable ? (
-              <p className="mt-3 rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+              <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
                 Usage history isn’t available on this environment yet, so we can’t show where this
                 blueprint has been applied.
               </p>
             ) : selectedApplications.length === 0 ? (
-              <p className="mt-3 rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+              <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
                 Not applied to any project yet. Every apply is recorded here, with what it created.
               </p>
             ) : (
