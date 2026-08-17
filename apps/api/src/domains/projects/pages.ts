@@ -162,7 +162,7 @@ export interface DocumentTreePage {
 }
 
 /** `document_template:<uuid>` → `<uuid>`; every other encoding → null. */
-function documentTemplateId(sourceTemplate: string | null | undefined): string | null {
+export function documentTemplateId(sourceTemplate: string | null | undefined): string | null {
   if (typeof sourceTemplate !== "string") return null;
   const m = sourceTemplate.match(/^document_template:([0-9a-fA-F-]{36})$/);
   return m ? m[1] : null;
@@ -601,7 +601,7 @@ export async function getProjectPageService(
   const { data: row, error } = await (ctx.supabase as any)
     .from("project_pages")
     .select(
-      "id, project_id, folder_id, created_by, title, content_html, header_html, footer_html, share_token, revoked_at, updated_at",
+      "id, project_id, folder_id, created_by, title, content_html, header_html, footer_html, share_token, revoked_at, updated_at, source_template",
     )
     .eq("id", data.pageId)
     .single();
@@ -631,7 +631,16 @@ export async function getProjectPageService(
     tokens[key] = { label: value || fieldLabel(key), empty: !value };
   }
   return {
-    page: { ...row, content_html: contentHtml, header_html: headerHtml, footer_html: footerHtml },
+    page: {
+      ...row,
+      content_html: contentHtml,
+      header_html: headerHtml,
+      footer_html: footerHtml,
+      // Decoded here so the editor can offer "Update <template>" instead of
+      // only ever "Save as a new template" - see updateTemplateFromPageService.
+      // The raw `source_template` encoding stays an API detail.
+      sourceTemplateId: documentTemplateId(row.source_template),
+    },
     tokens,
   };
 }

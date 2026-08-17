@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useBlocker, useNavigate, useParams } from "@tanstack/react-router";
 import { useEditor, EditorContent, getHTMLFromFragment, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -45,6 +45,7 @@ import {
   Search,
   MoreHorizontal,
   Layers,
+  LayoutTemplate,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -87,7 +88,11 @@ import {
   setProjectPageShare,
   generatePagePdf,
   savePageAsTemplate,
+  updateTemplateFromPage,
+  listDocumentTemplates,
+  type DocumentTemplateSummary,
 } from "@/lib/project-pages.functions";
+import { nextCopyName } from "@/lib/duplicate-name";
 import {
   listTextSnippets,
   createTextSnippet,
@@ -160,6 +165,16 @@ export function ProjectPageEditorPage() {
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [revoked, setRevoked] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  /** The document template this page was created from, if it was created from one. */
+  const [sourceTemplateId, setSourceTemplateId] = useState<string | null>(null);
+  /**
+   * The document library, read once the ··· menu is first opened.
+   *
+   * Two things need it and neither is worth a request on page load: naming a
+   * new template without colliding with an existing one, and deciding whether
+   * the template this page came from is one this team is allowed to update.
+   */
+  const [library, setLibrary] = useState<DocumentTemplateSummary[] | null>(null);
   /**
    * Optimistic-concurrency token: the row version this editor is working from.
    * A ref, not state, because the autosave chain reads it outside React's
@@ -367,6 +382,7 @@ export function ProjectPageEditorPage() {
         setShareToken(res.page.share_token);
         setRevoked(!!res.page.revoked_at);
         setUpdatedAt(res.page.updated_at);
+        setSourceTemplateId(res.page.sourceTemplateId ?? null);
         versionRef.current = res.page.updated_at;
         editor?.commands.setContent(res.page.content_html || "", { emitUpdate: false });
         // `emitUpdate: false` keeps loading from counting as an edit, but it
@@ -653,11 +669,54 @@ export function ProjectPageEditorPage() {
     }
   }
 
+  /**
+   * The library, cached for this page visit.
+   *
+   * A failed read resolves to an empty list rather than throwing: it only costs
+   * the "Update template" item and a smarter default name, neither of which is
+   * worth blocking the menu on.
+   */
+  const ensureLibrary = useCallback(async () => {
+    if (library) return library;
+    const templates = await listDocumentTemplates()
+      .then((res) => res.templates)
+      .catch(() => [] as DocumentTemplateSummary[]);
+    setLibrary(templates);
+    return templates;
+  }, [library]);
+
+  /**
+   * The template this page came from, when it is one this team can write to.
+   *
+   * Examples are excluded: they are shared with every company, RLS rejects the
+   * write, and the API refuses it - so offering the item would be offering a
+   * button that cannot work.
+   */
+  const sourceTemplate = useMemo(
+    () => library?.find((t) => t.id === sourceTemplateId && !t.isExample) ?? null,
+    [library, sourceTemplateId],
+  );
+
   async function handleSaveAsTemplate() {
+    /*
+     * The library is read first so the prompt cannot offer a name that is
+     * already taken.
+     *
+     * This document's title is usually the exact name of the template it was
+     * created from, and that title was the default. Accepting it produced a
+     * second template with the same name as the first, holding this job's
+     * version of it - which is the "then another template is created" half of
+     * the duplication the client reported. `nextCopyName` numbers it instead,
+     * the same way the Templates page numbers a copy.
+     */
+    const taken = (await ensureLibrary()).map((t) => t.name);
+    const clash = taken.some((n) => n.trim().toLowerCase() === title.trim().toLowerCase());
     const name = await prompt({
-      title: "Save as template",
+      title: "Save as a new template",
+      description:
+        "Adds a reusable copy to Templates → Documents, blanked of this job's photos and answers. This document keeps its own edits either way - you only need a template if every future job should start from this layout.",
       label: "Template name",
-      defaultValue: title,
+      defaultValue: clash ? nextCopyName(title, taken) : title,
     });
     if (!name) return;
     try {
@@ -668,6 +727,10 @@ export function ProjectPageEditorPage() {
         return;
       }
       await savePageAsTemplate({ data: { pageId, name } });
+      // The cached list no longer holds every name, and the next save would
+      // offer this one back as a default. Dropped rather than appended so the
+      // reload also picks up whatever a teammate added meanwhile.
+      setLibrary(null);
       // It lands in the document library - say so, and offer the route there.
       toast.success(`Saved "${name}" to your templates`, {
         description: "Find it under Templates → Documents, or add it to a blueprint.",
@@ -678,6 +741,45 @@ export function ProjectPageEditorPage() {
       });
     } catch (e: any) {
       toast.error(e?.message ?? "Could not save template");
+    }
+  }
+
+  /**
+   * Fold this document back into the template it came from.
+   *
+   * Confirmed first, and named in the confirmation: this rewrites something the
+   * whole team starts new jobs from, which is a different weight of action to
+   * anything else in this editor.
+   */
+  async function handleUpdateTemplate() {
+    if (!sourceTemplate) return;
+    if (
+      !(await confirm({
+        title: `Update "${sourceTemplate.name}"?`,
+        description:
+          "The template picks up this document's layout and wording. This job's photos, typed-in answers and merged-in details are stripped out first, and documents already created from it are untouched.",
+        confirmText: "Update template",
+      }))
+    )
+      return;
+    try {
+      // Built from the stored row, so anything still in the autosave debounce
+      // would be missing from it - same reason as the PDF export.
+      if (!(await flushPendingSave())) {
+        toast.error("Couldn't save your latest changes - template not updated");
+        return;
+      }
+      await updateTemplateFromPage({ data: { pageId } });
+      setLibrary(null);
+      toast.success(`"${sourceTemplate.name}" updated`, {
+        description: "Every new job that starts from it gets this version.",
+        action: {
+          label: "Open Templates",
+          onClick: () => void navigate({ to: "/templates", search: { tab: "documents" } }),
+        },
+      });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not update template");
     }
   }
 
@@ -935,15 +1037,49 @@ export function ProjectPageEditorPage() {
               <Share2 className="mr-1.5 h-3.5 w-3.5" />
               {revoked ? "Share" : "Shared"}
             </Button>
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={(o) => o && void ensureLibrary()}>
               <DropdownMenuTrigger asChild>
                 <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="More actions">
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="w-80">
+                {/*
+                  Both verbs, said plainly.
+
+                  There used to be one, "Save as a New Template", and it reads
+                  like the way to save this document - which it is not, the
+                  document autosaves. So a crew that improved a template while
+                  filling it in had no way to keep the improvement except adding
+                  a second template beside the first, and a crew that merely
+                  wanted to save their work added one by accident. Both are the
+                  duplication the client reported.
+                */}
+                {sourceTemplate && (
+                  <>
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Made from {sourceTemplate.name}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onClick={handleUpdateTemplate}>
+                      <Layers className="mr-2 h-4 w-4 text-primary" />
+                      <span>
+                        <span className="block font-bold">Update that template</span>
+                        <span className="block text-xs text-muted-foreground">
+                          Improves the one you already have instead of adding another.
+                        </span>
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem onClick={handleSaveAsTemplate}>
-                  <Layers className="mr-2 h-4 w-4" /> Save as a New Template
+                  <LayoutTemplate className="mr-2 h-4 w-4" />
+                  <span>
+                    <span className="block font-bold">Save as a new template</span>
+                    <span className="block text-xs text-muted-foreground">
+                      A separate template for future jobs. This document is already saved.
+                    </span>
+                  </span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

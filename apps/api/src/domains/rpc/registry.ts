@@ -224,6 +224,8 @@ import {
   previewDocumentTemplateService,
   savePageAsTemplateInputSchema,
   savePageAsTemplateService,
+  updateTemplateFromPageInputSchema,
+  updateTemplateFromPageService,
 } from "../projects/page-templates";
 import {
   createTextSnippetInputSchema,
@@ -1022,6 +1024,12 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   savePageAsTemplate: authed(
     (d) => savePageAsTemplateInputSchema.parse(d),
     savePageAsTemplateService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  // The alternative to the line above: improve the template this document came
+  // from, rather than leaving a near-copy of it in the library beside it.
+  updateTemplateFromPage: authed(
+    (d) => updateTemplateFromPageInputSchema.parse(d),
+    updateTemplateFromPageService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   setProjectPageShare: authed(
     (d) => setProjectPageShareInputSchema.parse(d),

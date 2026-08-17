@@ -6,6 +6,7 @@ import {
   loadTokenValues,
   fieldLabel,
   tokenSource,
+  documentTemplateId,
   type TokenSource,
 } from "./pages";
 import { sanitizePageHtml } from "./sanitize-page-html";
@@ -355,12 +356,41 @@ export async function createPageFromTemplateService(
   return { page: row };
 }
 
+/**
+ * A project page turned back into a reusable body.
+ *
+ * Keep the layout (photo rows, section structure) but never carry this
+ * project's actual photos, typed-in answers or merged-in details into a
+ * reusable template - see the three helpers, each of which strips one of them.
+ * Sanitize on the way in as well, so the stored template is clean rather than
+ * merely rendered clean. Read-side sanitizing (getDocumentTemplateService)
+ * covers rows written before this; this stops new ones being written at all.
+ *
+ * Shared by both routes out of a document - saving a new template and updating
+ * the one it came from - so the two can never disagree about what a template is
+ * allowed to contain.
+ */
+async function templateBodyFromPage(page: {
+  content_html: string;
+  project_id: string;
+  created_by: string;
+}): Promise<{ html: string; fields: string[] }> {
+  const sourceValues = await loadTokenValues(page.project_id, page.created_by);
+  const html = sanitizePageHtml(
+    valuesToTokens(blankFillFields(stripPhotosToSlots(page.content_html)), sourceValues),
+  );
+  const fields = Array.from(
+    new Set(Array.from(html.matchAll(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi), (m) => m[1].toLowerCase())),
+  ).sort();
+  return { html, fields };
+}
+
 export const savePageAsTemplateInputSchema = z.object({
   pageId: z.string().uuid(),
   name: z.string().trim().min(1).max(160),
 });
 
-/** "Save as a New Template" from the page editor's ··· menu. */
+/** "Save as a new template" from the page editor's ··· menu. */
 export async function savePageAsTemplateService(
   ctx: AuthedContext,
   data: z.infer<typeof savePageAsTemplateInputSchema>,
@@ -378,19 +408,7 @@ export async function savePageAsTemplateService(
     .eq("user_id", ctx.userId)
     .maybeSingle();
 
-  // Keep the layout (photo rows, section structure) but never carry this
-  // project's actual photos, typed-in answers or merged-in details into a
-  // reusable template - see the three helpers, each of which strips one of them.
-  // Sanitize on the way in as well, so the stored template is clean rather than
-  // merely rendered clean. Read-side sanitizing (getDocumentTemplateService)
-  // covers rows written before this; this stops new ones being written at all.
-  const sourceValues = await loadTokenValues(page.project_id as string, page.created_by as string);
-  const html = sanitizePageHtml(
-    valuesToTokens(blankFillFields(stripPhotosToSlots(page.content_html as string)), sourceValues),
-  );
-  const fields = Array.from(
-    new Set(Array.from(html.matchAll(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi), (m) => m[1].toLowerCase())),
-  ).sort();
+  const { html, fields } = await templateBodyFromPage(page);
 
   const { data: row, error } = await (ctx.supabase as any)
     .from("document_templates")
@@ -405,4 +423,68 @@ export async function savePageAsTemplateService(
     .single();
   if (error) throw new Error(error.message);
   return { template: row };
+}
+
+export const updateTemplateFromPageInputSchema = z.object({ pageId: z.string().uuid() });
+
+/**
+ * Fold this document's layout back into the template it was created from.
+ *
+ * The missing verb, and the last of the duplication the client reported. A crew
+ * that improved a template while filling it in on a job had exactly one way to
+ * keep the improvement: "Save as a new template". So the library grew a near
+ * copy every time anyone tidied a heading, and the original stayed wrong -
+ * "then another template is created ... creating duplicates is a big mess".
+ *
+ * Overwrites the body only. Name, style, trade and description are the
+ * library's, not this page's, so a document retitled for one customer cannot
+ * rename the template every other job starts from.
+ *
+ * Refused on a built-in: those are shared by every team and RLS rejects the
+ * write anyway, so it says so rather than failing as a permissions error.
+ */
+export async function updateTemplateFromPageService(
+  ctx: AuthedContext,
+  data: z.infer<typeof updateTemplateFromPageInputSchema>,
+) {
+  const { data: page, error: pageErr } = await (ctx.supabase as any)
+    .from("project_pages")
+    .select("content_html, project_id, created_by, source_template")
+    .eq("id", data.pageId)
+    .single();
+  if (pageErr || !page) throw new Error("Page not found");
+
+  const templateId = documentTemplateId(page.source_template as string | null);
+  if (!templateId) throw new Error("This document wasn't created from a template.");
+
+  const { data: template } = await (ctx.supabase as any)
+    .from("document_templates")
+    .select("id, name, team_id, body")
+    .eq("id", templateId)
+    .maybeSingle();
+  if (!template)
+    throw new Error(
+      "The template this came from no longer exists. Save this as a new template instead.",
+    );
+  if (template.team_id === null)
+    throw new Error(
+      "Example templates are shared with every company and can't be changed. Save this as a new template instead.",
+    );
+
+  const { html, fields } = await templateBodyFromPage(page);
+  /*
+   * Spread rather than rebuilt: `body` carries the style, the trade the card is
+   * filed under and the picker's description alongside the html, and none of
+   * those are this page's to decide.
+   */
+  const body = {
+    ...(template.body && typeof template.body === "object" ? template.body : {}),
+    html,
+  };
+  const { error } = await (ctx.supabase as any)
+    .from("document_templates")
+    .update({ body, fields })
+    .eq("id", templateId);
+  if (error) throw new Error(error.message);
+  return { template: { id: templateId, name: template.name as string } };
 }

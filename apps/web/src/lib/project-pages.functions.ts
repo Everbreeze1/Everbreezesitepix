@@ -40,6 +40,12 @@ export interface ProjectPage {
   share_token: string;
   revoked_at: string | null;
   updated_at: string;
+  /**
+   * The document template this page was created from, bare uuid, or null for a
+   * blank page and for the AI-generated kinds. What lets the editor offer to
+   * update that template instead of only ever adding another one beside it.
+   */
+  sourceTemplateId: string | null;
 }
 
 export const listProjectDocumentTree = rpcOp<{ projectId: string }, DocumentTree>(
@@ -55,7 +61,9 @@ export const renameDocumentFolder = rpcOp<{ folderId: string; name: string }, { 
   "renameDocumentFolder",
 );
 
-export const deleteDocumentFolder = rpcOp<{ folderId: string }, { ok: true }>("deleteDocumentFolder");
+export const deleteDocumentFolder = rpcOp<{ folderId: string }, { ok: true }>(
+  "deleteDocumentFolder",
+);
 
 export const moveDocument = rpcOp<
   { kind: "page" | "file"; id: string; folderId: string | null },
@@ -167,6 +175,12 @@ export const savePageAsTemplate = rpcOp<
   { template: { id: string; name: string } }
 >("savePageAsTemplate");
 
+/** Folds this document's layout back into the template it was created from. */
+export const updateTemplateFromPage = rpcOp<
+  { pageId: string },
+  { template: { id: string; name: string } }
+>("updateTemplateFromPage");
+
 export const setProjectPageShare = rpcOp<
   { pageId: string; enable: boolean },
   { shareToken: string }
@@ -191,6 +205,7 @@ export const generatePagePdf = rpcOp<{ pageId: string }, { pdfBase64: string; fi
   { idempotent: true },
 );
 
-export const getPublicProjectPagePdf = rpcOp<{ token: string }, { pdfBase64: string; filename: string }>(
-  "getPublicProjectPagePdf",
-);
+export const getPublicProjectPagePdf = rpcOp<
+  { token: string },
+  { pdfBase64: string; filename: string }
+>("getPublicProjectPagePdf");

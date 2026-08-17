@@ -685,3 +685,225 @@ describe("the template editor shows each field in one place", () => {
     expect(body.slice(0, 1400)).not.toContain("grid-cols-2");
   });
 });
+
+/*
+ * ---------------------------------------------------------------------------
+ * The residual duplication, and the two things that now stop it.
+ * ---------------------------------------------------------------------------
+ *
+ * 20260903000000 archived the copies that matched a shipped preset. What it
+ * could not reach was a copy of a document the team wrote themselves, which on
+ * the live database left four cards holding two documents:
+ *
+ *   HVAC Service Call Report (copy) / ... (copy) (copy)
+ *   Template July 31st Tire Buster Auto Report / ... (copy)
+ *
+ * 20260904000000 collapses those, and the card badge stops the next set being
+ * invisible. The two have to agree on what "the same document" means - the body,
+ * never the name - or the page will badge a card the sweep keeps, or worse,
+ * quietly archive one it never warned about.
+ */
+describe("duplicate copies are collapsed and surfaced", () => {
+  const SWEEP = readFileSync(
+    join(MIGRATIONS, "20260904000000_archive_duplicate_team_document_templates.sql"),
+    "utf8",
+  );
+
+  it("the sweep keeps one row per identical body, per team", () => {
+    // Partitioning on team_id as well as the body: two teams holding the same
+    // document is two teams, not a duplicate.
+    expect(SWEEP).toMatch(/PARTITION BY team_id, md5\(body ->> 'html'\)/);
+    // Oldest survives, deterministically.
+    expect(SWEEP).toMatch(/ORDER BY created_at, id/);
+    expect(SWEEP).toMatch(/r\.copy_rank > 1/);
+  });
+
+  it("the sweep never touches the built-in library", () => {
+    expect(SWEEP).toMatch(/team_id IS NOT NULL/);
+  });
+
+  it("the sweep archives rather than deletes", () => {
+    expect(SWEEP).toMatch(/SET archived = true/);
+    expect(SWEEP).not.toMatch(/DELETE\s+FROM/i);
+  });
+
+  it("re-running it is a no-op", () => {
+    // Already-archived rows fall out of the candidate set, so a second run
+    // cannot walk the survivors down to one.
+    expect(SWEEP).toMatch(/archived = false/);
+  });
+
+  it("the card badge and the sweep agree on what a duplicate is", () => {
+    /*
+     * Both compare the stored body and nothing else. A badge keyed on the name
+     * would mark "CLEANING SERVICES - Invoice With Photos (copy)", a document of
+     * its own that merely says copy in its name, and would miss the Tire Buster
+     * pair if either were renamed.
+     */
+    const block = MANAGER.slice(
+      MANAGER.indexOf("const duplicateOf"),
+      MANAGER.indexOf("const sections"),
+    );
+    expect(block.length).toBeGreaterThan(200);
+    expect(block).toContain("parseBody(t.body).html");
+    expect(block).not.toMatch(/\.name\b[^)]*\bnormalize|COPY_SUFFIX|\(copy\)/);
+    // Built-ins are excluded on both sides.
+    expect(block).toContain("t.team_id === null");
+    // Oldest is the keeper on both sides.
+    expect(block).toContain("created_at.localeCompare");
+  });
+
+  it("only the redundant cards are badged, never the one worth keeping", () => {
+    const block = MANAGER.slice(
+      MANAGER.indexOf("const duplicateOf"),
+      MANAGER.indexOf("const sections"),
+    );
+    // The keeper is destructured off the front and only `rest` is recorded.
+    expect(block).toMatch(/const \[keeper, \.\.\.rest\]/);
+    expect(block).toMatch(/for \(const dupe of rest\) out\.set\(dupe\.id, keeper\.name\)/);
+  });
+});
+
+/*
+ * The client, reading the Documents tab of the Templates page:
+ *
+ *   "I am not sure what the point of duplicating is ... Clean templates should
+ *    be allowed to be applied to projects. projects document section. Creating
+ *    duplicates is a big mess."
+ *
+ * The earlier round of work here treated the symptom - numbering copies,
+ * badging identical bodies, archiving the ones already in the database. This
+ * covers the cause: a grid that offered copying as a co-equal verb to using,
+ * and on a built-in labelled it "Duplicate to edit", which states that a
+ * template must be copied before it can be changed. It must not: a document is
+ * tailored for one job by using the template in that project and editing the
+ * page it creates, which touches no template at all.
+ */
+describe("copying is not how a template gets used", () => {
+  const EDITOR_PAGE = readFileSync(
+    join(ROOT, "apps/web/src/features/projects/pages/ProjectPageEditorPage.tsx"),
+    "utf8",
+  );
+
+  /**
+   * The file with its comments removed, so an assertion about what the page
+   * SAYS is not answered by prose explaining what it used to say - the comments
+   * in this component quote the old labels on purpose.
+   */
+  const rendered = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+
+  it("the card leads with using the template, not copying it", () => {
+    expect(MANAGER).toContain("Use in a project");
+    // The label that taught the wrong model. Copying a built-in is still
+    // offered; it just no longer claims to be the way to edit one.
+    expect(rendered(MANAGER)).not.toContain("Duplicate to edit");
+  });
+
+  it("copying opens the editor rather than dropping a twin in the grid", () => {
+    /*
+     * The old handler ended at the insert: it pushed a byte-identical row into
+     * `items` and toasted "Duplicated", so pressing the button to find out what
+     * it did left a permanent card indistinguishable from the one it came from.
+     */
+    const block = MANAGER.slice(
+      MANAGER.indexOf("async function copyForEditing"),
+      MANAGER.indexOf("async function closeEditor"),
+    );
+    expect(block.length).toBeGreaterThan(200);
+    expect(block).toMatch(/setEditor\(\{[^}]*fresh: true/);
+    expect(block).not.toMatch(/setItems\(/);
+    expect(block).not.toMatch(/toast\.success\(/);
+  });
+
+  it("a copy nobody edited is deleted again when the editor closes", () => {
+    const block = MANAGER.slice(
+      MANAGER.indexOf("async function closeEditor"),
+      MANAGER.indexOf("async function assignTrade"),
+    );
+    expect(block.length).toBeGreaterThan(200);
+    // Only ever a row this session created and never saved.
+    expect(block).toMatch(/if \(!open\?\.fresh \|\| !open\.template\)/);
+    expect(block).toMatch(/\.delete\(\)/);
+    // Edits that were never saved are still edits: they are confirmed away,
+    // not dropped on a stray Escape.
+    expect(block).toMatch(/const untouched =/);
+    expect(block).toMatch(/await confirm\(/);
+  });
+
+  it("both ways out of the editor run that cleanup", () => {
+    // The X inside the surface, and Escape / the overlay via the Dialog.
+    expect(MANAGER).toContain("onClose={() => void closeEditor()}");
+    expect(MANAGER).toMatch(/onOpenChange=\{\(v\) => \{[\s\S]{0,200}void closeEditor\(\)/);
+  });
+
+  it("a document can improve the template it came from instead of adding one", () => {
+    /*
+     * The verb that was missing. With only "Save as a new template", a crew
+     * that fixed a heading while filling the sheet in on site had one way to
+     * keep the fix: a second template beside the wrong one. The library grew
+     * every time anyone tidied anything.
+     */
+    const service = readFileSync(
+      join(ROOT, "apps/api/src/domains/projects/page-templates.ts"),
+      "utf8",
+    );
+    const block = service.slice(
+      service.indexOf("export async function updateTemplateFromPageService"),
+    );
+    expect(block.length).toBeGreaterThan(200);
+
+    // Built-ins are shared by every company. RLS rejects the write; this says
+    // so in words rather than surfacing a permissions error.
+    expect(block).toMatch(/template\.team_id === null/);
+    // Only the body's html is replaced. A document retitled for one customer
+    // must not rename, refile or restyle the template every job starts from.
+    expect(block).toMatch(/\.\.\.\(template\.body && typeof template\.body === "object"/);
+    expect(block).not.toMatch(/\.update\(\{[^}]*\bname\b/);
+
+    // Both routes out of a document build the body the same way, so the photo
+    // strip, the blanked answers and the values-back-to-tokens pass cannot
+    // apply to one and not the other.
+    expect(service).toMatch(/async function templateBodyFromPage\(/);
+    const saveBlock = service.slice(
+      service.indexOf("export async function savePageAsTemplateService"),
+      service.indexOf("export const updateTemplateFromPageInputSchema"),
+    );
+    expect(saveBlock).toContain("templateBodyFromPage(page)");
+    expect(block).toContain("templateBodyFromPage(page)");
+
+    // Reachable: registered, and offered by the editor behind a confirmation,
+    // since it rewrites what the whole team starts new jobs from.
+    const registry = readFileSync(join(ROOT, "apps/api/src/domains/rpc/registry.ts"), "utf8");
+    expect(registry).toMatch(/updateTemplateFromPage: authed\(/);
+    const editorBlock = EDITOR_PAGE.slice(
+      EDITOR_PAGE.indexOf("async function handleUpdateTemplate"),
+      EDITOR_PAGE.indexOf("async function handleExport"),
+    );
+    expect(editorBlock.length).toBeGreaterThan(200);
+    expect(editorBlock).toMatch(/await confirm\(/);
+    expect(editorBlock).toContain("updateTemplateFromPage({ data: { pageId } })");
+    // Never offered for an example, which cannot be written to.
+    expect(EDITOR_PAGE).toMatch(/t\.id === sourceTemplateId && !t\.isExample/);
+  });
+
+  it("saving a page as a template cannot silently mint a same-named twin", () => {
+    /*
+     * A page created from a template carries that template's name as its title,
+     * and the title was the prompt's default - so accepting it produced a
+     * second template with the first one's name, holding one job's version of
+     * it. That is the "then another template is created" the client described.
+     */
+    const block = EDITOR_PAGE.slice(
+      EDITOR_PAGE.indexOf("async function handleSaveAsTemplate"),
+      EDITOR_PAGE.indexOf("async function handleUpdateTemplate"),
+    );
+    expect(block.length).toBeGreaterThan(200);
+    // The names already in use, via the cache the ··· menu warms.
+    expect(block).toMatch(/await ensureLibrary\(\)/);
+    expect(EDITOR_PAGE).toContain("listDocumentTemplates()");
+    expect(block).toMatch(/defaultValue: clash \? nextCopyName\(title, taken\) : title/);
+    // And it says what it is for, since the menu item alone reads like "save".
+    expect(block).toMatch(/description:/);
+  });
+});

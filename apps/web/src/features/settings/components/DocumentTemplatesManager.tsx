@@ -76,6 +76,7 @@ import {
   FilePlus2,
   PanelRightOpen,
   PanelRightClose,
+  MoreHorizontal,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -134,6 +135,16 @@ interface EditorState {
   template: DocumentTemplate | null;
   name: string;
   body: DocBody;
+  /**
+   * This row was created by "Make an editable copy" for the edit currently on
+   * screen, and has never been saved.
+   *
+   * A copy that is closed without a save is deleted again rather than left in
+   * the grid - see `closeEditor`. Every stray "(copy)" card the client reported
+   * arrived the same way: the old Duplicate button inserted a byte-identical row
+   * and toasted, so a click made out of curiosity left a permanent card behind.
+   */
+  fresh?: boolean;
 }
 
 interface Props {
@@ -690,6 +701,50 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   );
 
   /**
+   * Template id -> the name of the older card holding the exact same document.
+   *
+   * The client's report was "massive duplication", and the part of it that
+   * survived the cleanup migrations is the part nothing on screen admitted to:
+   * "HVAC Service Call Report (copy)" and "... (copy) (copy)" are one document
+   * on two cards, and the only clue was counting the word "copy". Names are a
+   * bad test anyway - the pair created 24 seconds apart is a Duplicate click,
+   * while "CLEANING SERVICES - Invoice With Photos (copy)" says copy in its name
+   * and is a document of its own.
+   *
+   * So the body is the test, compared whole rather than hashed: exact string
+   * equality is what "the same document" means here, and it is what the
+   * companion migration (20260904000000) partitions on, so the badge and the
+   * sweep can never disagree about what counts as a duplicate.
+   *
+   * Only the newer rows are listed. The oldest is what the copies were made
+   * from, so it stays unmarked and the badge points at the cards that can go -
+   * a card that says "delete me" beats N cards that each say "one of us is
+   * redundant".
+   */
+  const duplicateOf = useMemo(() => {
+    const byBody = new Map<string, DocumentTemplate[]>();
+    for (const t of visible) {
+      // Built-ins are shared by every team and identical for everyone, so they
+      // are not duplicates of each other and not anyone's to tidy.
+      if (t.team_id === null) continue;
+      const html = parseBody(t.body).html;
+      if (!html) continue;
+      const list = byBody.get(html);
+      if (list) list.push(t);
+      else byBody.set(html, [t]);
+    }
+    const out = new Map<string, string>();
+    for (const list of byBody.values()) {
+      if (list.length < 2) continue;
+      const [keeper, ...rest] = [...list].sort(
+        (a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
+      );
+      for (const dupe of rest) out.set(dupe.id, keeper.name);
+    }
+    return out;
+  }, [visible]);
+
+  /**
    * The library split by trade, which is how a crew actually looks for a
    * document: this page used to be one flat grid of thirty cards where an
    * electrician's panel inspection sat between a water heater install and a
@@ -834,8 +889,8 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
    * delete. Two tiers of quality in one grid, with the worse tier the one that
    * looked editable.
    *
-   * Anyone wanting an editable copy of a sample now hits "Duplicate to edit" on
-   * the built-in itself, which starts them from the good body.
+   * Anyone wanting an editable copy of a sample now takes "Make an editable
+   * copy" on the built-in itself, which starts them from the good body.
    */
 
   async function persist() {
@@ -860,7 +915,27 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     setEditor(null);
   }
 
-  async function duplicate(t: DocumentTemplate) {
+  /**
+   * Make a copy of a template and open it for editing, as one action.
+   *
+   * The client, on this grid: "I am not sure what the point of duplicating is
+   * ... creating duplicates is a big mess." They are right about the button as
+   * it stood. Copying used to end at the insert: it wrote a row byte-identical
+   * to the one it came from, toasted "Duplicated", and left a second card in
+   * the section - so the grid grew a twin every time someone pressed it to find
+   * out what it did, and the twin was indistinguishable from its original.
+   *
+   * A copy is only worth having once it differs from the original, so the copy
+   * and the edit are now the same gesture: this opens the editor on the new row
+   * immediately, and `closeEditor` deletes it again if it is closed unchanged.
+   * The library can no longer accumulate a card nobody meant to create.
+   *
+   * It stays available because built-ins are read-only (RLS rejects writes to a
+   * null-team row), so an editable house version of one has to be a copy. What
+   * it is NOT is the way to tailor a document for a single job - that is "Use in
+   * a project", which the banner above the grid now says outright.
+   */
+  async function copyForEditing(t: DocumentTemplate) {
     /*
      * Numbered against the whole library rather than a blind " (copy)" suffix.
      * The client's report was of "massive duplication" in this grid, and a
@@ -888,8 +963,51 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
       .select()
       .single();
     if (error) return toast.error(error.message);
-    setItems((prev) => [data as unknown as DocumentTemplate, ...prev]);
-    toast.success("Duplicated");
+    const copy = data as unknown as DocumentTemplate;
+    /*
+     * Deliberately not added to `items` here. Until the editor is saved this
+     * row is provisional, and listing it would put the identical twin back on
+     * the page - which is the thing being fixed. `persist` reloads the library,
+     * and `closeEditor` deletes the row if nothing came of the edit.
+     */
+    setEditor({ template: copy, name: copy.name, body: parseBody(copy.body), fresh: true });
+  }
+
+  /**
+   * Leave the editor, throwing away a copy that never became its own document.
+   *
+   * Only ever deletes a row this session created (`fresh`) and has not saved,
+   * so an existing template is never at risk. An edited-but-unsaved copy asks
+   * first: those edits are lost either way, but losing them silently AND losing
+   * the row is not something to do on a stray Escape.
+   */
+  async function closeEditor() {
+    const open = editor;
+    if (!open?.fresh || !open.template) {
+      setEditor(null);
+      return;
+    }
+    const stored = parseBody(open.template.body);
+    const untouched = open.body.html === stored.html && open.name === open.template.name;
+    if (
+      !untouched &&
+      !(await confirm({
+        title: "Discard this copy?",
+        description: `"${open.template.name}" hasn't been saved, so nothing is added to your templates.`,
+        confirmText: "Discard copy",
+        cancelText: "Keep editing",
+        variant: "destructive",
+      }))
+    )
+      return;
+    setEditor(null);
+    const { error } = await supabase
+      .from("document_templates" as any)
+      .delete()
+      .eq("id", open.template.id);
+    // The row survived the delete, so it is on the page whether we say so or
+    // not. Reload rather than leave the grid disagreeing with the database.
+    if (error) await load();
   }
 
   /**
@@ -978,13 +1096,29 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
 
       <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
         <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
+        {/*
+          States the model outright, because the page previously implied a
+          different one. "Duplicate to edit" sat next to "Use in a project" at
+          the same weight, so the obvious reading was that a template has to be
+          copied before it can be changed - and following that reading leaves a
+          new template behind on every job. The client's words: "Clean templates
+          should be allowed to be applied to projects ... creating duplicates is
+          a big mess."
+        */}
         <div>
-          <p className="font-semibold">How to use a template</p>
+          <p className="font-semibold">Templates stay clean. Your edits live on the job.</p>
           <p className="mt-0.5 text-blue-900/80 dark:text-blue-200/80">
             Hit <strong>Use in a project</strong> on any template below and pick the job. You get a
             preview with that project&rsquo;s details already merged in, plus a box for each thing
-            it can&rsquo;t know, so the document arrives finished. They&rsquo;re also available
-            inside a project under <strong>Documents → Create → More Templates</strong>.
+            it can&rsquo;t know, so the document arrives finished. It&rsquo;s filed under that
+            project&rsquo;s <strong>Documents</strong>, where you can rewrite as much of it as the
+            job needs: the template itself never changes, and no copy of it is created. The same
+            templates are in a project under <strong>Documents → Create → More Templates</strong>.
+          </p>
+          <p className="mt-1.5 text-blue-900/80 dark:text-blue-200/80">
+            Only copy a template when you want a <em>different</em> template for every future job,
+            for example an example sheet rewritten in your own wording. That lives under the
+            &ldquo;···&rdquo; on the card.
           </p>
         </div>
       </div>
@@ -1080,6 +1214,8 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                   // Built-in examples (no team, no owner) are read-only for everyone -
                   // RLS rejects writes to them, so only Duplicate is offered.
                   const isExample = t.team_id === null;
+                  /** The older card holding this exact document, if there is one. */
+                  const twinOf = duplicateOf.get(t.id);
                   return (
                     <Card
                       key={t.id}
@@ -1116,12 +1252,52 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                           <Badge variant="secondary" className="text-[10px]">
                             Archived
                           </Badge>
+                        ) : twinOf ? (
+                          /*
+                            Amber rather than destructive: this card is redundant,
+                            not broken, and the copy is a statement of fact with
+                            the remedy attached. The full name of the card it
+                            duplicates goes in the tooltip because it is often
+                            the same string as this one bar a "(copy)", and two
+                            near-identical names side by side read as noise.
+                          */
+                          <Badge
+                            variant="outline"
+                            title={`Byte-for-byte the same document as "${twinOf}". Deleting this one changes nothing except the length of this page.`}
+                            className="shrink-0 gap-1 border-amber-300 bg-amber-50 text-[10px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+                          >
+                            <Copy className="h-2.5 w-2.5" />
+                            Duplicate
+                          </Badge>
                         ) : null}
                       </div>
+                      {twinOf && !t.archived && (
+                        <p className="-mt-2 text-[11px] leading-snug text-amber-800 dark:text-amber-300">
+                          Same document as <span className="font-semibold">{twinOf}</span>. Nothing
+                          here is lost by deleting it.
+                        </p>
+                      )}
                       <div className="rounded-lg border border-border/60 bg-muted/40 p-3 text-[11px] leading-relaxed text-muted-foreground line-clamp-3">
                         {templateSnippet(body.html)}
                       </div>
-                      <div className="mt-auto flex flex-wrap gap-1 border-t border-border/60 pt-3">
+                      {/*
+                        Two verbs on the card, everything else behind the "···".
+
+                        This row used to carry up to five buttons of equal
+                        weight, two of which made copies - and on a built-in the
+                        copy button read "Duplicate to edit", which states that
+                        editing a template requires copying it first. It does
+                        not: a document is tailored per job by using the
+                        template in that project and editing it there. The
+                        client read the row exactly as it was written and
+                        answered "creating duplicates is a big mess".
+
+                        So the copy actions keep working (a built-in is
+                        read-only, so a house version of one has to be a copy)
+                        but they stop advertising themselves as the way to use
+                        the library.
+                      */}
+                      <div className="mt-auto flex flex-wrap items-center gap-1 border-t border-border/60 pt-3">
                         {/* The primary verb. Without it the Templates page could only
                       author templates, never apply one - which is exactly why
                       "not sure how to use that template again" came back as
@@ -1136,37 +1312,58 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                           </Button>
                         )}
                         {canManage && (
-                          <Button
-                            size="sm"
-                            variant={isExample ? "outline" : "ghost"}
-                            onClick={() => duplicate(t)}
-                          >
-                            <Copy className="mr-1 h-3.5 w-3.5" />
-                            {isExample ? "Duplicate to edit" : "Duplicate"}
-                          </Button>
-                        )}
-                        {canManage && !isExample && (
-                          <Button size="sm" variant="ghost" onClick={() => toggleArchive(t)}>
-                            {t.archived ? (
-                              <>
-                                <ArchiveRestore className="mr-1 h-3.5 w-3.5" /> Restore
-                              </>
-                            ) : (
-                              <>
-                                <Archive className="mr-1 h-3.5 w-3.5" /> Archive
-                              </>
-                            )}
-                          </Button>
-                        )}
-                        {canManage && !isExample && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => remove(t)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="ml-auto h-8 w-8"
+                                aria-label={`More actions for ${t.name}`}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-72">
+                              <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Changes the library, not this job
+                              </DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => void copyForEditing(t)}>
+                                <Copy className="mr-2 h-4 w-4" />
+                                <span>
+                                  <span className="block font-bold">
+                                    {isExample ? "Make an editable copy" : "Duplicate"}
+                                  </span>
+                                  <span className="block text-xs text-muted-foreground">
+                                    {isExample
+                                      ? "Opens your own version to edit. The example stays as it is."
+                                      : "A second template you can change without touching this one."}
+                                  </span>
+                                </span>
+                              </DropdownMenuItem>
+                              {!isExample && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={() => void toggleArchive(t)}>
+                                    {t.archived ? (
+                                      <>
+                                        <ArchiveRestore className="mr-2 h-4 w-4" /> Restore
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Archive className="mr-2 h-4 w-4" /> Archive
+                                      </>
+                                    )}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => void remove(t)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                       </div>
                     </Card>
@@ -1320,7 +1517,9 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
       <Dialog
         open={!!editor}
         onOpenChange={(v) => {
-          if (!v) setEditor(null);
+          // Escape and the overlay close through the same path as the X, so a
+          // never-saved copy is cleaned up however the editor is left.
+          if (!v) void closeEditor();
         }}
       >
         <DialogContent
@@ -1336,7 +1535,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
               setEditor={setEditor}
               saving={saving}
               onSave={persist}
-              onClose={() => setEditor(null)}
+              onClose={() => void closeEditor()}
             />
           )}
         </DialogContent>
