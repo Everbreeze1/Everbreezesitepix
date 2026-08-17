@@ -59,6 +59,16 @@ export {
   type DraftReportSection,
 } from "./report-autostructure";
 export {
+  buildTaskReportSection,
+  buildTaskReportSections,
+  taskReportProgress,
+  type TaskForReport,
+  type TaskPhotoStateForReport,
+  type TaskReportOptions,
+  type TaskReportSection,
+  type TaskReportStatus,
+} from "./report-task-sections";
+export {
   INDUSTRIES,
   INDUSTRY_IDS,
   TEAM_SIZES,
