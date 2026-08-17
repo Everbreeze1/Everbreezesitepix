@@ -14,7 +14,10 @@ export const createCheckoutSessionInputSchema = z.object({
   plan: z.enum(PLAN_VALUES),
   origin: z.string().url(),
   interval: z.enum(["monthly", "annual"]).default("monthly"),
-  seats: z.number().int().min(1).max(500).default(1),
+  // Matches the largest PLAN_MEMBER_CAP (UNLIMITED_SEATS in pricing.ts). A
+  // lower bound here would refuse the very "add as many as you want" seat
+  // counts Pro and Team advertise.
+  seats: z.number().int().min(1).max(999).default(1),
 });
 
 export const createBillingPortalSessionInputSchema = z.object({

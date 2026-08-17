@@ -981,7 +981,13 @@ export function ProjectPageEditorPage() {
           paints over this toolbar as soon as the page scrolls. */}
       <div className="sticky top-[82px] z-10 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
+          {/* `flex-1` so the title box can take the room the toolbar is not
+              using. Document titles now lead with the project's name
+              (page-title.ts), which made a fixed `max-w-xs` box show
+              "Willow Street Retrofit - HVAC" and hide what the document
+              actually is. The row wraps on narrow screens, so this costs the
+              buttons nothing. */}
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <Button
               variant="ghost"
               size="icon"
@@ -1008,7 +1014,10 @@ export function ProjectPageEditorPage() {
                 // rather than showing a blank header for a page that has a name.
                 if (!title.trim()) setTitle(savedTitleRef.current);
               }}
-              className="h-8 max-w-xs border-none bg-transparent px-1 text-base font-extrabold shadow-none focus-visible:ring-1"
+              // The full title on hover, for the one that is still too long to
+              // fit. An input clips silently, with no ellipsis to say so.
+              title={title}
+              className="h-8 w-full min-w-0 max-w-xl border-none bg-transparent px-1 text-base font-extrabold shadow-none focus-visible:ring-1"
             />
           </div>
           <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">

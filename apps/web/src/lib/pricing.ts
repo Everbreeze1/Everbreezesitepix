@@ -8,6 +8,19 @@ export const ANNUAL_DISCOUNT = 0.2;
 /** Every tier starts with the same no-card-required trial. */
 export const TRIAL_DAYS = 14;
 
+/**
+ * Stands in for "add as many users as you want" on Pro and Team.
+ *
+ * Deliberately a number rather than Infinity: checkout has to hand Stripe a
+ * seat quantity, and an unbounded one turns a mis-typed crew size into a
+ * five-figure invoice. 999 is far past any real crew, so it reads as no limit
+ * while staying a quantity we can actually bill.
+ *
+ * Mirrored by PLAN_MEMBER_CAP in apps/api/src/lib/team-plan.ts and by the
+ * teams_sync_member_limit() trigger in supabase/migrations.
+ */
+export const UNLIMITED_SEATS = 999;
+
 export interface PlanPricing {
   id: BillingPlan;
   name: string;
@@ -22,6 +35,8 @@ export interface PlanPricing {
    * Hard seat ceiling. Mirrors PLAN_MEMBER_CAP in
    * apps/api/src/domains/teams/service.ts, which is what actually blocks
    * invites - a plan can't be sold for more seats than it can hold.
+   *
+   * `UNLIMITED_SEATS` means "add as many as you want" (Pro and Team).
    */
   maxSeats: number;
   /**
@@ -32,7 +47,21 @@ export interface PlanPricing {
    * string that can drift out of sync with the list beneath it.
    */
   adds: string[];
+  /** Draws the "Most popular" flag. Exactly one plan should carry it. */
+  popular?: boolean;
 }
+
+/**
+ * The band under the three cards. Not a fourth `PlanPricing`: it has no price,
+ * no seat maths and no checkout, so modelling it as one would put a plan into
+ * PLAN_ORDER that `tierRank` and `higherTiers` would then offer as an upgrade
+ * nobody can buy.
+ */
+export const ENTERPRISE = {
+  headline: "Enterprise",
+  summary: "10+ users, API access, SSO, dedicated success manager. Custom pricing.",
+  cta: "Talk to sales",
+} as const;
 
 export const PLANS: PlanPricing[] = [
   {
@@ -41,15 +70,25 @@ export const PLANS: PlanPricing[] = [
     audience: "For Solo & Small Teams",
     tagline: "Document every job so nothing gets lost, disputed, or forgotten.",
     basePriceMonthly: 24,
+    // 1 seat in the base, a $15 add-on for the second, hard stop at 2. The
+    // Team Management spec is explicit that "the 2nd user is the $15/mo
+    // add-on", and it is the second user in a different sense too: an Admin
+    // plus one Technician, never two Admins.
     includedSeats: 1,
     additionalSeatMonthly: 15,
     maxSeats: 2,
     adds: [
       "Photo & video capture",
+      // Already recorded on every photo and already stamped on reports, and
+      // this list never said so - the proof-of-work tier was hiding the part
+      // that makes the proof hold up.
+      "GPS & timestamp tagging",
       "Basic project management",
+      // Site Logs themselves are not gated; only the AI that drafts them is,
+      // which is why Pro's line below says "AI-assisted".
+      "Site logs",
       "Tags & labels",
-      "Manual reports",
-      "Share links",
+      "Manual reports & share links",
       "Offline mode",
     ],
   },
@@ -58,19 +97,28 @@ export const PLANS: PlanPricing[] = [
     name: "Pro",
     audience: "For Growing Teams",
     tagline: "Coordinate crews without constant calls, texts, and check-ins.",
-    basePriceMonthly: 119,
+    // The third user used to cost $95 more than the second: Starter capped at
+    // 2 for $39 and the next seat available anywhere was a $119 Pro base. That
+    // cliff is the whole reason this tier gets repriced.
+    basePriceMonthly: 79,
     includedSeats: 3,
-    additionalSeatMonthly: 29,
-    maxSeats: 50,
+    additionalSeatMonthly: 20,
+    maxSeats: UNLIMITED_SEATS,
+    popular: true,
     adds: [
-      "Company watermark",
+      // `are_teammates()` gates on plan IN ('pro','team') - see
+      // supabase/migrations/20260612193150_teams_plan.sql. Sharing a workspace
+      // at all is what Pro unlocks, and the list never said so.
+      "Shared team workspace",
+      "Live site map",
       // "Recorded", not just "Walkthroughs": generating an AI Summary also
       // files into the Walkthroughs tab and is available on any active plan.
       // Recording a narrated walkthrough is the part this tier unlocks.
-      "Recorded walkthroughs + 100 Auto Reports/mo",
+      "Recorded walkthroughs",
+      "Company watermark",
+      "100 Auto Reports/mo",
       "AI-assisted Site Logs",
       "Full checklists & templates",
-      "Map view",
       "Tasks on photos",
     ],
   },
@@ -79,17 +127,16 @@ export const PLANS: PlanPricing[] = [
     name: "Team",
     audience: "For Multi-Crew Operations",
     tagline: "Improve margins and reduce rework as you grow.",
-    basePriceMonthly: 179,
-    includedSeats: 3,
-    additionalSeatMonthly: 39,
-    maxSeats: 50,
+    basePriceMonthly: 199,
+    includedSeats: 6,
+    additionalSeatMonthly: 28,
+    maxSeats: UNLIMITED_SEATS,
     adds: [
-      "Workflows",
-      "Project blueprints",
+      "Workflows & project blueprints",
       // The Portfolio lock screen sends people here with "See Team plan", and
       // this list is what they land on - it named every other Team feature
       // except the one they clicked for.
-      "Portfolio site + website embeds",
+      "Client-facing Portfolio site + website embeds",
       "Advanced roles & permissions",
       "Unlimited Auto Reports",
       "Highest storage",
@@ -97,8 +144,29 @@ export const PLANS: PlanPricing[] = [
   },
 ];
 
-/** Highest seat count any plan can hold - the stepper's ceiling. */
-export const MAX_SEATS = Math.max(...PLANS.map((p) => p.maxSeats));
+/**
+ * Ceiling for the pricing page's crew stepper.
+ *
+ * NOT a plan limit - Pro and Team sell past it. It is just the largest crew the
+ * calculator will quote, because a stepper you have to click 900 times is not a
+ * calculator. Past this, the price is still base + rate x seats; the customer
+ * simply adds the seats from Settings rather than from the marketing page.
+ */
+export const MAX_SEATS = 100;
+
+/** Pro and Team: no ceiling worth naming, so don't name one. */
+export function hasUnlimitedSeats(plan: PlanPricing): boolean {
+  return plan.maxSeats >= UNLIMITED_SEATS;
+}
+
+/**
+ * True when the plan actually sells seats past what the base covers. False on
+ * Starter, where the cap and the included count are the same number - quoting
+ * "additional users: $0 each" there advertises a thing you cannot buy.
+ */
+export function sellsExtraSeats(plan: PlanPricing): boolean {
+  return plan.maxSeats > plan.includedSeats;
+}
 
 /** Cheapest to richest. Index doubles as the tier rank. */
 export const PLAN_ORDER: BillingPlan[] = PLANS.map((p) => p.id);

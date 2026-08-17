@@ -10,6 +10,7 @@ import {
   type TokenSource,
 } from "./pages";
 import { sanitizePageHtml } from "./sanitize-page-html";
+import { projectDocumentTitle, titleContext, uniqueDocumentTitle } from "./page-title";
 
 const REAL_PHOTO_IMG_RE = /<img\b[^>]*\bdata-photo-id="[0-9a-fA-F-]{36}"[^>]*>/g;
 
@@ -286,7 +287,14 @@ export const previewDocumentTemplateInputSchema = z.object({
 export async function previewDocumentTemplateService(
   ctx: AuthedContext,
   data: z.infer<typeof previewDocumentTemplateInputSchema>,
-): Promise<{ id: string; name: string; html: string; fields: TemplateFieldPreview[] }> {
+): Promise<{
+  id: string;
+  name: string;
+  html: string;
+  fields: TemplateFieldPreview[];
+  /** What the document will be called, so the dialog can show and edit it. */
+  suggestedTitle: string;
+}> {
   const template = await getDocumentTemplateService(ctx, { templateId: data.templateId });
 
   /*
@@ -299,12 +307,12 @@ export async function previewDocumentTemplateService(
    * be a read of someone else's project name and site address. Reading through
    * `ctx.supabase` lets RLS answer it: visible means allowed, including to a
    * teammate, which is exactly the rule the picker in front of this uses.
+   *
+   * `titleContext` reads that row through the same client, so the check below
+   * is the same check, and it comes back with the two things the suggested
+   * document title is built from at no extra round trip.
    */
-  const { data: project } = await (ctx.supabase as any)
-    .from("projects")
-    .select("id")
-    .eq("id", data.projectId)
-    .maybeSingle();
+  const { project, taken } = await titleContext(ctx, data.projectId);
   if (!project) throw Object.assign(new Error("Project not found"), { status: 404 });
 
   const values = await loadTokenValues(data.projectId, ctx.userId);
@@ -317,6 +325,7 @@ export async function previewDocumentTemplateService(
   return {
     id: template.id,
     name: template.name,
+    suggestedTitle: uniqueDocumentTitle(projectDocumentTitle(project.name, template.name), taken),
     /*
      * Bracket blanks are converted here as well, so the preview is the document
      * rather than a near-miss of it: `createPageFromTemplateService` runs the
@@ -338,6 +347,15 @@ export const createPageFromTemplateInputSchema = z.object({
   projectId: z.string().uuid(),
   templateId: z.string().uuid(),
   folderId: z.string().uuid().nullable().optional(),
+  /**
+   * What to call the document. Omitted means "decide for me", which is what the
+   * blueprint apply and any older client send; `projectDocumentTitle` then names
+   * it after the project and the template rather than the template alone.
+   *
+   * The same limits as every other page title, so a name accepted here cannot
+   * be one the editor's rename would refuse.
+   */
+  title: z.string().trim().min(1).max(200).optional(),
   /** When false the page keeps `{{tokens}}` literal so they can be filled in later. */
   resolveTokens: z.boolean().default(true),
   /**
@@ -362,13 +380,25 @@ export async function createPageFromTemplateService(
   // the seeded SQL templates gain them without every migration being rewritten.
   const contentHtml = bracketsToFillFields(resolved) ?? resolved;
 
+  /*
+   * A title the caller typed is used exactly as typed, numbering included: two
+   * documents they deliberately named the same is their filing decision, and
+   * silently appending "(2)" to a name somebody just entered is the app arguing
+   * with them. Only the name this file invents is made unique.
+   */
+  let title = data.title;
+  if (!title) {
+    const { project, taken } = await titleContext(ctx, data.projectId);
+    title = uniqueDocumentTitle(projectDocumentTitle(project?.name, template.name), taken);
+  }
+
   const { data: row, error } = await (ctx.supabase as any)
     .from("project_pages")
     .insert({
       project_id: data.projectId,
       folder_id: data.folderId ?? null,
       created_by: ctx.userId,
-      title: template.name,
+      title,
       content_html: contentHtml,
       source_template: `document_template:${template.id}`,
     })

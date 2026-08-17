@@ -37,11 +37,22 @@ function requirePriceEnv(name: string): string {
  * what /pricing advertises (base price covers N seats, then a lower rate for
  * each additional seat). For Pro monthly that is:
  *
- *   Tier 1 - first 3 units:  flat fee $119, per-unit $0
- *   Tier 2 - 4 and above:    per-unit $29
+ *   Tier 1 - first 3 units:  flat fee $79, per-unit $0
+ *   Tier 2 - 4 and above:    per-unit $20
+ *
+ * Team is the same shape at a different boundary - flat $199 for the first 6
+ * units, then $28 each. Starter is unchanged: flat $24 for the first unit,
+ * then $15, and it caps at 2 so tier 2 is only ever one seat wide.
+ *
+ * Pro and Team changed when the Starter-to-Pro gap was closed (Pro 119 -> 79
+ * with its extra seat 29 -> 20; Team 179 -> 199 covering 6 seats rather than
+ * 3, extra seat 39 -> 28). Starter needs no Stripe change. The Price
+ * objects in Stripe are the source of truth for what a card is actually
+ * charged, so until they are updated to match, /pricing advertises one number
+ * and checkout bills another.
  *
  * A plain flat per-unit Price is WRONG here: at quantity=5 it would bill
- * 5 x $119 = $595 instead of the advertised $119 + 2 x $29 = $177. The tier
+ * 5 x $79 = $395 instead of the advertised $79 + 2 x $20 = $119. The tier
  * boundaries and amounts must mirror `basePriceMonthly` / `includedSeats` /
  * `additionalSeatMonthly` in apps/web/src/lib/pricing.ts, with annual Prices
  * set to the same figures less the 20% ANNUAL_DISCOUNT.
