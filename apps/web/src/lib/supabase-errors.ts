@@ -36,7 +36,27 @@ export function friendlyError(e: unknown, fallback: string): string {
 export function isPendingMigrationError(e: unknown): boolean {
   const err = e as { code?: unknown; message?: unknown } | null;
   const code = String(err?.code ?? "");
-  // 42703 undefined_column, 42P01 undefined_table.
-  if (code === "42703" || code === "42P01") return true;
-  return /column .*does not exist|relation .*does not exist/i.test(String(err?.message ?? ""));
+  /*
+   * Two families, and only knowing one of them is how this check quietly stopped
+   * working.
+   *
+   * Postgres raises 42703 undefined_column and 42P01 undefined_table, and older
+   * PostgREST passed both straight through with a `... does not exist` sentence -
+   * which is what the regex below was written against.
+   *
+   * Current PostgREST answers from its own schema cache instead and never reaches
+   * Postgres: an unknown table is PGRST205, `Could not find the table 'public.x' in
+   * the schema cache`, and an unknown column in a write payload is PGRST204. Both
+   * mean exactly "the database is behind the code", and neither says "does not
+   * exist" nor carries a Postgres SQLSTATE - so on any current Supabase project a
+   * missing table fell through to the offline panel, telling the user to check
+   * their connection and offering a retry that could never succeed. Which is the
+   * precise failure this function exists to prevent.
+   */
+  if (code === "42703" || code === "42P01" || code === "PGRST205" || code === "PGRST204") {
+    return true;
+  }
+  return /column .*does not exist|relation .*does not exist|in the schema cache/i.test(
+    String(err?.message ?? ""),
+  );
 }

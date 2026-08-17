@@ -81,7 +81,7 @@ import {
   indexTaskPhotoItems,
   isMissingTaskPhotoItems,
   taskPhotoItemErrorMessage,
-  taskPhotoItemPatch,
+  taskPhotoItemRows,
   taskPhotoProgress,
   type TaskPhotoItem,
   type TaskPhotoItemIndex,
@@ -302,9 +302,7 @@ export function GroupPage() {
      */
     const photoIds = task?.photo_ids ?? [];
     if (photoIds.length > 0 && (nextStatus === "done" || nextStatus === "open")) {
-      const rows = photoIds.map((photoId) =>
-        taskPhotoItemPatch(taskId, photoId, nextStatus === "done" ? "done" : "open"),
-      );
+      const rows = taskPhotoItemRows(taskId, photoIds, nextStatus === "done" ? "done" : "open");
       const { error: itemError } = await (supabase as any)
         .from(TASK_PHOTO_ITEMS_TABLE)
         .upsert(rows, { onConflict: "task_id,photo_id" });

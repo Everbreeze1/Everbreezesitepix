@@ -19,11 +19,30 @@ import { toast } from "sonner";
 export const PROJECT_CLIENT_KEYS = ["client_name", "client_contact", "project_number"] as const;
 export const PROFILE_JOB_KEYS = ["job_title"] as const;
 
-/** True when Postgres says the column is simply not there. */
+/**
+ * True when the column is simply not there yet.
+ *
+ * Both families, and the second one is the family that matters here. Postgres
+ * raises 42703 for a SELECT naming a column it has not got, but this helper guards
+ * WRITES - and current PostgREST rejects a write payload from its own schema cache
+ * before Postgres ever sees it, as PGRST204, `Could not find the 'client_name'
+ * column of 'projects' in the schema cache`. Knowing only 42703 meant
+ * `writeWithNewColumns` never retried on any current Supabase project, so the
+ * whole point of this file - keep editing a project's name working while the
+ * migration is pending - did not happen.
+ *
+ * `isMissingColumn` in apps/api/src/lib/postgrest.ts is the canonical version and
+ * already knew this. Kept as a copy only because the browser cannot import from the
+ * API package; the two must say the same thing.
+ */
 export function isMissingColumn(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const e = error as { code?: string; message?: string };
-  return e.code === "42703" || /column .* does not exist/i.test(e.message ?? "");
+  return (
+    e.code === "PGRST204" ||
+    e.code === "42703" ||
+    /could not find the .* column|column .* does not exist/i.test(e.message ?? "")
+  );
 }
 
 /** The same row without the columns a pre-migration database has never seen. */
