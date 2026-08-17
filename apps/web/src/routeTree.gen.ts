@@ -25,6 +25,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PSlugRouteImport } from './routes/p.$slug'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
+import { Route as AuthConfirmRouteImport } from './routes/auth.confirm'
 import { Route as AppTimelineRouteImport } from './routes/_app.timeline'
 import { Route as AppTemplatesRouteImport } from './routes/_app.templates'
 import { Route as AppTeamsRouteImport } from './routes/_app.teams'
@@ -147,6 +148,11 @@ const PSlugRoute = PSlugRouteImport.update({
 const InviteTokenRoute = InviteTokenRouteImport.update({
   id: '/invite/$token',
   path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthConfirmRoute = AuthConfirmRouteImport.update({
+  id: '/auth/confirm',
+  path: '/auth/confirm',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppTimelineRoute = AppTimelineRouteImport.update({
@@ -402,6 +408,7 @@ export interface FileRoutesByFullPath {
   '/teams': typeof AppTeamsRoute
   '/templates': typeof AppTemplatesRoute
   '/timeline': typeof AppTimelineRoute
+  '/auth/confirm': typeof AuthConfirmRoute
   '/invite/$token': typeof InviteTokenRoute
   '/p/$slug': typeof PSlugRoute
   '/admin/audit-log': typeof AppAdminAuditLogRoute
@@ -462,6 +469,7 @@ export interface FileRoutesByTo {
   '/teams': typeof AppTeamsRoute
   '/templates': typeof AppTemplatesRoute
   '/timeline': typeof AppTimelineRoute
+  '/auth/confirm': typeof AuthConfirmRoute
   '/invite/$token': typeof InviteTokenRoute
   '/p/$slug': typeof PSlugRoute
   '/admin/audit-log': typeof AppAdminAuditLogRoute
@@ -525,6 +533,7 @@ export interface FileRoutesById {
   '/_app/teams': typeof AppTeamsRoute
   '/_app/templates': typeof AppTemplatesRoute
   '/_app/timeline': typeof AppTimelineRoute
+  '/auth/confirm': typeof AuthConfirmRoute
   '/invite/$token': typeof InviteTokenRoute
   '/p/$slug': typeof PSlugRoute
   '/_app/admin/audit-log': typeof AppAdminAuditLogRoute
@@ -588,6 +597,7 @@ export interface FileRouteTypes {
     | '/teams'
     | '/templates'
     | '/timeline'
+    | '/auth/confirm'
     | '/invite/$token'
     | '/p/$slug'
     | '/admin/audit-log'
@@ -648,6 +658,7 @@ export interface FileRouteTypes {
     | '/teams'
     | '/templates'
     | '/timeline'
+    | '/auth/confirm'
     | '/invite/$token'
     | '/p/$slug'
     | '/admin/audit-log'
@@ -710,6 +721,7 @@ export interface FileRouteTypes {
     | '/_app/teams'
     | '/_app/templates'
     | '/_app/timeline'
+    | '/auth/confirm'
     | '/invite/$token'
     | '/p/$slug'
     | '/_app/admin/audit-log'
@@ -760,6 +772,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsOfServiceRoute: typeof TermsOfServiceRoute
+  AuthConfirmRoute: typeof AuthConfirmRoute
   InviteTokenRoute: typeof InviteTokenRoute
   PSlugRoute: typeof PSlugRoute
   EmbedGalleryKeyRoute: typeof EmbedGalleryKeyRoute
@@ -887,6 +900,13 @@ declare module '@tanstack/react-router' {
       path: '/invite/$token'
       fullPath: '/invite/$token'
       preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/confirm': {
+      id: '/auth/confirm'
+      path: '/auth/confirm'
+      fullPath: '/auth/confirm'
+      preLoaderRoute: typeof AuthConfirmRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/timeline': {
@@ -1312,6 +1332,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsOfServiceRoute: TermsOfServiceRoute,
+  AuthConfirmRoute: AuthConfirmRoute,
   InviteTokenRoute: InviteTokenRoute,
   PSlugRoute: PSlugRoute,
   EmbedGalleryKeyRoute: EmbedGalleryKeyRoute,

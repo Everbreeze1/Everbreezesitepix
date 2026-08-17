@@ -53,6 +53,12 @@ const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
 
 const SITE_NAME = "Everbreeze SitePix";
 const ROOT_DOMAIN = "everbreezesitepix.com";
+/*
+ * Canonical origin for links we build ourselves. The apex only ever 308s to
+ * www, and a redirect hop on a one-shot verification link is one more thing
+ * that can go wrong, so links are minted on www directly.
+ */
+const APP_ORIGIN = `https://www.${ROOT_DOMAIN}`;
 
 function redactEmail(email: string | null | undefined): string {
   if (!email) return "***";
@@ -62,21 +68,77 @@ function redactEmail(email: string | null | undefined): string {
 }
 
 /**
- * Build the GoTrue verify link that the email's button points at.
+ * Which origin the confirmation link should be minted on.
  *
- * `email_data.site_url` arrives from Supabase ALREADY pointing at the GoTrue
- * base - i.e. `https://<ref>.supabase.co/auth/v1`. Appending `/auth/v1/verify`
- * to that produced
+ * `redirect_to` is where the user asked to end up, and GoTrue has already
+ * checked it against `additional_redirect_urls` before calling this hook.
+ * Reusing its origin is what keeps a locally-run or preview signup landing back
+ * on the machine that started it. Anything not recognisably ours falls back to
+ * production rather than being trusted, so a `redirect_to` that somehow got
+ * past the allow-list still cannot move the link onto another host.
+ */
+function resolveAppOrigin(redirectTo?: string): string {
+  if (!redirectTo) return APP_ORIGIN;
+  try {
+    const { hostname, origin } = new URL(redirectTo);
+    const ours =
+      hostname === ROOT_DOMAIN ||
+      hostname.endsWith(`.${ROOT_DOMAIN}`) ||
+      hostname === "localhost" ||
+      hostname === "127.0.0.1";
+    return ours ? origin : APP_ORIGIN;
+  } catch {
+    return APP_ORIGIN;
+  }
+}
+
+/**
+ * The in-app path to land on once the token has been exchanged.
  *
- *     https://<ref>.supabase.co/auth/v1/auth/v1/verify?token=...
+ * Only ever a relative path. `/auth/confirm` navigates to whatever this says
+ * after a successful verify, so accepting an absolute URL here would turn a
+ * page that every new user is guaranteed to visit into an open redirect.
+ */
+function resolveNext(redirectTo?: string): string | undefined {
+  const path = (() => {
+    try {
+      const url = new URL(redirectTo!);
+      return `${url.pathname}${url.search}`;
+    } catch {
+      return redirectTo;
+    }
+  })();
+  if (!path || !path.startsWith("/") || path.startsWith("//")) return undefined;
+  return path;
+}
+
+/**
+ * Build the link the email's button points at.
  *
- * which matches no route, so the request fell through to the API gateway and
- * came back as `{"message":"No API key found in request"}`. Every confirmation
- * link sent before this fix is dead in exactly that way - the misleading part
- * is that the error blames a missing apikey rather than the doubled path.
+ * This used to point straight at GoTrue:
  *
- * The suffix is stripped rather than the base hard-coded, so this stays correct
- * whether Supabase sends the GoTrue base or a bare origin.
+ *     https://<ref>.supabase.co/auth/v1/verify?token=...&redirect_to=...
+ *
+ * which works, but has two problems. The visible one is trust: a customer
+ * clicks a button in mail branded Everbreeze SitePix and their address bar
+ * fills with a random alphanumeric supabase.co subdomain, which is exactly what
+ * they have been trained to read as phishing. The one that actually breaks
+ * signups is that /verify is a single-use GET, so any link prescanner - Outlook
+ * Safe Links, corporate mail AV, a spam filter fetching URLs to grade them -
+ * spends the token before the human ever clicks, and the human then gets
+ * "Email link is invalid or has expired" on an email they only just received.
+ *
+ * So the link now points at our own `/auth/confirm`, which exchanges the token
+ * from the browser via `verifyOtp`. A prescanner fetching it just loads a React
+ * page and spends nothing, and the only host the user ever sees is ours.
+ *
+ * `email_data.site_url` is deliberately unused now - it arrives pointing at the
+ * GoTrue base (`https://<ref>.supabase.co/auth/v1`), never at the site, so it
+ * is the wrong input for a link meant to land on our domain. It stays in the
+ * type as documentation of what the hook payload carries.
+ *
+ * Links minted the old way keep working: GoTrue's /verify endpoint is
+ * untouched, so mail already sitting in an inbox is not invalidated by this.
  */
 export function buildConfirmationUrl(emailData: {
   site_url?: string;
@@ -85,13 +147,10 @@ export function buildConfirmationUrl(emailData: {
   email_action_type?: string;
   redirect_to?: string;
 }): string {
-  const base = (emailData.site_url ?? `https://${ROOT_DOMAIN}`)
-    .replace(/\/+$/, "")
-    .replace(/\/auth\/v1$/, "");
   /*
    * `email_change_current` / `email_change_new` are hook action types, not
-   * verify types - GoTrue's /verify only understands `email_change`. Passing
-   * the hook type straight through produced a link the endpoint rejects.
+   * verify types - `verifyOtp` only understands `email_change`. Passing the
+   * hook type straight through produced a link the exchange rejects.
    */
   const action = emailData.email_action_type ?? "signup";
   const verifyType = action.startsWith("email_change") ? "email_change" : action;
@@ -102,13 +161,15 @@ export function buildConfirmationUrl(emailData: {
    * new address must carry `token_hash_new`.
    */
   const wantsNewToken = action === "email_change" || action === "email_change_new";
-  const token = (wantsNewToken ? emailData.token_hash_new : undefined) ?? emailData.token_hash ?? "";
+  const token =
+    (wantsNewToken ? emailData.token_hash_new : undefined) ?? emailData.token_hash ?? "";
   const params = new URLSearchParams({
-    token,
+    token_hash: token,
     type: verifyType,
   });
-  if (emailData.redirect_to) params.set("redirect_to", emailData.redirect_to);
-  return `${base}/auth/v1/verify?${params.toString()}`;
+  const next = resolveNext(emailData.redirect_to);
+  if (next) params.set("next", next);
+  return `${resolveAppOrigin(emailData.redirect_to)}/auth/confirm?${params.toString()}`;
 }
 
 /**

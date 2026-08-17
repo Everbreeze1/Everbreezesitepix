@@ -2,11 +2,15 @@ import { describe, it, expect } from "vitest";
 import { buildConfirmationUrl } from "../apps/api/src/domains/email/auth-send";
 
 /*
- * The confirmation link is the one part of signup that nothing in this repo
- * exercises: it is built on the server, rendered into an email, and only fails
- * when a human clicks it - at which point Supabase reports
- * `{"message":"No API key found in request"}`, which points at authentication
- * rather than at the doubled `/auth/v1/auth/v1/` path that actually caused it.
+ * The confirmation link is the one part of signup that nothing else in this
+ * repo exercises: it is built on the server, rendered into an email, and only
+ * fails when a human clicks it.
+ *
+ * It used to point straight at GoTrue's `/auth/v1/verify`. That showed the
+ * customer a raw supabase.co subdomain, and because /verify spends its token on
+ * a plain GET, link prescanners burned the token before the human clicked. It
+ * now points at our own `/auth/confirm`, which exchanges the token from the
+ * browser.
  */
 describe("buildConfirmationUrl", () => {
   const base = {
@@ -15,61 +19,102 @@ describe("buildConfirmationUrl", () => {
     redirect_to: "https://www.everbreezesitepix.com/dashboard",
   };
 
-  it("does not double /auth/v1 when Supabase sends the GoTrue base", () => {
+  it("points at our own domain, never at supabase.co", () => {
     const url = buildConfirmationUrl({
       ...base,
       site_url: "https://ulmgvtuqjlzzadlwtiog.supabase.co/auth/v1",
     });
-    expect(url).not.toContain("/auth/v1/auth/v1");
-    expect(url.startsWith("https://ulmgvtuqjlzzadlwtiog.supabase.co/auth/v1/verify?")).toBe(true);
+    expect(url).not.toContain("supabase.co");
+    expect(url).not.toContain("/auth/v1/verify");
+    expect(url.startsWith("https://www.everbreezesitepix.com/auth/confirm?")).toBe(true);
   });
 
-  it("still appends /auth/v1/verify to a bare origin", () => {
-    const url = buildConfirmationUrl({
-      ...base,
-      site_url: "https://ulmgvtuqjlzzadlwtiog.supabase.co",
-    });
-    expect(url.startsWith("https://ulmgvtuqjlzzadlwtiog.supabase.co/auth/v1/verify?")).toBe(true);
-  });
-
-  it("tolerates a trailing slash on either form", () => {
-    for (const site_url of [
-      "https://x.supabase.co/",
-      "https://x.supabase.co/auth/v1/",
-    ]) {
-      const url = buildConfirmationUrl({ ...base, site_url });
-      expect(url.startsWith("https://x.supabase.co/auth/v1/verify?")).toBe(true);
-      expect(url).not.toContain("//auth");
-      expect(url).not.toContain("/auth/v1/auth/v1");
-    }
-  });
-
-  it("carries token, type and redirect_to through", () => {
-    const url = new URL(
-      buildConfirmationUrl({ ...base, site_url: "https://x.supabase.co/auth/v1" }),
-    );
-    expect(url.searchParams.get("token")).toBe("abc123");
+  it("carries token_hash, type and next through", () => {
+    const url = new URL(buildConfirmationUrl(base));
+    expect(url.searchParams.get("token_hash")).toBe("abc123");
     expect(url.searchParams.get("type")).toBe("signup");
-    expect(url.searchParams.get("redirect_to")).toBe(
-      "https://www.everbreezesitepix.com/dashboard",
-    );
+    expect(url.searchParams.get("next")).toBe("/dashboard");
   });
 
-  it("omits redirect_to when Supabase did not send one", () => {
+  it("reduces redirect_to to a relative path", () => {
+    /*
+     * `next` is fed straight to navigate() on a page every new user visits, so
+     * an absolute value would make our own confirmation email an open redirect.
+     */
+    const url = new URL(
+      buildConfirmationUrl({ ...base, redirect_to: "https://evil.example.com/steal" }),
+    );
+    expect(url.origin).toBe("https://www.everbreezesitepix.com");
+    const next = url.searchParams.get("next");
+    expect(next).toBe("/steal");
+    expect(next?.startsWith("//")).toBe(false);
+  });
+
+  it("omits next when Supabase did not send a redirect_to", () => {
+    const url = new URL(buildConfirmationUrl({ token_hash: "t", email_action_type: "recovery" }));
+    expect(url.searchParams.has("next")).toBe(false);
+    expect(url.searchParams.get("type")).toBe("recovery");
+  });
+
+  it("keeps a recovery link headed for the password screen", () => {
     const url = new URL(
       buildConfirmationUrl({
         token_hash: "t",
         email_action_type: "recovery",
-        site_url: "https://x.supabase.co/auth/v1",
+        redirect_to: "https://www.everbreezesitepix.com/reset-password",
       }),
     );
-    expect(url.searchParams.has("redirect_to")).toBe(false);
+    expect(url.searchParams.get("next")).toBe("/reset-password");
     expect(url.searchParams.get("type")).toBe("recovery");
   });
 
-  it("falls back to the product domain when site_url is absent", () => {
-    const url = buildConfirmationUrl({ ...base, site_url: undefined });
-    expect(url.startsWith("https://everbreezesitepix.com/auth/v1/verify?")).toBe(true);
+  it("ignores site_url entirely - it points at GoTrue, not at the site", () => {
+    for (const site_url of [
+      undefined,
+      "https://x.supabase.co",
+      "https://x.supabase.co/auth/v1",
+      "https://x.supabase.co/auth/v1/",
+    ]) {
+      const url = buildConfirmationUrl({ ...base, site_url });
+      expect(url.startsWith("https://www.everbreezesitepix.com/auth/confirm?"), site_url).toBe(
+        true,
+      );
+    }
+  });
+});
+
+describe("buildConfirmationUrl - which origin the link is minted on", () => {
+  /*
+   * GoTrue validates redirect_to against additional_redirect_urls before
+   * calling the hook, so reusing its origin is what keeps a locally-run signup
+   * landing back on the machine that started it. Anything unrecognised falls
+   * back to production instead of being trusted.
+   */
+  const base = { token_hash: "t", email_action_type: "signup" };
+
+  it("follows redirect_to onto our own hosts", () => {
+    for (const [redirect_to, origin] of [
+      ["https://www.everbreezesitepix.com/dashboard", "https://www.everbreezesitepix.com"],
+      ["https://everbreezesitepix.com/dashboard", "https://everbreezesitepix.com"],
+      ["http://localhost:5173/dashboard", "http://localhost:5173"],
+      ["http://127.0.0.1:5173/dashboard", "http://127.0.0.1:5173"],
+    ]) {
+      expect(new URL(buildConfirmationUrl({ ...base, redirect_to })).origin, redirect_to).toBe(
+        origin,
+      );
+    }
+  });
+
+  it("falls back to production for anything else", () => {
+    for (const redirect_to of [
+      "https://evil.example.com/x",
+      "https://everbreezesitepix.com.evil.example.com/x",
+      "not a url at all",
+    ]) {
+      expect(new URL(buildConfirmationUrl({ ...base, redirect_to })).origin, redirect_to).toBe(
+        "https://www.everbreezesitepix.com",
+      );
+    }
   });
 });
 
@@ -77,12 +122,11 @@ describe("buildConfirmationUrl - email change action types", () => {
   /*
    * Supabase's secure email change fires `email_change_current` (to the old
    * address) and `email_change_new` (to the new one). Those are hook action
-   * types; GoTrue's /verify endpoint only understands `email_change`, so
-   * passing them through unchanged builds a link the endpoint rejects.
+   * types; `verifyOtp` only understands `email_change`, so passing them through
+   * unchanged builds a link the exchange rejects.
    */
   const base = {
     token_hash: "tok",
-    site_url: "https://x.supabase.co/auth/v1",
     redirect_to: "https://www.everbreezesitepix.com/settings",
   };
 
@@ -94,7 +138,7 @@ describe("buildConfirmationUrl - email change action types", () => {
   }
 
   it("leaves unrelated action types alone", () => {
-    for (const action of ["signup", "recovery", "magiclink", "invite", "reauthentication"]) {
+    for (const action of ["signup", "recovery", "magiclink", "invite"]) {
       const url = new URL(buildConfirmationUrl({ ...base, email_action_type: action }));
       expect(url.searchParams.get("type")).toBe(action);
     }
@@ -109,7 +153,6 @@ describe("buildConfirmationUrl - email change carries the right token", () => {
    * pending.
    */
   const base = {
-    site_url: "https://x.supabase.co/auth/v1",
     token_hash: "OLD_TOKEN",
     token_hash_new: "NEW_TOKEN",
   };
@@ -117,7 +160,7 @@ describe("buildConfirmationUrl - email change carries the right token", () => {
   it("the message to the NEW address uses token_hash_new", () => {
     for (const action of ["email_change", "email_change_new"]) {
       const url = new URL(buildConfirmationUrl({ ...base, email_action_type: action }));
-      expect(url.searchParams.get("token"), action).toBe("NEW_TOKEN");
+      expect(url.searchParams.get("token_hash"), action).toBe("NEW_TOKEN");
     }
   });
 
@@ -125,22 +168,18 @@ describe("buildConfirmationUrl - email change carries the right token", () => {
     const url = new URL(
       buildConfirmationUrl({ ...base, email_action_type: "email_change_current" }),
     );
-    expect(url.searchParams.get("token")).toBe("OLD_TOKEN");
+    expect(url.searchParams.get("token_hash")).toBe("OLD_TOKEN");
   });
 
   it("falls back to token_hash when no new token is present", () => {
     const url = new URL(
-      buildConfirmationUrl({
-        site_url: base.site_url,
-        token_hash: "ONLY_TOKEN",
-        email_action_type: "email_change",
-      }),
+      buildConfirmationUrl({ token_hash: "ONLY_TOKEN", email_action_type: "email_change" }),
     );
-    expect(url.searchParams.get("token")).toBe("ONLY_TOKEN");
+    expect(url.searchParams.get("token_hash")).toBe("ONLY_TOKEN");
   });
 
   it("other flows are unaffected", () => {
     const url = new URL(buildConfirmationUrl({ ...base, email_action_type: "signup" }));
-    expect(url.searchParams.get("token")).toBe("OLD_TOKEN");
+    expect(url.searchParams.get("token_hash")).toBe("OLD_TOKEN");
   });
 });

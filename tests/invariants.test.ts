@@ -2005,6 +2005,62 @@ describe("family: a secure email change needs BOTH emails from one hook call", (
   });
 });
 
+describe("family: a link we email must land on our own domain", () => {
+  /*
+   * Confirmation links pointed at `https://<ref>.supabase.co/auth/v1/verify`.
+   * Two costs, one visible and one silent:
+   *
+   * 1. A customer clicks a button in mail branded Everbreeze SitePix and their
+   *    address bar fills with a random alphanumeric supabase.co subdomain -
+   *    which is precisely the shape people are taught to read as phishing.
+   * 2. /verify spends its token on a plain GET, so any prescanner that fetches
+   *    links before delivery (Outlook Safe Links, corporate mail AV, spam
+   *    filters grading URLs) burns it, and the human is then told the email
+   *    they just received has expired.
+   *
+   * The exchange therefore happens in the browser, on our domain, via
+   * `verifyOtp` on /auth/confirm.
+   */
+  const BUILDER = "apps/api/src/domains/email/auth-send.ts";
+  const ROUTE = "apps/web/src/routes/auth.confirm.tsx";
+
+  it("the builder never mints a GoTrue verify link", () => {
+    const src = stripComments(read(BUILDER));
+    expect(src).not.toMatch(/auth\/v1\/verify/);
+    expect(src).toMatch(/\/auth\/confirm\?/);
+    // token_hash is what verifyOtp takes; `token` was the /verify parameter.
+    expect(src).toMatch(/token_hash:\s*token/);
+  });
+
+  it("the landing route exists and exchanges the token client-side", () => {
+    const src = stripComments(read(ROUTE));
+    expect(src).toMatch(/createFileRoute\("\/auth\/confirm"\)/);
+    expect(src).toMatch(/verifyOtp\(\{\s*token_hash,\s*type\s*\}\)/);
+  });
+
+  it("the exchange runs exactly once", () => {
+    /*
+     * The token is single-use, so StrictMode's double mount would spend it
+     * twice and report "expired" on a confirmation that actually succeeded.
+     */
+    const src = stripComments(read(ROUTE));
+    expect(src).toMatch(/useRef\(false\)/);
+    expect(src).toMatch(/if \(started\.current\) return;/);
+  });
+
+  it("neither side lets `next` leave our domain", () => {
+    /*
+     * `next` is handed to navigate() on a page every new user is guaranteed to
+     * open, so an absolute value would turn our own signup email into an open
+     * redirect. Both the builder and the route reject it independently.
+     */
+    for (const file of [BUILDER, ROUTE]) {
+      const src = stripComments(read(file));
+      expect(src, file).toMatch(/startsWith\("\/\/"\)/);
+    }
+  });
+});
+
 describe("family: a recovery surface has to be reachable", () => {
   /*
    * Deleting is reversible for TRASH_RETENTION_DAYS (60), after which a nightly

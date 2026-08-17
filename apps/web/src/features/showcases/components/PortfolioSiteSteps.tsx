@@ -314,14 +314,26 @@ function CoverFields({ ctx }: { ctx: StepCtx }) {
       </Field>
 
       <div className="space-y-5">
-        <Field label="Headline" hint="Big type over the photo. Leave it blank to use your name.">
+        {/* "Leave it blank to use your name" described the fallback and said
+            nothing about what a good answer looks like, and the field sits on
+            the step where you have just chosen a photo of one job - so the
+            first live site built with this shouted a single job's name across
+            its front door. It is the company's line, not a project's. */}
+        <Field
+          label="Headline"
+          hint="Big type over the photo. Your business or your promise, not one job's name."
+        >
           <Input
             value={draft.heroHeadline}
             onChange={(e) => set("heroHeadline", e.target.value)}
             placeholder="Roofing done right, the first time."
             className="h-11 text-base"
           />
-          {suggestions.length > 0 && !draft.heroHeadline.trim() && (
+          {/* Shown whether or not the field is filled. Hiding them on first
+              keystroke meant the one person who most needed a better headline -
+              the one who had already typed a job title - was the only person
+              who never saw the alternatives. */}
+          {suggestions.length > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               {suggestions.map((s) => (
@@ -362,16 +374,23 @@ function CoverFields({ ctx }: { ctx: StepCtx }) {
   );
 }
 
-/** Two ready-made headlines built from answers already given. */
+/**
+ * Two ready-made headlines built from answers already given.
+ *
+ * Filtered against whatever is currently in the field so a chip is never an
+ * offer to retype what is already there - with the chips now visible after the
+ * field is filled, an identical one would just look broken.
+ */
 function headlineSuggestions(d: Draft): string[] {
   const trade = d.services[0]?.trim();
   const area = d.serviceAreas[0]?.trim();
   const name = d.businessName.trim();
+  const current = d.heroHeadline.trim().toLowerCase();
   const out: string[] = [];
   if (trade && area) out.push(`${trade} done right in ${area}.`);
   if (trade) out.push(`${trade} done right, the first time.`);
   if (name && out.length < 2) out.push(`${name}. Work you can point at.`);
-  return out.slice(0, 2);
+  return out.filter((s) => s.toLowerCase() !== current).slice(0, 2);
 }
 
 /* ------------------------------------------------------------------ */
