@@ -198,10 +198,7 @@ export function AppHeader() {
 
         <Button
           onClick={() =>
-            guard(
-              () => navigate({ to: "/projects/new" }),
-              "Subscribe to create new projects.",
-            )
+            guard(() => navigate({ to: "/projects/new" }), "Subscribe to create new projects.")
           }
           className="font-manrope hidden rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-primary/90 sm:inline-flex"
         >

@@ -47,7 +47,8 @@ export async function getAutoReportQuota(
     tier: plan.tier,
     used,
     limit,
-    remaining: limit === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : Math.max(0, limit - used),
+    remaining:
+      limit === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : Math.max(0, limit - used),
   };
 }
 

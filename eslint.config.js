@@ -7,11 +7,23 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
+    /*
+     * Build output, not source. `.vercel` and `.tanstack` are the two that were
+     * missing: CI never sees them (fresh checkout, and Build runs after Lint),
+     * but a developer who has run `npm run build` once has a full bundle sitting
+     * in `apps/web/.vercel/output`, and linting it took `npm run lint` from 13
+     * seconds to over ten minutes locally. Both are already in `.gitignore`.
+     */
     ignores: [
       "dist",
       ".output",
       "apps/web/.output",
       ".vinxi",
+      // `**/` prefixed, unlike the entries above: these live under `apps/web`,
+      // not the root, which is the same reason `apps/web/.output` needs its own
+      // line next to `.output`.
+      "**/.vercel/**",
+      "**/.tanstack/**",
       "apps/api/**",
       "apps/mobile/**",
       "packages/**",

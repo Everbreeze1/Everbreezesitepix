@@ -20,15 +20,10 @@ export async function verifyCronSecret(request: Request): Promise<boolean> {
   return safeEqualString(provided, String(expected));
 }
 
-export function verifyBearerSecret(
-  request: Request,
-  envName: string,
-): boolean {
+export function verifyBearerSecret(request: Request, envName: string): boolean {
   const secret = process.env[envName];
   if (!secret) return false;
   const auth = request.headers.get("authorization") ?? "";
-  const token = auth.toLowerCase().startsWith("bearer ")
-    ? auth.slice(7).trim()
-    : auth.trim();
+  const token = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : auth.trim();
   return safeEqualString(token, secret);
 }

@@ -11,9 +11,7 @@ export async function uploadProjectPhoto(options: {
   mimeType?: string | null;
   caption?: string;
 }): Promise<{ id: string }> {
-  const mime = options.mimeType?.startsWith("image/")
-    ? options.mimeType
-    : "image/jpeg";
+  const mime = options.mimeType?.startsWith("image/") ? options.mimeType : "image/jpeg";
   const ext = mime.includes("png") ? "png" : "jpg";
   const path = `${options.userId}/${options.projectId}/${crypto.randomUUID()}.${ext}`;
 
@@ -37,9 +35,7 @@ export async function uploadProjectPhoto(options: {
    * still find it.
    */
 
-  const caption =
-    options.caption?.trim() ||
-    `Photo ${new Date().toLocaleString()}`;
+  const caption = options.caption?.trim() || `Photo ${new Date().toLocaleString()}`;
 
   const { data, error: insErr } = await supabase
     .from("photos")

@@ -83,9 +83,7 @@ export function createApiClient(options: CreateApiClientOptions) {
     const headers = new Headers(init.headers);
     if (!headers.has("Accept")) headers.set("Accept", "application/json");
 
-    const token = options.getAccessToken
-      ? await options.getAccessToken()
-      : null;
+    const token = options.getAccessToken ? await options.getAccessToken() : null;
     if (token) headers.set("Authorization", `Bearer ${token}`);
     if (reqOpts?.idempotencyKey) {
       headers.set("Idempotency-Key", reqOpts.idempotencyKey);
@@ -135,8 +133,7 @@ export function createApiClient(options: CreateApiClientOptions) {
     /** Absolute paths for browser navigation / window.open (same-origin). */
     urls: {
       reportPdf: (token: string) => `${baseUrl}/v1/reports/${token}/pdf`,
-      walkthroughPdf: (token: string) =>
-        `${baseUrl}/v1/walkthroughs/${token}/pdf`,
+      walkthroughPdf: (token: string) => `${baseUrl}/v1/walkthroughs/${token}/pdf`,
     },
   };
 }

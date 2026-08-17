@@ -124,12 +124,7 @@ export function AppSidebar() {
     { ...showcasesItem, locked: portfolioLocked },
     ...(showOwnerNav ? [teamItem] : [collabItem]),
   ];
-  const toolItems = [
-    ...(showOwnerNav ? [pricingItem] : []),
-    trashItem,
-    helpItem,
-    reportIssueItem,
-  ];
+  const toolItems = [...(showOwnerNav ? [pricingItem] : []), trashItem, helpItem, reportIssueItem];
 
   /*
    * The badge is the only signal that anything is recoverable at all. Without a

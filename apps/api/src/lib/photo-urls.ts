@@ -37,7 +37,9 @@ export async function signPhotoUrls(
   const toSign = Array.from(originalFor.keys());
 
   const admin = getSupabaseAdmin();
-  const { data: signed, error } = await admin.storage.from(bucket).createSignedUrls(toSign, 60 * 60);
+  const { data: signed, error } = await admin.storage
+    .from(bucket)
+    .createSignedUrls(toSign, 60 * 60);
   if (error) {
     console.error("[photo-urls] failed to sign photo URLs", {
       error: error.message,

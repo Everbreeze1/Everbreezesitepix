@@ -59,7 +59,13 @@ export async function listPlatformUsersService(
 
   const teamByUser = new Map<string, PlatformUser["team"]>();
   ((memberships as any[]) ?? []).forEach((m) => {
-    if (m.team) teamByUser.set(m.user_id, { id: m.team.id, name: m.team.name, plan: m.team.plan, role: m.role });
+    if (m.team)
+      teamByUser.set(m.user_id, {
+        id: m.team.id,
+        name: m.team.name,
+        plan: m.team.plan,
+        role: m.role,
+      });
   });
   const adminSet = new Set(((adminRows as any[]) ?? []).map((r) => r.user_id));
 
@@ -95,7 +101,10 @@ export async function setPlatformAdminService(
       .upsert({ user_id: data.userId, granted_by: ctx.userId }, { onConflict: "user_id" });
     if (error) throw new Error(error.message);
   } else {
-    const { error } = await (admin as any).from("platform_admins").delete().eq("user_id", data.userId);
+    const { error } = await (admin as any)
+      .from("platform_admins")
+      .delete()
+      .eq("user_id", data.userId);
     if (error) throw new Error(error.message);
   }
 

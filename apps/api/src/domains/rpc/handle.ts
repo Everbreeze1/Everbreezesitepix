@@ -1,21 +1,9 @@
 import { z } from "zod";
-import {
-  idempotencyKeyFrom,
-  requestIdFrom,
-  writeAuditLog,
-} from "../../lib/audit";
+import { idempotencyKeyFrom, requestIdFrom, writeAuditLog } from "../../lib/audit";
 import { jsonError, jsonFromUnknownError, validationMessage } from "../../lib/errors";
-import {
-  beginIdempotency,
-  completeIdempotency,
-  releaseIdempotency,
-} from "../../lib/idempotency";
+import { beginIdempotency, completeIdempotency, releaseIdempotency } from "../../lib/idempotency";
 import { requireAuthedContext, type ServiceContext } from "../../lib/user-context";
-import {
-  clientRateKey,
-  rateLimit,
-  rateLimitHeaders,
-} from "../../lib/rate-limit";
+import { clientRateKey, rateLimit, rateLimitHeaders } from "../../lib/rate-limit";
 import { PUBLIC_RPC_OPS, rpcBodySchema, rpcRegistry } from "./registry";
 
 function rpcLimits() {
@@ -27,10 +15,7 @@ function rpcLimits() {
   };
 }
 
-function mergeHeaders(
-  base: HeadersInit,
-  extra?: HeadersInit,
-): Headers {
+function mergeHeaders(base: HeadersInit, extra?: HeadersInit): Headers {
   const headers = new Headers(base);
   if (extra) {
     const e = new Headers(extra);

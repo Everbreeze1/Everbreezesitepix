@@ -35,7 +35,12 @@ export async function createTextSnippetService(
   const teamId = await resolveTeamId(ctx);
   const { data: row, error } = await (ctx.supabase as any)
     .from("text_snippets")
-    .insert({ team_id: teamId, created_by: ctx.userId, title: data.title, content_html: data.contentHtml })
+    .insert({
+      team_id: teamId,
+      created_by: ctx.userId,
+      title: data.title,
+      content_html: data.contentHtml,
+    })
     .select("id, title, content_html, created_at")
     .single();
   if (error) throw new Error(error.message);
@@ -55,7 +60,10 @@ export async function updateTextSnippetService(
   if (data.title !== undefined) patch.title = data.title;
   if (data.contentHtml !== undefined) patch.content_html = data.contentHtml;
   if (Object.keys(patch).length === 0) return { ok: true };
-  const { error } = await (ctx.supabase as any).from("text_snippets").update(patch).eq("id", data.snippetId);
+  const { error } = await (ctx.supabase as any)
+    .from("text_snippets")
+    .update(patch)
+    .eq("id", data.snippetId);
   if (error) throw new Error(error.message);
   return { ok: true };
 }
@@ -65,7 +73,10 @@ export async function deleteTextSnippetService(
   ctx: AuthedContext,
   data: z.infer<typeof deleteTextSnippetInputSchema>,
 ) {
-  const { error } = await (ctx.supabase as any).from("text_snippets").delete().eq("id", data.snippetId);
+  const { error } = await (ctx.supabase as any)
+    .from("text_snippets")
+    .delete()
+    .eq("id", data.snippetId);
   if (error) throw new Error(error.message);
   return { ok: true };
 }

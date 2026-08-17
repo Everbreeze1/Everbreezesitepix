@@ -101,7 +101,9 @@ function PublicPagePage() {
               dangerouslySetInnerHTML={{ __html: data.page.headerHtml }}
             />
           )}
-          <h1 className="font-display mb-6 text-3xl font-bold text-foreground">{data.page.title}</h1>
+          <h1 className="font-display mb-6 text-3xl font-bold text-foreground">
+            {data.page.title}
+          </h1>
           <div
             className="tiptap prose prose-sm max-w-none"
             dangerouslySetInnerHTML={{ __html: data.page.contentHtml }}

@@ -81,8 +81,8 @@ export function ReportIssuePage() {
         Share feedback
       </h1>
       <p className="font-manrope mt-3 max-w-[576px] text-sm leading-6 text-muted-foreground">
-        Report something that&rsquo;s broken, or tell us what to build next. Both go straight to
-        the team.
+        Report something that&rsquo;s broken, or tell us what to build next. Both go straight to the
+        team.
       </p>
 
       <div className="mt-6 inline-flex rounded-xl border border-border bg-card p-1">

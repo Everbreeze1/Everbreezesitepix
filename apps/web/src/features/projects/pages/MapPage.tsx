@@ -180,7 +180,8 @@ export function MapPage() {
           photoCount: latest.count ?? 0,
           lastActivity:
             (latest.data as Array<{ created_at: string }> | null)?.[0]?.created_at ?? null,
-          thumbUrl: (thumb.data as Array<{ image_url: string | null }> | null)?.[0]?.image_url ?? null,
+          thumbUrl:
+            (thumb.data as Array<{ image_url: string | null }> | null)?.[0]?.image_url ?? null,
         };
       }),
     );

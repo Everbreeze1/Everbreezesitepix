@@ -41,7 +41,10 @@ export async function handlePurgeTrash(request: Request): Promise<Response> {
       );
       photosPurged = photoIds.length;
       for (const pathChunk of chunk(photoPaths, 500)) {
-        await admin.storage.from("site-photos").remove(pathChunk).catch(() => {});
+        await admin.storage
+          .from("site-photos")
+          .remove(pathChunk)
+          .catch(() => {});
       }
     }
 
@@ -51,9 +54,7 @@ export async function handlePurgeTrash(request: Request): Promise<Response> {
       .not("deleted_at", "is", null)
       .lt("deleted_at", cutoff)
       .limit(1000);
-    const projectIds = ((expiredProjects as Array<{ id: string }>) ?? []).map(
-      (r) => r.id,
-    );
+    const projectIds = ((expiredProjects as Array<{ id: string }>) ?? []).map((r) => r.id);
 
     let projectsPurged = 0;
     if (projectIds.length) {
@@ -67,7 +68,10 @@ export async function handlePurgeTrash(request: Request): Promise<Response> {
       // Blobs first: once the project row is gone the cascade takes the photo
       // rows with it, and there is nothing left to find these paths by.
       for (const pathChunk of chunk(allPhotoObjectPaths(remaining), 500)) {
-        await admin.storage.from("site-photos").remove(pathChunk).catch(() => {});
+        await admin.storage
+          .from("site-photos")
+          .remove(pathChunk)
+          .catch(() => {});
       }
 
       await mutateIn(

@@ -11,6 +11,8 @@ export interface ReviewLink {
 export const listReviewLinks = rpcOp<undefined, { links: ReviewLink[] }>("listReviewLinks");
 
 export const setReviewLinks = rpcOp<
-  { links: Array<{ platform: "google" | "nicejob" | "custom"; url: string; label?: string | null }> },
+  {
+    links: Array<{ platform: "google" | "nicejob" | "custom"; url: string; label?: string | null }>;
+  },
   { links: ReviewLink[] }
 >("setReviewLinks");

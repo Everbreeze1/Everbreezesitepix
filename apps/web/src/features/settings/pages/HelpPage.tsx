@@ -349,7 +349,9 @@ export function HelpPage() {
       // A category-level match (its own title/blurb) keeps all of its guides,
       // so searching "workflows" shows the whole section rather than nothing.
       const catMatches = `${cat.title} ${cat.blurb}`.toLowerCase().includes(q);
-      const guides = catMatches ? cat.guides : cat.guides.filter((g) => guideHaystack(g).includes(q));
+      const guides = catMatches
+        ? cat.guides
+        : cat.guides.filter((g) => guideHaystack(g).includes(q));
       return { ...cat, guides };
     }).filter((cat) => cat.guides.length > 0);
   }, [q]);
@@ -437,7 +439,11 @@ export function HelpPage() {
             <p className="font-manrope mt-1 text-sm text-muted-foreground">
               Try a different word, or clear the search to browse everything.
             </p>
-            <Button variant="outline" className="mt-4 rounded-xl text-xs font-bold" onClick={() => setQuery("")}>
+            <Button
+              variant="outline"
+              className="mt-4 rounded-xl text-xs font-bold"
+              onClick={() => setQuery("")}
+            >
               Clear search
             </Button>
           </div>

@@ -10,7 +10,9 @@
     }
   },
   "types": "./src/index.ts",
-  "files": ["src"],
+  "files": [
+    "src"
+  ],
   "peerDependencies": {
     "react": "^19.0.0"
   },

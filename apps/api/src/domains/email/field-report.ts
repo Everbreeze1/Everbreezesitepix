@@ -1,22 +1,10 @@
 import * as React from "react";
 import { render } from "@react-email/render";
 import { FieldReportEmail } from "@sitepix/email-templates";
-import {
-  idempotencyKeyFrom,
-  requestIdFrom,
-  writeAuditLog,
-} from "../../lib/audit";
+import { idempotencyKeyFrom, requestIdFrom, writeAuditLog } from "../../lib/audit";
 import { jsonError } from "../../lib/errors";
-import {
-  beginIdempotency,
-  completeIdempotency,
-  releaseIdempotency,
-} from "../../lib/idempotency";
-import {
-  clientRateKey,
-  rateLimit,
-  rateLimitHeaders,
-} from "../../lib/rate-limit";
+import { beginIdempotency, completeIdempotency, releaseIdempotency } from "../../lib/idempotency";
+import { clientRateKey, rateLimit, rateLimitHeaders } from "../../lib/rate-limit";
 import { sendEmail } from "../../lib/send-email";
 import { getSupabaseAdmin, requireUser } from "../../lib/supabase";
 import { fieldReportBodySchema } from "./schemas";
@@ -34,9 +22,7 @@ function mergeHeaders(base: HeadersInit, extra?: HeadersInit): Headers {
   return headers;
 }
 
-export async function handleFieldReportEmail(
-  request: Request,
-): Promise<Response> {
+export async function handleFieldReportEmail(request: Request): Promise<Response> {
   const started = Date.now();
   const requestId = requestIdFrom(request);
   const idemKey = idempotencyKeyFrom(request);
@@ -52,9 +38,7 @@ export async function handleFieldReportEmail(
     const emailWindowMs = Number(process.env.EMAIL_RATE_WINDOW_MS ?? 3_600_000);
     const limit = Number.isFinite(emailLimit) && emailLimit > 0 ? emailLimit : 10;
     const windowMs =
-      Number.isFinite(emailWindowMs) && emailWindowMs > 0
-        ? emailWindowMs
-        : 3_600_000;
+      Number.isFinite(emailWindowMs) && emailWindowMs > 0 ? emailWindowMs : 3_600_000;
     const rl = rateLimit({
       key: `email-report:${clientRateKey(request, user.id)}`,
       limit,
@@ -172,11 +156,9 @@ export async function handleFieldReportEmail(
     const safeName = pdfName.replace(/[^\w.\- ]/g, "_");
     const objectPath = `${user.id}/${objectId}/${safeName}`;
 
-    const { error: uploadErr } = await admin.storage.from(BUCKET).upload(
-      objectPath,
-      binary,
-      { contentType: "application/pdf", upsert: false },
-    );
+    const { error: uploadErr } = await admin.storage
+      .from(BUCKET)
+      .upload(objectPath, binary, { contentType: "application/pdf", upsert: false });
     if (uploadErr) {
       console.error("field-report upload failed", uploadErr);
       if (idemRecordId) await releaseIdempotency(idemRecordId);

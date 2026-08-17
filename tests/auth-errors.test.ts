@@ -82,7 +82,9 @@ describe("authErrorMessage", () => {
   });
 
   it("reads message, error_description or msg", () => {
-    expect(authErrorMessage({ error_description: "User already registered" })).toMatch(/logging in/i);
+    expect(authErrorMessage({ error_description: "User already registered" })).toMatch(
+      /logging in/i,
+    );
     expect(authErrorMessage({ msg: "email rate limit exceeded" })).toMatch(/wait a few minutes/i);
     expect(authErrorMessage("User already registered")).toMatch(/logging in/i);
   });

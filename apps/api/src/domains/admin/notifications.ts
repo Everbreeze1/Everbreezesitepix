@@ -72,12 +72,11 @@ export const sendAdminNotificationInputSchema = z.object({
   title: z.string().trim().min(1).max(160),
   body: z.string().trim().max(1000).optional().nullable(),
   linkPath: z.string().max(300).optional().nullable(),
-  target:
-    z.discriminatedUnion("type", [
-      z.object({ type: z.literal("all") }),
-      z.object({ type: z.literal("team"), teamId: z.string().uuid() }),
-      z.object({ type: z.literal("user"), userId: z.string().uuid() }),
-    ]),
+  target: z.discriminatedUnion("type", [
+    z.object({ type: z.literal("all") }),
+    z.object({ type: z.literal("team"), teamId: z.string().uuid() }),
+    z.object({ type: z.literal("user"), userId: z.string().uuid() }),
+  ]),
 });
 
 export async function sendAdminNotificationService(
@@ -120,7 +119,12 @@ export async function sendAdminNotificationService(
     actorId: ctx.userId,
     action: "send_admin_notification",
     targetType: "notification_broadcast",
-    targetId: data.target.type === "user" ? data.target.userId : data.target.type === "team" ? data.target.teamId : null,
+    targetId:
+      data.target.type === "user"
+        ? data.target.userId
+        : data.target.type === "team"
+          ? data.target.teamId
+          : null,
     metadata: { target: data.target, title: data.title, sentTo: recipientIds.length },
   });
 

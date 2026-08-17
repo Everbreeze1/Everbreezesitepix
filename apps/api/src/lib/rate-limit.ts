@@ -98,9 +98,10 @@ export function rateLimit(options: {
 /** Best-effort client key: user id, else IP-ish header, else "anon". */
 export function clientRateKey(request: Request, userId?: string | null): string {
   if (userId) return `user:${userId}`;
-  const forwarded = request.headers.get("cf-connecting-ip")
-    ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-    ?? request.headers.get("x-real-ip");
+  const forwarded =
+    request.headers.get("cf-connecting-ip") ??
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    request.headers.get("x-real-ip");
   if (forwarded) return `ip:${forwarded}`;
   return "anon";
 }
@@ -110,8 +111,6 @@ export function rateLimitHeaders(result: RateLimitResult, limit: number): Header
     "X-RateLimit-Limit": String(limit),
     "X-RateLimit-Remaining": String(result.remaining),
     "X-RateLimit-Reset": String(Math.ceil(result.resetAt / 1000)),
-    ...(result.ok
-      ? {}
-      : { "Retry-After": String(result.retryAfterSec) }),
+    ...(result.ok ? {} : { "Retry-After": String(result.retryAfterSec) }),
   };
 }

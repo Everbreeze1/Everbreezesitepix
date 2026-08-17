@@ -8,7 +8,14 @@ export default function AppLayout() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: colors.bg,
+        }}
+      >
         <ActivityIndicator color={colors.ink} />
       </View>
     );
@@ -27,7 +34,10 @@ export default function AppLayout() {
     >
       <Stack.Screen name="index" options={{ title: "Projects" }} />
       <Stack.Screen name="project/[id]/index" options={{ title: "Project" }} />
-      <Stack.Screen name="project/[id]/capture" options={{ title: "Capture", presentation: "modal" }} />
+      <Stack.Screen
+        name="project/[id]/capture"
+        options={{ title: "Capture", presentation: "modal" }}
+      />
       <Stack.Screen name="account" options={{ title: "Account" }} />
     </Stack>
   );

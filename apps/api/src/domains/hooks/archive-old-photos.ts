@@ -33,9 +33,7 @@ function archiveEnabled(): boolean {
   return raw === "1" || raw === "true";
 }
 
-export async function handleArchiveOldPhotos(
-  request: Request,
-): Promise<Response> {
+export async function handleArchiveOldPhotos(request: Request): Promise<Response> {
   if (!(await verifyCronSecret(request))) {
     return jsonError(401, "unauthorized", "Unauthorized");
   }
@@ -55,9 +53,7 @@ export async function handleArchiveOldPhotos(
 
   try {
     const admin = getSupabaseAdmin();
-    const cutoff = new Date(
-      Date.now() - 1000 * 60 * 60 * 24 * 30 * 6,
-    ).toISOString();
+    const cutoff = new Date(Date.now() - 1000 * 60 * 60 * 24 * 30 * 6).toISOString();
     const { data: photos, error } = await admin
       .from("photos")
       .select("id, storage_path, size_bytes")

@@ -1057,7 +1057,9 @@ export function ProjectDetailPage() {
 
       if (added === 0) {
         toast.error(
-          incoming.length > 1 ? `None of the ${incoming.length} photos could be added` : "Photo could not be added",
+          incoming.length > 1
+            ? `None of the ${incoming.length} photos could be added`
+            : "Photo could not be added",
         );
       } else if (failed > 0) {
         toast.warning(`${added} of ${incoming.length} photos added - ${failed} failed`, {
@@ -1536,10 +1538,14 @@ export function ProjectDetailPage() {
       .update({ video_path: videoPath, video_mime_type: mimeType } as any)
       .eq("id", walkthroughId);
     if (directVideoErr)
-      console.warn("[walkthrough] direct video_path update failed; trying server update", directVideoErr, {
-        wid: walkthroughId,
-        videoPath,
-      });
+      console.warn(
+        "[walkthrough] direct video_path update failed; trying server update",
+        directVideoErr,
+        {
+          wid: walkthroughId,
+          videoPath,
+        },
+      );
     let serverVideoSaved = false;
     try {
       await updateWalkVideo({
@@ -1547,10 +1553,14 @@ export function ProjectDetailPage() {
       });
       serverVideoSaved = true;
     } catch (serverVideoErr) {
-      console.warn("[walkthrough] video_path server update failed after direct save", serverVideoErr, {
-        wid: walkthroughId,
-        videoPath,
-      });
+      console.warn(
+        "[walkthrough] video_path server update failed after direct save",
+        serverVideoErr,
+        {
+          wid: walkthroughId,
+          videoPath,
+        },
+      );
     }
     if (directVideoErr && !serverVideoSaved) throw directVideoErr;
 
@@ -2714,8 +2724,7 @@ export function ProjectDetailPage() {
                 Walk the site from anywhere
               </h2>
               <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
-                Recorded walkthroughs and AI summaries both preserve field context beyond the
-                photo.
+                Recorded walkthroughs and AI summaries both preserve field context beyond the photo.
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -2907,7 +2916,8 @@ export function ProjectDetailPage() {
                           params={{ walkthroughId: w.id }}
                           className="mt-3 inline-flex items-center gap-2 text-xs font-extrabold text-primary hover:underline"
                         >
-                          {isSummary ? "Open summary" : "Open walkthrough"} <span aria-hidden>→</span>
+                          {isSummary ? "Open summary" : "Open walkthrough"}{" "}
+                          <span aria-hidden>→</span>
                         </Link>
                       </div>
                     </div>

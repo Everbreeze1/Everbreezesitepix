@@ -35,16 +35,17 @@ export async function listTrashedPhotosService(
     .order("deleted_at", { ascending: false })
     .limit(500);
   if (error) throw new Error(error.message);
-  const list = (rows as Array<{
-    id: string;
-    storage_path: string;
-    image_url: string | null;
-    caption: string | null;
-    tags: string[] | null;
-    taken_at: string | null;
-    created_at: string;
-    deleted_at: string;
-  }>) ?? [];
+  const list =
+    (rows as Array<{
+      id: string;
+      storage_path: string;
+      image_url: string | null;
+      caption: string | null;
+      tags: string[] | null;
+      taken_at: string | null;
+      created_at: string;
+      deleted_at: string;
+    }>) ?? [];
 
   const toSign = list.filter((r) => !r.image_url).map((r) => r.storage_path);
   const signedMap: Record<string, string> = {};
@@ -77,7 +78,8 @@ export async function restorePhotosService(
   // Content-Location header, which made "Select all" in Trash a guaranteed 500.
   await mutateIn(
     data.photoIds,
-    (idChunk) => (ctx.supabase as any).from("photos").update({ deleted_at: null }).in("id", idChunk),
+    (idChunk) =>
+      (ctx.supabase as any).from("photos").update({ deleted_at: null }).in("id", idChunk),
     "restore photos",
   );
   return { restored: data.photoIds.length };
@@ -111,7 +113,10 @@ export async function purgePhotosService(
   // and a rejection here would otherwise strand the blobs with no DB row left to
   // find them by.
   for (const pathChunk of chunk(paths)) {
-    await ctx.supabase.storage.from("site-photos").remove(pathChunk).catch(() => {});
+    await ctx.supabase.storage
+      .from("site-photos")
+      .remove(pathChunk)
+      .catch(() => {});
   }
   return { purged: ids.length };
 }
@@ -127,17 +132,18 @@ export async function listTrashedProjectsService(ctx: ServiceContext) {
     .order("deleted_at", { ascending: false });
   if (error) throw new Error(error.message);
 
-  const list = (rows as Array<{
-    id: string;
-    name: string;
-    description: string | null;
-    street: string | null;
-    city: string | null;
-    state: string | null;
-    zip: string | null;
-    status: string;
-    deleted_at: string;
-  }>) ?? [];
+  const list =
+    (rows as Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      street: string | null;
+      city: string | null;
+      state: string | null;
+      zip: string | null;
+      status: string;
+      deleted_at: string;
+    }>) ?? [];
   const ids = list.map((r) => r.id);
   const counts: Record<string, number> = {};
   if (ids.length) {

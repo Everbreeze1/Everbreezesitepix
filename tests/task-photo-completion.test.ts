@@ -667,7 +667,9 @@ describe("the two panels write the photo, not the task", () => {
     // Via the row builder, which is what keeps a duplicated photo id from making
     // the upsert touch one row twice.
     expect(groupPage).toContain("taskPhotoItemRows(");
-    expect(groupsApi).toMatch(/\.select\("id, project_id[^"]*photo_ids/);
+    // `\s*` after the paren: the column list is long enough that Prettier puts
+    // it on its own line, which is a formatting choice, not a change of intent.
+    expect(groupsApi).toMatch(/\.select\(\s*"id, project_id[^"]*photo_ids/);
   });
 
   it("both survive the migration not having been applied yet", () => {

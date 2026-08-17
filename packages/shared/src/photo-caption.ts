@@ -58,10 +58,7 @@ export function sanitizeCaption(input?: string | null): string {
   return input;
 }
 
-export function displayCaption(
-  caption: string | null | undefined,
-  fallback: string,
-): string {
+export function displayCaption(caption: string | null | undefined, fallback: string): string {
   return cleanCaption(caption) ?? fallback;
 }
 

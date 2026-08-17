@@ -22,18 +22,22 @@ export class AuthError extends Error {
 }
 
 export function createAuthedSupabaseClient(token: string): SupabaseClient<Database> {
-  return createClient<Database>(requireSitepixSupabaseUrl(), requireSitepixSupabasePublishableKey(), {
-    global: {
-      headers: {
-        Authorization: `Bearer ${token}`,
+  return createClient<Database>(
+    requireSitepixSupabaseUrl(),
+    requireSitepixSupabasePublishableKey(),
+    {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+      auth: {
+        storage: undefined,
+        persistSession: false,
+        autoRefreshToken: false,
       },
     },
-    auth: {
-      storage: undefined,
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
+  );
 }
 
 export async function requireAuthedContext(request: Request): Promise<AuthedContext> {

@@ -32,7 +32,12 @@ function useJustCheckedOut() {
 
 function AppLayout() {
   const { user, loading } = useAuth();
-  const { isActive, loading: subLoading, hasError: subErrored, retry: retrySub } = useSubscription();
+  const {
+    isActive,
+    loading: subLoading,
+    hasError: subErrored,
+    retry: retrySub,
+  } = useSubscription();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const justCheckedOut = useJustCheckedOut();
@@ -79,9 +84,7 @@ function AppLayout() {
         <div className="min-h-screen flex w-full bg-background">
           <AppSidebar />
           <div className="flex-1 flex flex-col min-w-0 bg-background">
-            {!isActive && (
-              <UpgradeBanner activating={justCheckedOut && checkoutAttempts < 6} />
-            )}
+            {!isActive && <UpgradeBanner activating={justCheckedOut && checkoutAttempts < 6} />}
             <AppHeader />
             <main className="flex-1 min-w-0 pb-20 md:pb-0">
               <Outlet />

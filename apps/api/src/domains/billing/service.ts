@@ -93,12 +93,22 @@ export async function createCheckoutSessionService(
     line_items: [{ price: priceId, quantity: data.seats }],
     success_url: `${data.origin}/settings?checkout=success`,
     cancel_url: `${data.origin}/pricing`,
-    metadata: { team_id: team.id, plan: data.plan, interval: data.interval, seats: String(data.seats) },
+    metadata: {
+      team_id: team.id,
+      plan: data.plan,
+      interval: data.interval,
+      seats: String(data.seats),
+    },
     subscription_data: {
       // Every tier advertises the same free trial on /pricing - keep this in
       // sync with TRIAL_DAYS in apps/web/src/lib/pricing.ts.
       trial_period_days: TRIAL_DAYS,
-      metadata: { team_id: team.id, plan: data.plan, interval: data.interval, seats: String(data.seats) },
+      metadata: {
+        team_id: team.id,
+        plan: data.plan,
+        interval: data.interval,
+        seats: String(data.seats),
+      },
     },
     // Our products don't have a Stripe tax_code assigned, which Managed
     // Payments (on by default for this account) requires. Disable it for
