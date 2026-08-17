@@ -41,7 +41,7 @@ const TIMEOUT_MS = 10_000;
  * Places API (New) field - an unknown name in the mask fails the whole request
  * with a 400, so this list is not a place to guess.
  */
-const DETAIL_FIELD_MASK = [
+const BASE_FIELDS = [
   "id",
   "displayName",
   "formattedAddress",
@@ -54,7 +54,26 @@ const DETAIL_FIELD_MASK = [
   "googleMapsUri",
   "editorialSummary",
   "primaryTypeDisplayName",
-].join(",");
+];
+
+/**
+ * Google's own review URLs, asked for separately because they are the one field
+ * here that might not be granted.
+ *
+ * `googleMapsLinks` sits in a higher SKU on some accounts, and an ungranted
+ * name in the mask fails the WHOLE request - which would lose the name, phone
+ * and rating to gain a link. So it is requested as an extra and dropped on the
+ * first 400, rather than being either trusted blindly or written off.
+ *
+ * Worth the retry because these URIs are authoritative. The
+ * `search.google.com/local/*` forms below are a long-standing pattern rather
+ * than a documented endpoint, and the whole point of the feature is a review
+ * link that still resolves in a year.
+ */
+const LINK_FIELD = "googleMapsLinks";
+
+const DETAIL_FIELD_MASK = [...BASE_FIELDS, LINK_FIELD].join(",");
+const DETAIL_FIELD_MASK_FALLBACK = BASE_FIELDS.join(",");
 
 export interface GoogleBusinessProfile {
   placeId: string;
@@ -96,13 +115,13 @@ function apiKey(): string {
 /* ------------------------------------------------------------------ */
 
 /**
- * Both review URLs are built from the place_id rather than read from the API.
+ * The fallback review URLs, used when `googleMapsLinks` was not granted.
  *
- * `googleMapsLinks` would give them to us directly, but it is gated behind a
- * pricier SKU on some accounts and an ungranted field in the mask 400s the
- * whole call - losing the name and phone number too, to gain a link we can
- * construct offline. These two `search.google.com/local/*` forms are the ones
- * Google itself hands out in the Business Profile dashboard.
+ * Preferred order is the other way round - see LINK_FIELD. These two
+ * `search.google.com/local/*` forms are a long-standing pattern rather than a
+ * documented endpoint, so they are the safety net, not the first choice. They
+ * are still worth keeping: they need nothing but the place_id, so a deployment
+ * on a cheaper Places SKU gets working review links rather than none.
  */
 export function googleReviewsUrl(placeId: string): string {
   return `https://search.google.com/local/reviews?placeid=${encodeURIComponent(placeId)}`;
@@ -287,14 +306,25 @@ function componentOf(components: AddressComponent[], type: string, short = false
   return (short ? hit.shortText : hit.longText)?.trim() || null;
 }
 
-async function fetchProfile(placeId: string): Promise<GoogleBusinessProfile | null> {
-  const res = await fetch(`${PLACES_HOST}/places/${encodeURIComponent(placeId)}`, {
-    headers: {
-      "X-Goog-Api-Key": apiKey(),
-      "X-Goog-FieldMask": DETAIL_FIELD_MASK,
-    },
+/** One details GET at a given mask. Separated so the caller can retry narrower. */
+function getPlace(placeId: string, mask: string): Promise<Response> {
+  return fetch(`${PLACES_HOST}/places/${encodeURIComponent(placeId)}`, {
+    headers: { "X-Goog-Api-Key": apiKey(), "X-Goog-FieldMask": mask },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
+}
+
+async function fetchProfile(placeId: string): Promise<GoogleBusinessProfile | null> {
+  let res = await getPlace(placeId, DETAIL_FIELD_MASK);
+
+  // A 400 means the mask was rejected, and googleMapsLinks is the only name in
+  // it that an account can lack entitlement for. Retrying without it keeps a
+  // billing difference between deployments from turning the whole feature into
+  // an error message; the constructed review URLs cover the loss.
+  if (res.status === 400) {
+    res = await getPlace(placeId, DETAIL_FIELD_MASK_FALLBACK);
+  }
+
   if (res.status === 404) return null;
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -317,6 +347,7 @@ async function fetchProfile(placeId: string): Promise<GoogleBusinessProfile | nu
     googleMapsUri?: string;
     editorialSummary?: { text?: string };
     primaryTypeDisplayName?: { text?: string };
+    googleMapsLinks?: { reviewsUri?: string; writeAReviewUri?: string; placeUri?: string };
   };
 
   const id = json.id?.trim() || placeId;
@@ -334,9 +365,12 @@ async function fetchProfile(placeId: string): Promise<GoogleBusinessProfile | nu
     summary: json.editorialSummary?.text?.trim() || null,
     rating: typeof json.rating === "number" ? Math.round(json.rating * 10) / 10 : null,
     reviewCount: typeof json.userRatingCount === "number" ? json.userRatingCount : null,
-    mapsUrl: json.googleMapsUri?.trim() || null,
-    reviewsUrl: googleReviewsUrl(id),
-    writeReviewUrl: googleWriteReviewUrl(id),
+    mapsUrl: json.googleMapsUri?.trim() || json.googleMapsLinks?.placeUri?.trim() || null,
+    // Google's own URIs when the field was granted, the constructed forms when
+    // it wasn't. Both are persisted by the caller, so a page view never depends
+    // on which branch ran.
+    reviewsUrl: json.googleMapsLinks?.reviewsUri?.trim() || googleReviewsUrl(id),
+    writeReviewUrl: json.googleMapsLinks?.writeAReviewUri?.trim() || googleWriteReviewUrl(id),
   };
 }
 
