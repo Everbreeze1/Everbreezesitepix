@@ -167,6 +167,8 @@ export type ProjectDetailSearch = {
   camera?: 1;
   walkthrough?: 1;
   panel?: "tasks" | "checklists" | "walkthroughs" | "reports" | "workflows" | "trash" | "calendar";
+  /** Photo id to open the viewer on. See the effect that consumes it. */
+  photo?: string;
 };
 
 import type { Project, Photo, Report } from "../types";
@@ -342,6 +344,9 @@ export function ProjectDetailPage() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  /* A ?photo= id waiting for the photo it names to be loaded. See below. */
+  const [pendingPhotoId, setPendingPhotoId] = useState<string | null>(null);
+  const pendingPhotoWidened = useRef(false);
   const [annotatePhotoId, setAnnotatePhotoId] = useState<string | null>(null);
   // Kept in the URL (?panel=) rather than plain component state, so returning
   // from a sub-page (a document, a walkthrough, the report builder) via back
@@ -885,6 +890,63 @@ export function ProjectDetailPage() {
     });
     return sorted;
   }, [photos, phaseFilter, tagFilter, tagLogic, sortOrder]);
+
+  /*
+   * ?photo=<id> opens the viewer on that photo, then clears itself the way
+   * ?camera=1 does so a back-nav does not reopen it.
+   *
+   * This is where a notification lands. "New task assigned to you" and
+   * "X mentioned you" are both written against one picture, and both used to
+   * link at the project, which on a job with a few hundred photos is a search
+   * problem handed to the person you just asked to do something.
+   *
+   * The phase and tag filters are cleared on the way in. They matter when the
+   * reader is ALREADY on this project with a filter applied - the router keeps
+   * the component mounted and only swaps the search param, so those filters are
+   * live and would swallow the photo the link exists to show. Silently, too: a
+   * filtered-out photo and a deleted one look identical from here. Arriving
+   * from elsewhere mounts the page fresh and both are already at their
+   * defaults, so this costs that case nothing.
+   */
+  useEffect(() => {
+    if (!search.photo) return;
+    setPendingPhotoId(search.photo);
+    pendingPhotoWidened.current = false;
+    setPhaseFilter("all");
+    setTagFilter([]);
+    navigate({
+      to: "/projects/$projectId",
+      params: { projectId },
+      search: (prev: ProjectDetailSearch) => ({ ...prev, photo: undefined }),
+      replace: true,
+    });
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [search.photo]);
+
+  useEffect(() => {
+    if (!pendingPhotoId || loading) return;
+
+    const idx = filteredPhotos.findIndex((p) => p.id === pendingPhotoId);
+    if (idx >= 0) {
+      setLightboxIndex(idx);
+      setPendingPhotoId(null);
+      return;
+    }
+
+    /*
+     * The page loads the newest `photoLimit` photos, so a link to an older one
+     * finds nothing on the first pass. Widen once and wait for the reload
+     * rather than reporting a photo missing that was only out of frame.
+     */
+    if (!pendingPhotoWidened.current && totalPhotos > photos.length) {
+      pendingPhotoWidened.current = true;
+      setPhotoLimit(Math.max(totalPhotos, photos.length + 1));
+      return;
+    }
+
+    setPendingPhotoId(null);
+    toast.error("That photo is no longer on this project.");
+  }, [pendingPhotoId, loading, filteredPhotos, photos.length, totalPhotos]);
 
   // Live counts for the current lightbox photo - used for toolbar badges.
   const currentLightboxPhotoId =

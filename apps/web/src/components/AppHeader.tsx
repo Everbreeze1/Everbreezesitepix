@@ -19,6 +19,7 @@ import { useProfile } from "@/hooks/use-profile";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { useNotifications } from "@/hooks/use-notifications";
 import { formatRelativeTime } from "@/lib/format-time";
+import { notificationLinkTarget } from "@/lib/notification-link";
 
 function getInitials(name?: string | null, email?: string | null) {
   const trimmed = name?.trim();
@@ -129,7 +130,7 @@ export function AppHeader() {
                       onClick={() => {
                         void markRead(n.id);
                         setNotifOpen(false);
-                        if (n.linkPath) navigate({ to: n.linkPath });
+                        if (n.linkPath) navigate(notificationLinkTarget(n.linkPath) as any);
                       }}
                       className="flex w-full items-start gap-2 px-4 py-3 text-left text-sm transition-colors hover:bg-accent"
                     >
