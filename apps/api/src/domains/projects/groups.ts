@@ -223,11 +223,16 @@ export async function getProjectGroupService(ctx: AuthedContext, data: any) {
         // `assigned_by` rides along so the group rollup can apply the same
         // "only the assignee closes it" rule as the project panel, rather than
         // offering a status button the database then refuses.
-        .select("id, project_id, title, status, priority, due_date, assignee_email, assignee_user_id, assigned_by, updated_at")
+        //
+        // `photo_ids` for the same reason one step further on: a task raised
+        // against a set of photos is finished when its photos are, so closing
+        // one from here has to close them rather than stamp a status that the
+        // next tick on any photo would roll straight back to in_progress.
+        .select("id, project_id, title, status, priority, due_date, assignee_email, assignee_user_id, assigned_by, photo_ids, updated_at")
         .in("project_id", projectIds)
         .order("status", { ascending: true })
         .order("updated_at", { ascending: false });
-      const tasks = ((tks as Array<{ id: string; project_id: string; title: string; status: string; priority: string; due_date: string | null; assignee_email: string | null; assignee_user_id: string | null; assigned_by: string | null; updated_at: string }>) ?? []);
+      const tasks = ((tks as Array<{ id: string; project_id: string; title: string; status: string; priority: string; due_date: string | null; assignee_email: string | null; assignee_user_id: string | null; assigned_by: string | null; photo_ids: string[] | null; updated_at: string }>) ?? []);
       const tasksByProject: Record<string, typeof tasks> = {};
       tasks.forEach((t) => {
         (tasksByProject[t.project_id] ??= []).push(t);

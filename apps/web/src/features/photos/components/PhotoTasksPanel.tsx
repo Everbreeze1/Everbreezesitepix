@@ -9,6 +9,7 @@ import {
   UserPlus,
   ChevronDown,
   CheckSquare,
+  StickyNote,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/sitepix/client";
@@ -19,6 +20,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useTeamMembers } from "@/hooks/use-team-members";
 import { useAssignableTeammates } from "@/hooks/use-assignable-teammates";
 import { completionRights } from "@/lib/assignment";
+import {
+  TASK_PHOTO_ITEMS_TABLE,
+  TASK_PHOTO_ITEM_COLUMNS,
+  isMissingTaskPhotoItems,
+  photoPositionInTask,
+  taskPhotoItemPatch,
+  taskStatusFromPhotos,
+  type TaskPhotoItem,
+} from "@/lib/task-photo-items";
 import { useReportPanelCount } from "@/features/photos/components/PhotoDetailsPanel";
 import type { CommentContributor } from "@/features/photos/components/PhotoCommentsPanel";
 
@@ -85,6 +95,21 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
   const [assignee, setAssignee] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const { isManager } = useTeamMembers();
+  /**
+   * Per-photo state for the tasks on this picture, keyed task -> photo.
+   *
+   * The whole task's photos, not only this one, because the line under a title
+   * has to be able to say "photo 3 of 12, 5 done". Knowing this photo alone was
+   * the old model, and it is exactly why ticking here closed the other eleven.
+   */
+  const [itemIndex, setItemIndex] = useState<Map<string, Map<string, TaskPhotoItem>>>(new Map());
+  /** False once the per-photo table answers "does not exist". */
+  const [itemsReady, setItemsReady] = useState(true);
+  /** Task ids being written, so the circle can show it is in flight. */
+  const [pending, setPending] = useState<Set<string>>(new Set());
+  /** Task id whose "what was done" note is being edited on this photo. */
+  const [noteFor, setNoteFor] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
 
   /*
    * The whole crew, not only the people who have already touched this project.
@@ -116,10 +141,46 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
     if (error) {
       if (!String(error.message).includes("does not exist")) toast.error(error.message);
       setTasks([]);
+      setItemIndex(new Map());
     } else {
-      setTasks(data as any[] as Task[]);
+      const rows = data as any[] as Task[];
+      setTasks(rows);
+      await loadItems(rows);
     }
     setLoading(false);
+  };
+
+  const loadItems = async (rows: Task[]) => {
+    if (rows.length === 0) {
+      setItemIndex(new Map());
+      return;
+    }
+    const { data, error } = await supabase
+      .from(TASK_PHOTO_ITEMS_TABLE as any)
+      .select(TASK_PHOTO_ITEM_COLUMNS)
+      .in(
+        "task_id",
+        rows.map((t) => t.id),
+      );
+    if (error) {
+      // Before the migration is applied the panel behaves as it did: one status
+      // per task. Worth no message to a crew member, who cannot act on it.
+      if (isMissingTaskPhotoItems(error)) setItemsReady(false);
+      else toast.error(error.message);
+      setItemIndex(new Map());
+      return;
+    }
+    setItemsReady(true);
+    const index = new Map<string, Map<string, TaskPhotoItem>>();
+    ((data ?? []) as any[] as TaskPhotoItem[]).forEach((item) => {
+      let byPhoto = index.get(item.task_id);
+      if (!byPhoto) {
+        byPhoto = new Map();
+        index.set(item.task_id, byPhoto);
+      }
+      byPhoto.set(item.photo_id, item);
+    });
+    setItemIndex(index);
   };
 
   useEffect(() => {
@@ -172,23 +233,106 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
     setAssignee("");
   };
 
-  const cycleStatus = async (t: Task) => {
+  const taskRights = (t: Task) =>
+    completionRights(
+      { assignedTo: t.assignee_user_id, assignedBy: t.assigned_by },
+      { userId: currentUserId, isManager },
+      t.assignee_user_id
+        ? (contribById.get(t.assignee_user_id)?.fullName ??
+            contribById.get(t.assignee_user_id)?.email ??
+            null)
+        : null,
+    );
+
+  /** This photo's own state on a task, which is what the circle shows now. */
+  const photoStatus = (t: Task): "open" | "done" => {
+    if (!itemsReady) return t.status === "done" ? "done" : "open";
+    return itemIndex.get(t.id)?.get(photoId)?.status ?? "open";
+  };
+
+  const photoNote = (t: Task): string => itemIndex.get(t.id)?.get(photoId)?.note ?? "";
+
+  /**
+   * Tick this photo off the task, rather than ticking the task off.
+   *
+   * The old circle wrote `tasks.status`, and a task can cover a dozen photos:
+   * closing the work here closed it on every other picture in the set and
+   * struck it through in each of their panels. It writes the (task, photo) row
+   * now, and the database rolls the task up once the last photo lands.
+   */
+  const setPhotoDone = async (t: Task, next: "open" | "done", note?: string | null) => {
+    if (!itemsReady) {
+      void cycleTaskStatus(t);
+      return;
+    }
+    const existing = itemIndex.get(t.id)?.get(photoId) ?? null;
+    if (next === "done" && existing?.status !== "done") {
+      // Same rule as the project panel and the checklist page. Checked here so
+      // the tap does nothing visible rather than flashing a completed state the
+      // database then rejects.
+      const rights = taskRights(t);
+      if (!rights.canComplete) {
+        toast.error(rights.reason ?? "You can't mark this task done.");
+        return;
+      }
+    }
+
+    const beforeIndex = itemIndex;
+    const beforeStatus = t.status;
+    const optimistic: TaskPhotoItem = {
+      task_id: t.id,
+      photo_id: photoId,
+      status: next,
+      note: (note !== undefined ? note : existing?.note)?.trim() || null,
+      completed_by: next === "done" ? (existing?.completed_by ?? currentUserId) : null,
+      completed_at: next === "done" ? (existing?.completed_at ?? new Date().toISOString()) : null,
+    };
+    const nextIndex = new Map(itemIndex);
+    const byPhoto = new Map(nextIndex.get(t.id) ?? []);
+    byPhoto.set(photoId, optimistic);
+    nextIndex.set(t.id, byPhoto);
+    setItemIndex(nextIndex);
+
+    const rolled = taskStatusFromPhotos(t.photo_ids, byPhoto, t.status);
+    if (rolled !== t.status) {
+      setTasks((arr) => arr.map((x) => (x.id === t.id ? { ...x, status: rolled } : x)));
+    }
+
+    setPending((prev) => new Set(prev).add(t.id));
+    const { error } = await supabase
+      .from(TASK_PHOTO_ITEMS_TABLE as any)
+      .upsert(taskPhotoItemPatch(t.id, photoId, next, optimistic.note), {
+        onConflict: "task_id,photo_id",
+      });
+    setPending((prev) => {
+      const s = new Set(prev);
+      s.delete(t.id);
+      return s;
+    });
+
+    if (error) {
+      if (isMissingTaskPhotoItems(error)) setItemsReady(false);
+      else toast.error(error.message);
+      setItemIndex(beforeIndex);
+      setTasks((arr) => arr.map((x) => (x.id === t.id ? { ...x, status: beforeStatus } : x)));
+      void load();
+      return;
+    }
+
+    if (rolled === "done" && beforeStatus !== "done") {
+      toast.success("Last photo done, task complete");
+    }
+  };
+
+  /**
+   * The pre-breakdown behaviour, kept for the window between this code
+   * deploying and the migration being applied by hand in the SQL editor.
+   */
+  const cycleTaskStatus = async (t: Task) => {
     const next: Status = STATUS_ORDER[(STATUS_ORDER.indexOf(t.status) + 1) % 3];
 
-    // Same rule as the Tasks panel and the checklist page - the assignee closes
-    // their own work, and a manager may override. Checked here so the tap does
-    // nothing visible rather than flashing a completed state that the database
-    // then rejects.
     if (next === "done") {
-      const rights = completionRights(
-        { assignedTo: t.assignee_user_id, assignedBy: t.assigned_by },
-        { userId: currentUserId, isManager },
-        t.assignee_user_id
-          ? (contribById.get(t.assignee_user_id)?.fullName ??
-              contribById.get(t.assignee_user_id)?.email ??
-              null)
-          : null,
-      );
+      const rights = taskRights(t);
       if (!rights.canComplete) {
         toast.error(rights.reason ?? "You can't mark this task done.");
         return;
@@ -305,48 +449,144 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
           </div>
         ) : (
           tasks.map((t) => {
-            const Icon = STATUS_ICON[t.status];
-            const cls = STATUS_CLS[t.status];
+            const doneHere = photoStatus(t) === "done";
+            /*
+             * The icon answers "is this photo handled", not "is the task
+             * closed". A task still open elsewhere reads as done here once this
+             * picture is dealt with, which is the whole point.
+             */
+            const Icon = doneHere ? CheckCircle2 : itemsReady ? Circle : STATUS_ICON[t.status];
+            const cls = doneHere
+              ? STATUS_CLS.done
+              : itemsReady
+                ? STATUS_CLS.open
+                : STATUS_CLS[t.status];
             const c = t.assignee_user_id ? contribById.get(t.assignee_user_id) : null;
+            const position = itemsReady
+              ? photoPositionInTask(t.photo_ids, photoId, itemIndex.get(t.id))
+              : null;
+            const note = photoNote(t);
+            const busy = pending.has(t.id);
             return (
               <div
                 key={t.id}
-                className="group flex items-center gap-2 rounded-xl border border-sidebar-border bg-sidebar-accent px-2.5 py-2 transition-colors hover:border-sidebar-foreground/25"
+                className="group rounded-xl border border-sidebar-border bg-sidebar-accent px-2.5 py-2 transition-colors hover:border-sidebar-foreground/25"
               >
-                <button
-                  type="button"
-                  aria-label={`Mark as ${STATUS_LABEL[STATUS_ORDER[(STATUS_ORDER.indexOf(t.status) + 1) % 3]]} (currently ${STATUS_LABEL[t.status]})`}
-                  title={`${STATUS_LABEL[t.status]} - tap to advance`}
-                  onClick={() => void cycleStatus(t)}
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${cls} hover:bg-sidebar-foreground/10`}
-                >
-                  <Icon className="h-4 w-4" />
-                </button>
-                <div
-                  className={`flex-1 truncate text-sm ${t.status === "done" ? "text-sidebar-foreground/50 line-through" : "text-sidebar-foreground/95"}`}
-                  title={t.title}
-                >
-                  {t.title}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-label={
+                      itemsReady
+                        ? doneHere
+                          ? "Reopen this photo on this task"
+                          : "Mark this photo done on this task"
+                        : `Mark as ${STATUS_LABEL[STATUS_ORDER[(STATUS_ORDER.indexOf(t.status) + 1) % 3]]} (currently ${STATUS_LABEL[t.status]})`
+                    }
+                    title={
+                      itemsReady
+                        ? doneHere
+                          ? "Done on this photo. Tap to reopen."
+                          : "Mark this photo done"
+                        : `${STATUS_LABEL[t.status]} - tap to advance`
+                    }
+                    onClick={() =>
+                      void (itemsReady
+                        ? setPhotoDone(t, doneHere ? "open" : "done")
+                        : cycleTaskStatus(t))
+                    }
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${cls} hover:bg-sidebar-foreground/10 disabled:opacity-60`}
+                  >
+                    {busy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Icon className="h-4 w-4" />
+                    )}
+                  </button>
+                  <div
+                    className={`flex-1 truncate text-sm ${doneHere ? "text-sidebar-foreground/50 line-through" : "text-sidebar-foreground/95"}`}
+                    title={t.title}
+                  >
+                    {t.title}
+                  </div>
+                  <AssigneePicker
+                    value={t.assignee_user_id ?? ""}
+                    onChange={(v) => void reassign(t, v || null)}
+                    contributors={teammates}
+                    loading={teammatesLoading}
+                    currentUserId={currentUserId}
+                    currentLabel={
+                      personLabel(c, currentUserId) ??
+                      (t.assignee_email ? t.assignee_email.split("@")[0] : "")
+                    }
+                  />
+                  <button
+                    type="button"
+                    aria-label="Delete task"
+                    onClick={() => void remove(t)}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground/40 opacity-0 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <AssigneePicker
-                  value={t.assignee_user_id ?? ""}
-                  onChange={(v) => void reassign(t, v || null)}
-                  contributors={teammates}
-                  loading={teammatesLoading}
-                  currentUserId={currentUserId}
-                  currentLabel={
-                    personLabel(c, currentUserId) ??
-                    (t.assignee_email ? t.assignee_email.split("@")[0] : "")
-                  }
-                />
-                <button
-                  type="button"
-                  aria-label="Delete task"
-                  onClick={() => void remove(t)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground/40 opacity-0 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground focus-visible:opacity-100 group-hover:opacity-100"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+
+                {/* A task bigger than this picture says so, so nobody assumes
+                    the job is finished because their photo is. */}
+                {position && (
+                  <p className="mt-1 pl-9 text-[11px] text-sidebar-foreground/50">{position}</p>
+                )}
+
+                {/* What was done, on this photo. The detail the client said the
+                    single completion button could never carry. */}
+                {itemsReady &&
+                  (noteFor === t.id ? (
+                    <Input
+                      value={noteDraft}
+                      onChange={(e) => setNoteDraft(e.target.value)}
+                      onBlur={() => {
+                        setNoteFor(null);
+                        if (noteDraft.trim() !== note.trim()) {
+                          void setPhotoDone(t, photoStatus(t), noteDraft);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          e.currentTarget.blur();
+                        }
+                        if (e.key === "Escape") {
+                          setNoteDraft(note);
+                          setNoteFor(null);
+                        }
+                      }}
+                      placeholder="What was done to this photo?"
+                      className="ml-9 mt-1.5 h-7 w-[calc(100%-2.25rem)] border-sidebar-border bg-sidebar/60 text-xs text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-sidebar-ring"
+                      autoFocus
+                    />
+                  ) : note ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNoteDraft(note);
+                        setNoteFor(t.id);
+                      }}
+                      className="mt-1 flex w-full items-start gap-1.5 pl-9 pr-1 text-left text-[11px] leading-4 text-sidebar-foreground/65 hover:text-sidebar-foreground"
+                    >
+                      <StickyNote className="mt-0.5 h-3 w-3 shrink-0" />
+                      <span className="min-w-0 flex-1">{note}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNoteDraft("");
+                        setNoteFor(t.id);
+                      }}
+                      className="mt-1 pl-9 text-[11px] text-sidebar-foreground/40 opacity-0 transition hover:text-sidebar-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      {doneHere ? "Add what was done" : "Add a note"}
+                    </button>
+                  ))}
               </div>
             );
           })

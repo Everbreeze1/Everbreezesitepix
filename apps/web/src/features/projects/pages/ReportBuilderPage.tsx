@@ -33,6 +33,7 @@ import {
   GripVertical,
   X,
   Image as ImageIcon,
+  CheckSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -58,7 +59,8 @@ import { RichTextEditor } from "@/components/RichTextEditor";
 import { ReportDocument, type ReportDocModel } from "@/components/ReportDocument";
 import { PhotosPerPagePicker } from "@/features/projects/components/PhotosPerPagePicker";
 import { ReviewAskStatus } from "@/features/projects/components/ReviewAskStatus";
-import { sanitizeCaption } from "@sitepix/shared";
+import { sanitizeCaption, type TaskReportSection } from "@sitepix/shared";
+import { AddTasksToReportDialog } from "@/features/projects/components/AddTasksToReportDialog";
 
 // ---------- types ----------
 interface ReportRow {
@@ -134,6 +136,7 @@ export function ReportBuilderPage() {
     { kind: "cover" } | { kind: "section"; sectionId: string } | null
   >(null);
   const [savingFlash, setSavingFlash] = useState<"idle" | "saving" | "saved">("idle");
+  const [taskPicker, setTaskPicker] = useState(false);
 
   const photoMap = useMemo(() => {
     const m = new Map<string, PhotoRef>();
@@ -303,6 +306,42 @@ export function ReportBuilderPage() {
     }
     setSections((rs) => [...rs, data as SectionRow]);
   }
+  /**
+   * Insert one section per chosen task, in one write.
+   *
+   * Positions continue from the highest in use for the same reason `addSection`
+   * does it: `deleteSection` leaves gaps and never renumbers, so counting the
+   * survivors would reuse a position somebody already holds and the two would
+   * then sort arbitrarily in the builder and in the export.
+   */
+  async function addTaskSections(built: TaskReportSection[]) {
+    if (built.length === 0) {
+      setTaskPicker(false);
+      return;
+    }
+    const base = sections.reduce((max, s) => Math.max(max, s.position), -1) + 1;
+    const rows = built.map((s, i) => ({
+      report_id: reportId,
+      position: base + i,
+      title: s.title,
+      body: s.body,
+      photos: s.photos,
+    }));
+    const { data, error } = await (supabase as any)
+      .from("project_report_sections")
+      .insert(rows)
+      .select("*");
+    if (error || !data) {
+      toast.error("Couldn't add the task sections", { description: error?.message });
+      return;
+    }
+    setSections((rs) => [...rs, ...(data as SectionRow[])]);
+    setTaskPicker(false);
+    toast.success(
+      built.length === 1 ? "Task added to the report" : `${built.length} tasks added to the report`,
+    );
+  }
+
   async function deleteSection(id: string) {
     if (!(await confirm({ description: "Delete this section?", variant: "destructive" }))) return;
     const prev = sections;
@@ -772,11 +811,31 @@ export function ReportBuilderPage() {
               </SortableContext>
             </DndContext>
 
-            <Button onClick={addSection} variant="outline" className="w-full border-dashed">
-              <Plus className="mr-1 h-4 w-4" /> Add section
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button onClick={addSection} variant="outline" className="flex-1 border-dashed">
+                <Plus className="mr-1 h-4 w-4" /> Add section
+              </Button>
+              {/* The field record reaching the customer. Each task becomes a
+                  section, each photo captioned with what was done to it. */}
+              <Button
+                onClick={() => setTaskPicker(true)}
+                variant="outline"
+                className="flex-1 border-dashed"
+              >
+                <CheckSquare className="mr-1 h-4 w-4" /> Add work from tasks
+              </Button>
+            </div>
           </div>
         </>
+      )}
+
+      {taskPicker && project && (
+        <AddTasksToReportDialog
+          open
+          projectId={project.id}
+          onClose={() => setTaskPicker(false)}
+          onAdd={addTaskSections}
+        />
       )}
 
       {/* Photo picker */}

@@ -14,6 +14,8 @@ import {
   LayoutList,
   LayoutGrid,
   User as UserIcon,
+  ChevronDown,
+  ListChecks,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +45,19 @@ import { completionRights, isManagerRole } from "@/lib/assignment";
 import { getMyTeam } from "@/lib/teams.functions";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
+import { TaskPhotoChecklist } from "./TaskPhotoChecklist";
+import {
+  TASK_PHOTO_ITEMS_TABLE,
+  TASK_PHOTO_ITEM_COLUMNS,
+  indexTaskPhotoItems,
+  isMissingTaskPhotoItems,
+  taskPhotoItemPatch,
+  taskPhotoProgress,
+  taskStatusFromPhotos,
+  taskWorkSummary,
+  type TaskPhotoItem,
+  type TaskPhotoItemIndex,
+} from "@/lib/task-photo-items";
 
 type Status = "open" | "in_progress" | "done";
 type Priority = "low" | "normal" | "high" | "urgent";
@@ -74,6 +89,9 @@ interface Task {
 interface ProjectPhoto {
   id: string;
   url: string;
+  /** Names the photo in the per-photo breakdown, so a row is not a uuid. */
+  caption?: string | null;
+  taken_at?: string | null;
 }
 
 interface TeamMemberLite {
@@ -92,6 +110,12 @@ interface ProjectTasksProps {
   projectId: string;
   /** Photos already loaded for the project page (id + signed/public URL). */
   projectPhotos: ProjectPhoto[];
+  /**
+   * Reports the open/total split back after every load, so the tab strip's
+   * badge is not a number fetched once when the page opened. It read "Tasks 0"
+   * over a list with a task in it for the whole time anyone stayed on the page.
+   */
+  onCountsChanged?: (counts: { open: number; total: number }) => void;
 }
 
 const STATUS_META: Record<Status, { label: string; icon: any; cls: string }> = {
@@ -132,7 +156,7 @@ function dueLabel(dueDate: string): { label: string; overdue: boolean } {
 }
 
 export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(function ProjectTasks(
-  { projectId, projectPhotos },
+  { projectId, projectPhotos, onCountsChanged },
   ref,
 ) {
   const { user } = useAuth();
@@ -149,6 +173,25 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
   /** Inline quick-add: most punch-list items are just a sentence. */
   const [quickTitle, setQuickTitle] = useState("");
   const [quickAdding, setQuickAdding] = useState(false);
+  /**
+   * Per-photo state for every task on this project, keyed task -> photo.
+   *
+   * Loaded alongside the tasks rather than per row: a project's worth of these
+   * is a handful of rows, and fetching them per expanded task would make
+   * opening a breakdown feel like a page load.
+   */
+  const [photoItems, setPhotoItems] = useState<TaskPhotoItemIndex>(new Map());
+  /** Tasks whose per-photo breakdown is open in the list. */
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  /** `${taskId}:${photoId}` currently being written, for the spinner on a row. */
+  const [pendingPhotos, setPendingPhotos] = useState<Set<string>>(new Set());
+  /**
+   * False once the per-photo table has answered "does not exist". Migrations in
+   * this project are pasted into the SQL editor by hand, so the code can land
+   * before the table does, and every photo-aware path falls back to the single
+   * status column it used before rather than failing.
+   */
+  const [photoItemsReady, setPhotoItemsReady] = useState(true);
 
   async function quickAdd() {
     const t = quickTitle.trim();
@@ -162,7 +205,10 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
       assignee_user_id: null,
       assignee_email: null,
       due_date: null,
-      priority: "medium",
+      // 'medium' is not one of the four the CHECK constraint in
+      // 20260618220000 allows, so every quick-add was refused by the database
+      // and surfaced as a raw constraint message.
+      priority: "normal",
       status: "open",
       completed_at: null,
       photo_ids: [],
@@ -210,10 +256,42 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
         toast.error(error.message);
       }
       setTasks([]);
+      setPhotoItems(new Map());
     } else {
-      setTasks(data as any[] as Task[]);
+      const rows = data as any[] as Task[];
+      setTasks(rows);
+      await loadPhotoItems(rows);
     }
     setLoading(false);
+  };
+
+  /**
+   * The per-photo rows for the tasks that carry photos.
+   *
+   * Only those: a task with no photos has no breakdown to load, and on a
+   * punch list that is most of them.
+   */
+  const loadPhotoItems = async (rows: Task[]) => {
+    const ids = rows.filter((t) => (t.photo_ids?.length ?? 0) > 0).map((t) => t.id);
+    if (ids.length === 0) {
+      setPhotoItems(new Map());
+      return;
+    }
+    const { data, error } = await supabase
+      .from(TASK_PHOTO_ITEMS_TABLE as any)
+      .select(TASK_PHOTO_ITEM_COLUMNS)
+      .in("task_id", ids);
+    if (error) {
+      // Silent when the migration has not been applied yet. Every task then
+      // reads as it did before, which is the correct fallback and not a
+      // failure a crew member can act on.
+      if (isMissingTaskPhotoItems(error)) setPhotoItemsReady(false);
+      else toast.error(error.message);
+      setPhotoItems(new Map());
+      return;
+    }
+    setPhotoItemsReady(true);
+    setPhotoItems(indexTaskPhotoItems((data ?? []) as any[] as TaskPhotoItem[]));
   };
 
   const loadTeam = async () => {
@@ -236,6 +314,19 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
     void load();
     void loadTeam(); /* eslint-disable-next-line */
   }, [projectId, user?.id]);
+
+  /*
+   * Reported off `tasks` rather than from inside `load`, so ticking a task off
+   * moves the badge too. Completing one used to leave "Tasks 4" over three open
+   * tasks until the page was reloaded.
+   */
+  useEffect(() => {
+    if (loading) return;
+    onCountsChanged?.({
+      open: tasks.filter((t) => t.status !== "done").length,
+      total: tasks.length,
+    }); /* eslint-disable-next-line */
+  }, [tasks, loading]);
 
   const counts = useMemo(() => {
     const c = { open: 0, in_progress: 0, done: 0, total: tasks.length };
@@ -274,11 +365,142 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
       taskAssigneeName(t),
     );
 
+  /** The per-photo rows for one task, or null when it carries no photos. */
+  const itemsFor = (taskId: string) => photoItems.get(taskId) ?? null;
+
+  /** Does this task's completion live in its photos rather than in its status? */
+  const isPhotoDriven = (t: Task) => photoItemsReady && (t.photo_ids?.length ?? 0) > 0;
+
+  const markPending = (key: string, on: boolean) =>
+    setPendingPhotos((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+
+  /**
+   * Write one photo's state and move the task with it.
+   *
+   * The database rolls the task's status up from its photos, so the local task
+   * row is advanced by the same rule (`taskStatusFromPhotos`) rather than left
+   * to be corrected by the next reload. Both halves are optimistic and both are
+   * rolled back together if the write is refused.
+   */
+  const writePhotoItem = async (
+    t: Task,
+    photoId: string,
+    patch: { status?: "open" | "done"; note?: string | null },
+  ) => {
+    const key = `${t.id}:${photoId}`;
+    const existing = itemsFor(t.id)?.get(photoId) ?? null;
+    const status = patch.status ?? existing?.status ?? "open";
+    const note = patch.note !== undefined ? patch.note : (existing?.note ?? null);
+
+    if (status === "done" && existing?.status !== "done") {
+      const rights = taskRights(t);
+      if (!rights.canComplete) {
+        toast.error(rights.reason ?? "You can't mark this task done.");
+        return;
+      }
+    }
+
+    const before = photoItems;
+    const beforeStatus = t.status;
+    const optimistic: TaskPhotoItem = {
+      task_id: t.id,
+      photo_id: photoId,
+      status,
+      note: note?.trim() ? note.trim() : null,
+      completed_by: status === "done" ? (existing?.completed_by ?? user?.id ?? null) : null,
+      completed_at: status === "done" ? (existing?.completed_at ?? new Date().toISOString()) : null,
+    };
+
+    const nextIndex = new Map(photoItems);
+    const byPhoto = new Map(nextIndex.get(t.id) ?? []);
+    byPhoto.set(photoId, optimistic);
+    nextIndex.set(t.id, byPhoto);
+    setPhotoItems(nextIndex);
+
+    const rolled = taskStatusFromPhotos(t.photo_ids, byPhoto, t.status);
+    if (rolled !== t.status) {
+      setTasks((arr) =>
+        arr.map((x) =>
+          x.id === t.id
+            ? {
+                ...x,
+                status: rolled,
+                completed_at: rolled === "done" ? new Date().toISOString() : null,
+              }
+            : x,
+        ),
+      );
+    }
+
+    markPending(key, true);
+    const { error } = await supabase
+      .from(TASK_PHOTO_ITEMS_TABLE as any)
+      .upsert(taskPhotoItemPatch(t.id, photoId, status, note), {
+        onConflict: "task_id,photo_id",
+      });
+    markPending(key, false);
+
+    if (error) {
+      if (isMissingTaskPhotoItems(error)) {
+        setPhotoItemsReady(false);
+        toast.error("Per-photo tasks need the latest SQL migration.");
+      } else {
+        // The trigger raises the sentence worth showing, same as the task one.
+        toast.error(error.message);
+      }
+      setPhotoItems(before);
+      setTasks((arr) => arr.map((x) => (x.id === t.id ? { ...x, status: beforeStatus } : x)));
+      void load();
+      return;
+    }
+
+    if (rolled === "done" && beforeStatus !== "done") {
+      toast.success(
+        t.assigned_by && t.assigned_by !== user?.id
+          ? `Every photo done - ${memberName(memberById.get(t.assigned_by))} has been notified`
+          : "Every photo on this task is done",
+      );
+    }
+  };
+
+  /** Every outstanding photo at once, for "mark the whole task done". */
+  const writeAllPhotoItems = async (t: Task, status: "open" | "done") => {
+    const rows = (t.photo_ids ?? []).map((photoId) => {
+      const existing = itemsFor(t.id)?.get(photoId) ?? null;
+      return taskPhotoItemPatch(t.id, photoId, status, existing?.note ?? null);
+    });
+    if (rows.length === 0) return true;
+
+    const { error } = await supabase
+      .from(TASK_PHOTO_ITEMS_TABLE as any)
+      .upsert(rows, { onConflict: "task_id,photo_id" });
+    if (error) {
+      if (isMissingTaskPhotoItems(error)) {
+        setPhotoItemsReady(false);
+        return false;
+      }
+      toast.error(error.message);
+      void load();
+      return false;
+    }
+    return true;
+  };
+
   /**
    * The one writer of `status`, so the completion rule cannot be reached around
    * by the button that happens not to go through it. `cycleStatus` used to be a
    * second copy of this and was the reason the board's tap-to-advance ignored
    * everything the row buttons checked.
+   *
+   * A task that carries photos is finished when its photos are. Closing one
+   * from here therefore closes its photos and lets the database roll the status
+   * up, instead of stamping 'done' over a job with eight pictures still
+   * outstanding - which is precisely what the single button used to do.
    */
   const setStatus = async (t: Task, next: Status) => {
     if (t.status === next) return;
@@ -299,6 +521,70 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
           }))
         )
           return;
+      }
+    }
+
+    if (isPhotoDriven(t)) {
+      const progress = taskPhotoProgress(t.photo_ids, itemsFor(t.id));
+      if (next === "done" && progress.remaining > 0) {
+        if (
+          !(await confirm({
+            title: `Mark all ${progress.total} photos done?`,
+            description: `“${t.title}” still has ${progress.remaining} of ${progress.total} photos outstanding. Closing the task marks every one of them done.`,
+            confirmText: "Mark all done",
+          }))
+        )
+          return;
+      }
+      if (next === "done") {
+        if (await writeAllPhotoItems(t, "done")) {
+          const stampedAt = new Date().toISOString();
+          setPhotoItems((prev) => {
+            const nextIndex = new Map(prev);
+            const byPhoto = new Map(nextIndex.get(t.id) ?? []);
+            (t.photo_ids ?? []).forEach((pid) => {
+              const existing = byPhoto.get(pid);
+              byPhoto.set(pid, {
+                task_id: t.id,
+                photo_id: pid,
+                status: "done",
+                // A note already written about this photo is a record of work
+                // and survives the task being closed around it.
+                note: existing?.note ?? null,
+                completed_by: existing?.completed_by ?? user?.id ?? null,
+                completed_at: existing?.completed_at ?? stampedAt,
+              });
+            });
+            nextIndex.set(t.id, byPhoto);
+            return nextIndex;
+          });
+          setTasks((arr) =>
+            arr.map((x) => (x.id === t.id ? { ...x, status: "done", completed_at: stampedAt } : x)),
+          );
+          if (t.assigned_by && t.assigned_by !== user?.id) {
+            toast.success(
+              `Task completed - ${memberName(memberById.get(t.assigned_by))} has been notified`,
+            );
+          }
+          return;
+        }
+        // The table is not there yet. Fall through and write the status column,
+        // which is what this button did before the breakdown existed.
+      } else if (t.status === "done") {
+        // Reopening a task reopens its photos, or the rollup would close it
+        // again on the next tick.
+        await writeAllPhotoItems(t, "open");
+        setPhotoItems((prev) => {
+          const nextIndex = new Map(prev);
+          const byPhoto = new Map(
+            [...(nextIndex.get(t.id) ?? [])].map(([pid, item]) => [
+              pid,
+              { ...item, status: "open" as const, completed_at: null, completed_by: null },
+            ]),
+          );
+          nextIndex.set(t.id, byPhoto);
+          return nextIndex;
+        });
       }
     }
 
@@ -369,9 +655,23 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
     return null;
   };
 
+  const toggleExpanded = (taskId: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+
   const renderTaskRow = (t: Task) => {
     const done = t.status === "done";
     const due = t.due_date ? dueLabel(t.due_date) : null;
+    const photoDriven = isPhotoDriven(t);
+    const items = itemsFor(t.id);
+    const progress = taskPhotoProgress(t.photo_ids, items);
+    const summary = taskWorkSummary(t.photo_ids, items);
+    const isOpen = expanded.has(t.id);
+    const rights = taskRights(t);
     const m = t.assignee_user_id ? memberById.get(t.assignee_user_id) : null;
     const assigneeName = m
       ? m.full_name || m.email || "Member"
@@ -419,6 +719,45 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
               >
                 {t.title}
               </p>
+              {/*
+                The line the client said was missing. A task raised against a
+                set of photos says how much of the set is handled, right where
+                the single "Completed" pill used to be the whole story.
+              */}
+              {photoDriven && progress.total > 0 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleExpanded(t.id);
+                  }}
+                  aria-expanded={isOpen}
+                  className="mt-1.5 flex items-center gap-2 font-manrope text-xs font-bold text-muted-foreground transition hover:text-foreground"
+                >
+                  <ListChecks className="h-3.5 w-3.5" />
+                  <span className="tabular-nums">{progress.label}</span>
+                  <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                    <span
+                      className="block h-full rounded-full bg-[#10B981] transition-all"
+                      style={{ width: `${progress.percent}%` }}
+                    />
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+              )}
+              {/*
+                And the other half of it: what was actually done, not just that
+                something was. First note only on the row - the rest are one
+                click away in the breakdown.
+              */}
+              {photoDriven && summary.done.length > 0 && !isOpen && (
+                <p className="mt-1 truncate text-[11px] leading-4 text-muted-foreground">
+                  {summary.done[0]}
+                  {summary.done.length > 1 && ` (+${summary.done.length - 1} more)`}
+                </p>
+              )}
               {(assigneeName || t.priority !== "normal") && (
                 <div className="mt-1 flex items-center gap-3">
                   {assigneeName && (
@@ -448,15 +787,26 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
                 Completed
               </span>
             ) : (
-              due && (
-                <span
-                  className={`rounded-full px-3 py-1.5 font-manrope text-[10px] font-extrabold ${
-                    due.overdue ? "bg-red-500 text-white" : "bg-primary text-primary-foreground"
-                  }`}
-                >
-                  {due.overdue ? `Overdue · ${due.label}` : due.label}
-                </span>
-              )
+              <>
+                {/* Partial progress deserves its own pill. "3/12" beside a due
+                    date is the difference between a task nobody has touched and
+                    one that is nearly finished, which the old row could not
+                    tell apart. */}
+                {photoDriven && progress.done > 0 && (
+                  <span className="rounded-full border-[0.8px] border-[#10B981]/40 bg-[#10B981]/10 px-2.5 py-1.5 font-manrope text-[10px] font-extrabold tabular-nums text-[#10B981]">
+                    {progress.shortLabel}
+                  </span>
+                )}
+                {due && (
+                  <span
+                    className={`rounded-full px-3 py-1.5 font-manrope text-[10px] font-extrabold ${
+                      due.overdue ? "bg-red-500 text-white" : "bg-primary text-primary-foreground"
+                    }`}
+                  >
+                    {due.overdue ? `Overdue · ${due.label}` : due.label}
+                  </span>
+                )}
+              </>
             )}
             <Button
               size="icon"
@@ -472,11 +822,38 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
             </Button>
           </div>
         </div>
+
+        {/* Opened in place rather than behind the dialog: a crew member working
+            down a punch list ticks photos off, they do not edit a record. */}
+        {photoDriven && isOpen && (
+          <div
+            className="mt-1.5 rounded-2xl border-[0.8px] border-border bg-muted/25 p-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <TaskPhotoChecklist
+              photoIds={t.photo_ids}
+              photos={projectPhotos}
+              items={items}
+              canComplete={rights.canComplete}
+              cannotCompleteReason={rights.canComplete ? null : rights.reason}
+              pending={
+                new Set(
+                  [...pendingPhotos]
+                    .filter((k) => k.startsWith(`${t.id}:`))
+                    .map((k) => k.slice(t.id.length + 1)),
+                )
+              }
+              onToggle={(photoId, next) => writePhotoItem(t, photoId, { status: next })}
+              onNote={(photoId, note) => writePhotoItem(t, photoId, { note })}
+            />
+          </div>
+        )}
       </li>
     );
   };
 
   const renderBoardCard = (t: Task) => {
+    const cardProgress = taskPhotoProgress(t.photo_ids, itemsFor(t.id));
     const overdue = !!(
       t.due_date &&
       t.status !== "done" &&
@@ -520,12 +897,25 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
           )}
           {renderAssignee(t)}
           {t.photo_ids.length > 0 && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+            <span
+              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"
+              title={cardProgress.label}
+            >
               <ImageIcon className="h-3 w-3" />
-              {t.photo_ids.length}
+              {/* A bare photo count said how big the job was and nothing about
+                  how much of it was left. */}
+              <span className="tabular-nums">{cardProgress.shortLabel}</span>
             </span>
           )}
         </div>
+        {cardProgress.isMulti && (
+          <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-[#10B981] transition-all"
+              style={{ width: `${cardProgress.percent}%` }}
+            />
+          </div>
+        )}
         <div className="mt-2 flex gap-1" onClick={(e) => e.stopPropagation()}>
           {(["open", "in_progress", "done"] as Status[])
             .filter((s) => s !== t.status)
@@ -723,6 +1113,16 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
           /* A new task is nobody's yet, so it can be filed as done outright;
              an existing one obeys the same rule as the row buttons. */
           canComplete={editing ? taskRights(editing).canComplete : true}
+          completionReason={editing ? taskRights(editing).reason : null}
+          /* Only an existing task has a breakdown: a task being created has no
+             row for its photos to hang off yet, and the photos it is about to
+             carry are all outstanding by definition. */
+          items={editing ? itemsFor(editing.id) : null}
+          photoItemsReady={photoItemsReady}
+          pendingPhotos={pendingPhotos}
+          onPhotoItem={(photoId, patch) => {
+            if (editing) void writePhotoItem(editing, photoId, patch);
+          }}
           onSaved={() => {
             setCreating(false);
             setEditing(null);
@@ -745,6 +1145,11 @@ function TaskDialog({
   members,
   seedPhotoIds,
   canComplete,
+  completionReason,
+  items,
+  photoItemsReady,
+  pendingPhotos,
+  onPhotoItem,
   onSaved,
 }: {
   open: boolean;
@@ -756,6 +1161,11 @@ function TaskDialog({
   members: TeamMemberLite[];
   seedPhotoIds: string[];
   canComplete: boolean;
+  completionReason: string | null;
+  items: Map<string, TaskPhotoItem> | null;
+  photoItemsReady: boolean;
+  pendingPhotos: Set<string>;
+  onPhotoItem: (photoId: string, patch: { status?: "open" | "done"; note?: string | null }) => void;
   onSaved: () => void;
 }) {
   const [title, setTitle] = useState(task?.title ?? "");
@@ -767,6 +1177,23 @@ function TaskDialog({
   const [status, setStatus] = useState<Status>(task?.status ?? "open");
   const [photoIds, setPhotoIds] = useState<string[]>(task?.photo_ids ?? seedPhotoIds);
   const [saving, setSaving] = useState(false);
+
+  /*
+   * The breakdown covers the photos the task already carries, not the working
+   * selection in this dialog. A photo picked a second ago has no saved row for
+   * its state to live on, and ticking it would record work against a photo the
+   * task does not yet cover. It joins the list on save.
+   */
+  const savedPhotoIds =
+    task && photoItemsReady ? photoIds.filter((id) => task.photo_ids.includes(id)) : [];
+  const photoDriven = savedPhotoIds.length > 0;
+  const progress = taskPhotoProgress(savedPhotoIds, items);
+  /*
+   * With a breakdown in the dialog, "Done" is an outcome rather than an input:
+   * the database derives it from the photos, so offering it as a choice would
+   * be offering a value the next write overturns.
+   */
+  const doneIsDerived = photoDriven && progress.remaining > 0;
 
   const togglePhoto = (id: string) => {
     setPhotoIds((arr) => (arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]));
@@ -878,16 +1305,23 @@ function TaskDialog({
                       it is not offered here either - the alternative is a save
                       that fails after the dialog has collected every other
                       edit. */}
-                  <SelectItem value="done" disabled={!canComplete && status !== "done"}>
+                  <SelectItem
+                    value="done"
+                    disabled={(!canComplete && status !== "done") || doneIsDerived}
+                  >
                     Done
                   </SelectItem>
                 </SelectContent>
               </Select>
-              {!canComplete && (
+              {!canComplete ? (
                 <p className="mt-1 text-[10.5px] text-muted-foreground">
                   Only the assignee or a manager can mark this done.
                 </p>
-              )}
+              ) : doneIsDerived ? (
+                <p className="mt-1 text-[10.5px] text-muted-foreground">
+                  Finishes on its own once all {progress.total} photos below are done.
+                </p>
+              ) : null}
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium">Priority</label>
@@ -1027,6 +1461,42 @@ function TaskDialog({
               </div>
             )}
           </div>
+
+          {/*
+            What was done, and what is still outstanding, photo by photo.
+            The dialog already collected a date, an assignee and a priority; the
+            thing it could never say was which of the twelve photos the task
+            covers had actually been dealt with.
+          */}
+          {photoDriven && (
+            <div className="rounded-2xl border-[0.8px] border-border bg-muted/25 p-3">
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-medium">
+                <ListChecks className="h-3.5 w-3.5 text-muted-foreground" />
+                Photo by photo
+              </div>
+              <TaskPhotoChecklist
+                photoIds={savedPhotoIds}
+                photos={projectPhotos}
+                items={items}
+                canComplete={canComplete}
+                cannotCompleteReason={canComplete ? null : completionReason}
+                pending={
+                  new Set(
+                    task
+                      ? [...pendingPhotos]
+                          .filter((k) => k.startsWith(`${task.id}:`))
+                          .map((k) => k.slice(task.id.length + 1))
+                      : [],
+                  )
+                }
+                onToggle={(photoId, next) => onPhotoItem(photoId, { status: next })}
+                onNote={(photoId, note) => onPhotoItem(photoId, { note })}
+              />
+              <p className="mt-2 text-[10.5px] text-muted-foreground">
+                Ticks and notes here save straight away, separately from this dialog's Save.
+              </p>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>

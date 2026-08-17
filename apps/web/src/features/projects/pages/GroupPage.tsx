@@ -13,6 +13,7 @@ import {
   CheckSquare,
   MapPin,
   ImageOff,
+  Image as ImageIcon,
   Clock,
   CircleDot,
   Circle,
@@ -74,6 +75,16 @@ import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useTeamMembers } from "@/hooks/use-team-members";
 import { completionRights } from "@/lib/assignment";
+import {
+  TASK_PHOTO_ITEMS_TABLE,
+  TASK_PHOTO_ITEM_COLUMNS,
+  indexTaskPhotoItems,
+  isMissingTaskPhotoItems,
+  taskPhotoItemPatch,
+  taskPhotoProgress,
+  type TaskPhotoItem,
+  type TaskPhotoItemIndex,
+} from "@/lib/task-photo-items";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { EditGroupProjectsDialog } from "@/features/projects/components/EditGroupProjectsDialog";
@@ -115,6 +126,12 @@ export function GroupPage() {
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editProjectsOpen, setEditProjectsOpen] = useState(false);
+  /**
+   * Per-photo state for the photo-bearing tasks across every project in this
+   * group, keyed task -> photo. A rollup that shows "In Progress" and nothing
+   * else cannot say whether that means one photo of twelve or eleven.
+   */
+  const [photoItems, setPhotoItems] = useState<TaskPhotoItemIndex>(new Map());
 
   const load = async () => {
     setLoading(true);
@@ -123,12 +140,36 @@ export function GroupPage() {
       setData(res);
       setRenameValue(res.group.name);
       setDescriptionValue(res.group.description ?? "");
+      await loadPhotoItems(res);
     } catch (e: any) {
       toast.error(e?.message ?? "Could not load group");
       navigate({ to: "/projects" });
     } finally {
       setLoading(false);
     }
+  };
+
+  /** One query for the whole group, and only for tasks that carry photos. */
+  const loadPhotoItems = async (res: any) => {
+    const taskIds: string[] = (res?.projects ?? []).flatMap((p: any) =>
+      (p.tasks ?? []).filter((t: any) => (t.photo_ids?.length ?? 0) > 0).map((t: any) => t.id),
+    );
+    if (taskIds.length === 0) {
+      setPhotoItems(new Map());
+      return;
+    }
+    const { data: rows, error } = await (supabase as any)
+      .from(TASK_PHOTO_ITEMS_TABLE)
+      .select(TASK_PHOTO_ITEM_COLUMNS)
+      .in("task_id", taskIds);
+    if (error) {
+      // Silent before the migration is applied: the rollup then reads exactly
+      // as it did, which is the right fallback and not a crew member's problem.
+      if (!isMissingTaskPhotoItems(error)) toast.error(error.message);
+      setPhotoItems(new Map());
+      return;
+    }
+    setPhotoItems(indexTaskPhotoItems((rows ?? []) as TaskPhotoItem[]));
   };
 
   const loadAllProjects = async () => {
@@ -230,7 +271,11 @@ export function GroupPage() {
     projectId: string,
     taskId: string,
     nextStatus: string,
-    task?: { assignee_user_id: string | null; assigned_by: string | null },
+    task?: {
+      assignee_user_id: string | null;
+      assigned_by: string | null;
+      photo_ids?: string[] | null;
+    },
   ) => {
     // The same rule the project panel and the photo panel apply - a rollup is
     // still a place work gets closed from, and this one used to be the way
@@ -244,6 +289,31 @@ export function GroupPage() {
         toast.error(rights.reason ?? "You can't mark this task done.");
         return;
       }
+    }
+
+    /*
+     * A task raised against photos is finished when its photos are, exactly as
+     * on the project tab. Writing `status` alone from here would stamp
+     * "Completed" over a job with twelve untouched pictures, and the first tick
+     * on any one of them would roll it back to in progress on its own - the
+     * rollup counting one done out of twelve. So the photos are written and the
+     * database derives the status from them.
+     */
+    const photoIds = task?.photo_ids ?? [];
+    if (photoIds.length > 0 && (nextStatus === "done" || nextStatus === "open")) {
+      const rows = photoIds.map((photoId) =>
+        taskPhotoItemPatch(taskId, photoId, nextStatus === "done" ? "done" : "open"),
+      );
+      const { error: itemError } = await (supabase as any)
+        .from(TASK_PHOTO_ITEMS_TABLE)
+        .upsert(rows, { onConflict: "task_id,photo_id" });
+      if (itemError && !isMissingTaskPhotoItems(itemError)) {
+        toast.error(itemError.message || "Could not update task");
+        void load();
+        return;
+      }
+      // A missing table means the migration has not been applied yet, so this
+      // falls through to the status write it has always done.
     }
 
     patchProject(projectId, (p) => ({
@@ -718,6 +788,10 @@ export function GroupPage() {
                                   ? "assigned"
                                   : "open";
                             const isEditing = editingTaskId === t.id;
+                            const progress = taskPhotoProgress(
+                              t.photo_ids,
+                              photoItems.get(t.id) ?? null,
+                            );
                             return (
                               <li
                                 key={t.id}
@@ -779,6 +853,23 @@ export function GroupPage() {
                                         <SelectItem value="done">Completed</SelectItem>
                                       </SelectContent>
                                     </Select>
+                                    {/* "In Progress" alone cannot say whether
+                                        that is one photo of twelve or eleven. */}
+                                    {progress.total > 0 && (
+                                      <span
+                                        className="inline-flex items-center gap-1.5 tabular-nums"
+                                        title={progress.label}
+                                      >
+                                        <ImageIcon className="h-3 w-3" />
+                                        {progress.shortLabel}
+                                        <span className="h-1 w-10 overflow-hidden rounded-full bg-muted">
+                                          <span
+                                            className="block h-full rounded-full bg-emerald-500"
+                                            style={{ width: `${progress.percent}%` }}
+                                          />
+                                        </span>
+                                      </span>
+                                    )}
                                     {t.assignee_email && (
                                       <span className="truncate">{t.assignee_email}</span>
                                     )}

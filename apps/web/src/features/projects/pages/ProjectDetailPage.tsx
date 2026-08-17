@@ -3010,7 +3010,18 @@ export function ProjectDetailPage() {
           projectPhotos={photos.map((p) => ({
             id: p.id,
             url: p.image_url ?? signed[p.storage_path] ?? "",
+            // The per-photo breakdown names each row. Without these it would
+            // fall back to "Photo 3", which is a position rather than a place.
+            caption: p.caption,
+            taken_at: p.taken_at,
           }))}
+          onCountsChanged={({ open, total }) =>
+            setCounts((c) =>
+              c.tasksOpen === open && c.tasksTotal === total
+                ? c
+                : { ...c, tasksOpen: open, tasksTotal: total },
+            )
+          }
         />
       )}
 
