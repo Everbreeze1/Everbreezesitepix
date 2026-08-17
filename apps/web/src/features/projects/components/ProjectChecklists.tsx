@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { GENERAL_CATEGORY, makeCategoryRank } from "@/lib/template-categories";
+import { useCompanySetup } from "@/hooks/use-company-setup";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,6 +63,8 @@ interface Template {
   id: string;
   name: string;
   description: string | null;
+  /** Optional as well as nullable - see ChecklistTemplatesPage. */
+  category?: string | null;
 }
 
 interface Checklist {
@@ -118,6 +122,24 @@ export function ProjectChecklists({
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [items, setItems] = useState<ChecklistItemCount[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
+
+  /*
+   * The company's own trade first, then alphabetical within a trade.
+   *
+   * This menu is the field-facing twin of the Settings rail, and it was the
+   * one surface the trade work missed: a crew that had copied a dozen starters
+   * across trades got them back as one alphabetical run, on a phone, on site.
+   * Same ordering function as every other picker, so all of them agree.
+   */
+  const { profile: company } = useCompanySetup();
+  const orderedTemplates = useMemo(() => {
+    const rank = makeCategoryRank(company.industry, company.trades);
+    return [...templates].sort(
+      (a, b) =>
+        rank(a.category || GENERAL_CATEGORY) - rank(b.category || GENERAL_CATEGORY) ||
+        a.name.localeCompare(b.name),
+    );
+  }, [templates, company.industry, company.trades]);
   const [creating, setCreating] = useState(false);
   const [tab, setTab] = useState<"active" | "completed">("active");
   /** When this browser last wrote, so realtime can defer to a create in flight. */
@@ -144,7 +166,7 @@ export function ProjectChecklists({
             .order("created_at", { ascending: true }),
           supabase
             .from("checklist_templates" as any)
-            .select("id, name, description")
+            .select("id, name, description, category")
             .eq("archived", false)
             .order("name", { ascending: true }),
         ]);
@@ -371,7 +393,7 @@ export function ProjectChecklists({
             {/* Scrolls rather than paginates: a company with 30 templates should
                 still reach any of them without leaving this menu. */}
             <div className="max-h-64 overflow-y-auto">
-              {templates.map((t) => (
+              {orderedTemplates.map((t) => (
                 <DropdownMenuItem key={t.id} onClick={() => void applyTemplate(t.id)}>
                   <ClipboardList className="mr-2 h-4 w-4" />
                   <span className="flex-1 truncate">

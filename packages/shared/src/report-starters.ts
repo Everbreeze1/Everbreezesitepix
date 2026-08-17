@@ -41,6 +41,7 @@ export type ReportStarterCategory =
   | "Roofing & Exterior"
   | "Restoration"
   | "Cleaning"
+  | "Landscaping"
   | "Real Estate"
   | "Field Admin";
 
@@ -254,6 +255,23 @@ export const REPORT_STARTERS: readonly ReportStarter[] = [
     photosPerPage: 3,
     cover: FULL_COVER,
     sections: ["Scope of clean", "Before", "Areas completed", "After", "Notes for next visit"],
+  },
+  {
+    id: "grounds-maintenance",
+    name: "Grounds Maintenance Report",
+    description:
+      "The recurring visit write-up a property manager approves from their desk, before and after.",
+    category: "Landscaping",
+    photosPerPage: 3,
+    cover: FULL_COVER,
+    sections: [
+      "Visit summary",
+      "Before",
+      "Work completed",
+      "After",
+      "Plant health and problems",
+      "Recommended additional work",
+    ],
   },
   {
     id: "property-condition",

@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
-import { Mail, MapPin, Phone } from "lucide-react";
+import { Mail, MapPin, Phone, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { readableTextOn, withAlpha } from "@/lib/contrast";
 import { DEFAULT_ACCENT, type Draft } from "@/features/showcases/site-draft";
 
-type Focus = "hero" | "services" | "areas" | "about" | "contact" | "address";
+type Focus = "hero" | "services" | "areas" | "about" | "reviews" | "contact" | "address";
 
 /**
  * A living thumbnail of the public site, wired straight to the draft.
@@ -21,6 +21,8 @@ export function PortfolioLivePreview({
   heroPreview,
   focus,
   projectCount,
+  googleRating,
+  googleReviewCount,
   className,
 }: {
   draft: Draft;
@@ -28,6 +30,9 @@ export function PortfolioLivePreview({
   focus?: Focus;
   /** Real project count, so the placeholder grid tells the truth. */
   projectCount?: number;
+  /** From the connected Google listing, so the reviews band shows the real star. */
+  googleRating?: number | null;
+  googleReviewCount?: number | null;
   className?: string;
 }) {
   const scroller = useRef<HTMLDivElement | null>(null);
@@ -226,6 +231,34 @@ export function PortfolioLivePreview({
                 <div className="mt-2 grid h-16 place-items-center rounded bg-neutral-100 text-[9px] text-neutral-400">
                   Project map
                 </div>
+              )}
+            </div>
+          </Block>
+        )}
+
+        {/* ---- Reviews ---- */}
+        {draft.showReviews && (
+          <Block focus={focus} id="reviews">
+            <div className="border-b border-neutral-100 bg-neutral-900 px-3 py-4 text-center">
+              <p className="text-[8px] font-bold uppercase tracking-[0.24em] text-white/50">
+                Reviews
+              </p>
+              {googleRating != null ? (
+                <>
+                  <p className="mt-1.5 inline-flex items-center gap-1 text-lg font-black leading-none tracking-tight text-white">
+                    <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                    {googleRating.toFixed(1)}
+                  </p>
+                  <p className="mt-1 text-[9px] text-white/60">
+                    {googleReviewCount
+                      ? `${googleReviewCount.toLocaleString()} Google reviews`
+                      : "on Google"}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-1.5 text-[9px] leading-snug text-white/60">
+                  Connect Google and your star rating lands here.
+                </p>
               )}
             </div>
           </Block>

@@ -1,6 +1,8 @@
-import { useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import {
   Building2,
+  Check,
+  ExternalLink,
   Hammer,
   ImagePlus,
   Link2,
@@ -8,12 +10,15 @@ import {
   MapPin,
   MessageSquareText,
   PhoneCall,
+  Plus,
   Sparkles,
+  Star,
   TriangleAlert,
   Trash2,
   Upload,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { richIsEmpty } from "@sitepix/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +27,10 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { cn } from "@/lib/utils";
+import { listReviewLinks, setReviewLinks, type ReviewLink } from "@/lib/review-links.functions";
+import type { PortfolioDetail } from "@/lib/portfolio.functions";
 import type { Draft, PortfolioSiteDraft, SlugState } from "@/features/showcases/site-draft";
+import { GoogleBusinessConnect } from "./GoogleBusinessConnect";
 import { ShowcasePhotoPickerDialog } from "./ShowcasePhotoPickerDialog";
 import { TagInput } from "./TagInput";
 
@@ -46,6 +54,16 @@ import { TagInput } from "./TagInput";
 export interface StepCtx extends PortfolioSiteDraft {
   serviceTypes: string[];
   /**
+   * The saved row, not the draft.
+   *
+   * The Google connection is the one thing on these screens that writes
+   * straight to the row instead of through the draft - it has to, because the
+   * server is the only side that ever sees Google's answers. So the steps that
+   * show it need the persisted values and a way to report the write back up.
+   */
+  portfolio: PortfolioDetail;
+  onSaved: (patch: Partial<PortfolioDetail>) => void;
+  /**
    * Which surface is drawing the fields.
    *
    * Only the cover step reads it, and only to decide one thing: the wizard has
@@ -68,7 +86,7 @@ export interface SiteStep {
   /** Steps that may be passed without an answer. */
   optional?: boolean;
   /** Which block of the live preview this step is writing. */
-  previewFocus: "hero" | "services" | "areas" | "about" | "contact" | "address";
+  previewFocus: "hero" | "services" | "areas" | "about" | "reviews" | "contact" | "address";
   /**
    * Whether Enter in this step's fields submits the step.
    *
@@ -78,7 +96,15 @@ export interface SiteStep {
    * of them teaches people the shortcut is broken.
    */
   enterAdvances: boolean;
-  isDone: (d: Draft) => boolean;
+  /**
+   * Whether this step has been answered.
+   *
+   * `portfolio` is the saved row, and only the Reviews step reads it - the
+   * Google connection is the one answer that never passes through the draft.
+   * Optional so the pre-draft callers (needsGuidedSetup, which runs before
+   * anything is loaded) keep working unchanged.
+   */
+  isDone: (d: Draft, portfolio?: PortfolioDetail) => boolean;
   Fields: ComponentType<{ ctx: StepCtx }>;
 }
 
@@ -103,6 +129,16 @@ function BusinessFields({ ctx }: { ctx: StepCtx }) {
 
   return (
     <>
+      {/* First, because the fastest way through this whole wizard is to not
+          type any of it. */}
+      <GoogleBusinessConnect
+        portfolio={ctx.portfolio}
+        draft={draft}
+        set={set}
+        onSaved={ctx.onSaved}
+        compact={ctx.layout === "editor"}
+      />
+
       <Field label="Business name">
         <Input
           value={draft.businessName}
@@ -302,13 +338,24 @@ function CoverFields({ ctx }: { ctx: StepCtx }) {
           )}
         </Field>
 
-        <Field label="Sub-headline" hint="Optional. One line of context under the headline.">
+        {/* The label used to just say "one line of context", and people filled
+            it with the name of a job ("LED lighting upgrade"), which then read
+            as the whole company's strapline. It is a line about the business,
+            and saying where it lands is what makes that obvious. */}
+        <Field
+          label="Sub-headline"
+          hint="Optional. One line about the business, under the headline on your cover."
+        >
           <Textarea
             value={draft.heroSubhead}
             onChange={(e) => set("heroSubhead", e.target.value)}
             rows={2}
+            maxLength={160}
             placeholder="Family-run and serving the Sacramento area since 2009."
           />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Not a project title. Individual jobs get their own titles under Projects.
+          </p>
         </Field>
       </div>
     </div>
@@ -364,22 +411,81 @@ function AreasFields({ ctx }: { ctx: StepCtx }) {
 function AboutFields({ ctx }: { ctx: StepCtx }) {
   const { draft, set } = ctx;
   return (
+    <Field
+      label="About your business"
+      hint="Why someone should call you rather than the next listing."
+    >
+      <RichTextEditor
+        value={draft.aboutHtml}
+        onChange={(html) => set("aboutHtml", html)}
+        placeholder="We're a family-run crew of six…"
+        minHeight={160}
+      />
+    </Field>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Step 6 - reviews                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Reviews, given a step of their own.
+ *
+ * They used to be a single switch buried at the bottom of the About step, whose
+ * hint pointed at a Settings page most people never opened - so the site
+ * shipped with the reviews section silently empty and the client's read was
+ * simply "there is no google reviews link".
+ *
+ * The step earns its place twice over, because the same links do two jobs. On
+ * the portfolio they are proof for a prospect who hasn't hired anyone yet. On a
+ * finished job report they are the ask, sent to a customer who just watched you
+ * work - and the job report is the only thing this business ever sends a
+ * customer, so it is the only place that ask can be made.
+ */
+function ReviewsFields({ ctx }: { ctx: StepCtx }) {
+  const { draft, set, portfolio } = ctx;
+  // Re-reads the table whenever the connection changes, because connecting
+  // writes a Google row this hook has not seen. See useTeamReviewLinks.
+  const links = useTeamReviewLinks(portfolio.google_review_ask_url);
+
+  return (
     <>
+      <GoogleBusinessConnect
+        portfolio={portfolio}
+        draft={draft}
+        set={set}
+        onSaved={ctx.onSaved}
+        compact={ctx.layout === "editor"}
+      />
+
+      {portfolio.google_reviews_url && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <LinkPreviewRow
+            title="Prospects see"
+            label="Read our Google reviews"
+            hint="On your site, under the projects."
+            url={portfolio.google_reviews_url}
+          />
+          <LinkPreviewRow
+            title="Customers see"
+            label="Leave us a review"
+            hint="On every job report you share."
+            url={portfolio.google_review_ask_url ?? portfolio.google_reviews_url}
+          />
+        </div>
+      )}
+
       <Field
-        label="About your business"
-        hint="Why someone should call you rather than the next listing."
+        label="Other places you collect reviews"
+        hint="Facebook, Yelp, NiceJob, anywhere with a public page. Saved as you type."
       >
-        <RichTextEditor
-          value={draft.aboutHtml}
-          onChange={(html) => set("aboutHtml", html)}
-          placeholder="We're a family-run crew of six…"
-          minHeight={160}
-        />
+        <ExtraReviewLinks state={links} />
       </Field>
 
       <ToggleRow
-        label="Show review links"
-        hint="Adds the review links from Settings to the site."
+        label="Show reviews on my site"
+        hint="Turn off to hide the rating and the review buttons from the public site. Job reports still ask."
         checked={draft.showReviews}
         onChange={(v) => set("showReviews", v)}
       />
@@ -387,8 +493,207 @@ function AboutFields({ ctx }: { ctx: StepCtx }) {
   );
 }
 
+function LinkPreviewRow({
+  title,
+  label,
+  hint,
+  url,
+}: {
+  title: string;
+  label: string;
+  hint: string;
+  url: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border p-4">
+      <p className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
+        {title}
+      </p>
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-1.5 inline-flex items-center gap-1.5 text-sm font-bold text-foreground underline-offset-4 hover:underline"
+      >
+        <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+        {label}
+        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+      </a>
+      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+interface ReviewLinksState {
+  rows: Array<{ platform: ReviewLink["platform"]; url: string; label: string }>;
+  loading: boolean;
+  saving: boolean;
+  add: () => void;
+  update: (index: number, patch: Partial<{ url: string; label: string }>) => void;
+  remove: (index: number) => void;
+}
+
+/**
+ * The non-Google review links, loaded and saved on their own.
+ *
+ * They live in `team_review_links`, not on the portfolio row, so they cannot
+ * ride along on the draft's save. Autosaved on a debounce instead, because the
+ * wizard's whole promise is "saved automatically as you go" and one step
+ * needing a Save button people have not been trained to look for is how links
+ * get lost.
+ *
+ * The Google row is filtered out of the editor but carried through every write.
+ * That is not cosmetic: setReviewLinks replaces the team's whole list, so a
+ * save built from a stale read would delete the Google row and take the review
+ * ask off every future job report with it. `syncKey` is what closes that
+ * window - connecting a listing changes it, which re-reads the table before the
+ * next autosave can be composed from the wrong picture.
+ */
+function useTeamReviewLinks(syncKey: string | null): ReviewLinksState {
+  const [rows, setRows] = useState<ReviewLinksState["rows"]>([]);
+  const [google, setGoogle] = useState<ReviewLink[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  // Nothing is written until the user touches something, so simply loading the
+  // step can never rewrite the table.
+  const touched = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    listReviewLinks()
+      .then((res) => {
+        if (cancelled) return;
+        setGoogle(res.links.filter((l) => l.platform === "google"));
+        // A re-read triggered by connecting must not throw away rows the user
+        // is halfway through typing, so the editable half is only seeded once.
+        if (!touched.current) {
+          setRows(
+            res.links
+              .filter((l) => l.platform !== "google")
+              .map((l) => ({ platform: l.platform, url: l.url, label: l.label ?? "" })),
+          );
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [syncKey]);
+
+  useEffect(() => {
+    if (!touched.current || loading) return;
+    const timer = window.setTimeout(async () => {
+      setSaving(true);
+      try {
+        await setReviewLinks({
+          data: {
+            links: [
+              ...google.map((l) => ({
+                platform: l.platform,
+                url: l.url,
+                label: l.label,
+              })),
+              ...rows
+                .filter((r) => /^https?:\/\//i.test(r.url.trim()))
+                .map((r) => ({
+                  platform: r.platform,
+                  url: r.url.trim(),
+                  label: r.label.trim() || null,
+                })),
+            ],
+          },
+        });
+      } catch (e: any) {
+        toast.error(e?.message ?? "Could not save the review links");
+      } finally {
+        setSaving(false);
+      }
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [rows, google, loading]);
+
+  const mark = () => {
+    touched.current = true;
+  };
+
+  return {
+    rows,
+    loading,
+    saving,
+    add: () => {
+      mark();
+      setRows((prev) => [...prev, { platform: "custom", url: "", label: "" }]);
+    },
+    update: (index, patch) => {
+      mark();
+      setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+    },
+    remove: (index) => {
+      mark();
+      setRows((prev) => prev.filter((_, i) => i !== index));
+    },
+  };
+}
+
+function ExtraReviewLinks({ state }: { state: ReviewLinksState }) {
+  if (state.loading) {
+    return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
+  }
+
+  return (
+    <div className="space-y-2">
+      {state.rows.map((row, i) => (
+        <div key={i} className="flex flex-wrap items-center gap-2">
+          <Input
+            value={row.label}
+            onChange={(e) => state.update(i, { label: e.target.value })}
+            placeholder="Yelp"
+            className="h-10 w-full sm:w-32"
+          />
+          <Input
+            value={row.url}
+            onChange={(e) => state.update(i, { url: e.target.value })}
+            placeholder="https://…"
+            className="h-10 min-w-[180px] flex-1"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="shrink-0 text-muted-foreground hover:text-destructive"
+            onClick={() => state.remove(i)}
+            aria-label="Remove this link"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ))}
+
+      <div className="flex items-center gap-3">
+        <Button type="button" variant="outline" size="sm" onClick={state.add}>
+          <Plus className="mr-1.5 h-3.5 w-3.5" /> Add a link
+        </Button>
+        {state.saving ? (
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" /> Saving
+          </span>
+        ) : (
+          state.rows.length > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Check className="h-3 w-3" /> Saved
+            </span>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
-/* Step 6 - contact                                                    */
+/* Step 7 - contact                                                    */
 /* ------------------------------------------------------------------ */
 
 function ContactFields({ ctx }: { ctx: StepCtx }) {
@@ -454,7 +759,7 @@ function ContactFields({ ctx }: { ctx: StepCtx }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Step 7 - the address it lives at                                    */
+/* Step 8 - the address it lives at                                    */
 /* ------------------------------------------------------------------ */
 
 function AddressFields({ ctx }: { ctx: StepCtx }) {
@@ -579,6 +884,21 @@ export const SITE_STEPS: SiteStep[] = [
     Fields: AboutFields,
   },
   {
+    id: "reviews",
+    label: "Reviews",
+    question: "Where do people review you?",
+    hint: "Connect Google once and it feeds both your site and the review ask on every job report.",
+    icon: Star,
+    optional: true,
+    previewFocus: "reviews",
+    enterAdvances: false,
+    // Done means "there is something to show". The switch alone isn't enough:
+    // reviews turned on with nowhere to send anyone renders as nothing, which
+    // is exactly the empty section this step exists to stop shipping.
+    isDone: (d, p) => !!p?.google_place_id,
+    Fields: ReviewsFields,
+  },
+  {
     id: "contact",
     label: "Contact",
     question: "How should they reach you?",
@@ -605,9 +925,12 @@ export const SITE_STEPS: SiteStep[] = [
 /** The steps a site really needs before it is worth publishing. */
 export const REQUIRED_STEP_IDS = ["business", "services", "cover"] as const;
 
-export function siteProgress(draft: Draft): { done: number; total: number; percent: number } {
+export function siteProgress(
+  draft: Draft,
+  portfolio?: PortfolioDetail,
+): { done: number; total: number; percent: number } {
   const counted = SITE_STEPS.filter((s) => s.id !== "address");
-  const done = counted.filter((s) => s.isDone(draft)).length;
+  const done = counted.filter((s) => s.isDone(draft, portfolio)).length;
   return { done, total: counted.length, percent: Math.round((done / counted.length) * 100) };
 }
 

@@ -38,6 +38,15 @@ export interface PortfolioDetail {
   embed_key: string;
   seo_title: string | null;
   seo_description: string | null;
+  /** The connected Google Business Profile, or nulls when none is linked. */
+  google_place_id: string | null;
+  google_maps_url: string | null;
+  google_name: string | null;
+  google_rating: number | null;
+  google_review_count: number | null;
+  google_reviews_url: string | null;
+  google_review_ask_url: string | null;
+  google_synced_at: string | null;
 }
 
 export interface MyPortfolio {
@@ -224,6 +233,16 @@ function toDetail(row: any, heroImageUrl: string | null): PortfolioDetail {
     embed_key: row.embed_key,
     seo_title: row.seo_title ?? null,
     seo_description: row.seo_description ?? null,
+    google_place_id: row.google_place_id ?? null,
+    google_maps_url: row.google_maps_url ?? null,
+    google_name: row.google_name ?? null,
+    // numeric(2,1) arrives as a string over PostgREST, so coerce rather than
+    // shipping "4.8" to a UI that formats it as a number.
+    google_rating: row.google_rating == null ? null : Number(row.google_rating),
+    google_review_count: row.google_review_count ?? null,
+    google_reviews_url: row.google_reviews_url ?? null,
+    google_review_ask_url: row.google_review_ask_url ?? null,
+    google_synced_at: row.google_synced_at ?? null,
   };
 }
 

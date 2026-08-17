@@ -49,6 +49,15 @@ export interface PortfolioDetail {
   embed_key: string;
   seo_title: string | null;
   seo_description: string | null;
+  /** The connected Google Business Profile, or nulls when none is linked. */
+  google_place_id: string | null;
+  google_maps_url: string | null;
+  google_name: string | null;
+  google_rating: number | null;
+  google_review_count: number | null;
+  google_reviews_url: string | null;
+  google_review_ask_url: string | null;
+  google_synced_at: string | null;
 }
 
 export interface MyPortfolio {
@@ -90,6 +99,11 @@ export interface PublicPortfolioSite {
   show_reviews: boolean;
   seo_title: string | null;
   seo_description: string | null;
+  /** Present only when a Google Business Profile is connected and reviews are on. */
+  google_rating: number | null;
+  google_review_count: number | null;
+  google_reviews_url: string | null;
+  google_review_ask_url: string | null;
 }
 
 export interface PortfolioReviewLink {
@@ -97,6 +111,34 @@ export interface PortfolioReviewLink {
   label: string | null;
   platform: string;
 }
+
+/** One Google listing, as returned by the lookup before anything is saved. */
+export interface GoogleBusinessProfile {
+  placeId: string;
+  name: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  phone: string | null;
+  website: string | null;
+  category: string | null;
+  summary: string | null;
+  rating: number | null;
+  reviewCount: number | null;
+  mapsUrl: string | null;
+  reviewsUrl: string;
+  writeReviewUrl: string;
+}
+
+/** The site fields a connected listing can fill in. */
+export type GoogleApplyField =
+  | "businessName"
+  | "phone"
+  | "address"
+  | "websiteUrl"
+  | "services"
+  | "serviceAreas"
+  | "heroSubhead";
 
 export interface PublicPortfolio {
   status: "ok" | "not_found" | "unpublished";
@@ -198,6 +240,34 @@ export const checkPortfolioSlug = rpcOp<
 export const rotatePortfolioEmbedKey = rpcOp<undefined, { embedKey: string }>(
   "rotatePortfolioEmbedKey",
 );
+
+/** Read-only: finds the listing behind a pasted link so it can be confirmed. */
+export const lookupGoogleBusiness = rpcOp<
+  { query: string },
+  { found: boolean; profile: GoogleBusinessProfile | null }
+>("lookupGoogleBusiness");
+
+/**
+ * Links the listing and copies the ticked fields across. The server re-reads
+ * the listing itself, so only the choice of fields travels from the browser.
+ */
+export const connectGoogleBusiness = rpcOp<
+  { placeId: string; apply: GoogleApplyField[] },
+  {
+    ok: true;
+    profile: GoogleBusinessProfile;
+    applied: string[];
+    /** The written values, keyed as the builder's draft keys them. */
+    values: Partial<Record<GoogleApplyField, string | string[]>>;
+  }
+>("connectGoogleBusiness");
+
+export const refreshGoogleBusiness = rpcOp<
+  undefined,
+  { ok: true; profile: GoogleBusinessProfile | null }
+>("refreshGoogleBusiness");
+
+export const disconnectGoogleBusiness = rpcOp<undefined, { ok: true }>("disconnectGoogleBusiness");
 
 /** Site-only fields on a showcase - its URL, facets, map pin and listing state. */
 export const updateShowcaseSite = rpcOp<

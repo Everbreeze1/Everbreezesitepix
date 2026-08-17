@@ -36,13 +36,13 @@ export interface Industry {
   /**
    * The heading that *is* this trade, where the library has one written for it.
    *
-   * Absent for an industry we currently serve with general field paperwork -
-   * "Something else" and Landscaping. Both still reorder the library, because
-   * leading with Field Reports beats leading with Electrical for them, but
-   * neither gets a heading badged "Your trade": telling a landscaper that
-   * "Field Reports" is their trade is a claim about them that is not true, and
-   * it is the kind of small wrongness that makes the whole personalisation
-   * read as guessed.
+   * Absent only for "Something else", which by definition cannot have one. It
+   * still reorders the library, because leading with Field Reports beats
+   * leading with Electrical for a company that would not say which they are,
+   * but it gets no heading badged "Your trade": telling someone that "Field
+   * Reports" is their trade is a claim about them that is not true, and it is
+   * the kind of small wrongness that makes the whole personalisation read as
+   * guessed.
    */
   tradeCategory?: string;
 }
@@ -115,7 +115,8 @@ export const INDUSTRIES: readonly Industry[] = [
     id: "landscaping",
     label: "Landscaping & Grounds",
     hint: "Maintenance rounds, installs, seasonal work",
-    categories: ["Field Reports", "Cleaning", "Field Admin"],
+    categories: ["Landscaping", "Field Reports", "Field Admin"],
+    tradeCategory: "Landscaping",
   },
   {
     id: "other",
@@ -139,10 +140,13 @@ export function industryLabel(id: string | null | undefined): string | null {
 /**
  * The one template heading that is this company's trade, or null.
  *
- * Both template screens badge this heading "Your trade" and the picker opens
- * it on arrival. It is deliberately not "the first recommended category": for
- * "Something else" and Landscaping that would be "Field Reports", and calling
- * that a landscaper's trade is a claim we cannot back.
+ * Every Templates tab badges this heading "Your trade", and the in-project
+ * document picker opens it on arrival.
+ *
+ * Deliberately not "the first recommended category". For "Something else" that
+ * would be "Field Reports", and calling that a company's trade is a claim we
+ * cannot back - the honest answer there is null, and null is what every caller
+ * degrades to the unpersonalised order on.
  */
 export function tradeCategoryFor(id: string | null | undefined): string | null {
   return findIndustry(id)?.tradeCategory ?? null;
@@ -152,27 +156,36 @@ export function tradeCategoryFor(id: string | null | undefined): string | null {
  * The template categories a company should see first, given the trade they
  * picked plus any extra trades they also do.
  *
- * Deduplicated and order-preserving: the primary industry's categories lead,
- * then each extra trade's own category. A company that is "HVAC, and we also
- * do plumbing" gets HVAC first and Plumbing right behind it, and never sees
- * the same heading twice.
+ * Trades lead, general paperwork follows. That ordering is the whole point and
+ * it is easy to get subtly wrong: walking the primary industry's full list
+ * first and appending the extras afterwards produces
+ * `Plumbing, Field Reports, Field Admin, HVAC` for a plumber who also does
+ * HVAC - their second trade below two generic headings they did not ask for.
+ * Spotted on screen in Settings, where the recommendation is drawn as chips;
+ * it had been wrong since the extras were added.
+ *
+ * So: the company's own trade, then every other trade they do, and only then
+ * the general categories their industry falls back on. Deduplicated and
+ * order-preserving, so no heading appears twice.
  */
 export function recommendedCategories(
   industryId: string | null | undefined,
   extraTradeIds: readonly string[] = [],
 ): string[] {
+  const primary = findIndustry(industryId);
+  if (!primary) return [];
+
   const out: string[] = [];
-  const push = (c: string) => {
-    if (!out.includes(c)) out.push(c);
+  const push = (c: string | undefined) => {
+    if (c && !out.includes(c)) out.push(c);
   };
-  for (const c of findIndustry(industryId)?.categories ?? []) push(c);
-  // Only the extra trade's own headline category - pulling in its full list
-  // would drag "Field Reports" up the order for every combination and the
-  // recommendation would stop meaning anything.
-  for (const id of extraTradeIds) {
-    const c = findIndustry(id)?.categories[0];
-    if (c) push(c);
-  }
+
+  // The trades, most-theirs first.
+  push(primary.tradeCategory);
+  for (const id of extraTradeIds) push(findIndustry(id)?.tradeCategory);
+  // Then whatever general paperwork their industry leans on. `categories`
+  // repeats the trade heading at [0], which `push` drops.
+  for (const c of primary.categories) push(c);
   return out;
 }
 

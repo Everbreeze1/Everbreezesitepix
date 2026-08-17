@@ -139,6 +139,17 @@ describe("every Templates tab reads the company's trade", () => {
     ["Workflows", WORKFLOW_PAGE_PATH],
     ["Report templates", "apps/web/src/features/settings/components/ReportTemplatesManager.tsx"],
     ["New report dialog", "apps/web/src/features/projects/components/NewReportDialog.tsx"],
+    /*
+     * The field-facing pickers, which the first pass missed.
+     *
+     * Settings is where templates are authored; these are where they are USED,
+     * on a phone, on site, by the person the ordering was for. A trade that
+     * leads in Settings and not here is the personalisation failing at the only
+     * moment it was meant to pay off.
+     */
+    ["In-project checklists", "apps/web/src/features/projects/components/ProjectChecklists.tsx"],
+    ["In-project workflows", "apps/web/src/features/projects/components/ProjectWorkflows.tsx"],
+    ["Apply template dialog", "apps/web/src/features/projects/components/ApplyTemplateDialog.tsx"],
   ];
 
   it("sorts by the personalised rank on every surface with a library", () => {
@@ -180,15 +191,36 @@ describe("every Templates tab reads the company's trade", () => {
     );
   });
 
-  it("selects the column it groups by", () => {
-    // Grouping by a field the query never asked for files everything under
-    // General, silently.
+  it("selects the column it sorts by", () => {
+    /*
+     * The silent failure this exists for: a query that never asks for
+     * `category` gets undefined on every row, so `makeCategoryRank` files the
+     * whole list under General and the ordering looks like it simply does
+     * nothing. No error, no warning - just a personalisation that quietly
+     * stopped applying.
+     */
     expect(WORKFLOW_PAGE).toMatch(
       /select\("id, name, description, archived, created_at, category"\)/,
     );
     expect(read("apps/web/src/features/settings/components/ReportTemplatesManager.tsx")).toMatch(
       /sections, archived, created_at, updated_at, category/,
     );
+    /*
+     * Only the surfaces backed by a `category` COLUMN. The document library
+     * keeps its trade inside the `body` jsonb instead, read as
+     * `body->>category` or handed over by the listDocumentTemplates RPC, so
+     * neither document surface has a column to select and both are exempt.
+     */
+    for (const path of [
+      "apps/web/src/features/projects/components/ProjectChecklists.tsx",
+      "apps/web/src/features/projects/components/ProjectWorkflows.tsx",
+      "apps/web/src/features/projects/components/ApplyTemplateDialog.tsx",
+      "apps/web/src/features/settings/pages/ChecklistTemplatesPage.tsx",
+    ]) {
+      expect(read(path), `${path} sorts by a column it never selects`).toMatch(
+        /\.select\("[^"]*\bcategory\b/,
+      );
+    }
   });
 
   it("ships the migration the columns live in", () => {

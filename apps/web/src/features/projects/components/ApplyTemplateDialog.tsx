@@ -15,6 +15,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
+import { useCompanySetup } from "@/hooks/use-company-setup";
+import { GENERAL_CATEGORY, makeCategoryRank } from "@/lib/template-categories";
 import { getMyTeam } from "@/lib/teams.functions";
 import { toast } from "sonner";
 import {
@@ -43,7 +45,13 @@ type DocTpl = {
   body: any;
   fields: string[];
 };
-type ChkTpl = { id: string; name: string; description: string | null };
+type ChkTpl = {
+  id: string;
+  name: string;
+  description: string | null;
+  /** Optional as well as nullable - see ChecklistTemplatesPage. */
+  category?: string | null;
+};
 
 export function ApplyTemplateDialog({
   open,
@@ -60,6 +68,7 @@ export function ApplyTemplateDialog({
   const [loading, setLoading] = useState(false);
   const [docs, setDocs] = useState<DocTpl[]>([]);
   const [chks, setChks] = useState<ChkTpl[]>([]);
+  const { profile: company } = useCompanySetup();
   const [q, setQ] = useState("");
   const [applying, setApplying] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string>("");
@@ -79,7 +88,7 @@ export function ApplyTemplateDialog({
             .order("updated_at", { ascending: false }),
           supabase
             .from("checklist_templates" as any)
-            .select("id, name, description, archived")
+            .select("id, name, description, archived, category")
             .order("created_at", { ascending: false }),
         ]);
         if (cancelled) return;
@@ -113,10 +122,22 @@ export function ApplyTemplateDialog({
     const query = q.trim().toLowerCase();
     return query ? docs.filter((d) => d.name.toLowerCase().includes(query)) : docs;
   }, [docs, q]);
+  /*
+   * Filtered by the search box, then ordered with the company's own trade
+   * first - the same ordering every other template picker uses. Sorting after
+   * filtering rather than before keeps the trade order intact within whatever
+   * the search left behind.
+   */
   const filledChks = useMemo(() => {
     const query = q.trim().toLowerCase();
-    return query ? chks.filter((c) => c.name.toLowerCase().includes(query)) : chks;
-  }, [chks, q]);
+    const matched = query ? chks.filter((c) => c.name.toLowerCase().includes(query)) : chks;
+    const rank = makeCategoryRank(company.industry, company.trades);
+    return [...matched].sort(
+      (a, b) =>
+        rank(a.category || GENERAL_CATEGORY) - rank(b.category || GENERAL_CATEGORY) ||
+        a.name.localeCompare(b.name),
+    );
+  }, [chks, q, company.industry, company.trades]);
 
   function fill(html: string): string {
     return html.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (m, k) => {

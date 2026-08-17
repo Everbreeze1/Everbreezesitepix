@@ -103,10 +103,13 @@ describe("the industry taxonomy", () => {
   it("only claims a trade heading where one is actually written for it", () => {
     /*
      * `tradeCategoryFor` is what badges a heading "Your trade" and what the
-     * in-project picker opens on arrival. Two industries deliberately have
-     * none - "Something else" and Landscaping are served by general field
-     * paperwork, and badging "Field Reports" as a landscaper's trade is a
-     * claim about them that is not true.
+     * in-project picker opens on arrival. Only "Something else" has none, and
+     * by definition cannot: badging "Field Reports" as that company's trade is
+     * a claim about them that is not true.
+     *
+     * Landscaping was in that position too until it got a section of its own
+     * in 20260830000000. Anything else added here without a library ends up
+     * back in it, which is what the coverage tests exist to catch.
      */
     for (const ind of INDUSTRIES) {
       const trade = tradeCategoryFor(ind.id);
@@ -117,7 +120,7 @@ describe("the industry taxonomy", () => {
       expect(ind.categories[0], `${ind.id} badges a heading it does not lead with`).toBe(trade);
     }
     expect(tradeCategoryFor("other")).toBeNull();
-    expect(tradeCategoryFor("landscaping")).toBeNull();
+    expect(tradeCategoryFor("landscaping")).toBe("Landscaping");
     expect(tradeCategoryFor(null)).toBeNull();
     expect(tradeCategoryFor("underwater-basket-weaving")).toBeNull();
   });
@@ -136,8 +139,29 @@ describe("recommendedCategories", () => {
   it("leads with the primary industry, then each extra trade", () => {
     const out = recommendedCategories("hvac", ["plumbing"]);
     expect(out[0]).toBe("HVAC");
-    expect(out).toContain("Plumbing");
-    expect(out.indexOf("Plumbing")).toBeGreaterThan(0);
+    expect(out[1]).toBe("Plumbing");
+  });
+
+  it("puts every trade above the general fallbacks", () => {
+    /*
+     * The bug this exists for, seen on screen before it was seen in code: a
+     * plumber who also does HVAC got
+     * `Plumbing, Field Reports, Field Admin, HVAC` - their second trade below
+     * two generic headings. Walking the primary's full list first and
+     * appending extras afterwards is the natural way to write this, and it is
+     * wrong.
+     */
+    const out = recommendedCategories("plumbing", ["hvac"]);
+    expect(out.slice(0, 2)).toEqual(["Plumbing", "HVAC"]);
+    expect(out.indexOf("HVAC")).toBeLessThan(out.indexOf("Field Reports"));
+    expect(out.indexOf("HVAC")).toBeLessThan(out.indexOf("Field Admin"));
+  });
+
+  it("ignores an extra trade with no section of its own", () => {
+    // "Something else" has no trade heading, so it must not inject one.
+    const out = recommendedCategories("plumbing", ["other"]);
+    expect(out[0]).toBe("Plumbing");
+    expect(out).not.toContain(undefined);
   });
 
   it("never repeats a heading", () => {
@@ -216,6 +240,32 @@ describe("the screens that read the business profile", () => {
     expect(registry).toMatch(/INDUSTRY_IDS/);
     expect(registry).toMatch(/TEAM_SIZE_IDS/);
     expect(registry).toMatch(/from "@sitepix\/shared"/);
+  });
+
+  it("never claims a company is unset while it is still loading", () => {
+    /*
+     * Caught in a browser, not by reading code: Settings → Company spent ~5
+     * seconds telling a company that WAS set up "Not set up yet, so the
+     * template library is in its default order", beside a button offering to
+     * set it up again. Long enough to be the state most people see and act on.
+     *
+     * Both surfaces that can render an "unset" message have to gate on
+     * `loading` first. The card already did; the panel did not.
+     */
+    // The card's guard lives in the hook that decides `shouldPrompt`, not in
+    // the card - the card only draws what it is told.
+    const hook = read("apps/web/src/hooks/use-company-setup.tsx");
+    expect(hook, "the dashboard card can prompt before the team has loaded").toMatch(
+      /shouldPrompt:\s*!loading &&/,
+    );
+
+    const panel = read("apps/web/src/features/settings/components/BusinessProfileSection.tsx");
+    expect(panel, "the Settings panel renders a verdict before the team has loaded").toMatch(
+      /if \(setup\.loading\)/,
+    );
+    // The early return has to come before the "Not set up yet" copy, or the
+    // guard is decorative.
+    expect(panel.indexOf("if (setup.loading)")).toBeLessThan(panel.indexOf("Not set up yet"));
   });
 
   it("reads the answers back out where an admin can see them", () => {

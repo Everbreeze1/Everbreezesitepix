@@ -55,13 +55,13 @@ export function PortfolioSetupWizard({
   onGoToProjects: () => void;
 }) {
   const site = usePortfolioSiteDraft(portfolio, onSaved);
-  const ctx: StepCtx = { ...site, serviceTypes, layout: "wizard" };
+  const ctx: StepCtx = { ...site, serviceTypes, layout: "wizard", portfolio, onSaved };
   const { draft, dirty, save, saving } = site;
 
   // Resume where they stopped: the first unanswered step, not step one. A
   // returning contractor should never re-confirm their own business name.
   const [index, setIndex] = useState(() => {
-    const first = SITE_STEPS.findIndex((s) => !s.isDone(draft));
+    const first = SITE_STEPS.findIndex((s) => !s.isDone(draft, portfolio));
     return first === -1 ? SITE_STEPS.length : first;
   });
   const [furthest, setFurthest] = useState(index);
@@ -98,7 +98,10 @@ export function PortfolioSetupWizard({
       ? `${window.location.origin}/p/${draft.slug}`
       : `/p/${draft.slug}`;
 
-  const missing = useMemo(() => SITE_STEPS.filter((s) => !s.isDone(draft)), [draft]);
+  const missing = useMemo(
+    () => SITE_STEPS.filter((s) => !s.isDone(draft, portfolio)),
+    [draft, portfolio],
+  );
 
   return (
     <div className="px-4 pb-24 pt-6 sm:px-8 sm:pt-8">
@@ -164,13 +167,13 @@ export function PortfolioSetupWizard({
                     "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition",
                     active
                       ? "border-primary bg-primary/10 text-primary"
-                      : s.isDone(draft)
+                      : s.isDone(draft, portfolio)
                         ? "border-border text-muted-foreground hover:text-foreground"
                         : "border-dashed border-border text-muted-foreground",
                     !reachable && "opacity-40",
                   )}
                 >
-                  {s.isDone(draft) && !active ? (
+                  {s.isDone(draft, portfolio) && !active ? (
                     <Check className="h-3 w-3" />
                   ) : (
                     <s.icon className="h-3 w-3" />
@@ -225,6 +228,8 @@ export function PortfolioSetupWizard({
                 heroPreview={site.heroPreview}
                 focus={step?.previewFocus}
                 projectCount={projectCount}
+                googleRating={portfolio.google_rating}
+                googleReviewCount={portfolio.google_review_count}
               />
             </div>
           </div>
@@ -252,7 +257,7 @@ function StepScreen({
   onNext: () => void;
 }) {
   const Fields = step.Fields;
-  const filled = step.isDone(ctx.draft);
+  const filled = step.isDone(ctx.draft, ctx.portfolio);
 
   return (
     // A real <form> rather than a div of inputs: it is what makes Enter advance

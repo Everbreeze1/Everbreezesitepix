@@ -1555,6 +1555,16 @@ function ReviewLinksSection({ isTeam }: { isTeam: boolean }) {
         Add links to your Google Business Profile, NiceJob, or any other review site. They'll show
         up as a "How did we do?" prompt on every shared report and Site Log.
       </p>
+      {/* Two screens write this table now. Saying so here is what stops someone
+          hand-pasting a Google link over the one the connection manages, which
+          would work until the next re-sync quietly replaced it. */}
+      <p className="font-manrope text-sm text-muted-foreground">
+        Connecting your Google Business Profile from{" "}
+        <Link to="/showcases" className="font-bold text-primary underline-offset-4 hover:underline">
+          Portfolio
+        </Link>{" "}
+        fills the Google link in for you and puts your star rating on your mini-site.
+      </p>
 
       {links.map((l, i) => (
         <div

@@ -71,6 +71,8 @@ import { SURFACE_BUTTON } from "@/components/ui/surface";
 import { KIND_META, type ItemKind } from "@/lib/workflow-items";
 import { friendlyError, isPendingMigrationError } from "@/lib/supabase-errors";
 import { cn } from "@/lib/utils";
+import { GENERAL_CATEGORY, makeCategoryRank } from "@/lib/template-categories";
+import { useCompanySetup } from "@/hooks/use-company-setup";
 import {
   RunnerCard,
   RunnerCardSkeleton,
@@ -96,6 +98,8 @@ interface Template {
   id: string;
   name: string;
   description: string | null;
+  /** Optional as well as nullable - see WorkflowTemplatesPage. */
+  category?: string | null;
 }
 interface Workflow {
   id: string;
@@ -348,6 +352,23 @@ export function ProjectWorkflows({
   const [phases, setPhases] = useState<Phase[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
+
+  /*
+   * The company's own trade first, then alphabetical within a trade. Same
+   * reasoning and the same ordering function as the checklist picker beside it
+   * and the document picker: this is the field-facing twin of the Settings
+   * rail, and a crew on a phone should not scroll past four trades to reach
+   * their own.
+   */
+  const { profile: company } = useCompanySetup();
+  const orderedTemplates = useMemo(() => {
+    const rank = makeCategoryRank(company.industry, company.trades);
+    return [...templates].sort(
+      (a, b) =>
+        rank(a.category || GENERAL_CATEGORY) - rank(b.category || GENERAL_CATEGORY) ||
+        a.name.localeCompare(b.name),
+    );
+  }, [templates, company.industry, company.trades]);
   const [photos, setPhotos] = useState<Record<string, PhotoRef>>({});
   const [applying, setApplying] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -391,7 +412,7 @@ export function ProjectWorkflows({
             .order("started_at", { ascending: true }),
           supabase
             .from("workflow_templates" as any)
-            .select("id, name, description")
+            .select("id, name, description, category")
             .eq("archived", false)
             .order("name", { ascending: true }),
         ]);
@@ -1128,7 +1149,7 @@ export function ProjectWorkflows({
             {/* Scrolls rather than paginates: a company with 30 templates should
                 still reach any of them without leaving this menu. */}
             <div className="max-h-64 overflow-y-auto">
-              {templates.map((t) => (
+              {orderedTemplates.map((t) => (
                 <DropdownMenuItem key={t.id} onClick={() => void applyTemplate(t.id)}>
                   <WorkflowIcon className="mr-2 h-4 w-4" />
                   <span className="flex-1 truncate">
