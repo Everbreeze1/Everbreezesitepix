@@ -1887,7 +1887,6 @@ function PhaseCard({
     data: { type: "phase" },
   });
   const nameRef = useRef<HTMLInputElement>(null);
-  const [showDescription, setShowDescription] = useState(!!phase.description);
 
   useEffect(() => {
     if (autoFocus) {
@@ -1936,33 +1935,53 @@ function PhaseCard({
             aria-label="Phase name"
             className="text-[15px] font-bold"
           />
-          {(showDescription || phase.description) && (
+          {/* Always in the card, never behind the "..." menu. The description
+              is part of writing a phase - the crew reads it in the runner - and
+              a field you have to go hunting for is a field nobody fills in.
+              Empty, it costs one line of placeholder under the name. */}
+          {collapsed ? (
+            <>
+              {phase.description && (
+                <p className="line-clamp-1 px-2 pt-0.5 text-[11.5px] text-muted-foreground">
+                  {phase.description}
+                </p>
+              )}
+              <p className="px-2 pt-0.5 text-[11.5px] font-semibold text-muted-foreground">
+                {items.length} step{items.length === 1 ? "" : "s"}
+                {required > 0 && ` · ${required} required`}
+                {phase.requires_signoff && " · sign-off"}
+              </p>
+            </>
+          ) : (
             <QuietTextarea
               value={phase.description ?? ""}
               onChange={(e) => onUpdate({ description: e.target.value || null })}
-              placeholder="What has to be true before this phase is done?"
+              placeholder="Description (optional) - what has to be true before this phase is done?"
               aria-label="Phase description"
               className="text-xs text-muted-foreground"
             />
           )}
-          {collapsed && (
-            <p className="px-2 pt-0.5 text-[11.5px] font-semibold text-muted-foreground">
-              {items.length} step{items.length === 1 ? "" : "s"}
-              {required > 0 && ` · ${required} required`}
-              {phase.requires_signoff && " · sign-off"}
-            </p>
-          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          {/* A setting, not an action. The label used to read "Sign-off" in
+              both states, so it looked like a button that signs something now
+              and gave no clue which way the switch was thrown - the state lived
+              only in a colour. It says which state it is in, like
+              RequiredToggle, and the title says what clicking does. */}
           <button
             type="button"
             onClick={() => onUpdate({ requires_signoff: !phase.requires_signoff })}
             aria-pressed={phase.requires_signoff}
+            aria-label={
+              phase.requires_signoff
+                ? "Sign-off required to close this phase. Click to stop requiring one."
+                : "No sign-off required. Click to require one."
+            }
             title={
               phase.requires_signoff
-                ? "Sign-off required to close this phase"
-                : "No sign-off required"
+                ? "The crew signs their name to close this phase. Click to stop requiring it."
+                : "Click to require a signature before this phase can close."
             }
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10.5px] font-extrabold uppercase tracking-wide transition-colors",
@@ -1972,7 +1991,9 @@ function PhaseCard({
             )}
           >
             <Signature className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Sign-off</span>
+            <span className="hidden sm:inline">
+              {phase.requires_signoff ? "Sign-off required" : "No sign-off"}
+            </span>
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1986,9 +2007,6 @@ function PhaseCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onClick={() => setShowDescription((s) => !s)}>
-                {showDescription || phase.description ? "Hide description" : "Add description"}
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={onDuplicate}>
                 <Copy className="mr-2 h-4 w-4" />
                 Duplicate phase
@@ -2059,6 +2077,19 @@ function PhaseCard({
               );
             })}
           </div>
+
+          {/* What the toggle above actually buys you, said once, where the gate
+              happens: after the steps, before the phase can close. Amber to
+              match the strip the crew meets in the runner. */}
+          {phase.requires_signoff && (
+            <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-2.5 py-1.5 text-[11.5px] font-semibold text-amber-700 dark:text-amber-300">
+              <Signature className="mt-px h-3.5 w-3.5 shrink-0" />
+              <span>
+                On the job, this phase can't be closed until someone types their name here. The name
+                and the time are saved to the job record.
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

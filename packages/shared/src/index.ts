@@ -13,6 +13,8 @@ export {
   type InlineRun,
   type RichBlock,
 } from "./report-rich";
+export { markdownToHtml, markdownToRich } from "./markdown-rich";
+export { cleanWalkthroughMarkdown, walkthroughSummaryBlocks } from "./walkthrough-summary";
 export {
   REPORT_PAGE,
   splitOnPageBreak,
