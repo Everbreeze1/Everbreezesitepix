@@ -347,50 +347,89 @@ function collectInlineWords(node: HtmlNode, inherited: Style): Word[] {
 }
 
 /**
- * Images are inline nodes, so a paragraph may hold several of them - a photo
- * strip. Render them side by side across the content width, mirroring the
- * editor. Slots that failed to embed (unfilled SVG placeholders, which pdf-lib
- * cannot read) are dropped, so they never reach a delivered document.
+ * Every `<img>` in a subtree, in document order.
+ *
+ * A photo is not reliably a direct child of its block. The editor's image node
+ * is inline and therefore carries marks, so any styling that covers a photo
+ * ships it wrapped - `<p><span style="font-size:14px"><img></span></p>`,
+ * `<p><strong><img></strong></p>` - and the photo picker inserts at the caret,
+ * which lands inside a list item or a table cell whenever the section the user
+ * built has one.
+ *
+ * The browser renders all of those, so the editor and the shared page showed
+ * the photos while the exported PDF, which only looked one level down from the
+ * paragraph, quietly left every one of them out. A document handed to a client
+ * with its evidence missing is the worst possible way for that to surface, so
+ * the renderer now finds images wherever they sit.
  */
-async function renderImageRow(
-  layout: Layout,
-  imgs: ElementNode[],
-  align: "left" | "center" | "right" = "left",
-) {
+function collectImages(node: HtmlNode): ElementNode[] {
+  if (node.type !== "element") return [];
+  if (node.tag === "img") return [node];
+  const out: ElementNode[] = [];
+  for (const child of node.children) out.push(...collectImages(child));
+  return out;
+}
+
+/**
+ * Embed each image, dropping the ones pdf-lib cannot read - which is how
+ * unfilled template photo slots (inline SVG "click to add" art) are kept out of
+ * a delivered document.
+ */
+async function embedImages(layout: Layout, imgs: ElementNode[]): Promise<PDFImage[]> {
   const embedded: PDFImage[] = [];
   for (const el of imgs) {
     if (!el.attrs.src) continue;
     const img = await tryEmbedImage(layout.pdf, el.attrs.src);
     if (img) embedded.push(img);
   }
+  return embedded;
+}
+
+/** The box an image row is laid out in. Defaults to the full content column. */
+interface ImageBox {
+  x: number;
+  width: number;
+}
+
+/**
+ * Images are inline nodes, so a paragraph may hold several of them - a photo
+ * strip. Render them side by side across `box`, mirroring the editor.
+ *
+ * `box` is the indented column when the row belongs to a list item; everything
+ * else gets the full content width.
+ */
+async function renderImageRow(
+  layout: Layout,
+  imgs: ElementNode[],
+  align: "left" | "center" | "right" = "left",
+  box: ImageBox = { x: MARGIN, width: CONTENT_W },
+) {
+  const embedded = await embedImages(layout, imgs);
   if (!embedded.length) return;
 
   if (embedded.length === 1) {
     const img = embedded[0];
     const ratio = img.height / img.width;
-    let w = CONTENT_W * 0.7;
+    let w = box.width * 0.7;
     let h = w * ratio;
     if (h > 320) {
       h = 320;
       w = h / ratio;
     }
     layout.ensureSpace(h + 12);
-    const slack = CONTENT_W - w;
-    const x = MARGIN + (align === "center" ? slack / 2 : align === "right" ? slack : 0);
+    const slack = box.width - w;
+    const x = box.x + (align === "center" ? slack / 2 : align === "right" ? slack : 0);
     layout.page.drawImage(img, { x, y: layout.y - h, width: w, height: h });
     layout.y -= h + 12;
     return;
   }
 
   const gap = 8;
-  const cellW = (CONTENT_W - gap * (embedded.length - 1)) / embedded.length;
-  const rowH = Math.min(
-    Math.max(...embedded.map((i) => cellW * (i.height / i.width))),
-    260,
-  );
+  const cellW = (box.width - gap * (embedded.length - 1)) / embedded.length;
+  const rowH = Math.min(Math.max(...embedded.map((i) => cellW * (i.height / i.width))), 260);
   layout.ensureSpace(rowH + 12);
   const top = layout.y;
-  let x = MARGIN;
+  let x = box.x;
   for (const img of embedded) {
     const ratio = img.height / img.width;
     let w = cellW;
@@ -410,6 +449,55 @@ async function renderImageRow(
   layout.y = top - rowH - 12;
 }
 
+/**
+ * Photos inside a table cell.
+ *
+ * Capped shorter than a full-width row: a cell is a column of a sign-off or
+ * action-items grid, so a phone photo at its natural height would make one row
+ * taller than the rest of the table put together. Measured and drawn as two
+ * steps because the row's height - and therefore its borders - has to be known
+ * before anything inside it is drawn.
+ */
+const CELL_PAD = 6;
+const CELL_IMG_MAX_H = 130;
+
+function cellImageRowHeight(imgs: PDFImage[], width: number): number {
+  if (!imgs.length) return 0;
+  const gap = 6;
+  const cellW = (width - gap * (imgs.length - 1)) / imgs.length;
+  return Math.min(Math.max(...imgs.map((i) => cellW * (i.height / i.width))), CELL_IMG_MAX_H);
+}
+
+function drawCellImageRow(
+  page: PDFPage,
+  imgs: PDFImage[],
+  x: number,
+  top: number,
+  width: number,
+): void {
+  if (!imgs.length) return;
+  const gap = 6;
+  const cellW = (width - gap * (imgs.length - 1)) / imgs.length;
+  const rowH = cellImageRowHeight(imgs, width);
+  let cx = x;
+  for (const img of imgs) {
+    const ratio = img.height / img.width;
+    let w = cellW;
+    let h = w * ratio;
+    if (h > rowH) {
+      h = rowH;
+      w = h / ratio;
+    }
+    page.drawImage(img, {
+      x: cx + (cellW - w) / 2,
+      y: top - rowH + (rowH - h) / 2,
+      width: w,
+      height: h,
+    });
+    cx += cellW + gap;
+  }
+}
+
 async function renderTable(layout: Layout, table: ElementNode) {
   const rows: ElementNode[] = [];
   const walk = (n: HtmlNode) => {
@@ -424,24 +512,34 @@ async function renderTable(layout: Layout, table: ElementNode) {
   const colCount = Math.max(...cellsPerRow.map((c) => c.length), 1);
   const colWidth = CONTENT_W / colCount;
 
+  const size = 10;
+  const innerW = colWidth - CELL_PAD * 2;
+  const emptyStyle: Style = {
+    bold: false,
+    italic: false,
+    underline: false,
+    color: null,
+    fontFamily: null,
+    fontSize: null,
+  };
+
   for (const row of rows) {
     const cells = row.children.filter((c) => c.type === "element") as ElementNode[];
-    layout.ensureSpace(24);
-    const rowTop = layout.y;
-    let maxLines = 1;
-    const cellWords = cells.map((cell) => collectInlineWords(cell, { bold: false, italic: false, underline: false, color: null, fontFamily: null, fontSize: null }));
-    // Draw each cell's text, tracking the tallest cell to advance y by.
-    for (let i = 0; i < cells.length; i++) {
-      const x = MARGIN + i * colWidth;
-      const words = cellWords[i];
-      let cy = rowTop - 4;
+
+    /*
+     * Measure the whole row before drawing any of it. A cell holding a photo is
+     * taller than its text, and the row's height is what its borders are drawn
+     * from - so the images have to be embedded (and their aspect ratios known)
+     * before the first glyph goes down, or a row with a picture in it draws its
+     * rules through the middle of the picture.
+     */
+    const cellLines = cells.map((cell) => {
       const lines: Word[][] = [];
       let line: Word[] = [];
       let lineW = 0;
-      const size = 10;
-      for (const w of words) {
+      for (const w of collectInlineWords(cell, emptyStyle)) {
         const width = layout.fontFor(w.style).widthOfTextAtSize(sanitizeForWinAnsi(w.text), size);
-        if (lineW + width > colWidth - 12 && line.length) {
+        if (lineW + width > innerW && line.length) {
           lines.push(line);
           line = [w];
           lineW = width;
@@ -451,8 +549,26 @@ async function renderTable(layout: Layout, table: ElementNode) {
         }
       }
       if (line.length) lines.push(line);
-      for (const ln of lines) {
-        let lx = x + 6;
+      return lines;
+    });
+    const cellImages: PDFImage[][] = [];
+    for (const cell of cells) cellImages.push(await embedImages(layout, collectImages(cell)));
+
+    const maxLines = Math.max(1, ...cellLines.map((l) => l.length));
+    const cellHeights = cells.map((_, i) => {
+      const imgH = cellImages[i].length ? cellImageRowHeight(cellImages[i], innerW) + 6 : 0;
+      return cellLines[i].length * 14 + imgH;
+    });
+    const rowHeight = Math.max(maxLines * 14, ...cellHeights) + 8;
+
+    layout.ensureSpace(rowHeight);
+    const rowTop = layout.y;
+
+    for (let i = 0; i < cells.length; i++) {
+      const x = MARGIN + i * colWidth;
+      let cy = rowTop - 4;
+      for (const ln of cellLines[i]) {
+        let lx = x + CELL_PAD;
         for (const w of ln) {
           const font = layout.fontFor(w.style);
           const txt = sanitizeForWinAnsi(w.text);
@@ -461,9 +577,8 @@ async function renderTable(layout: Layout, table: ElementNode) {
         }
         cy -= size + 4;
       }
-      maxLines = Math.max(maxLines, lines.length);
+      drawCellImageRow(layout.page, cellImages[i], x + CELL_PAD, cy - 2, innerW);
     }
-    const rowHeight = maxLines * 14 + 8;
     for (let i = 0; i <= cells.length; i++) {
       layout.page.drawLine({
         start: { x: MARGIN + i * colWidth, y: rowTop },
@@ -574,6 +689,10 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
         align: readAlign(node),
       });
       layout.y -= 4;
+      // A heading can hold a photo: the caret sits inside one after the user
+      // types a section title, and the picker inserts wherever the caret is.
+      const headingImgs = collectImages(node);
+      if (headingImgs.length) await renderImageRow(layout, headingImgs, readAlign(node));
       return;
     }
     case "p": {
@@ -591,12 +710,12 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
           return;
         }
       }
-      const imgs = node.children.filter(
-        (c): c is ElementNode => c.type === "element" && c.tag === "img",
-      );
-      const words = node.children
-        .filter((c) => !(c.type === "element" && c.tag === "img"))
-        .flatMap((c) => collectInlineWords(c, empty));
+      // Descendants, not just direct children: the editor's image node is
+      // inline and carries marks, so a styled photo arrives inside a <span> or
+      // a <strong>. `collectInlineWords` yields nothing for an <img>, so the
+      // same walk can produce the text without double-counting them.
+      const imgs = collectImages(node);
+      const words = collectInlineWords(node, empty);
       // An image-only paragraph must not also emit a blank line, but a truly
       // empty <p></p> still needs to render as vertical space.
       if (words.length || !imgs.length) {
@@ -676,9 +795,24 @@ async function renderListItem(layout: Layout, li: ElementNode, ordered: boolean,
   }
 
   const savedX = indent;
+  const itemWidth = CONTENT_W - (savedX - MARGIN);
   const before = layout.y;
-  layout.drawParagraph(words, { x: savedX, width: CONTENT_W - (savedX - MARGIN), size: 11 });
-  if (layout.y === before) layout.y -= 14;
+  const imgs = collectImages(li);
+  // An item that is only a photo must not also draw a blank line of text, the
+  // same rule an image-only paragraph follows.
+  if (words.length || !imgs.length) {
+    layout.drawParagraph(words, { x: savedX, width: itemWidth, size: 11 });
+    if (layout.y === before) layout.y -= 14;
+  }
+  /*
+   * Photos in a list item.
+   *
+   * A "Photo notes" section is a heading plus a bullet list, and a photo
+   * dropped against one of those bullets is the whole point of the section. The
+   * row is laid out in the item's indented column so it lines up under the
+   * text rather than under the marker.
+   */
+  if (imgs.length) await renderImageRow(layout, imgs, "left", { x: savedX, width: itemWidth });
 }
 
 /** Header/footer are rendered as a single running line per page - flattens all inline text across the fragment. */
