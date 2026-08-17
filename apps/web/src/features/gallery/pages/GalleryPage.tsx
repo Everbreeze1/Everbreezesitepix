@@ -1694,7 +1694,9 @@ export function GalleryPage() {
                           {photoTags.length === 0 ? "Add tags" : "Edit"}
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent align="start" className="z-[120] w-64 p-2">
+                      {/* `dark` so the picker reads as part of the viewer's
+                          fixed-navy chrome even when the app theme is light. */}
+                      <PopoverContent align="start" className="dark z-[120] w-64 p-2">
                         <PhotoTagPopoverBody
                           photoTags={photoTags}
                           onToggle={(t) => togglePhotoTag(ph.id, t)}

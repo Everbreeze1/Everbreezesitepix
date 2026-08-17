@@ -19,12 +19,7 @@ export type BlueprintItemKind = "checklist" | "document" | "report" | "label_set
  * PageTabStrip - Documents really is the tab keyed `reports`, so the mapping is
  * spelled out here once rather than guessed at each call site.
  */
-export type BlueprintDestination =
-  | "checklists"
-  | "workflows"
-  | "documents"
-  | "reports"
-  | "labels";
+export type BlueprintDestination = "checklists" | "workflows" | "documents" | "reports" | "labels";
 
 export const DESTINATION: Record<
   BlueprintDestination,
@@ -148,6 +143,42 @@ export const KIND_OUTCOME: Record<
     destination: "labels",
   },
 };
+
+/** Destinations in the order a blueprint fills them. */
+const DESTINATION_ORDER: BlueprintDestination[] = [
+  "checklists",
+  "workflows",
+  "documents",
+  "reports",
+  "labels",
+];
+
+/**
+ * "Where does applying this put things", as one line rather than a panel.
+ *
+ * The blueprint detail used to answer that with a full grouped preview listing
+ * every item by name, directly above the contents list that already listed
+ * every item by name. Two panels, one set of facts. This collapses the answer
+ * to a destination and a count, and the naming stays with the contents list -
+ * the apply dialog still shows the full grouped picture, which is where it
+ * matters, because that is the moment something actually happens.
+ */
+export function destinationTotals(
+  items: Array<{ kind: BlueprintItemKind }>,
+  labels: string[],
+): Array<{ destination: BlueprintDestination; count: number }> {
+  const totals = new Map<BlueprintDestination, number>();
+  for (const item of items) {
+    const d = KIND_OUTCOME[item.kind].destination;
+    totals.set(d, (totals.get(d) ?? 0) + 1);
+  }
+  // Blueprint labels are not items, but they land on the project all the same.
+  if (labels.length) totals.set("labels", (totals.get("labels") ?? 0) + labels.length);
+  return DESTINATION_ORDER.filter((d) => totals.has(d)).map((d) => ({
+    destination: d,
+    count: totals.get(d)!,
+  }));
+}
 
 /** Kinds in the order a blueprint applies them, for stable UI grouping. */
 export const KIND_ORDER: BlueprintItemKind[] = [

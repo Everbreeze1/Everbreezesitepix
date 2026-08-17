@@ -146,11 +146,13 @@ export interface DocumentTemplateSummary {
   updatedAt: string;
 }
 
-/** `document_templates.body` is `{ style, html, description, category }` (see DocumentTemplatesManager). */
+/** `document_templates.body` is `{ style, html, description, category, copiedFrom }` (see DocumentTemplatesManager). */
 function parseBody(body: unknown): {
   html: string;
   description: string | null;
   category: string | null;
+  /** The built-in this row is the team's own version of, if it is one. */
+  copiedFrom: string | null;
 } {
   if (body && typeof body === "object") {
     const b = body as Record<string, unknown>;
@@ -158,9 +160,10 @@ function parseBody(body: unknown): {
       html: typeof b.html === "string" ? b.html : "",
       description: typeof b.description === "string" && b.description ? b.description : null,
       category: typeof b.category === "string" && b.category ? b.category : null,
+      copiedFrom: typeof b.copiedFrom === "string" && b.copiedFrom ? b.copiedFrom : null,
     };
   }
-  return { html: "", description: null, category: null };
+  return { html: "", description: null, category: null, copiedFrom: null };
 }
 
 export async function listDocumentTemplatesService(
@@ -173,18 +176,37 @@ export async function listDocumentTemplatesService(
     .order("updated_at", { ascending: false });
   if (error) throw new Error(error.message);
 
-  const templates: DocumentTemplateSummary[] = ((data as any[]) ?? []).map((t) => {
-    const parsed = parseBody(t.body);
-    return {
-      id: t.id,
-      name: t.name,
+  const rows = ((data as any[]) ?? []).map((t) => ({ row: t, parsed: parseBody(t.body) }));
+
+  /*
+   * Built-ins the team has made their own version of.
+   *
+   * Editing an example is a copy underneath - RLS will not let anyone write to
+   * a row shared by every company - and showing both the copy and the original
+   * is how this picker used to read as duplicated. The team's row stands in for
+   * the example instead, exactly as it does on the Templates page, so a crew
+   * scrolling their trade sees one card per document.
+   *
+   * The query above already excludes archived rows, so an archived version
+   * shadows nothing and the example comes back on its own.
+   */
+  const shadowed = new Set(
+    rows
+      .filter((r) => r.row.team_id !== null && r.parsed.copiedFrom)
+      .map((r) => r.parsed.copiedFrom),
+  );
+
+  const templates: DocumentTemplateSummary[] = rows
+    .filter(({ row }) => !(row.team_id === null && shadowed.has(row.id)))
+    .map(({ row, parsed }) => ({
+      id: row.id,
+      name: row.name,
       description: parsed.description,
       category: parsed.category,
-      isExample: t.team_id === null,
-      fields: (t.fields as string[]) ?? [],
-      updatedAt: t.updated_at,
-    };
-  });
+      isExample: row.team_id === null,
+      fields: (row.fields as string[]) ?? [],
+      updatedAt: row.updated_at,
+    }));
 
   // The team's own templates first (most recently touched at the top), then
   // the built-ins grouped by trade category, alphabetical within each.

@@ -328,6 +328,13 @@ export function ApplyBlueprintDialog({
                 projectName={targets.length === 1 ? targets[0].name : null}
                 dense
               />
+              {/* The reassurance sat permanently on the blueprint detail page,
+                  where nothing was about to happen. It belongs at the point
+                  something is. */}
+              <p className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
+                Nothing is overwritten: existing checklists, documents and labels on the project
+                stay exactly as they are, and these are added alongside them.
+              </p>
             </section>
 
             {/* Where it goes. */}

@@ -8,6 +8,7 @@ import {
   Trash2,
   UserPlus,
   ChevronDown,
+  CheckSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/sitepix/client";
@@ -18,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useTeamMembers } from "@/hooks/use-team-members";
 import { useAssignableTeammates } from "@/hooks/use-assignable-teammates";
 import { completionRights } from "@/lib/assignment";
+import { useReportPanelCount } from "@/features/photos/components/PhotoDetailsPanel";
 import type { CommentContributor } from "@/features/photos/components/PhotoCommentsPanel";
 
 type Status = "open" | "in_progress" | "done";
@@ -44,16 +46,36 @@ interface Props {
 const STATUS_ORDER: Status[] = ["open", "in_progress", "done"];
 const STATUS_ICON = { open: Circle, in_progress: CircleDashed, done: CheckCircle2 } as const;
 const STATUS_CLS = {
-  open: "text-white/60",
+  open: "text-sidebar-foreground/60",
   in_progress: "text-amber-300",
   done: "text-emerald-400",
 } as const;
+const STATUS_LABEL = { open: "Open", in_progress: "In progress", done: "Done" } as const;
 
 function initials(name: string | null, email: string | null) {
   const src = (name || email || "?").trim();
   const parts = src.split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return src.slice(0, 2).toUpperCase();
+}
+
+/**
+ * What to call somebody on a pill barely wider than a word.
+ *
+ * Never the raw address: a task assigned to a teammate whose profile has no
+ * name rendered as "marklagura223@gmail.…", which reads as data rather than as
+ * a person. The full address is still there under the name inside the picker,
+ * where there is room for it.
+ */
+function personLabel(
+  c: CommentContributor | null | undefined,
+  currentUserId?: string,
+): string | null {
+  if (!c) return null;
+  if (currentUserId && c.userId === currentUserId) return "You";
+  if (c.fullName) return c.fullName;
+  if (c.email) return c.email.split("@")[0];
+  return "Teammate";
 }
 
 export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributors }: Props) {
@@ -71,6 +93,8 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
    * everyone. See use-assignable-teammates.ts.
    */
   const { teammates, isLoading: teammatesLoading } = useAssignableTeammates(contributors);
+
+  useReportPanelCount("tasks", tasks.length);
 
   const contribById = useMemo(() => {
     const m = new Map<string, CommentContributor>();
@@ -134,6 +158,16 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
       return;
     }
     setTasks((arr) => [data as any as Task, ...arr]);
+    // Confirmation that the assignment landed on a person, not just that a row
+    // was written: the picker resets to "Assign" on the next line either way.
+    const who = assignee ? personLabel(contribById.get(assignee), currentUserId) : null;
+    toast.success(
+      !who
+        ? "Task added"
+        : who === "You"
+          ? "Task added, assigned to you"
+          : `Task assigned to ${who}`,
+    );
     setTitle("");
     setAssignee("");
   };
@@ -200,16 +234,22 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
     if (error) {
       toast.error(error.message);
       void load();
+      return;
     }
+    const who = personLabel(c, currentUserId);
+    toast.success(
+      !who ? "Task unassigned" : who === "You" ? "Assigned to you" : `Assigned to ${who}`,
+    );
   };
 
-  // No heading here - PhotoDetailsPanel already renders a "Tasks" section
-  // header above this slot, so titling it again produced the stacked
-  // "TASKS / TASKS ON THIS PHOTO" pair seen in the lightbox.
+  // No heading here - PhotoDetailsPanel's tab strip already says "Tasks" and
+  // carries the count, so titling it again produced the stacked pair seen in
+  // the lightbox.
   return (
-    <div className="flex h-full min-h-0 flex-col text-white">
-      {/* Add form */}
-      <div className="flex items-center gap-2">
+    <div className="flex h-full min-h-0 w-full flex-col text-sidebar-foreground">
+      {/* Add form. Pinned at the top of the tab so it does not travel with the
+          list once a photo carries more tasks than fit. */}
+      <div className="shrink-0 space-y-2 rounded-2xl border border-sidebar-border bg-sidebar-accent p-2.5">
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -219,41 +259,49 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
               void add();
             }
           }}
-          placeholder="Add a task…"
-          className="h-9 border-white/15 bg-white/5 text-sm text-white placeholder:text-white/40 focus-visible:ring-white/30"
+          placeholder="Add a task for this photo…"
+          className="h-9 border-sidebar-border bg-sidebar/60 text-sm text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-sidebar-ring"
         />
-        <AssigneePicker
-          value={assignee}
-          onChange={setAssignee}
-          contributors={teammates}
-          loading={teammatesLoading}
-          compact
-        />
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => void add()}
-          disabled={!title.trim() || saving}
-          className="h-9 gap-1"
-        >
-          {saving ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Plus className="h-3.5 w-3.5" />
-          )}
-          Add
-        </Button>
+        <div className="flex items-center gap-2">
+          <AssigneePicker
+            value={assignee}
+            onChange={setAssignee}
+            contributors={teammates}
+            loading={teammatesLoading}
+            currentUserId={currentUserId}
+            compact
+          />
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void add()}
+            disabled={!title.trim() || saving}
+            className="ml-auto h-9 gap-1"
+          >
+            {saving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Plus className="h-3.5 w-3.5" />
+            )}
+            Add
+          </Button>
+        </div>
       </div>
 
       {/* List */}
-      <div className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+      <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
         {loading ? (
-          <div className="flex items-center justify-center py-6 text-white/60">
+          <div className="flex items-center justify-center py-6 text-sidebar-foreground/60">
             <Loader2 className="h-4 w-4 animate-spin" />
           </div>
         ) : tasks.length === 0 ? (
-          <div className="py-4 text-center text-xs text-white/50">
-            No tasks yet - add one above.
+          <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-sidebar-border px-4 py-10 text-center">
+            <CheckSquare className="h-5 w-5 text-sidebar-foreground/30" />
+            <p className="text-xs text-sidebar-foreground/55">
+              No tasks on this photo yet.
+              <br />
+              Add one above and assign it to a teammate.
+            </p>
           </div>
         ) : (
           tasks.map((t) => {
@@ -263,18 +311,20 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
             return (
               <div
                 key={t.id}
-                className="group flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-2 transition-colors hover:border-white/20 hover:bg-white/[0.08]"
+                className="group flex items-center gap-2 rounded-xl border border-sidebar-border bg-sidebar-accent px-2.5 py-2 transition-colors hover:border-sidebar-foreground/25"
               >
                 <button
                   type="button"
-                  aria-label={`Cycle status (currently ${t.status})`}
+                  aria-label={`Mark as ${STATUS_LABEL[STATUS_ORDER[(STATUS_ORDER.indexOf(t.status) + 1) % 3]]} (currently ${STATUS_LABEL[t.status]})`}
+                  title={`${STATUS_LABEL[t.status]} - tap to advance`}
                   onClick={() => void cycleStatus(t)}
-                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded ${cls} hover:bg-white/10`}
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${cls} hover:bg-sidebar-foreground/10`}
                 >
                   <Icon className="h-4 w-4" />
                 </button>
                 <div
-                  className={`flex-1 truncate text-sm ${t.status === "done" ? "text-white/50 line-through" : ""}`}
+                  className={`flex-1 truncate text-sm ${t.status === "done" ? "text-sidebar-foreground/50 line-through" : "text-sidebar-foreground/95"}`}
+                  title={t.title}
                 >
                   {t.title}
                 </div>
@@ -283,15 +333,17 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
                   onChange={(v) => void reassign(t, v || null)}
                   contributors={teammates}
                   loading={teammatesLoading}
+                  currentUserId={currentUserId}
                   currentLabel={
-                    c ? (c.fullName ?? c.email ?? "Assigned") : (t.assignee_email ?? "")
+                    personLabel(c, currentUserId) ??
+                    (t.assignee_email ? t.assignee_email.split("@")[0] : "")
                   }
                 />
                 <button
                   type="button"
                   aria-label="Delete task"
                   onClick={() => void remove(t)}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-white/40 opacity-0 hover:bg-white/10 hover:text-white group-hover:opacity-100"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground/40 opacity-0 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground focus-visible:opacity-100 group-hover:opacity-100"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -311,6 +363,7 @@ function AssigneePicker({
   compact = false,
   currentLabel,
   loading = false,
+  currentUserId,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -318,6 +371,7 @@ function AssigneePicker({
   compact?: boolean;
   currentLabel?: string;
   loading?: boolean;
+  currentUserId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -332,17 +386,23 @@ function AssigneePicker({
   const selected = contributors.find((c) => c.userId === value) ?? null;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setQ("");
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 ${compact ? "h-9" : "h-7"}`}
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg border border-sidebar-border bg-sidebar/60 px-2.5 text-xs font-semibold text-sidebar-foreground/80 transition-colors hover:bg-sidebar-foreground/10 ${compact ? "h-9" : "h-7"}`}
           aria-label="Assignee"
         >
           {selected ? (
             <Avatar className="h-5 w-5">
               {selected.avatarUrl && <AvatarImage src={selected.avatarUrl} alt="" />}
-              <AvatarFallback className="bg-white/20 text-[10px] text-white">
+              <AvatarFallback className="bg-sidebar-foreground/20 text-[10px] text-sidebar-foreground">
                 {initials(selected.fullName, selected.email)}
               </AvatarFallback>
             </Avatar>
@@ -350,17 +410,31 @@ function AssigneePicker({
             <UserPlus className="h-3.5 w-3.5" />
           )}
           {compact ? (
-            <span className="hidden sm:inline">
-              {selected ? (selected.fullName ?? selected.email ?? "Assigned") : "Assign"}
+            <span className="max-w-[120px] truncate">
+              {personLabel(selected, currentUserId) ?? "Assign"}
             </span>
           ) : null}
           {!compact && currentLabel ? (
-            <span className="max-w-[80px] truncate">{currentLabel}</span>
+            <span className="max-w-[92px] truncate">{currentLabel}</span>
           ) : null}
           <ChevronDown className="h-3 w-3 opacity-60" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="z-[120] w-64 p-2">
+      {/*
+       * `dark` on the content, not a hand-rolled palette: the viewer's chrome is
+       * the fixed navy of the app sidebar in either theme, so a popover left on
+       * the ambient tokens opened as a white card in the middle of it whenever
+       * the app itself was light. Re-scoping the theme variables here keeps this
+       * the app's own popover - same elevation, same hover, same borders as
+       * every other menu - only resolved dark.
+       */}
+      {/* The add-form picker sits at the left edge of a 400px panel, so an
+          end-aligned menu hangs off it and over the photo; the per-task picker
+          is right-aligned in its row and wants the opposite. */}
+      <PopoverContent
+        align={compact ? "start" : "end"}
+        className="dark z-[120] w-64 p-2 text-popover-foreground"
+      >
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -414,7 +488,7 @@ function AssigneePicker({
                   onChange(c.userId);
                   setOpen(false);
                 }}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs hover:bg-accent ${c.userId === value ? "bg-accent" : ""}`}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors hover:bg-accent ${c.userId === value ? "bg-accent" : ""}`}
               >
                 <Avatar className="h-6 w-6">
                   {c.avatarUrl && <AvatarImage src={c.avatarUrl} alt="" />}
@@ -422,9 +496,13 @@ function AssigneePicker({
                     {initials(c.fullName, c.email)}
                   </AvatarFallback>
                 </Avatar>
+                {/* The name line is a name, never the address: a profile with
+                    no full name used to put the whole address on this line and
+                    truncate it, which took the "(you)" with it. The address
+                    keeps its own line underneath. */}
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{c.fullName ?? c.email ?? "Teammate"}</div>
-                  {c.fullName && c.email ? (
+                  <div className="truncate font-medium">{personLabel(c, currentUserId)}</div>
+                  {c.email ? (
                     <div className="truncate text-[10px] text-muted-foreground">{c.email}</div>
                   ) : null}
                 </div>

@@ -83,6 +83,7 @@ export function LabelPicker({
   teamId = null,
   userId,
   variant = "light",
+  size = "md",
 }: {
   value: string[];
   onChange: (next: string[]) => void;
@@ -92,6 +93,12 @@ export function LabelPicker({
   teamId?: string | null;
   userId?: string;
   variant?: "light" | "dark";
+  /**
+   * Chip size for the selected labels. Defaults to the photo-overlay size these
+   * chips were built for; settings screens that carry one quiet row of them
+   * pass `sm` so a colour cloud does not outweigh the thing it describes.
+   */
+  size?: ChipSize;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -157,7 +164,7 @@ export function LabelPicker({
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {value.map((l) => (
-        <LabelChip key={l} label={l} onRemove={() => remove(l)} variant={variant} />
+        <LabelChip key={l} label={l} size={size} onRemove={() => remove(l)} variant={variant} />
       ))}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>

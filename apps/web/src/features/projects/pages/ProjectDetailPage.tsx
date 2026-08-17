@@ -3639,13 +3639,15 @@ export function ProjectDetailPage() {
                       <PopoverTrigger asChild>
                         <button
                           type="button"
-                          className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-sidebar-foreground/20 bg-sidebar-foreground/[0.03] px-2.5 text-[11px] font-medium text-sidebar-foreground/70 transition hover:border-sidebar-foreground/40 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground"
+                          className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-sidebar-border bg-sidebar-foreground/[0.03] px-2.5 text-[11px] font-medium text-sidebar-foreground/70 transition hover:border-sidebar-foreground/40 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground"
                         >
                           <TagIcon className="h-3 w-3" />
                           {photoTags.length === 0 ? "Add tags" : "Edit"}
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent align="start" className="z-[120] w-64 p-2">
+                      {/* `dark` so the picker reads as part of the viewer's
+                          fixed-navy chrome even when the app theme is light. */}
+                      <PopoverContent align="start" className="dark z-[120] w-64 p-2">
                         <PhotoTagPopoverBody
                           photoTags={photoTags}
                           onToggle={(t) => togglePhotoTag(ph.id, t)}
