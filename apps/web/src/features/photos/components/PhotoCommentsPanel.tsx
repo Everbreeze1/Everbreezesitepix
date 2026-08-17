@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Send, Trash2, AtSign } from "lucide-react";
+import { Loader2, Send, Trash2, AtSign, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/sitepix/client";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,10 @@ import {
 } from "@/lib/photo-comments.functions";
 import { formatRelativeTime } from "@/lib/format-time";
 import { useAssignableTeammates } from "@/hooks/use-assignable-teammates";
+import {
+  useReportPanelCount,
+  usePanelIsActive,
+} from "@/features/photos/components/PhotoDetailsPanel";
 
 export interface CommentContributor {
   userId: string;
@@ -49,6 +53,21 @@ function initials(name: string): string {
       .map((w) => w[0]?.toUpperCase() ?? "")
       .join("") || "?"
   );
+}
+
+/**
+ * What to call a teammate in the mention list, and what to type into the
+ * message when one is picked.
+ *
+ * A profile with no full name used to fall back to the whole address, so the
+ * list read as data and the inserted handle came out "@marklagura223@gmail.com"
+ * - which `renderBodyWithMentions` cannot even match past the second @, so it
+ * did not highlight either. The part before the @ is a name people recognise.
+ */
+function mentionName(c: CommentContributor): string {
+  if (c.fullName) return c.fullName;
+  if (c.email) return c.email.split("@")[0];
+  return "Teammate";
 }
 
 function renderBodyWithMentions(body: string): React.ReactNode {
@@ -88,6 +107,9 @@ export function PhotoCommentsPanel({
   const { teammates, isLoading: teammatesLoading } = useAssignableTeammates(contributors);
   const mentionable = teammates;
   const mentionablePending = contributorsLoading || teammatesLoading;
+
+  useReportPanelCount("comments", comments.length);
+  const visible = usePanelIsActive("comments");
 
   const list = listPhotoComments;
   const create = createPhotoComment;
@@ -163,11 +185,17 @@ export function PhotoCommentsPanel({
     };
   }, [photoId, getOne]);
 
-  // Auto-scroll to bottom as new comments arrive.
+  /*
+   * Auto-scroll to the newest message. `visible` is in the dependency list
+   * because the tab stays mounted while it is off screen - a hidden element has
+   * no scroll height, so a message that arrived on another tab would otherwise
+   * leave the list parked at the top the next time Comments is opened.
+   */
   useEffect(() => {
+    if (!visible) return;
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [comments.length, loading]);
+  }, [comments.length, loading, visible]);
 
   // Detect @ query while typing.
   const handleBodyChange = (v: string) => {
@@ -192,8 +220,7 @@ export function PhotoCommentsPanel({
   }, [mentionQuery, mentionable, currentUserId]);
 
   const insertMention = (c: CommentContributor) => {
-    const name = c.fullName ?? c.email ?? "teammate";
-    const handle = name.split(/\s+/)[0] || "teammate";
+    const handle = mentionName(c).split(/\s+/)[0] || "teammate";
     const cursor = textareaRef.current?.selectionStart ?? body.length;
     const before = body.slice(0, cursor).replace(/@[\w.-]*$/, `@${handle} `);
     const after = body.slice(cursor);
@@ -242,22 +269,24 @@ export function PhotoCommentsPanel({
     }
   };
 
-  // No heading here - the parent Section already says "Comments"; the
-  // @-mention hint moved into that header's action slot.
+  // No heading here - PhotoDetailsPanel's tab strip already says "Comments"
+  // and carries the count.
   return (
-    <div className="flex h-full min-h-0 flex-col text-white">
-      <div
-        ref={listRef}
-        className="flex-1 space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-white/5 p-2.5 pr-3"
-      >
+    <div className="flex h-full min-h-0 w-full flex-col text-sidebar-foreground">
+      <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
         {loading ? (
-          <div className="flex items-center justify-center py-6 text-white/60">
+          <div className="flex items-center justify-center py-6 text-sidebar-foreground/60">
             <Loader2 className="h-4 w-4 animate-spin" />
           </div>
         ) : comments.length === 0 ? (
-          <p className="py-4 text-center text-xs text-white/50">
-            No messages yet. Start the conversation for this photo.
-          </p>
+          <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-sidebar-border px-4 py-10 text-center">
+            <MessageSquare className="h-5 w-5 text-sidebar-foreground/30" />
+            <p className="text-xs text-sidebar-foreground/55">
+              No messages yet.
+              <br />
+              Start the conversation for this photo.
+            </p>
+          </div>
         ) : (
           comments.map((c) => {
             const name = displayName(c);
@@ -266,16 +295,26 @@ export function PhotoCommentsPanel({
               <div key={c.id} className="group flex items-start gap-2">
                 <Avatar className="h-7 w-7 shrink-0">
                   {c.authorAvatarUrl ? <AvatarImage src={c.authorAvatarUrl} alt={name} /> : null}
-                  <AvatarFallback className="bg-white/15 text-[10px] text-white">
+                  <AvatarFallback className="bg-sidebar-foreground/15 text-[10px] text-sidebar-foreground">
                     {initials(name)}
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-1.5 text-[11px]">
-                    <span className="font-medium text-white/90">{mine ? "You" : name}</span>
-                    <span className="text-white/40">{formatRelativeTime(c.createdAt)}</span>
+                    <span className="font-medium text-sidebar-foreground/90">
+                      {mine ? "You" : name}
+                    </span>
+                    <span className="text-sidebar-foreground/40">
+                      {formatRelativeTime(c.createdAt)}
+                    </span>
                   </div>
-                  <div className="mt-0.5 whitespace-pre-wrap break-words rounded-lg bg-white/10 px-2.5 py-2 text-sm leading-relaxed text-white/95">
+                  <div
+                    className={`mt-1 whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                      mine
+                        ? "rounded-tl-sm bg-primary/20 text-sidebar-foreground"
+                        : "rounded-tl-sm bg-sidebar-accent text-sidebar-foreground/95"
+                    }`}
+                  >
                     {renderBodyWithMentions(c.body)}
                   </div>
                 </div>
@@ -284,7 +323,7 @@ export function PhotoCommentsPanel({
                     type="button"
                     aria-label="Delete comment"
                     onClick={() => del(c.id)}
-                    className="mt-1 hidden h-6 w-6 items-center justify-center rounded text-white/40 hover:bg-white/10 hover:text-white group-hover:flex"
+                    className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-sidebar-foreground/40 opacity-0 transition-opacity hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground focus-visible:opacity-100 group-hover:opacity-100"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -295,40 +334,43 @@ export function PhotoCommentsPanel({
         )}
       </div>
 
-      <div className="relative mt-2">
+      {/* Composer, pinned to the bottom edge of the tab. */}
+      <div className="relative mt-3 shrink-0 border-t border-sidebar-border pt-3">
+        {/* `dark` on the menu below, for the same reason as the assignee
+            picker's popover: it is the app's floating-menu surface, resolved
+            dark so it sits on the viewer's fixed navy chrome in either app
+            theme. */}
         {mentionQuery !== null &&
           (mentionMatches.length > 0 || mentionablePending || mentionable.length === 0) && (
-            <div className="absolute bottom-full left-0 z-10 mb-1.5 w-64 overflow-hidden rounded-xl border border-white/10 bg-neutral-900 shadow-xl">
-              <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/50">
+            <div className="dark absolute bottom-full left-0 z-10 mb-1.5 w-64 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl">
+              <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Mention teammate
               </div>
               {mentionablePending && mentionable.length === 0 && (
-                <div className="flex items-center gap-2 px-2 py-2 text-xs text-white/60">
+                <div className="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Loading teammates…
                 </div>
               )}
               {!(mentionablePending && mentionable.length === 0) && mentionMatches.length === 0 && (
-                <div className="px-2 py-2 text-xs text-white/50">
+                <div className="px-2 py-2 text-xs text-muted-foreground">
                   {mentionable.length === 0
                     ? "No teammates yet. Invite your crew from the Teams page."
                     : "No teammates match"}
                 </div>
               )}
               {mentionMatches.map((c) => {
-                const name = c.fullName ?? c.email ?? "Teammate";
+                const name = mentionName(c);
                 return (
                   <button
                     key={c.userId}
                     type="button"
                     onClick={() => insertMention(c)}
-                    className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm text-white hover:bg-white/10"
+                    className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-accent"
                   >
                     <Avatar className="h-6 w-6">
                       {c.avatarUrl ? <AvatarImage src={c.avatarUrl} alt={name} /> : null}
-                      <AvatarFallback className="bg-white/15 text-[10px] text-white">
-                        {initials(name)}
-                      </AvatarFallback>
+                      <AvatarFallback className="text-[10px]">{initials(name)}</AvatarFallback>
                     </Avatar>
                     <span className="truncate">{name}</span>
                   </button>
@@ -349,14 +391,14 @@ export function PhotoCommentsPanel({
             }}
             placeholder="Write a message… use @ to mention"
             rows={2}
-            className="min-h-[42px] flex-1 resize-none border-white/15 bg-white/5 text-sm text-white placeholder:text-white/40 focus-visible:ring-white/30"
+            className="min-h-[42px] flex-1 resize-none border-sidebar-border bg-sidebar-accent text-sm text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-sidebar-ring"
           />
           <div className="flex flex-col gap-1">
             <Button
               type="button"
               variant="secondary"
               size="icon"
-              className="h-9 w-9 bg-white/10 text-white hover:bg-white/20"
+              className="h-9 w-9 border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-foreground/15"
               onClick={() => {
                 setBody((b) =>
                   b.endsWith("@") || b.endsWith(" ") || b === "" ? b + "@" : b + " @",

@@ -19,7 +19,6 @@ import {
   MoreHorizontal,
   Copy,
   Pencil,
-  Clock,
   Sparkles,
   ArrowRight,
   ArrowUp,
@@ -71,8 +70,12 @@ import { SURFACE_CARD } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import { LabelChip, LabelPicker } from "@/features/photos/components/LabelPicker";
 import { ApplyBlueprintDialog } from "@/features/settings/components/ApplyBlueprintDialog";
-import { BlueprintOutcomePreview } from "@/features/settings/components/BlueprintOutcomePreview";
-import { KIND_OUTCOME, KIND_ORDER } from "@/features/settings/components/blueprint-outcomes";
+import {
+  DESTINATION,
+  KIND_OUTCOME,
+  KIND_ORDER,
+  destinationTotals,
+} from "@/features/settings/components/blueprint-outcomes";
 import { LabelsManager } from "@/features/settings/components/LabelsManager";
 import { LabelSetsManager } from "@/features/settings/components/LabelSetsManager";
 import { ReportTemplatesManager } from "@/features/settings/components/ReportTemplatesManager";
@@ -357,7 +360,9 @@ export function TemplatesPage() {
         // bodies behind these rows are tens of kilobytes of document HTML each.
         // Selecting the whole column to read one key off it would pull the
         // entire built-in library down on every visit to this page.
-        .select("id, name, archived, category:body->>category")
+        // `copiedFrom` comes along for the same price and keeps this dropdown
+        // agreeing with the two screens that list the library - see `docTpls`.
+        .select("id, name, archived, category:body->>category, copiedFrom:body->>copiedFrom")
         .eq("archived", false)
         .order("name"),
       supabase
@@ -381,12 +386,22 @@ export function TemplatesPage() {
     setChecklistTemplates(((chkRes.data as any[]) ?? []) as ChecklistTemplate[]);
     setAttached(((attRes.data as any[]) ?? []) as AttachedChecklist[]);
     setTplItems(((itemsRes.data as any[]) ?? []) as TemplateItem[]);
+    /*
+     * A built-in the team has made their own version of is dropped in favour of
+     * that version, the same rule the Documents tab and the in-project picker
+     * apply. Without it this dropdown is the one place left offering both, and
+     * a blueprint could be built on the example a company has already replaced.
+     */
+    const docRows = (docRes.data as any[]) ?? [];
+    const shadowed = new Set(docRows.map((x: any) => x.copiedFrom).filter(Boolean));
     setDocTpls(
-      ((docRes.data as any[]) ?? []).map((x: any) => ({
-        id: x.id,
-        name: x.name,
-        category: x.category ?? null,
-      })),
+      docRows
+        .filter((x: any) => !shadowed.has(x.id))
+        .map((x: any) => ({
+          id: x.id,
+          name: x.name,
+          category: x.category ?? null,
+        })),
     );
     setReportTpls(((repRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
     setLabelSetTpls(((lsRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
@@ -1395,6 +1410,9 @@ function BlueprintsTab(props: {
   }
 
   const hasContent = previewItems.length > 0 || (selected?.labels?.length ?? 0) > 0;
+  // Plain call, not a `useMemo` - this component returns early above, so a hook
+  // here would be a conditional one. It is a walk over a handful of items.
+  const lands = destinationTotals(previewItems, selected?.labels ?? []);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
@@ -1410,8 +1428,15 @@ function BlueprintsTab(props: {
           />
         </div>
 
+        {/* Secondary on purpose. The hero above this already carries a primary
+            "New blueprint", and two filled buttons one scroll apart read as two
+            different actions until you read both labels. */}
         {canManage && (
-          <Button className="w-full justify-center rounded-xl" onClick={onCreate}>
+          <Button
+            variant="outline"
+            className="h-9 w-full justify-center rounded-xl"
+            onClick={onCreate}
+          >
             <Plus className="mr-1.5 h-4 w-4" />
             New blueprint
           </Button>
@@ -1464,28 +1489,28 @@ function BlueprintsTab(props: {
                           {t.description}
                         </p>
                       )}
+                      {/* Labels as quiet text, not as chips. The chip is a
+                          skewed, saturated block built for sitting over a
+                          photo; three of them per card turned a 320px rail
+                          into the loudest thing on the page, and none of that
+                          colour helps you pick a blueprint out of a list. The
+                          detail panel still shows the real chips, where they
+                          are the value being edited. */}
                       {(t.labels?.length ?? 0) > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {t.labels!.slice(0, 3).map((l) => (
-                            <LabelChip key={l} label={l} size="xs" />
-                          ))}
-                          {(t.labels?.length ?? 0) > 3 && (
-                            <span className="text-[10px] text-muted-foreground">
-                              +{(t.labels?.length ?? 0) - 3}
-                            </span>
-                          )}
-                        </div>
+                        <span className="flex w-full min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <Tag className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{t.labels!.join(", ")}</span>
+                        </span>
                       )}
-                      <div className="flex w-full items-center gap-3 text-[11px] text-muted-foreground">
-                        <span className="inline-flex items-center gap-1">
-                          <LayoutTemplate className="h-3 w-3" />
+                      <div className="flex w-full items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <span>
                           {sectionCount} section{sectionCount === 1 ? "" : "s"}
                         </span>
                         {applicationsAvailable && applyCount > 0 && (
-                          <span className="inline-flex items-center gap-1 font-bold text-primary">
-                            <Rocket className="h-3 w-3" />
-                            used {applyCount}×
-                          </span>
+                          <>
+                            <span aria-hidden>·</span>
+                            <span>used {applyCount}×</span>
+                          </>
                         )}
                       </div>
                     </button>
@@ -1526,30 +1551,31 @@ function BlueprintsTab(props: {
                     {selected.description}
                   </p>
                 )}
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5" />
-                    Created {timeAgo(selected.created_at)}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <LayoutTemplate className="h-3.5 w-3.5" />
+                {/* One line, no icons. Three icon-and-label pairs for three
+                    numbers read as three controls until you look twice. */}
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                  <span>
                     {sections.length} section{sections.length === 1 ? "" : "s"}
                   </span>
                   {applicationsAvailable && (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Rocket className="h-3.5 w-3.5" />
-                      {selectedApplications.length === 0
-                        ? "Never applied yet"
-                        : `Applied ${selectedApplications.length}×`}
-                    </span>
+                    <>
+                      <span aria-hidden>·</span>
+                      <span>
+                        {selectedApplications.length === 0
+                          ? "never applied"
+                          : `applied ${selectedApplications.length}×`}
+                      </span>
+                    </>
                   )}
+                  <span aria-hidden>·</span>
+                  <span>created {timeAgo(selected.created_at)}</span>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                {/* The action the whole page exists for. It sat behind no
-                    explanation at all before: you could author a blueprint and
-                    never find out what it did to anything. */}
+              {/* One primary, one secondary, one overflow. Four buttons of
+                  equal weight made the row a menu bar and left nothing
+                  obviously the thing to press. */}
+              <div className="flex shrink-0 items-center gap-2">
                 {isTeam ? (
                   <Button
                     size="sm"
@@ -1570,76 +1596,79 @@ function BlueprintsTab(props: {
                     Applying is on Team
                   </Button>
                 )}
-                {isTeam && (
-                  <Button asChild variant="outline" size="sm" className="rounded-lg">
-                    <Link to="/projects/new" search={{ blueprint: selected.id }}>
-                      <Plus className="mr-1.5 h-3.5 w-3.5" />
-                      New project from this
-                    </Link>
+                {canManage && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onEdit(selected)}
+                    className="rounded-lg"
+                  >
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                    Edit
                   </Button>
                 )}
-                {canManage && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onEdit(selected)}
-                      className="rounded-lg"
-                    >
-                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                      Edit
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="rounded-lg"
-                          aria-label="More actions"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem onClick={() => onDuplicate(selected)}>
-                          <Copy className="mr-2 h-4 w-4" />
-                          Duplicate
+                {(isTeam || canManage) && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 rounded-lg"
+                        aria-label="More actions"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      {isTeam && (
+                        <DropdownMenuItem asChild>
+                          <Link to="/projects/new" search={{ blueprint: selected.id }}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            New project from this
+                          </Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onArchiveToggle(selected)}>
-                          {selected.archived ? (
-                            <>
-                              <ArchiveRestore className="mr-2 h-4 w-4" />
-                              Unarchive
-                            </>
-                          ) : (
-                            <>
-                              <Archive className="mr-2 h-4 w-4" />
-                              Archive
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => onDelete(selected)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </>
+                      )}
+                      {canManage && (
+                        <>
+                          {isTeam && <DropdownMenuSeparator />}
+                          <DropdownMenuItem onClick={() => onDuplicate(selected)}>
+                            <Copy className="mr-2 h-4 w-4" />
+                            Duplicate
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => onArchiveToggle(selected)}>
+                            {selected.archived ? (
+                              <>
+                                <ArchiveRestore className="mr-2 h-4 w-4" />
+                                Unarchive
+                              </>
+                            ) : (
+                              <>
+                                <Archive className="mr-2 h-4 w-4" />
+                                Archive
+                              </>
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => onDelete(selected)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
               </div>
             </div>
 
             {/* Labels belong with the header: they are applied to the project
-                alongside everything else, not a separate setting. */}
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
-              <span className="inline-flex items-center gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
-                <Tag className="h-3 w-3" />
-                Labels
-              </span>
+                alongside everything else, not a separate setting. No rule and
+                no uppercase eyebrow over them - one row of chips is legible as
+                labels without being announced. */}
+            <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
               {canManage ? (
                 <LabelPicker
                   value={selected.labels ?? []}
@@ -1648,63 +1677,32 @@ function BlueprintsTab(props: {
                   triggerLabel="Add label"
                   teamId={teamId}
                   userId={userId}
+                  size="sm"
                 />
+              ) : (selected.labels?.length ?? 0) === 0 ? (
+                <span className="text-xs text-muted-foreground">No labels.</span>
               ) : (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {(selected.labels ?? []).map((l) => (
-                    <LabelChip key={l} label={l} />
-                  ))}
-                  {(selected.labels?.length ?? 0) === 0 && (
-                    <span className="text-xs text-muted-foreground">No labels yet.</span>
-                  )}
-                </div>
+                (selected.labels ?? []).map((l) => <LabelChip key={l} label={l} size="sm" />)
               )}
             </div>
           </div>
 
-          {/* What applying it does. This is the answer to "when I select a
-              template, what happens to it?" and it comes before the builder on
-              purpose - the outcome is the point, the parts list is detail. */}
-          <div className={cn(SURFACE_CARD, "p-5")}>
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <div>
-                <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
-                  When you apply this
-                </p>
-                <h3 className="font-display mt-1.5 text-lg font-bold tracking-tight">
-                  Here is the project you get
-                </h3>
-              </div>
-              {hasContent && isTeam && (
-                <Button size="sm" variant="ghost" className="rounded-lg" onClick={onApply}>
-                  Apply now
-                  <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
-            <BlueprintOutcomePreview
-              className="mt-3"
-              items={previewItems}
-              labels={selected.labels ?? []}
-            />
-            {hasContent && (
-              <p className="mt-3 text-[11.5px] leading-relaxed text-muted-foreground">
-                Applying never overwrites anything: existing checklists, documents and labels on the
-                project stay exactly as they are, and these are added alongside them.
-              </p>
-            )}
-          </div>
-
-          {/* Contents */}
+          {/* Contents, and where they land.
+           *
+           * These were two cards. The upper one grouped every item by its
+           * destination and named it; the lower one listed the same items again
+           * in apply order, to be edited. Same facts, twice, one above the
+           * other. The destination summary is now a single row of counts and
+           * the naming happens once, in the list you can actually reorder. The
+           * full grouped picture still runs in the apply dialog, at the moment
+           * it decides something. */}
           <div className={cn(SURFACE_CARD, "p-5")}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
-                  Blueprint contents
-                </p>
-                <h3 className="font-display mt-1.5 text-lg font-bold tracking-tight">
+                <h3 className="text-sm font-bold tracking-tight">Contents</h3>
+                <p className="mt-0.5 text-[11.5px] text-muted-foreground">
                   {sections.length} section{sections.length === 1 ? "" : "s"}, applied in this order
-                </h3>
+                </p>
               </div>
               {canManage && (
                 <DropdownMenu>
@@ -1747,6 +1745,29 @@ function BlueprintsTab(props: {
               )}
             </div>
 
+            {/* "What happens when I apply this", in one row instead of a
+                panel: the project tabs that gain something, and how much. */}
+            {lands.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-muted-foreground">Lands in</span>
+                {lands.map(({ destination, count }) => {
+                  const dest = DESTINATION[destination];
+                  const DestIcon = dest.icon;
+                  return (
+                    <span
+                      key={destination}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 py-1 text-[11px] font-semibold text-muted-foreground"
+                      title={dest.blurb}
+                    >
+                      <DestIcon className="h-3 w-3" />
+                      {dest.tab}
+                      <span className="text-foreground">+{count}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
             {sections.length === 0 ? (
               <div className="mt-4 flex flex-col items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-10 text-center">
                 <LayoutTemplate className="h-6 w-6 text-muted-foreground/70" />
@@ -1756,6 +1777,30 @@ function BlueprintsTab(props: {
                   workflows, documents, reports or label sets and they all land on the project in
                   one click.
                 </p>
+                {/* The "build the piece first" pointer lives here and only
+                    here. It used to sit under every populated list too, five
+                    inline links deep, where the answer was already known. */}
+                {canManage && (
+                  <p className="mt-3 max-w-sm text-[11px] leading-relaxed text-muted-foreground">
+                    Need a new piece first? Build it under{" "}
+                    {(
+                      ["checklists", "workflows", "documents", "reports", "label-sets"] as const
+                    ).map((key, i, arr) => (
+                      <span key={key}>
+                        <button
+                          className="font-semibold text-primary hover:underline"
+                          onClick={() => onGoToTab(key)}
+                        >
+                          {key === "label-sets"
+                            ? "Label sets"
+                            : key[0].toUpperCase() + key.slice(1)}
+                        </button>
+                        {i < arr.length - 2 ? ", " : i === arr.length - 2 ? " or " : ""}
+                      </span>
+                    ))}
+                    , then come back here and add it.
+                  </p>
+                )}
               </div>
             ) : (
               <ul className="mt-4 space-y-2">
@@ -1765,25 +1810,27 @@ function BlueprintsTab(props: {
                   return (
                     <li
                       key={`${r.legacy ? "chk" : "it"}-${r.id}`}
-                      className="group flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3.5 py-2.5 transition-colors hover:border-border"
+                      className="group flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2 transition-colors hover:border-border"
                     >
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-bold text-muted-foreground">
+                      {/* Position as a number, not a chip. A filled badge next
+                          to a tinted icon read as two icons. */}
+                      <span className="w-3.5 shrink-0 text-right text-[11px] font-bold tabular-nums text-muted-foreground/70">
                         {idx + 1}
-                      </div>
+                      </span>
                       <span
                         className={cn(
-                          "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded",
+                          "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
                           meta.tint,
                         )}
                       >
-                        <Icon className="h-4 w-4" />
+                        <Icon className="h-3.5 w-3.5" />
                       </span>
-                      <Badge
-                        variant="outline"
-                        className="hidden shrink-0 text-[10px] sm:inline-flex"
-                      >
-                        {meta.label}
-                      </Badge>
+                      {/* One line. The kind used to be stated three times per
+                          row - tinted icon, outlined badge, and a sentence
+                          spelling out what it becomes - which is what made a
+                          five-section blueprint a wall. The icon carries the
+                          kind, the word beside it names it, and the "Lands in"
+                          row above says where it all goes. */}
                       <span className="min-w-0 flex-1">
                         <span
                           className={cn(
@@ -1793,14 +1840,21 @@ function BlueprintsTab(props: {
                         >
                           {r.name}
                         </span>
-                        <span className="block truncate text-[11px] text-muted-foreground">
-                          {r.missing
-                            ? "The source template was deleted - remove this section"
-                            : `→ ${KIND_OUTCOME[r.kind].becomes}`}
-                        </span>
+                        {r.missing && (
+                          <span className="block truncate text-[11px] text-destructive/80">
+                            The source template was deleted - remove this section
+                          </span>
+                        )}
                       </span>
+                      <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:block">
+                        {meta.label}
+                      </span>
+                      {/* Revealed on hover or keyboard focus on a pointer
+                          device, always present on touch, where there is no
+                          hover to reveal them with. Space is reserved either
+                          way, so nothing shifts. */}
                       {canManage && (
-                        <div className="flex shrink-0 items-center">
+                        <div className="flex shrink-0 items-center transition-opacity focus-within:opacity-100 group-hover:opacity-100 sm:opacity-0">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -1837,26 +1891,6 @@ function BlueprintsTab(props: {
                 })}
               </ul>
             )}
-
-            {canManage && (
-              <p className="mt-3 text-[11px] text-muted-foreground">
-                Need a new piece first? Build it under{" "}
-                {(["checklists", "workflows", "documents", "reports", "label-sets"] as const).map(
-                  (key, i, arr) => (
-                    <span key={key}>
-                      <button
-                        className="font-semibold text-primary hover:underline"
-                        onClick={() => onGoToTab(key)}
-                      >
-                        {key === "label-sets" ? "Label sets" : key[0].toUpperCase() + key.slice(1)}
-                      </button>
-                      {i < arr.length - 2 ? ", " : i === arr.length - 2 ? " or " : ""}
-                    </span>
-                  ),
-                )}
-                , then come back here and add it.
-              </p>
-            )}
           </div>
 
           {/*
@@ -1869,12 +1903,7 @@ function BlueprintsTab(props: {
            * genuinely never been applied.
            */}
           <div className={cn(SURFACE_CARD, "p-5")}>
-            <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
-              Track record
-            </p>
-            <h3 className="font-display mt-1.5 text-lg font-bold tracking-tight">
-              Where this blueprint has been used
-            </h3>
+            <h3 className="text-sm font-bold tracking-tight">Where it has been used</h3>
             {!applicationsAvailable ? (
               <p className="mt-3 rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
                 Usage history isn’t available on this environment yet, so we can’t show where this

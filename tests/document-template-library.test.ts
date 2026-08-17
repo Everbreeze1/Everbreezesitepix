@@ -253,7 +253,11 @@ describe("the Templates page files the library by trade", () => {
      * ship the entire built-in library - tens of kilobytes of document HTML per
      * row - on every visit to the Templates page.
      */
-    expect(PAGE).toMatch(/select\("id, name, archived, category:body->>category"\)/);
+    const select = /\.select\("(id, name, archived[^"]*)"\)/.exec(PAGE)?.[1];
+    expect(select, "the document template select changed shape").toBeTruthy();
+    // Named keys off the jsonb, never the column itself.
+    expect(select).toContain("category:body->>category");
+    expect(select).not.toMatch(/(^|,)\s*body\s*(,|$)/);
     expect(PAGE).toMatch(/addKind === "document"\s*\?\s*byTrade\(available\)/);
   });
 });
@@ -784,6 +788,10 @@ describe("copying is not how a template gets used", () => {
     join(ROOT, "apps/web/src/features/projects/pages/ProjectPageEditorPage.tsx"),
     "utf8",
   );
+  const PAGE_SRC = readFileSync(
+    join(ROOT, "apps/web/src/features/settings/pages/TemplatesPage.tsx"),
+    "utf8",
+  );
 
   /**
    * The file with its comments removed, so an assertion about what the page
@@ -798,6 +806,67 @@ describe("copying is not how a template gets used", () => {
     // The label that taught the wrong model. Copying a built-in is still
     // offered; it just no longer claims to be the way to edit one.
     expect(rendered(MANAGER)).not.toContain("Duplicate to edit");
+  });
+
+  it("Edit works on a built-in, and the copy behind it is not the user's problem", () => {
+    /*
+     * A built-in belongs to no team and RLS refuses the write, so editing one
+     * has to produce a row of the team's own. The page used to hand that
+     * constraint to the user as a button reading "Duplicate to edit". Now Edit
+     * is on every card and the copy happens underneath.
+     */
+    const block = MANAGER.slice(
+      MANAGER.indexOf("async function edit("),
+      MANAGER.indexOf("async function copyForEditing"),
+    );
+    expect(block.length).toBeGreaterThan(100);
+    expect(block).toMatch(/if \(t\.team_id !== null\) return openForEdit\(t\)/);
+    expect(block).toContain("copyForEditing(t)");
+    // The Edit button is no longer withheld from examples, and Duplicate is no
+    // longer offered on them - there is nothing left for it to do there.
+    expect(rendered(MANAGER)).toMatch(/canManage && \(\s*<Button size="sm" variant="outline"/);
+    expect(rendered(MANAGER)).toMatch(/canManage && !isExample && \(\s*<DropdownMenu>/);
+  });
+
+  it("the company's version replaces the example instead of joining it", () => {
+    /*
+     * The whole point. Without this the grid grows a card every time someone
+     * edits an example, which is the duplication the client reported wearing a
+     * different hat.
+     */
+    const copy = MANAGER.slice(
+      MANAGER.indexOf("async function copyForEditing"),
+      MANAGER.indexOf("async function closeEditor"),
+    );
+    // Provenance recorded, and only for an example: a copy of the team's own
+    // template is a second template and both belong on the page.
+    expect(copy).toMatch(/isExample \? \{ \.\.\.\(body as object\), copiedFrom: t\.id \} : body/);
+    // It takes the original's name, since the original steps aside.
+    expect(copy).toMatch(/isExample && free \? t\.name : nextCopyName\(t\.name, taken\)/);
+
+    const shadow = MANAGER.slice(
+      MANAGER.indexOf("const shadowedExamples"),
+      MANAGER.indexOf("const visible"),
+    );
+    // Only a live row shadows, so archiving or deleting the copy brings the
+    // example back - which is also the undo for having made one.
+    expect(shadow).toMatch(/t\.team_id === null \|\| t\.archived/);
+    expect(MANAGER).toMatch(/!\(i\.team_id === null && shadowedExamples\.has\(i\.id\)\)/);
+  });
+
+  it("every screen that lists the library applies that rule", () => {
+    // Three lists read `document_templates`. A rule applied to two of them is a
+    // library that contradicts itself depending on where you look at it.
+    const api = readFileSync(join(ROOT, "apps/api/src/domains/projects/page-templates.ts"), "utf8");
+    const list = api.slice(
+      api.indexOf("export async function listDocumentTemplatesService"),
+      api.indexOf("export const getDocumentTemplateInputSchema"),
+    );
+    expect(list).toMatch(/const shadowed = new Set\(/);
+    expect(list).toMatch(/!\(row\.team_id === null && shadowed\.has\(row\.id\)\)/);
+    // The blueprint "add a document" dropdown, which is the third.
+    expect(PAGE_SRC).toMatch(/copiedFrom:body->>copiedFrom/);
+    expect(PAGE_SRC).toMatch(/\.filter\(\(x: any\) => !shadowed\.has\(x\.id\)\)/);
   });
 
   it("copying opens the editor rather than dropping a twin in the grid", () => {

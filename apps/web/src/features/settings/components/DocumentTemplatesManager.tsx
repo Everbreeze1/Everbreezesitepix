@@ -128,6 +128,20 @@ interface DocBody {
    * until they do.
    */
   category?: string;
+  /**
+   * The built-in this row is the company's version of, by id.
+   *
+   * Set when Edit is pressed on an example: those are shared with every company
+   * and RLS refuses the write, so editing one has to produce a row of the team's
+   * own. Recording which built-in it replaces is what keeps that from being
+   * visible as duplication - `shadowedExamples` hides the example behind it, so
+   * the library holds one card for the document either way.
+   *
+   * Stored in `body` rather than a column of its own: `body` is jsonb, so this
+   * needed no migration, and nothing outside the two places that read it has to
+   * know the key exists.
+   */
+  copiedFrom?: string;
 }
 
 /** The editor dialog's working copy, before it is written back to the row. */
@@ -414,6 +428,7 @@ function parseBody(raw: any): DocBody {
       html: raw.html,
       description: raw.description ?? "",
       category: typeof raw.category === "string" && raw.category ? raw.category : undefined,
+      copiedFrom: typeof raw.copiedFrom === "string" && raw.copiedFrom ? raw.copiedFrom : undefined,
     };
   }
   return { style: "report", html: "", description: "" };
@@ -695,9 +710,36 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     setLoading(false);
   }
 
+  /**
+   * Built-ins the team has made their own version of, by id.
+   *
+   * The company's row stands in for the example rather than sitting next to it,
+   * which is what stops "I edited an example" from reading as "the library grew
+   * a card". One document, one card, whoever owns it.
+   *
+   * Only a live row shadows: archive or delete the company's version and the
+   * example is back on the page, which is also the undo for having made one.
+   * Reading `items` rather than `visible` keeps that true under "Show archived",
+   * where an archived copy is on screen and must not hide anything.
+   */
+  const shadowedExamples = useMemo(() => {
+    const out = new Set<string>();
+    for (const t of items) {
+      if (t.team_id === null || t.archived) continue;
+      const from = parseBody(t.body).copiedFrom;
+      if (from) out.add(from);
+    }
+    return out;
+  }, [items]);
+
   const visible = useMemo(
-    () => items.filter((i) => (showArchived ? true : !i.archived)),
-    [items, showArchived],
+    () =>
+      items.filter(
+        (i) =>
+          (showArchived ? true : !i.archived) &&
+          !(i.team_id === null && shadowedExamples.has(i.id)),
+      ),
+    [items, showArchived, shadowedExamples],
   );
 
   /**
@@ -916,48 +958,68 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   }
 
   /**
+   * Edit a template, whoever owns it.
+   *
+   * On the team's own row this is a plain edit. On a built-in it cannot be:
+   * those belong to no team, every company sees the same row, and RLS rejects
+   * the write. The page used to answer that with a second button reading
+   * "Duplicate to edit" - a database constraint written out as a chore for
+   * whoever is holding the phone, and following it left a second card in the
+   * grid. The client, pointing at that button: "I am not sure what the point of
+   * duplicating is ... creating duplicates is a big mess."
+   *
+   * So the copy happens here instead, and `shadowedExamples` hides the built-in
+   * behind the row it produced. Press Edit, get the editor, and the number of
+   * cards on the page does not move.
+   */
+  async function edit(t: DocumentTemplate) {
+    if (t.team_id !== null) return openForEdit(t);
+    await copyForEditing(t);
+    toast.success("Editing your company's version", {
+      description: `The example "${t.name}" is shared with every company, so this is yours to change. Delete it and the example comes back.`,
+    });
+  }
+
+  /**
    * Make a copy of a template and open it for editing, as one action.
    *
-   * The client, on this grid: "I am not sure what the point of duplicating is
-   * ... creating duplicates is a big mess." They are right about the button as
-   * it stood. Copying used to end at the insert: it wrote a row byte-identical
-   * to the one it came from, toasted "Duplicated", and left a second card in
-   * the section - so the grid grew a twin every time someone pressed it to find
-   * out what it did, and the twin was indistinguishable from its original.
+   * Copying used to end at the insert: it wrote a row byte-identical to the one
+   * it came from, toasted "Duplicated", and left a second card in the section -
+   * so the grid grew a twin every time someone pressed it to find out what it
+   * did, and the twin was indistinguishable from its original.
    *
    * A copy is only worth having once it differs from the original, so the copy
-   * and the edit are now the same gesture: this opens the editor on the new row
+   * and the edit are one gesture: this opens the editor on the new row
    * immediately, and `closeEditor` deletes it again if it is closed unchanged.
    * The library can no longer accumulate a card nobody meant to create.
-   *
-   * It stays available because built-ins are read-only (RLS rejects writes to a
-   * null-team row), so an editable house version of one has to be a copy. What
-   * it is NOT is the way to tailor a document for a single job - that is "Use in
-   * a project", which the banner above the grid now says outright.
    */
   async function copyForEditing(t: DocumentTemplate) {
+    const isExample = t.team_id === null;
+    const body = t.body && typeof t.body === "object" ? { ...(t.body as object) } : t.body;
     /*
-     * Numbered against the whole library rather than a blind " (copy)" suffix.
-     * The client's report was of "massive duplication" in this grid, and a
-     * suffix that stacks is half of how it reads: "HVAC Service Call Report",
-     * "... (copy)" and "... (copy) (copy)" are three cards for one document,
-     * and nothing about the names says which is which. See nextCopyName.
+     * A copy of an example replaces it on the page, so it takes the original's
+     * name rather than "... (copy)": there is nothing left beside it for the
+     * suffix to distinguish it from. `nextCopyName` still runs when that name is
+     * somehow taken - by a copy made before this existed, say - because two
+     * cards reading exactly the same thing is worse than a suffix.
      *
-     * `items` and not `visible`, so an archived row still reserves its name -
-     * a collision the user cannot see is still a collision.
+     * `items` and not `visible`, so an archived row still reserves its name: a
+     * collision the user cannot see is still a collision.
      */
+    const taken = items.map((i) => i.name);
+    const free = !taken.some((n) => n.trim().toLowerCase() === t.name.trim().toLowerCase());
     const { data, error } = await supabase
       .from("document_templates" as any)
       .insert({
+        name: isExample && free ? t.name : nextCopyName(t.name, taken),
         // Never inherit a null team_id from an example - the copy must belong
         // to the caller's team so it is editable.
-        name: nextCopyName(
-          t.name,
-          items.map((i) => i.name),
-        ),
         team_id: teamId ?? null,
         created_by: user?.id,
-        body: t.body,
+        // Provenance, so the example this stands in for can step aside. Only
+        // for an example: a copy of the team's own template is a second
+        // template, and both belong on the page.
+        body: isExample ? { ...(body as object), copiedFrom: t.id } : body,
         fields: t.fields,
       })
       .select()
@@ -1116,9 +1178,9 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
             templates are in a project under <strong>Documents → Create → More Templates</strong>.
           </p>
           <p className="mt-1.5 text-blue-900/80 dark:text-blue-200/80">
-            Only copy a template when you want a <em>different</em> template for every future job,
-            for example an example sheet rewritten in your own wording. That lives under the
-            &ldquo;···&rdquo; on the card.
+            To change a template for good, hit <strong>Edit</strong>. On an example that gives you
+            your company&rsquo;s own version, which takes the example&rsquo;s place here and in the
+            project picker, so the list stays the same length. Delete it and the example is back.
           </p>
         </div>
       </div>
@@ -1248,6 +1310,21 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                           <Badge variant="outline" className="shrink-0 text-[10px]">
                             Example
                           </Badge>
+                        ) : body.copiedFrom ? (
+                          /*
+                            This row is standing in for a built-in that is no
+                            longer on the page. Said on the card, because a
+                            template that silently replaced another one is the
+                            sort of thing someone should be able to find out
+                            about without being told.
+                          */
+                          <Badge
+                            variant="outline"
+                            title="Your company's version of an example template. It replaces the example here and in the project picker. Delete it and the example comes back."
+                            className="shrink-0 text-[10px]"
+                          >
+                            Your version
+                          </Badge>
                         ) : t.archived ? (
                           <Badge variant="secondary" className="text-[10px]">
                             Archived
@@ -1288,14 +1365,15 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                         copy button read "Duplicate to edit", which states that
                         editing a template requires copying it first. It does
                         not: a document is tailored per job by using the
-                        template in that project and editing it there. The
-                        client read the row exactly as it was written and
-                        answered "creating duplicates is a big mess".
+                        template in that project and editing it there, and a
+                        built-in is made yours by pressing Edit like any other
+                        card. The client read the row exactly as it was written
+                        and answered "creating duplicates is a big mess".
 
-                        So the copy actions keep working (a built-in is
-                        read-only, so a house version of one has to be a copy)
-                        but they stop advertising themselves as the way to use
-                        the library.
+                        Duplicate survives only where it means something a verb
+                        above cannot: a SECOND template beside one you already
+                        own. On a built-in there is nothing left for it to do,
+                        so it is not offered.
                       */}
                       <div className="mt-auto flex flex-wrap items-center gap-1 border-t border-border/60 pt-3">
                         {/* The primary verb. Without it the Templates page could only
@@ -1306,12 +1384,12 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                         <Button size="sm" onClick={() => openUse(t)}>
                           <FilePlus2 className="mr-1 h-3.5 w-3.5" /> Use in a project
                         </Button>
-                        {canManage && !isExample && (
-                          <Button size="sm" variant="outline" onClick={() => void openForEdit(t)}>
+                        {canManage && (
+                          <Button size="sm" variant="outline" onClick={() => void edit(t)}>
                             <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
                           </Button>
                         )}
-                        {canManage && (
+                        {canManage && !isExample && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
@@ -1330,38 +1408,38 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                               <DropdownMenuItem onClick={() => void copyForEditing(t)}>
                                 <Copy className="mr-2 h-4 w-4" />
                                 <span>
-                                  <span className="block font-bold">
-                                    {isExample ? "Make an editable copy" : "Duplicate"}
-                                  </span>
+                                  <span className="block font-bold">Duplicate</span>
                                   <span className="block text-xs text-muted-foreground">
-                                    {isExample
-                                      ? "Opens your own version to edit. The example stays as it is."
-                                      : "A second template you can change without touching this one."}
+                                    A second template you can change without touching this one.
                                   </span>
                                 </span>
                               </DropdownMenuItem>
-                              {!isExample && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem onClick={() => void toggleArchive(t)}>
-                                    {t.archived ? (
-                                      <>
-                                        <ArchiveRestore className="mr-2 h-4 w-4" /> Restore
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Archive className="mr-2 h-4 w-4" /> Archive
-                                      </>
-                                    )}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    onClick={() => void remove(t)}
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                  </DropdownMenuItem>
-                                </>
-                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => void toggleArchive(t)}>
+                                {t.archived ? (
+                                  <>
+                                    <ArchiveRestore className="mr-2 h-4 w-4" /> Restore
+                                  </>
+                                ) : (
+                                  <>
+                                    <Archive className="mr-2 h-4 w-4" /> Archive
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => void remove(t)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                <span>
+                                  <span className="block">Delete</span>
+                                  {body.copiedFrom && (
+                                    <span className="block text-xs text-muted-foreground">
+                                      Brings the example back.
+                                    </span>
+                                  )}
+                                </span>
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         )}
