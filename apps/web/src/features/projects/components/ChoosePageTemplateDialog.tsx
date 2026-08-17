@@ -243,7 +243,8 @@ export function ChoosePageTemplateDialog({
               <DialogTitle>Choose Page Template</DialogTitle>
               <DialogDescription>
                 Open your trade to see its templates. Preview one to see it with this
-                project&rsquo;s details already in place.
+                project&rsquo;s details already in place. You get a document filed under this
+                project that you can edit freely; the template itself is left alone.
               </DialogDescription>
             </DialogHeader>
 
