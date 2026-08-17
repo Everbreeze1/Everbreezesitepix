@@ -19,17 +19,39 @@ const analysisTool = {
     parameters: {
       type: "object",
       properties: {
-        brand: { type: "string", description: "Manufacturer / brand printed on the equipment, if visible. Empty string if none." },
-        model_number: { type: "string", description: "Model number printed on the equipment, if visible. Empty string if none." },
-        serial_number: { type: "string", description: "Serial number printed on the equipment, if visible. Empty string if none." },
-        ocr_text: { type: "string", description: "All other readable text in the image (labels, warnings, signs). Empty string if none." },
-        labels: { type: "array", items: { type: "string" }, description: "High-level scene labels (e.g. roof, HVAC unit, electrical panel)." },
+        brand: {
+          type: "string",
+          description:
+            "Manufacturer / brand printed on the equipment, if visible. Empty string if none.",
+        },
+        model_number: {
+          type: "string",
+          description: "Model number printed on the equipment, if visible. Empty string if none.",
+        },
+        serial_number: {
+          type: "string",
+          description: "Serial number printed on the equipment, if visible. Empty string if none.",
+        },
+        ocr_text: {
+          type: "string",
+          description:
+            "All other readable text in the image (labels, warnings, signs). Empty string if none.",
+        },
+        labels: {
+          type: "array",
+          items: { type: "string" },
+          description: "High-level scene labels (e.g. roof, HVAC unit, electrical panel).",
+        },
         defects: {
           type: "array",
           items: {
             type: "object",
             properties: {
-              type: { type: "string", description: "e.g. crack, leak, corrosion, wear, misalignment, missing_part, damage" },
+              type: {
+                type: "string",
+                description:
+                  "e.g. crack, leak, corrosion, wear, misalignment, missing_part, damage",
+              },
               severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
               location: { type: "string", description: "Where in the image / on the equipment." },
               description: { type: "string" },
@@ -38,8 +60,15 @@ const analysisTool = {
             additionalProperties: false,
           },
         },
-        report_text: { type: "string", description: "1-3 paragraph field inspection report in plain English." },
-        recommendations: { type: "array", items: { type: "string" }, description: "Actionable next steps for the field worker." },
+        report_text: {
+          type: "string",
+          description: "1-3 paragraph field inspection report in plain English.",
+        },
+        recommendations: {
+          type: "array",
+          items: { type: "string" },
+          description: "Actionable next steps for the field worker.",
+        },
       },
       required: ["ocr_text", "labels", "defects", "report_text", "recommendations"],
       additionalProperties: false,
@@ -96,8 +125,14 @@ export async function analyzePhotoService(ctx: AuthedContext, data: { photoId: s
           {
             role: "user",
             content: [
-              { type: "text", text: "Analyze this job site photo. Extract brand/model/serial, list defects, and recommend next steps." },
-              { type: "image_url", image_url: { url: await inlineImageAsDataUrl(signed.signedUrl) } },
+              {
+                type: "text",
+                text: "Analyze this job site photo. Extract brand/model/serial, list defects, and recommend next steps.",
+              },
+              {
+                type: "image_url",
+                image_url: { url: await inlineImageAsDataUrl(signed.signedUrl) },
+              },
             ],
           },
         ],
@@ -119,7 +154,10 @@ export async function analyzePhotoService(ctx: AuthedContext, data: { photoId: s
     if (parsed.brand) idLines.push(`Brand: ${parsed.brand}`);
     if (parsed.model_number) idLines.push(`Model: ${parsed.model_number}`);
     if (parsed.serial_number) idLines.push(`Serial: ${parsed.serial_number}`);
-    const ocrCombined = [idLines.join("\n"), parsed.ocr_text ?? ""].filter(Boolean).join("\n\n").trim();
+    const ocrCombined = [idLines.join("\n"), parsed.ocr_text ?? ""]
+      .filter(Boolean)
+      .join("\n\n")
+      .trim();
 
     /*
      * The prose the model wrote gets the dash fold; the values it read off the
@@ -232,7 +270,7 @@ export async function chatWithAssistantService(
   }
 
   const systemPrompt =
-    "You are SitePix AI, an expert professional field supervisor with 15+ years of experience in construction, HVAC, electrical, and general contracting. Your tone is direct, confident, helpful, and concise. Speak in short, punchy sentences optimized for natural speech narration. Be practical, solution-focused, and encouraging without being overly wordy. Always prioritize clarity and actionable advice. When a photo is attached, briefly note what you see before advising. Avoid filler like \"As an AI…\" or \"Great question!\". CRITICAL LENGTH RULE: keep every reply to 350 characters or fewer (roughly 2–4 short sentences). Only exceed this when the user explicitly asks for a detailed report or full write-up.";
+    'You are SitePix AI, an expert professional field supervisor with 15+ years of experience in construction, HVAC, electrical, and general contracting. Your tone is direct, confident, helpful, and concise. Speak in short, punchy sentences optimized for natural speech narration. Be practical, solution-focused, and encouraging without being overly wordy. Always prioritize clarity and actionable advice. When a photo is attached, briefly note what you see before advising. Avoid filler like "As an AI…" or "Great question!". CRITICAL LENGTH RULE: keep every reply to 350 characters or fewer (roughly 2–4 short sentences). Only exceed this when the user explicitly asks for a detailed report or full write-up.';
 
   const lastUserContent: unknown = imageUrl
     ? [
@@ -256,7 +294,8 @@ export async function chatWithAssistantService(
   if (!res.ok) {
     const t = await res.text();
     if (res.status === 429) throw new Error("Rate limited. Try again in a moment.");
-    if (res.status === 402) throw new Error("AI credits exhausted. Add credits in workspace settings.");
+    if (res.status === 402)
+      throw new Error("AI credits exhausted. Add credits in workspace settings.");
     throw new Error(`AI error ${res.status}: ${t.slice(0, 200)}`);
   }
   const json = await res.json();
@@ -294,16 +333,17 @@ async function requireActiveSub(
   userId: string,
   feature = "This AI feature",
 ) {
-  const { data: isAdmin } = await supabase
-    .rpc("has_role" as never, { _user_id: userId, _role: "admin" } as never);
+  const { data: isAdmin } = await supabase.rpc(
+    "has_role" as never,
+    { _user_id: userId, _role: "admin" } as never,
+  );
   if (isAdmin) return;
 
   const { isActive } = await getCallerTeamPlan(supabase, userId);
   if (!isActive) {
-    throw Object.assign(
-      new Error(`${feature} requires an active plan. Upgrade to Pro or Team.`),
-      { status: 403 },
-    );
+    throw Object.assign(new Error(`${feature} requires an active plan. Upgrade to Pro or Team.`), {
+      status: 403,
+    });
   }
 }
 
@@ -320,8 +360,10 @@ function describeTimeline(takenAt: Array<string | null>): string {
   const days = Array.from(new Set(dates.map(dayKey)));
   const first = dates[0];
   const last = dates[dates.length - 1];
-  const fmtDate = (d: Date) => d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-  const fmtTime = (d: Date) => d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const fmtDate = (d: Date) =>
+    d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  const fmtTime = (d: Date) =>
+    d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 
   if (days.length === 1) {
     return `All photos were captured on ${fmtDate(first)}, between ${fmtTime(first)} and ${fmtTime(last)} - a single visit.`;
@@ -360,83 +402,96 @@ async function buildPhotoContext(
     .in("id", photoIds);
   if (!photos?.length) throw new Error("No photos found");
 
-  const projectIds = Array.from(new Set((photos as any[]).map((p: any) => p.project_id).filter(Boolean))) as string[];
+  const projectIds = Array.from(
+    new Set((photos as any[]).map((p: any) => p.project_id).filter(Boolean)),
+  ) as string[];
   const safeIds = projectIds.length ? projectIds : ["00000000-0000-0000-0000-000000000000"];
 
-  const [{ data: projects }, { data: analyses }, { data: tagRows }, { data: walkRows }, commentRes] =
-    await Promise.all([
-      supabase.from("projects").select("id, name, street, city, state").in("id", safeIds),
-      supabase
-        .from("ai_analyses")
-        .select("photo_id, ocr_text, labels, defects, report_text, recommendations")
-        .in("photo_id", photoIds)
-        .eq("status", "completed"),
-      (supabase as any).from("photo_tags").select("photo_id, tags(name)").in("photo_id", photoIds),
-      // Narration captured while walking the site - this is how a Report or
-      // Site Log "pulls from a walkthrough": the spoken note rides on the photo.
-      (supabase as any)
-        .from("walkthrough_photos")
-        .select("photo_id, spoken_note")
-        .in("photo_id", photoIds),
-      opts.includeComments
-        ? (supabase as any)
-            .from("photo_comments")
-            .select("photo_id, body, created_at")
-            .in("photo_id", photoIds)
-            .order("created_at", { ascending: true })
-        : Promise.resolve({ data: [] as any[] }),
-    ]);
+  const [
+    { data: projects },
+    { data: analyses },
+    { data: tagRows },
+    { data: walkRows },
+    commentRes,
+  ] = await Promise.all([
+    supabase.from("projects").select("id, name, street, city, state").in("id", safeIds),
+    supabase
+      .from("ai_analyses")
+      .select("photo_id, ocr_text, labels, defects, report_text, recommendations")
+      .in("photo_id", photoIds)
+      .eq("status", "completed"),
+    (supabase as any).from("photo_tags").select("photo_id, tags(name)").in("photo_id", photoIds),
+    // Narration captured while walking the site - this is how a Report or
+    // Site Log "pulls from a walkthrough": the spoken note rides on the photo.
+    (supabase as any)
+      .from("walkthrough_photos")
+      .select("photo_id, spoken_note")
+      .in("photo_id", photoIds),
+    opts.includeComments
+      ? (supabase as any)
+          .from("photo_comments")
+          .select("photo_id, body, created_at")
+          .in("photo_id", photoIds)
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
 
   const projectById = new Map(((projects as any[]) ?? []).map((p: any) => [p.id, p]));
   const analysisByPhoto = new Map(((analyses as any[]) ?? []).map((a: any) => [a.photo_id, a]));
 
   const tagsByPhoto = new Map<string, string[]>();
-  for (const row of ((tagRows as any[]) ?? [])) {
+  for (const row of (tagRows as any[]) ?? []) {
     const name = row?.tags?.name;
     if (!name) continue;
     tagsByPhoto.set(row.photo_id, [...(tagsByPhoto.get(row.photo_id) ?? []), name]);
   }
 
   const notesByPhoto = new Map<string, string>();
-  for (const row of ((walkRows as any[]) ?? [])) {
+  for (const row of (walkRows as any[]) ?? []) {
     const note = String(row?.spoken_note ?? "").trim();
     if (note) notesByPhoto.set(row.photo_id, note);
   }
 
   const commentsByPhoto = new Map<string, string[]>();
-  for (const row of (((commentRes as any)?.data as any[]) ?? [])) {
+  for (const row of ((commentRes as any)?.data as any[]) ?? []) {
     const body = String(row?.body ?? "").trim();
     if (!body) continue;
     commentsByPhoto.set(row.photo_id, [...(commentsByPhoto.get(row.photo_id) ?? []), body]);
   }
 
-  const photoSummaries = (photos as any[]).map((p: any, i: number) => {
-    const a = analysisByPhoto.get(p.id);
-    const proj = p.project_id ? projectById.get(p.project_id) : undefined;
-    const cap = cleanCaption(p.caption);
-    const tags = tagsByPhoto.get(p.id) ?? [];
-    const note = notesByPhoto.get(p.id);
-    const comments = commentsByPhoto.get(p.id) ?? [];
-    return [
-      `Photo ${i + 1}${cap ? ` - ${cap}` : ""}`,
-      cap ? null : `(no caption recorded)`,
-      proj
-        ? `Project: ${proj.name}${
-            [proj.street, proj.city, proj.state].filter(Boolean).length
-              ? ` (${[proj.street, proj.city, proj.state].filter(Boolean).join(", ")})`
-              : ""
-          }`
-        : null,
-      tags.length ? `Tags: ${tags.join(", ")}` : null,
-      p.taken_at ? `Taken: ${new Date(p.taken_at).toLocaleString()}` : null,
-      note ? `Spoken note during walkthrough: "${note}"` : null,
-      comments.length ? `Team notes: ${comments.join(" | ")}` : null,
-      a?.report_text ? `Findings: ${a.report_text}` : null,
-      a?.defects?.length ? `Defects: ${JSON.stringify(a.defects)}` : null,
-      a?.recommendations?.length ? `Recommendations: ${(a.recommendations as string[]).join("; ")}` : null,
-      a?.ocr_text ? `Text on equipment: ${a.ocr_text}` : null,
-    ].filter(Boolean).join("\n");
-  }).join("\n\n---\n\n");
+  const photoSummaries = (photos as any[])
+    .map((p: any, i: number) => {
+      const a = analysisByPhoto.get(p.id);
+      const proj = p.project_id ? projectById.get(p.project_id) : undefined;
+      const cap = cleanCaption(p.caption);
+      const tags = tagsByPhoto.get(p.id) ?? [];
+      const note = notesByPhoto.get(p.id);
+      const comments = commentsByPhoto.get(p.id) ?? [];
+      return [
+        `Photo ${i + 1}${cap ? ` - ${cap}` : ""}`,
+        cap ? null : `(no caption recorded)`,
+        proj
+          ? `Project: ${proj.name}${
+              [proj.street, proj.city, proj.state].filter(Boolean).length
+                ? ` (${[proj.street, proj.city, proj.state].filter(Boolean).join(", ")})`
+                : ""
+            }`
+          : null,
+        tags.length ? `Tags: ${tags.join(", ")}` : null,
+        p.taken_at ? `Taken: ${new Date(p.taken_at).toLocaleString()}` : null,
+        note ? `Spoken note during walkthrough: "${note}"` : null,
+        comments.length ? `Team notes: ${comments.join(" | ")}` : null,
+        a?.report_text ? `Findings: ${a.report_text}` : null,
+        a?.defects?.length ? `Defects: ${JSON.stringify(a.defects)}` : null,
+        a?.recommendations?.length
+          ? `Recommendations: ${(a.recommendations as string[]).join("; ")}`
+          : null,
+        a?.ocr_text ? `Text on equipment: ${a.ocr_text}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n\n---\n\n");
 
   const proj = projectById.get(projectIds[0]);
   const timeline = describeTimeline((photos as any[]).map((p: any) => p.taken_at ?? p.created_at));
@@ -579,14 +634,14 @@ export async function draftReportNarrativeService(
  * (and which silently matched nothing, returning every section empty).
  */
 function extractSection(markdown: string, heading: string): string {
-  const re = new RegExp(
-    `^#{1,3}\\s*${heading}\\s*$([\\s\\S]*?)(?=^#{1,3}\\s|$(?![\\s\\S]))`,
-    "im",
-  );
+  const re = new RegExp(`^#{1,3}\\s*${heading}\\s*$([\\s\\S]*?)(?=^#{1,3}\\s|$(?![\\s\\S]))`, "im");
   return re.exec(markdown ?? "")?.[1]?.trim() ?? "";
 }
 
-export async function describeSiteLogPhotosService(ctx: AuthedContext, data: { photoIds: string[] }) {
+export async function describeSiteLogPhotosService(
+  ctx: AuthedContext,
+  data: { photoIds: string[] },
+) {
   const { supabase, userId } = ctx;
   if (!aiKeyConfigured()) throw new Error("AI is not configured");
   await requireActiveSub(supabase, userId, "Site log descriptions");
@@ -610,48 +665,64 @@ export async function describeSiteLogPhotosService(ctx: AuthedContext, data: { p
     tagsByPhoto.set(row.photo_id, arr);
   }
 
-  const NEUTRAL = "No descriptive information was provided for this photo. No specific observations or notes available.";
+  const NEUTRAL =
+    "No descriptive information was provided for this photo. No specific observations or notes available.";
 
-  const signed = await Promise.all((photos as any[]).map(async (p: any) => {
-    const caption = cleanCaption(p.caption);
-    const tags = tagsByPhoto.get(p.id) ?? [];
-    const hasContext = !!caption || tags.length > 0;
-    if (!hasContext) return { id: p.id, caption: "", tags, url: null as string | null, skip: true };
-    const { data: s } = await supabase.storage
-      .from("site-photos")
-      .createSignedUrl(p.storage_path, 900);
-    return { id: p.id, caption, tags, url: s?.signedUrl ?? null, skip: false };
-  }));
+  const signed = await Promise.all(
+    (photos as any[]).map(async (p: any) => {
+      const caption = cleanCaption(p.caption);
+      const tags = tagsByPhoto.get(p.id) ?? [];
+      const hasContext = !!caption || tags.length > 0;
+      if (!hasContext)
+        return { id: p.id, caption: "", tags, url: null as string | null, skip: true };
+      const { data: s } = await supabase.storage
+        .from("site-photos")
+        .createSignedUrl(p.storage_path, 900);
+      return { id: p.id, caption, tags, url: s?.signedUrl ?? null, skip: false };
+    }),
+  );
 
   const ep = chatEndpoint(CHAT_MODEL);
-  const results = await Promise.all(signed.map(async (item, i) => {
-    if (item.skip || !item.url) return [item.id, NEUTRAL] as const;
-    try {
-      const contextBits: string[] = [];
-      if (item.caption) contextBits.push(`caption: ${item.caption}`);
-      if (item.tags.length) contextBits.push(`tags: ${item.tags.join(", ")}`);
-      const res = await fetch(ep.url, {
-        method: "POST",
-        headers: ep.headers,
-        body: JSON.stringify({
-          model: ep.model,
-          messages: [
-            { role: "system", content: "You write a concise site-log note for a construction/trades photo, grounded ONLY in the user-provided context (caption, tags, voice notes). Reply with 2-3 short factual sentences that restate/expand the provided context and describe what is plainly visible. Neutral tone. Do NOT invent defects, risks, code issues, or recommendations the user did not mention. No headings, no bullets, no markdown, no disclaimers." },
-            { role: "user", content: [
-              { type: "text", text: `Photo ${i + 1} - user context: ${contextBits.join(" | ")}. Write the site-log note.` },
-              { type: "image_url", image_url: { url: await inlineImageAsDataUrl(item.url) } },
-            ] },
-          ],
-        }),
-      });
-      if (!res.ok) return [item.id, NEUTRAL] as const;
-      const json = await res.json();
-      const text = normalizeDashes(json.choices?.[0]?.message?.content ?? "").trim();
-      return [item.id, text || NEUTRAL] as const;
-    } catch {
-      return [item.id, NEUTRAL] as const;
-    }
-  }));
+  const results = await Promise.all(
+    signed.map(async (item, i) => {
+      if (item.skip || !item.url) return [item.id, NEUTRAL] as const;
+      try {
+        const contextBits: string[] = [];
+        if (item.caption) contextBits.push(`caption: ${item.caption}`);
+        if (item.tags.length) contextBits.push(`tags: ${item.tags.join(", ")}`);
+        const res = await fetch(ep.url, {
+          method: "POST",
+          headers: ep.headers,
+          body: JSON.stringify({
+            model: ep.model,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You write a concise site-log note for a construction/trades photo, grounded ONLY in the user-provided context (caption, tags, voice notes). Reply with 2-3 short factual sentences that restate/expand the provided context and describe what is plainly visible. Neutral tone. Do NOT invent defects, risks, code issues, or recommendations the user did not mention. No headings, no bullets, no markdown, no disclaimers.",
+              },
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text: `Photo ${i + 1} - user context: ${contextBits.join(" | ")}. Write the site-log note.`,
+                  },
+                  { type: "image_url", image_url: { url: await inlineImageAsDataUrl(item.url) } },
+                ],
+              },
+            ],
+          }),
+        });
+        if (!res.ok) return [item.id, NEUTRAL] as const;
+        const json = await res.json();
+        const text = normalizeDashes(json.choices?.[0]?.message?.content ?? "").trim();
+        return [item.id, text || NEUTRAL] as const;
+      } catch {
+        return [item.id, NEUTRAL] as const;
+      }
+    }),
+  );
 
   const notes: Record<string, string> = {};
   for (const [id, text] of results) notes[id] = text;
@@ -668,7 +739,9 @@ export async function summarizeWalkthroughsReportService(
 
   const { data: walks } = await supabase
     .from("walkthroughs" as never)
-    .select("id, title, transcript, summary_markdown, duration_seconds, started_at, project_id, status, created_by")
+    .select(
+      "id, title, transcript, summary_markdown, duration_seconds, started_at, project_id, status, created_by",
+    )
     .in("id", data.walkthroughIds);
   const mine = (walks ?? []).filter((w: { created_by: string }) => w.created_by === userId);
   if (!mine.length) throw new Error("No walkthroughs found");
@@ -677,20 +750,27 @@ export async function summarizeWalkthroughsReportService(
   const { data: projects } = await supabase
     .from("projects")
     .select("id, name")
-    .in("id", projectIds.length ? (projectIds as string[]) : ["00000000-0000-0000-0000-000000000000"]);
+    .in(
+      "id",
+      projectIds.length ? (projectIds as string[]) : ["00000000-0000-0000-0000-000000000000"],
+    );
   const projectById = new Map(((projects as any[]) ?? []).map((p: any) => [p.id, p]));
 
-  const blocks = mine.map((w: any, i: number) => {
-    const proj = w.project_id ? projectById.get(w.project_id) : undefined;
-    return [
-      `Walkthrough ${i + 1}: ${w.title ?? "Untitled"}`,
-      proj ? `Project: ${proj.name}` : null,
-      w.started_at ? `Date: ${new Date(w.started_at).toLocaleString()}` : null,
-      w.duration_seconds ? `Duration: ${Math.round(w.duration_seconds / 60)} min` : null,
-      w.summary_markdown ? `Prior summary:\n${w.summary_markdown}` : null,
-      w.transcript ? `Transcript:\n${String(w.transcript).slice(0, 6000)}` : null,
-    ].filter(Boolean).join("\n");
-  }).join("\n\n===\n\n");
+  const blocks = mine
+    .map((w: any, i: number) => {
+      const proj = w.project_id ? projectById.get(w.project_id) : undefined;
+      return [
+        `Walkthrough ${i + 1}: ${w.title ?? "Untitled"}`,
+        proj ? `Project: ${proj.name}` : null,
+        w.started_at ? `Date: ${new Date(w.started_at).toLocaleString()}` : null,
+        w.duration_seconds ? `Duration: ${Math.round(w.duration_seconds / 60)} min` : null,
+        w.summary_markdown ? `Prior summary:\n${w.summary_markdown}` : null,
+        w.transcript ? `Transcript:\n${String(w.transcript).slice(0, 6000)}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n\n===\n\n");
 
   const ep = chatEndpoint(CHAT_MODEL);
   const res = await fetch(ep.url, {
@@ -699,8 +779,15 @@ export async function summarizeWalkthroughsReportService(
     body: JSON.stringify({
       model: ep.model,
       messages: [
-        { role: "system", content: "You are SitePix AI, summarizing one or more site walkthroughs into a clean recap - like a site log, not an engineering diagnosis. Structure the Markdown as: # Title, ## Summary (2-3 sentences describing what was walked), ## Highlights (bulleted list summarizing what the technician described, grouped by area/topic when natural), ## Follow-ups (only if the source material explicitly mentions them). STYLE RULES: Neutral, factual, summary-focused. Do NOT use language like 'critical', 'code violation', 'safety hazard', 'severity: high', or strong diagnostic opinions unless the speaker explicitly used those words. Do NOT invent findings, risks, or recommendations. Base every bullet on what is actually in the transcripts and prior summaries. Prefer short bullets and clean spacing over long paragraphs." },
-        { role: "user", content: `${data.title ? `Report title: ${data.title}\n\n` : ""}Walkthroughs:\n\n${blocks}` },
+        {
+          role: "system",
+          content:
+            "You are SitePix AI, summarizing one or more site walkthroughs into a clean recap - like a site log, not an engineering diagnosis. Structure the Markdown as: # Title, ## Summary (2-3 sentences describing what was walked), ## Highlights (bulleted list summarizing what the technician described, grouped by area/topic when natural), ## Follow-ups (only if the source material explicitly mentions them). STYLE RULES: Neutral, factual, summary-focused. Do NOT use language like 'critical', 'code violation', 'safety hazard', 'severity: high', or strong diagnostic opinions unless the speaker explicitly used those words. Do NOT invent findings, risks, or recommendations. Base every bullet on what is actually in the transcripts and prior summaries. Prefer short bullets and clean spacing over long paragraphs.",
+        },
+        {
+          role: "user",
+          content: `${data.title ? `Report title: ${data.title}\n\n` : ""}Walkthroughs:\n\n${blocks}`,
+        },
       ],
     }),
   });

@@ -9,9 +9,10 @@ export interface TextSnippet {
 
 export const listTextSnippets = rpcOp<undefined, { snippets: TextSnippet[] }>("listTextSnippets");
 
-export const createTextSnippet = rpcOp<{ title: string; contentHtml: string }, { snippet: TextSnippet }>(
-  "createTextSnippet",
-);
+export const createTextSnippet = rpcOp<
+  { title: string; contentHtml: string },
+  { snippet: TextSnippet }
+>("createTextSnippet");
 
 export const updateTextSnippet = rpcOp<
   { snippetId: string; title?: string; contentHtml?: string },

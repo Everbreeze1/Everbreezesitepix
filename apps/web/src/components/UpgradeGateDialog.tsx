@@ -21,8 +21,8 @@ export function UpgradeGateDialog() {
           </DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          {gateState.reason ?? "This action needs an active plan."} Choose a plan to keep
-          creating and uploading - you can keep browsing your existing projects for free.
+          {gateState.reason ?? "This action needs an active plan."} Choose a plan to keep creating
+          and uploading - you can keep browsing your existing projects for free.
         </p>
         <Button asChild className="w-full">
           <Link to="/pricing" onClick={closeGate}>

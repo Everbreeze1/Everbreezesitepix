@@ -89,7 +89,9 @@ export function AddProjectToTagDialog({ open, tag, projects, onClose, onAdded }:
           <div className="p-1">
             {filtered.length === 0 ? (
               <p className="p-4 text-center text-xs text-muted-foreground">
-                {projects.length === 0 ? "Every project already has this tag." : "No projects match."}
+                {projects.length === 0
+                  ? "Every project already has this tag."
+                  : "No projects match."}
               </p>
             ) : (
               filtered.map((p) => (

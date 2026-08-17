@@ -16,6 +16,4 @@ export const markNotificationRead = rpcOp<{ notificationId: string }, { ok: true
   "markNotificationRead",
 );
 
-export const markAllNotificationsRead = rpcOp<undefined, { ok: true }>(
-  "markAllNotificationsRead",
-);
+export const markAllNotificationsRead = rpcOp<undefined, { ok: true }>("markAllNotificationsRead");

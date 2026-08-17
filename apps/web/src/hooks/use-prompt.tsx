@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useRef, useState, ReactNode, FormEvent } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useRef,
+  useState,
+  ReactNode,
+  FormEvent,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,7 +76,9 @@ export function PromptDialogProvider({ children }: { children: ReactNode }) {
             </DialogHeader>
             <div className="py-2">
               {options?.label && (
-                <label className="mb-1.5 block text-xs font-bold text-muted-foreground">{options.label}</label>
+                <label className="mb-1.5 block text-xs font-bold text-muted-foreground">
+                  {options.label}
+                </label>
               )}
               <Input
                 autoFocus

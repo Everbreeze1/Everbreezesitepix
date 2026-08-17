@@ -78,8 +78,7 @@ export function useNotifications() {
     );
     qc.setQueryData(
       qk.notificationsUnread(user.id),
-      (cur: { count: number } | undefined) =>
-        cur && { count: Math.max(0, cur.count - ids.size) },
+      (cur: { count: number } | undefined) => cur && { count: Math.max(0, cur.count - ids.size) },
     );
   };
 

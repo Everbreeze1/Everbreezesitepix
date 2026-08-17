@@ -36,14 +36,11 @@ export async function synthesizeBreezeSpeechService(
     audioConfig: { audioEncoding: "MP3" },
   };
 
-  const res = await fetch(
-    `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-  );
+  const res = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
     throw new Error(`TTS failed: ${res.status} ${txt.slice(0, 200)}`);

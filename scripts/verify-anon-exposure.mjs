@@ -38,7 +38,9 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? env.VITE_SUPABASE_URL;
 const ANON_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 if (!SUPABASE_URL || !ANON_KEY) {
-  console.error("Missing VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY (checked env and .env).");
+  console.error(
+    "Missing VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY (checked env and .env).",
+  );
   process.exit(2);
 }
 
@@ -51,24 +53,67 @@ if (!SUPABASE_URL || !ANON_KEY) {
 const INTENTIONALLY_PUBLIC = new Set([]);
 
 const TABLES = [
-  "admin_audit_log", "ai_analyses", "api_audit_logs", "api_idempotency_keys",
-  "auto_report_generations", "checklist_item_photos", "checklist_template_items",
-  "checklist_templates", "document_templates", "feedback_prompt_events", "feedback_signals",
-  "issue_reports", "label_set_items", "label_sets", "labels", "notifications",
-  "photo_comments", "photos", "platform_admins", "portfolios", "profiles",
-  "project_blueprint_applications", "project_boards", "project_checklist_items",
-  "project_checklists", "project_document_folders", "project_documents",
-  "project_group_members", "project_groups", "project_pages", "project_report_sections",
-  "project_reports", "project_site_logs", "project_template_checklists",
-  "project_template_items", "project_templates", "project_workflow_items",
-  "project_workflow_phases", "project_workflows", "projects", "report_templates",
-  "showcase_items", "showcase_sections", "showcases", "tasks", "team_invites",
-  "team_members", "team_review_links", "teams", "text_snippets", "walkthrough_photos",
-  "walkthroughs", "workflow_template_items", "workflow_template_phases", "workflow_templates",
+  "admin_audit_log",
+  "ai_analyses",
+  "api_audit_logs",
+  "api_idempotency_keys",
+  "auto_report_generations",
+  "checklist_item_photos",
+  "checklist_template_items",
+  "checklist_templates",
+  "document_templates",
+  "feedback_prompt_events",
+  "feedback_signals",
+  "issue_reports",
+  "label_set_items",
+  "label_sets",
+  "labels",
+  "notifications",
+  "photo_comments",
+  "photos",
+  "platform_admins",
+  "portfolios",
+  "profiles",
+  "project_blueprint_applications",
+  "project_boards",
+  "project_checklist_items",
+  "project_checklists",
+  "project_document_folders",
+  "project_documents",
+  "project_group_members",
+  "project_groups",
+  "project_pages",
+  "project_report_sections",
+  "project_reports",
+  "project_site_logs",
+  "project_template_checklists",
+  "project_template_items",
+  "project_templates",
+  "project_workflow_items",
+  "project_workflow_phases",
+  "project_workflows",
+  "projects",
+  "report_templates",
+  "showcase_items",
+  "showcase_sections",
+  "showcases",
+  "tasks",
+  "team_invites",
+  "team_members",
+  "team_review_links",
+  "teams",
+  "text_snippets",
+  "walkthrough_photos",
+  "walkthroughs",
+  "workflow_template_items",
+  "workflow_template_phases",
+  "workflow_templates",
   // Restored by 20260811003000. They hold private chat history and, in
   // photo_shares, the share `token` itself - exactly the shape of data that
   // leaked from `walkthroughs`, so they are the most important rows here.
-  "conversations", "messages", "photo_shares",
+  "conversations",
+  "messages",
+  "photo_shares",
 ];
 
 const leaks = [];

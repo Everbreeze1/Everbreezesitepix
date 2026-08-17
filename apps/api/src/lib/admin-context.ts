@@ -10,6 +10,8 @@ export async function requirePlatformAdmin(userId: string): Promise<void> {
     .eq("user_id", userId)
     .maybeSingle();
   if (error || !data) {
-    throw Object.assign(new AuthError("Forbidden - platform admin access required"), { status: 403 });
+    throw Object.assign(new AuthError("Forbidden - platform admin access required"), {
+      status: 403,
+    });
   }
 }

@@ -71,9 +71,7 @@ export async function listProjectPhotos(projectId: string, limit = 40): Promise<
   return (data as PhotoListItem[]) ?? [];
 }
 
-export async function signPhotoUrls(
-  photos: PhotoListItem[],
-): Promise<Record<string, string>> {
+export async function signPhotoUrls(photos: PhotoListItem[]): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   const needSign: { id: string; path: string }[] = [];
 
@@ -84,12 +82,10 @@ export async function signPhotoUrls(
 
   if (!needSign.length) return out;
 
-  const { data } = await supabase.storage
-    .from("site-photos")
-    .createSignedUrls(
-      needSign.map((n) => n.path),
-      60 * 60,
-    );
+  const { data } = await supabase.storage.from("site-photos").createSignedUrls(
+    needSign.map((n) => n.path),
+    60 * 60,
+  );
 
   data?.forEach((s, i) => {
     if (s?.signedUrl) out[needSign[i].id] = s.signedUrl;

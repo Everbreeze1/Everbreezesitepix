@@ -305,147 +305,152 @@ function SignupPage() {
             </div>
           ) : (
             <>
-          <p className="font-manrope text-xs font-extrabold uppercase leading-4 tracking-[1.92px] text-primary">
-            Create your account
-          </p>
-          <h2 className="font-display mt-3 text-[48px] font-black uppercase leading-[0.92] tracking-[-1.68px] text-foreground">
-            Bring your job sites into focus.
-          </h2>
-          <p className="font-manrope mt-4 text-sm leading-[24px] text-muted-foreground">
-            Create your account and organize your first project in minutes.
-          </p>
+              <p className="font-manrope text-xs font-extrabold uppercase leading-4 tracking-[1.92px] text-primary">
+                Create your account
+              </p>
+              <h2 className="font-display mt-3 text-[48px] font-black uppercase leading-[0.92] tracking-[-1.68px] text-foreground">
+                Bring your job sites into focus.
+              </h2>
+              <p className="font-manrope mt-4 text-sm leading-[24px] text-muted-foreground">
+                Create your account and organize your first project in minutes.
+              </p>
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="name" className="font-manrope text-sm font-bold text-foreground">
-                Full name
-              </Label>
-              <Input
-                id="name"
-                required
-                autoComplete="name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Jordan Smith"
-                className="h-[45.6px] rounded-lg border-border font-manrope text-sm placeholder:text-[#9CA3AF]"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email" className="font-manrope text-sm font-bold text-foreground">
-                Work email
-              </Label>
-              {/*
+              <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="font-manrope text-sm font-bold text-foreground">
+                    Full name
+                  </Label>
+                  <Input
+                    id="name"
+                    required
+                    autoComplete="name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Jordan Smith"
+                    className="h-[45.6px] rounded-lg border-border font-manrope text-sm placeholder:text-[#9CA3AF]"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="font-manrope text-sm font-bold text-foreground">
+                    Work email
+                  </Label>
+                  {/*
                 autoComplete/inputMode/autoCapitalize are what let a password
                 manager save the credential and what gives a phone the email
                 keyboard. Without autoCapitalize="none" iOS capitalises the
                 first letter, which is one of the ways " A@B.com" gets typed in
                 the first place.
               */}
-              <Input
-                id="email"
-                type="email"
-                required
-                autoComplete="email"
-                inputMode="email"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
-                className="h-[45.6px] rounded-lg border-border font-manrope text-sm placeholder:text-[#9CA3AF]"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password" className="font-manrope text-sm font-bold text-foreground">
-                Password
-              </Label>
-              {/* "new-password" is what prompts a manager to offer to generate
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    inputMode="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@company.com"
+                    className="h-[45.6px] rounded-lg border-border font-manrope text-sm placeholder:text-[#9CA3AF]"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="password"
+                    className="font-manrope text-sm font-bold text-foreground"
+                  >
+                    Password
+                  </Label>
+                  {/* "new-password" is what prompts a manager to offer to generate
                   and save one; "current-password" here would make it autofill
                   an existing credential instead. */}
-              <PasswordInput
-                id="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 8 characters"
-                className="h-[45.6px] rounded-lg border-border font-manrope text-sm placeholder:text-[#9CA3AF]"
-              />
-            </div>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="h-12 w-full gap-2 rounded-lg bg-primary font-manrope text-sm font-bold text-primary-foreground hover:bg-primary/90"
-            >
-              {loading ? "Creating account…" : "Create account"}
-              {!loading && <ArrowRight className="h-4 w-4" />}
-            </Button>
-          </form>
+                  <PasswordInput
+                    id="password"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="At least 8 characters"
+                    className="h-[45.6px] rounded-lg border-border font-manrope text-sm placeholder:text-[#9CA3AF]"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="h-12 w-full gap-2 rounded-lg bg-primary font-manrope text-sm font-bold text-primary-foreground hover:bg-primary/90"
+                >
+                  {loading ? "Creating account…" : "Create account"}
+                  {!loading && <ArrowRight className="h-4 w-4" />}
+                </Button>
+              </form>
 
-          {social.any && (
-            <>
-              <div className="mt-7 flex items-center gap-3">
-                <div className="h-px flex-1 bg-border" />
-                <span className="font-manrope text-xs text-muted-foreground">or continue with</span>
-                <div className="h-px flex-1 bg-border" />
-              </div>
+              {social.any && (
+                <>
+                  <div className="mt-7 flex items-center gap-3">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="font-manrope text-xs text-muted-foreground">
+                      or continue with
+                    </span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
 
-              <div className="mt-7 grid gap-2.5">
-                {social.has("google") && (
-                  <Button
-                    type="button"
-                    onClick={() => handleOAuth("google")}
-                    disabled={!!oauthPending}
-                    variant="outline"
-                    className="h-10 w-full rounded-lg border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F5FB]"
-                  >
-                    {oauthPending === "google" ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <GoogleIcon />
+                  <div className="mt-7 grid gap-2.5">
+                    {social.has("google") && (
+                      <Button
+                        type="button"
+                        onClick={() => handleOAuth("google")}
+                        disabled={!!oauthPending}
+                        variant="outline"
+                        className="h-10 w-full rounded-lg border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F5FB]"
+                      >
+                        {oauthPending === "google" ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <GoogleIcon />
+                        )}
+                        Continue with Google
+                      </Button>
                     )}
-                    Continue with Google
-                  </Button>
-                )}
-                {social.has("apple") && (
-                  <Button
-                    type="button"
-                    onClick={() => handleOAuth("apple")}
-                    disabled={!!oauthPending}
-                    variant="outline"
-                    className="h-10 w-full rounded-lg border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F5FB]"
-                  >
-                    {oauthPending === "apple" ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <AppleIcon />
+                    {social.has("apple") && (
+                      <Button
+                        type="button"
+                        onClick={() => handleOAuth("apple")}
+                        disabled={!!oauthPending}
+                        variant="outline"
+                        className="h-10 w-full rounded-lg border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F5FB]"
+                      >
+                        {oauthPending === "apple" ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <AppleIcon />
+                        )}
+                        Continue with Apple
+                      </Button>
                     )}
-                    Continue with Apple
-                  </Button>
-                )}
-              </div>
-            </>
-          )}
+                  </div>
+                </>
+              )}
 
-          <p className="font-manrope mt-7 text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
-            <Link to="/login" className="font-bold text-primary hover:underline">
-              Log in
-            </Link>
-          </p>
-          <p className="font-manrope mt-4 text-center text-xs leading-5 text-muted-foreground">
-            By continuing, you agree to our{" "}
-            <Link to="/terms-of-service" className="text-primary hover:underline">
-              Terms of Service
-            </Link>{" "}
-            and{" "}
-            <Link to="/privacy-policy" className="text-primary hover:underline">
-              Privacy Policy
-            </Link>
-            .
-          </p>
+              <p className="font-manrope mt-7 text-center text-sm text-muted-foreground">
+                Already have an account?{" "}
+                <Link to="/login" className="font-bold text-primary hover:underline">
+                  Log in
+                </Link>
+              </p>
+              <p className="font-manrope mt-4 text-center text-xs leading-5 text-muted-foreground">
+                By continuing, you agree to our{" "}
+                <Link to="/terms-of-service" className="text-primary hover:underline">
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link to="/privacy-policy" className="text-primary hover:underline">
+                  Privacy Policy
+                </Link>
+                .
+              </p>
             </>
           )}
         </div>

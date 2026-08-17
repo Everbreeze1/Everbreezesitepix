@@ -275,7 +275,9 @@ describe("the style presets the Templates page writes", () => {
       return decl ? decl[1] : whole;
     });
 
-  const presets = [...MANAGER.matchAll(/key: "(\w+)",[\s\S]*?html: `([\s\S]*?)`,\n  \},/g)].map(
+  // `{2}` rather than two literal spaces: the indent is what closes the preset
+  // object in the source, and two spaces in a regex are unreadable (no-regex-spaces).
+  const presets = [...MANAGER.matchAll(/key: "(\w+)",[\s\S]*?html: `([\s\S]*?)`,\n {2}\},/g)].map(
     (m) => ({ key: m[1], html: resolve(m[2]) }),
   );
 

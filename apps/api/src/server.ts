@@ -172,9 +172,7 @@ app.use(
   }),
 );
 
-app.get("/v1/health", (c) =>
-  c.json(healthHandler(), 200, { "Cache-Control": "no-store" }),
-);
+app.get("/v1/health", (c) => c.json(healthHandler(), 200, { "Cache-Control": "no-store" }));
 
 app.post("/v1/rpc", (c) => handleRpc(c.req.raw));
 app.post("/v1/auth/send-email", (c) => handleAuthSendEmail(c.req.raw));

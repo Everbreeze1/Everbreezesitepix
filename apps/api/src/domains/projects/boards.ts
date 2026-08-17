@@ -19,7 +19,9 @@ async function myTeamId(ctx: AuthedContext): Promise<string | null> {
   return (data as any)?.team_id ?? null;
 }
 
-export async function listProjectBoardsService(ctx: AuthedContext): Promise<{ boards: ProjectBoard[] }> {
+export async function listProjectBoardsService(
+  ctx: AuthedContext,
+): Promise<{ boards: ProjectBoard[] }> {
   const teamId = await myTeamId(ctx);
   if (!teamId) return { boards: [] };
   const { data } = await (ctx.supabase as any)

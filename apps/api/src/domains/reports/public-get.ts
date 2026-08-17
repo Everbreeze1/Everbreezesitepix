@@ -127,7 +127,9 @@ export async function getPublicProjectReportService(
   if ((project as { deleted_at?: string | null } | null)?.deleted_at) return empty("revoked");
 
   let reviewLinks: PublicProjectReport["reviewLinks"] = [];
-  const team = (teamMembership as any)?.team as { id: string; plan: string; is_internal: boolean } | undefined;
+  const team = (teamMembership as any)?.team as
+    | { id: string; plan: string; is_internal: boolean }
+    | undefined;
   if (team && (team.plan === "team" || team.is_internal)) {
     const { data: linkRows } = await (supabaseAdmin as any)
       .from("team_review_links")
@@ -156,18 +158,21 @@ export async function getPublicProjectReportService(
   legacyIds.forEach((id) => photoIdSet.add(id));
 
   const urlById = new Map<string, string>();
-  const metaById = new Map<string, {
-    id: string;
-    caption: string | null;
-    phase: string | null;
-    tags: string[] | null;
-    taken_at: string | null;
-    created_at: string;
-    latitude: number | null;
-    longitude: number | null;
-    storage_path: string;
-    image_url: string | null;
-  }>();
+  const metaById = new Map<
+    string,
+    {
+      id: string;
+      caption: string | null;
+      phase: string | null;
+      tags: string[] | null;
+      taken_at: string | null;
+      created_at: string;
+      latitude: number | null;
+      longitude: number | null;
+      storage_path: string;
+      image_url: string | null;
+    }
+  >();
   if (photoIdSet.size) {
     // Chunked, and errors throw rather than being dropped by destructuring only
     // `data` - above ~398 ids the single `.in()` this replaced failed on

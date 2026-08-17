@@ -60,9 +60,7 @@ export default function ProjectsScreen() {
         <FlatList
           data={projects}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={
-            projects.length ? styles.list : styles.emptyList
-          }
+          contentContainerStyle={projects.length ? styles.list : styles.emptyList}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

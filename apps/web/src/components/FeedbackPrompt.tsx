@@ -82,11 +82,7 @@ export function FeedbackPrompt() {
     close();
   };
 
-  const send = async (
-    nextKind: FeedbackKind,
-    sentiment: "good" | "bad" | null,
-    text: string,
-  ) => {
+  const send = async (nextKind: FeedbackKind, sentiment: "good" | "bad" | null, text: string) => {
     setSending(true);
     try {
       await submitFeedback({
@@ -134,9 +130,7 @@ export function FeedbackPrompt() {
       {step === "done" ? (
         <div className="py-2 pr-6">
           <p className="text-sm font-bold text-foreground">Thanks - that helps.</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            We read every one of these.
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">We read every one of these.</p>
         </div>
       ) : step === "ask" ? (
         <div className="pr-6">

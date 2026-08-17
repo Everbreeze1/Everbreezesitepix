@@ -503,7 +503,10 @@ function TermsOfServicePage() {
               </p>
               <p className="text-muted-foreground">
                 Website:{" "}
-                <a href="https://www.everbreezesitepix.com" className="text-primary hover:underline">
+                <a
+                  href="https://www.everbreezesitepix.com"
+                  className="text-primary hover:underline"
+                >
                   everbreezesitepix.com
                 </a>
               </p>

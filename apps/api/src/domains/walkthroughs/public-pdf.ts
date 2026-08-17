@@ -1,4 +1,11 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
+import {
+  PDFDocument,
+  StandardFonts,
+  rgb,
+  type PDFFont,
+  type PDFImage,
+  type PDFPage,
+} from "pdf-lib";
 import { walkthroughSummaryBlocks, type RichBlock } from "@sitepix/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import {
@@ -88,7 +95,7 @@ export async function handleWalkthroughPdf(token: string): Promise<Response> {
       .order("position", { ascending: true }),
   ]);
 
-  const links = ((linkRows as any[]) ?? []);
+  const links = (linkRows as any[]) ?? [];
   const urlById = new Map<string, string>();
   const metaById = new Map<string, { caption: string | null }>();
   if (links.length) {
@@ -186,7 +193,8 @@ export async function renderWalkthroughPdf(input: WalkthroughPdfInput): Promise<
     return img;
   }
 
-  const fmtDur = (s: number) => `${Math.floor(s / 60)}:${(Math.max(0, s) % 60).toString().padStart(2, "0")}`;
+  const fmtDur = (s: number) =>
+    `${Math.floor(s / 60)}:${(Math.max(0, s) % 60).toString().padStart(2, "0")}`;
   const rawTranscript = input.transcript.replace(/\s+/g, " ").trim();
   const durationSeconds = input.durationSeconds;
 
@@ -195,35 +203,94 @@ export async function renderWalkthroughPdf(input: WalkthroughPdfInput): Promise<
   let y = PAGE_H - MARGIN;
 
   y = await drawCompanyHeader(pdf, page, fonts, MARGIN, y, profile, TEXT, MUTED);
-  page.drawLine({ start: { x: MARGIN, y: y - 6 }, end: { x: PAGE_W - MARGIN, y: y - 6 }, thickness: 0.5, color: BORDER });
+  page.drawLine({
+    start: { x: MARGIN, y: y - 6 },
+    end: { x: PAGE_W - MARGIN, y: y - 6 },
+    thickness: 0.5,
+    color: BORDER,
+  });
   y -= 34;
 
   // A summary was never walked, so neither the "WALKTHROUGH REPORT"
   // stamp nor a "Duration 0:00" line is true of it. This PDF is the
   // customer-facing deliverable, so both are branched rather than left.
-  page.drawText(sanitizeForWinAnsi(isSummary ? "PHOTO SUMMARY" : "WALKTHROUGH REPORT"), { x: MARGIN, y, size: 9, font: fonts.bold, color: ACCENT });
+  page.drawText(sanitizeForWinAnsi(isSummary ? "PHOTO SUMMARY" : "WALKTHROUGH REPORT"), {
+    x: MARGIN,
+    y,
+    size: 9,
+    font: fonts.bold,
+    color: ACCENT,
+  });
   y -= 22;
-  y = drawWrapped(page, safeTitle, { x: MARGIN, y, maxWidth: CONTENT_W, size: 26, font: fonts.bold, color: TEXT, lineGap: 6 });
+  y = drawWrapped(page, safeTitle, {
+    x: MARGIN,
+    y,
+    maxWidth: CONTENT_W,
+    size: 26,
+    font: fonts.bold,
+    color: TEXT,
+    lineGap: 6,
+  });
   y -= 6;
 
   const metaParts = [
-    new Date(input.startedAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }),
+    new Date(input.startedAt).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }),
     ...(isSummary ? [] : [`Duration ${fmtDur(durationSeconds)}`]),
     `${links.length} ${links.length === 1 ? "photo" : "photos"}`,
   ];
   const author = profile?.full_name;
   if (author) metaParts.push(`Prepared by ${author}`);
-  page.drawText(sanitizeForWinAnsi(metaParts.join("  ·  ")), { x: MARGIN, y: y - 11, size: 10.5, font: fonts.regular, color: MUTED });
+  page.drawText(sanitizeForWinAnsi(metaParts.join("  ·  ")), {
+    x: MARGIN,
+    y: y - 11,
+    size: 10.5,
+    font: fonts.regular,
+    color: MUTED,
+  });
   y -= 30;
 
   if (project) {
-    const addr = [project.street, [project.city, project.state].filter(Boolean).join(", "), project.zip].filter(Boolean);
+    const addr = [
+      project.street,
+      [project.city, project.state].filter(Boolean).join(", "),
+      project.zip,
+    ].filter(Boolean);
     const cardH = addr.length ? 78 : 56;
-    page.drawRectangle({ x: MARGIN, y: y - cardH, width: CONTENT_W, height: cardH, color: FAINT, borderColor: BORDER, borderWidth: 0.5 });
-    page.drawText("PROJECT", { x: MARGIN + 16, y: y - 18, size: 8, font: fonts.bold, color: ACCENT });
-    page.drawText(sanitizeForWinAnsi(String(project.name ?? "")), { x: MARGIN + 16, y: y - 38, size: 14, font: fonts.bold, color: TEXT });
+    page.drawRectangle({
+      x: MARGIN,
+      y: y - cardH,
+      width: CONTENT_W,
+      height: cardH,
+      color: FAINT,
+      borderColor: BORDER,
+      borderWidth: 0.5,
+    });
+    page.drawText("PROJECT", {
+      x: MARGIN + 16,
+      y: y - 18,
+      size: 8,
+      font: fonts.bold,
+      color: ACCENT,
+    });
+    page.drawText(sanitizeForWinAnsi(String(project.name ?? "")), {
+      x: MARGIN + 16,
+      y: y - 38,
+      size: 14,
+      font: fonts.bold,
+      color: TEXT,
+    });
     if (addr.length) {
-      page.drawText(sanitizeForWinAnsi(addr.join(" · ")), { x: MARGIN + 16, y: y - 58, size: 10, font: fonts.regular, color: MUTED });
+      page.drawText(sanitizeForWinAnsi(addr.join(" · ")), {
+        x: MARGIN + 16,
+        y: y - 58,
+        size: 10,
+        font: fonts.regular,
+        color: MUTED,
+      });
     }
     y -= cardH + 20;
   }
@@ -249,7 +316,17 @@ export async function renderWalkthroughPdf(input: WalkthroughPdfInput): Promise<
 
     if (heroImg) {
       const heroH = 182;
-      drawFittedImage(page, heroImg, MARGIN, y - heroH, CONTENT_W, heroH, BORDER, fonts.regular, MUTED);
+      drawFittedImage(
+        page,
+        heroImg,
+        MARGIN,
+        y - heroH,
+        CONTENT_W,
+        heroH,
+        BORDER,
+        fonts.regular,
+        MUTED,
+      );
       y -= heroH + 16;
     }
 
@@ -259,7 +336,12 @@ export async function renderWalkthroughPdf(input: WalkthroughPdfInput): Promise<
         let py = PAGE_H - MARGIN;
         drawRunningHeader(page, fonts.regular, safeTitle, "Summary (cont.)", MARGIN, PAGE_W, MUTED);
         py -= 14;
-        page.drawLine({ start: { x: MARGIN, y: py }, end: { x: PAGE_W - MARGIN, y: py }, thickness: 0.5, color: BORDER });
+        page.drawLine({
+          start: { x: MARGIN, y: py },
+          end: { x: PAGE_W - MARGIN, y: py },
+          thickness: 0.5,
+          color: BORDER,
+        });
         py -= 26;
         drawFooter(page, fonts.regular, companyName, MARGIN, MUTED);
         return { page, y: py };
@@ -289,9 +371,22 @@ export async function renderWalkthroughPdf(input: WalkthroughPdfInput): Promise<
     const batch = links.slice(i, i + perPage);
     page = pdf.addPage([PAGE_W, PAGE_H]);
     let py = PAGE_H - MARGIN;
-    drawRunningHeader(page, fonts.regular, safeTitle, `Photos ${i + 1}-${Math.min(i + perPage, links.length)} of ${links.length}`, MARGIN, PAGE_W, MUTED);
+    drawRunningHeader(
+      page,
+      fonts.regular,
+      safeTitle,
+      `Photos ${i + 1}-${Math.min(i + perPage, links.length)} of ${links.length}`,
+      MARGIN,
+      PAGE_W,
+      MUTED,
+    );
     py -= 14;
-    page.drawLine({ start: { x: MARGIN, y: py }, end: { x: PAGE_W - MARGIN, y: py }, thickness: 0.5, color: BORDER });
+    page.drawLine({
+      start: { x: MARGIN, y: py },
+      end: { x: PAGE_W - MARGIN, y: py },
+      thickness: 0.5,
+      color: BORDER,
+    });
     py -= 18;
 
     const availH = py - MARGIN - 28;
@@ -313,32 +408,60 @@ export async function renderWalkthroughPdf(input: WalkthroughPdfInput): Promise<
       // does not exist.
       let cy = rowTop - 4;
       page.drawText(
-        sanitizeForWinAnsi(isSummary ? `Photo ${idx}` : `Photo ${idx}  ·  ${fmtDur(l.offset_seconds ?? 0)}`),
+        sanitizeForWinAnsi(
+          isSummary ? `Photo ${idx}` : `Photo ${idx}  ·  ${fmtDur(l.offset_seconds ?? 0)}`,
+        ),
         {
-          x: MARGIN + imgBoxW + 16, y: cy - 11, size: 10, font: fonts.bold, color: ACCENT,
+          x: MARGIN + imgBoxW + 16,
+          y: cy - 11,
+          size: 10,
+          font: fonts.bold,
+          color: ACCENT,
         },
       );
       cy -= 22;
-      const note = String(l.spoken_note ?? "").trim()
-        || estimateSpokenNote(rawTranscript, l.offset_seconds ?? 0, links[i + b + 1]?.offset_seconds ?? null, durationSeconds, i + b, links.length);
+      const note =
+        String(l.spoken_note ?? "").trim() ||
+        estimateSpokenNote(
+          rawTranscript,
+          l.offset_seconds ?? 0,
+          links[i + b + 1]?.offset_seconds ?? null,
+          durationSeconds,
+          i + b,
+          links.length,
+        );
       if (note) {
         cy = drawWrapped(page, `“${note}”`, {
-          x: MARGIN + imgBoxW + 16, y: cy, maxWidth: capBoxW,
-          size: 10.5, font: fonts.italic, color: TEXT, lineGap: 3,
+          x: MARGIN + imgBoxW + 16,
+          y: cy,
+          maxWidth: capBoxW,
+          size: 10.5,
+          font: fonts.italic,
+          color: TEXT,
+          lineGap: 3,
         });
         cy -= 6;
       } else if (!isSummary) {
         // Nothing was ever spoken over a summary, so this would apologise
         // for missing narration under every single photo.
         page.drawText(sanitizeForWinAnsi("No spoken note captured."), {
-          x: MARGIN + imgBoxW + 16, y: cy - 11, size: 10, font: fonts.italic, color: MUTED,
+          x: MARGIN + imgBoxW + 16,
+          y: cy - 11,
+          size: 10,
+          font: fonts.italic,
+          color: MUTED,
         });
         cy -= 20;
       }
       if (l.caption && !looksLikeFilename(l.caption)) {
         drawWrapped(page, l.caption, {
-          x: MARGIN + imgBoxW + 16, y: cy, maxWidth: capBoxW,
-          size: 9.5, font: fonts.regular, color: MUTED, lineGap: 3,
+          x: MARGIN + imgBoxW + 16,
+          y: cy,
+          maxWidth: capBoxW,
+          size: 9.5,
+          font: fonts.regular,
+          color: MUTED,
+          lineGap: 3,
         });
       }
     }
@@ -378,7 +501,13 @@ function drawWrapped(page: PDFPage, text: string, opts: WrapOpts): number {
     for (const w of words) {
       const test = line ? `${line} ${w}` : w;
       if (opts.font.widthOfTextAtSize(test, opts.size) > opts.maxWidth && line) {
-        page.drawText(sanitizeForWinAnsi(line), { x: opts.x, y: y - opts.size, size: opts.size, font: opts.font, color: opts.color });
+        page.drawText(sanitizeForWinAnsi(line), {
+          x: opts.x,
+          y: y - opts.size,
+          size: opts.size,
+          font: opts.font,
+          color: opts.color,
+        });
         y -= lineHeight;
         line = w;
       } else {
@@ -386,7 +515,13 @@ function drawWrapped(page: PDFPage, text: string, opts: WrapOpts): number {
       }
     }
     if (line) {
-      page.drawText(sanitizeForWinAnsi(line), { x: opts.x, y: y - opts.size, size: opts.size, font: opts.font, color: opts.color });
+      page.drawText(sanitizeForWinAnsi(line), {
+        x: opts.x,
+        y: y - opts.size,
+        size: opts.size,
+        font: opts.font,
+        color: opts.color,
+      });
       y -= lineHeight;
     }
   }
@@ -396,9 +531,11 @@ function drawWrapped(page: PDFPage, text: string, opts: WrapOpts): number {
 function looksLikeFilename(s: string): boolean {
   const t = s.trim();
   if (!t) return true;
-  return /\.(jpe?g|png|webp|gif|heic|heif|avif)$/i.test(t)
-    || /^(?:walkthrough|photo|img|image|dsc|screenshot)[-_ ]?\d/i.test(t)
-    || /^https?:\/\//i.test(t);
+  return (
+    /\.(jpe?g|png|webp|gif|heic|heif|avif)$/i.test(t) ||
+    /^(?:walkthrough|photo|img|image|dsc|screenshot)[-_ ]?\d/i.test(t) ||
+    /^https?:\/\//i.test(t)
+  );
 }
 
 function estimateSpokenNote(
@@ -412,15 +549,21 @@ function estimateSpokenNote(
   const words = transcript.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
   if (!words.length) return null;
   const totalCount = Math.max(1, total);
-  const duration = Number.isFinite(durationSeconds) && durationSeconds > 0
-    ? durationSeconds
-    : (endSeconds && endSeconds > startSeconds ? endSeconds : 0);
+  const duration =
+    Number.isFinite(durationSeconds) && durationSeconds > 0
+      ? durationSeconds
+      : endSeconds && endSeconds > startSeconds
+        ? endSeconds
+        : 0;
   let startRatio: number;
   let endRatio: number;
   if (duration > 0 && Number.isFinite(startSeconds)) {
     const perPhoto = duration / totalCount;
     const windowStart = Math.max(0, startSeconds - Math.min(8, perPhoto / 2));
-    const windowEnd = Math.min(duration, endSeconds && endSeconds > startSeconds ? endSeconds : startSeconds + Math.max(10, perPhoto));
+    const windowEnd = Math.min(
+      duration,
+      endSeconds && endSeconds > startSeconds ? endSeconds : startSeconds + Math.max(10, perPhoto),
+    );
     startRatio = Math.min(0.95, Math.max(0, windowStart / duration));
     endRatio = Math.min(1, Math.max(startRatio + 0.02, windowEnd / duration));
   } else {
@@ -436,36 +579,70 @@ function estimateSpokenNote(
 function drawFittedImage(
   page: PDFPage,
   img: PDFImage | null,
-  x: number, y: number, boxW: number, boxH: number,
+  x: number,
+  y: number,
+  boxW: number,
+  boxH: number,
   border: ReturnType<typeof rgb>,
   helv: PDFFont,
   muted: ReturnType<typeof rgb>,
 ) {
   page.drawRectangle({ x, y, width: boxW, height: boxH, borderColor: border, borderWidth: 0.5 });
   if (!img) {
-    page.drawText("Image unavailable", { x: x + 8, y: y + boxH / 2 - 4, size: 9, font: helv, color: muted });
+    page.drawText("Image unavailable", {
+      x: x + 8,
+      y: y + boxH / 2 - 4,
+      size: 9,
+      font: helv,
+      color: muted,
+    });
     return;
   }
   const ratio = img.height / img.width;
   let w = boxW;
   let h = w * ratio;
-  if (h > boxH) { h = boxH; w = h / ratio; }
+  if (h > boxH) {
+    h = boxH;
+    w = h / ratio;
+  }
   page.drawImage(img, { x: x + (boxW - w) / 2, y: y + (boxH - h) / 2, width: w, height: h });
 }
 
 function drawRunningHeader(
-  page: PDFPage, font: PDFFont, left: string, right: string,
-  margin: number, pageW: number, color: ReturnType<typeof rgb>,
+  page: PDFPage,
+  font: PDFFont,
+  left: string,
+  right: string,
+  margin: number,
+  pageW: number,
+  color: ReturnType<typeof rgb>,
 ) {
-  page.drawText(sanitizeForWinAnsi(truncate(left, 60)), { x: margin, y: page.getHeight() - margin, size: 9, font, color });
+  page.drawText(sanitizeForWinAnsi(truncate(left, 60)), {
+    x: margin,
+    y: page.getHeight() - margin,
+    size: 9,
+    font,
+    color,
+  });
   const rw = font.widthOfTextAtSize(right, 9);
-  page.drawText(sanitizeForWinAnsi(right), { x: pageW - margin - rw, y: page.getHeight() - margin, size: 9, font, color });
+  page.drawText(sanitizeForWinAnsi(right), {
+    x: pageW - margin - rw,
+    y: page.getHeight() - margin,
+    size: 9,
+    font,
+    color,
+  });
 }
 
 async function drawCompanyHeader(
-  pdf: PDFDocument, page: PDFPage, fonts: FontSet,
-  margin: number, y: number, profile: WalkthroughPdfInput["profile"],
-  text: ReturnType<typeof rgb>, muted: ReturnType<typeof rgb>,
+  pdf: PDFDocument,
+  page: PDFPage,
+  fonts: FontSet,
+  margin: number,
+  y: number,
+  profile: WalkthroughPdfInput["profile"],
+  text: ReturnType<typeof rgb>,
+  muted: ReturnType<typeof rgb>,
 ): Promise<number> {
   const name = profile?.company || "SitePix";
   const logoUrl = profile?.company_logo_url as string | null | undefined;
@@ -481,24 +658,56 @@ async function drawCompanyHeader(
       topY = y - 4;
     }
   }
-  page.drawText(sanitizeForWinAnsi(name), { x: textX, y: topY - 14, size: 14, font: fonts.bold, color: text });
+  page.drawText(sanitizeForWinAnsi(name), {
+    x: textX,
+    y: topY - 14,
+    size: 14,
+    font: fonts.bold,
+    color: text,
+  });
   let cy = topY - 28;
   if (profile?.company_phone) {
-    page.drawText(sanitizeForWinAnsi(String(profile.company_phone)), { x: textX, y: cy, size: 9, font: fonts.regular, color: muted });
+    page.drawText(sanitizeForWinAnsi(String(profile.company_phone)), {
+      x: textX,
+      y: cy,
+      size: 9,
+      font: fonts.regular,
+      color: muted,
+    });
     cy -= 12;
   }
   if (profile?.company_address) {
-    page.drawText(sanitizeForWinAnsi(truncate(String(profile.company_address), 80)), { x: textX, y: cy, size: 9, font: fonts.regular, color: muted });
+    page.drawText(sanitizeForWinAnsi(truncate(String(profile.company_address), 80)), {
+      x: textX,
+      y: cy,
+      size: 9,
+      font: fonts.regular,
+      color: muted,
+    });
     cy -= 12;
   }
   return Math.min(cy, y - 50);
 }
 
-function drawFooter(page: PDFPage, font: PDFFont, company: string, margin: number, color: ReturnType<typeof rgb>) {
-  page.drawText(sanitizeForWinAnsi(`Generated with SitePix · ${company}`), { x: margin, y: 24, size: 8, font, color });
+function drawFooter(
+  page: PDFPage,
+  font: PDFFont,
+  company: string,
+  margin: number,
+  color: ReturnType<typeof rgb>,
+) {
+  page.drawText(sanitizeForWinAnsi(`Generated with SitePix · ${company}`), {
+    x: margin,
+    y: 24,
+    size: 8,
+    font,
+    color,
+  });
 }
 
-function truncate(s: string, n: number) { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+function truncate(s: string, n: number) {
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
 
 async function tryEmbedImage(pdf: PDFDocument, url: string): Promise<PDFImage | null> {
   try {
@@ -506,10 +715,17 @@ async function tryEmbedImage(pdf: PDFDocument, url: string): Promise<PDFImage | 
     if (!res.ok) return null;
     const buf = new Uint8Array(await res.arrayBuffer());
     if (buf.length < 8) return null;
-    if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return await pdf.embedPng(buf);
+    if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47)
+      return await pdf.embedPng(buf);
     if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return await pdf.embedJpg(buf);
-    try { return await pdf.embedJpg(buf); } catch {}
-    try { return await pdf.embedPng(buf); } catch {}
+    try {
+      return await pdf.embedJpg(buf);
+    } catch {}
+    try {
+      return await pdf.embedPng(buf);
+    } catch {}
     return null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }

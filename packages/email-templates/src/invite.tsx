@@ -75,9 +75,7 @@ export const InviteEmail = ({
               gets from us. */}
           <Text style={wordmark}>Everbreeze SitePix</Text>
 
-          <Heading style={h1}>
-            {teamName ? `Join ${teamName}` : "You've been invited"}
-          </Heading>
+          <Heading style={h1}>{teamName ? `Join ${teamName}` : "You've been invited"}</Heading>
 
           <Text style={text}>
             {inviterName ? (

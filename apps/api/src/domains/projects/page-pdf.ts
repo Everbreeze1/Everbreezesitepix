@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
+import {
+  PDFDocument,
+  StandardFonts,
+  rgb,
+  type PDFFont,
+  type PDFImage,
+  type PDFPage,
+} from "pdf-lib";
 import type { AuthedContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { resolvePageImages, resolveHeaderFooterTokens, resolvePageTokens } from "./pages";
@@ -114,7 +121,8 @@ function hexToRgb(hex: string): ReturnType<typeof rgb> | null {
 function uint8ToBase64(bytes: Uint8Array): string {
   let s = "";
   const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) s += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  for (let i = 0; i < bytes.length; i += chunk)
+    s += String.fromCharCode(...bytes.subarray(i, i + chunk));
   return btoa(s);
 }
 
@@ -260,7 +268,11 @@ class Layout {
     let line: Word[] = [];
     let lineWidth = 0;
     const spaceAt = (sz: number) => this.fonts.regular.widthOfTextAtSize(" ", sz);
-    const widthOf = (w: Word) => this.fontFor(w.style).widthOfTextAtSize(sanitizeForWinAnsi(w.text), this.sizeFor(w, opts.size));
+    const widthOf = (w: Word) =>
+      this.fontFor(w.style).widthOfTextAtSize(
+        sanitizeForWinAnsi(w.text),
+        this.sizeFor(w, opts.size),
+      );
 
     const flush = () => {
       if (!line.length) return;
@@ -336,7 +348,11 @@ function collectInlineWords(node: HtmlNode, inherited: Style): Word[] {
     const familyMatch = /font-family:\s*([^;]+)/.exec(node.attrs.style);
     if (familyMatch) {
       const fam = familyMatch[1].toLowerCase();
-      style.fontFamily = fam.includes("times") ? "times" : fam.includes("courier") ? "courier" : "helvetica";
+      style.fontFamily = fam.includes("times")
+        ? "times"
+        : fam.includes("courier")
+          ? "courier"
+          : "helvetica";
     }
     const sizeMatch = /font-size:\s*(\d+(?:\.\d+)?)px/.exec(node.attrs.style);
     if (sizeMatch) style.fontSize = Math.round(parseFloat(sizeMatch[1]));
@@ -508,7 +524,9 @@ async function renderTable(layout: Layout, table: ElementNode) {
   table.children.forEach(walk);
   if (!rows.length) return;
 
-  const cellsPerRow = rows.map((r) => r.children.filter((c) => c.type === "element" && (c as ElementNode).tag !== "text"));
+  const cellsPerRow = rows.map((r) =>
+    r.children.filter((c) => c.type === "element" && (c as ElementNode).tag !== "text"),
+  );
   const colCount = Math.max(...cellsPerRow.map((c) => c.length), 1);
   const colWidth = CONTENT_W / colCount;
 
@@ -587,8 +605,18 @@ async function renderTable(layout: Layout, table: ElementNode) {
         color: BORDER,
       });
     }
-    layout.page.drawLine({ start: { x: MARGIN, y: rowTop }, end: { x: MARGIN + colCount * colWidth, y: rowTop }, thickness: 0.5, color: BORDER });
-    layout.page.drawLine({ start: { x: MARGIN, y: rowTop - rowHeight }, end: { x: MARGIN + colCount * colWidth, y: rowTop - rowHeight }, thickness: 0.5, color: BORDER });
+    layout.page.drawLine({
+      start: { x: MARGIN, y: rowTop },
+      end: { x: MARGIN + colCount * colWidth, y: rowTop },
+      thickness: 0.5,
+      color: BORDER,
+    });
+    layout.page.drawLine({
+      start: { x: MARGIN, y: rowTop - rowHeight },
+      end: { x: MARGIN + colCount * colWidth, y: rowTop - rowHeight },
+      thickness: 0.5,
+      color: BORDER,
+    });
     layout.y = rowTop - rowHeight;
   }
   layout.y -= 10;
@@ -671,9 +699,22 @@ async function renderPanel(layout: Layout, node: ElementNode) {
   layout.y -= PANEL_GAP;
 }
 
-async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered = false, index = 1) {
+async function renderNode(
+  layout: Layout,
+  node: HtmlNode,
+  listDepth = 0,
+  ordered = false,
+  index = 1,
+) {
   if (node.type === "text") return;
-  const empty: Style = { bold: false, italic: false, underline: false, color: null, fontFamily: null, fontSize: null };
+  const empty: Style = {
+    bold: false,
+    italic: false,
+    underline: false,
+    color: null,
+    fontFamily: null,
+    fontSize: null,
+  };
 
   switch (node.tag) {
     case "h1":
@@ -719,7 +760,12 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
       // An image-only paragraph must not also emit a blank line, but a truly
       // empty <p></p> still needs to render as vertical space.
       if (words.length || !imgs.length) {
-        layout.drawParagraph(words, { x: MARGIN, width: CONTENT_W, size: 11, align: readAlign(node) });
+        layout.drawParagraph(words, {
+          x: MARGIN,
+          width: CONTENT_W,
+          size: 11,
+          align: readAlign(node),
+        });
       }
       if (imgs.length) await renderImageRow(layout, imgs, readAlign(node));
       return;
@@ -772,12 +818,25 @@ async function renderNode(layout: Layout, node: HtmlNode, listDepth = 0, ordered
   }
 }
 
-async function renderListItem(layout: Layout, li: ElementNode, ordered: boolean, index: number, isTaskList: boolean) {
+async function renderListItem(
+  layout: Layout,
+  li: ElementNode,
+  ordered: boolean,
+  index: number,
+  isTaskList: boolean,
+) {
   const indent = MARGIN + 18;
   let checked: boolean | null = null;
   if (isTaskList) checked = li.attrs["data-checked"] === "true";
 
-  const empty: Style = { bold: false, italic: false, underline: false, color: null, fontFamily: null, fontSize: null };
+  const empty: Style = {
+    bold: false,
+    italic: false,
+    underline: false,
+    color: null,
+    fontFamily: null,
+    fontSize: null,
+  };
   const words = collectInlineWords(li, empty);
 
   layout.ensureSpace(16);
@@ -785,13 +844,23 @@ async function renderListItem(layout: Layout, li: ElementNode, ordered: boolean,
   if (isTaskList) {
     const size = 9;
     layout.page.drawRectangle({
-      x: MARGIN, y: markerY - size - 2, width: size, height: size,
-      borderColor: checked ? rgb(0.11, 0.4, 0.78) : MUTED, borderWidth: 1,
+      x: MARGIN,
+      y: markerY - size - 2,
+      width: size,
+      height: size,
+      borderColor: checked ? rgb(0.11, 0.4, 0.78) : MUTED,
+      borderWidth: 1,
       color: checked ? rgb(0.11, 0.4, 0.78) : undefined,
     });
   } else {
     const marker = ordered ? `${index}.` : "•";
-    layout.page.drawText(marker, { x: MARGIN, y: markerY - 11, size: 11, font: layout.fonts.regular, color: TEXT });
+    layout.page.drawText(marker, {
+      x: MARGIN,
+      y: markerY - 11,
+      size: 11,
+      font: layout.fonts.regular,
+      color: TEXT,
+    });
   }
 
   const savedX = indent;
@@ -818,7 +887,14 @@ async function renderListItem(layout: Layout, li: ElementNode, ordered: boolean,
 /** Header/footer are rendered as a single running line per page - flattens all inline text across the fragment. */
 function wordsFromHtml(html: string | null | undefined): Word[] {
   if (!html) return [];
-  const empty: Style = { bold: false, italic: false, underline: false, color: null, fontFamily: null, fontSize: null };
+  const empty: Style = {
+    bold: false,
+    italic: false,
+    underline: false,
+    color: null,
+    fontFamily: null,
+    fontSize: null,
+  };
   const words: Word[] = [];
   for (const node of parseHtml(html)) words.push(...collectInlineWords(node, empty));
   return words;
@@ -869,13 +945,27 @@ export async function renderPagePdf(
   };
   const fonts = fontFamilies.helvetica;
 
-  const layout = new Layout(pdf, fontFamilies, wordsFromHtml(resolvedHeaderHtml), wordsFromHtml(resolvedFooterHtml));
+  const layout = new Layout(
+    pdf,
+    fontFamilies,
+    wordsFromHtml(resolvedHeaderHtml),
+    wordsFromHtml(resolvedFooterHtml),
+  );
   layout.newPage();
   layout.page.drawText(sanitizeForWinAnsi(title), {
-    x: MARGIN, y: layout.y - 26, size: 24, font: fonts.bold, color: TEXT,
+    x: MARGIN,
+    y: layout.y - 26,
+    size: 24,
+    font: fonts.bold,
+    color: TEXT,
   });
   layout.y -= 50;
-  layout.page.drawLine({ start: { x: MARGIN, y: layout.y }, end: { x: PAGE_W - MARGIN, y: layout.y }, thickness: 0.5, color: BORDER });
+  layout.page.drawLine({
+    start: { x: MARGIN, y: layout.y },
+    end: { x: PAGE_W - MARGIN, y: layout.y },
+    thickness: 0.5,
+    color: BORDER,
+  });
   layout.y -= 20;
 
   for (const node of nodes) await renderNode(layout, node);
@@ -885,7 +975,13 @@ export async function renderPagePdf(
   pages.forEach((p, i) => {
     const label = `Page ${i + 1} of ${pages.length}`;
     const w = fonts.regular.widthOfTextAtSize(label, 8);
-    p.drawText(label, { x: PAGE_W - MARGIN - w, y: MARGIN - 12, size: 8, font: fonts.regular, color: MUTED });
+    p.drawText(label, {
+      x: PAGE_W - MARGIN - w,
+      y: MARGIN - 12,
+      size: 8,
+      font: fonts.regular,
+      color: MUTED,
+    });
   });
 
   const bytes = await pdf.save();

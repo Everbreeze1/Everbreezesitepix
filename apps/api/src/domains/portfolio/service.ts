@@ -250,10 +250,7 @@ async function loadTeamShowcaseCards(
   db: any,
   teamId: string,
 ): Promise<Array<PortfolioShowcaseCard & { on_site: boolean; is_draft: boolean }>> {
-  const { data } = await db
-    .from("showcases")
-    .select(SHOWCASE_CARD_COLUMNS)
-    .eq("team_id", teamId);
+  const { data } = await db.from("showcases").select(SHOWCASE_CARD_COLUMNS).eq("team_id", teamId);
   const rows = ((data as ShowcaseCardRow[]) ?? []).slice().sort(compareCardRows);
   const cards = await loadShowcaseCards(db, rows);
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -288,9 +285,7 @@ const tagList = (max: number) =>
     .max(max)
     .optional()
     .transform((v) =>
-      v == null
-        ? v
-        : Array.from(new Set(v.map((s) => s.trim()).filter(Boolean))).slice(0, max),
+      v == null ? v : Array.from(new Set(v.map((s) => s.trim()).filter(Boolean))).slice(0, max),
     );
 
 export const updatePortfolioInputSchema = z.object({
@@ -362,7 +357,11 @@ export async function updatePortfolioService(
   if (data.seoDescription !== undefined) patch.seo_description = data.seoDescription;
 
   if (!Object.keys(patch).length) {
-    const { data: row } = await db.from("portfolios").select("slug").eq("team_id", teamId).maybeSingle();
+    const { data: row } = await db
+      .from("portfolios")
+      .select("slug")
+      .eq("team_id", teamId)
+      .maybeSingle();
     return { ok: true, slug: (row as any)?.slug ?? "" };
   }
 
@@ -511,7 +510,8 @@ export async function updateShowcaseSiteService(
     .select("slug")
     .maybeSingle();
   if (error) {
-    if ((error as any).code === "23505") badRequest("That address is already used by another project.");
+    if ((error as any).code === "23505")
+      badRequest("That address is already used by another project.");
     badRequest(error.message);
   }
   if (!updated) notFound("That project no longer exists, or you can't edit it.");

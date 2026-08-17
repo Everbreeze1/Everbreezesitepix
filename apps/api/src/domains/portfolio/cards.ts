@@ -104,10 +104,7 @@ export async function loadShowcaseCards(
     if (id) thumbId.set(r.id, id);
   });
 
-  const urlMap = await resolvePhotoUrls(
-    Array.from(new Set(thumbId.values())),
-    CARD_THUMB_WIDTH,
-  );
+  const urlMap = await resolvePhotoUrls(Array.from(new Set(thumbId.values())), CARD_THUMB_WIDTH);
 
   return rows.map((r) => {
     const id = thumbId.get(r.id);
@@ -124,7 +121,7 @@ export async function loadShowcaseCards(
       state: r.state,
       latitude: r.latitude,
       longitude: r.longitude,
-      cover_image_url: id ? (urlMap.get(id)?.image_url || null) : null,
+      cover_image_url: id ? urlMap.get(id)?.image_url || null : null,
       photo_count: photoCount.get(r.id) ?? 0,
       featured: !!r.featured,
       completed_on: r.completed_on,

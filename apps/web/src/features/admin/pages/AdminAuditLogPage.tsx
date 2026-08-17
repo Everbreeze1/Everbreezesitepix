@@ -27,7 +27,9 @@ export function AdminAuditLogPage() {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : data.entries.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">No admin actions logged yet.</p>
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          No admin actions logged yet.
+        </p>
       ) : (
         <div className="mt-4 max-h-[600px] space-y-2 overflow-y-auto">
           {data.entries.map((e) => (

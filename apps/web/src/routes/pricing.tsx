@@ -214,7 +214,9 @@ function FeatureList({ features, muted }: { features: string[]; muted?: boolean 
             muted ? "text-sidebar-foreground/80" : "text-foreground/80"
           }`}
         >
-          <Check className={`mt-0.5 h-4 w-4 shrink-0 ${muted ? "text-sidebar-ring" : "text-primary"}`} />
+          <Check
+            className={`mt-0.5 h-4 w-4 shrink-0 ${muted ? "text-sidebar-ring" : "text-primary"}`}
+          />
           {f}
         </li>
       ))}
@@ -291,11 +293,7 @@ function PublicPricingPage() {
                   disabled={capped}
                   className="mt-6 h-11 rounded-lg font-manrope text-sm font-bold"
                 >
-                  {capped ? (
-                    <span>Not available</span>
-                  ) : (
-                    <Link to="/signup">Start Free Trial</Link>
-                  )}
+                  {capped ? <span>Not available</span> : <Link to="/signup">Start Free Trial</Link>}
                 </Button>
 
                 <p className="mt-4 font-manrope text-xs text-muted-foreground">{plan.tagline}</p>
@@ -476,8 +474,8 @@ function CreateTeamPrompt({ onCreated }: { onCreated: () => void }) {
         Name your team to continue
       </h2>
       <p className="mt-1 font-manrope text-sm text-sidebar-foreground/60">
-        SitePix subscriptions are billed per team - you'll be the owner and can invite others
-        after subscribing.
+        SitePix subscriptions are billed per team - you'll be the owner and can invite others after
+        subscribing.
       </p>
       <div className="mt-5 flex flex-col gap-3 sm:flex-row">
         <Input
@@ -541,7 +539,12 @@ function CurrentPlanPanel({
             {plan.includedSeats} user{plan.includedSeats === 1 ? "" : "s"} included ·{" "}
             {hasUnlimitedSeats(plan) ? "add as many as you need" : `up to ${plan.maxSeats}`}
           </p>
-          <Button asChild variant="outline" size="sm" className="mt-3 rounded-lg font-manrope font-bold">
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="mt-3 rounded-lg font-manrope font-bold"
+          >
             <Link to="/settings">Manage billing</Link>
           </Button>
         </div>

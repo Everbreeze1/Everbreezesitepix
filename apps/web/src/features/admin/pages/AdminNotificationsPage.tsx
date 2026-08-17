@@ -37,9 +37,16 @@ function ComposeCard({ onSent }: { onSent: () => void }) {
     setSending(true);
     try {
       const target =
-        audience === "all" ? { type: "all" as const } : { type: "user" as const, userId: selectedUser!.id };
+        audience === "all"
+          ? { type: "all" as const }
+          : { type: "user" as const, userId: selectedUser!.id };
       const res = await sendAdminNotification({
-        data: { title: title.trim(), body: body.trim() || null, linkPath: linkPath.trim() || null, target },
+        data: {
+          title: title.trim(),
+          body: body.trim() || null,
+          linkPath: linkPath.trim() || null,
+          target,
+        },
       });
       toast.success(`Sent to ${res.sentTo} user${res.sentTo === 1 ? "" : "s"}`);
       setTitle("");
@@ -108,7 +115,8 @@ function ComposeCard({ onSent }: { onSent: () => void }) {
                         }}
                         className="block w-full px-3 py-2 text-left text-sm hover:bg-accent"
                       >
-                        {u.fullName ?? "-"} <span className="text-muted-foreground">({u.email})</span>
+                        {u.fullName ?? "-"}{" "}
+                        <span className="text-muted-foreground">({u.email})</span>
                       </button>
                     ))}
                   </div>
@@ -120,7 +128,11 @@ function ComposeCard({ onSent }: { onSent: () => void }) {
 
         <div>
           <Label>Title</Label>
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What's new" />
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="What's new"
+          />
         </div>
         <div>
           <Label>Body (optional)</Label>
@@ -136,7 +148,11 @@ function ComposeCard({ onSent }: { onSent: () => void }) {
         </div>
 
         <Button onClick={send} disabled={!canSend || sending}>
-          {sending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+          {sending ? (
+            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="mr-1.5 h-4 w-4" />
+          )}
           Send
         </Button>
       </div>

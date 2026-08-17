@@ -157,10 +157,7 @@ export async function resolvePhotoUrls(
  * they come back as one implicit untitled section so an old showcase keeps
  * rendering until it is next edited.
  */
-export async function loadSections(
-  db: any,
-  showcaseId: string,
-): Promise<ShowcaseSectionDetail[]> {
+export async function loadSections(db: any, showcaseId: string): Promise<ShowcaseSectionDetail[]> {
   const [{ data: sectionRows }, { data: itemRows }] = await Promise.all([
     db
       .from("showcase_sections")
@@ -176,7 +173,10 @@ export async function loadSections(
 
   const sections = (sectionRows as any[]) ?? [];
   const items = (itemRows as any[]) ?? [];
-  const urlMap = await resolvePhotoUrls(items.map((i) => i.photo_id), SHOWCASE_PHOTO_WIDTH);
+  const urlMap = await resolvePhotoUrls(
+    items.map((i) => i.photo_id),
+    SHOWCASE_PHOTO_WIDTH,
+  );
 
   // Project names are looked up separately rather than via a PostgREST embed -
   // `project_id` is deliberately not a FK (see the migration), so an embed
@@ -224,7 +224,9 @@ export async function loadSections(
   return out;
 }
 
-export async function listShowcasesService(ctx: AuthedContext): Promise<{ showcases: ShowcaseSummary[] }> {
+export async function listShowcasesService(
+  ctx: AuthedContext,
+): Promise<{ showcases: ShowcaseSummary[] }> {
   const teamId = await myTeamId(ctx);
   if (!teamId) return { showcases: [] };
   const { data } = await (ctx.supabase as any)
@@ -243,7 +245,10 @@ export async function listShowcasesService(ctx: AuthedContext): Promise<{ showca
   const { data: countRows } = await (ctx.supabase as any)
     .from("showcase_items")
     .select("showcase_id, photo_id, position")
-    .in("showcase_id", rows.map((r) => r.id))
+    .in(
+      "showcase_id",
+      rows.map((r) => r.id),
+    )
     .order("position", { ascending: true });
 
   const countByShowcase = new Map<string, number>();
@@ -263,7 +268,10 @@ export async function listShowcasesService(ctx: AuthedContext): Promise<{ showca
     const id = r.cover_photo_id ?? firstPhotoByShowcase.get(r.id);
     if (id) thumbIdByShowcase.set(r.id, id);
   });
-  const urlMap = await resolvePhotoUrls(Array.from(new Set(thumbIdByShowcase.values())), CARD_THUMB_WIDTH);
+  const urlMap = await resolvePhotoUrls(
+    Array.from(new Set(thumbIdByShowcase.values())),
+    CARD_THUMB_WIDTH,
+  );
 
   return {
     showcases: rows.map((r) => ({
@@ -276,7 +284,7 @@ export async function listShowcasesService(ctx: AuthedContext): Promise<{ showca
       item_count: countByShowcase.get(r.id) ?? 0,
       cover_image_url: (() => {
         const thumbId = thumbIdByShowcase.get(r.id);
-        return thumbId ? (urlMap.get(thumbId)?.image_url || null) : null;
+        return thumbId ? urlMap.get(thumbId)?.image_url || null : null;
       })(),
       created_at: r.created_at,
       updated_at: r.updated_at,
@@ -445,8 +453,7 @@ export async function createShowcaseFromProjectService(
   // "Completed" is the last time anyone photographed the job - the only date
   // the data actually supports. Photos are ordered ascending, so take the tail.
   const lastShot = [...photos].reverse().find((p) => p.taken_at || p.created_at);
-  const completedOn =
-    (lastShot?.taken_at ?? lastShot?.created_at)?.slice(0, 10) ?? null;
+  const completedOn = (lastShot?.taken_at ?? lastShot?.created_at)?.slice(0, 10) ?? null;
   const safeName = String(project.name ?? "this project")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -795,7 +802,7 @@ export async function getPublicShowcaseService(
   // hero image, even when no explicit cover was chosen.
   const firstPhoto = sections.flatMap((s) => s.items).find((i) => i.image_url)?.image_url ?? null;
   const coverImageUrl = row.cover_photo_id
-    ? (coverMap.get(row.cover_photo_id)?.image_url || firstPhoto)
+    ? coverMap.get(row.cover_photo_id)?.image_url || firstPhoto
     : firstPhoto;
 
   const p = profile as any;

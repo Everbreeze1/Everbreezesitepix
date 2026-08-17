@@ -2122,7 +2122,10 @@ describe("family: a recovery surface has to be reachable", () => {
     // Slice to the array's own terminator, not the first `]` - the spread
     // `...(showOwnerNav ? [pricingItem] : [])` closes a bracket before it.
     const block = src.slice(start, src.indexOf("];", start) + 2);
-    expect(block).toMatch(/^\s*trashItem,\s*$/m);
+    // A bare element: preceded by `[` or `,`, followed by `,` or `]`. Matched
+    // without anchoring to line starts so Prettier collapsing the array onto
+    // one line stays a formatting change, not a failure.
+    expect(block).toMatch(/[[,]\s*trashItem\s*[,\]]/);
     // showOwnerNav guards Upgrade only; trashItem must not sit inside a ternary.
     expect(block).not.toMatch(/\?\s*\[trashItem\]/);
   });

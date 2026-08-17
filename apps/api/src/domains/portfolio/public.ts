@@ -79,27 +79,25 @@ export interface PublicPortfolio {
 export interface PublicPortfolioShowcase {
   status: "ok" | "not_found" | "unpublished";
   site: PublicPortfolioSite | null;
-  showcase:
-    | {
-        slug: string;
-        title: string;
-        tagline: string | null;
-        summary: string | null;
-        service_type: string | null;
-        products_used: string[];
-        city: string | null;
-        state: string | null;
-        completed_on: string | null;
-        layout: string;
-        intro_html: string | null;
-        outro_html: string | null;
-        accent_color: string | null;
-        show_contact: boolean;
-        show_reviews: boolean;
-        cover_image_url: string | null;
-        sections: ShowcaseSectionDetail[];
-      }
-    | null;
+  showcase: {
+    slug: string;
+    title: string;
+    tagline: string | null;
+    summary: string | null;
+    service_type: string | null;
+    products_used: string[];
+    city: string | null;
+    state: string | null;
+    completed_on: string | null;
+    layout: string;
+    intro_html: string | null;
+    outro_html: string | null;
+    accent_color: string | null;
+    show_contact: boolean;
+    show_reviews: boolean;
+    cover_image_url: string | null;
+    sections: ShowcaseSectionDetail[];
+  } | null;
   /** Walk to the neighbouring project without going back to the grid. */
   prev: { slug: string; title: string; cover_image_url: string | null } | null;
   next: { slug: string; title: string; cover_image_url: string | null } | null;
@@ -177,10 +175,7 @@ async function visibleShowcaseRows(teamId: string): Promise<ShowcaseCardRow[]> {
   return ((data as ShowcaseCardRow[]) ?? []).slice().sort(compareCardRows);
 }
 
-async function loadReviewLinks(
-  teamId: string,
-  enabled: boolean,
-): Promise<PortfolioReviewLink[]> {
+async function loadReviewLinks(teamId: string, enabled: boolean): Promise<PortfolioReviewLink[]> {
   if (!enabled) return [];
   const { data } = await (getSupabaseAdmin() as any)
     .from("team_review_links")
@@ -354,14 +349,17 @@ export async function getPublicPortfolioShowcaseService(
       show_contact: detail.show_contact ?? true,
       show_reviews: detail.show_reviews ?? true,
       cover_image_url: detail.cover_photo_id
-        ? (coverMap.get(detail.cover_photo_id)?.image_url || firstPhoto)
+        ? coverMap.get(detail.cover_photo_id)?.image_url || firstPhoto
         : firstPhoto,
       sections,
     },
     prev: neighbour(index - 1),
     next: neighbour(index + 1),
     related: listable(cards)
-      .filter((c) => c.slug !== target.slug && !!target.service_type && c.service_type === target.service_type)
+      .filter(
+        (c) =>
+          c.slug !== target.slug && !!target.service_type && c.service_type === target.service_type,
+      )
       .slice(0, 3),
     reviewLinks,
   };
@@ -422,7 +420,11 @@ export async function getPortfolioEmbedService(
  * portfolios across teams, which is exactly what a sitemap is for.
  */
 export async function listPublicPortfolioUrlsService(): Promise<{
-  entries: Array<{ slug: string; updated_at: string; showcases: Array<{ slug: string; updated_at: string }> }>;
+  entries: Array<{
+    slug: string;
+    updated_at: string;
+    showcases: Array<{ slug: string; updated_at: string }>;
+  }>;
 }> {
   const admin = getSupabaseAdmin();
   const { data: portfolios } = await (admin as any)
@@ -435,7 +437,10 @@ export async function listPublicPortfolioUrlsService(): Promise<{
   const { data: showcases } = await (admin as any)
     .from("showcases")
     .select("team_id, slug, updated_at")
-    .in("team_id", rows.map((r) => r.team_id))
+    .in(
+      "team_id",
+      rows.map((r) => r.team_id),
+    )
     .eq("on_site", true)
     .is("revoked_at", null)
     .not("slug", "is", null);

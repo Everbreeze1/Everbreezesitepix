@@ -144,7 +144,10 @@ export function CreateBoardDialog({
                       key={t.id}
                       className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
                     >
-                      <Checkbox checked={selectedTags.has(t.id)} onCheckedChange={() => toggle(t.id)} />
+                      <Checkbox
+                        checked={selectedTags.has(t.id)}
+                        onCheckedChange={() => toggle(t.id)}
+                      />
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-full"
                         style={{ background: t.color }}
@@ -165,17 +168,28 @@ export function CreateBoardDialog({
               disabled={saving || deleting}
               className="text-destructive hover:text-destructive"
             >
-              {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              {deleting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
               Delete pipeline
             </Button>
           ) : (
             <span />
           )}
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving || deleting}>
+            <Button
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              disabled={saving || deleting}
+            >
               Cancel
             </Button>
-            <Button onClick={submit} disabled={saving || deleting || !name.trim() || selectedTags.size === 0}>
+            <Button
+              onClick={submit}
+              disabled={saving || deleting || !name.trim() || selectedTags.size === 0}
+            >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isEdit ? "Save changes" : "Create Pipeline"}
             </Button>

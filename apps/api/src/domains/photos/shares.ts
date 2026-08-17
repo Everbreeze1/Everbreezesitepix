@@ -4,7 +4,11 @@ import { getSupabaseAdmin } from "../../lib/supabase";
 
 export const createPhotoShareInputSchema = z.object({
   photoId: z.string().uuid(),
-  expiresInHours: z.number().int().min(0).max(24 * 365),
+  expiresInHours: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 365),
   allowDownload: z.boolean(),
 });
 
@@ -194,8 +198,7 @@ export async function getPublicPhotoShareService(
     company: profile
       ? {
           name: profile.company ?? null,
-          logo_url:
-            profile.watermark_enabled !== false ? profile.company_logo_url ?? null : null,
+          logo_url: profile.watermark_enabled !== false ? (profile.company_logo_url ?? null) : null,
         }
       : null,
     allowDownload: share.allow_download,

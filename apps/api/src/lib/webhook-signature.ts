@@ -59,9 +59,7 @@ export function verifyStandardWebhook(
   }
   if (!key.length) return false;
 
-  const expected = createHmac("sha256", key)
-    .update(`${id}.${ts}.${rawBody}`)
-    .digest("base64");
+  const expected = createHmac("sha256", key).update(`${id}.${ts}.${rawBody}`).digest("base64");
 
   // The header may carry several space-separated versioned signatures; any
   // matching v1 entry is enough.

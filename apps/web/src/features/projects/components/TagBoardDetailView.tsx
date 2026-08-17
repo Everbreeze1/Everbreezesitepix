@@ -132,7 +132,9 @@ export function TagBoardDetailView({
         .filter((t): t is TagRow => !!t)
         .map((tag) => ({
           tag,
-          projects: allProjects.filter((p) => (projectTagMap[p.id] ?? []).some((t) => t.id === tag.id)),
+          projects: allProjects.filter((p) =>
+            (projectTagMap[p.id] ?? []).some((t) => t.id === tag.id),
+          ),
         })),
     [board.tag_ids, allTags, allProjects, projectTagMap],
   );
@@ -257,7 +259,9 @@ export function TagBoardDetailView({
               <DragOverlay dropAnimation={dropAnimation}>
                 {active ? (
                   <div className="w-[264px] rotate-2 cursor-grabbing rounded-lg border border-primary/60 bg-card p-3 shadow-2xl ring-2 ring-primary/20">
-                    <p className="truncate text-sm font-bold text-foreground">{active.project.name}</p>
+                    <p className="truncate text-sm font-bold text-foreground">
+                      {active.project.name}
+                    </p>
                     {projectAddress(active.project) && (
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">
                         {projectAddress(active.project)}
@@ -399,9 +403,7 @@ function BoardCard({
   const addr = projectAddress(project);
   // Days since last touch drives a colour cue - a board should surface what's
   // gone quiet without the reader having to parse every timestamp.
-  const daysStale = Math.floor(
-    (Date.now() - new Date(project.updated_at).getTime()) / 86_400_000,
-  );
+  const daysStale = Math.floor((Date.now() - new Date(project.updated_at).getTime()) / 86_400_000);
 
   return (
     // The whole card is the drag target - no hunting for a small handle, and it
