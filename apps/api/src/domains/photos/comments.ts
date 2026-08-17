@@ -16,12 +16,17 @@ export interface PhotoComment {
   createdAt: string;
 }
 
-async function enrichAuthors(rows: Array<{ author_id: string }>): Promise<Map<string, {
-  id: string;
-  full_name: string | null;
-  email: string | null;
-  avatar_url: string | null;
-}>> {
+async function enrichAuthors(rows: Array<{ author_id: string }>): Promise<
+  Map<
+    string,
+    {
+      id: string;
+      full_name: string | null;
+      email: string | null;
+      avatar_url: string | null;
+    }
+  >
+> {
   const ids = Array.from(new Set(rows.map((r) => r.author_id).filter(Boolean)));
   if (ids.length === 0) return new Map();
   const supabaseAdmin = getSupabaseAdmin();
@@ -29,12 +34,15 @@ async function enrichAuthors(rows: Array<{ author_id: string }>): Promise<Map<st
     .from("profiles" as never)
     .select("id, full_name, email, avatar_url")
     .in("id", ids);
-  const map = new Map<string, {
-    id: string;
-    full_name: string | null;
-    email: string | null;
-    avatar_url: string | null;
-  }>();
+  const map = new Map<
+    string,
+    {
+      id: string;
+      full_name: string | null;
+      email: string | null;
+      avatar_url: string | null;
+    }
+  >();
   for (const p of (data ?? []) as Array<{
     id: string;
     full_name: string | null;
@@ -172,7 +180,13 @@ export async function createPhotoCommentService(
           type: "photo_comment_mention",
           title: `${authorName} mentioned you`,
           body: typed.body,
-          linkPath: `/projects/${typed.project_id}`,
+          /*
+           * At the photo, not at the project. A mention is written against one
+           * picture, and "X mentioned you" that opens a job with three hundred
+           * thumbnails leaves the reader to find which one. The web route
+           * consumes ?photo= and opens the viewer on it.
+           */
+          linkPath: `/projects/${typed.project_id}?photo=${typed.photo_id}`,
           projectId: typed.project_id,
           entityType: "photo_comment",
           entityId: typed.id,

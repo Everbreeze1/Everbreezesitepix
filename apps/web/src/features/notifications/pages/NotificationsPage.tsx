@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/PageHeader";
 import { formatRelativeTime } from "@/lib/format-time";
+import { notificationLinkTarget } from "@/lib/notification-link";
 import {
   listNotifications,
   markAllNotificationsRead,
@@ -61,7 +62,7 @@ export function NotificationsPage() {
       );
       markNotificationRead({ data: { notificationId: n.id } }).catch(() => {});
     }
-    if (n.linkPath) navigate({ to: n.linkPath });
+    if (n.linkPath) navigate(notificationLinkTarget(n.linkPath) as any);
   };
 
   const markAllRead = async () => {

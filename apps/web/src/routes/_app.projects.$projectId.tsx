@@ -9,6 +9,20 @@ export const Route = createFileRoute("/_app/projects/$projectId")({
   validateSearch: (search: Record<string, unknown>): ProjectDetailSearch => ({
     camera: search.camera === 1 || search.camera === "1" ? 1 : undefined,
     walkthrough: search.walkthrough === 1 || search.walkthrough === "1" ? 1 : undefined,
+    /*
+     * ?photo=<uuid> opens the viewer on one photo. This is what a "task
+     * assigned to you" or "mentioned you" notification carries, so the tap
+     * lands on the picture the message is about.
+     *
+     * Shape-checked rather than passed through: the value goes straight into a
+     * lookup against the loaded photos, and anything that is not an id can only
+     * produce a "that photo is not here" toast for a photo nobody linked.
+     */
+    photo:
+      typeof search.photo === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(search.photo)
+        ? search.photo
+        : undefined,
     // `timeline` is the old name for what is now the Calendar tab; keep
     // accepting it so links shared before the rename still open the right tab.
     panel:

@@ -179,6 +179,19 @@ function timeAgo(iso: string) {
   return `${Math.floor(mo / 12)}y ago`;
 }
 
+/**
+ * Separator for a run of small facts on one line ("5 sections · never applied
+ * · created 3d ago").
+ *
+ * Three characters, and the last one is invisible in an editor, so: an ordinary
+ * space, U+00B7 MIDDLE DOT, then U+00A0 NO-BREAK SPACE. The no-break space ties
+ * the dot to the word after it, so the line may wrap in front of a separator
+ * but never behind one, and no line ends on a dangling dot. That is exactly
+ * what a 420px screen did to this line back when each fact was its own flex
+ * child: "5 sections ·" / "never applied ·" / "created just now".
+ */
+const META_SEP = " · ";
+
 const KIND_META: Record<
   TemplateItemKind,
   { label: string; icon: typeof ClipboardList; tint: string }
@@ -1535,7 +1548,11 @@ function BlueprintsTab(props: {
         <div className="space-y-4">
           {/* Header */}
           <div className={cn(SURFACE_CARD, "p-5")}>
-            <div className="flex flex-wrap items-start justify-between gap-4">
+            {/* Stacked below `sm`. Side by side, the action group is ~230px of
+                shrink-0 buttons and the title is the only thing left that can
+                give, so a phone truncated the blueprint's name to three
+                characters to hold a row of buttons intact. */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2.5">
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
@@ -1552,24 +1569,24 @@ function BlueprintsTab(props: {
                   </p>
                 )}
                 {/* One line, no icons. Three icon-and-label pairs for three
-                    numbers read as three controls until you look twice. */}
-                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  <span>
-                    {sections.length} section{sections.length === 1 ? "" : "s"}
-                  </span>
-                  {applicationsAvailable && (
-                    <>
-                      <span aria-hidden>·</span>
-                      <span>
-                        {selectedApplications.length === 0
-                          ? "never applied"
-                          : `applied ${selectedApplications.length}×`}
-                      </span>
-                    </>
-                  )}
-                  <span aria-hidden>·</span>
-                  <span>created {timeAgo(selected.created_at)}</span>
-                </div>
+                    numbers read as three controls until you look twice.
+                    One text node rather than flex children, joined on a
+                    no-break space so a separator can never be left stranded at
+                    the end of a wrapped line - which is what a phone did with
+                    "5 sections ·" / "never applied ·" / "created just now". */}
+                <p className="mt-2.5 text-xs text-muted-foreground">
+                  {[
+                    `${sections.length} section${sections.length === 1 ? "" : "s"}`,
+                    ...(applicationsAvailable
+                      ? [
+                          selectedApplications.length === 0
+                            ? "never applied"
+                            : `applied ${selectedApplications.length}×`,
+                        ]
+                      : []),
+                    `created ${timeAgo(selected.created_at)}`,
+                  ].join(META_SEP)}
+                </p>
               </div>
 
               {/* One primary, one secondary, one overflow. Four buttons of
