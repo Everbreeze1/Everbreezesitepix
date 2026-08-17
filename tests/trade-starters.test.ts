@@ -22,6 +22,15 @@ const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
 const WORKFLOW_PAGE_PATH = "apps/web/src/features/settings/pages/WorkflowTemplatesPage.tsx";
 const WORKFLOW_PAGE = read(WORKFLOW_PAGE_PATH);
+/*
+ * The starter list moved out of the page into a data module of its own, so the
+ * blueprint installer could import it without pulling the builder screen and
+ * every `@/` alias in it into a node test run. The page is still read above for
+ * the "does this screen use the personalised rank" checks below.
+ */
+const WORKFLOW_STARTERS_SRC = read(
+  "apps/web/src/features/settings/components/workflow-starters.ts",
+);
 
 /** The trade order every tab sorts by. */
 const CATEGORY_ORDER = (() => {
@@ -44,7 +53,7 @@ interface Starter {
 }
 
 const WORKFLOW_STARTERS: Starter[] = (() => {
-  const block = /const STARTER_WORKFLOWS:[\s\S]*?\n\];/.exec(WORKFLOW_PAGE)?.[0] ?? "";
+  const block = /const STARTER_WORKFLOWS:[\s\S]*?\n\];/.exec(WORKFLOW_STARTERS_SRC)?.[0] ?? "";
   return block
     .split(/\n {2}\{\n/)
     .slice(1)

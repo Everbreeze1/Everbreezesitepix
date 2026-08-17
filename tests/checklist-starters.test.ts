@@ -17,8 +17,16 @@ import { INDUSTRIES, tradeCategoryFor } from "@sitepix/shared";
 
 const ROOT = resolve(__dirname, "..");
 const PAGE_PATH = "apps/web/src/features/settings/pages/ChecklistTemplatesPage.tsx";
+/*
+ * The starter list moved out of the page into a data module of its own, so that
+ * the blueprint installer could import it without dragging the whole builder
+ * screen (and every `@/` alias in it) into a node test run. The page path is
+ * still read below for the "does this screen use the personalised rank" checks.
+ */
+const STARTERS_PATH = "apps/web/src/features/settings/components/checklist-starters.ts";
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 const PAGE = read(PAGE_PATH);
+const STARTERS_SRC = read(STARTERS_PATH);
 
 /** The trade order both template tabs sort by. */
 const CATEGORY_ORDER = (() => {
@@ -44,7 +52,7 @@ interface Starter {
 }
 
 const STARTERS: Starter[] = (() => {
-  const block = /const STARTER_TEMPLATES:[\s\S]*?\n\];/.exec(PAGE)?.[0] ?? "";
+  const block = /const STARTER_TEMPLATES:[\s\S]*?\n\];/.exec(STARTERS_SRC)?.[0] ?? "";
   // Each starter is one object at two-space indent inside the array literal.
   return block
     .split(/\n {2}\{\n/)

@@ -8,6 +8,7 @@ const TABLE_FOR_KIND: Record<BlueprintItemKind, string> = {
   document: "document_templates",
   report: "report_templates",
   label_set: "label_sets",
+  walkthrough: "walkthrough_templates",
 };
 
 export interface BlueprintContents {

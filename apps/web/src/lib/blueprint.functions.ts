@@ -30,6 +30,14 @@ export interface BlueprintOriginApplication {
   blueprintVisible: boolean;
   /** Reconstructed by the backfill rather than observed at apply time. */
   inferred: boolean;
+  /**
+   * The bundle version this project received.
+   *
+   * Null on applies recorded before the column existed, and on a database still
+   * without it, so every reader has to treat "no version" as ordinary rather
+   * than as an error.
+   */
+  version: number | null;
   appliedAt: string;
   counts: Record<string, number>;
   failedCount: number;

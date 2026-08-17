@@ -1,4 +1,5 @@
 import {
+  Camera,
   ClipboardList,
   FileText,
   ListChecks,
@@ -8,7 +9,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type BlueprintItemKind = "checklist" | "document" | "report" | "label_set" | "workflow";
+export type BlueprintItemKind =
+  | "checklist"
+  | "document"
+  | "report"
+  | "label_set"
+  | "workflow"
+  | "walkthrough";
 
 /**
  * The project surface a blueprint item lands on, named exactly as the project
@@ -36,10 +43,14 @@ export const DESTINATION: Record<
     icon: ListChecks,
     blurb: "Tick-off lists the crew works through on site",
   },
+  // Walkthroughs land here too. A shot list applied to a project becomes a run
+  // of capture steps in this same tab, tagged as a walkthrough rather than a
+  // workflow, so the blurb has to speak for both or it under-describes half of
+  // what lands.
   workflows: {
     tab: "Workflows",
     icon: WorkflowIcon,
-    blurb: "Phase-by-phase runs with photo prompts and sign-off gates",
+    blurb: "Phase-by-phase runs and capture shot lists, with photo prompts and sign-off gates",
   },
   documents: {
     tab: "Documents",
@@ -133,6 +144,15 @@ export const KIND_OUTCOME: Record<
     becomes: "A draft report on the Reports screen, ready to edit and share",
     destination: "reports",
   },
+  walkthrough: {
+    label: "Walkthrough",
+    plural: "walkthroughs",
+    countsKey: "walkthroughs",
+    icon: Camera,
+    tint: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
+    becomes: "A shot list on the project, one capture step per shot, ticked off as the crew works",
+    destination: "workflows",
+  },
   label_set: {
     label: "Label set",
     plural: "label sets",
@@ -143,6 +163,22 @@ export const KIND_OUTCOME: Record<
     destination: "labels",
   },
 };
+
+/**
+ * Kinds a blueprint may hold at most one of.
+ *
+ * From the spec: "A Blueprint equals zero-to-many checklists, zero-to-one
+ * workflow, zero-to-many document templates, zero-to-many report templates,
+ * zero-to-many walkthrough templates."
+ *
+ * A workflow is the project's status tracker, and a project has one status. Two
+ * attached workflows would apply both and leave the project with two competing
+ * trackers and no rule for which one is the status. The picker enforces this
+ * and so does the apply service, because the picker is not the only writer.
+ */
+export const SINGLETON_KINDS: ReadonlySet<BlueprintItemKind> = new Set<BlueprintItemKind>([
+  "workflow",
+]);
 
 /** Destinations in the order a blueprint fills them. */
 const DESTINATION_ORDER: BlueprintDestination[] = [
@@ -184,6 +220,7 @@ export function destinationTotals(
 export const KIND_ORDER: BlueprintItemKind[] = [
   "checklist",
   "workflow",
+  "walkthrough",
   "document",
   "report",
   "label_set",
