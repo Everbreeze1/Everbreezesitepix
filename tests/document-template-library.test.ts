@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { sanitizePageHtml } from "../apps/api/src/domains/projects/sanitize-page-html";
 import { bracketsToFillFields, SUPPORTED_TOKENS } from "../apps/api/src/domains/projects/pages";
+import { nextCopyName } from "../apps/web/src/lib/duplicate-name";
 
 /*
  * The built-in template library is authored in SQL and never type-checked by
@@ -164,10 +165,10 @@ describe("the built-in template library - what the seed migrations contain", () 
 
 /*
  * The presets in DocumentTemplatesManager are the other half of the library:
- * "New template" and "Load sample site logs" write these bodies straight into
- * `document_templates`, and they are never parsed by anything above.
+ * "New template" writes these bodies straight into `document_templates`, and
+ * they are never parsed by anything above.
  *
- * They are how the bug arrived. `sitelog_walkthrough` merges {{weather}},
+ * They are how the bug arrived. `sitelog_walkthrough` merged {{weather}},
  * {{client_name}}, {{project_number}} and {{prepared_by_title}} - four fields
  * `loadTokenValues` had never heard of - so applying it to a project produced a
  * document with all four printed as raw `{{tokens}}`, which is what the client
@@ -258,13 +259,138 @@ describe("the Templates page files the library by trade", () => {
 });
 
 describe("the style presets the Templates page writes", () => {
+  /**
+   * `${PHOTO_SLOT}` and friends, resolved against the consts declared in the
+   * same file. The preset bodies interpolate them, and every check below reads
+   * the finished document, so an unresolved `${...}` would quietly turn a photo
+   * slot into a piece of literal text that no assertion here would notice.
+   */
+  const resolve = (html: string) =>
+    html.replace(/\$\{(\w+)\}/g, (whole, name: string) => {
+      const decl = new RegExp(`const ${name} =\\s*\n?\\s*"([^"]*)";`).exec(MANAGER);
+      return decl ? decl[1] : whole;
+    });
+
   const presets = [...MANAGER.matchAll(/key: "(\w+)",[\s\S]*?html: `([\s\S]*?)`,\n  \},/g)].map(
-    (m) => ({ key: m[1], html: m[2] }),
+    (m) => ({ key: m[1], html: resolve(m[2]) }),
   );
 
   it("parses (guards the parser these tests depend on)", () => {
-    expect(presets.length).toBeGreaterThanOrEqual(9);
-    expect(presets.some((p) => p.key === "sitelog_walkthrough")).toBe(true);
+    expect(presets.length).toBeGreaterThanOrEqual(6);
+    expect(presets.map((p) => p.key)).toEqual([
+      "report",
+      "letter",
+      "checklist",
+      "memo",
+      "walkthrough",
+      "sitelog",
+    ]);
+    for (const p of presets) {
+      expect(p.html, `preset ${p.key} left an unresolved interpolation`).not.toContain("${");
+    }
+  });
+
+  it("does not ship a second, worse copy of a library document", () => {
+    /*
+     * The client, on Templates > Documents: "Some of the recent ones you have
+     * made look nice and editable but some of the other ones with garbage can
+     * are terrible."
+     *
+     * The garbage can is the tell. A built-in is `team_id IS NULL` and RLS
+     * makes it read-only, so its card has no delete; a team's own row has one.
+     * "Load sample site logs" wrote three team-owned copies of the presets, and
+     * those copies were the terrible ones - plain heading-and-bullet documents
+     * standing next to a library of laid-out ones, and the only cards on the
+     * page that looked editable.
+     *
+     * Every one of the three is covered better by a built-in that ships in the
+     * library, so the button went rather than being rewritten. Anyone wanting
+     * an editable sample duplicates a built-in, which starts from the good body.
+     */
+    expect(MANAGER).not.toContain("loadSampleSiteLogs");
+    expect(MANAGER).not.toContain("Load sample site logs");
+    for (const key of ["sitelog_basic", "sitelog_walkthrough", "sitelog_hvac"]) {
+      expect(
+        presets.some((p) => p.key === key),
+        `${key} is back`,
+      ).toBe(false);
+    }
+  });
+
+  it("starts a team's own template at the same standard as the library", () => {
+    /*
+     * The other half of the same complaint, and the half that would let it come
+     * back: both sets of documents land in one grid on this page, so a preset
+     * that is a bare run of `<h1>` over `<ul>` reads as the shoddy tier no
+     * matter how good the seeded library gets.
+     *
+     * These are the shape the library is built from: a grid to fill rather
+     * than a bullet list, and the grey meta and guidance lines that carry the
+     * instructions instead of filler prose sitting in the document body.
+     */
+    for (const p of presets) {
+      expect(p.html, `preset ${p.key} has no table to fill in`).toContain("<table");
+      expect(p.html, `preset ${p.key} has no header cells`).toContain("<th");
+      expect(p.html, `preset ${p.key} has no styled meta or guidance line`).toContain(
+        'style="color: rgb(',
+      );
+    }
+  });
+
+  it("gives the on-site styles somewhere to put the photos", () => {
+    /*
+     * A field report, a checklist recap, a walkthrough and a daily log are all
+     * documents whose evidence is photographs. The seeded ones lay out tappable
+     * slots; the presets used to say "List key photos captured today with brief
+     * captions" and leave the author to it. Letter and memo are correspondence
+     * and are deliberately exempt.
+     */
+    for (const key of ["report", "checklist", "walkthrough", "sitelog"]) {
+      const p = presets.find((x) => x.key === key);
+      expect(p, `preset ${key} is missing`).toBeTruthy();
+      expect(p!.html, `preset ${key} has no photo slots`).toContain("data:image/svg+xml");
+      expect(count(asCreated(p!.html), "data:image/svg+xml"), `${key} lost photo slots`).toBe(
+        count(p!.html, "data:image/svg+xml"),
+      );
+    }
+  });
+
+  it("keeps every preset table intact through sanitising", () => {
+    // Same guard the seeded library gets: `allowedAttributes` dropping a table
+    // attribute turns a grid into a run of paragraphs, permanently, because the
+    // sanitised HTML is what gets written to the page.
+    for (const p of presets) {
+      const created = asCreated(p.html);
+      expect(count(created, "<table"), `preset ${p.key} lost tables`).toBe(count(p.html, "<table"));
+      expect(count(created, "<th"), `preset ${p.key} lost header cells`).toBe(count(p.html, "<th"));
+    }
+  });
+
+  it("leaves no filler prose sitting where an answer belongs", () => {
+    /*
+     * "Item one", "Component - measurement / reading - status", "Write your
+     * memo body here" - all text an author had to select and delete before
+     * typing, and all of it printed verbatim into a customer's PDF if they
+     * forgot. 20260826000000_repair_team_document_templates.sql exists to undo
+     * exactly this in rows that were already written from these bodies.
+     */
+    const FILLER = [
+      "Item one",
+      "Item two",
+      "First action",
+      "Second action",
+      "Follow-up needed",
+      "Write your me",
+      "Describe the",
+      "Component - measurement",
+      "Task one -",
+      "Photo 1 - caption",
+    ];
+    for (const p of presets) {
+      for (const filler of FILLER) {
+        expect(p.html, `preset ${p.key} still ships "${filler}"`).not.toContain(filler);
+      }
+    }
   });
 
   it("only uses merge tokens the resolver knows", () => {
@@ -429,5 +555,133 @@ describe("the built-in template library - what survives being applied to a page"
     for (const t of SEEDED) {
       expect(asCreated(t.html)).not.toMatch(/alt="[^"]*<span/);
     }
+  });
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * The client's report: "There is massive duplication ... it gets duplicated in
+ * the documents section."
+ * ---------------------------------------------------------------------------
+ *
+ * They were reading a real page. Their team library held eleven rows for three
+ * documents - "Basic site log", "Detailed walkthrough log" and "HVAC /
+ * construction log", each present three or four times, every copy byte
+ * identical to the next. Their explanation (that using a template in a project
+ * and editing it there wrote a copy back) was wrong; nothing on the project
+ * page path writes to `document_templates`. Two things in this screen did:
+ *
+ *   1. a "Load sample site logs" button that inserted the same three rows on
+ *      every click, with no check for the rows it had already written. Removed,
+ *      and `20260903000000_retire_superseded_team_document_templates.sql`
+ *      archives what it left behind;
+ *   2. "Duplicate", which appended " (copy)" unconditionally - so a second
+ *      duplicate became "... (copy) (copy)". Both live on the database.
+ *
+ * The tests below hold each of those shut.
+ */
+describe("the library cannot refill itself with duplicates", () => {
+  it("no button inserts a fixed set of templates", () => {
+    /*
+     * The shape that caused it: an insert of an array built from the presets,
+     * rather than of a single row the user named. Matching on the button's copy
+     * as well, since that is what a reintroduction would most likely bring back.
+     */
+    // The button's own label, and the handler behind it.
+    expect(MANAGER).not.toMatch(/Load sample site logs/i);
+    expect(MANAGER).not.toMatch(/loadSampleSiteLogs/);
+    // The three preset bodies it wrote. Only the keys are checked, not every
+    // mention: the comments in that file explain what these styles were and why
+    // they went, and that history is worth keeping readable.
+    expect(MANAGER).not.toMatch(/key: "sitelog_(basic|walkthrough|hvac)"/);
+  });
+
+  it("every insert into document_templates names exactly one row", () => {
+    const inserts = [
+      ...MANAGER.matchAll(/from\("document_templates" as any\)\s*\n\s*\.insert\(([\s\S]{0,80})/g),
+    ];
+    expect(inserts.length).toBeGreaterThan(0);
+    for (const [, head] of inserts) {
+      // `.insert(rows)` / `.insert([...])` is a bulk write; `.insert({` is one row.
+      expect(head.trimStart().startsWith("{"), `bulk insert: ${head.trim().slice(0, 40)}`).toBe(
+        true,
+      );
+    }
+  });
+
+  it("duplicate() numbers the copy instead of stacking a suffix", () => {
+    expect(MANAGER).toContain("nextCopyName(");
+    expect(MANAGER).not.toMatch(/name: `\$\{t\.name\} \(copy\)`/);
+  });
+});
+
+describe("nextCopyName", () => {
+  it("names a first copy the way it always did", () => {
+    expect(nextCopyName("Site Report", ["Site Report"])).toBe("Site Report (copy)");
+  });
+
+  it("numbers instead of stacking (copy) (copy)", () => {
+    const taken = ["Site Report", "Site Report (copy)"];
+    expect(nextCopyName("Site Report (copy)", taken)).toBe("Site Report (copy 2)");
+    expect(nextCopyName("Site Report", taken)).toBe("Site Report (copy 2)");
+  });
+
+  it("keeps counting past the second copy", () => {
+    const taken = ["Site Report", "Site Report (copy)", "Site Report (copy 2)"];
+    expect(nextCopyName("Site Report (copy 2)", taken)).toBe("Site Report (copy 3)");
+  });
+
+  it("flattens a chain written before the fix", () => {
+    // The live row, duplicated once more.
+    expect(
+      nextCopyName("HVAC Service Call Report (copy) (copy)", [
+        "HVAC Service Call Report",
+        "HVAC Service Call Report (copy)",
+        "HVAC Service Call Report (copy) (copy)",
+      ]),
+    ).toBe("HVAC Service Call Report (copy 2)");
+  });
+
+  it("ignores case and padding when deciding a name is taken", () => {
+    expect(nextCopyName("Site Report", ["  site report (COPY)  "])).toBe("Site Report (copy 2)");
+  });
+
+  it("never returns an empty name", () => {
+    expect(nextCopyName("(copy)", [])).toBe("Untitled document (copy)");
+    expect(nextCopyName("   ", [])).toBe("Untitled document (copy)");
+  });
+
+  it("leaves a name that merely mentions copy alone", () => {
+    expect(nextCopyName("Copy of the roof plan", [])).toBe("Copy of the roof plan (copy)");
+  });
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * "this is a report template that i am forced to edit. Very bad looking.
+ *  Crowded."
+ * ---------------------------------------------------------------------------
+ *
+ * The screenshot showed nine placeholder inputs in a four-column grid inside
+ * the document, and the same nine again down the Fields panel on the right -
+ * two sets of boxes for one set of values, both bound to `sampleOverrides`.
+ * They are now split across the `md` breakpoint so only one can ever render.
+ */
+describe("the template editor shows each field in one place", () => {
+  it("the quick-fields strip and the Fields panel never render together", () => {
+    const strip = /quickFields\.length > 0 && \(\s*\n\s*<div className="([^"]+)"/.exec(MANAGER);
+    expect(strip, "quick fields strip not found").not.toBeNull();
+    expect(strip![1]).toContain("md:hidden");
+
+    const panel = /<aside className="([^"]+)"/.exec(MANAGER);
+    expect(panel, "fields panel not found").not.toBeNull();
+    expect(panel![1]).toContain("hidden");
+    expect(panel![1]).toContain("md:block");
+  });
+
+  it("the Fields panel lists its inputs in one column", () => {
+    // Two columns inside a 320px panel truncates both the labels and the values.
+    const body = MANAGER.slice(MANAGER.indexOf("Editable fields"));
+    expect(body.slice(0, 1400)).not.toContain("grid-cols-2");
   });
 });
