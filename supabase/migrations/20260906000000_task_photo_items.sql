@@ -385,6 +385,38 @@ BEGIN
 END;
 $$;
 
+/**
+ * When this task's work was actually finished, read back off its photos.
+ *
+ * `tasks.completed_at` is not a safe thing to re-derive from `now()`, because a
+ * task can pass through 'not done' and back inside a single statement. Purging one
+ * photo from a fully closed task does exactly that:
+ *
+ *   1. the foreign key cascade deletes that photo's item row, and the AFTER ROW
+ *      rollup recomputes while `photo_ids` still names the purged photo - so the
+ *      task is short of its own denominator, demotes, and `completed_at` is nulled
+ *   2. the AFTER STATEMENT trigger in section 5 then prunes the dead id, the
+ *      status recomputes honestly, and the task is 'done' again
+ *
+ * Correct at both ends, and the date was silently moved to the purge in between.
+ * The item rows still carry the real one, so that is where it comes from. It also
+ * answers the ordinary case better than `now()` did: the last photo's timestamp IS
+ * when the task became complete, whether that was a second or a year ago.
+ */
+CREATE OR REPLACE FUNCTION public.task_photo_completed_at(_task_id uuid, _photo_ids uuid[])
+RETURNS timestamptz
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT max(i.completed_at)
+    FROM public.task_photo_items i
+   WHERE i.task_id = _task_id
+     AND i.status = 'done'
+     AND i.photo_id = ANY(_photo_ids);
+$$;
+
 CREATE OR REPLACE FUNCTION public.rollup_task_from_photo_items() RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -416,7 +448,13 @@ BEGIN
   IF _target IS DISTINCT FROM _t.status THEN
     UPDATE public.tasks
        SET status = _target,
-           completed_at = CASE WHEN _target = 'done' THEN COALESCE(_t.completed_at, now()) ELSE NULL END
+           completed_at = CASE
+             WHEN _target = 'done'
+               THEN COALESCE(_t.completed_at,
+                             public.task_photo_completed_at(_t.id, _t.photo_ids),
+                             now())
+             ELSE NULL
+           END
      WHERE id = _t.id;
   END IF;
 
@@ -452,7 +490,16 @@ BEGIN
 
   IF _target IS DISTINCT FROM NEW.status THEN
     NEW.status := _target;
-    NEW.completed_at := CASE WHEN _target = 'done' THEN COALESCE(NEW.completed_at, now()) ELSE NULL END;
+    -- Recovered, never restamped. This trigger is the second half of the purge
+    -- sequence described on `task_photo_completed_at`, so `NEW.completed_at` has
+    -- very often just been nulled by the first half.
+    NEW.completed_at := CASE
+      WHEN _target = 'done'
+        THEN COALESCE(NEW.completed_at,
+                      public.task_photo_completed_at(NEW.id, NEW.photo_ids),
+                      now())
+      ELSE NULL
+    END;
   END IF;
 
   RETURN NEW;
@@ -564,14 +611,26 @@ UPDATE public.tasks t
 --
 -- The EXISTS guard is not decoration: `photo_ids` is a plain uuid[] with no
 -- foreign key behind it, so it can name photos that have since been deleted,
--- and the FK on this table would reject them.
+-- and the FK on this table would reject them. Section 5 has already pruned those
+-- ids, so on a first run this guard should find nothing left to skip; it stays
+-- because it is the thing standing between a stale id and a failed migration.
+--
+-- `completed_by` is left NULL, not set to `created_by`.
+--
+-- `tasks` has no `completed_by` column, so there is nothing on the row that
+-- records who actually closed the work - and `created_by` is whoever WROTE the
+-- task, which for assigned work is precisely the person who did not do it. The
+-- column is rendered as "closed by" the moment any screen wants it, and a
+-- confident wrong name is worse than a blank: nobody double-checks a name that
+-- looks filled in. NULL says what is true, which is that this predates the
+-- record being kept.
 
 INSERT INTO public.task_photo_items (task_id, photo_id, status, completed_at, completed_by)
 SELECT t.id,
        p.photo_id,
        'done',
        COALESCE(t.completed_at, t.updated_at),
-       t.created_by
+       NULL
   FROM public.tasks t
   CROSS JOIN LATERAL unnest(t.photo_ids) AS p(photo_id)
  WHERE t.status = 'done'
@@ -603,11 +662,9 @@ UPDATE public.tasks t
    SET status = public.task_photo_rollup_status(t.id, t.photo_ids, t.status),
        completed_at = CASE
          WHEN public.task_photo_rollup_status(t.id, t.photo_ids, t.status) = 'done'
-           THEN COALESCE(
-                  t.completed_at,
-                  (SELECT max(i.completed_at) FROM public.task_photo_items i
-                    WHERE i.task_id = t.id AND i.photo_id = ANY(t.photo_ids)),
-                  now())
+           THEN COALESCE(t.completed_at,
+                         public.task_photo_completed_at(t.id, t.photo_ids),
+                         now())
          ELSE NULL
        END
  WHERE COALESCE(array_length(t.photo_ids, 1), 0) > 0
@@ -644,6 +701,10 @@ CREATE TRIGGER tasks_sync_photo_items
 -- of this file. Here rather than beside the function so that section 7, which
 -- calls it directly, is not relying on the migration role happening to own it.
 REVOKE ALL ON FUNCTION public.task_photo_rollup_status(uuid, uuid[], text)
+  FROM anon, authenticated, PUBLIC;
+-- Same reasoning, same reader: it answers when a task's photos were closed
+-- without asking whose task it is.
+REVOKE ALL ON FUNCTION public.task_photo_completed_at(uuid, uuid[])
   FROM anon, authenticated, PUBLIC;
 
 -- These two were disabled rather than dropped, so they have to be switched back
@@ -724,6 +785,27 @@ END $$;
 --   FROM public.tasks t
 --   CROSS JOIN LATERAL unnest(t.photo_ids) AS p(photo_id)
 --  WHERE NOT EXISTS (SELECT 1 FROM public.photos ph WHERE ph.id = p.photo_id);
+--
+-- An earlier copy of this file stamped `completed_by = created_by` on backfilled
+-- rows, which names the task's author rather than whoever closed the work. Section
+-- 6 now writes NULL, but `ON CONFLICT DO NOTHING` will not go back and correct
+-- rows that already exist, so clearing them is a separate decision.
+--
+-- The discriminator is `created_at` against `completed_at`: a backfilled row was
+-- created at migration time and carries a completion date from whenever the task
+-- was actually closed, so the two are far apart. A row written by someone ticking
+-- a photo has both stamped in the same statement. Check what it selects before
+-- turning it into an UPDATE:
+--
+-- SELECT i.task_id, i.photo_id, i.completed_by, i.completed_at, i.created_at
+--   FROM public.task_photo_items i
+--  WHERE i.completed_by IS NOT NULL
+--    AND i.note IS NULL
+--    AND i.completed_at IS NOT NULL
+--    AND i.created_at > i.completed_at + interval '1 minute';
+--
+-- UPDATE public.task_photo_items i SET completed_by = NULL
+--  WHERE ... the same predicate ...;
 --
 -- And nothing may be left disabled. Section 8 raises if so, but after a manual
 -- recovery it is worth asking directly - `tgenabled` is 'O' for a live trigger:

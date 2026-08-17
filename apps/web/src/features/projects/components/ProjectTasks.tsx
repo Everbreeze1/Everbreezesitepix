@@ -51,6 +51,7 @@ import {
   TASK_PHOTO_ITEM_COLUMNS,
   indexTaskPhotoItems,
   isMissingTaskPhotoItems,
+  taskPhotoItemErrorMessage,
   taskPhotoItemPatch,
   taskPhotoProgress,
   taskStatusFromPhotos,
@@ -450,8 +451,10 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
         setPhotoItemsReady(false);
         toast.error("Per-photo tasks need the latest SQL migration.");
       } else {
-        // The trigger raises the sentence worth showing, same as the task one.
-        toast.error(error.message);
+        // The trigger raises the sentence worth showing, same as the task one -
+        // and anything that is Postgres describing a constraint instead gets a
+        // sentence a crew member can act on.
+        toast.error(taskPhotoItemErrorMessage(error));
       }
       setPhotoItems(before);
       setTasks((arr) => arr.map((x) => (x.id === t.id ? { ...x, status: beforeStatus } : x)));
@@ -484,7 +487,7 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
         setPhotoItemsReady(false);
         return false;
       }
-      toast.error(error.message);
+      toast.error(taskPhotoItemErrorMessage(error));
       void load();
       return false;
     }
