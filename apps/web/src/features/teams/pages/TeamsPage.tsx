@@ -54,6 +54,8 @@ import {
   ROLE_DESCRIPTION,
   ROLE_LABEL,
   assignableRoles,
+  can,
+  canManageMember,
   normaliseRole,
 } from "@sitepix/shared/team-permissions";
 import { SubcontractorsPanel } from "../components/SubcontractorsPanel";
@@ -108,17 +110,30 @@ export function TeamsPage() {
     return <TeamDesignPreview />;
   }
 
-  // Only the team owner can access the Teams settings page.
-  // Members/admins were invited - they shouldn't see plan, seats, or invites.
-  if (data.myRole !== "owner") {
+  /*
+   * Who reaches this page: anyone the matrix lets manage people.
+   *
+   * It was owner-only, which contradicted section 4 - an Admin has
+   * `manage_users` and a Manager has `manage_own_crew`, and neither could open
+   * the only screen where those capabilities exist.
+   *
+   * Opening it is safe in a way that is easy to assume it is not. This page
+   * carries NO billing controls - see the note in the header below; the Stripe
+   * portal has one home, Settings → Billing, and that is gated separately on
+   * `can(role, "billing")`. What an Admin or Manager gains here is the roster,
+   * invites and the seat count, which is exactly the job they were given.
+   */
+  const mayManagePeople = can(data.myRole, "manage_users") || can(data.myRole, "manage_own_crew");
+  if (!mayManagePeople) {
     return (
       <div className="mx-auto max-w-2xl px-4 pb-24 pt-16 text-center">
         <h1 className="font-display text-2xl font-bold text-foreground">
-          Team settings are owner-only
+          You don't manage this team
         </h1>
         <p className="mt-2 font-manrope text-sm text-muted-foreground">
-          You're a member of <strong className="text-foreground">{data.team.name}</strong>. Only the
-          team owner can manage members, invites, and the plan.
+          You're on <strong className="text-foreground">{data.team.name}</strong> as{" "}
+          {ROLE_LABEL[normaliseRole(data.myRole)]}. Managing members, invites and seats is for
+          Owners, Admins and Managers.
         </p>
         <Link
           to="/dashboard"
@@ -325,7 +340,9 @@ function TeamDashboard({
   memberLimit: number;
   onChange: () => void;
 }) {
-  const canManage = myRole === "owner" || myRole === "admin";
+  // Inviting and removing is company-wide user management, so a Manager -
+  // whose reach is their own crew - does not get it.
+  const canManage = can(myRole, "manage_users");
   const isOwner = myRole === "owner";
   const seatsUsed = members.length + invites.length;
   const seatsLeft = Math.max(0, memberLimit - seatsUsed);
@@ -816,7 +833,9 @@ function MembersList({
           filtered.map((m, idx) => {
             const name = m.profile?.full_name || m.profile?.email || "Unknown user";
             const email = m.profile?.email;
-            const canEdit = myRole === "owner" && m.role !== "owner";
+            // Same function the server enforces with, so the menu never
+            // offers an action the RPC will refuse.
+            const canEdit = canManageMember(myRole, m.role);
             const canRemove = (myRole === "owner" || myRole === "admin") && m.role !== "owner";
             const unconfirmed = m.emailConfirmed === false;
             const canResend = myRole === "owner" || myRole === "admin";

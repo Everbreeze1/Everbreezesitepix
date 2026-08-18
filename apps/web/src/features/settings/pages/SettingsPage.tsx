@@ -45,6 +45,8 @@ import { useSubscription, PRO_AUTO_REPORTS_PER_MONTH } from "@/hooks/use-subscri
 import { supabase } from "@/integrations/sitepix/client";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { getMyTeam, createBillingPortalSession } from "@/features/settings/api";
+// Same matrix the billing RPC enforces with - see domains/billing/service.ts.
+import { can } from "@sitepix/shared/team-permissions";
 import { listReviewLinks, setReviewLinks, type ReviewLink } from "@/lib/review-links.functions";
 import { useStorageUsage, formatBytes } from "@/hooks/use-storage-usage";
 import { SUPPORT_EMAIL, mailtoHref } from "@/lib/contact";
@@ -299,7 +301,7 @@ export function SettingsPage() {
                 autoReportsLimit={autoReportsLimit}
                 autoReportsRemaining={autoReportsRemaining}
                 teamData={teamData}
-                isOwner={myTeamRole === "owner"}
+                isOwner={can(myTeamRole, "billing")}
               />
             )}
             {active === "team" && <TeamSection isTeam={isTeam} teamData={teamData} />}

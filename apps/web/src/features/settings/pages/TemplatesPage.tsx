@@ -1,4 +1,5 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { can } from "@sitepix/shared/team-permissions";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   LayoutTemplate,
@@ -307,7 +308,9 @@ export function TemplatesPage() {
 
   const { isPro, isTeam } = useSubscription();
   const myRole: string | null = teamData?.myRole ?? null;
-  const canManage = !myRole || myRole === "owner" || myRole === "admin";
+  // `!myRole` is a solo user with no team at all - they own everything they
+  // can see, so there is nobody to gate against.
+  const canManage = !myRole || can(myRole, "manage_templates");
   const gated = !isPro;
 
   const tab: TemplateTabKey = search.tab ?? "blueprints";

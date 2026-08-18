@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { getStripe, planToPriceId, type BillingPlan, type BillingInterval } from "../../lib/stripe";
 import { PLAN_MEMBER_CAP } from "../../lib/team-plan";
+import { can } from "@sitepix/shared/team-permissions";
 import type { ServiceContext } from "../../lib/user-context";
 
 const PLAN_VALUES = ["starter", "pro", "team"] as const;
@@ -31,8 +32,22 @@ async function requireOwnedTeam(ctx: ServiceContext) {
     .eq("user_id", ctx.userId)
     .maybeSingle();
   if (!membership) throw new Error("Create a team first.");
-  if ((membership as any).role !== "owner") {
-    throw new Error("Only the team owner can manage billing.");
+  /*
+   * Owner OR Admin, per section 4 of the Team Management spec, which gives
+   * Admin `billing: yes`. It was owner-only, so an Admin held a capability the
+   * server refused - the kind of mismatch that shows up as a button that 403s.
+   *
+   * This is the widening worth being deliberate about: it is the Stripe portal,
+   * where a subscription can be changed or cancelled. Nothing else in this
+   * change touches money. If you want billing kept to the owner alone, this
+   * single condition is the place to narrow it, and the matrix entry for
+   * `admin -> billing` in packages/shared/src/team-permissions.ts is the
+   * other half.
+   */
+  if (!can((membership as any).role, "billing")) {
+    throw Object.assign(new Error("Only the team owner or an admin can manage billing."), {
+      status: 403,
+    });
   }
 
   const { data: team } = await supabaseAdmin

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ROLE_DESCRIPTION,
@@ -132,5 +134,129 @@ describe("every role is presentable", () => {
       expect(ROLE_LABEL[role]).toBeTruthy();
       expect(ROLE_DESCRIPTION[role]).toBeTruthy();
     }
+  });
+});
+
+describe("family: the matrix is actually enforced, not just declared", () => {
+  const read = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
+
+  /*
+   * `canManageMember` was defined and unit-tested for a round while the role
+   * change endpoint still hard-required `team.owner_id === userId`. Both halves
+   * of section 4 were therefore unreachable: an Admin had `manage_users` and
+   * could not use it, and a Manager's entire purpose - promoting someone over
+   * their own crew - was impossible. A tested pure function that nothing calls
+   * is indistinguishable from a shipped feature until someone tries it.
+   */
+  it("the role-change endpoint asks the matrix, not the owner column", () => {
+    const src = read("apps/api/src/domains/teams/service.ts");
+    expect(src).toMatch(/canManageMember\(\(caller as any\)\.role, \(target as any\)\.role\)/);
+    expect(src).not.toMatch(/Only the owner can change roles\./);
+  });
+
+  it("the roster menu gates on the same function the server uses", () => {
+    const src = read("apps/web/src/features/teams/pages/TeamsPage.tsx");
+    expect(src).toMatch(/canManageMember\(myRole, m\.role\)/);
+    expect(src).not.toMatch(/canEdit = myRole === "owner"/);
+  });
+});
+
+describe("family: page access follows the matrix, and billing is gated separately", () => {
+  const read = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
+
+  /*
+   * The Teams page was owner-only, which locked an Admin out of `manage_users`
+   * and a Manager out of `manage_own_crew` - the only screen either capability
+   * exists on. Opening it is safe specifically because that page carries no
+   * billing controls; the Stripe portal lives in Settings and is gated on its
+   * own capability. These two facts have to stay true together, so both are
+   * asserted here rather than in separate files.
+   */
+  it("the Teams page admits anyone who can manage people", () => {
+    const src = read("apps/web/src/features/teams/pages/TeamsPage.tsx");
+    expect(src).toMatch(/can\(data\.myRole, "manage_users"\)/);
+    expect(src).toMatch(/can\(data\.myRole, "manage_own_crew"\)/);
+    expect(src).not.toMatch(/if \(data\.myRole !== "owner"\)/);
+  });
+
+  it("the Teams page still has no billing action on it", () => {
+    const src = read("apps/web/src/features/teams/pages/TeamsPage.tsx");
+    // If a Stripe control ever lands here, the reasoning that made it safe to
+    // open the page to Admins and Managers silently stops holding.
+    expect(src).not.toMatch(/createBillingPortalSession|createCheckoutSession/);
+  });
+
+  it("billing is enforced on the capability, on the server", () => {
+    const src = read("apps/api/src/domains/billing/service.ts");
+    expect(src).toMatch(/can\(\(membership as any\)\.role, "billing"\)/);
+    expect(src).not.toMatch(/role !== "owner"/);
+  });
+
+  it("the Settings billing section agrees with the server", () => {
+    const src = read("apps/web/src/features/settings/pages/SettingsPage.tsx");
+    expect(src).toMatch(/can\(myTeamRole, "billing"\)/);
+  });
+
+  it("only Owner and Admin hold billing, so widening the page did not widen money", () => {
+    expect(can("owner", "billing")).toBe(true);
+    expect(can("admin", "billing")).toBe(true);
+    expect(can("manager", "billing")).toBe(false);
+    expect(can("standard", "billing")).toBe(false);
+    expect(can("restricted", "billing")).toBe(false);
+  });
+});
+
+describe("family: no capability is declared without a call site", () => {
+  const read = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
+
+  /*
+   * The failure this catches has now happened twice: `canManageMember` sat
+   * tested-but-uncalled for a round, and `manage_templates` was granted to
+   * Manager while the only screen that edits templates still hardcoded
+   * owner/admin. Both looked shipped and neither was. A capability nothing asks
+   * about is a claim, not a permission.
+   */
+  const CAPABILITIES = [
+    "billing",
+    "manage_users",
+    "manage_own_crew",
+    "view_all_projects",
+    "assigned_projects_only",
+    "destructive_actions",
+    "manage_templates",
+  ];
+
+  const SOURCES = [
+    "apps/api/src/domains/teams/service.ts",
+    "apps/api/src/domains/billing/service.ts",
+    "apps/web/src/features/teams/pages/TeamsPage.tsx",
+    "apps/web/src/features/settings/pages/SettingsPage.tsx",
+    "apps/web/src/features/settings/pages/TemplatesPage.tsx",
+  ]
+    .map(read)
+    .join("\n");
+
+  it("every capability in the matrix is asked about somewhere", () => {
+    const unused = CAPABILITIES.filter((c) => !SOURCES.includes(`"${c}"`));
+    /*
+     * These three are enforced in Postgres, not TypeScript, so no call site
+     * here can show them:
+     *   view_all_projects      - `are_teammates()`, every shared-resource policy
+     *   assigned_projects_only - `member_can_reach_project()` (20260911000000)
+     *   destructive_actions    - by the ABSENCE of a DELETE policy, which is the
+     *                            strongest form and the least greppable
+     * Anything else showing up in this list is a capability that was written
+     * down and never wired.
+     */
+    expect(unused).toEqual(["view_all_projects", "assigned_projects_only", "destructive_actions"]);
+  });
+
+  it("Manager holds only what section 4 lists", () => {
+    expect(can("manager", "manage_own_crew")).toBe(true);
+    expect(can("manager", "view_all_projects")).toBe(true);
+    expect(can("manager", "billing")).toBe(false);
+    expect(can("manager", "manage_users")).toBe(false);
+    expect(can("manager", "destructive_actions")).toBe(false);
+    expect(can("manager", "manage_templates")).toBe(false);
   });
 });
