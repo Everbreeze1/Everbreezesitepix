@@ -4,6 +4,13 @@ import { rateLimit } from "../../lib/rate-limit";
 import { ACTIVE_SUBSCRIPTION_STATUSES, PLAN_MEMBER_CAP } from "../../lib/team-plan";
 import { insertNotification } from "../notifications/service";
 import { sendTeamInviteEmail } from "../email/team-invite";
+import {
+  ROLE_LABEL,
+  assignableRoles,
+  can,
+  normaliseRole,
+  roleAllowedOnTier,
+} from "@sitepix/shared/team-permissions";
 
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>;
 
@@ -766,12 +773,191 @@ export async function updateMemberRoleService(ctx: AuthedContext, data: any) {
   if (!team || (team as any).owner_id !== userId)
     throw new Error("Only the owner can change roles.");
 
+  /*
+   * The role must be one this tier can actually hold.
+   *
+   * `assignableRoles()` is what the picker renders from, but the RPC is
+   * reachable with a hand-made request, so a Starter account could otherwise
+   * post `manager` and hold a role it never paid for. Same list, same source
+   * (packages/shared/src/team-permissions.ts), checked on both sides.
+   */
+  const requested = normaliseRole(data.role);
+  // Ownership moves by transfer, never by re-roling somebody into it. The zod
+  // enum already omits `owner`, so this is unreachable through the RPC - it is
+  // here because `AssignableRole` below requires it to be, and a guarantee the
+  // compiler checks outlasts a schema somebody widens later.
+  if (requested === "owner") {
+    throw Object.assign(new Error("Ownership is transferred, not assigned."), { status: 400 });
+  }
+
+  const tier = await callerTierForTeam(supabaseAdmin, (target as any).team_id);
+  if (!roleAllowedOnTier(requested, tier)) {
+    throw Object.assign(
+      new Error(`The ${ROLE_LABEL[requested]} role is not available on your current plan.`),
+      { status: 403 },
+    );
+  }
+  /*
+   * Restricted is refused until the caller can actually scope them.
+   *
+   * `assignmentsEnforced` is true now that project_assignments and its RLS
+   * exist (20260911000000). Before that migration the role would have granted
+   * a full view rather than a narrow one - the failure mode this flag was
+   * added to make impossible.
+   */
+  if (!assignableRoles(tier, { assignmentsEnforced: true }).includes(requested)) {
+    throw Object.assign(new Error("That role cannot be assigned."), { status: 400 });
+  }
+
   const { error } = await supabaseAdmin
     .from("team_members" as any)
     .update({ role: data.role })
     .eq("id", data.memberId);
   if (error) throw new Error(error.message);
+
+  /*
+   * Moving OFF Restricted clears the assignments.
+   *
+   * Left behind, they are inert - `member_can_reach_project` is only consulted
+   * for a Restricted viewer, and everyone else reaches projects through
+   * `are_teammates`. But they become live again the moment the person is put
+   * back on Restricted, silently restoring a scope that may be months stale.
+   */
+  if (
+    normaliseRole((target as any).role) === "restricted" &&
+    normaliseRole(data.role) !== "restricted"
+  ) {
+    const { data: memberRow } = await supabaseAdmin
+      .from("team_members" as any)
+      .select("user_id")
+      .eq("id", data.memberId)
+      .maybeSingle();
+    if (memberRow) {
+      await supabaseAdmin
+        .from("project_assignments" as any)
+        .delete()
+        .eq("user_id", (memberRow as any).user_id);
+    }
+  }
+
   return { ok: true };
+}
+
+/** The billing tier a team is actually on, for role gating. */
+async function callerTierForTeam(
+  supabaseAdmin: SupabaseAdmin,
+  teamId: string,
+): Promise<"starter" | "pro" | "team"> {
+  const { data: team } = await supabaseAdmin
+    .from("teams" as any)
+    .select("plan, subscription_status, is_internal")
+    .eq("id", teamId)
+    .maybeSingle();
+  if ((team as any)?.is_internal) return "team";
+  const active = ACTIVE_SUBSCRIPTION_STATUSES.has((team as any)?.subscription_status);
+  const plan = (team as any)?.plan;
+  if (!active) return "starter";
+  return plan === "pro" || plan === "team" ? plan : "starter";
+}
+
+/**
+ * Which jobs a Restricted member may reach.
+ *
+ * Owner/admin only, and the projects must be the team's own - the assignment
+ * table has no team column, so without this check an admin could scope one of
+ * their people onto another company's job by pasting its id.
+ */
+export async function setMemberProjectsService(ctx: AuthedContext, data: any) {
+  const { userId } = ctx;
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: caller } = await supabaseAdmin
+    .from("team_members" as any)
+    .select("team_id, role")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!caller) throw Object.assign(new Error("Create a team first."), { status: 403 });
+  if (!can((caller as any).role, "manage_users")) {
+    throw Object.assign(new Error("Only owners and admins can assign jobs."), { status: 403 });
+  }
+  const teamId = (caller as any).team_id;
+
+  const { data: target } = await supabaseAdmin
+    .from("team_members" as any)
+    .select("id, team_id, user_id, role")
+    .eq("id", data.memberId)
+    .maybeSingle();
+  if (!target || (target as any).team_id !== teamId) throw new Error("Member not found");
+
+  // Assigning jobs to anyone else is a no-op with a misleading UI: every other
+  // role already reaches every project through `are_teammates`.
+  if (normaliseRole((target as any).role) !== "restricted") {
+    throw new Error("Only Restricted members are scoped to specific jobs.");
+  }
+
+  const projectIds: string[] = Array.from(new Set(data.projectIds ?? []));
+  if (projectIds.length) {
+    const { data: members } = await supabaseAdmin
+      .from("team_members" as any)
+      .select("user_id")
+      .eq("team_id", teamId);
+    const memberIds = (members ?? []).map((m: any) => m.user_id);
+    const { data: rows } = await supabaseAdmin
+      .from("projects" as any)
+      .select("id")
+      .in("id", projectIds)
+      .in("created_by", memberIds.length ? memberIds : ["00000000-0000-0000-0000-000000000000"]);
+    const found = new Set((rows ?? []).map((r: any) => r.id));
+    if (projectIds.some((id) => !found.has(id))) {
+      throw Object.assign(new Error("That project is not part of your team."), { status: 403 });
+    }
+  }
+
+  await supabaseAdmin
+    .from("project_assignments" as any)
+    .delete()
+    .eq("user_id", (target as any).user_id);
+  if (projectIds.length) {
+    const { error } = await supabaseAdmin.from("project_assignments" as any).insert(
+      projectIds.map((project_id) => ({
+        project_id,
+        user_id: (target as any).user_id,
+        assigned_by: userId,
+      })),
+    );
+    if (error) throw new Error(error.message);
+  }
+
+  return { ok: true, projectCount: projectIds.length };
+}
+
+/** The jobs a Restricted member currently holds, for the assignment dialog. */
+export async function getMemberProjectsService(ctx: AuthedContext, data: any) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: caller } = await supabaseAdmin
+    .from("team_members" as any)
+    .select("team_id, role")
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+  if (!caller || !can((caller as any).role, "manage_users")) {
+    throw Object.assign(new Error("Not allowed."), { status: 403 });
+  }
+
+  const { data: target } = await supabaseAdmin
+    .from("team_members" as any)
+    .select("user_id, team_id")
+    .eq("id", data.memberId)
+    .maybeSingle();
+  if (!target || (target as any).team_id !== (caller as any).team_id) {
+    throw new Error("Member not found");
+  }
+
+  const { data: rows } = await supabaseAdmin
+    .from("project_assignments" as any)
+    .select("project_id")
+    .eq("user_id", (target as any).user_id);
+
+  return { projectIds: (rows ?? []).map((r: any) => r.project_id as string) };
 }
 
 export async function leaveTeamService(ctx: AuthedContext) {

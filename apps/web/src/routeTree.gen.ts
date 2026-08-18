@@ -23,6 +23,7 @@ import { Route as EmbedDotjsRouteImport } from './routes/embed[.]js'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SubcontractorInviteTokenRouteImport } from './routes/subcontractor-invite.$token'
 import { Route as PSlugRouteImport } from './routes/p.$slug'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as AuthConfirmRouteImport } from './routes/auth.confirm'
@@ -140,6 +141,12 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SubcontractorInviteTokenRoute =
+  SubcontractorInviteTokenRouteImport.update({
+    id: '/subcontractor-invite/$token',
+    path: '/subcontractor-invite/$token',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const PSlugRoute = PSlugRouteImport.update({
   id: '/p/$slug',
   path: '/p/$slug',
@@ -411,6 +418,7 @@ export interface FileRoutesByFullPath {
   '/auth/confirm': typeof AuthConfirmRoute
   '/invite/$token': typeof InviteTokenRoute
   '/p/$slug': typeof PSlugRoute
+  '/subcontractor-invite/$token': typeof SubcontractorInviteTokenRoute
   '/admin/audit-log': typeof AppAdminAuditLogRoute
   '/admin/notifications': typeof AppAdminNotificationsRoute
   '/admin/teams': typeof AppAdminTeamsRouteWithChildren
@@ -472,6 +480,7 @@ export interface FileRoutesByTo {
   '/auth/confirm': typeof AuthConfirmRoute
   '/invite/$token': typeof InviteTokenRoute
   '/p/$slug': typeof PSlugRoute
+  '/subcontractor-invite/$token': typeof SubcontractorInviteTokenRoute
   '/admin/audit-log': typeof AppAdminAuditLogRoute
   '/admin/notifications': typeof AppAdminNotificationsRoute
   '/admin/teams': typeof AppAdminTeamsRouteWithChildren
@@ -536,6 +545,7 @@ export interface FileRoutesById {
   '/auth/confirm': typeof AuthConfirmRoute
   '/invite/$token': typeof InviteTokenRoute
   '/p/$slug': typeof PSlugRoute
+  '/subcontractor-invite/$token': typeof SubcontractorInviteTokenRoute
   '/_app/admin/audit-log': typeof AppAdminAuditLogRoute
   '/_app/admin/notifications': typeof AppAdminNotificationsRoute
   '/_app/admin/teams': typeof AppAdminTeamsRouteWithChildren
@@ -600,6 +610,7 @@ export interface FileRouteTypes {
     | '/auth/confirm'
     | '/invite/$token'
     | '/p/$slug'
+    | '/subcontractor-invite/$token'
     | '/admin/audit-log'
     | '/admin/notifications'
     | '/admin/teams'
@@ -661,6 +672,7 @@ export interface FileRouteTypes {
     | '/auth/confirm'
     | '/invite/$token'
     | '/p/$slug'
+    | '/subcontractor-invite/$token'
     | '/admin/audit-log'
     | '/admin/notifications'
     | '/admin/teams'
@@ -724,6 +736,7 @@ export interface FileRouteTypes {
     | '/auth/confirm'
     | '/invite/$token'
     | '/p/$slug'
+    | '/subcontractor-invite/$token'
     | '/_app/admin/audit-log'
     | '/_app/admin/notifications'
     | '/_app/admin/teams'
@@ -775,6 +788,7 @@ export interface RootRouteChildren {
   AuthConfirmRoute: typeof AuthConfirmRoute
   InviteTokenRoute: typeof InviteTokenRoute
   PSlugRoute: typeof PSlugRoute
+  SubcontractorInviteTokenRoute: typeof SubcontractorInviteTokenRoute
   EmbedGalleryKeyRoute: typeof EmbedGalleryKeyRoute
   EmbedMapKeyRoute: typeof EmbedMapKeyRoute
   PSlugShowcaseSlugRoute: typeof PSlugShowcaseSlugRoute
@@ -886,6 +900,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/subcontractor-invite/$token': {
+      id: '/subcontractor-invite/$token'
+      path: '/subcontractor-invite/$token'
+      fullPath: '/subcontractor-invite/$token'
+      preLoaderRoute: typeof SubcontractorInviteTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/p/$slug': {
@@ -1335,6 +1356,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthConfirmRoute: AuthConfirmRoute,
   InviteTokenRoute: InviteTokenRoute,
   PSlugRoute: PSlugRoute,
+  SubcontractorInviteTokenRoute: SubcontractorInviteTokenRoute,
   EmbedGalleryKeyRoute: EmbedGalleryKeyRoute,
   EmbedMapKeyRoute: EmbedMapKeyRoute,
   PSlugShowcaseSlugRoute: PSlugShowcaseSlugRoute,

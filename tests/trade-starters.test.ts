@@ -146,6 +146,14 @@ describe("every Templates tab reads the company's trade", () => {
     ["Document picker", "apps/web/src/features/projects/components/ChoosePageTemplateDialog.tsx"],
     ["Checklists", "apps/web/src/features/settings/pages/ChecklistTemplatesPage.tsx"],
     ["Workflows", WORKFLOW_PAGE_PATH],
+    /*
+     * The two surfaces added with the blueprint layering work. Walkthroughs is
+     * a library tab like the five above it; Blueprints became one the moment
+     * blueprints gained a trade of their own, and it was the last tab still
+     * sorting by creation order.
+     */
+    ["Walkthroughs", "apps/web/src/features/settings/components/WalkthroughTemplatesManager.tsx"],
+    ["Blueprints", "apps/web/src/features/settings/pages/TemplatesPage.tsx"],
     ["Report templates", "apps/web/src/features/settings/components/ReportTemplatesManager.tsx"],
     ["New report dialog", "apps/web/src/features/projects/components/NewReportDialog.tsx"],
     /*

@@ -86,7 +86,18 @@ import {
   revokeInviteService,
   saveCompanyProfileService,
   updateMemberRoleService,
+  setMemberProjectsService,
+  getMemberProjectsService,
 } from "../teams/service";
+import {
+  acceptSubcontractorInviteService,
+  acceptSubcontractorInviteSignupService,
+  inviteSubcontractorService,
+  listSubcontractorsService,
+  lookupSubcontractorInviteService,
+  revokeSubcontractorService,
+  setSubcontractorProjectsService,
+} from "../subcontractors/service";
 import {
   createBillingPortalSessionInputSchema,
   createBillingPortalSessionService,
@@ -558,6 +569,64 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     (d) => z.object({ inviteId: z.string().uuid() }).parse(d),
     revokeInviteService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
+
+  /* ---- Subcontractor access (Team tier) ---- */
+  inviteSubcontractor: authed(
+    (d) =>
+      z
+        .object({
+          email: z.string().trim().toLowerCase().email().max(200),
+          companyName: z.string().trim().max(120).optional(),
+          // Capped so one call cannot fan a single outside firm across an
+          // entire workspace by accident.
+          projectIds: z.array(z.string().uuid()).min(1).max(200),
+          origin: z.string().url().max(300).optional(),
+        })
+        .parse(d),
+    inviteSubcontractorService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  listSubcontractors: {
+    handle: async (ctx: ServiceContext | null) => {
+      if (!ctx) throw Object.assign(new Error("Unauthorized"), { status: 401 });
+      return listSubcontractorsService(ctx as never);
+    },
+  },
+  setSubcontractorProjects: authed(
+    (d) =>
+      z
+        .object({
+          subcontractorId: z.string().uuid(),
+          // Empty is allowed here, unlike on invite: taking the last project
+          // away is how you park a firm without revoking them.
+          projectIds: z.array(z.string().uuid()).max(200),
+        })
+        .parse(d),
+    setSubcontractorProjectsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  revokeSubcontractor: authed(
+    (d) => z.object({ subcontractorId: z.string().uuid() }).parse(d),
+    revokeSubcontractorService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  lookupSubcontractorInvite: pub(
+    (d) => z.object({ token: z.string().min(10).max(200) }).parse(d),
+    lookupSubcontractorInviteService as (data: never) => Promise<unknown>,
+  ),
+  acceptSubcontractorInvite: authed(
+    (d) => z.object({ token: z.string().min(10).max(200) }).parse(d),
+    acceptSubcontractorInviteService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  acceptSubcontractorInviteSignup: pub(
+    (d) =>
+      z
+        .object({
+          token: z.string().min(10).max(200),
+          fullName: z.string().trim().min(1).max(120),
+          password: z.string().min(8).max(200),
+        })
+        .parse(d),
+    acceptSubcontractorInviteSignupService as (data: never) => Promise<unknown>,
+  ),
   removeMember: authed(
     (d) => z.object({ memberId: z.string().uuid() }).parse(d),
     removeMemberService as (ctx: ServiceContext, data: never) => Promise<unknown>,
@@ -567,10 +636,30 @@ export const rpcRegistry: Record<string, RpcEntry> = {
       z
         .object({
           memberId: z.string().uuid(),
-          role: z.enum(["admin", "member"]),
+          // `member` stays accepted: it is the historical spelling of Standard
+          // and existing clients still send it. The service normalises.
+          // Which of these a team may actually hold is a plan question, not a
+          // parse one - `roleAllowedOnTier` decides that in the service.
+          role: z.enum(["admin", "manager", "standard", "restricted", "member"]),
         })
         .parse(d),
     updateMemberRoleService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  setMemberProjects: authed(
+    (d) =>
+      z
+        .object({
+          memberId: z.string().uuid(),
+          // Empty is allowed: taking every job away is how you park a
+          // Restricted member without removing them from the team.
+          projectIds: z.array(z.string().uuid()).max(500),
+        })
+        .parse(d),
+    setMemberProjectsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  getMemberProjects: authed(
+    (d) => z.object({ memberId: z.string().uuid() }).parse(d),
+    getMemberProjectsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   leaveTeam: {
     handle: async (ctx) => {

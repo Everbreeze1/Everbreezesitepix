@@ -49,7 +49,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { SURFACE_CARD } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { CATEGORY_ORDER, GENERAL_CATEGORY, categoryRank } from "@/lib/template-categories";
+import { CATEGORY_ORDER, GENERAL_CATEGORY, makeCategoryRank } from "@/lib/template-categories";
+import { useCompanySetup } from "@/hooks/use-company-setup";
 import { WALKTHROUGH_STARTERS, type WalkthroughStarter } from "./walkthrough-starters";
 
 /**
@@ -208,14 +209,36 @@ export function WalkthroughTemplatesManager({ canManage }: { canManage: boolean 
     void load();
   }, [user, load]);
 
+  /*
+   * The company's own trade leads, the same way it does on Checklists,
+   * Workflows, Documents and Reports.
+   *
+   * `categoryRank` is the fixed opinion a brand new account sees; once a company
+   * has said what they do, that opinion is wrong for them and
+   * `makeCategoryRank` replaces it. Being the one library tab that ignored the
+   * answer is exactly the drift the invariant in tests/trade-starters.ts exists
+   * to catch, and this tab is now in its list.
+   */
+  const company = useCompanySetup();
+  const rank = useMemo(
+    () => makeCategoryRank(company.profile.industry, company.profile.trades),
+    [company.profile.industry, company.profile.trades],
+  );
+
   const visible = useMemo(() => {
     const q = searchText.trim().toLowerCase();
-    return templates.filter((t) => {
-      if (!showArchived && t.archived) return false;
-      if (!q) return true;
-      return `${t.name} ${t.description ?? ""} ${t.category ?? ""}`.toLowerCase().includes(q);
-    });
-  }, [templates, showArchived, searchText]);
+    return templates
+      .filter((t) => {
+        if (!showArchived && t.archived) return false;
+        if (!q) return true;
+        return `${t.name} ${t.description ?? ""} ${t.category ?? ""}`.toLowerCase().includes(q);
+      })
+      .sort(
+        (a, b) =>
+          rank(a.category || GENERAL_CATEGORY) - rank(b.category || GENERAL_CATEGORY) ||
+          a.name.localeCompare(b.name),
+      );
+  }, [templates, showArchived, searchText, rank]);
 
   const selected = templates.find((t) => t.id === selectedId) ?? null;
   const selectedShots = useMemo(
@@ -913,8 +936,8 @@ export function WalkthroughTemplatesManager({ canManage }: { canManage: boolean 
               {[...WALKTHROUGH_STARTERS]
                 .sort(
                   (a, b) =>
-                    (a.category ? categoryRank(a.category) : Number.MAX_SAFE_INTEGER) -
-                      (b.category ? categoryRank(b.category) : Number.MAX_SAFE_INTEGER) ||
+                    (a.category ? rank(a.category) : Number.MAX_SAFE_INTEGER) -
+                      (b.category ? rank(b.category) : Number.MAX_SAFE_INTEGER) ||
                     a.name.localeCompare(b.name),
                 )
                 .map((s) => (

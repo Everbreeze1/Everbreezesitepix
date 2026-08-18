@@ -50,6 +50,14 @@ import {
   resendMemberConfirmation,
 } from "@/features/teams/api";
 import { relativeTime } from "@sitepix/shared";
+import {
+  ROLE_DESCRIPTION,
+  ROLE_LABEL,
+  assignableRoles,
+  normaliseRole,
+} from "@sitepix/shared/team-permissions";
+import { SubcontractorsPanel } from "../components/SubcontractorsPanel";
+import { AssignJobsDialog } from "../components/AssignJobsDialog";
 
 const AVATAR_PALETTE = ["#059669", "#7C3AED", "#D97706", "#DB2777", "#0EA5E9", "#65A30D"];
 const avatarColor = (role: string, index: number) =>
@@ -67,12 +75,13 @@ const roleIcon = (r: string) =>
     <UserIcon className="h-3 w-3" />
   );
 
-const roleLabel: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
-const roleTitle: Record<string, string> = {
-  owner: "Workspace admin",
-  admin: "Project manager",
-  member: "Crew member",
-};
+/*
+ * Both maps go through `normaliseRole` so the historical `member` value and the
+ * spec's `standard` render as one thing. Falling back to the raw value would
+ * print "restricted" in lower case next to properly cased labels.
+ */
+const roleLabel = (role: string) => ROLE_LABEL[normaliseRole(role)];
+const roleTitle = (role: string) => ROLE_DESCRIPTION[normaliseRole(role)];
 
 function initials(name?: string | null, email?: string | null) {
   const src = (name || email || "?").trim();
@@ -183,7 +192,7 @@ function TeamDesignPreview() {
                       {m.name}
                     </div>
                     <div className="mt-0.5 truncate font-manrope text-xs text-muted-foreground">
-                      {roleTitle[m.role]} · Active {m.active}
+                      {roleTitle(m.role)} · Active {m.active}
                     </div>
                   </div>
                 </div>
@@ -388,7 +397,7 @@ function TeamDashboard({
       )}
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-        <MembersList members={members} myRole={myRole} onChange={onChange} />
+        <MembersList members={members} myRole={myRole} plan={plan} onChange={onChange} />
         <WorkspaceCoverageCard
           seatsUsed={seatsUsed}
           memberLimit={memberLimit}
@@ -397,6 +406,11 @@ function TeamDashboard({
           onInviteClick={() => setInviteOpen(true)}
         />
       </div>
+
+      {/* Below the roster, not inside it. A subcontractor holds no seat, so
+          listing them among members would put a person in the crew list who
+          never moves the seat count - the first thing an owner would query. */}
+      <SubcontractorsPanel isTeamPlan={plan === "team"} />
 
       {invites.length > 0 && (
         <PendingInvites invites={invites} canManage={canManage} onChange={onChange} />
@@ -710,10 +724,13 @@ function PendingInvites({
 function MembersList({
   members,
   myRole,
+  plan,
   onChange,
 }: {
   members: any[];
   myRole: string;
+  /** Decides which roles this team may hold - see `assignableRoles`. */
+  plan: TeamPlan;
   onChange: () => void;
 }) {
   const remove = removeMember;
@@ -721,6 +738,7 @@ function MembersList({
   const [confirmRemove, setConfirmRemove] = useState<any | null>(null);
   const [query, setQuery] = useState("");
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState<{ id: string; name: string } | null>(null);
 
   /*
    * Someone who accepted their invite but never confirmed their email is on the
@@ -823,7 +841,7 @@ function MembersList({
                       )}
                     </div>
                     <div className="mt-0.5 truncate font-manrope text-xs text-muted-foreground">
-                      {roleTitle[m.role] ?? roleLabel[m.role] ?? m.role}
+                      {roleTitle(m.role)}
                       {unconfirmed ? (
                         <> · Cannot sign in until they confirm their email</>
                       ) : (
@@ -856,26 +874,34 @@ function MembersList({
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        {canEdit && m.role !== "admin" && (
-                          <DropdownMenuItem
-                            onClick={async () => {
-                              await updateRole({ data: { memberId: m.id, role: "admin" } });
-                              toast.success("Promoted to admin");
-                              onChange();
-                            }}
-                          >
-                            <Shield className="mr-2 h-4 w-4" /> Make admin
-                          </DropdownMenuItem>
-                        )}
-                        {canEdit && m.role !== "member" && (
-                          <DropdownMenuItem
-                            onClick={async () => {
-                              await updateRole({ data: { memberId: m.id, role: "member" } });
-                              toast.success("Set as member");
-                              onChange();
-                            }}
-                          >
-                            <UserIcon className="mr-2 h-4 w-4" /> Make member
+                        {/* Driven by the shared matrix rather than a hardcoded
+                            pair, so the picker and the server's own check read
+                            the same list and a tier can never be offered a role
+                            the RPC will refuse. */}
+                        {canEdit &&
+                          assignableRoles(plan, { assignmentsEnforced: true })
+                            .filter((role) => role !== normaliseRole(m.role))
+                            .map((role) => (
+                              <DropdownMenuItem
+                                key={role}
+                                onClick={async () => {
+                                  try {
+                                    await updateRole({ data: { memberId: m.id, role } });
+                                    toast.success(`Set as ${ROLE_LABEL[role]}`);
+                                    onChange();
+                                  } catch (e: any) {
+                                    toast.error(e?.message ?? "Could not change role");
+                                  }
+                                }}
+                              >
+                                <Shield className="mr-2 h-4 w-4" /> Make {ROLE_LABEL[role]}
+                              </DropdownMenuItem>
+                            ))}
+                        {/* Only Restricted members are scoped, so this is the
+                            only role for which "which jobs?" is a question. */}
+                        {canEdit && normaliseRole(m.role) === "restricted" && (
+                          <DropdownMenuItem onClick={() => setAssigning({ id: m.id, name })}>
+                            <UserIcon className="mr-2 h-4 w-4" /> Choose their jobs
                           </DropdownMenuItem>
                         )}
                         {canRemove && (
@@ -895,7 +921,7 @@ function MembersList({
                     <button
                       type="button"
                       disabled
-                      title={`${roleLabel[m.role] ?? m.role} - no actions available`}
+                      title={`${roleLabel(m.role)} - no actions available`}
                       className="cursor-default rounded-xl bg-muted px-3 py-2 font-manrope text-xs font-extrabold text-muted-foreground/50"
                     >
                       Manage
@@ -907,6 +933,14 @@ function MembersList({
           })
         )}
       </ul>
+
+      <AssignJobsDialog
+        member={assigning}
+        onClose={() => {
+          setAssigning(null);
+          onChange();
+        }}
+      />
 
       <Dialog open={!!confirmRemove} onOpenChange={(o) => !o && setConfirmRemove(null)}>
         <DialogContent>

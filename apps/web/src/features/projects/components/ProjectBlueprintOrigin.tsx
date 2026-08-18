@@ -127,10 +127,32 @@ function ApplicationBlock({
             {app.inferred
               ? "Detected from its checklists"
               : `${first ? "Set up" : "Also applied"} ${relativeTime(app.appliedAt)}`}
+            {app.version != null && <span> · v{app.version}</span>}
             {app.failedCount > 0 && (
               <span className="font-bold text-destructive"> · {app.failedCount} failed</span>
             )}
           </p>
+          {/*
+           * The blueprint has moved on, and this project has not.
+           *
+           * This is the visible half of the spec's isolation rule: "editing the
+           * master Blueprint later must NOT retroactively alter projects already
+           * using it." That the rule holds is a property of the apply being a
+           * copy; that anyone can TELL it holds needs saying, and the moment it
+           * matters is when someone opens a project, sees the blueprint's name,
+           * and wonders whether what they are looking at is current.
+           *
+           * Only shown when there is a real gap, so an unedited blueprint adds
+           * no noise.
+           */}
+          {app.version != null &&
+            app.currentVersion != null &&
+            app.currentVersion > app.version && (
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                That blueprint is now at v{app.currentVersion}. This project keeps what it was
+                given.
+              </p>
+            )}
         </div>
         {/*
          * Badge, never hide: a teammate who cannot open someone's personal

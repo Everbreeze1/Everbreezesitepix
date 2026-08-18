@@ -682,6 +682,15 @@ export type BlueprintOriginApplication = {
    * written before that column existed, and on databases still without it.
    */
   version: number | null;
+  /**
+   * What that blueprint is at NOW, when the caller can see it.
+   *
+   * Higher than `version` means the blueprint has been edited since this project
+   * was set up - and, because the apply copies rather than links, that this
+   * project was deliberately left alone. Null when there is nothing to compare
+   * against.
+   */
+  currentVersion: number | null;
   appliedAt: string;
   counts: Record<string, number>;
   failedCount: number;
@@ -785,13 +794,34 @@ export async function getProjectBlueprintOriginService(
     new Set(ledger.map((r) => r.blueprint_id).filter(Boolean) as string[]),
   );
 
-  // Caller-scoped, so RLS decides. Membership here means "you may open it".
-  const { data: visibleRows } = await (ctx.supabase as any)
+  /*
+   * Caller-scoped, so RLS decides. Membership here means "you may open it".
+   *
+   * `version` comes along for the ride so the caller can compare what this
+   * project RECEIVED against what the blueprint is now. That comparison is the
+   * whole point of the versioning rule: the instances are copies, so a blueprint
+   * that has moved on since cannot have altered this project, and saying so is
+   * more use than a bare version number nobody can interpret.
+   */
+  const ids = blueprintIds.length ? blueprintIds : [NIL_UUID];
+  let { data: visibleRows, error: visibleErr } = await (ctx.supabase as any)
     .from("project_templates")
-    .select("id, name")
-    .in("id", blueprintIds.length ? blueprintIds : [NIL_UUID]);
+    .select("id, name, version")
+    .in("id", ids);
+  if (visibleErr && isMissingColumn(visibleErr)) {
+    // 20260908000000 pending. Losing the comparison must not lose the names.
+    ({ data: visibleRows } = await (ctx.supabase as any)
+      .from("project_templates")
+      .select("id, name")
+      .in("id", ids));
+  }
   const visible = new Map<string, string>(
     ((visibleRows as any[]) ?? []).map((t: any) => [t.id as string, t.name as string]),
+  );
+  const currentVersions = new Map<string, number>(
+    ((visibleRows as any[]) ?? [])
+      .filter((t: any) => typeof t.version === "number")
+      .map((t: any) => [t.id as string, t.version as number]),
   );
 
   // Names for rows written before `blueprint_name` existed, read with the admin
@@ -817,6 +847,10 @@ export async function getProjectBlueprintOriginService(
     blueprintVisible: !!r.blueprint_id && visible.has(r.blueprint_id),
     inferred: r.origin === "inferred",
     version: r.blueprint_version ?? null,
+    // Null when the blueprint is deleted, invisible to this caller, or the
+    // column is not there yet - all three mean "no comparison to offer", which
+    // the caller renders as silence rather than as a change.
+    currentVersion: r.blueprint_id ? (currentVersions.get(r.blueprint_id) ?? null) : null,
     appliedAt: r.created_at,
     counts: r.counts ?? {},
     failedCount: r.failed_count ?? 0,
