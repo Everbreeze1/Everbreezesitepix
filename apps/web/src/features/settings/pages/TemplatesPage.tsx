@@ -88,12 +88,17 @@ import {
   type BlueprintStarter,
 } from "@/features/settings/components/blueprint-starters";
 import { installBlueprintStarter } from "@/features/settings/components/install-blueprint-starter";
-import { CATEGORY_ORDER } from "@/lib/template-categories";
 import { LabelsManager } from "@/features/settings/components/LabelsManager";
 import { LabelSetsManager } from "@/features/settings/components/LabelSetsManager";
 import { ReportTemplatesManager } from "@/features/settings/components/ReportTemplatesManager";
 import { DocumentTemplatesManager } from "@/features/settings/components/DocumentTemplatesManager";
-import { GENERAL_CATEGORY, categoryRank } from "@/lib/template-categories";
+import {
+  CATEGORY_ORDER,
+  GENERAL_CATEGORY,
+  categoryRank,
+  makeCategoryRank,
+} from "@/lib/template-categories";
+import { useCompanySetup } from "@/hooks/use-company-setup";
 
 import { ensureLabel, useLabelCatalog } from "@/hooks/use-label-catalog";
 
@@ -274,6 +279,9 @@ function byTrade(entries: LibraryEntry[]): Array<[string, LibraryEntry[]]> {
  */
 const NO_CATEGORY = "__none";
 
+/** "Every trade" in the blueprint rail's filter. Same sentinel reasoning. */
+const ALL_TRADES = "__all";
+
 /** Which library tab authors a given blueprint section kind. */
 const KIND_TAB: Record<TemplateItemKind, TemplateTabKey> = {
   checklist: "checklists",
@@ -337,6 +345,8 @@ export function TemplatesPage() {
   const [creating, setCreating] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [searchText, setSearchText] = useState("");
+  /** Trade filter for the blueprint rail. `ALL_TRADES` is the unfiltered default. */
+  const [tradeFilter, setTradeFilter] = useState<string>(ALL_TRADES);
   const [reordering, setReordering] = useState(false);
 
   const [applyOpen, setApplyOpen] = useState(false);
@@ -587,17 +597,57 @@ export function TemplatesPage() {
     };
   }, [user, gated, tab]);
 
+  /*
+   * The blueprint rail sorts the way every other Templates tab sorts: the
+   * company's own trade first.
+   *
+   * Blueprints were the last tab still on plain creation order, which was
+   * defensible while they had no trade and stopped being so the moment they
+   * did - a plumber scrolling past three roofing blueprints to reach theirs is
+   * the same complaint that put `makeCategoryRank` on the other five tabs.
+   *
+   * Within a trade the default leads, because it is the one a new project of
+   * that trade will start from and burying it alphabetically is what makes a
+   * default worth nothing.
+   */
+  const company = useCompanySetup();
+  const rank = useMemo(
+    () => makeCategoryRank(company.profile.industry, company.profile.trades),
+    [company.profile.industry, company.profile.trades],
+  );
+
   const visibleTemplates = useMemo(() => {
     const q = searchText.trim().toLowerCase();
-    return templates.filter((t) => {
-      if (!showArchived && t.archived) return false;
-      if (q) {
-        const hay = `${t.name} ${t.description ?? ""} ${(t.labels ?? []).join(" ")}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [templates, showArchived, searchText]);
+    return templates
+      .filter((t) => {
+        if (!showArchived && t.archived) return false;
+        if (tradeFilter !== ALL_TRADES && (t.category || GENERAL_CATEGORY) !== tradeFilter) {
+          return false;
+        }
+        if (q) {
+          const hay =
+            `${t.name} ${t.description ?? ""} ${t.category ?? ""} ${(t.labels ?? []).join(" ")}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      })
+      .sort(
+        (a, b) =>
+          rank(a.category || GENERAL_CATEGORY) - rank(b.category || GENERAL_CATEGORY) ||
+          Number(b.default_for_category) - Number(a.default_for_category) ||
+          a.name.localeCompare(b.name),
+      );
+  }, [templates, showArchived, searchText, tradeFilter, rank]);
+
+  /** Trades actually represented, so the filter never offers an empty result. */
+  const tradesInUse = useMemo(() => {
+    const present = new Set(
+      templates
+        .filter((t) => showArchived || !t.archived)
+        .map((t) => t.category || GENERAL_CATEGORY),
+    );
+    return [...present].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  }, [templates, showArchived, rank]);
 
   const selected = templates.find((t) => t.id === selectedId) ?? null;
 
@@ -1221,6 +1271,9 @@ export function TemplatesPage() {
               onSearch={setSearchText}
               showArchived={showArchived}
               onToggleArchived={() => setShowArchived((s) => !s)}
+              trades={tradesInUse}
+              tradeFilter={tradeFilter}
+              onTradeFilter={setTradeFilter}
               onCreate={() => setCreateOpen(true)}
               onStarters={() => setStartersOpen(true)}
               sections={sections}
@@ -1647,6 +1700,10 @@ function BlueprintsTab(props: {
   onSearch: (v: string) => void;
   showArchived: boolean;
   onToggleArchived: () => void;
+  /** Trades present in the library, in the company's own order. */
+  trades: string[];
+  tradeFilter: string;
+  onTradeFilter: (v: string) => void;
   onCreate: () => void;
   onStarters: () => void;
   sections: SectionRow[];
@@ -1684,6 +1741,9 @@ function BlueprintsTab(props: {
     onSearch,
     showArchived,
     onToggleArchived,
+    trades,
+    tradeFilter,
+    onTradeFilter,
     onCreate,
     onStarters,
     sections,
@@ -1752,6 +1812,25 @@ function BlueprintsTab(props: {
           />
         </div>
 
+        {/* The trade filter the spec's "optional, for filtering later" asks for.
+            Hidden below two trades, where it is a control with one meaningful
+            position and nothing to narrow. */}
+        {trades.length > 1 && (
+          <Select value={tradeFilter} onValueChange={onTradeFilter}>
+            <SelectTrigger className="h-9 rounded-xl text-xs font-semibold">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_TRADES}>All trades</SelectItem>
+              {trades.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
         {/* Create lives in the list header, not in a full-width button of its
             own above it. The hero already carries a primary "New blueprint" a
             couple of hundred pixels up, so this was the same action twice on
@@ -1798,7 +1877,12 @@ function BlueprintsTab(props: {
           </div>
           {visibleTemplates.length === 0 ? (
             <p className="px-3 py-8 text-center text-xs text-muted-foreground">
-              No blueprints match your search.
+              {/* Naming the filter that emptied the list, because a trade
+                  filter set two visits ago is invisible otherwise and reads as
+                  "my blueprints are gone". */}
+              {tradeFilter === ALL_TRADES
+                ? "No blueprints match your search."
+                : `No ${tradeFilter} blueprints${search.trim() ? " match your search" : ""}.`}
             </p>
           ) : (
             <ul className="max-h-[62vh] divide-y divide-border/60 overflow-y-auto">

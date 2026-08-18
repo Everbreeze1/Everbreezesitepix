@@ -1,0 +1,108 @@
+-- Team roles: add Manager, Standard and Restricted to `team_role`.
+--
+-- The client, on the current state: "We are going to update the team
+-- Permissions because its very bad right now." He is right, and the shape of
+-- the problem is that `team_role` has exactly three values - owner, admin,
+-- member - and NOTHING in the product gates them on plan. Every `role IN
+-- ('owner','admin')` check in this schema works the same on a Starter account
+-- as on a Team one, which is why "Advanced roles & permissions" on the Team
+-- pricing card described something Starter already had.
+--
+-- Section 4 of the Team Management spec is the target:
+--
+--   Role        Billing  Manage users  All projects  Assigned only  Destructive
+--   Admin       yes      yes           yes           -              yes
+--   Manager     no       own crew      yes           -              limited
+--   Standard    no       no            yes           -              no
+--   Restricted  no       no            no            yes            no
+--
+-- The matrix itself lives in packages/shared/src/team-permissions.ts, imported
+-- by both the API (which refuses calls with it) and the web app (which hides
+-- controls with it). This migration only teaches the database the vocabulary.
+--
+-- ---------------------------------------------------------------------------
+-- WHY THIS MIGRATION ADDS VALUES AND DOES NOTHING ELSE
+-- ---------------------------------------------------------------------------
+-- Postgres will not let a transaction use an enum value it added itself. A
+-- migration runs as one transaction, so any statement here that referenced
+-- 'manager' - a CHECK, a policy, a backfill - would fail with "unsafe use of
+-- new value of enum type" no matter how it was written. Splitting is not a
+-- style choice; it is the only order that works.
+--
+-- So: this file adds the vocabulary. The policies and the project-assignment
+-- table that make `restricted` mean anything come in the next migration, once
+-- these values are committed and usable.
+--
+-- ---------------------------------------------------------------------------
+-- `member` IS NOT MIGRATED, AND THAT IS DELIBERATE
+-- ---------------------------------------------------------------------------
+-- Every existing non-admin row reads 'member', which is what the spec calls
+-- Standard. Rewriting them to 'standard' would touch every team_members and
+-- team_invites row in the product to change a label, and a role column is the
+-- last place to accept avoidable write risk: get it wrong and someone is locked
+-- out of their own workspace, or worse, someone is not.
+--
+-- `normaliseRole()` in team-permissions.ts folds 'member' to 'standard' on
+-- read, so the two are the same role everywhere it matters. New rows will be
+-- written as 'standard'; old ones stay as they are and behave identically.
+--
+-- Idempotent: IF NOT EXISTS on every ADD VALUE. Safe to re-run.
+-- Apply in the SitePix Supabase SQL editor (or `supabase db push`).
+
+SET lock_timeout = '5s';
+
+-- ===========================================================================
+-- 1. THE NEW VOCABULARY
+-- ===========================================================================
+-- Additive only. No existing row changes, no table is rewritten, and every
+-- policy that reads `role IN ('owner','admin')` keeps meaning exactly what it
+-- meant before - a value nobody holds yet cannot change an existing answer.
+--
+-- BEFORE = 'member' places Standard where it belongs in the ordering, next to
+-- the value it supersedes, so `ORDER BY role` sorts the roster sensibly instead
+-- of alphabetically. Ordering is a property of the enum, not of the query, so
+-- it has to be right at creation time.
+
+ALTER TYPE public.team_role ADD VALUE IF NOT EXISTS 'manager' AFTER 'admin';
+ALTER TYPE public.team_role ADD VALUE IF NOT EXISTS 'standard' BEFORE 'member';
+ALTER TYPE public.team_role ADD VALUE IF NOT EXISTS 'restricted' AFTER 'member';
+
+-- ===========================================================================
+-- WHAT IS DELIBERATELY NOT HERE
+-- ===========================================================================
+-- 1. No policy touches Manager yet. `is_team_admin()` still answers
+--    role IN ('owner','admin'), which is correct: a Manager is not an admin,
+--    and the capabilities it DOES gain (own crew, templates) are enforced in
+--    the API layer where "own crew" is expressible. Widening this function
+--    would hand Managers the team_members write policy, which is company-wide
+--    user management - the one thing section 4 says they must not have.
+--
+-- 2. No project-assignment table, so `restricted` grants nothing yet. That is
+--    the safe direction to be incomplete in: a Restricted user currently sees
+--    nothing extra, rather than seeing everything. `assignableRoles()` refuses
+--    to offer the role at all until the assignment RLS exists, so it cannot be
+--    handed out in the meantime.
+--
+-- 3. No subcontractor table. Subcontractors are explicitly NOT team_members -
+--    `effectiveMemberLimit` counts that table, so filing them there would make
+--    every subcontractor consume a paid seat, which is the opposite of what
+--    Team is being sold on.
+
+-- === VERIFY ================================================================
+-- Six values, in matrix order. Expect:
+-- owner, admin, manager, standard, member, restricted
+--
+-- SELECT enumlabel, enumsortorder
+--   FROM pg_enum
+--  WHERE enumtypid = 'public.team_role'::regtype
+--  ORDER BY enumsortorder;
+--
+-- Nothing was rewritten - every existing member still reads 'member', and the
+-- counts should match what they were before this ran:
+--
+-- SELECT role, count(*) FROM public.team_members GROUP BY 1 ORDER BY 2 DESC;
+-- SELECT role, count(*) FROM public.team_invites GROUP BY 1 ORDER BY 2 DESC;
+--
+-- No one holds a new role yet. Expect zero rows:
+--
+-- SELECT * FROM public.team_members WHERE role IN ('manager', 'standard', 'restricted');

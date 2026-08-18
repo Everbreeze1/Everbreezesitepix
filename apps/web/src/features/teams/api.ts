@@ -9,6 +9,8 @@ export {
   revokeInvite,
   removeMember,
   updateMemberRole,
+  setMemberProjects,
+  getMemberProjects,
   leaveTeam,
   resendInvite,
   resendMemberConfirmation,

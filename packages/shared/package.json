@@ -27,6 +27,10 @@
     "./report-template-structure": {
       "types": "./src/report-template-structure.ts",
       "default": "./src/report-template-structure.ts"
+    },
+    "./team-permissions": {
+      "types": "./src/team-permissions.ts",
+      "default": "./src/team-permissions.ts"
     }
   },
   "types": "./src/index.ts",

@@ -116,6 +116,8 @@ export {
   revokeInviteService,
   removeMemberService,
   updateMemberRoleService,
+  setMemberProjectsService,
+  getMemberProjectsService,
   leaveTeamService,
   lookupInviteService,
   acceptInviteService,
@@ -133,6 +135,16 @@ export type {
   TeamActivityItem,
   ProjectContributor,
 } from "./domains/teams/service";
+
+export {
+  inviteSubcontractorService,
+  listSubcontractorsService,
+  setSubcontractorProjectsService,
+  revokeSubcontractorService,
+  lookupSubcontractorInviteService,
+  acceptSubcontractorInviteService,
+  acceptSubcontractorInviteSignupService,
+} from "./domains/subcontractors/service";
 
 export {
   createCheckoutSessionService,

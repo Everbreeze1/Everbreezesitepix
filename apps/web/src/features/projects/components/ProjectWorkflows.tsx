@@ -1519,17 +1519,26 @@ function WorkflowRunner({
     headingRef.current?.focus();
   }, [workflow.id]);
 
+  /*
+   * A walkthrough opened from the list is a shot list, and the card that led
+   * here said so. Carrying the workflow icon and "All workflows" into the run
+   * itself would make the label look like a mislabelling the moment you opened
+   * it. The runner's machinery is genuinely shared - a shot list instantiates
+   * into these same tables - so only the naming changes.
+   */
+  const isWalkthrough = workflow.source_kind === "walkthrough";
+
   return (
     <RunnerDetailShell>
       <div ref={headingRef} tabIndex={-1} className="outline-none">
         <RunnerDetailHeader
-          icon={WorkflowIcon}
+          icon={isWalkthrough ? Camera : WorkflowIcon}
           tone={state.tone}
           title={workflow.name}
           description={workflow.description}
           saveState={saveState}
           onBack={onBack}
-          backLabel="All workflows"
+          backLabel={isWalkthrough ? "All workflows & walkthroughs" : "All workflows"}
           done={state.done}
           total={state.total}
           progressLabel={`${workflow.name} progress`}
@@ -1590,7 +1599,7 @@ function WorkflowRunner({
                 size="sm"
                 variant="outline"
                 onClick={() => window.print()}
-                aria-label="Print this workflow"
+                aria-label={isWalkthrough ? "Print this walkthrough" : "Print this workflow"}
                 title="Print / Save as PDF"
               >
                 <Printer className="h-4 w-4 sm:mr-1.5" />
@@ -1600,7 +1609,7 @@ function WorkflowRunner({
                 size="sm"
                 variant={workflow.revoked_at ? "outline" : "secondary"}
                 onClick={onShare}
-                aria-label="Share this workflow"
+                aria-label={isWalkthrough ? "Share this walkthrough" : "Share this workflow"}
               >
                 <Share2 className="h-4 w-4 sm:mr-1.5" />
                 <span className="hidden sm:inline">{workflow.revoked_at ? "Share" : "Shared"}</span>

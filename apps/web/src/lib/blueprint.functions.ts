@@ -38,6 +38,12 @@ export interface BlueprintOriginApplication {
    * than as an error.
    */
   version: number | null;
+  /**
+   * What the blueprint is at now, when this viewer can see it. Higher than
+   * `version` means it has been edited since, and that this project was
+   * deliberately left as it was.
+   */
+  currentVersion: number | null;
   appliedAt: string;
   counts: Record<string, number>;
   failedCount: number;

@@ -115,10 +115,11 @@ export const PLANS: PlanPricing[] = [
     advertiseSeatCap: false,
     popular: true,
     adds: [
-      // `are_teammates()` gates on plan IN ('pro','team') - see
-      // supabase/migrations/20260612193150_teams_plan.sql. Sharing a workspace
-      // at all is what Pro unlocks, and the list never said so.
-      "Shared team workspace",
+      // NOT "Shared team workspace". That was here briefly and it was wrong:
+      // 20260803000000_starter_project_sharing.sql widened `are_teammates()` to
+      // plan IN ('starter','pro','team'), so a 2-person Starter team already
+      // shares everything. What Pro actually adds is room for a crew, and that
+      // is the seat line on the card, not a feature bullet.
       "Live site map",
       // "Recorded", not just "Walkthroughs": generating an AI Summary also
       // files into the Walkthroughs tab and is available on any active plan.
@@ -148,6 +149,10 @@ export const PLANS: PlanPricing[] = [
       // except the one they clicked for.
       "Client-facing Portfolio site + website embeds",
       "Advanced roles & permissions",
+      // The tier's stated upgrade reason: on Pro, a one-day sub costs a full
+      // seat. Enforced in RLS (20260910000000_subcontractor_access.sql), not
+      // just hidden in the UI.
+      "Subcontractor access, no extra seat",
       "Unlimited Auto Reports",
       // "Highest storage" deliberately absent. The tier does get the largest
       // allowance (see use-storage-usage), but nobody shops on a number they

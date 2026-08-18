@@ -9,6 +9,8 @@ import type {
   revokeInviteService,
   removeMemberService,
   updateMemberRoleService,
+  setMemberProjectsService,
+  getMemberProjectsService,
   leaveTeamService,
   lookupInviteService,
   acceptInviteService,
@@ -74,7 +76,10 @@ export const removeMember = rpcOp<{ memberId: string }, Result<typeof removeMemb
 );
 
 export const updateMemberRole = rpcOp<
-  { memberId: string; role: "admin" | "member" },
+  // Mirrors the zod enum in the RPC registry. `owner` is absent on purpose:
+  // ownership is transferred, not assigned, and the service rejects it.
+  // `member` stays for older callers - the service folds it to `standard`.
+  { memberId: string; role: "admin" | "manager" | "standard" | "restricted" | "member" },
   Result<typeof updateMemberRoleService>
 >("updateMemberRole");
 
@@ -122,3 +127,18 @@ export const getProjectContributors = rpcOp<
   { projectId: string },
   Result<typeof getProjectContributorsService>
 >("getProjectContributors");
+
+/**
+ * Restricted-member job scoping. Separate from `updateMemberRole` because the
+ * two answer different questions - which role, and which jobs - and only the
+ * Restricted role has the second one.
+ */
+export const setMemberProjects = rpcOp<
+  { memberId: string; projectIds: string[] },
+  Result<typeof setMemberProjectsService>
+>("setMemberProjects");
+
+export const getMemberProjects = rpcOp<
+  { memberId: string },
+  Result<typeof getMemberProjectsService>
+>("getMemberProjects");
