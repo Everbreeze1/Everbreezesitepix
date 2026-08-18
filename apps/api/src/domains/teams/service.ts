@@ -8,6 +8,7 @@ import {
   ROLE_LABEL,
   assignableRoles,
   can,
+  canManageMember,
   normaliseRole,
   roleAllowedOnTier,
 } from "@sitepix/shared/team-permissions";
@@ -765,13 +766,35 @@ export async function updateMemberRoleService(ctx: AuthedContext, data: any) {
   if (!target) throw new Error("Member not found");
   if ((target as any).role === "owner") throw new Error("Cannot change owner role.");
 
-  const { data: team } = await supabaseAdmin
-    .from("teams" as any)
-    .select("owner_id")
-    .eq("id", (target as any).team_id)
-    .single();
-  if (!team || (team as any).owner_id !== userId)
-    throw new Error("Only the owner can change roles.");
+  /*
+   * Who may re-role whom - the matrix, not "owner only".
+   *
+   * This used to be a flat `team.owner_id !== userId`, which contradicted
+   * section 4 in two directions at once: an Admin has `manage_users` and could
+   * not use it, and a Manager's whole reason to exist ("promote a Standard user
+   * over their own crew") was unreachable. `canManageMember` is the single
+   * definition of that question and was already tested; it just was not called.
+   *
+   * It also keeps the guarantee the old line accidentally provided: the owner
+   * row is immune to everyone, so a workspace can never end up with nobody who
+   * can pay the bill.
+   */
+  const { data: caller } = await supabaseAdmin
+    .from("team_members" as any)
+    .select("role, team_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!caller || (caller as any).team_id !== (target as any).team_id) {
+    throw Object.assign(new Error("Member not found"), { status: 404 });
+  }
+  if (!canManageMember((caller as any).role, (target as any).role)) {
+    throw Object.assign(
+      new Error(
+        `A ${ROLE_LABEL[normaliseRole((caller as any).role)]} cannot change that member's role.`,
+      ),
+      { status: 403 },
+    );
+  }
 
   /*
    * The role must be one this tier can actually hold.
