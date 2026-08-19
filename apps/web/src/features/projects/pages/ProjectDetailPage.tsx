@@ -169,6 +169,8 @@ export type ProjectDetailSearch = {
   panel?: "tasks" | "checklists" | "walkthroughs" | "reports" | "workflows" | "trash" | "calendar";
   /** Photo id to open the viewer on. See the effect that consumes it. */
   photo?: string;
+  /** Task id to open on the Tasks tab. See the effect that consumes it. */
+  task?: string;
 };
 
 import type { Project, Photo, Report } from "../types";
@@ -908,6 +910,35 @@ export function ProjectDetailPage() {
    * from elsewhere mounts the page fresh and both are already at their
    * defaults, so this costs that case nothing.
    */
+  /*
+   * ?task=<uuid> - the Tasks tab, opened on one task.
+   *
+   * Every notification a task raises now carries this. Before it existed they
+   * all linked at `/projects/<id>`, which drops the reader on the photo grid
+   * with no indication that the message was about a task at all, let alone
+   * which one.
+   *
+   * The id is lifted out of the URL and held in state for the same reason the
+   * photo one is: the panel consumes it once, and leaving it in the address bar
+   * would reopen the task every time the reader navigated back to the project.
+   */
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!search.task) return;
+    setPendingTaskId(search.task);
+    navigate({
+      to: "/projects/$projectId",
+      params: { projectId },
+      search: (prev: ProjectDetailSearch) => ({
+        ...prev,
+        task: undefined,
+        panel: "tasks" as const,
+      }),
+      replace: true,
+    });
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [search.task]);
   useEffect(() => {
     if (!search.photo) return;
     setPendingPhotoId(search.photo);
@@ -3017,6 +3048,8 @@ export function ProjectDetailPage() {
         <ProjectTasks
           ref={tasksRef}
           projectId={project.id}
+          openTaskId={pendingTaskId}
+          onOpenedTask={() => setPendingTaskId(null)}
           projectPhotos={photos.map((p) => ({
             id: p.id,
             url: p.image_url ?? signed[p.storage_path] ?? "",

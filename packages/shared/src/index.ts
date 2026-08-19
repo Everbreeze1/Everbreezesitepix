@@ -1,5 +1,15 @@
 export { relativeTime } from "./relative-time";
 export {
+  parseCalendarDate,
+  todayCalendarDate,
+  startOfLocalDay,
+  calendarDaysFromToday,
+  isCalendarDateOverdue,
+  formatCalendarDate,
+  calendarDueLabel,
+  type DueLabel,
+} from "./calendar-date";
+export {
   isFilenameLikeCaption,
   cleanCaption,
   sanitizeCaption,
@@ -22,6 +32,15 @@ export {
   type SectionPagePlan,
 } from "./report-pagination";
 export { normalizeDashes, normalizeDashesTrimmed } from "./machine-dashes";
+export {
+  NOTIFICATION_PREF_DEFAULTS,
+  NOTIFICATION_TYPE_PREF,
+  prefEnabled,
+  emailAllowed,
+  parseNotificationPrefs,
+  type NotificationPrefs,
+  type NotificationPrefKey,
+} from "./notification-prefs";
 export { labelColor, labelChipClass } from "./label-colors";
 export {
   thumbPathFor,

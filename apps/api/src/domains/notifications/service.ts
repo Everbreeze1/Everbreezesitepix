@@ -19,7 +19,15 @@ export interface Notification {
     | "workflow_completed"
     | "photo_comment_mention"
     | "team_invite_accepted"
-    | "admin_announcement";
+    | "admin_announcement"
+    // The collaboration layer on a task, from
+    // 20260915000000_task_collaboration.sql. `task_updated` goes to watchers
+    // when a task they are copied in on is reassigned or closed - distinct from
+    // `task_completed`, which is the assignor's report-back and carries the
+    // right to reopen.
+    | "task_comment"
+    | "task_watching"
+    | "task_updated";
   title: string;
   body: string | null;
   linkPath: string | null;

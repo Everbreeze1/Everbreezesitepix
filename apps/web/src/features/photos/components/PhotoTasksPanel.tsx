@@ -21,6 +21,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { useTeamMembers } from "@/hooks/use-team-members";
 import { useAssignableTeammates } from "@/hooks/use-assignable-teammates";
 import { completionRights, overrideConfirm } from "@/lib/assignment";
+import { notifyTaskChanged } from "@/lib/tasks.functions";
 import {
   TASK_PHOTO_ITEMS_TABLE,
   TASK_PHOTO_ITEM_COLUMNS,
@@ -221,6 +222,15 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
       toast.error(error.message);
       return;
     }
+    /*
+     * The assignment notification, delivered.
+     *
+     * `tasks_notify_assignee` writes the in-app row the moment the insert
+     * commits; this turns it into email, which is what the client asked for -
+     * a crew member on a roof is not refreshing a dashboard. Fire and forget:
+     * the task is already saved.
+     */
+    notifyTaskChanged((data as any).id);
     setTasks((arr) => [data as any as Task, ...arr]);
     // Confirmation that the assignment landed on a person, not just that a row
     // was written: the picker resets to "Assign" on the next line either way.
@@ -341,6 +351,9 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
     }
 
     if (rolled === "done" && beforeStatus !== "done") {
+      // The rollup closed the task in the database, so the completion and
+      // watcher triggers have fired. Deliver what they wrote.
+      notifyTaskChanged(t.id);
       toast.success("Last photo done, task complete");
     }
   };
@@ -379,7 +392,11 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
     if (error) {
       toast.error(error.message);
       void load();
+      return;
     }
+    // Completion tells the assignor and every watcher. Same dispatch as the
+    // project panel - one helper, so a second surface cannot quietly skip it.
+    notifyTaskChanged(t.id);
   };
 
   const remove = async (t: Task) => {
@@ -411,6 +428,7 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
       void load();
       return;
     }
+    notifyTaskChanged(t.id);
     const who = personLabel(c, currentUserId);
     toast.success(
       !who ? "Task unassigned" : who === "You" ? "Assigned to you" : `Assigned to ${who}`,

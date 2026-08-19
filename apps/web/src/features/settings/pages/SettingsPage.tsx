@@ -47,6 +47,12 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { getMyTeam, createBillingPortalSession } from "@/features/settings/api";
 // Same matrix the billing RPC enforces with - see domains/billing/service.ts.
 import { can } from "@sitepix/shared/team-permissions";
+import {
+  parseNotificationPrefs,
+  prefEnabled,
+  type NotificationPrefs,
+  type NotificationPrefKey,
+} from "@sitepix/shared";
 import { listReviewLinks, setReviewLinks, type ReviewLink } from "@/lib/review-links.functions";
 import { useStorageUsage, formatBytes } from "@/hooks/use-storage-usage";
 import { SUPPORT_EMAIL, mailtoHref } from "@/lib/contact";
@@ -128,28 +134,22 @@ const SECTIONS: {
   },
 ];
 
+/**
+ * Where notification preferences USED to live, read once and never written.
+ *
+ * They are stored on `profiles.notification_prefs` now (20260916000000), where
+ * the email sender can actually see them - the localStorage copy described a
+ * preference no server could read, which was fine until task assignments
+ * started reaching inboxes. This key survives only so somebody who switched
+ * something off before that shipped is not quietly resubscribed by the fix.
+ *
+ * The old `NotifPrefs` shape is gone with it. Four of its seven keys named
+ * things nothing sends; the ones that survive are in
+ * packages/shared/src/notification-prefs.ts, which the sender imports too.
+ */
 const NOTIF_KEY = (uid: string) => `sitepix:notif-prefs:${uid}`;
 const EXTRAS_KEY = (uid: string) => `sitepix:profile-extras:${uid}`;
 const COMPANY_EXTRAS_KEY = (uid: string) => `sitepix:company-extras:${uid}`;
-
-interface NotifPrefs {
-  emailEnabled: boolean;
-  pushEnabled: boolean;
-  commentsOnMyPhotos: boolean;
-  repliesToMyComments: boolean;
-  projectActivity: boolean;
-  weeklyDigest: boolean;
-  productUpdates: boolean;
-}
-const DEFAULT_NOTIFS: NotifPrefs = {
-  emailEnabled: true,
-  pushEnabled: true,
-  commentsOnMyPhotos: true,
-  repliesToMyComments: true,
-  projectActivity: true,
-  weeklyDigest: false,
-  productUpdates: false,
-};
 
 interface ProfileExtras {
   firstName: string;
@@ -777,48 +777,122 @@ function AccountSection() {
 
 function NotificationsSection() {
   const { user } = useAuth();
-  const [prefs, setPrefs] = useState<NotifPrefs>(DEFAULT_NOTIFS);
+  const [prefs, setPrefs] = useState<NotificationPrefs>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
+  /*
+   * Read from the profile, not from this browser.
+   *
+   * These switches used to live in `localStorage` alone, which is one browser
+   * on one device and which no server can read - so "Email notifications: off"
+   * described a preference nothing consulted. Harmless while nothing was sent;
+   * a real problem the moment task assignments started reaching people's
+   * inboxes.
+   *
+   * The old local value is read once as a fallback, so somebody who turned
+   * something off before this shipped keeps it off rather than being quietly
+   * resubscribed by the fix. It is not written back to: the profile is the
+   * record from here on.
+   */
   useEffect(() => {
     if (!user) return;
-    try {
-      const raw = localStorage.getItem(NOTIF_KEY(user.id));
-      if (raw) setPrefs({ ...DEFAULT_NOTIFS, ...JSON.parse(raw) });
-    } catch {}
+    let cancelled = false;
+    (async () => {
+      let local: NotificationPrefs = {};
+      try {
+        const raw = localStorage.getItem(NOTIF_KEY(user.id));
+        if (raw) local = parseNotificationPrefs(JSON.parse(raw));
+      } catch {
+        // A malformed local value is not worth telling anyone about. It reads
+        // as "nothing expressed", which is every default.
+      }
+      const { data, error } = await supabase
+        .from("profiles" as any)
+        .select("notification_prefs")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        // Includes the window before 20260916000000 is applied by hand. Say so
+        // rather than rendering defaults as though they were saved values - a
+        // silently empty read is how a preferences screen lies.
+        console.warn("[settings] could not read notification preferences", error.message);
+        setPrefs(local);
+        setLoading(false);
+        return;
+      }
+      const stored = parseNotificationPrefs((data as any)?.notification_prefs);
+      setPrefs(Object.keys(stored).length > 0 ? stored : local);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
-  const update = (patch: Partial<NotifPrefs>) => {
+  /*
+   * Written on every toggle rather than behind the Save button.
+   *
+   * The button used to call `toast.success("Preferences saved")` over a value
+   * that had already been in localStorage since the switch was tapped, which is
+   * a confirmation of nothing. A switch that reports its own outcome is the
+   * honest shape, and the button below now says what it does.
+   */
+  const update = async (patch: NotificationPrefs) => {
     if (!user) return;
+    const before = prefs;
     const next = { ...prefs, ...patch };
     setPrefs(next);
-    localStorage.setItem(NOTIF_KEY(user.id), JSON.stringify(next));
+    setSaving(true);
+    const { error } = await supabase
+      .from("profiles" as any)
+      .update({ notification_prefs: next })
+      .eq("id", user.id);
+    setSaving(false);
+    if (error) {
+      setPrefs(before);
+      toast.error(
+        /notification_prefs/.test(error.message)
+          ? "Notification preferences need the latest SQL migration."
+          : error.message,
+      );
+    }
   };
 
-  // "Product updates & tips" is kept in NotifPrefs/DEFAULT_NOTIFS for existing
-  // stored preferences, but isn't shown as a row here - the design only lists
-  // these four.
-  const rows: { key: keyof NotifPrefs; label: string; desc: string }[] = [
+  /*
+   * Exactly the messages this product actually sends by email today.
+   *
+   * The four rows that used to be here - comments on my photos, replies to my
+   * comments, project activity, weekly digest - named things no sender exists
+   * for. A row that governs nothing is the same lie as a switch nothing reads,
+   * so they are gone rather than restyled. Add a row here when something starts
+   * sending, not before.
+   */
+  const rows: { key: NotificationPrefKey; label: string; desc: string }[] = [
     {
-      key: "commentsOnMyPhotos",
-      label: "New comments on my photos",
-      desc: "When someone responds to a field record you uploaded.",
+      key: "taskAssigned",
+      label: "Tasks assigned to me",
+      desc: "When a teammate hands you a job. This is the one crews rely on.",
     },
     {
-      key: "repliesToMyComments",
-      label: "Replies to my comments",
-      desc: "When a teammate responds to a conversation you are in.",
+      key: "taskComments",
+      label: "Comments and mentions",
+      desc: "Notes written on a task you are on, and messages that name you.",
     },
     {
-      key: "projectActivity",
-      label: "Project activity",
-      desc: "New photos, reports, and status changes on your projects.",
+      key: "taskUpdates",
+      label: "Tasks I am copied in on",
+      desc: "When work you are following is reassigned or closed.",
     },
     {
-      key: "weeklyDigest",
-      label: "Weekly digest",
-      desc: "A tidy Monday overview of the work in motion.",
+      key: "taskCompleted",
+      label: "Work I assigned is done",
+      desc: "When somebody finishes a job you handed to them.",
     },
   ];
+
+  const emailOn = prefEnabled(prefs, "emailEnabled");
 
   return (
     <>
@@ -827,15 +901,22 @@ function NotificationsSection() {
           icon={Mail}
           title="Email notifications"
           desc="Delivered to your account inbox."
-          checked={prefs.emailEnabled}
-          onChange={(v) => update({ emailEnabled: v })}
+          checked={emailOn}
+          onChange={(v) => void update({ emailEnabled: v })}
         />
+        {/*
+          Not a preference, a statement of fact.
+          Web push needs a service worker and VAPID keys that this deployment
+          does not have, so nothing sends it. A live switch over a channel with
+          no sender is exactly what this section was rebuilt to stop doing.
+        */}
         <ChannelCard
           icon={Bell}
           title="Push notifications"
-          desc="Receive updates on supported devices."
-          checked={prefs.pushEnabled}
-          onChange={(v) => update({ pushEnabled: v })}
+          desc="Not available yet. Assignments arrive by email and in the app."
+          checked={false}
+          disabled
+          onChange={() => {}}
         />
       </div>
 
@@ -847,20 +928,26 @@ function NotificationsSection() {
               <p className="mt-0.5 font-manrope text-xs text-muted-foreground">{r.desc}</p>
             </div>
             <Switch
-              checked={!!prefs[r.key]}
-              onCheckedChange={(v) => update({ [r.key]: v } as Partial<NotifPrefs>)}
+              checked={emailOn && prefEnabled(prefs, r.key)}
+              // Greyed out under the master switch rather than hidden: the rows
+              // are still your settings, they just have nothing to govern while
+              // email is off.
+              disabled={loading || !emailOn}
+              onCheckedChange={(v) => void update({ [r.key]: v } as NotificationPrefs)}
             />
           </div>
         ))}
       </div>
 
-      <div className="flex justify-end border-t border-border pt-6">
-        <Button
-          onClick={() => toast.success("Preferences saved")}
-          className="rounded-lg bg-primary font-manrope font-bold text-primary-foreground hover:bg-primary/90"
-        >
-          <Check className="mr-2 h-4 w-4" /> Save preferences
-        </Button>
+      <p className="font-manrope text-xs leading-5 text-muted-foreground">
+        Turning email off does not affect the bell in the app - you will still see everything there.
+        Invitations, password resets and other account email are always sent.
+      </p>
+
+      <div className="flex items-center justify-end gap-3 border-t border-border pt-6">
+        <span className="font-manrope text-xs text-muted-foreground">
+          {saving ? "Saving…" : loading ? "Loading…" : "Saved automatically"}
+        </span>
       </div>
     </>
   );
@@ -872,18 +959,22 @@ function ChannelCard({
   desc,
   checked,
   onChange,
+  disabled = false,
 }: {
   icon: React.ElementType;
   title: string;
   desc: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  /** A channel with no sender behind it. Shown, never operable. */
+  disabled?: boolean;
 }) {
   return (
     <div
       className={cn(
         "flex items-center gap-3 rounded-xl border p-4 transition-all",
         checked ? "border-primary/40 bg-primary/5" : "border-border bg-card/70",
+        disabled && "opacity-60",
       )}
     >
       <div
@@ -898,7 +989,7 @@ function ChannelCard({
         <div className="font-manrope text-sm font-extrabold text-foreground">{title}</div>
         <p className="font-manrope text-xs text-muted-foreground">{desc}</p>
       </div>
-      <Switch checked={checked} onCheckedChange={onChange} />
+      <Switch checked={checked} onCheckedChange={onChange} disabled={disabled} />
     </div>
   );
 }

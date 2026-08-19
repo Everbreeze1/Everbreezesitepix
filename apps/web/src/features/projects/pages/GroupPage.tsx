@@ -76,6 +76,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useTeamMembers } from "@/hooks/use-team-members";
 import { completionRights, overrideConfirm } from "@/lib/assignment";
+import { formatCalendarDate, isCalendarDateOverdue } from "@sitepix/shared";
 import {
   TASK_PHOTO_ITEMS_TABLE,
   TASK_PHOTO_ITEM_COLUMNS,
@@ -796,7 +797,12 @@ export function GroupPage() {
                                 ? CircleDot
                                 : Circle;
                             const overdue =
-                              !done && t.due_date && new Date(t.due_date).getTime() < Date.now();
+                              // Local-midnight comparison. `due_date` is a
+                              // calendar date, and `new Date("2026-08-20")`
+                              // parses it as UTC midnight - which flagged a
+                              // task due today as overdue everywhere west of
+                              // Greenwich. Same fix as the Tasks tab.
+                              !done && t.due_date && isCalendarDateOverdue(t.due_date);
                             // status value shown in the Select: derive "assigned"/"open" purely from assignee for the OPEN state
                             const currentValue = done
                               ? "done"
@@ -896,10 +902,7 @@ export function GroupPage() {
                                         className={`inline-flex items-center gap-1 tabular-nums ${overdue ? "font-semibold text-destructive" : ""}`}
                                       >
                                         {overdue && <AlertCircle className="h-3 w-3" />}
-                                        {new Date(t.due_date).toLocaleDateString(undefined, {
-                                          month: "short",
-                                          day: "numeric",
-                                        })}
+                                        {formatCalendarDate(t.due_date)}
                                       </span>
                                     )}
                                     <Link
