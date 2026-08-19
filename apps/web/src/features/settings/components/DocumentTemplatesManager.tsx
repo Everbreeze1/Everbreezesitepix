@@ -105,6 +105,15 @@ import { tradeCategoryFor } from "@sitepix/shared";
  */
 type DocStyle = "report" | "letter" | "checklist" | "memo" | "walkthrough" | "sitelog";
 
+/** Where pages made from a template file. Mirrors the API's FilingBucket. */
+type FilingBucket = "report" | "invoice" | "document";
+
+const FILING_META: Record<FilingBucket, { label: string; hint: string }> = {
+  report: { label: "Reports", hint: "Lands in the project's Reports tab" },
+  invoice: { label: "Invoices", hint: "Lands in Documents, filed as an invoice" },
+  document: { label: "Documents", hint: "Lands in the project's Documents tab" },
+};
+
 interface DocumentTemplate {
   id: string;
   team_id: string | null;
@@ -128,6 +137,16 @@ interface DocBody {
    * until they do.
    */
   category?: string;
+  /**
+   * Which project tab pages made from this template land in.
+   *
+   * Defaults to "report", which is what all but a handful of templates in this
+   * product are - the library is site visit reports, condition surveys, punch
+   * lists. `style` cannot carry this: every seeded template is `style: 'report'`,
+   * so it is a constant. The server reads the same field; see
+   * apps/api/src/domains/projects/page-filing.ts.
+   */
+  filesUnder?: FilingBucket;
   /**
    * The built-in this row is the company's version of, by id.
    *
@@ -428,10 +447,12 @@ function parseBody(raw: any): DocBody {
       html: raw.html,
       description: raw.description ?? "",
       category: typeof raw.category === "string" && raw.category ? raw.category : undefined,
+      filesUnder:
+        raw.filesUnder === "invoice" || raw.filesUnder === "document" ? raw.filesUnder : "report",
       copiedFrom: typeof raw.copiedFrom === "string" && raw.copiedFrom ? raw.copiedFrom : undefined,
     };
   }
-  return { style: "report", html: "", description: "" };
+  return { style: "report", html: "", description: "", filesUnder: "report" };
 }
 
 /** The section heading a template files under. Same key the picker groups by. */
@@ -1097,6 +1118,31 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     toast.success(`Filed under ${category ?? GENERAL_CATEGORY}`);
   }
 
+  /**
+   * Sets where pages made from this template file.
+   *
+   * The client asked to be "asked to save it under Reprots? Or Invoices? Or
+   * something else to Differnciate the reports templates". Asked once, here,
+   * rather than on every save: the answer is a property of the template, not
+   * of the moment, and a prompt on every use would be a tax on the common case
+   * where the answer never changes.
+   *
+   * Same spread-don't-rebuild rule as `assignTrade` - the body carries keys
+   * this screen does not know about, and refiling must not drop them.
+   */
+  async function assignFiling(t: DocumentTemplate, filesUnder: FilingBucket) {
+    const raw =
+      t.body && typeof t.body === "object" ? { ...(t.body as Record<string, unknown>) } : {};
+    raw.filesUnder = filesUnder;
+    const { error } = await supabase
+      .from("document_templates" as any)
+      .update({ body: raw as any })
+      .eq("id", t.id);
+    if (error) return toast.error(error.message);
+    setItems((prev) => prev.map((i) => (i.id === t.id ? { ...i, body: raw } : i)));
+    toast.success(`New pages file under ${FILING_META[filesUnder].label}`);
+  }
+
   async function toggleArchive(t: DocumentTemplate) {
     const { error } = await supabase
       .from("document_templates" as any)
@@ -1299,11 +1345,21 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                             {/* The trade, changeable in place. Read-only on the
                                 built-ins, which RLS will not let anyone
                                 rewrite anyway. */}
-                            <TradeChip
-                              category={body.category ?? GENERAL_CATEGORY}
-                              editable={canManage && !isExample}
-                              onChange={(next) => void assignTrade(t, next)}
-                            />
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <TradeChip
+                                category={body.category ?? GENERAL_CATEGORY}
+                                editable={canManage && !isExample}
+                                onChange={(next) => void assignTrade(t, next)}
+                              />
+                              {/* Where its pages land. Read-only on built-ins
+                                  for the same reason the trade is: RLS will not
+                                  let anyone rewrite them. */}
+                              <FilingChip
+                                filesUnder={body.filesUnder ?? "report"}
+                                editable={canManage && !isExample}
+                                onChange={(next) => void assignFiling(t, next)}
+                              />
+                            </div>
                           </div>
                         </div>
                         {isExample ? (
@@ -1679,6 +1735,66 @@ function TradeChip({
             </DropdownMenuItem>
           );
         })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
+ * "Files under Reports / Invoices / Documents", as a chip beside the trade.
+ *
+ * Same shape as TradeChip on purpose: these are the two questions about where a
+ * template belongs, and answering them should not be two different gestures.
+ */
+function FilingChip({
+  filesUnder,
+  editable,
+  onChange,
+}: {
+  filesUnder: FilingBucket;
+  editable: boolean;
+  onChange: (next: FilingBucket) => void;
+}) {
+  const face = (
+    <>
+      <FileText className="h-3 w-3" />
+      {FILING_META[filesUnder].label}
+    </>
+  );
+  if (!editable) {
+    return (
+      <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
+        {face}
+      </span>
+    );
+  }
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          title="Change which project tab pages made from this land in"
+          className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground transition hover:bg-accent hover:text-foreground"
+        >
+          {face}
+          <ChevronDown className="h-3 w-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64">
+        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          Pages made from this file under
+        </DropdownMenuLabel>
+        {(["report", "invoice", "document"] as const).map((b) => (
+          <DropdownMenuItem key={b} onSelect={() => onChange(b)} className="flex items-start gap-2">
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold">{FILING_META[b].label}</span>
+              <span className="block text-[11px] leading-snug text-muted-foreground">
+                {FILING_META[b].hint}
+              </span>
+            </span>
+            {b === filesUnder && <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

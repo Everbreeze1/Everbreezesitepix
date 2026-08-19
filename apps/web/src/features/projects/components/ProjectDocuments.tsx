@@ -110,6 +110,23 @@ interface Props {
   onChanged?: () => void;
 }
 
+/**
+ * The categories a job's paperwork actually falls into.
+ *
+ * "I think Documents should be able to save under a popular category to keep
+ * docs easy to navigate and organzie" - so these are offered rather than
+ * invented one project at a time, and they are the words a contractor already
+ * uses for the piles on the truck seat.
+ *
+ * They are folders, not a new column on the table. That is a deliberate
+ * trade: folders already move, rename, delete, accept drops and survive being
+ * emptied, and every one of those behaviours would have to be rebuilt for a
+ * parallel "category" concept that did the same job. The cost is that a
+ * category can be renamed or deleted like any folder - which for a set of
+ * suggestions is a feature, since no two trades file paperwork identically.
+ */
+const STANDARD_FOLDERS = ["Plans", "Permits", "Contracts", "Invoices", "Photos", "Other"] as const;
+
 type TypeFilter = "all" | "pages" | "files";
 type SortKey = "name" | "type" | "updated";
 
@@ -208,7 +225,21 @@ export function ProjectDocuments({
           .order("created_at", { ascending: false }),
       ]);
       if (error) toast.error("Couldn't load documents", { description: error.message });
-      setTree(t);
+      /*
+       * Reports are filtered out here, not hidden further down.
+       *
+       * They have their own tab now, and this component is a file manager -
+       * everything below it (folder moves, multi-select, the counts in the
+       * toolbar) works off `tree.pages`. Letting report pages into that state
+       * and then skipping them at render time would leave every one of those
+       * counting and selecting paths quietly including rows the user cannot
+       * see. The server decides which is which; see page-filing.ts.
+       *
+       * A page with no bucket at all is kept, not dropped: that is an older
+       * API answering a newer bundle, and showing a document twice is a far
+       * smaller failure than a document that has vanished from storage.
+       */
+      setTree({ ...t, pages: t.pages.filter((pg) => pg.bucket !== "report") });
       setDocuments((docRows ?? []) as ProjectDocument[]);
     } catch (e: any) {
       toast.error("Couldn't load documents", { description: e?.message });
@@ -366,6 +397,39 @@ export function ProjectDocuments({
       await load();
     } catch (e: any) {
       toast.error(e?.message ?? "Could not create folder");
+    }
+  }
+
+  /**
+   * Creates whichever of the standard categories this project does not have.
+   *
+   * Additive on purpose: a project that already has "Invoices" keeps the one
+   * it has, with everything already filed in it, and gains only the missing
+   * ones. Pressing this twice does nothing the second time, which matters
+   * because the only feedback is a list that grows.
+   */
+  async function handleAddStandardFolders() {
+    const have = new Set((tree?.folders ?? []).map((f) => f.name.trim().toLowerCase()));
+    const missing = STANDARD_FOLDERS.filter((n) => !have.has(n.toLowerCase()));
+    if (missing.length === 0) {
+      toast.info("This project already has the standard folders");
+      return;
+    }
+    try {
+      /*
+       * Sequential, not `Promise.all`. Folder names are unique per project, so
+       * six parallel inserts race each other on that constraint and the
+       * failures come back as six identical toasts. Six round trips once, at a
+       * moment the user explicitly asked for them, is the cheaper trade.
+       */
+      for (const name of missing) {
+        await createDocumentFolder({ data: { projectId, name } });
+      }
+      toast.success(`Added ${missing.length} folder${missing.length === 1 ? "" : "s"}`);
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not add the standard folders");
+      await load();
     }
   }
 
@@ -702,19 +766,32 @@ export function ProjectDocuments({
       <div className="flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-end">
         <div>
           <p className="text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
-            Plans, reports &amp; files
+            Plans, permits &amp; files
           </p>
           <h2 className="font-display mt-3 text-4xl font-bold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
             Project documents
           </h2>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
-            Storage for every plan, permit, report, and delivery ticket. Generated logs and reports
-            are filed here too - create them from <span className="font-bold">Create document</span>{" "}
-            at the top of the project. Summaries are filed under{" "}
-            <span className="font-bold">Walkthroughs</span>.
+            Storage for every plan, permit, contract and delivery ticket, plus the pages you fill in
+            from a document template. Walkthrough summaries, daily logs and generated reports have
+            their own tab: <span className="font-bold">Reports</span>.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/* Only while the project has nothing filed. Once there are folders
+              the person has a system, and a button that pours six more into it
+              is noise. */}
+          {(tree?.folders.length ?? 0) === 0 && (
+            <Button
+              variant="outline"
+              onClick={handleAddStandardFolders}
+              title={`Creates ${STANDARD_FOLDERS.join(", ")}`}
+              className="h-8 gap-2 rounded-lg px-4 text-xs font-bold"
+            >
+              <FolderPlus className="h-4 w-4" />
+              Add standard folders
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={handleCreateFolder}
@@ -723,9 +800,13 @@ export function ProjectDocuments({
             <FolderPlus className="h-4 w-4" />
             New folder
           </Button>
+          {/* Scoped to what this tab holds. Reports have their own tab and
+              their own button now, so offering to generate one from inside
+              storage would file it somewhere the user is not looking. */}
           <GenerateDocumentMenu
             projectId={projectId}
             folderId={currentFolderId}
+            scope="documents"
             onCreated={() => void load()}
             trigger={
               <Button

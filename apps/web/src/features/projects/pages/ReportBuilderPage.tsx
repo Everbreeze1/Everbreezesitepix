@@ -172,7 +172,7 @@ export function ReportBuilderPage() {
         navigate({
           to: "/projects/$projectId",
           params: { projectId },
-          search: { panel: "reports" },
+          search: { panel: "documents" },
         });
         return;
       }
@@ -572,7 +572,7 @@ export function ReportBuilderPage() {
       {/* Top bar */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <Button asChild variant="ghost" size="sm">
-          <Link to="/projects/$projectId" params={{ projectId }} search={{ panel: "reports" }}>
+          <Link to="/projects/$projectId" params={{ projectId }} search={{ panel: "documents" }}>
             <ArrowLeft className="mr-1 h-4 w-4" /> Back to project
           </Link>
         </Button>

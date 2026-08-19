@@ -48,6 +48,7 @@ export function GenerateDocumentMenu({
   align = "end",
   photoIds,
   onCreated,
+  scope = "all",
 }: {
   projectId: string;
   /** Documents tab passes the open folder so generated files land there; the header uses the root. */
@@ -62,6 +63,17 @@ export function GenerateDocumentMenu({
    */
   photoIds?: string[];
   onCreated?: () => void;
+  /**
+   * Which kinds this trigger offers.
+   *
+   * The project header keeps "all" - from there you have not said what you are
+   * making yet. Each tab passes its own, so the button inside Reports makes
+   * reports and the one inside Documents makes documents, which is the client's
+   * "the Create Document on top should be for creating new report": the button
+   * belongs to the list under it rather than being one menu that files things
+   * into whichever tab you were not looking at.
+   */
+  scope?: "all" | "reports" | "documents";
 }) {
   const navigate = useNavigate();
   const { profile } = useProfile();
@@ -80,6 +92,10 @@ export function GenerateDocumentMenu({
   const [useTemplateId, setUseTemplateId] = useState<string | null>(null);
   const [summaryPickerOpen, setSummaryPickerOpen] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
+
+  /* Which halves of the menu render. Both are true for "all". */
+  const showReportKinds = scope === "all" || scope === "reports";
+  const showDocumentKinds = scope === "all" || scope === "documents";
 
   const openPage = (pageId: string) => {
     onCreated?.();
@@ -162,89 +178,100 @@ export function GenerateDocumentMenu({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
         <DropdownMenuContent align={align} className="w-72">
-          <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            Saved under Walkthroughs
-          </DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => setSummaryPickerOpen(true)}>
-            <Footprints className="mr-2 h-4 w-4 text-primary" />
-            <span>
-              <span className="block font-bold">Summary</span>
-              <span className="block text-xs text-muted-foreground">
-                Short shareable brief from your photos
-              </span>
-            </span>
-          </DropdownMenuItem>
+          {showReportKinds && (
+            <>
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Saved under Walkthroughs, and listed in Reports
+              </DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setSummaryPickerOpen(true)}>
+                <Footprints className="mr-2 h-4 w-4 text-primary" />
+                <span>
+                  <span className="block font-bold">Summary</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Short shareable brief from your photos
+                  </span>
+                </span>
+              </DropdownMenuItem>
 
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            Saved under Documents
-          </DropdownMenuLabel>
-          {/* Label stays "Daily Log": the project already has a separate
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Saved under Reports
+              </DropdownMenuLabel>
+              {/* Label stays "Daily Log": the project already has a separate
               "Site Logs" feature (project_site_logs), so reusing that name
               here would point at the wrong thing. */}
-          <DropdownMenuItem onClick={() => setAiTemplate("daily_log")}>
-            <Sparkles className="mr-2 h-4 w-4 text-primary" />
-            <span>
-              <span className="block font-bold">Daily Log</span>
-              <span className="block text-xs text-muted-foreground">
-                Quick internal bullets for your own record
-              </span>
-            </span>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              setPhotosPerPage(clampPhotosPerPage(profile?.report_photos_per_page));
-              setAiTemplate("report");
-            }}
-          >
-            <ClipboardList className="mr-2 h-4 w-4 text-primary" />
-            <span>
-              <span className="block font-bold">Report</span>
-              <span className="block text-xs text-muted-foreground">
-                Client-ready: title page, summary, photo sections, conclusion
-              </span>
-            </span>
-          </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setAiTemplate("daily_log")}>
+                <Sparkles className="mr-2 h-4 w-4 text-primary" />
+                <span>
+                  <span className="block font-bold">Daily Log</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Quick internal bullets for your own record
+                  </span>
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setPhotosPerPage(clampPhotosPerPage(profile?.report_photos_per_page));
+                  setAiTemplate("report");
+                }}
+              >
+                <ClipboardList className="mr-2 h-4 w-4 text-primary" />
+                <span>
+                  <span className="block font-bold">Report</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Client-ready: title page, summary, photo sections, conclusion
+                  </span>
+                </span>
+              </DropdownMenuItem>
+            </>
+          )}
 
-          <DropdownMenuSeparator />
-          {/*
+          {showReportKinds && showDocumentKinds && <DropdownMenuSeparator />}
+          {showDocumentKinds && (
+            <>
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Saved under Documents
+              </DropdownMenuLabel>
+              {/*
             Badged rather than removed: the padlock is what tells a Starter
             account the library exists. Selecting it opens the upgrade prompt
             instead of the picker.
           */}
-          <DropdownMenuItem
-            onClick={(e) => {
-              if (!templatesLocked) return setTemplatePickerOpen(true);
-              e.preventDefault();
-              promptUpgrade();
-            }}
-          >
-            {templatesLocked ? (
-              <Lock className="mr-2 h-4 w-4" />
-            ) : (
-              <Layers className="mr-2 h-4 w-4" />
-            )}
-            <span>
-              <span className="flex items-center gap-1.5 font-bold">
-                More Templates
-                {templatesLocked && (
-                  <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
-                    Pro
-                  </Badge>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  if (!templatesLocked) return setTemplatePickerOpen(true);
+                  e.preventDefault();
+                  promptUpgrade();
+                }}
+              >
+                {templatesLocked ? (
+                  <Lock className="mr-2 h-4 w-4" />
+                ) : (
+                  <Layers className="mr-2 h-4 w-4" />
                 )}
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                Saved by your team or examples
-              </span>
-            </span>
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleCreateBlank}>
-            <FileText className="mr-2 h-4 w-4" />
-            <span>
-              <span className="block font-bold">Blank page</span>
-              <span className="block text-xs text-muted-foreground">Start from scratch</span>
-            </span>
-          </DropdownMenuItem>
+                <span>
+                  <span className="flex items-center gap-1.5 font-bold">
+                    More Templates
+                    {templatesLocked && (
+                      <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
+                        Pro
+                      </Badge>
+                    )}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    Saved by your team or examples
+                  </span>
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleCreateBlank}>
+                <FileText className="mr-2 h-4 w-4" />
+                <span>
+                  <span className="block font-bold">Blank page</span>
+                  <span className="block text-xs text-muted-foreground">Start from scratch</span>
+                </span>
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

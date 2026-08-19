@@ -40,6 +40,12 @@ export const Route = createFileRoute("/_app/projects/$projectId")({
         : undefined,
     // `timeline` is the old name for what is now the Calendar tab; keep
     // accepting it so links shared before the rename still open the right tab.
+    //
+    // `reports` is NOT aliased the same way, and that is deliberate. It used to
+    // be the key behind a tab labelled "Documents" - the mismatch this whole
+    // change exists to undo - so it now opens the Reports tab it was always
+    // named after, and Documents has its own honest key. A link shared before
+    // this lands one tab across rather than on a page that does not exist.
     panel:
       search.panel === "timeline"
         ? "calendar"
@@ -48,6 +54,7 @@ export const Route = createFileRoute("/_app/projects/$projectId")({
                 "tasks",
                 "checklists",
                 "walkthroughs",
+                "documents",
                 "reports",
                 "workflows",
                 "trash",
