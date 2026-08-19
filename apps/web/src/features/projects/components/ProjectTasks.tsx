@@ -433,14 +433,55 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
   }, [tasks, filter, view]);
 
   /*
-   * A selection only means anything against the rows it was made on. Changing
-   * the filter or flipping to the board hides some of them, and a bulk action
-   * that reaches tasks the user can no longer see is the worst kind of
-   * surprise.
+   * The selection is pruned to what is actually on screen, rather than cleared
+   * outright.
+   *
+   * A selection only means anything against rows the user can see, and three
+   * things take a row off screen: changing the filter, deleting it, and - the
+   * one that bites - closing it while the filter says "Open". The bulk bar
+   * survives its own actions now, so without this, marking four tasks done
+   * under an Open filter would leave four invisible rows selected and the next
+   * press of Delete would reach them.
+   *
+   * Flipping between list and board keeps whatever is still visible. The board
+   * shows every task regardless of the filter, so the switch can only ever
+   * widen what is on screen, and losing a selection because you wanted the same
+   * tasks laid out differently is the same annoyance as losing it after
+   * assigning.
+   *
+   * `prev` is returned unchanged when nothing needs dropping, which is what
+   * keeps this from re-rendering itself in a loop.
    */
   useEffect(() => {
-    setSelected(new Set());
-  }, [filter, view]);
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const onScreen = new Set(visible.map((t) => t.id));
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (onScreen.has(id)) next.add(id);
+      });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [visible]);
+
+  /*
+   * Escape clears the selection.
+   *
+   * The bar no longer dismisses itself after an action, so it needs a way out
+   * that is not hunting for a button. Escape is what every other dismissable
+   * thing in this app answers to.
+   */
+  useEffect(() => {
+    if (selected.size === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      // Not while a dialog or a select is open on top of the list - Escape
+      // belongs to whatever is in front.
+      if (e.key !== "Escape" || creating || editing) return;
+      setSelected(new Set());
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selected.size, creating, editing]);
 
   /**
    * Who may close a task here.
@@ -767,9 +808,15 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
    * them can now be handed over in one gesture, and the people who need to
    * watch rather than hold the work are watchers.
    *
-   * Selection is deliberately list-view only. The board is a drag surface where
-   * a row already has three tap targets on it, and a checkbox column there
-   * would compete with the status buttons for the same corner.
+   * Selection works in BOTH views. It was list-only at first, on the theory
+   * that a board card already has three tap targets competing for the same
+   * corner - and the review that followed said, correctly, that "the table view
+   * is not showing the task assignment flow". A view that can show the work but
+   * not act on it is a view you have to leave, which is worse than a crowded
+   * card. The checkbox is hidden until hover or until something is selected, so
+   * the crowding only exists for somebody already using it.
+   *
+   * The selection also SURVIVES an action - see `bulkPatch`.
    */
   const clearSelection = () => setSelected(new Set());
 
@@ -782,6 +829,54 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
     });
 
   const selectedTasks = useMemo(() => tasks.filter((t) => selected.has(t.id)), [tasks, selected]);
+
+  /**
+   * What the selected tasks already say about one field.
+   *
+   * Returns the shared value, the string "mixed" when they disagree, or null
+   * when nothing is selected. This is what lets a control in the bulk bar read
+   * as the state of the batch instead of as a blank command:
+   *
+   *   "i click drop down to choose assigned to ... it doesn't show who its
+   *    assigned to. which i click that drop down should have a little hint of
+   *    who has been assigned the task."
+   *
+   * Exactly right, and the reason the old bar could not: its triggers were
+   * hardcoded labels over `value=""`, so they never showed anything at all.
+   * A control that cannot show the current value is a control you have to open
+   * to find out what you are changing.
+   */
+  const sharedValue = <T,>(pick: (t: Task) => T): T | "mixed" | null => {
+    if (selectedTasks.length === 0) return null;
+    const first = pick(selectedTasks[0]);
+    return selectedTasks.every((t) => pick(t) === first) ? first : "mixed";
+  };
+
+  const selectionAssignee = sharedValue((t) => t.assignee_user_id);
+  const selectionPriority = sharedValue((t) => t.priority);
+  const selectionDue = sharedValue((t) => t.due_date);
+
+  /**
+   * The name to put on the Assign-to trigger, and whether to warn on it.
+   *
+   * Falls back to the row's own `assignee_email` when the holder is not on the
+   * roster - somebody who has left the team, or a roster that has not finished
+   * loading. "Member" would be a shrug where a name belongs, and the whole
+   * point of this label is to say who has the work.
+   */
+  const selectionAssigneeLabel =
+    selectionAssignee === "mixed"
+      ? "Mixed"
+      : selectionAssignee
+        ? (memberById.get(selectionAssignee)?.full_name ??
+          memberById.get(selectionAssignee)?.email ??
+          selectedTasks.find((t) => t.assignee_user_id === selectionAssignee)?.assignee_email ??
+          "Member")
+        : "Unassigned";
+  const selectionAssigneeMember =
+    selectionAssignee && selectionAssignee !== "mixed"
+      ? (memberById.get(selectionAssignee) ?? null)
+      : null;
 
   /**
    * Apply one patch to every selected task, in one statement.
@@ -809,7 +904,21 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
     // Every task that moved may owe somebody a message, and the triggers have
     // already written them. One dispatch per task, none of them awaited.
     ids.forEach(notifyTaskChanged);
-    clearSelection();
+    /*
+     * The selection SURVIVES the action, and that is the fix for the reported
+     * bug:
+     *
+     *   "after picking assignee the drop down window disappears, doesn't allow
+     *    me to put date or priority, i have to click back at it"
+     *
+     * This used to call `clearSelection()` here, which unmounted the whole bar
+     * - so setting an assignee, a due date and a priority on the same three
+     * tasks meant ticking them three times. Assigning is not the end of what
+     * somebody is doing to a batch; it is usually the first of three things.
+     *
+     * The bar is dismissed deliberately instead, by Clear or by Escape.
+     * `bulkDelete` is the one exception, because its rows no longer exist.
+     */
     await load();
     toast.success(done);
   };
@@ -881,7 +990,8 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
       return;
     }
     ids.forEach(notifyTaskChanged);
-    clearSelection();
+    // Selection kept, same as `bulkPatch`: closing a batch and then dating or
+    // reassigning the ones that were refused is a perfectly normal next step.
     await load();
     toast.success(
       refused.length > 0
@@ -941,6 +1051,17 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
             <AvatarFallback className="text-[8px]">{initials(m.full_name, m.email)}</AvatarFallback>
           </Avatar>
           {name}
+          {/* Parity with the list row. A board card that omits this is the same
+              invisible-assignment problem in a different shape: the task looks
+              handed over and the person cannot open the app. */}
+          {m.emailConfirmed === false && (
+            <span
+              title={`${name} has not confirmed their email and cannot sign in yet`}
+              className="inline-flex items-center rounded-full bg-amber-500/15 px-1 py-0.5 text-amber-700 dark:text-amber-300"
+            >
+              <ShieldAlert className="h-2.5 w-2.5" />
+            </span>
+          )}
         </span>
       );
     }
@@ -1192,17 +1313,43 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
     // had its own copy of the UTC-parsing bug and would flag a task due today
     // as overdue.
     const overdue = !!(t.due_date && t.status !== "done" && isCalendarDateOverdue(t.due_date));
+    const isSelected = selected.has(t.id);
     return (
       <Card
         key={t.id}
         // Matches the list-view row (rounded-2xl, hairline border, translucent
         // fill) so the same task doesn't change shape when you flip views.
-        className="cursor-pointer rounded-2xl border-[0.8px] border-border bg-card/70 p-3.5 transition hover:border-primary/40 hover:bg-card"
+        className={`group cursor-pointer rounded-2xl border-[0.8px] p-3.5 transition ${
+          isSelected
+            ? "border-primary/50 bg-primary/[0.06]"
+            : "border-border bg-card/70 hover:border-primary/40 hover:bg-card"
+        }`}
         onClick={() => setEditing(t)}
       >
         <div className="flex items-start justify-between gap-2">
+          {/*
+            The board's half of the reported gap: "there is a list view and a
+            table view, the table view is not showing the task assignment flow."
+
+            It was list-only on the theory that a card already has three tap
+            targets competing for the same corner. That reasoning was wrong the
+            moment somebody reached for it and it was not there - a view that
+            can show the work but cannot act on it is a view you have to leave.
+          */}
+          <span
+            onClick={(e) => e.stopPropagation()}
+            className={`mt-0.5 shrink-0 transition ${
+              isSelected || selected.size > 0 ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            }`}
+          >
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => toggleSelected(t.id)}
+              aria-label={`Select ${t.title}`}
+            />
+          </span>
           <p
-            className={`text-sm font-medium ${t.status === "done" ? "line-through text-muted-foreground" : ""}`}
+            className={`min-w-0 flex-1 text-sm font-medium ${t.status === "done" ? "line-through text-muted-foreground" : ""}`}
           >
             {t.title}
           </p>
@@ -1356,8 +1503,10 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
       </div>
 
       {/*
-        The bulk bar. Appears only once something is ticked, so the panel looks
-        exactly as it did to anyone who never uses it.
+        The bulk bar. Appears once something is ticked, in either view, and
+        STAYS until it is dismissed - it is a small editor for the batch, not a
+        one-shot menu. Every control on it reads the batch's current value, so
+        it says what the selection is before it is used to change it.
 
         "Assign all HVAC installs to the HVAC team" is two gestures here: filter
         or tick the rows, pick the person. The role-shaped half of that question
@@ -1365,28 +1514,83 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
         an assignee is one person - handing twelve tasks to "the HVAC team"
         without naming anybody is how work ends up belonging to nobody.
       */}
-      {view === "list" && selected.size > 0 && (
+      {selected.size > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border-[0.8px] border-primary/40 bg-primary/[0.06] p-2.5">
           <span className="ml-1 font-manrope text-xs font-extrabold tabular-nums text-foreground">
             {selected.size} selected
           </span>
 
+          {/*
+            Each control below is CONTROLLED on the selection's current value,
+            not blank. Opening one shows a tick beside whoever holds the batch
+            already, and the trigger says it without being opened at all - which
+            is the whole of "that drop down should have a little hint of who has
+            been assigned the task".
+
+            "Mixed" is a real answer and gets said out loud. A batch of three
+            tasks held by three people is not unassigned, and showing it as
+            unassigned would be a lie that costs somebody an accidental
+            reassignment.
+          */}
           <Select
-            value=""
+            value={
+              selectionAssignee === "mixed"
+                ? "__mixed__"
+                : selectionAssignee
+                  ? selectionAssignee
+                  : "__none__"
+            }
             disabled={bulkBusy}
-            onValueChange={(v) => void bulkAssign(v === "__none__" ? null : v)}
+            onValueChange={(v) => {
+              if (v === "__mixed__") return;
+              void bulkAssign(v === "__none__" ? null : v);
+            }}
           >
-            <SelectTrigger className="h-8 w-[168px] border-border bg-card text-xs">
-              <span className="inline-flex items-center gap-1.5 truncate">
-                <UserIcon className="h-3.5 w-3.5" />
-                Assign to
+            <SelectTrigger
+              className="h-8 w-[190px] border-border bg-card text-xs"
+              aria-label={`Assignee for the selected tasks: ${selectionAssigneeLabel}`}
+            >
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                {selectionAssigneeMember ? (
+                  <Avatar className="h-4 w-4 shrink-0">
+                    {selectionAssigneeMember.avatar_url && (
+                      <AvatarImage src={selectionAssigneeMember.avatar_url} alt="" />
+                    )}
+                    <AvatarFallback className="text-[7px]">
+                      {initials(selectionAssigneeMember.full_name, selectionAssigneeMember.email)}
+                    </AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <UserIcon className="h-3.5 w-3.5 shrink-0" />
+                )}
+                <span className="truncate">{selectionAssigneeLabel}</span>
+                {selectionAssigneeMember?.emailConfirmed === false && (
+                  <ShieldAlert className="h-3 w-3 shrink-0 text-amber-500" />
+                )}
               </span>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__none__">Unassigned</SelectItem>
+              {/* Only ever rendered so the trigger has something to bind to
+                  when the batch disagrees. Picking it is a no-op. */}
+              {selectionAssignee === "mixed" && (
+                <SelectItem value="__mixed__" disabled>
+                  Mixed - pick one to change them all
+                </SelectItem>
+              )}
+              <SelectItem value="__none__">
+                <span className="inline-flex items-center gap-1.5">
+                  <UserIcon className="h-3.5 w-3.5" /> Unassigned
+                </span>
+              </SelectItem>
               {members.map((m) => (
                 <SelectItem key={m.user_id} value={m.user_id}>
                   <span className="inline-flex items-center gap-1.5">
+                    <Avatar className="h-4 w-4">
+                      {m.avatar_url && <AvatarImage src={m.avatar_url} alt="" />}
+                      <AvatarFallback className="text-[8px]">
+                        {initials(m.full_name, m.email)}
+                      </AvatarFallback>
+                    </Avatar>
                     {memberName(m)}
                     {m.emailConfirmed === false && (
                       <ShieldAlert className="h-3 w-3 text-amber-500" />
@@ -1398,22 +1602,39 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
           </Select>
 
           <Select
-            value=""
+            value={selectionPriority === "mixed" ? "__mixed__" : (selectionPriority ?? "normal")}
             disabled={bulkBusy}
-            onValueChange={(v) =>
+            onValueChange={(v) => {
+              if (v === "__mixed__") return;
               void bulkPatch(
                 { priority: v },
                 `${selected.size} set to ${PRIORITY_META[v as Priority].label}`,
-              )
-            }
+              );
+            }}
           >
-            <SelectTrigger className="h-8 w-[150px] border-border bg-card text-xs">
-              <span className="inline-flex items-center gap-1.5 truncate">
-                <Flag className="h-3.5 w-3.5" />
-                Priority
+            <SelectTrigger
+              className="h-8 w-[150px] border-border bg-card text-xs"
+              aria-label={`Priority for the selected tasks: ${
+                selectionPriority === "mixed"
+                  ? "mixed"
+                  : PRIORITY_META[(selectionPriority ?? "normal") as Priority].label
+              }`}
+            >
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <Flag className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">
+                  {selectionPriority === "mixed"
+                    ? "Mixed"
+                    : PRIORITY_META[(selectionPriority ?? "normal") as Priority].label}
+                </span>
               </span>
             </SelectTrigger>
             <SelectContent>
+              {selectionPriority === "mixed" && (
+                <SelectItem value="__mixed__" disabled>
+                  Mixed
+                </SelectItem>
+              )}
               {(["low", "normal", "high", "urgent"] as Priority[]).map((p) => (
                 <SelectItem key={p} value={p}>
                   {PRIORITY_META[p].label}
@@ -1426,13 +1647,24 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
               produces is already "YYYY-MM-DD", which is exactly what the `date`
               column stores, so nothing between here and Postgres has to guess
               at a timezone. No `min`: backdating a due date is a legitimate
-              thing to do to a punch list that has slipped. */}
-          <label className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs">
-            <CalendarDays className="h-3.5 w-3.5" />
+              thing to do to a punch list that has slipped.
+
+              `key` on the selection's shared value so the input re-mounts when
+              that changes - an uncontrolled date input keeps whatever the
+              browser last put in it otherwise, and would go on showing the old
+              batch's date over a new one. */}
+          <label
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs"
+            title={
+              selectionDue === "mixed" ? "The selected tasks have different due dates" : undefined
+            }
+          >
+            <CalendarDays className="h-3.5 w-3.5 shrink-0" />
             <input
+              key={String(selectionDue)}
               type="date"
               disabled={bulkBusy}
-              defaultValue=""
+              defaultValue={selectionDue && selectionDue !== "mixed" ? selectionDue : ""}
               onChange={(e) =>
                 e.target.value &&
                 void bulkPatch(
@@ -1440,9 +1672,14 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
                   `${selected.size} due ${formatCalendarDate(e.target.value)}`,
                 )
               }
-              className="bg-transparent text-xs outline-none"
+              className="w-[112px] bg-transparent text-xs outline-none"
               aria-label="Set a due date on the selected tasks"
             />
+            {selectionDue === "mixed" && (
+              <span className="font-manrope text-[10px] font-bold text-muted-foreground">
+                Mixed
+              </span>
+            )}
           </label>
 
           <Button
@@ -1699,7 +1936,39 @@ function TaskDialog({
       ? (task.assigned_by ?? null)
       : userId
     : null;
-  const selectedMember = members.find((m) => m.user_id === assigneeUserId);
+  /**
+   * Everyone the dropdown may offer: the roster, plus whoever already holds
+   * this task if they are not on it.
+   *
+   * Radix renders the placeholder when no `SelectItem` matches the bound value,
+   * so a task assigned to somebody the roster does not contain read as
+   * "Unassigned" - a field that says the opposite of the truth about who owns
+   * the work. Three ordinary situations produce exactly that: the roster is
+   * still loading, the assignee has since left the team, or the task was
+   * assigned from the photo panel, whose people come from a different query.
+   *
+   * The stand-in is labelled from `assignee_email` where the row carries one,
+   * so it reads as a person rather than as a uuid, and it is only ever added
+   * for the value already stored - this cannot invent somebody assignable.
+   */
+  const assigneeOptions = useMemo(() => {
+    if (!assigneeUserId || members.some((m) => m.user_id === assigneeUserId)) return members;
+    return [
+      ...members,
+      {
+        user_id: assigneeUserId,
+        full_name: null,
+        email: task?.assignee_email ?? null,
+        avatar_url: null,
+        role: null,
+        // Not "unconfirmed" - nothing here knows, and accusing a working
+        // account of being stuck is the one thing this warning must not do.
+        emailConfirmed: null,
+      } satisfies TeamMemberLite,
+    ];
+  }, [members, assigneeUserId, task?.assignee_email]);
+
+  const selectedMember = assigneeOptions.find((m) => m.user_id === assigneeUserId);
   const pendingAssigneeName = assigneeUserId
     ? memberName(selectedMember)
     : assigneeEmail.trim() || null;
@@ -2038,7 +2307,7 @@ function TaskDialog({
 
             <div>
               <FieldLabel hint="One person holds it. Copy others in below.">Assignee</FieldLabel>
-              {members.length > 0 ? (
+              {assigneeOptions.length > 0 ? (
                 <Select
                   value={assigneeUserId || "__none__"}
                   onValueChange={(v) => setAssigneeUserId(v === "__none__" ? "" : v)}
@@ -2052,7 +2321,7 @@ function TaskDialog({
                         <UserIcon className="h-3.5 w-3.5" /> Unassigned
                       </span>
                     </SelectItem>
-                    {members.map((m) => (
+                    {assigneeOptions.map((m) => (
                       <SelectItem key={m.user_id} value={m.user_id}>
                         <span className="inline-flex items-center gap-1.5">
                           <Avatar className="h-4 w-4">

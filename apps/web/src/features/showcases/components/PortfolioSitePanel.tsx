@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Loader2, Save, Wand2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { usePortfolioSiteDraft } from "@/features/showcases/site-draft";
@@ -27,19 +27,24 @@ import { PortfolioLivePreview } from "./PortfolioLivePreview";
  * Saving stays explicit, matching the showcase builder: a dirty flag derived
  * from a serialised snapshot and one Save. The guided build saves per step
  * because it is a queue you walk once; this is a desk you keep coming back to.
+ *
+ * There is deliberately no "Guided setup" button here any more. Once this
+ * screen grew the same trail, the same questions and the same ticks, that
+ * button swapped you to a near-identical page - which is the "bolted together"
+ * feeling the client kept naming, now with a control inviting you into it. The
+ * guided build still exists and still opens by itself for a portfolio that has
+ * not been started; it is a first run, not a mode you toggle.
  */
 export function PortfolioSitePanel({
   portfolio,
   onSaved,
   serviceTypes,
   projectCount,
-  onStartGuided,
 }: {
   portfolio: PortfolioDetail;
   onSaved: (patch: Partial<PortfolioDetail>) => void;
   serviceTypes: string[];
   projectCount?: number;
-  onStartGuided?: () => void;
 }) {
   const site = usePortfolioSiteDraft(portfolio, onSaved);
   const ctx: StepCtx = { ...site, serviceTypes, layout: "editor", portfolio, onSaved };
@@ -53,14 +58,6 @@ export function PortfolioSitePanel({
   const step = SITE_STEPS[index];
   const Fields = step.Fields;
   const progress = siteProgress(draft, portfolio);
-
-  // The wizard builds its own draft from the saved row, so anything unsaved
-  // here has to be committed on the way out or it vanishes on the hand-off.
-  const startGuided = async () => {
-    if (!onStartGuided) return;
-    if (dirty && !(await save({ quiet: true }))) return;
-    onStartGuided();
-  };
 
   return (
     <div className="space-y-6">
@@ -89,16 +86,6 @@ export function PortfolioSitePanel({
         </span>
 
         <div className="ml-auto flex items-center gap-2">
-          {onStartGuided && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void startGuided()}
-              disabled={saving}
-            >
-              <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Guided setup
-            </Button>
-          )}
           <Button size="sm" onClick={() => void save()} disabled={saving || !dirty}>
             {saving ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
