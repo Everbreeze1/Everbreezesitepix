@@ -20,7 +20,8 @@ export interface CompanyProfile {
    */
   report_photos_per_page: number | null;
   /**
-   * The author's job title, merged into documents as `{{prepared_by_title}}`.
+   * The author's job title, merged into documents as `{{job_title}}` - and as
+   * `{{prepared_by_title}}`, the name the same field went by first.
    * This field existed in the Settings form long before it existed here - it
    * was kept in localStorage, so it could never reach a document, a PDF, or
    * another device.

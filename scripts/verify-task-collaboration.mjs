@@ -169,7 +169,10 @@ async function main() {
         .single();
       if (error) {
         // `record "old" is not assigned yet` would surface right here.
-        bad("a task can be created with an assignee", `${error.code ?? ""} ${error.message}`.trim());
+        bad(
+          "a task can be created with an assignee",
+          `${error.code ?? ""} ${error.message}`.trim(),
+        );
         return;
       }
       taskId = data.id;

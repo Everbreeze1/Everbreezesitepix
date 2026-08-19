@@ -322,6 +322,21 @@ const PLACEHOLDER_LABELS: Record<string, string> = {
   client_name: "Client name",
   client_contact: "Client contact",
   prepared_by: "Prepared by",
+  /*
+   * The author's job title, under two names.
+   *
+   * `job_title` is the one the Fields panel inserts, because a template that
+   * reads `{{job_title}}` next to a chip labelled "Job title" is a template
+   * somebody can debug by reading it. `prepared_by_title` is what every
+   * template authored before that shipped with - the seed migrations, the
+   * built-in presets, and whatever a team has already written for itself - so
+   * it stays a first-class token rather than degrading to a
+   * `[Prepared by title]` blank.
+   *
+   * Same shape as `company` / `company_name` above: two spellings, one label,
+   * one value behind both.
+   */
+  job_title: "Job title",
   prepared_by_title: "Job title",
   weather: "Weather",
   date: "Date",
@@ -365,6 +380,7 @@ const SETTINGS_TOKENS = new Set([
   "company_address",
   "company_phone",
   "prepared_by",
+  "job_title",
   "prepared_by_title",
 ]);
 
@@ -466,6 +482,7 @@ export async function loadTokenValues(
     client_name: project?.client_name,
     client_contact: project?.client_contact,
     prepared_by: profile?.full_name,
+    job_title: profile?.job_title,
     prepared_by_title: profile?.job_title,
     date: today,
   };
