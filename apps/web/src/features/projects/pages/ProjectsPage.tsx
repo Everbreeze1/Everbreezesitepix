@@ -31,6 +31,8 @@ import {
   CheckCircle2,
   SlidersHorizontal,
   Eye,
+  GitBranch,
+  CircleSlash,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +51,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
@@ -60,19 +65,38 @@ import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
 import { listProjectGroups } from "@/features/projects/api";
-import { listProjectBoards, type ProjectBoard } from "@/features/projects/api";
+import {
+  listProjectBoards,
+  setProjectPipelineStage,
+  type PipelineStage,
+  type ProjectBoard,
+} from "@/features/projects/api";
 import { GroupCard } from "@/features/projects/components/GroupCard";
 import {
   CreateGroupDialog,
   type ProjectPickerRow,
 } from "@/features/projects/components/CreateGroupDialog";
 import { CreateBoardDialog } from "@/features/projects/components/CreateBoardDialog";
-import { TagBoardDetailView } from "@/features/projects/components/TagBoardDetailView";
+import { PipelineBoardView } from "@/features/projects/components/PipelineBoardView";
 import { BoardSettingsSheet } from "@/features/projects/components/BoardSettingsSheet";
+import { AssignTeammatesDialog } from "@/features/projects/components/AssignTeammatesDialog";
+import { ProjectCrew } from "@/features/projects/components/ProjectCrew";
+import { useProjectAssignees } from "@/hooks/use-project-assignees";
+
+/**
+ * The stage filter's stand-in for NULL.
+ *
+ * "Show me what is not in a pipeline yet" is the question the whole unassigned
+ * rail exists to answer, and it needs to be askable from the list too. A
+ * sentinel keeps it in the same array as the real stage ids rather than paying
+ * for a second piece of state.
+ */
+const NO_STAGE = "__none__";
 
 /** Panes of the single Filters popover. */
 const FILTER_PANES = [
   { key: "views", label: "Views", icon: Eye },
+  { key: "stage", label: "Stage", icon: GitBranch },
   { key: "tags", label: "Tags", icon: TagIcon },
   { key: "labels", label: "Labels", icon: Bookmark },
   { key: "people", label: "People", icon: UsersIcon },
@@ -91,6 +115,76 @@ const DEFAULT_LABELS: Array<{ name: string; color: string }> = [
   { name: "Follow-up Needed", color: "#ef4444" },
 ];
 
+/**
+ * Black or white on a stage chip, whichever wins on WCAG contrast.
+ *
+ * Stage colours are chosen per board and span pale ambers to dark violets, so a
+ * fixed foreground puts unreadable text on half of them. Same rule as the board
+ * columns use, so a stage reads identically in both places.
+ */
+function stageChipTextColor(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return "#ffffff";
+  const n = parseInt(m[1], 16);
+  const channel = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const luminance =
+    0.2126 * channel((n >> 16) & 255) +
+    0.7152 * channel((n >> 8) & 255) +
+    0.0722 * channel(n & 255);
+  return (luminance + 0.05) / 0.05 > 1.05 / (luminance + 0.05) ? "#111827" : "#ffffff";
+}
+
+/**
+ * One tickable stage in the Filters popover.
+ *
+ * Carries its own count because the useful question is usually "how much work
+ * is sitting at Invoiced", and a filter row that answers it before you tick it
+ * saves the round trip.
+ */
+function StageFilterRow({
+  checked,
+  color,
+  label,
+  count,
+  onToggle,
+}: {
+  checked: boolean;
+  /** Absent on "Not in a pipeline", which is a state rather than a stage. */
+  color?: string;
+  label: string;
+  count: number;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onToggle}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
+      className={`flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 transition ${
+        checked ? "bg-accent/70" : "hover:bg-muted"
+      }`}
+    >
+      <Checkbox checked={checked} />
+      {color ? (
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+      ) : (
+        <CircleSlash className="h-3 w-3 shrink-0 text-muted-foreground" />
+      )}
+      <span className="min-w-0 flex-1 truncate text-xs font-medium">{label}</span>
+      <span className="shrink-0 text-[10px] font-bold text-muted-foreground">{count}</span>
+    </div>
+  );
+}
+
 interface ProjectRow {
   id: string;
   name: string;
@@ -106,6 +200,12 @@ interface ProjectRow {
   archived?: boolean | null;
   labels?: string[] | null;
   completed_at?: string | null;
+  /**
+   * The single-select pipeline position. Separate from `status`, which is the
+   * big-picture Active/Completed/Archived bucket, and separate from tags, which
+   * no longer double as stages. NULL means the project is in no pipeline.
+   */
+  pipeline_stage_id?: string | null;
 }
 
 /**
@@ -183,6 +283,8 @@ export function ProjectsPage() {
   const [tab, setTab] = useState<TabKey>("projects");
   const [query, setQuery] = useState(routeSearch.q ?? "");
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  /** Stage ids, plus NO_STAGE for "not in a pipeline". Empty means no filter. */
+  const [selectedStageIds, setSelectedStageIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("any");
 
   // Project label filter (color-managed labels stored on projects.labels[])
@@ -236,8 +338,10 @@ export function ProjectsPage() {
   >([]);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
 
-  // Tag Boards - team-shared, auto-updating (any project matching the
-  // board's tag_ids), distinct from the manual per-user Groups above.
+  // Pipelines - team-shared boards whose columns are real stages the board
+  // owns, with each project holding exactly one of them
+  // (`projects.pipeline_stage_id`). Distinct from the manual per-user Groups
+  // above, and no longer built out of tags.
   const fetchBoards = listProjectBoards;
   const [boards, setBoards] = useState<ProjectBoard[]>([]);
   const [createBoardOpen, setCreateBoardOpen] = useState(false);
@@ -621,6 +725,17 @@ export function ProjectsPage() {
         return selectedTagIds.every((id) => tagIds.has(id));
       });
     }
+    /*
+     * OR, where tags are AND, and the difference is not a preference.
+     *
+     * A project carries many tags, so "Kitchen AND Urgent" narrows to the
+     * projects holding both. A project holds one stage, so "Scheduled AND
+     * Invoiced" would always be empty. Ticking two stages has to mean "either",
+     * or the control is a trap.
+     */
+    if (selectedStageIds.length > 0) {
+      list = list.filter((p) => selectedStageIds.includes(p.pipeline_stage_id ?? NO_STAGE));
+    }
     if (selectedLabels.length > 0) {
       const wanted = selectedLabels.map((s) => s.toLowerCase());
       list = list.filter((p) => {
@@ -658,6 +773,7 @@ export function ProjectsPage() {
     statusFilter,
     query,
     selectedTagIds,
+    selectedStageIds,
     selectedLabels,
     labelMode,
     selectedContributors,
@@ -685,6 +801,70 @@ export function ProjectsPage() {
       toast.error(error.message);
     }
   };
+  /**
+   * The board's optimistic move, and its undo.
+   *
+   * The write itself lives in the board view (one RPC, one field). This only
+   * moves the local row, which is all a re-render needs: a card's column is
+   * `pipeline_stage_id` and nothing else, so there is no second list to keep in
+   * step the way the tag boards needed.
+   */
+  const setPipelineStageLocally = (projectId: string, stageId: string | null) => {
+    setAllProjects((ps) =>
+      ps.map((p) => (p.id === projectId ? { ...p, pipeline_stage_id: stageId } : p)),
+    );
+  };
+
+  /**
+   * The same move the board's drag makes, from the project list.
+   *
+   * A stage is a field on the project, so it should be settable wherever the
+   * project is - not only on the one screen that draws it as a column. Same
+   * op, same optimism, same undo.
+   */
+  const updatePipelineStage = async (projectId: string, stageId: string | null) => {
+    const previous = allProjects.find((p) => p.id === projectId)?.pipeline_stage_id ?? null;
+    if (previous === stageId) return;
+    setPipelineStageLocally(projectId, stageId);
+    try {
+      await setProjectPipelineStage({ data: { projectId, stageId } });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not change the stage");
+      setPipelineStageLocally(projectId, previous);
+    }
+  };
+
+  /** Stage id to how it should be drawn, plus which pipeline it belongs to. */
+  const stageLookup = useMemo(() => {
+    const out: Record<string, { name: string; color: string; boardName: string }> = {};
+    for (const b of boards) {
+      for (const s of b.stages) out[s.id] = { name: s.name, color: s.color, boardName: b.name };
+    }
+    return out;
+  }, [boards]);
+
+  /** Every stage a project could be moved to, grouped by pipeline. */
+  const stageOptions = useMemo(
+    () =>
+      boards
+        .filter((b) => b.stages.length > 0)
+        .map((b) => ({
+          id: b.id,
+          name: b.name,
+          stages: [...b.stages].sort((x, y) => x.position - y.position),
+        })),
+    [boards],
+  );
+
+  /** How many projects each stage holds, so removing one can say what it costs. */
+  const projectCountByStage = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of allProjects) {
+      if (p.pipeline_stage_id) counts[p.pipeline_stage_id] = (counts[p.pipeline_stage_id] ?? 0) + 1;
+    }
+    return counts;
+  }, [allProjects]);
+
   const toggleStar = async (id: string, next: boolean) => {
     const prev = allProjects;
     setAllProjects((ps) => ps.map((p) => (p.id === id ? { ...p, starred: next } : p)));
@@ -773,6 +953,7 @@ export function ProjectsPage() {
   /** Refinements behind the Filters button. Search is counted separately. */
   const filterCount =
     selectedTagIds.length +
+    selectedStageIds.length +
     selectedLabels.length +
     selectedContributors.length +
     (dateFrom || dateTo ? 1 : 0) +
@@ -784,6 +965,7 @@ export function ProjectsPage() {
   /** Clears the popover's refinements. Does not touch the search keyword. */
   const clearRefinements = () => {
     setSelectedTagIds([]);
+    setSelectedStageIds([]);
     setSelectedLabels([]);
     setSelectedContributors([]);
     setDateFrom("");
@@ -869,15 +1051,17 @@ export function ProjectsPage() {
                 ? (statusFilter !== "any" ? 1 : 0) +
                   (starredOnly ? 1 : 0) +
                   (archivedMode !== "hide" ? 1 : 0)
-                : p.key === "tags"
-                  ? selectedTagIds.length
-                  : p.key === "labels"
-                    ? selectedLabels.length
-                    : p.key === "people"
-                      ? selectedContributors.length
-                      : dateFrom || dateTo
-                        ? 1
-                        : 0;
+                : p.key === "stage"
+                  ? selectedStageIds.length
+                  : p.key === "tags"
+                    ? selectedTagIds.length
+                    : p.key === "labels"
+                      ? selectedLabels.length
+                      : p.key === "people"
+                        ? selectedContributors.length
+                        : dateFrom || dateTo
+                          ? 1
+                          : 0;
             return (
               <button
                 key={p.key}
@@ -1012,6 +1196,85 @@ export function ProjectsPage() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {filterPane === "stage" && (
+          <div className="p-3">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Pipeline stage
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {selectedStageIds.length} selected
+              </span>
+            </div>
+            <div className="max-h-60 overflow-y-auto pr-1">
+              {stageOptions.length === 0 ? (
+                <div className="px-1 py-3 text-xs text-muted-foreground">
+                  No pipelines yet. Build one on the Pipelines tab and every project can hold a
+                  stage.
+                </div>
+              ) : (
+                <div className="space-y-0.5">
+                  {stageOptions.map((b) => (
+                    <div key={b.id}>
+                      <p className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        {b.name}
+                      </p>
+                      {b.stages.map((s) => (
+                        <StageFilterRow
+                          key={s.id}
+                          checked={selectedStageIds.includes(s.id)}
+                          color={s.color}
+                          label={s.name}
+                          count={projectCountByStage[s.id] ?? 0}
+                          onToggle={() =>
+                            setSelectedStageIds((prev) =>
+                              prev.includes(s.id)
+                                ? prev.filter((id) => id !== s.id)
+                                : [...prev, s.id],
+                            )
+                          }
+                        />
+                      ))}
+                    </div>
+                  ))}
+                  {/*
+                    The list's half of the unassigned rail. Same question, asked
+                    from the other view: what has not been placed yet.
+                  */}
+                  <div className="mt-2 border-t border-border pt-2">
+                    <StageFilterRow
+                      checked={selectedStageIds.includes(NO_STAGE)}
+                      label="Not in a pipeline"
+                      count={allProjects.filter((p) => !p.pipeline_stage_id).length}
+                      onToggle={() =>
+                        setSelectedStageIds((prev) =>
+                          prev.includes(NO_STAGE)
+                            ? prev.filter((id) => id !== NO_STAGE)
+                            : [...prev, NO_STAGE],
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            {selectedStageIds.length > 0 && (
+              <>
+                <p className="mt-2 px-1 text-[10px] text-muted-foreground">
+                  A project holds one stage, so several ticks mean any of them.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStageIds([])}
+                  className="mt-1 w-full rounded-md py-1.5 text-center text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                >
+                  Clear stage filters
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -1490,39 +1753,20 @@ export function ProjectsPage() {
                   </div>
 
                   {boardsLoading ? null : activeBoard ? (
-                    <TagBoardDetailView
+                    <PipelineBoardView
                       board={activeBoard}
-                      allTags={allTags}
                       allProjects={allProjects}
-                      projectTagMap={projectTagMap}
                       coverUrls={coverUrls}
                       photoCounts={photoCounts}
                       reportCounts={reportCounts}
                       onManage={() => setManageBoardOpen(true)}
-                      onTagAssigned={(projectId, tag) => {
-                        setProjectTagMap((prev) => {
-                          const existing = prev[projectId] ?? [];
-                          if (existing.some((t) => t.id === tag.id)) return prev;
-                          return { ...prev, [projectId]: [...existing, tag] };
-                        });
-                      }}
-                      onTagMoved={(projectId, fromTagId, toTag) => {
-                        setProjectTagMap((prev) => {
-                          const without = (prev[projectId] ?? []).filter((t) => t.id !== fromTagId);
-                          return {
-                            ...prev,
-                            [projectId]: without.some((t) => t.id === toTag.id)
-                              ? without
-                              : [...without, toTag],
-                          };
-                        });
-                      }}
+                      onStageChanged={setPipelineStageLocally}
                     />
                   ) : (
                     <EmptyState
                       icon={Layers}
                       title="No pipelines yet"
-                      description='A pipeline moves projects through stages by tag (e.g. "Lead", "Active", "Complete") - shared with your team and always up to date. Drag a card between stages to re-tag it.'
+                      description="A pipeline is the process your work moves through, with a stage for each step (Lead/Quoted, Scheduled, In Progress, Completed, Invoiced, Paid). Every project sits in one stage at a time, and dragging its card is what moves it."
                       action={
                         <Button onClick={() => setCreateBoardOpen(true)}>
                           <Layers className="mr-2 h-4 w-4" /> New Pipeline
@@ -1548,6 +1792,9 @@ export function ProjectsPage() {
                   onStar={toggleStar}
                   onArchive={toggleArchive}
                   onStatus={updateStatus}
+                  stageLookup={stageLookup}
+                  stageOptions={stageOptions}
+                  onStage={updatePipelineStage}
                 />
               )}
             </div>
@@ -1557,15 +1804,39 @@ export function ProjectsPage() {
             <BoardSettingsSheet
               open={manageBoardOpen}
               onOpenChange={setManageBoardOpen}
-              allTags={allTags}
               board={activeBoard}
+              otherBoardNames={boards.filter((b) => b.id !== activeBoard.id).map((b) => b.name)}
+              tagNames={allTags.map((t) => t.name)}
+              projectNames={allProjects.map((p) => p.name)}
+              countByStageId={projectCountByStage}
               onUpdated={(updated) => {
                 setBoards((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
                 setActiveBoard(updated);
+                // A removed stage clears pipeline_stage_id on the projects that
+                // were in it (ON DELETE SET NULL), so the local rows have to
+                // stop pointing at a column that no longer exists.
+                const live = new Set(updated.stages.map((s) => s.id));
+                setAllProjects((ps) =>
+                  ps.map((p) =>
+                    p.pipeline_stage_id && !live.has(p.pipeline_stage_id)
+                      ? { ...p, pipeline_stage_id: null }
+                      : p,
+                  ),
+                );
               }}
               onDeleted={(id) => {
+                const gone = new Set(
+                  (boards.find((b) => b.id === id)?.stages ?? []).map((s) => s.id),
+                );
                 setBoards((prev) => prev.filter((b) => b.id !== id));
                 setActiveBoard(null);
+                setAllProjects((ps) =>
+                  ps.map((p) =>
+                    p.pipeline_stage_id && gone.has(p.pipeline_stage_id)
+                      ? { ...p, pipeline_stage_id: null }
+                      : p,
+                  ),
+                );
               }}
             />
           )}
@@ -1573,7 +1844,9 @@ export function ProjectsPage() {
           <CreateBoardDialog
             open={createBoardOpen}
             onOpenChange={setCreateBoardOpen}
-            allTags={allTags}
+            existingBoardNames={boards.map((b) => b.name)}
+            tagNames={allTags.map((t) => t.name)}
+            projectNames={allProjects.map((p) => p.name)}
             onCreated={(board) => {
               setBoards((prev) => [board, ...prev]);
               void qc.invalidateQueries({ queryKey: qk.projectBoards(user?.id ?? "") });
@@ -1678,6 +1951,9 @@ function ProjectsList({
   onStar,
   onArchive,
   onStatus,
+  stageLookup,
+  stageOptions,
+  onStage,
 }: {
   projects: ProjectRow[];
   loading: boolean;
@@ -1694,7 +1970,24 @@ function ProjectsList({
   onStar: (id: string, next: boolean) => void;
   onArchive: (id: string, next: boolean) => void;
   onStatus: (id: string, status: string) => void;
+  /** Stage id to how the chip should read. Empty until a pipeline exists. */
+  stageLookup: Record<string, { name: string; color: string; boardName: string }>;
+  stageOptions: Array<{ id: string; name: string; stages: PipelineStage[] }>;
+  onStage: (projectId: string, stageId: string | null) => void;
 }) {
+  /*
+   * The crew on every visible card, in one request.
+   *
+   * Sliced to the RPC's own ceiling rather than paginated: this list is already
+   * client-side filtered, and a workspace showing more than 200 cards at once
+   * is scrolling past the point where a crew stack on card 201 is what anybody
+   * is looking for. The cards past the cut simply render without one.
+   */
+  const { byProject, canAssign } = useProjectAssignees(
+    useMemo(() => projects.slice(0, 200).map((p) => p.id), [projects]),
+  );
+  const [assignFor, setAssignFor] = useState<ProjectRow | null>(null);
+
   if (loading) {
     return null;
   }
@@ -1724,209 +2017,344 @@ function ProjectsList({
   }
 
   return (
-    <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-      {projects.map((p) => {
-        const badge = statusBadge(p.status);
-        const cover = coverUrls[p.id];
-        const photoCount = photoCounts[p.id] ?? 0;
-        const reportCount = reportCounts[p.id] ?? 0;
-        const checklistCount = checklistCounts[p.id] ?? 0;
-        const members = recentMembers[p.id] ?? [];
-        const loc = projectLocation(p);
-        const tags = projectTagMap[p.id] ?? [];
-        return (
-          <div
-            key={p.id}
-            className={cn(SURFACE_CARD_INTERACTIVE, "group flex flex-col overflow-hidden")}
-          >
-            <Link
-              to="/projects/$projectId"
-              params={{ projectId: p.id }}
-              className="relative block h-40 w-full shrink-0 overflow-hidden bg-muted"
-              aria-label={`Open ${p.name}`}
+    <>
+      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {projects.map((p) => {
+          const badge = statusBadge(p.status);
+          const cover = coverUrls[p.id];
+          const photoCount = photoCounts[p.id] ?? 0;
+          const reportCount = reportCounts[p.id] ?? 0;
+          const checklistCount = checklistCounts[p.id] ?? 0;
+          const members = recentMembers[p.id] ?? [];
+          const assigned = byProject[p.id] ?? [];
+          const loc = projectLocation(p);
+          const tags = projectTagMap[p.id] ?? [];
+          return (
+            <div
+              key={p.id}
+              className={cn(SURFACE_CARD_INTERACTIVE, "group flex flex-col overflow-hidden")}
             >
-              {cover || coverPaths[p.id] ? (
-                <PhotoThumb
-                  storagePath={coverPaths[p.id]}
-                  thumbPath={coverThumbPaths[p.id]}
-                  fallbackUrl={cover}
-                  width={420}
-                  alt={`${p.name} cover`}
-                  className="transition-transform duration-300 group-hover:scale-105"
-                />
-              ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
-                  <ImageOff className="h-6 w-6 opacity-60" />
-                  <span className="text-[10px] uppercase tracking-wider">No photos</span>
-                </div>
-              )}
-              <span
-                className={`absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full ${badge.badgeClass} px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white shadow`}
+              <Link
+                to="/projects/$projectId"
+                params={{ projectId: p.id }}
+                className="relative block h-40 w-full shrink-0 overflow-hidden bg-muted"
+                aria-label={`Open ${p.name}`}
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-white/90" />
-                {badge.label}
-              </span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onStar(p.id, !p.starred);
-                }}
-                aria-label={p.starred ? "Unstar project" : "Star project"}
-                className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-sidebar/40 text-sidebar-foreground backdrop-blur transition hover:bg-sidebar/60"
-              >
-                <Star className={`h-4 w-4 ${p.starred ? "fill-amber-400 text-amber-400" : ""}`} />
-              </button>
-            </Link>
+                {cover || coverPaths[p.id] ? (
+                  <PhotoThumb
+                    storagePath={coverPaths[p.id]}
+                    thumbPath={coverThumbPaths[p.id]}
+                    fallbackUrl={cover}
+                    width={420}
+                    alt={`${p.name} cover`}
+                    className="transition-transform duration-300 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
+                    <ImageOff className="h-6 w-6 opacity-60" />
+                    <span className="text-[10px] uppercase tracking-wider">No photos</span>
+                  </div>
+                )}
+                <span
+                  className={`absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full ${badge.badgeClass} px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white shadow`}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-white/90" />
+                  {badge.label}
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onStar(p.id, !p.starred);
+                  }}
+                  aria-label={p.starred ? "Unstar project" : "Star project"}
+                  className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-sidebar/40 text-sidebar-foreground backdrop-blur transition hover:bg-sidebar/60"
+                >
+                  <Star className={`h-4 w-4 ${p.starred ? "fill-amber-400 text-amber-400" : ""}`} />
+                </button>
+              </Link>
 
-            <div className="flex flex-1 flex-col gap-3 p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <Link
-                    to="/projects/$projectId"
-                    params={{ projectId: p.id }}
-                    className="block truncate text-base font-extrabold tracking-tight text-foreground hover:text-primary"
-                  >
-                    {p.name}
-                  </Link>
-                  {loc && (
-                    <p className="mt-1 flex items-center gap-1 truncate text-xs text-muted-foreground">
-                      <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
-                      <span className="truncate">{loc}</span>
-                    </p>
-                  )}
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-                      aria-label="More actions"
+              <div className="flex flex-1 flex-col gap-3 p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link
+                      to="/projects/$projectId"
+                      params={{ projectId: p.id }}
+                      className="block truncate text-base font-extrabold tracking-tight text-foreground hover:text-primary"
                     >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Set status
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem
-                      disabled={p.status === "active"}
-                      onClick={() => onStatus(p.id, "active")}
-                    >
-                      <span className="mr-2 h-2 w-2 rounded-full bg-emerald-400" />
-                      Active
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      disabled={p.status === "on_hold"}
-                      onClick={() => onStatus(p.id, "on_hold")}
-                    >
-                      <span className="mr-2 h-2 w-2 rounded-full bg-amber-400" />
-                      On hold
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      disabled={p.status === "completed"}
-                      onClick={() => onStatus(p.id, "completed")}
-                    >
-                      <span className="mr-2 h-2 w-2 rounded-full bg-violet-400" />
-                      Completed
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => onStar(p.id, !p.starred)}>
-                      <Star
-                        className={`mr-2 h-4 w-4 ${p.starred ? "fill-amber-400 text-amber-400" : ""}`}
-                      />
-                      {p.starred ? "Unstar" : "Star"}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onArchive(p.id, !p.archived)}>
-                      {p.archived ? (
+                      {p.name}
+                    </Link>
+                    {loc && (
+                      <p className="mt-1 flex items-center gap-1 truncate text-xs text-muted-foreground">
+                        <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        <span className="truncate">{loc}</span>
+                      </p>
+                    )}
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                        aria-label="More actions"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        Set status
+                      </DropdownMenuLabel>
+                      <DropdownMenuItem
+                        disabled={p.status === "active"}
+                        onClick={() => onStatus(p.id, "active")}
+                      >
+                        <span className="mr-2 h-2 w-2 rounded-full bg-emerald-400" />
+                        Active
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={p.status === "on_hold"}
+                        onClick={() => onStatus(p.id, "on_hold")}
+                      >
+                        <span className="mr-2 h-2 w-2 rounded-full bg-amber-400" />
+                        On hold
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={p.status === "completed"}
+                        onClick={() => onStatus(p.id, "completed")}
+                      >
+                        <span className="mr-2 h-2 w-2 rounded-full bg-violet-400" />
+                        Completed
+                      </DropdownMenuItem>
+                      {/*
+                      Moving a job along without opening the board.
+
+                      A submenu rather than a flat list: with two pipelines of
+                      six stages this would otherwise be twelve rows pushed in
+                      between "Set status" and "Crew", burying both. Grouped by
+                      pipeline, because "In Progress" on two different boards is
+                      two different places.
+                    */}
+                      {stageOptions.length > 0 && (
                         <>
-                          <ArchiveRestore className="mr-2 h-4 w-4" />
-                          Restore
-                        </>
-                      ) : (
-                        <>
-                          <Archive className="mr-2 h-4 w-4" />
-                          Archive
+                          <DropdownMenuSeparator />
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                              <GitBranch className="mr-2 h-4 w-4" />
+                              {p.pipeline_stage_id && stageLookup[p.pipeline_stage_id]
+                                ? stageLookup[p.pipeline_stage_id].name
+                                : "Set pipeline stage"}
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent className="w-56">
+                              {stageOptions.map((board, i) => (
+                                <div key={board.id}>
+                                  {i > 0 && <DropdownMenuSeparator />}
+                                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                                    {board.name}
+                                  </DropdownMenuLabel>
+                                  {board.stages.map((s) => (
+                                    <DropdownMenuItem
+                                      key={s.id}
+                                      disabled={s.id === p.pipeline_stage_id}
+                                      onClick={() => onStage(p.id, s.id)}
+                                    >
+                                      <span
+                                        className="mr-2 h-2.5 w-2.5 shrink-0 rounded-full"
+                                        style={{ background: s.color }}
+                                      />
+                                      <span className="truncate">{s.name}</span>
+                                    </DropdownMenuItem>
+                                  ))}
+                                </div>
+                              ))}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                disabled={!p.pipeline_stage_id}
+                                onClick={() => onStage(p.id, null)}
+                              >
+                                <CircleSlash className="mr-2 h-3.5 w-3.5" />
+                                Not in a pipeline
+                              </DropdownMenuItem>
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
                         </>
                       )}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link to="/projects/$projectId" params={{ projectId: p.id }}>
-                        Open project
-                      </Link>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              {(p.labels ?? []).length > 0 && (
-                <div className="flex flex-wrap items-center gap-1">
-                  {(p.labels ?? []).slice(0, 3).map((label) => (
-                    <LabelChip key={label} label={label} />
-                  ))}
-                  {(p.labels ?? []).length > 3 && (
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                      +{(p.labels ?? []).length - 3}
-                    </span>
-                  )}
+                      {/*
+                      Staffing a job from the list it is on, rather than from
+                      Team settings. The roster's picker still exists and writes
+                      the same rows, but nobody opens Team settings to answer
+                      "who is doing this one" - they are already looking at it.
+                      Hidden entirely when the viewer cannot assign, since the
+                      server would refuse the write.
+                    */}
+                      {canAssign && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            Crew
+                          </DropdownMenuLabel>
+                          <DropdownMenuItem onClick={() => setAssignFor(p)}>
+                            <UsersIcon className="mr-2 h-4 w-4" />
+                            {assigned.length === 0
+                              ? "Assign teammates"
+                              : `Change crew (${assigned.length})`}
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => onStar(p.id, !p.starred)}>
+                        <Star
+                          className={`mr-2 h-4 w-4 ${p.starred ? "fill-amber-400 text-amber-400" : ""}`}
+                        />
+                        {p.starred ? "Unstar" : "Star"}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onArchive(p.id, !p.archived)}>
+                        {p.archived ? (
+                          <>
+                            <ArchiveRestore className="mr-2 h-4 w-4" />
+                            Restore
+                          </>
+                        ) : (
+                          <>
+                            <Archive className="mr-2 h-4 w-4" />
+                            Archive
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link to="/projects/$projectId" params={{ projectId: p.id }}>
+                          Open project
+                        </Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-              )}
-              {tags.length > 0 && <TagPillRow tags={tags.map((t) => t.name)} size="sm" max={4} />}
 
-              {/*
+                {/*
+                  Where the job is in its process, on the card.
+
+                  The stage lived only on the Pipelines tab until now, which
+                  made it feel like a property of the board rather than of the
+                  project. It is a field on the project, so it reads here too,
+                  and the same chip colour ties it back to its column.
+                */}
+                {p.pipeline_stage_id && stageLookup[p.pipeline_stage_id] && (
+                  <span
+                    className="inline-flex w-fit max-w-full items-center gap-1.5 truncate rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider"
+                    style={{
+                      background: stageLookup[p.pipeline_stage_id].color,
+                      color: stageChipTextColor(stageLookup[p.pipeline_stage_id].color),
+                    }}
+                    title={`${stageLookup[p.pipeline_stage_id].boardName}: ${stageLookup[p.pipeline_stage_id].name}`}
+                  >
+                    <GitBranch className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{stageLookup[p.pipeline_stage_id].name}</span>
+                  </span>
+                )}
+
+                {(p.labels ?? []).length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1">
+                    {(p.labels ?? []).slice(0, 3).map((label) => (
+                      <LabelChip key={label} label={label} />
+                    ))}
+                    {(p.labels ?? []).length > 3 && (
+                      <span className="text-[10px] font-medium text-muted-foreground">
+                        +{(p.labels ?? []).length - 3}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {tags.length > 0 && <TagPillRow tags={tags.map((t) => t.name)} size="sm" max={4} />}
+
+                {/*
                 One meta band, not two. Counts, last activity and the crew used
                 to sit in two stacked bordered rows, which cost a row of cards
                 per screen to say the same thing.
               */}
-              <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-3">
-                <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] font-semibold text-muted-foreground">
-                  <span
-                    className="inline-flex items-center gap-1.5"
-                    title={`${photoCount} ${photoCount === 1 ? "photo" : "photos"}`}
-                  >
-                    <Camera className="h-3.5 w-3.5" />
-                    {photoCount}
-                  </span>
-                  <span
-                    className="inline-flex items-center gap-1.5"
-                    title={`${reportCount} ${reportCount === 1 ? "report" : "reports"}`}
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    {reportCount}
-                  </span>
-                  <span
-                    className="inline-flex items-center gap-1.5"
-                    title={`${checklistCount} ${checklistCount === 1 ? "checklist" : "checklists"}`}
-                  >
-                    <FolderKanban className="h-3.5 w-3.5" />
-                    {checklistCount}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5" title="Last activity">
-                    <Clock className="h-3.5 w-3.5" />
-                    {timeAgo(p.updated_at)}
-                  </span>
-                </div>
-                {members.length > 0 && (
-                  <div className="flex shrink-0 -space-x-1.5">
-                    {members.slice(0, 4).map((m) => (
-                      <Avatar key={m.id} className="h-6 w-6 border-2 border-card">
-                        {m.avatar ? <AvatarImage src={m.avatar} alt={m.name ?? ""} /> : null}
-                        <AvatarFallback className="bg-foreground text-[9px] font-extrabold text-background">
-                          {(m.name ?? "?").slice(0, 1).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                    ))}
+                <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-3">
+                  <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] font-semibold text-muted-foreground">
+                    <span
+                      className="inline-flex items-center gap-1.5"
+                      title={`${photoCount} ${photoCount === 1 ? "photo" : "photos"}`}
+                    >
+                      <Camera className="h-3.5 w-3.5" />
+                      {photoCount}
+                    </span>
+                    <span
+                      className="inline-flex items-center gap-1.5"
+                      title={`${reportCount} ${reportCount === 1 ? "report" : "reports"}`}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      {reportCount}
+                    </span>
+                    <span
+                      className="inline-flex items-center gap-1.5"
+                      title={`${checklistCount} ${checklistCount === 1 ? "checklist" : "checklists"}`}
+                    >
+                      <FolderKanban className="h-3.5 w-3.5" />
+                      {checklistCount}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5" title="Last activity">
+                      <Clock className="h-3.5 w-3.5" />
+                      {timeAgo(p.updated_at)}
+                    </span>
                   </div>
-                )}
+                  {/*
+                  The crew wins this slot when there is one, because it is the
+                  answer to a question somebody decided ("who is on this job")
+                  rather than a by-product ("who has uploaded here"). The
+                  uploader stack stays as the fallback for an unstaffed job so
+                  the card is not blank, and both now say which they are on
+                  hover - they were bare initials with nothing to hover before.
+                */}
+                  {assigned.length > 0 || canAssign ? (
+                    <ProjectCrew
+                      userIds={assigned}
+                      canAssign={canAssign}
+                      onAssign={() => setAssignFor(p)}
+                      className="shrink-0"
+                    />
+                  ) : (
+                    members.length > 0 && (
+                      <div className="flex shrink-0 -space-x-1.5">
+                        {members.slice(0, 4).map((m) => (
+                          <Avatar
+                            key={m.id}
+                            className="h-6 w-6 border-2 border-card"
+                            title={`${m.name ?? "Someone"} has added photos to this project`}
+                          >
+                            {m.avatar ? <AvatarImage src={m.avatar} alt={m.name ?? ""} /> : null}
+                            <AvatarFallback className="bg-foreground text-[9px] font-extrabold text-background">
+                              {(m.name ?? "?").slice(0, 1).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                        ))}
+                      </div>
+                    )
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+
+      {/*
+      One dialog for the whole grid, opened with whichever card was clicked.
+      Mounting one per card would build a modal for every project on the page
+      in order to show at most one of them.
+    */}
+      {assignFor && (
+        <AssignTeammatesDialog
+          projectId={assignFor.id}
+          projectName={assignFor.name}
+          open
+          onOpenChange={(o) => !o && setAssignFor(null)}
+        />
+      )}
+    </>
   );
 }

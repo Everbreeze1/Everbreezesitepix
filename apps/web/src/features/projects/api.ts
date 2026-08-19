@@ -13,7 +13,10 @@ export {
   createProjectBoard,
   updateProjectBoard,
   deleteProjectBoard,
+  setProjectPipelineStage,
   type ProjectBoard,
+  type PipelineStage,
+  type PipelineStageInput,
 } from "@/lib/project-boards.functions";
 export {
   softDeleteProject,

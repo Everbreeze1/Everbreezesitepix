@@ -35,6 +35,15 @@ export const qk = {
   photoDay: (userId: string, scope?: { day: string; projectIds: string[]; tags: string[] }) =>
     scope ? (["photo-day", userId, scope] as const) : (["photo-day", userId] as const),
   mapProjects: (userId: string) => ["map", "projects", userId] as const,
+  /**
+   * Who is on which job. Omit `projectIds` for the base key - invalidating that
+   * clears every window of ids at once, which is what a save has to do: the
+   * projects grid and the project page hold different slices of the same table.
+   */
+  projectAssignees: (userId: string, projectIds?: string[]) =>
+    projectIds
+      ? (["project-assignees", userId, [...projectIds].sort().join(",")] as const)
+      : (["project-assignees", userId] as const),
   notificationsUnread: (userId: string) => ["notifications", "unread", userId] as const,
   notificationsList: (userId: string) => ["notifications", "list", userId] as const,
 };

@@ -16,7 +16,21 @@
  * reason explained, before a write is refused. If one changes, change both.
  */
 
-/** Roles the Settings page labels "Workspace admin" and "Project manager". */
+/**
+ * Who may close somebody else's work: Owner and Admin.
+ *
+ * This used to be documented as "the roles the Settings page labels 'Workspace
+ * admin' and 'Project manager'". Those labels are gone - Settings had invented
+ * a vocabulary of its own, and calling an Admin a "Project manager" collided
+ * head-on with Manager becoming a real, separate, Team-only role. The set is
+ * unchanged; only the sentence describing it was wrong.
+ *
+ * Deliberately NOT `can(role, "manage_own_crew")`, which would add Manager.
+ * This is the completion override in
+ * supabase/migrations/20260819000000_assignment_and_completion.sql, and that
+ * trigger names owner and admin. Widening it here and not there would disable
+ * a button the database still refuses, or worse, enable one it refuses.
+ */
 const MANAGER_ROLES = new Set(["owner", "admin"]);
 
 export function isManagerRole(role: string | null | undefined): boolean {

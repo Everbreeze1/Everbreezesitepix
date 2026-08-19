@@ -118,6 +118,8 @@ export {
   updateMemberRoleService,
   setMemberProjectsService,
   getMemberProjectsService,
+  getProjectAssigneesService,
+  setProjectAssigneesService,
   leaveTeamService,
   lookupInviteService,
   acceptInviteService,

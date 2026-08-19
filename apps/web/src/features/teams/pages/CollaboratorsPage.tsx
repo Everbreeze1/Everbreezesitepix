@@ -2,9 +2,6 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   Users,
-  Crown,
-  Shield,
-  User as UserIcon,
   FolderKanban,
   Images,
   Sparkles,
@@ -25,17 +22,21 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getMyTeam, getTeamActivity, type TeamActivityItem } from "@/lib/teams.functions";
 import { supabase } from "@/integrations/sitepix/client";
 import { relativeTime } from "@sitepix/shared";
+import { useSubscription } from "@/hooks/use-subscription";
+import { RoleBadge } from "@/features/teams/components/RoleBadge";
 
-const roleIcon = (r: string) =>
-  r === "owner" ? (
-    <Crown className="h-3 w-3" />
-  ) : r === "admin" ? (
-    <Shield className="h-3 w-3" />
-  ) : (
-    <UserIcon className="h-3 w-3" />
-  );
-
-const roleLabel: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
+/*
+ * This page carried its own role vocabulary - a three-entry map of owner,
+ * admin and member, with `?? m.role` behind it. That map predates the roles
+ * matrix, so a Manager, a Standard or a Restricted collaborator fell through to
+ * the raw database value and rendered as "restricted" in lower case under a CSS
+ * capitalize, next to properly cased labels, with nothing anywhere saying what
+ * it meant.
+ *
+ * `RoleBadge` replaces it: one matrix, one set of names, one explanation on
+ * hover, and the tier-aware wording so a Pro workspace reads Member where a
+ * Team one reads Standard.
+ */
 
 function initials(name?: string | null, email?: string | null) {
   const src = (name || email || "?").trim();
@@ -88,6 +89,8 @@ const SHARED_FEATURES = [
 ] as const;
 
 export function CollaboratorsPage() {
+  // Only to name roles the way this tier names them - see RoleBadge.
+  const { tier } = useSubscription();
   const fetchTeam = getMyTeam;
   const fetchActivity = getTeamActivity;
   const { data, isLoading } = useQuery({
@@ -233,13 +236,7 @@ export function CollaboratorsPage() {
                         <span className="truncate text-sm font-medium">
                           {name ?? email ?? "Member"}
                         </span>
-                        <Badge
-                          variant="outline"
-                          className="shrink-0 capitalize border-primary/30 text-[10px] text-primary"
-                        >
-                          {roleIcon(m.role)}
-                          <span className="ml-1">{roleLabel[m.role] ?? m.role}</span>
-                        </Badge>
+                        <RoleBadge role={m.role} tier={tier} size="xs" />
                       </div>
                       <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                         {total > 0 ? (

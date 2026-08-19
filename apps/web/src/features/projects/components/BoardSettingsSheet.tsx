@@ -1,20 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  DndContext,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Loader2, Plus, X } from "lucide-react";
+import { Info, Loader2 } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -25,85 +10,107 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/use-confirm";
+import {
+  DEFAULT_PIPELINE_STAGES,
+  pipelineNameBlocks,
+  pipelineNameIssue,
+  pipelineNameMessage,
+  samePipelineName,
+} from "@sitepix/shared";
 import {
   updateProjectBoard,
   deleteProjectBoard,
   type ProjectBoard,
 } from "@/lib/project-boards.functions";
+import {
+  PipelineStageEditor,
+  defaultStageDrafts,
+  draftsFromStages,
+  draftsToInput,
+  stageDraftsIssue,
+  type StageDraft,
+} from "@/features/projects/components/PipelineStageEditor";
 
-interface TagRow {
-  id: string;
-  name: string;
-  color: string;
-}
-
-function chipTextColor(hex: string): string {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return "#fff";
-  const n = parseInt(m[1], 16);
-  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111827" : "#ffffff";
-}
-
+/**
+ * Pipeline settings: the name, and the stage list.
+ *
+ * There used to be a tag picker here, and the "stages" it produced were the
+ * team's tags. Renaming a stage renamed a tag everywhere else in the app, and
+ * two tags on one project drew two cards. Stages are the board's own rows now,
+ * so this sheet edits them directly and touches nothing else.
+ */
 export function BoardSettingsSheet({
   open,
   onOpenChange,
   board,
-  allTags,
+  otherBoardNames,
+  tagNames = [],
+  projectNames = [],
+  countByStageId = {},
   onUpdated,
   onDeleted,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   board: ProjectBoard;
-  allTags: TagRow[];
+  /** Every other pipeline on the team, so a rename cannot create a duplicate. */
+  otherBoardNames: string[];
+  tagNames?: string[];
+  projectNames?: string[];
+  countByStageId?: Record<string, number>;
   onUpdated: (board: ProjectBoard) => void;
   onDeleted: (id: string) => void;
 }) {
   const confirm = useConfirm();
   const [name, setName] = useState(board.name);
-  const [tagIds, setTagIds] = useState<string[]>(board.tag_ids);
+  const [stages, setStages] = useState<StageDraft[]>(() => draftsFromStages(board.stages));
   const [saving, setSaving] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
 
   // Re-seed when a different board is opened (or the board changes underneath us).
   useEffect(() => {
     setName(board.name);
-    setTagIds(board.tag_ids);
-  }, [board.id, board.name, board.tag_ids]);
+    setStages(draftsFromStages(board.stages));
+  }, [board.id, board.name, board.stages]);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-  const tagById = useMemo(() => new Map(allTags.map((t) => [t.id, t])), [allTags]);
-  const columns = tagIds.map((id) => tagById.get(id)).filter((t): t is TagRow => !!t);
-  const available = allTags.filter((t) => !tagIds.includes(t.id));
+  const nameIssue = useMemo(
+    () => pipelineNameIssue(name, { otherPipelineNames: otherBoardNames, tagNames, projectNames }),
+    [name, otherBoardNames, tagNames, projectNames],
+  );
+  const stagesIssue = stageDraftsIssue(stages);
+  const blocked = pipelineNameBlocks(nameIssue) || !!stagesIssue;
 
-  function handleReorder(e: DragEndEvent) {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    setTagIds((prev) => {
-      const from = prev.indexOf(String(active.id));
-      const to = prev.indexOf(String(over.id));
-      if (from < 0 || to < 0) return prev;
-      return arrayMove(prev, from, to);
-    });
-  }
+  /** Already the default set, so offering to reset to it would say nothing. */
+  const looksStandard = useMemo(
+    () =>
+      stages.length === DEFAULT_PIPELINE_STAGES.length &&
+      stages.every((s, i) => samePipelineName(s.name, DEFAULT_PIPELINE_STAGES[i].name)),
+    [stages],
+  );
+
+  /** Stages the person deleted from the list that still hold work. */
+  const droppedCount = useMemo(() => {
+    const kept = new Set(stages.map((s) => s.id).filter(Boolean) as string[]);
+    return board.stages
+      .filter((s) => !kept.has(s.id))
+      .reduce((n, s) => n + (countByStageId[s.id] ?? 0), 0);
+  }, [stages, board.stages, countByStageId]);
 
   async function handleSave() {
-    if (!name.trim()) {
-      toast.error("Pipeline name can't be empty");
-      return;
-    }
-    if (tagIds.length === 0) {
-      toast.error("Add at least one stage");
-      return;
+    if (blocked) return;
+    if (droppedCount > 0) {
+      const ok = await confirm({
+        title: "Remove stages that still hold work?",
+        description: `${droppedCount} project${droppedCount === 1 ? "" : "s"} will drop out of this pipeline. The project${droppedCount === 1 ? "" : "s"} and everything on ${droppedCount === 1 ? "it" : "them"} stay; only the pipeline position is cleared, and you can put ${droppedCount === 1 ? "it" : "them"} back in any stage.`,
+        variant: "destructive",
+      });
+      if (!ok) return;
     }
     setSaving(true);
     try {
       const updated = await updateProjectBoard({
-        data: { id: board.id, name: name.trim(), tagIds },
+        data: { id: board.id, name: name.trim(), stages: draftsToInput(stages) },
       });
       onUpdated(updated);
       onOpenChange(false);
@@ -117,7 +124,7 @@ export function BoardSettingsSheet({
   async function handleDelete() {
     if (
       !(await confirm({
-        description: `Delete "${board.name}"? The projects and tags stay - only the pipeline is removed.`,
+        description: `Delete "${board.name}"? The projects stay - only the pipeline and its stages are removed.`,
         variant: "destructive",
       }))
     )
@@ -138,7 +145,8 @@ export function BoardSettingsSheet({
         <SheetHeader className="border-b px-6 pb-4 pt-6 text-left">
           <SheetTitle>Pipeline Settings</SheetTitle>
           <SheetDescription>
-            Select which tags appear as stages and drag to reorder them.
+            Name the process, then set the stages a job moves through. A project sits in one stage
+            at a time.
           </SheetDescription>
         </SheetHeader>
 
@@ -150,67 +158,56 @@ export function BoardSettingsSheet({
             onChange={(e) => setName(e.target.value)}
             className="mt-1.5"
           />
-
-          <p className="mb-2 mt-6 text-sm font-bold text-foreground">
-            Active Stages <span className="text-muted-foreground">({columns.length})</span>
-          </p>
-
-          {columns.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-              No stages yet - add a tag below.
+          {nameIssue ? (
+            <p
+              className={`mt-1.5 text-xs font-semibold ${
+                pipelineNameBlocks(nameIssue)
+                  ? "text-destructive"
+                  : "text-amber-600 dark:text-amber-500"
+              }`}
+            >
+              {pipelineNameMessage(nameIssue)}
             </p>
           ) : (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleReorder}
-            >
-              <SortableContext items={tagIds} strategy={verticalListSortingStrategy}>
-                <div className="space-y-1.5">
-                  {columns.map((tag) => (
-                    <SortableColumnRow
-                      key={tag.id}
-                      tag={tag}
-                      onRemove={() => setTagIds((prev) => prev.filter((id) => id !== tag.id))}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-3 w-3 shrink-0" />
+              Name it after the process it represents, not a customer, job or location.
+            </p>
           )}
 
-          <Popover open={addOpen} onOpenChange={setAddOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                disabled={available.length === 0}
+          <div className="mb-2 mt-6 flex items-center justify-between gap-2">
+            <p className="text-sm font-bold text-foreground">
+              Stages <span className="text-muted-foreground">({stages.length})</span>
+            </p>
+            {/*
+              The way out for a board that came across from the tag era.
+              Every pipeline that existed before the rework had its columns
+              built from tag names, so plenty of them read "carpet", "ac4",
+              "2025" - tag names, not steps in a process. Retyping six rows to
+              fix that is enough friction that most people would not.
+
+              It replaces rather than merges, because nothing can guess which
+              standard stage "carpet" was meant to be. The jobs are not lost:
+              they land in the "Not in a pipeline" rail on the board, ready to
+              be dragged into the right column, and the confirmation on Done
+              says how many that will be before anything is written.
+            */}
+            {!looksStandard && (
+              <button
+                type="button"
+                onClick={() => setStages(defaultStageDrafts())}
+                className="text-xs font-semibold text-muted-foreground underline-offset-2 transition hover:text-foreground hover:underline"
               >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                {available.length === 0 ? "All tags added" : "Add stage"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="max-h-72 w-64 overflow-y-auto p-1">
-              {available.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => {
-                    setTagIds((prev) => [...prev, t.id]);
-                    setAddOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
-                >
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ background: t.color }}
-                  />
-                  <span className="truncate">{t.name}</span>
-                </button>
-              ))}
-            </PopoverContent>
-          </Popover>
+                Use the standard stages
+              </button>
+            )}
+          </div>
+
+          <PipelineStageEditor
+            drafts={stages}
+            onChange={setStages}
+            countByStageId={countByStageId}
+          />
         </div>
 
         <div className="flex items-center justify-between gap-2 border-t px-6 py-4">
@@ -219,58 +216,14 @@ export function BoardSettingsSheet({
             onClick={handleDelete}
             className="text-destructive hover:text-destructive"
           >
-            Delete Board
+            Delete Pipeline
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={handleSave} disabled={saving || blocked}>
             {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             Done
           </Button>
         </div>
       </SheetContent>
     </Sheet>
-  );
-}
-
-function SortableColumnRow({ tag, onRemove }: { tag: TagRow; onRemove: () => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: tag.id,
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      // `relative` is required for the z-index to apply at all: this row is a
-      // flex *container*, not a flex item, and its parent is a plain block - so
-      // a bare `z-10` was dropped and the dragged row was painted in DOM order,
-      // letting later siblings' opaque backgrounds cut across it.
-      className={`flex items-center gap-2 rounded-lg border border-border bg-card px-2 py-2 ${
-        isDragging ? "relative z-[5] opacity-80 shadow-md" : ""
-      }`}
-    >
-      <button
-        type="button"
-        {...listeners}
-        {...attributes}
-        aria-label={`Reorder ${tag.name}`}
-        className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-      <span
-        className="inline-flex min-w-0 flex-1 items-center truncate rounded-full px-2.5 py-1 text-xs font-bold"
-        style={{ background: tag.color, color: chipTextColor(tag.color) }}
-      >
-        <span className="truncate">{tag.name}</span>
-      </span>
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label={`Remove ${tag.name} column`}
-        className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
-    </div>
   );
 }

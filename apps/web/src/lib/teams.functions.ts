@@ -11,6 +11,8 @@ import type {
   updateMemberRoleService,
   setMemberProjectsService,
   getMemberProjectsService,
+  getProjectAssigneesService,
+  setProjectAssigneesService,
   leaveTeamService,
   lookupInviteService,
   acceptInviteService,
@@ -142,3 +144,21 @@ export const getMemberProjects = rpcOp<
   { memberId: string },
   Result<typeof getMemberProjectsService>
 >("getMemberProjects");
+
+/**
+ * The same assignments, read from the project instead of from the person.
+ *
+ * `getProjectAssignees` takes a list because the projects grid draws a crew
+ * stack per card and one request per card is sixty requests for one screen.
+ * `canAssign` comes back with the data so the button appears exactly when the
+ * write would be accepted, rather than the browser guessing from the roster.
+ */
+export const getProjectAssignees = rpcOp<
+  { projectIds: string[] },
+  Result<typeof getProjectAssigneesService>
+>("getProjectAssignees");
+
+export const setProjectAssignees = rpcOp<
+  { projectId: string; userIds: string[] },
+  Result<typeof setProjectAssigneesService>
+>("setProjectAssignees");

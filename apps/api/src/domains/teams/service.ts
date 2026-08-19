@@ -839,31 +839,49 @@ export async function updateMemberRoleService(ctx: AuthedContext, data: any) {
   if (error) throw new Error(error.message);
 
   /*
-   * Moving OFF Restricted clears the assignments.
+   * The assignments are KEPT across a role change. This used to wipe them.
    *
-   * Left behind, they are inert - `member_can_reach_project` is only consulted
-   * for a Restricted viewer, and everyone else reaches projects through
-   * `are_teammates`. But they become live again the moment the person is put
-   * back on Restricted, silently restoring a scope that may be months stale.
+   * When the only writer was the Restricted scoping picker, a row here meant
+   * one thing - a fence - and a fence left behind on somebody who is no longer
+   * Restricted is stale state waiting to become live again if they are ever put
+   * back. Clearing it was right for that meaning.
+   *
+   * The rows mean something else now as well. The projects list and the project
+   * page write them to say who is on a job, for every role, so the same table
+   * is a crew list; wiping it on a role change would quietly take a person off
+   * every job they are staffed on, in response to an action ("make them a
+   * Manager") that says nothing about staffing. That is data loss the admin did
+   * not ask for and cannot see.
+   *
+   * The old risk is real and is handled where it belongs: an admin who puts
+   * somebody back onto Restricted gets "Choose their jobs" in the same menu,
+   * showing exactly which jobs are about to become that person's whole
+   * workspace, before they are anyone's fence again.
+   *
+   * `scopedProjectCount` is what makes that visible rather than merely
+   * available. Moving somebody TO Restricted turns whatever crew rows they
+   * already had into their entire view of the workspace, so the number comes
+   * back with the result and the roster says it out loud in the same breath as
+   * "Set as Restricted". A silent inheritance is the thing worth avoiding here,
+   * not the inheritance itself.
    */
-  if (
-    normaliseRole((target as any).role) === "restricted" &&
-    normaliseRole(data.role) !== "restricted"
-  ) {
+  let scopedProjectCount: number | null = null;
+  if (requested === "restricted") {
     const { data: memberRow } = await supabaseAdmin
       .from("team_members" as any)
       .select("user_id")
       .eq("id", data.memberId)
       .maybeSingle();
     if (memberRow) {
-      await supabaseAdmin
+      const { count } = await supabaseAdmin
         .from("project_assignments" as any)
-        .delete()
+        .select("id", { count: "exact", head: true })
         .eq("user_id", (memberRow as any).user_id);
+      scopedProjectCount = count ?? 0;
     }
   }
 
-  return { ok: true };
+  return { ok: true, scopedProjectCount };
 }
 
 /** The billing tier a team is actually on, for role gating. */
@@ -981,6 +999,226 @@ export async function getMemberProjectsService(ctx: AuthedContext, data: any) {
     .eq("user_id", (target as any).user_id);
 
   return { projectIds: (rows ?? []).map((r: any) => r.project_id as string) };
+}
+
+/*
+ * ===========================================================================
+ * THE SAME TABLE, READ FROM THE OTHER END
+ * ===========================================================================
+ * `setMemberProjects` answers "which jobs is this person on?" and is reached
+ * from the roster. These two answer "who is on this job?" and are reached from
+ * the projects list and the project itself, which is where the question is
+ * actually asked - nobody opens Team Settings to staff a job they are looking
+ * at.
+ *
+ * One table, `project_assignments`, so the two views can never disagree. What
+ * an assignment MEANS still depends on the role at the other end of it, and
+ * that distinction is the whole Pro/Team line:
+ *
+ *   every role except Restricted - the crew list. Who is on this job. It grants
+ *     nothing, because they already reach every project through
+ *     `are_teammates()`. This is what Pro has, on every plan.
+ *   Restricted - the crew list AND the fence. `member_can_reach_project()`
+ *     consults exactly these rows, so ticking a box here is what lets them in.
+ *     Restricted is Team-only (`MIN_TIER` in team-permissions.ts).
+ *
+ * So the control is the same everywhere and honest on both plans: on Pro it
+ * staffs a job, on Team it staffs a job and, for one role, scopes a person.
+ */
+
+/** Who may staff a job. Company-wide user management, or a Manager's own crew. */
+function mayAssignCrew(role: unknown): boolean {
+  return can(role as string, "manage_users") || can(role as string, "manage_own_crew");
+}
+
+/**
+ * The team's own projects, as a set, for validating ids the browser sent.
+ *
+ * `project_assignments` has no team column - it points at a project and a user
+ * - so "is this project ours?" has to be asked of `projects.created_by` against
+ * the roster. Without it, an admin could paste another company's project id and
+ * quietly attach one of their people to it.
+ */
+async function teamProjectIds(
+  supabaseAdmin: SupabaseAdmin,
+  teamId: string,
+  projectIds: string[],
+): Promise<Set<string>> {
+  if (!projectIds.length) return new Set();
+  const { data: members } = await supabaseAdmin
+    .from("team_members" as any)
+    .select("user_id")
+    .eq("team_id", teamId);
+  const memberIds = (members ?? []).map((m: any) => m.user_id);
+  const { data: rows } = await supabaseAdmin
+    .from("projects" as any)
+    .select("id")
+    .in("id", projectIds)
+    .in("created_by", memberIds.length ? memberIds : ["00000000-0000-0000-0000-000000000000"]);
+  return new Set((rows ?? []).map((r: any) => r.id as string));
+}
+
+/**
+ * Who is assigned to each of these jobs.
+ *
+ * Takes a list rather than one id because the projects page renders a grid: one
+ * request per card would be sixty requests to draw sixty avatar stacks. The
+ * project page passes a single id and pays for exactly that.
+ *
+ * Returns `canAssign` alongside the data so the caller does not have to
+ * re-derive the server's own answer from the roster and get it subtly wrong -
+ * the button appears if and only if the write would be accepted.
+ */
+export async function getProjectAssigneesService(ctx: AuthedContext, data: any) {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: caller } = await supabaseAdmin
+    .from("team_members" as any)
+    .select("team_id, role")
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+  // A solo account has no team row. That is not an error, it is an empty crew.
+  if (!caller) return { byProject: {} as Record<string, string[]>, canAssign: false };
+
+  /*
+   * Filtered through the CALLER's client, not the admin one.
+   *
+   * `setProjectAssignees` proves team ownership with the service role because
+   * it has to reject a pasted id from another company. Reading is a different
+   * question: a Restricted member is on this team and is deliberately fenced to
+   * a few of its jobs, so answering "who is on job X" for a job they cannot
+   * open would hand back the one thing their role exists to withhold. RLS
+   * already knows exactly which projects each viewer may see, so the read asks
+   * it rather than re-deciding.
+   */
+  const requested: string[] = Array.from(new Set(data.projectIds ?? []));
+  let ids: string[] = [];
+  if (requested.length) {
+    const { data: visible } = await ctx.supabase.from("projects").select("id").in("id", requested);
+    ids = ((visible ?? []) as any[]).map((r) => r.id as string);
+  }
+
+  const byProject: Record<string, string[]> = {};
+  for (const id of ids) byProject[id] = [];
+  if (ids.length) {
+    const { data: rows } = await supabaseAdmin
+      .from("project_assignments" as any)
+      .select("project_id, user_id")
+      .in("project_id", ids);
+    for (const r of (rows ?? []) as any[]) {
+      (byProject[r.project_id] ??= []).push(r.user_id as string);
+    }
+  }
+
+  return { byProject, canAssign: mayAssignCrew((caller as any).role) };
+}
+
+/**
+ * Replace the crew on one job.
+ *
+ * Whole-set rather than add/remove because the dialog is a list of tickboxes
+ * and that is what it holds: sending the ticked set makes an untick a real
+ * instruction instead of something the client has to remember to send as a
+ * second call. Empty is legitimate - it is how a job is unstaffed.
+ */
+export async function setProjectAssigneesService(ctx: AuthedContext, data: any) {
+  const { userId } = ctx;
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: caller } = await supabaseAdmin
+    .from("team_members" as any)
+    .select("team_id, role")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!caller) throw Object.assign(new Error("Create a team first."), { status: 403 });
+  if (!mayAssignCrew((caller as any).role)) {
+    throw Object.assign(
+      new Error(
+        `A ${ROLE_LABEL[normaliseRole((caller as any).role)]} cannot change who is on a job.`,
+      ),
+      { status: 403 },
+    );
+  }
+  const teamId = (caller as any).team_id as string;
+
+  const ours = await teamProjectIds(supabaseAdmin, teamId, [data.projectId]);
+  if (!ours.has(data.projectId)) {
+    throw Object.assign(new Error("That project is not part of your team."), { status: 403 });
+  }
+
+  /*
+   * Every id must be a teammate. Checked against `team_members` rather than
+   * against `auth.users`, so a stale id - somebody who has left - is refused
+   * instead of resurrecting an assignment nothing else would ever clear.
+   */
+  const userIds: string[] = Array.from(new Set(data.userIds ?? []));
+  if (userIds.length) {
+    const { data: rows } = await supabaseAdmin
+      .from("team_members" as any)
+      .select("user_id")
+      .eq("team_id", teamId)
+      .in("user_id", userIds);
+    const found = new Set((rows ?? []).map((r: any) => r.user_id as string));
+    const stranger = userIds.find((id) => !found.has(id));
+    if (stranger) {
+      throw Object.assign(new Error("That person is not on your team."), { status: 403 });
+    }
+  }
+
+  const { data: existingRows } = await supabaseAdmin
+    .from("project_assignments" as any)
+    .select("user_id")
+    .eq("project_id", data.projectId);
+  const existing = new Set((existingRows ?? []).map((r: any) => r.user_id as string));
+
+  await supabaseAdmin
+    .from("project_assignments" as any)
+    .delete()
+    .eq("project_id", data.projectId);
+  if (userIds.length) {
+    const { error } = await supabaseAdmin.from("project_assignments" as any).insert(
+      userIds.map((user_id) => ({
+        project_id: data.projectId,
+        user_id,
+        assigned_by: userId,
+      })),
+    );
+    if (error) throw new Error(error.message);
+  }
+
+  /*
+   * Tell the people who were just added, and only them.
+   *
+   * Re-saving the dialog without changing anything must not re-notify the whole
+   * crew, which is why this diffs against what was already there rather than
+   * notifying everyone in `userIds`. `insertNotification` drops the actor's own
+   * row, so assigning yourself stays silent.
+   */
+  const { data: proj } = await supabaseAdmin
+    .from("projects" as any)
+    .select("name")
+    .eq("id", data.projectId)
+    .maybeSingle();
+  const projectName = ((proj as any)?.name as string) || "a project";
+  await Promise.all(
+    userIds
+      .filter((id) => !existing.has(id))
+      .map((recipientId) =>
+        insertNotification(supabaseAdmin as any, {
+          recipientId,
+          actorId: userId,
+          type: "project_assigned",
+          title: `You were added to ${projectName}`,
+          body: "Open the project to see the photos, tasks and documents on it.",
+          linkPath: `/projects/${data.projectId}`,
+          projectId: data.projectId,
+          entityType: "project",
+          entityId: data.projectId,
+        }),
+      ),
+  );
+
+  return { ok: true, count: userIds.length };
 }
 
 export async function leaveTeamService(ctx: AuthedContext) {

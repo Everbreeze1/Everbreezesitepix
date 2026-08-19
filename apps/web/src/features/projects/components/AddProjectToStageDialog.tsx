@@ -116,9 +116,7 @@ export function AddProjectToStageDialog({
                   >
                     <span className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{p.name}</p>
-                      {addr && (
-                        <p className="truncate text-[11px] text-muted-foreground">{addr}</p>
-                      )}
+                      {addr && <p className="truncate text-[11px] text-muted-foreground">{addr}</p>}
                       {p.currentStageName && (
                         <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
                           {p.currentStageName}

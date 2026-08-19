@@ -124,3 +124,16 @@ export {
   looksLikeStreetAddress,
   withoutStreetAddress,
 } from "./portfolio-fields";
+export {
+  DEFAULT_PIPELINE_STAGES,
+  PIPELINE_STAGE_COLORS,
+  MAX_PIPELINE_STAGES,
+  nextPipelineStageColor,
+  normalizePipelineName,
+  samePipelineName,
+  pipelineNameIssue,
+  pipelineNameBlocks,
+  pipelineNameMessage,
+  type PipelineStageSeed,
+  type PipelineNameIssue,
+} from "./pipeline-stages";

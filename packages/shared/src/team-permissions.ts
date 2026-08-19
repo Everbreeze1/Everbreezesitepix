@@ -131,7 +131,21 @@ const MIN_TIER: Record<TeamRole, BillingTier> = {
   // Starter's second seat is a Technician with no billing and no settings,
   // which is Standard.
   standard: "starter",
-  manager: "pro",
+  /*
+   * Manager is Team-only, and that is a deliberate reversal.
+   *
+   * It used to sit on Pro, which left Pro holding two thirds of the hierarchy
+   * (Admin / Manager / Standard) and Team adding only the Restricted row on
+   * top. "Advanced roles & permissions" then described something a Pro
+   * customer mostly already had, which is the same complaint that produced
+   * this file in the first place - one tier down.
+   *
+   * Pro is now flat on purpose: Admin and Member, one level apart, and every
+   * Member sits at the same level below the Admin. Everything that makes the
+   * hierarchy a hierarchy - a middle tier, and scoping a person to named jobs
+   * - is what Team sells.
+   */
+  manager: "team",
   restricted: "team",
 };
 
@@ -192,11 +206,75 @@ export const ROLE_LABEL: Record<TeamRole, string> = {
   restricted: "Restricted",
 };
 
-/** One line explaining what the role can do, shown under the label. */
+/**
+ * One line explaining what the role actually grants.
+ *
+ * Not decoration. Until this was rendered next to the role options, an admin
+ * picking between Manager and Standard was choosing between two words, with
+ * the difference between them written down only in this file. A picker that
+ * does not say what it grants is a guess with a confirmation toast on it.
+ */
 export const ROLE_DESCRIPTION: Record<TeamRole, string> = {
   owner: "Full control, including billing. Cannot be removed.",
-  admin: "Full control, including billing and team management.",
-  manager: "Manages their own crew and sees every project. No billing.",
-  standard: "Works on every project. Cannot manage users or billing.",
-  restricted: "Sees only the projects they are assigned to.",
+  admin: "Full control, including billing, team and every project.",
+  manager: "Runs their own crew and sees every project. No billing, no admins.",
+  standard: "Works on every project. Cannot manage the team or billing.",
+  restricted: "Sees only the jobs you assign them. Nothing else in the workspace.",
 };
+
+/*
+ * ===========================================================================
+ * HOW A TIER TALKS ABOUT ITS ROLES
+ * ===========================================================================
+ * The matrix above is the same on every plan; the vocabulary is not.
+ *
+ * Team ships a hierarchy, so its middle seat has a name that distinguishes it
+ * from the one above and the one below: Standard. Pro ships two levels, so the
+ * seat below Admin is just the Member - calling it "Standard" there implies a
+ * Manager and a Restricted it does not have, and invites exactly the question
+ * ("standard compared to what?") the flat design exists to avoid.
+ *
+ * Both funcs take the tier so no screen has to remember the rule, and both
+ * fall back to the canonical label for roles a tier cannot hold - a Pro team
+ * that still has a legacy Manager row must render it as a Manager rather than
+ * as nothing.
+ */
+
+/** The base seat's name on this tier. Team calls it Standard, flatter tiers Member. */
+export function roleLabelForTier(
+  role: StoredTeamRole | string | null | undefined,
+  tier: BillingTier,
+): string {
+  const r = normaliseRole(role);
+  if (r === "standard" && tier !== "team") return "Member";
+  return ROLE_LABEL[r];
+}
+
+/** The one-liner for this role as this tier's customers experience it. */
+export function roleDescriptionForTier(
+  role: StoredTeamRole | string | null | undefined,
+  tier: BillingTier,
+): string {
+  const r = normaliseRole(role);
+  if (r === "standard" && tier !== "team") {
+    // Says the level out loud. On a flat plan "one level below the Admin" is
+    // the entire permission model, so it is the sentence worth spending.
+    return "One level below Admin. Works on every project, but cannot manage the team or billing.";
+  }
+  return ROLE_DESCRIPTION[r];
+}
+
+/**
+ * Does this tier have per-user job scoping at all?
+ *
+ * Two different things get called "assigning" and only one of them is gated.
+ * Putting a teammate on a job - the crew list on a project - is ordinary
+ * workspace behaviour and every plan has it. SCOPING a person so that the jobs
+ * you ticked are the only ones they can see is the Restricted role, and that
+ * is Team's. A Pro screen must therefore show the crew picker and must not
+ * show the "choose their jobs" picker, because on Pro the second one would
+ * appear to restrict somebody and do nothing.
+ */
+export function tierHasJobScoping(tier: BillingTier): boolean {
+  return roleAllowedOnTier("restricted", tier);
+}
