@@ -5,3 +5,4 @@ export { RecoveryEmail } from "./recovery";
 export { EmailChangeEmail } from "./email-change";
 export { ReauthenticationEmail } from "./reauthentication";
 export { FieldReportEmail } from "./field-report";
+export { TaskNotificationEmail } from "./task-notification";

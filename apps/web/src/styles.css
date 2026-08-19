@@ -8,16 +8,24 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * "Wide and tall enough to run a pinned, multi-pane workspace."
+ * "Wide and tall enough to run a pinned workspace."
  *
  * A width breakpoint alone is not the question a layout like the Templates
- * blueprints tab is asking. Pinning three panes to the viewport needs room in
- * both axes: below 1280px there is no width for a second detail column, and
- * below 640px of height the panes would each be a hundred pixels of scrollbar.
- * Outside this variant the cards simply stack and the page scrolls, which is
- * the right answer on a phone and on a short window alike.
+ * blueprints tab is asking. Pinning panes to the viewport needs room in both
+ * axes: below `lg` the blueprint rail stops being a side column and stacks on
+ * top of the detail, so there is nothing left to pin against, and below 640px
+ * of height the panes would each be a hundred pixels of scrollbar. Outside
+ * this variant the cards simply stack and the page scrolls, which is the right
+ * answer on a phone and on a short window alike.
+ *
+ * The width was 1280px until the detail grew a Contents / Applied to switch.
+ * That number was asking "is there room for a second detail column", which
+ * stopped being the deciding question the moment the two panes could share one
+ * slot: from 1024px up there is exactly one column to pin, and pinning it is
+ * what stops a fifteen-section blueprint from scrolling the page. What is left
+ * is the rail's own breakpoint, which is `lg`.
  */
-@custom-variant workspace (@media (min-width: 1280px) and (min-height: 640px));
+@custom-variant workspace (@media (min-width: 1024px) and (min-height: 640px));
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);

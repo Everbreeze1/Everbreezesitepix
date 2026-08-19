@@ -188,3 +188,19 @@ export {
   markNotificationReadInputSchema,
 } from "./domains/notifications/service";
 export type { Notification } from "./domains/notifications/service";
+
+export {
+  listTaskCollaborationService,
+  createTaskCommentService,
+  deleteTaskCommentService,
+  addTaskWatchersService,
+  removeTaskWatcherService,
+  dispatchTaskNotificationsService,
+  listTaskCollaborationInputSchema,
+  createTaskCommentInputSchema,
+  deleteTaskCommentInputSchema,
+  addTaskWatchersInputSchema,
+  removeTaskWatcherInputSchema,
+  dispatchTaskNotificationsInputSchema,
+} from "./domains/tasks/service";
+export type { TaskComment, TaskWatcher } from "./domains/tasks/service";

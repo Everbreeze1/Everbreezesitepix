@@ -16,6 +16,9 @@ import {
   User as UserIcon,
   ChevronDown,
   ListChecks,
+  ShieldAlert,
+  Users,
+  Eye,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,6 +41,15 @@ import {
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  calendarDueLabel,
+  formatCalendarDate,
+  isCalendarDateOverdue,
+  todayCalendarDate,
+} from "@sitepix/shared";
+import { notifyTaskChanged } from "@/lib/tasks.functions";
+import { TaskCollaboration } from "./TaskCollaboration";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -68,6 +80,36 @@ type Priority = "low" | "normal" | "high" | "urgent";
 /** One spelling of a teammate's display name, used by every label on this panel. */
 const memberName = (m?: { full_name: string | null; email: string | null } | null) =>
   m?.full_name || m?.email || "Member";
+
+/**
+ * The sentence shown before work is handed to somebody who cannot sign in.
+ *
+ * The client found this in the live data: "The existing 'Check Refrigerant
+ * Pressure' task is assigned to Gumaro vazquez, whose email is unconfirmed.
+ * The task UI doesn't warn you when assigning to a pending/unconfirmed
+ * teammate, so a task can sit invisible to someone who literally can't log in
+ * to see it."
+ *
+ * Deliberately a confirmation and not a block. An unconfirmed teammate is a
+ * real person on the crew who will very likely be confirmed by Tuesday, and
+ * refusing the assignment would be the app deciding how a foreman runs their
+ * week. What it must not do is stay quiet, because a silent assignment to a
+ * locked account is indistinguishable from a working one right up until the
+ * job is missed.
+ *
+ * The email still goes out - it reaches their inbox whether or not the account
+ * is confirmed, which is exactly where the confirmation link is sitting.
+ */
+function unconfirmedAssigneeConfirm(who: string) {
+  return {
+    title: `${who} cannot sign in yet`,
+    description:
+      `${who} has not confirmed their email address, so they cannot open the app to see this ` +
+      `task. They will still get the email about it. Resend their confirmation from the Team ` +
+      `page if they never received one.`,
+    confirmText: "Assign anyway",
+  };
+}
 
 interface Task {
   id: string;
@@ -103,6 +145,20 @@ interface TeamMemberLite {
   email: string | null;
   avatar_url: string | null;
   role: string | null;
+  /**
+   * Whether they have confirmed their address, and so whether they can sign in
+   * at all.
+   *
+   * `getMyTeam` has resolved this per member since the Teams page grew its
+   * "cannot sign in until they confirm their email" line, and this panel simply
+   * threw it away. The client's report is what that costs: an existing task is
+   * assigned to somebody whose account is stuck, "so a task can sit invisible
+   * to someone who literally can't log in to see it."
+   *
+   * null means the lookup itself failed. Unknown is not the same as
+   * unconfirmed, and a working account must never be accused of being stuck.
+   */
+  emailConfirmed: boolean | null;
 }
 
 export interface ProjectTasksHandle {
@@ -119,6 +175,14 @@ interface ProjectTasksProps {
    * over a list with a task in it for the whole time anyone stayed on the page.
    */
   onCountsChanged?: (counts: { open: number; total: number }) => void;
+  /**
+   * A task to open as soon as the list has loaded, from `?task=<uuid>` in the
+   * URL. Every notification a task raises carries it, so a bell that reads
+   * "waiting on part" lands on the thread it was written in.
+   */
+  openTaskId?: string | null;
+  /** Told once the task has been opened, so the id is not re-consumed. */
+  onOpenedTask?: () => void;
 }
 
 const STATUS_META: Record<Status, { label: string; icon: any; cls: string }> = {
@@ -141,25 +205,25 @@ function initials(name: string | null, email: string | null) {
   return src.slice(0, 2).toUpperCase();
 }
 
-function dueLabel(dueDate: string): { label: string; overdue: boolean } {
-  const due = new Date(dueDate);
-  const today = new Date(new Date().toDateString());
-  const diffDays = Math.round((due.getTime() - today.getTime()) / 86_400_000);
-  if (diffDays === 0) return { label: "Today", overdue: false };
-  if (diffDays === 1) return { label: "Tomorrow", overdue: false };
-  if (diffDays < 0)
-    return {
-      label: due.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-      overdue: true,
-    };
-  return {
-    label: due.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-    overdue: false,
-  };
-}
+/**
+ * How a due date reads on a row.
+ *
+ * This used to be `new Date(t.due_date)`, and the client caught what that costs:
+ *
+ *   "I entered 08/20/2026 and the task list shows the due-date pill as
+ *    'Aug 19.' Looks like a timezone rounding bug converting the date to UTC."
+ *
+ * Exactly that. `due_date` is a Postgres `date` and arrives as "2026-08-20",
+ * which ECMAScript parses as UTC midnight; west of Greenwich every render moved
+ * it back a day, and a task due today read as overdue from the moment it was
+ * saved. The parsing now lives in `@sitepix/shared/calendar-date`, which rebuilds
+ * a calendar date at LOCAL midnight, so the same string means the same day on
+ * every screen that shows it.
+ */
+const dueLabel = (dueDate: string) => calendarDueLabel(dueDate);
 
 export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(function ProjectTasks(
-  { projectId, projectPhotos, onCountsChanged },
+  { projectId, projectPhotos, onCountsChanged, openTaskId, onOpenedTask },
   ref,
 ) {
   const { user } = useAuth();
@@ -176,6 +240,9 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
   /** Inline quick-add: most punch-list items are just a sentence. */
   const [quickTitle, setQuickTitle] = useState("");
   const [quickAdding, setQuickAdding] = useState(false);
+  /** Tasks ticked for a bulk action. List view only - see `bulkPatch`. */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   /**
    * Per-photo state for every task on this project, keyed task -> photo.
    *
@@ -306,6 +373,7 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
         email: m.profile?.email ?? null,
         avatar_url: m.profile?.avatar_url ?? null,
         role: m.role ?? null,
+        emailConfirmed: typeof m.emailConfirmed === "boolean" ? m.emailConfirmed : null,
       }));
       setMembers(list);
     } catch {
@@ -331,6 +399,26 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
     }); /* eslint-disable-next-line */
   }, [tasks, loading]);
 
+  /*
+   * The task a notification pointed at, opened once the rows are in.
+   *
+   * Waits for `tasks` rather than firing on the id alone: the dialog is fed a
+   * row, and there is nothing to feed it while the list is still loading. A
+   * task that has since been deleted simply says so instead of leaving the
+   * reader on a tab wondering which of forty rows the message was about.
+   */
+  useEffect(() => {
+    if (!openTaskId || loading) return;
+    const found = tasks.find((t) => t.id === openTaskId);
+    if (found) {
+      setCreating(false);
+      setEditing(found);
+    } else {
+      toast.error("That task is no longer here.");
+    }
+    onOpenedTask?.(); /* eslint-disable-next-line */
+  }, [openTaskId, loading, tasks]);
+
   const counts = useMemo(() => {
     const c = { open: 0, in_progress: 0, done: 0, total: tasks.length };
     tasks.forEach((t) => {
@@ -343,6 +431,16 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
     if (filter === "all" || view === "board") return tasks;
     return tasks.filter((t) => t.status === filter);
   }, [tasks, filter, view]);
+
+  /*
+   * A selection only means anything against the rows it was made on. Changing
+   * the filter or flipping to the board hides some of them, and a bulk action
+   * that reaches tasks the user can no longer see is the worst kind of
+   * surprise.
+   */
+  useEffect(() => {
+    setSelected(new Set());
+  }, [filter, view]);
 
   /**
    * Who may close a task here.
@@ -479,6 +577,9 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
     }
 
     if (rolled === "done" && beforeStatus !== "done") {
+      // The rollup closed the task in the database, which fires the completion
+      // and watcher triggers. Send what they wrote.
+      notifyTaskChanged(t.id);
       toast.success(
         t.assigned_by && t.assigned_by !== user?.id
           ? `Every photo done - ${memberName(memberById.get(t.assigned_by))} has been notified`
@@ -583,6 +684,7 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
           setTasks((arr) =>
             arr.map((x) => (x.id === t.id ? { ...x, status: "done", completed_at: stampedAt } : x)),
           );
+          notifyTaskChanged(t.id);
           if (t.assigned_by && t.assigned_by !== user?.id) {
             toast.success(
               `Task completed - ${memberName(memberById.get(t.assigned_by))} has been notified`,
@@ -629,6 +731,14 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
       void load();
       return;
     }
+    /*
+     * The write landed, so the triggers have decided who is owed a message:
+     * `tasks_notify_completed` for the assignor, `tasks_notify_watchers` for
+     * anyone copied in. This turns those rows into email. Fire and forget - a
+     * mail provider having a bad minute must not turn a saved status into a red
+     * toast, and the bell has already rung either way.
+     */
+    notifyTaskChanged(t.id);
     if (next === "done" && t.assigned_by && t.assigned_by !== user?.id) {
       toast.success(
         `Task completed - ${memberName(memberById.get(t.assigned_by))} has been notified`,
@@ -641,6 +751,171 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
       t,
       t.status === "open" ? "in_progress" : t.status === "in_progress" ? "done" : "open",
     );
+
+  /* --------------------------------------------------------------- bulk */
+
+  /*
+   * Assigning many tasks at once.
+   *
+   * The client: "With only 3 team members this doesn't bite yet, but as the
+   * crew grows, one-by-one dropdown assignment won't scale to 'assign all HVAC
+   * installs to the HVAC team'."
+   *
+   * The scaling problem is the number of ROUND TRIPS through a modal, not the
+   * number of assignees, so the fix is a multi-select over the list rather than
+   * a second assignee column. A task still belongs to one person; twelve of
+   * them can now be handed over in one gesture, and the people who need to
+   * watch rather than hold the work are watchers.
+   *
+   * Selection is deliberately list-view only. The board is a drag surface where
+   * a row already has three tap targets on it, and a checkbox column there
+   * would compete with the status buttons for the same corner.
+   */
+  const clearSelection = () => setSelected(new Set());
+
+  const toggleSelected = (taskId: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+
+  const selectedTasks = useMemo(() => tasks.filter((t) => selected.has(t.id)), [tasks, selected]);
+
+  /**
+   * Apply one patch to every selected task, in one statement.
+   *
+   * `.in('id', ids)` rather than a loop: a bulk action that is twelve separate
+   * requests can half-succeed, and there is no sensible thing to tell somebody
+   * whose seventh task failed. `load()` afterwards rather than a local patch,
+   * because the database may have moved more than the columns we sent (the
+   * completion trigger stamps `completed_at`, the photo rollup can move
+   * `status`).
+   */
+  const bulkPatch = async (patch: Record<string, unknown>, done: string) => {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    const { error } = await supabase
+      .from("tasks" as any)
+      .update(patch)
+      .in("id", ids);
+    setBulkBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    // Every task that moved may owe somebody a message, and the triggers have
+    // already written them. One dispatch per task, none of them awaited.
+    ids.forEach(notifyTaskChanged);
+    clearSelection();
+    await load();
+    toast.success(done);
+  };
+
+  const bulkAssign = async (userId: string | null) => {
+    const member = userId ? memberById.get(userId) : null;
+    if (member?.emailConfirmed === false) {
+      const ok = await confirm(unconfirmedAssigneeConfirm(memberName(member)));
+      if (!ok) return;
+    }
+    await bulkPatch(
+      {
+        assignee_user_id: userId,
+        assignee_email: member?.email ?? null,
+        // Same pairing `assignmentPatch` states for checklists and workflows:
+        // an assignor is only true of the assignment it was written with, so
+        // clearing the assignee clears it.
+        assigned_by: userId ? (user?.id ?? null) : null,
+      },
+      userId
+        ? `${selected.size} ${selected.size === 1 ? "task" : "tasks"} assigned to ${memberName(member)}`
+        : `${selected.size} ${selected.size === 1 ? "task" : "tasks"} unassigned`,
+    );
+  };
+
+  /**
+   * Close everything selected that this viewer is allowed to close.
+   *
+   * Refusals are counted rather than thrown: a manager sweeping up a job's
+   * punch list should not have the whole action fail because one item belongs
+   * to a tech they cannot override. The database is the real rule either way
+   * (`enforce_task_completer`), so anything this skips would have been refused
+   * there.
+   */
+  const bulkComplete = async () => {
+    const allowed = selectedTasks.filter((t) => t.status !== "done" && taskRights(t).canComplete);
+    const refused = selectedTasks.filter((t) => t.status !== "done" && !taskRights(t).canComplete);
+    const overrides = allowed.filter((t) => taskRights(t).isOverride);
+
+    if (allowed.length === 0) {
+      toast.error(
+        refused.length > 0
+          ? "None of these are yours to close. Ask a manager."
+          : "Those are already done.",
+      );
+      return;
+    }
+    if (overrides.length > 0) {
+      const ok = await confirm({
+        title: `Complete ${overrides.length} ${overrides.length === 1 ? "task" : "tasks"} for someone else?`,
+        description:
+          `${overrides.length} of these ${overrides.length === 1 ? "is" : "are"} assigned to ` +
+          `other people. You can close ${overrides.length === 1 ? "it" : "them"}, but the record ` +
+          `will show you closed ${overrides.length === 1 ? "it" : "them"}.`,
+        confirmText: "Complete anyway",
+      });
+      if (!ok) return;
+    }
+
+    setBulkBusy(true);
+    const ids = allowed.map((t) => t.id);
+    const { error } = await supabase
+      .from("tasks" as any)
+      .update({ status: "done", completed_at: new Date().toISOString() })
+      .in("id", ids);
+    setBulkBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    ids.forEach(notifyTaskChanged);
+    clearSelection();
+    await load();
+    toast.success(
+      refused.length > 0
+        ? `${ids.length} completed, ${refused.length} left for their assignee`
+        : `${ids.length} ${ids.length === 1 ? "task" : "tasks"} completed`,
+    );
+  };
+
+  const bulkDelete = async () => {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (
+      !(await confirm({
+        title: `Delete ${ids.length} ${ids.length === 1 ? "task" : "tasks"}?`,
+        description: "This cannot be undone.",
+        variant: "destructive",
+        confirmText: "Delete",
+      }))
+    )
+      return;
+    setBulkBusy(true);
+    const { error } = await supabase
+      .from("tasks" as any)
+      .delete()
+      .in("id", ids);
+    setBulkBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    clearSelection();
+    await load();
+    toast.success(`${ids.length} ${ids.length === 1 ? "task" : "tasks"} deleted`);
+  };
 
   const removeTask = async (t: Task) => {
     if (!(await confirm({ description: "Delete this task?", variant: "destructive" }))) return;
@@ -706,17 +981,40 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
         ? initials(null, t.assignee_email)
         : null;
 
+    const isSelected = selected.has(t.id);
+    /* Unknown is not the same as unconfirmed - see `TeamMemberLite`. */
+    const assigneeBlocked = m?.emailConfirmed === false;
+
     return (
       <li key={t.id}>
         <div
           onClick={() => setEditing(t)}
           className={`group flex cursor-pointer items-center justify-between gap-4 rounded-2xl border-[0.8px] p-4 transition ${
-            done
-              ? "border-[#34D399]/30 bg-[#34D399]/[0.06]"
-              : "border-border bg-card/70 hover:bg-card"
+            isSelected
+              ? "border-primary/50 bg-primary/[0.06]"
+              : done
+                ? "border-[#34D399]/30 bg-[#34D399]/[0.06]"
+                : "border-border bg-card/70 hover:bg-card"
           }`}
         >
           <div className="flex min-w-0 items-center gap-3">
+            {/* Hidden until it is useful: a checkbox column on every row all the
+                time turns a punch list into a spreadsheet. It appears on hover,
+                and stays put once anything is selected. */}
+            <span
+              onClick={(e) => e.stopPropagation()}
+              className={`shrink-0 transition ${
+                isSelected || selected.size > 0
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100"
+              }`}
+            >
+              <Checkbox
+                checked={isSelected}
+                onCheckedChange={() => toggleSelected(t.id)}
+                aria-label={`Select ${t.title}`}
+              />
+            </span>
             <button
               type="button"
               onClick={(e) => {
@@ -788,6 +1086,20 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
                         {assigneeInitials}
                       </span>
                       Assigned to {assigneeName}
+                      {/* The task the client found: assigned, and invisible to
+                          its assignee because their account is not confirmed.
+                          Said on the row, not only behind the dialog, because
+                          the whole problem is that nothing about the list looked
+                          wrong. */}
+                      {assigneeBlocked && (
+                        <span
+                          title={`${assigneeName} has not confirmed their email and cannot sign in yet`}
+                          className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-700 dark:text-amber-300"
+                        >
+                          <ShieldAlert className="h-2.5 w-2.5" />
+                          Cannot sign in
+                        </span>
+                      )}
                     </span>
                   )}
                   {t.priority !== "normal" && (
@@ -876,11 +1188,10 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
 
   const renderBoardCard = (t: Task) => {
     const cardProgress = taskPhotoProgress(t.photo_ids, itemsFor(t.id));
-    const overdue = !!(
-      t.due_date &&
-      t.status !== "done" &&
-      new Date(t.due_date) < new Date(new Date().toDateString())
-    );
+    // Local-midnight comparison, same fix as `dueLabel` above: the board card
+    // had its own copy of the UTC-parsing bug and would flag a task due today
+    // as overdue.
+    const overdue = !!(t.due_date && t.status !== "done" && isCalendarDateOverdue(t.due_date));
     return (
       <Card
         key={t.id}
@@ -911,10 +1222,7 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
               className={`inline-flex items-center gap-1 text-[10px] ${overdue ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground"}`}
             >
               <CalendarDays className="h-3 w-3" />
-              {new Date(t.due_date).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
+              {formatCalendarDate(t.due_date)}
             </span>
           )}
           {renderAssignee(t)}
@@ -1047,6 +1355,141 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
         </Button>
       </div>
 
+      {/*
+        The bulk bar. Appears only once something is ticked, so the panel looks
+        exactly as it did to anyone who never uses it.
+
+        "Assign all HVAC installs to the HVAC team" is two gestures here: filter
+        or tick the rows, pick the person. The role-shaped half of that question
+        lives on the watcher picker inside a task, because a role is a group and
+        an assignee is one person - handing twelve tasks to "the HVAC team"
+        without naming anybody is how work ends up belonging to nobody.
+      */}
+      {view === "list" && selected.size > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border-[0.8px] border-primary/40 bg-primary/[0.06] p-2.5">
+          <span className="ml-1 font-manrope text-xs font-extrabold tabular-nums text-foreground">
+            {selected.size} selected
+          </span>
+
+          <Select
+            value=""
+            disabled={bulkBusy}
+            onValueChange={(v) => void bulkAssign(v === "__none__" ? null : v)}
+          >
+            <SelectTrigger className="h-8 w-[168px] border-border bg-card text-xs">
+              <span className="inline-flex items-center gap-1.5 truncate">
+                <UserIcon className="h-3.5 w-3.5" />
+                Assign to
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Unassigned</SelectItem>
+              {members.map((m) => (
+                <SelectItem key={m.user_id} value={m.user_id}>
+                  <span className="inline-flex items-center gap-1.5">
+                    {memberName(m)}
+                    {m.emailConfirmed === false && (
+                      <ShieldAlert className="h-3 w-3 text-amber-500" />
+                    )}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value=""
+            disabled={bulkBusy}
+            onValueChange={(v) =>
+              void bulkPatch(
+                { priority: v },
+                `${selected.size} set to ${PRIORITY_META[v as Priority].label}`,
+              )
+            }
+          >
+            <SelectTrigger className="h-8 w-[150px] border-border bg-card text-xs">
+              <span className="inline-flex items-center gap-1.5 truncate">
+                <Flag className="h-3.5 w-3.5" />
+                Priority
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              {(["low", "normal", "high", "urgent"] as Priority[]).map((p) => (
+                <SelectItem key={p} value={p}>
+                  {PRIORITY_META[p].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* A bare date input rather than a picker in a popover. The value it
+              produces is already "YYYY-MM-DD", which is exactly what the `date`
+              column stores, so nothing between here and Postgres has to guess
+              at a timezone. No `min`: backdating a due date is a legitimate
+              thing to do to a punch list that has slipped. */}
+          <label className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs">
+            <CalendarDays className="h-3.5 w-3.5" />
+            <input
+              type="date"
+              disabled={bulkBusy}
+              defaultValue=""
+              onChange={(e) =>
+                e.target.value &&
+                void bulkPatch(
+                  { due_date: e.target.value },
+                  `${selected.size} due ${formatCalendarDate(e.target.value)}`,
+                )
+              }
+              className="bg-transparent text-xs outline-none"
+              aria-label="Set a due date on the selected tasks"
+            />
+          </label>
+
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={bulkBusy}
+            onClick={() => void bulkComplete()}
+            className="h-8 rounded-lg bg-card px-3 text-xs font-bold"
+          >
+            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+            Mark done
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={bulkBusy}
+            onClick={() => void bulkDelete()}
+            className="h-8 rounded-lg px-3 text-xs font-bold text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+            Delete
+          </Button>
+
+          <div className="ml-auto flex items-center gap-1">
+            {selected.size < visible.length && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 rounded-lg px-3 text-xs font-bold"
+                onClick={() => setSelected(new Set(visible.map((t) => t.id)))}
+              >
+                Select all {visible.length}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 rounded-lg px-3 text-xs font-bold"
+              onClick={clearSelection}
+            >
+              {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Clear"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-5">
         {loading ? (
           <div className="flex items-center justify-center py-10">
@@ -1157,6 +1600,36 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
   );
 });
 
+/**
+ * One label, spelled the same way on every field in this dialog.
+ *
+ * The dialog arrived from the Lovable build with default shadcn labels
+ * (`text-xs font-medium`) sitting inside a panel that had since been rebuilt in
+ * the product's own type: Manrope, extrabold, uppercase, letter-spaced, with
+ * a display face on headings. The client's note was "we should unify the
+ * creation flow to our new design/theme", and this is the smallest piece of
+ * that: a field label that matches the section headers three inches above it.
+ */
+function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
+  return (
+    <div className="mb-1.5 flex items-baseline justify-between gap-3">
+      <label className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
+        {children}
+      </label>
+      {hint && <span className="text-[10.5px] text-muted-foreground">{hint}</span>}
+    </div>
+  );
+}
+
+/** The rounded-2xl hairline card the rest of the panel is built out of. */
+function Panel({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`rounded-2xl border-[0.8px] border-border bg-muted/25 p-3.5 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
 function TaskDialog({
   open,
   onClose,
@@ -1226,8 +1699,9 @@ function TaskDialog({
       ? (task.assigned_by ?? null)
       : userId
     : null;
+  const selectedMember = members.find((m) => m.user_id === assigneeUserId);
   const pendingAssigneeName = assigneeUserId
-    ? memberName(members.find((m) => m.user_id === assigneeUserId))
+    ? memberName(selectedMember)
     : assigneeEmail.trim() || null;
   const rights = completionRights(
     { assignedTo: assigneeUserId || null, assignedBy: pendingAssignedBy },
@@ -1241,6 +1715,18 @@ function TaskDialog({
    * must not ask again.
    */
   const completesNow = status === "done" && task?.status !== "done";
+
+  /*
+   * Assigning to somebody who cannot open the app.
+   *
+   * Shown live under the field rather than only as a confirmation on save, so
+   * the choice is informed while it is being made. `emailConfirmed` is null when
+   * the lookup itself failed, and unknown must never be rendered as a warning.
+   */
+  const assigneeBlocked = selectedMember?.emailConfirmed === false;
+  /* True only when the save is what creates the problem, so re-saving a task
+     that was already assigned to them does not re-litigate it. */
+  const newlyAssigningBlocked = assigneeBlocked && task?.assignee_user_id !== assigneeUserId;
 
   /*
    * The breakdown covers the photos the task already carries, not the working
@@ -1262,6 +1748,20 @@ function TaskDialog({
   const togglePhoto = (id: string) => {
     setPhotoIds((arr) => (arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]));
   };
+
+  /** Due-date shortcuts, in the reader's own calendar rather than in UTC. */
+  const dueShortcuts: Array<{ label: string; value: string }> = (() => {
+    const today = new Date();
+    const plus = (days: number) => {
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + days);
+      return todayCalendarDate(d);
+    };
+    return [
+      { label: "Today", value: plus(0) },
+      { label: "Tomorrow", value: plus(1) },
+      { label: "Next week", value: plus(7) },
+    ];
+  })();
 
   const save = async () => {
     if (!title.trim()) {
@@ -1294,11 +1794,19 @@ function TaskDialog({
         if (!ok) return;
       }
     }
+    /*
+     * And the one the client found: handing work to a teammate who cannot sign
+     * in. Asked last, so it is the final thing between the decision and the
+     * write, and only when this save is what creates the situation.
+     */
+    if (newlyAssigningBlocked) {
+      const ok = await confirm(unconfirmedAssigneeConfirm(memberName(selectedMember)));
+      if (!ok) return;
+    }
     setSaving(true);
-    const selectedMember = members.find((m) => m.user_id === assigneeUserId);
     const payload = {
       project_id: projectId,
-      created_by: userId,
+      created_by: task?.created_by ?? userId,
       title: title.trim(),
       description: description.trim() || null,
       assignee_user_id: assigneeUserId || null,
@@ -1324,13 +1832,25 @@ function TaskDialog({
       completed_at: status === "done" ? (task?.completed_at ?? new Date().toISOString()) : null,
       photo_ids: photoIds,
     };
+    /*
+     * `select('id')` on both arms, because the id is what the notification
+     * dispatch is keyed on. An insert that did not hand back its id was the
+     * reason a brand new task assigned to somebody could not be followed up
+     * with an email without a second round trip to find the row again.
+     */
     const q = task
       ? supabase
           .from("tasks" as any)
           .update(payload)
           .eq("id", task.id)
-      : supabase.from("tasks" as any).insert(payload);
-    const { error } = await q;
+          .select("id")
+          .single()
+      : supabase
+          .from("tasks" as any)
+          .insert(payload)
+          .select("id")
+          .single();
+    const { data: saved, error } = await q;
     setSaving(false);
     if (error) {
       if (
@@ -1343,7 +1863,26 @@ function TaskDialog({
       }
       return;
     }
-    toast.success(task ? "Task updated" : "Task created");
+
+    /*
+     * Send whatever that write owed.
+     *
+     * This is the client's first and loudest finding - "No notification fires
+     * on assignment ... crew members have no way to know new work landed on
+     * them unless they're manually refreshing the app". The in-app row is
+     * written by `tasks_notify_assignee` the moment the statement above
+     * commits; this turns it into an email that reaches somebody who is not
+     * looking at a dashboard.
+     */
+    const savedId = ((saved ?? null) as { id?: string } | null)?.id ?? task?.id;
+    if (savedId) notifyTaskChanged(savedId);
+
+    const assigneeChanged = (task?.assignee_user_id ?? null) !== (assigneeUserId || null);
+    if (assigneeUserId && assigneeChanged && assigneeUserId !== userId) {
+      toast.success(`${memberName(selectedMember)} has been notified`);
+    } else {
+      toast.success(task ? "Task updated" : "Task created");
+    }
     onSaved();
   };
 
@@ -1357,34 +1896,49 @@ function TaskDialog({
       {/* The confirmations raised from in here would otherwise dismiss this
           dialog when answered; DialogContent guards that for every dialog.
           See lib/modal-layers.ts. */}
-      <DialogContent className="max-w-3xl p-6 sm:p-8">
-        <DialogHeader>
-          <DialogTitle>{task ? "Edit task" : "New task"}</DialogTitle>
+      <DialogContent className="max-w-3xl gap-0 overflow-hidden rounded-3xl border-[0.8px] border-border p-0">
+        {/* Letterhead, in the panel's own type rather than shadcn's default
+            dialog title. The eyebrow/display pairing is the same one the Tasks
+            tab uses for "Keep the next move visible / What needs attention". */}
+        <DialogHeader className="space-y-0 border-b border-border bg-muted/30 px-6 py-5 text-left sm:px-7">
+          <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
+            {task ? "Edit task" : "New task"}
+          </p>
+          <DialogTitle className="font-display mt-1.5 text-[26px] font-bold leading-[30px] tracking-[-0.8px] text-foreground">
+            {task ? (task.title ?? "Task") : "What needs doing?"}
+          </DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
+
+        <div className="max-h-[68vh] space-y-4 overflow-y-auto px-6 py-5 sm:px-7">
           <div>
-            <label className="mb-1 block text-xs font-medium">Title</label>
+            <FieldLabel>Title</FieldLabel>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Fix gutter at SW corner"
+              className="h-11 rounded-xl text-sm font-medium"
               autoFocus
             />
           </div>
+
           <div>
-            <label className="mb-1 block text-xs font-medium">Description</label>
+            <FieldLabel hint="What the job is. Notes about it go in Activity below.">
+              Description
+            </FieldLabel>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional details…"
               rows={3}
+              className="rounded-xl text-sm"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium">Status</label>
+              <FieldLabel>Status</FieldLabel>
               <Select value={status} onValueChange={(v) => setStatus(v as Status)}>
-                <SelectTrigger className="h-9">
+                <SelectTrigger className="h-11 rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1403,50 +1957,93 @@ function TaskDialog({
                 </SelectContent>
               </Select>
               {!canComplete ? (
-                <p className="mt-1 text-[10.5px] text-muted-foreground">
+                <p className="mt-1.5 text-[10.5px] leading-4 text-muted-foreground">
                   {rights.reason ?? "Only the assignee or a manager can mark this done."}
                 </p>
               ) : rights.isOverride && completesNow ? (
                 /* Allowed, but it is someone else's name being overridden -
                    said here as well as in the confirmation, so the choice is
                    informed before it is made. */
-                <p className="mt-1 text-[10.5px] text-amber-600 dark:text-amber-500">
+                <p className="mt-1.5 text-[10.5px] leading-4 text-amber-600 dark:text-amber-500">
                   {rights.reason}
                 </p>
               ) : doneIsDerived ? (
-                <p className="mt-1 text-[10.5px] text-muted-foreground">
+                <p className="mt-1.5 text-[10.5px] leading-4 text-muted-foreground">
                   Finishes on its own once all {progress.total} photos below are done.
                 </p>
               ) : null}
             </div>
+
             <div>
-              <label className="mb-1 block text-xs font-medium">Priority</label>
+              <FieldLabel>Priority</FieldLabel>
               <Select value={priority} onValueChange={(v) => setPriority(v as Priority)}>
-                <SelectTrigger className="h-9">
+                <SelectTrigger className="h-11 rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="urgent">Urgent</SelectItem>
+                  {(["low", "normal", "high", "urgent"] as Priority[]).map((p) => (
+                    <SelectItem key={p} value={p}>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Flag className="h-3 w-3" />
+                        {PRIORITY_META[p].label}
+                      </span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium">Due date</label>
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <FieldLabel hint={dueDate ? formatCalendarDate(dueDate) : undefined}>
+                Due date
+              </FieldLabel>
+              <Input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="h-11 rounded-xl text-sm"
+              />
+              {/* The shortcuts are computed off the browser's own calendar day,
+                  so "Today" is the reader's today. Typing 08/20 and getting
+                  Aug 19 back is the bug this release fixes; a shortcut built on
+                  `new Date().toISOString()` would have quietly reintroduced it. */}
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {dueShortcuts.map((s) => (
+                  <button
+                    key={s.label}
+                    type="button"
+                    onClick={() => setDueDate(dueDate === s.value ? "" : s.value)}
+                    className={`rounded-full border-[0.8px] px-2.5 py-1 font-manrope text-[10.5px] font-bold transition ${
+                      dueDate === s.value
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-card text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+                {dueDate && (
+                  <button
+                    type="button"
+                    onClick={() => setDueDate("")}
+                    className="rounded-full border-[0.8px] border-transparent px-2 py-1 font-manrope text-[10.5px] font-bold text-muted-foreground transition hover:text-destructive"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
+
             <div>
-              <label className="mb-1 block text-xs font-medium">Assignee</label>
+              <FieldLabel hint="One person holds it. Copy others in below.">Assignee</FieldLabel>
               {members.length > 0 ? (
                 <Select
                   value={assigneeUserId || "__none__"}
                   onValueChange={(v) => setAssigneeUserId(v === "__none__" ? "" : v)}
                 >
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-11 rounded-xl">
                     <SelectValue placeholder="Unassigned" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1464,7 +2061,13 @@ function TaskDialog({
                               {initials(m.full_name, m.email)}
                             </AvatarFallback>
                           </Avatar>
-                          {m.full_name || m.email || "Member"}
+                          {memberName(m)}
+                          {/* Marked in the list, not only after the fact: the
+                              point is to be seen before the pick, not to
+                              explain the pick afterwards. */}
+                          {m.emailConfirmed === false && (
+                            <ShieldAlert className="h-3 w-3 text-amber-500" />
+                          )}
                         </span>
                       </SelectItem>
                     ))}
@@ -1476,72 +2079,86 @@ function TaskDialog({
                   value={assigneeEmail}
                   onChange={(e) => setAssigneeEmail(e.target.value)}
                   placeholder="who@example.com"
+                  className="h-11 rounded-xl text-sm"
                 />
+              )}
+              {assigneeBlocked && (
+                <p className="mt-1.5 flex items-start gap-1.5 text-[10.5px] leading-4 text-amber-600 dark:text-amber-500">
+                  <ShieldAlert className="mt-px h-3 w-3 shrink-0" />
+                  <span>
+                    {memberName(selectedMember)} has not confirmed their email and cannot sign in
+                    yet. They will still get the email about this task.
+                  </span>
+                </p>
               )}
             </div>
           </div>
 
           <div>
-            <div className="mb-1 flex items-center justify-between">
-              <label className="text-xs font-medium">
-                Attach photos {photoIds.length > 0 && `(${photoIds.length})`}
-              </label>
-              {photoIds.length > 0 && (
-                <button
-                  className="text-[11px] text-muted-foreground hover:text-foreground"
-                  onClick={() => setPhotoIds([])}
-                >
-                  Clear
-                </button>
-              )}
-            </div>
+            <FieldLabel hint={photoIds.length > 0 ? `${photoIds.length} attached` : undefined}>
+              Photos
+            </FieldLabel>
             {projectPhotos.length === 0 ? (
-              <p className="rounded border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+              <p className="rounded-xl border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
                 Upload photos to this project first.
               </p>
             ) : (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full justify-start">
-                    <ImageIcon className="mr-2 h-3.5 w-3.5" />
-                    {photoIds.length === 0 ? "Pick photos" : `${photoIds.length} selected`}
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="h-10 flex-1 justify-start rounded-xl text-xs font-bold"
+                    >
+                      <ImageIcon className="mr-2 h-3.5 w-3.5" />
+                      {photoIds.length === 0 ? "Pick photos" : `${photoIds.length} selected`}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-2" align="start">
+                    <div className="grid max-h-72 grid-cols-3 gap-1.5 overflow-y-auto">
+                      {projectPhotos.map((p) => {
+                        const on = photoIds.includes(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={() => togglePhoto(p.id)}
+                            className={`relative aspect-square overflow-hidden rounded-lg border-2 ${on ? "border-primary" : "border-transparent"} transition`}
+                          >
+                            {p.url ? (
+                              <img src={p.url} alt="" className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="h-full w-full bg-muted" />
+                            )}
+                            {on && (
+                              <span className="absolute right-0.5 top-0.5 grid h-4 w-4 place-items-center rounded-full bg-primary text-primary-foreground">
+                                <CheckCircle2 className="h-3 w-3" />
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                {photoIds.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    className="h-10 rounded-xl px-3 text-xs font-bold text-muted-foreground"
+                    onClick={() => setPhotoIds([])}
+                  >
+                    Clear
                   </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80 p-2" align="start">
-                  <div className="grid max-h-72 grid-cols-3 gap-1.5 overflow-y-auto">
-                    {projectPhotos.map((p) => {
-                      const on = photoIds.includes(p.id);
-                      return (
-                        <button
-                          key={p.id}
-                          onClick={() => togglePhoto(p.id)}
-                          className={`relative aspect-square overflow-hidden rounded border-2 ${on ? "border-primary" : "border-transparent"} transition`}
-                        >
-                          {p.url ? (
-                            <img src={p.url} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            <div className="h-full w-full bg-muted" />
-                          )}
-                          {on && (
-                            <span className="absolute right-0.5 top-0.5 grid h-4 w-4 place-items-center rounded-full bg-primary text-primary-foreground">
-                              <CheckCircle2 className="h-3 w-3" />
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </PopoverContent>
-              </Popover>
+                )}
+              </div>
             )}
             {photoIds.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
+              <div className="mt-2 flex flex-wrap gap-1.5">
                 {photoIds.map((pid) => {
                   const p = projectPhotos.find((x) => x.id === pid);
                   return (
                     <div
                       key={pid}
-                      className="relative h-12 w-12 overflow-hidden rounded border border-border"
+                      className="relative h-12 w-12 overflow-hidden rounded-lg border border-border"
                     >
                       {p?.url && <img src={p.url} alt="" className="h-full w-full object-cover" />}
                       <button
@@ -1565,9 +2182,9 @@ function TaskDialog({
             covers had actually been dealt with.
           */}
           {photoDriven && (
-            <div className="rounded-2xl border-[0.8px] border-border bg-muted/25 p-3">
-              <div className="mb-2 flex items-center gap-1.5 text-xs font-medium">
-                <ListChecks className="h-3.5 w-3.5 text-muted-foreground" />
+            <Panel>
+              <div className="mb-2 flex items-center gap-1.5 font-manrope text-xs font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
+                <ListChecks className="h-3.5 w-3.5" />
                 Photo by photo
               </div>
               <TaskPhotoChecklist
@@ -1591,14 +2208,50 @@ function TaskDialog({
               <p className="mt-2 text-[10.5px] text-muted-foreground">
                 Ticks and notes here save straight away, separately from this dialog's Save.
               </p>
-            </div>
+            </Panel>
+          )}
+
+          {/*
+            The CC line and the thread.
+            Only on a saved task: both hang off a task id, and a task being
+            created does not have one yet. Rather than hide that, the empty
+            state says so, because "where are the comments" is a worse question
+            than "save it first".
+          */}
+          {task ? (
+            <TaskCollaboration
+              taskId={task.id}
+              members={members}
+              currentUserId={userId}
+              assigneeUserId={assigneeUserId || null}
+            />
+          ) : (
+            <Panel className="flex items-start gap-2.5">
+              <Users className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <p className="font-manrope text-xs leading-5 text-muted-foreground">
+                Create the task first, then you can copy other people in and leave notes on it.
+                Whoever you assign it to is emailed as soon as you save.
+              </p>
+            </Panel>
           )}
         </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
+
+        <DialogFooter className="gap-2 border-t border-border bg-muted/20 px-6 py-4 sm:px-7">
+          {/* Says what pressing Save will do to somebody else's day. An
+              assignment that notifies a person should not be a silent side
+              effect of a button labelled "Save". */}
+          {assigneeUserId &&
+            assigneeUserId !== userId &&
+            (task?.assignee_user_id ?? null) !== assigneeUserId && (
+              <p className="mr-auto flex items-center gap-1.5 font-manrope text-[11px] font-bold text-muted-foreground">
+                <Eye className="h-3.5 w-3.5" />
+                {memberName(selectedMember)} will be notified
+              </p>
+            )}
+          <Button variant="ghost" className="rounded-xl font-bold" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={saving}>
+          <Button onClick={save} disabled={saving} className="rounded-xl px-5 font-bold">
             {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
             {task ? "Save" : "Create task"}
           </Button>

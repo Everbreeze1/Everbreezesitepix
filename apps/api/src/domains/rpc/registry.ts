@@ -148,6 +148,20 @@ import {
   markNotificationReadInputSchema,
   markNotificationReadService,
 } from "../notifications/service";
+import {
+  addTaskWatchersInputSchema,
+  addTaskWatchersService,
+  createTaskCommentInputSchema,
+  createTaskCommentService,
+  deleteTaskCommentInputSchema,
+  deleteTaskCommentService,
+  dispatchTaskNotificationsInputSchema,
+  dispatchTaskNotificationsService,
+  listTaskCollaborationInputSchema,
+  listTaskCollaborationService,
+  removeTaskWatcherInputSchema,
+  removeTaskWatcherService,
+} from "../tasks/service";
 import { checkIsPlatformAdminService, getAdminMetricsService } from "../admin/service";
 import {
   listPlatformUsersInputSchema,
@@ -925,6 +939,37 @@ export const rpcRegistry: Record<string, RpcEntry> = {
       return markAllNotificationsReadService(ctx);
     },
   },
+  /*
+   * Task collaboration. The task row itself is still written straight from the
+   * browser through the Supabase client; these five cover the parts a browser
+   * cannot do - reading a teammate's address, sending mail, and stamping the
+   * delivery marker the client has no grant on.
+   */
+  listTaskCollaboration: authed(
+    (d) => listTaskCollaborationInputSchema.parse(d),
+    listTaskCollaborationService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  createTaskComment: authed(
+    (d) => createTaskCommentInputSchema.parse(d),
+    createTaskCommentService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  deleteTaskComment: authed(
+    (d) => deleteTaskCommentInputSchema.parse(d),
+    deleteTaskCommentService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  addTaskWatchers: authed(
+    (d) => addTaskWatchersInputSchema.parse(d),
+    addTaskWatchersService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  removeTaskWatcher: authed(
+    (d) => removeTaskWatcherInputSchema.parse(d),
+    removeTaskWatcherService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  dispatchTaskNotifications: authed(
+    (d) => dispatchTaskNotificationsInputSchema.parse(d),
+    dispatchTaskNotificationsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
   checkIsPlatformAdmin: {
     handle: async (ctx) => {
       if (!ctx) throw new AuthError("Unauthorized");

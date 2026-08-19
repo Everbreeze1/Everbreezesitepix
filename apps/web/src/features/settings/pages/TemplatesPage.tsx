@@ -322,7 +322,8 @@ const ALL_TRADES = "__all";
 const WORKSPACE_HEIGHT = cn(
   "workspace:min-h-0 workspace:flex-1",
   "[@media(min-height:951px)]:workspace:max-h-[calc(100vh-29.5rem)]",
-  "[@media(max-height:950px)]:workspace:max-h-[calc(100vh-21.5rem)]",
+  "[@media(min-height:821px)_and_(max-height:950px)]:workspace:max-h-[calc(100vh-21.5rem)]",
+  "[@media(max-height:820px)]:workspace:max-h-[calc(100vh-17.5rem)]",
 );
 
 /** Which library tab authors a given blueprint section kind. */
@@ -1208,13 +1209,7 @@ export function TemplatesPage() {
      * item of `main` it takes the height that is actually left, and still
      * grows past it for the tabs that are long lists.
      */
-    <div
-      className="workspace:min-h-0 flex flex-1 flex-col bg-background"
-      // Read by the one rule in styles.css that this page cannot write for
-      // itself: it releases the app shell's `main` from its content height so
-      // the blueprints tab can fill the window instead of pushing past it.
-      data-fill-viewport={tab === "blueprints" ? "" : undefined}
-    >
+    <div className="workspace:min-h-0 flex flex-1 flex-col bg-background">
       {/* pt-only responsive scaling. `md:py-10` used to sit here, and because a
           variant shorthand outranks the unvariated `pb-32`, desktop bottom
           padding collapsed to 40px - less than the 84px the floating camera
@@ -1241,13 +1236,19 @@ export function TemplatesPage() {
             removed above 950px. */}
         <div className="relative overflow-hidden rounded-[32px] bg-sidebar">
           <div className="pointer-events-none absolute -right-24 -top-28 h-[288px] w-[288px] rounded-full border-[28px] border-sidebar-ring/20" />
-          <div className="relative flex flex-col gap-7 p-6 sm:px-10 sm:py-9 [@media(max-height:950px)]:sm:py-5">
+          <div className="relative flex flex-col gap-7 p-6 sm:px-10 sm:py-9 [@media(min-height:821px)_and_(max-height:950px)]:sm:py-5 [@media(max-height:820px)]:sm:py-3">
             <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1">
-                <span className="inline-flex items-center rounded-full bg-sidebar-ring px-3 py-1 text-[10px] font-extrabold uppercase tracking-[1.4px] text-sidebar-foreground">
+                {/* The eyebrow goes at the third height band. It names the
+                    section of the sidebar you clicked to get here, which is a
+                    nicety at 1080px and 34px of an 800px window that the
+                    section list needs more. 820px is the boundary because 768
+                    and 800 are what a maximised window on an ordinary laptop
+                    reports, and both should get the tight hero. */}
+                <span className="inline-flex items-center rounded-full bg-sidebar-ring px-3 py-1 text-[10px] font-extrabold uppercase tracking-[1.4px] text-sidebar-foreground [@media(max-height:820px)]:hidden">
                   Workspace tools
                 </span>
-                <h1 className="font-display mt-3 truncate text-2xl font-bold leading-tight tracking-tight text-sidebar-foreground sm:text-3xl">
+                <h1 className="font-display mt-3 truncate text-2xl font-bold leading-tight tracking-tight text-sidebar-foreground sm:text-3xl [@media(max-height:820px)]:mt-0 [@media(max-height:820px)]:text-xl [@media(max-height:820px)]:sm:text-2xl">
                   Templates
                 </h1>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-sidebar-foreground/60 [@media(max-height:950px)]:hidden">
@@ -1925,8 +1926,16 @@ function BlueprintsTab(props: {
   // the same reason `destinationTotals` counts them.
   for (const label of selected?.labels ?? []) pushLanded("labels", label, "Label");
 
+  /*
+   * `minmax(0,1fr)`, not `1fr`. A bare `1fr` track is `minmax(auto,1fr)`, so
+   * the detail column could never be narrower than its own min-content - and
+   * at 1024px that content wants about 534px of a 416px track, which the
+   * browser resolves by widening the document and putting a horizontal
+   * scrollbar under the whole app. The inner pane grid already spells its
+   * tracks this way; this one was the last bare `1fr` left.
+   */
   return (
-    <div className={cn("grid gap-4 lg:grid-cols-[320px_1fr]", WORKSPACE_HEIGHT)}>
+    <div className={cn("grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]", WORKSPACE_HEIGHT)}>
       {/* Library rail */}
       <div className="flex min-h-0 flex-col gap-3">
         <div className="relative">
@@ -2091,7 +2100,7 @@ function BlueprintsTab(props: {
           </p>
         </Card>
       ) : (
-        <div className="flex min-h-0 flex-col gap-3">
+        <div className="flex min-h-0 min-w-0 flex-col gap-3">
           {/* Header. `shrink-0`, so the identity of the thing you are looking
               at is the one part of the workspace that never gets squeezed.
               Deliberately short: it sits directly on top of the two working
@@ -2106,7 +2115,15 @@ function BlueprintsTab(props: {
                 give, so a phone truncated the blueprint's name to three
                 characters to hold a row of buttons intact. */}
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
-              <div className="min-w-0 flex-1">
+              {/* `min-w-[10rem]`, not `min-w-0`. The action group beside this is
+                  ~290px of shrink-0 buttons, so on a 416px detail column a
+                  plain `min-w-0` let the name shrink all the way to "Z..."
+                  while the buttons kept every pixel. The floor makes the row
+                  wrap the buttons to a second line instead, which costs 40px
+                  once and keeps the name of the thing you are looking at
+                  readable. Above 1152px there is room for both and nothing
+                  wraps. */}
+              <div className="min-w-[10rem] flex-1">
                 <div className="flex items-center gap-2.5">
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
                     <LayoutTemplate className="h-4 w-4" />
@@ -2366,7 +2383,7 @@ function BlueprintsTab(props: {
               tall enough to hold a card with one line of text in it and short
               enough that a 720px-tall window still fits the whole tab without
               scrolling, which is the thing all of this is for. */}
-          <div className="grid min-h-0 max-xl:min-h-[13rem] flex-1 gap-4 [@media(min-width:1280px)_and_(max-width:1399px)]:grid-cols-[minmax(0,1fr)_16rem] [@media(min-width:1400px)_and_(max-width:1535px)]:grid-cols-[minmax(0,1fr)_20rem] [@media(min-width:1536px)]:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="grid min-h-0 max-xl:min-h-[13rem] flex-1 grid-cols-[minmax(0,1fr)] gap-4 [@media(min-width:1280px)_and_(max-width:1399px)]:grid-cols-[minmax(0,1fr)_16rem] [@media(min-width:1400px)_and_(max-width:1535px)]:grid-cols-[minmax(0,1fr)_20rem] [@media(min-width:1536px)]:grid-cols-[minmax(0,1fr)_22rem]">
             {/* Contents, and where they land.
              *
              * These were two cards. The upper one grouped every item by its
@@ -2379,7 +2396,7 @@ function BlueprintsTab(props: {
             <div
               className={cn(
                 SURFACE_CARD,
-                "flex min-h-0 flex-col p-4 sm:p-5",
+                "flex min-h-0 min-w-0 flex-col p-4 sm:p-5",
                 // Only below `xl`, where the switch above is what is choosing.
                 pane !== "contents" && "max-xl:hidden",
               )}
@@ -2604,7 +2621,7 @@ function BlueprintsTab(props: {
                    only fight it. Without it a thirty-section blueprint on a
                    narrow window is thirty rows of page scroll again, which is
                    the thing the switch above exists to stop. */
-                <ul className="mt-4 max-h-[46vh] min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 workspace:max-h-none">
+                <ul className="@container mt-4 max-h-[46vh] min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 workspace:max-h-none">
                   {sections.map((r, idx) => {
                     const meta = KIND_META[r.kind];
                     const Icon = meta.icon;
@@ -2647,7 +2664,15 @@ function BlueprintsTab(props: {
                             </span>
                           )}
                         </span>
-                        <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:block">
+                        {/* The kind in words, but only where the column is
+                            wide enough to spend 65px on it. A container query
+                            and not a media query: this list is a narrow second
+                            column at 1280px and a full-width pane at 1024px,
+                            so window width is the wrong question. Where it is
+                            hidden the tinted icon still carries the kind, and
+                            the 65px goes to the name, which was truncating to
+                            "Pre-Install Saf...". */}
+                        <span className="hidden shrink-0 text-[11px] text-muted-foreground @min-[26rem]:block">
                           {meta.label}
                         </span>
                         {/* Revealed on hover or keyboard focus on a pointer
@@ -2710,7 +2735,7 @@ function BlueprintsTab(props: {
             <div
               className={cn(
                 SURFACE_CARD,
-                "flex min-h-0 flex-col p-4 sm:p-5",
+                "flex min-h-0 min-w-0 flex-col p-4 sm:p-5",
                 pane !== "applied" && "max-xl:hidden",
               )}
             >

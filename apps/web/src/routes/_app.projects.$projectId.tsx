@@ -23,6 +23,21 @@ export const Route = createFileRoute("/_app/projects/$projectId")({
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(search.photo)
         ? search.photo
         : undefined,
+    /*
+     * ?task=<uuid> opens the Tasks tab with one task expanded. Carried by every
+     * notification a task raises - assigned, reassigned, completed, commented
+     * on - so a bell that says "waiting on part" lands on the thread it was
+     * written in rather than on a tab with forty rows.
+     *
+     * Same shape check as `photo`, for the same reason: the value is only ever
+     * matched against loaded rows, so anything else is a lookup that finds
+     * nothing.
+     */
+    task:
+      typeof search.task === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(search.task)
+        ? search.task
+        : undefined,
     // `timeline` is the old name for what is now the Calendar tab; keep
     // accepting it so links shared before the rename still open the right tab.
     panel:
