@@ -233,7 +233,6 @@ export function PortfolioPage() {
               serviceTypes={data.serviceTypes}
               projectCount={data.showcases.length}
               onSaved={patchPortfolio}
-              onStartGuided={() => setGuided(true)}
             />
           ) : (
             <ReadOnlyNotice what="the site's branding and copy" />
