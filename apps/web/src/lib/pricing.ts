@@ -137,7 +137,7 @@ export const PLANS: PlanPricing[] = [
     name: "Team",
     audience: "For Multi-Crew Operations",
     tagline: "Improve margins and reduce rework as you grow.",
-    basePriceMonthly: 179,
+    basePriceMonthly: 169,
     includedSeats: 3,
     additionalSeatMonthly: 24,
     maxSeats: SELF_SERVE_SEAT_CAP,

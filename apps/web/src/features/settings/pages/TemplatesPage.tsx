@@ -1867,6 +1867,24 @@ function BlueprintsTab(props: {
    */
   const [previewOpen, setPreviewOpen] = useState(false);
 
+  /*
+   * Which of the two working panes is on screen, below the width where they
+   * fit side by side.
+   *
+   * Under 1280px the panes cannot be columns, and stacked they were the whole
+   * complaint: a blueprint with a dozen sections buried "Applied to" a screen
+   * and a half below the fold, so checking which project a blueprint had
+   * landed on meant scrolling down past every section and back up again. They
+   * now share one slot with a two-way switch above it, so the second question
+   * is a click away instead of a scroll away.
+   *
+   * Above 1280px both panes render and the switch is hidden, which is why this
+   * is a class toggle rather than a conditional render: the wide layout must
+   * never depend on this state, and a window dragged across the breakpoint
+   * must not be able to leave a column missing.
+   */
+  const [pane, setPane] = useState<"contents" | "applied">("contents");
+
   if (loading) {
     return (
       <Card className="flex items-center justify-center p-16">
@@ -1994,7 +2012,13 @@ function BlueprintsTab(props: {
                 : `No ${tradeFilter} blueprints${search.trim() ? " match your search" : ""}.`}
             </p>
           ) : (
-            <ul className="max-h-[62vh] flex-1 divide-y divide-border/60 overflow-y-auto workspace:max-h-none">
+            /* Two caps, because the rail is two different things. Beside the
+               detail it is a column and can take 62vh; stacked on top of it,
+               below `lg`, every one of those pixels is pushed between you and
+               the blueprint you just picked, so it scrolls inside 17rem
+               instead. Pinned in the workspace it takes the height the flex
+               chain measured and neither cap applies. */
+            <ul className="max-h-[17rem] flex-1 divide-y divide-border/60 overflow-y-auto lg:max-h-[62vh] workspace:max-h-none">
               {visibleTemplates.map((t) => {
                 const isSelected = selectedId === t.id;
                 const sectionCount = sectionCountByTemplate.get(t.id) ?? 0;
@@ -2067,64 +2091,46 @@ function BlueprintsTab(props: {
           </p>
         </Card>
       ) : (
-        <div className="flex min-h-0 flex-col gap-4">
+        <div className="flex min-h-0 flex-col gap-3">
           {/* Header. `shrink-0`, so the identity of the thing you are looking
-              at is the one part of the workspace that never gets squeezed. */}
-          <div className={cn(SURFACE_CARD, "shrink-0 p-4 sm:p-5")}>
+              at is the one part of the workspace that never gets squeezed.
+              Deliberately short: it sits directly on top of the two working
+              panes, and on an 800px-tall laptop those panes get only what this
+              card leaves them, so every row of chrome here is a row of section
+              list somewhere else. It used to run four stacked rows (title,
+              description, meta, labels) at 194px tall; it is now two, and the
+              panes below gained the difference. */}
+          <div className={cn(SURFACE_CARD, "shrink-0 px-4 py-3 sm:px-5 sm:py-3.5")}>
             {/* Stacked below `sm`. Side by side, the action group is ~230px of
                 shrink-0 buttons and the title is the only thing left that can
                 give, so a phone truncated the blueprint's name to three
                 characters to hold a row of buttons intact. */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2.5">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                    <LayoutTemplate className="h-4.5 w-4.5" />
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                    <LayoutTemplate className="h-4 w-4" />
                   </span>
-                  <h2 className="font-display truncate text-xl font-bold tracking-tight">
+                  <h2 className="font-display truncate text-lg font-bold tracking-tight">
                     {selected.name}
                   </h2>
                   {selected.archived && <Badge variant="outline">Archived</Badge>}
                 </div>
-                {/* Two lines, then an ellipsis with the rest on hover. A long
-                    description is the one field on this card that can grow
-                    without limit, and every line it grows by comes off the
-                    panes below it. */}
+                {/* One line, then an ellipsis with the rest on hover, and no
+                    line at all on a short window. A long description is the one
+                    field on this card that can grow without limit, and every
+                    line it grows by comes off the panes below it. Nothing is
+                    lost when it goes: the rail row you picked this blueprint
+                    from prints the same description, and the full text is on
+                    the title attribute either way. */}
                 {selected.description && (
                   <p
-                    className="mt-2 line-clamp-2 max-w-2xl text-sm text-muted-foreground"
+                    className="mt-1 line-clamp-1 max-w-2xl text-[13px] text-muted-foreground [@media(max-height:950px)]:hidden"
                     title={selected.description}
                   >
                     {selected.description}
                   </p>
                 )}
-                {/* Created date only.
-                 *
-                 * This line used to read "5 sections · never applied · created
-                 * just now", and both of the first two are stated again, in
-                 * full, within one screen: the section count heads the Contents
-                 * card, the apply count heads the Track record card. Each fact
-                 * is now written once, in the card that acts on it. */}
-                {/* Trade, default flag and version live on one line under the
-                    name. The version is the spec's audit half: the bundle is
-                    already copied on apply, so this number is what lets a
-                    project say which shape of the blueprint made it. */}
-                <p className="mt-2.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-                  <span>{selected.category ?? GENERAL_CATEGORY}</span>
-                  <span aria-hidden>·</span>
-                  <span>v{selected.version}</span>
-                  <span aria-hidden>·</span>
-                  <span>Created {timeAgo(selected.created_at)}</span>
-                  {selected.default_for_category && selected.category && (
-                    <span
-                      className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-bold text-primary"
-                      title={`New ${selected.category} projects start from this blueprint`}
-                    >
-                      <Star className="h-2.5 w-2.5" />
-                      Default for {selected.category}
-                    </span>
-                  )}
-                </p>
               </div>
 
               {/* One primary, one secondary, one overflow. Four buttons of
@@ -2219,11 +2225,42 @@ function BlueprintsTab(props: {
               </div>
             </div>
 
-            {/* Labels belong with the header: they are applied to the project
-                alongside everything else, not a separate setting. No rule and
-                no uppercase eyebrow over them - one row of chips is legible as
-                labels without being announced. */}
-            <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
+            {/* Trade, version, created date, the default flag and the labels,
+             * all on one line, spanning the whole card.
+             *
+             * Spanning is the point. Inside the title column this row shares
+             * its width with the action buttons, and at 1280px that is narrow
+             * enough that two labels and the Add trigger wrap to a third line -
+             * which is exactly the height this card was rewritten to give back.
+             * Below the buttons it has the full measure and stays one line.
+             *
+             * The labels used to own a row of their own with a rule above it,
+             * and they are the same class of fact as the trade: what this
+             * blueprint is filed under, not something you work on here. The
+             * section count and the apply count are deliberately absent - both
+             * are stated in full a few pixels below, at the head of the card
+             * that acts on them. The version is the spec's audit half: the
+             * bundle is copied on apply, so this number is what lets a project
+             * say which shape of the blueprint made it.
+             *
+             * A div rather than the p this used to be, because LabelPicker is a
+             * flex container and cannot live inside a paragraph. */}
+            <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+              <span>{selected.category ?? GENERAL_CATEGORY}</span>
+              <span aria-hidden>·</span>
+              <span>v{selected.version}</span>
+              <span aria-hidden>·</span>
+              <span>Created {timeAgo(selected.created_at)}</span>
+              {selected.default_for_category && selected.category && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-bold text-primary"
+                  title={`New ${selected.category} projects start from this blueprint`}
+                >
+                  <Star className="h-2.5 w-2.5" />
+                  Default for {selected.category}
+                </span>
+              )}
+              <span aria-hidden className="mx-1 h-3 w-px shrink-0 bg-border/70" />
               {canManage ? (
                 <LabelPicker
                   value={selected.labels ?? []}
@@ -2235,11 +2272,71 @@ function BlueprintsTab(props: {
                   size="sm"
                 />
               ) : (selected.labels?.length ?? 0) === 0 ? (
-                <span className="text-xs text-muted-foreground">No labels.</span>
+                <span>No labels</span>
               ) : (
                 (selected.labels ?? []).map((l) => <LabelChip key={l} label={l} size="sm" />)
               )}
             </div>
+          </div>
+
+          {/*
+           * The same two questions, one at a time, below the width where they
+           * can be columns.
+           *
+           * Under 1280px the grid collapses to one column and the panes stack,
+           * which is what put "Applied to" a full section list below the fold:
+           * on a blueprint with a dozen sections, answering "which project is
+           * this on" meant scrolling down past every section and then back up
+           * to carry on editing. Both panes now share one slot and this switch
+           * chooses between them, so the trip is a click rather than a scroll.
+           *
+           * Hidden from 1280px up, where both are on screen at once and there
+           * is nothing to choose.
+           */}
+          {/* A pressed-state group rather than a tablist, deliberately. Above
+              `xl` both cards are on screen and this control is not, so there is
+              no width at which one of them is "the unselected tab" - calling
+              them tabs would announce a state that only half the layout has. */}
+          <div
+            role="group"
+            aria-label="Show contents or applied projects"
+            className="flex shrink-0 items-center gap-1 rounded-xl border border-border/60 bg-muted/40 p-1 xl:hidden"
+          >
+            {(
+              [
+                { key: "contents", label: "Contents", count: sections.length },
+                {
+                  key: "applied",
+                  label: "Applied to",
+                  count: applicationsAvailable ? selectedApplications.length : null,
+                },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                aria-pressed={pane === t.key}
+                onClick={() => setPane(t.key)}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
+                  pane === t.key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {t.label}
+                {t.count !== null && (
+                  <span
+                    className={cn(
+                      "tabular-nums",
+                      pane === t.key ? "text-muted-foreground" : "text-muted-foreground/70",
+                    )}
+                  >
+                    {t.count}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
 
           {/*
@@ -2259,8 +2356,17 @@ function BlueprintsTab(props: {
               first, because "which project did this land on" is unanswerable
               from "20 Charlcote Cr...". Written as explicit ranges rather than
               a base plus overrides so none of them has to outrank another in
-              the stylesheet. */}
-          <div className="grid min-h-0 flex-1 gap-4 [@media(min-width:1280px)_and_(max-width:1399px)]:grid-cols-[minmax(0,1fr)_16rem] [@media(min-width:1400px)_and_(max-width:1535px)]:grid-cols-[minmax(0,1fr)_20rem] [@media(min-width:1536px)]:grid-cols-[minmax(0,1fr)_22rem]">
+              the stylesheet.
+
+              `max-xl:min-h` is for the switched layout below them: without a
+              floor, flipping to an 'Applied to' that says "not applied to any
+              project yet" collapsed the row to two lines and took the rail and
+              everything under it up with it, so the switch itself jumped out
+              from under the pointer. 13rem and not more: the floor has to be
+              tall enough to hold a card with one line of text in it and short
+              enough that a 720px-tall window still fits the whole tab without
+              scrolling, which is the thing all of this is for. */}
+          <div className="grid min-h-0 max-xl:min-h-[13rem] flex-1 gap-4 [@media(min-width:1280px)_and_(max-width:1399px)]:grid-cols-[minmax(0,1fr)_16rem] [@media(min-width:1400px)_and_(max-width:1535px)]:grid-cols-[minmax(0,1fr)_20rem] [@media(min-width:1536px)]:grid-cols-[minmax(0,1fr)_22rem]">
             {/* Contents, and where they land.
              *
              * These were two cards. The upper one grouped every item by its
@@ -2270,7 +2376,14 @@ function BlueprintsTab(props: {
              * and the naming happens once, in the list you can actually
              * reorder. The full grouped picture still runs in the apply dialog,
              * at the moment it decides something. */}
-            <div className={cn(SURFACE_CARD, "flex min-h-0 flex-col p-4 sm:p-5")}>
+            <div
+              className={cn(
+                SURFACE_CARD,
+                "flex min-h-0 flex-col p-4 sm:p-5",
+                // Only below `xl`, where the switch above is what is choosing.
+                pane !== "contents" && "max-xl:hidden",
+              )}
+            >
               {/* The count sits under the row rather than beside the heading.
                   Beside it, the heading block and the two buttons together
                   wanted more than this column has at 1280px, so the buttons
@@ -2486,7 +2599,12 @@ function BlueprintsTab(props: {
                 // The pane's scroller. A twenty-section blueprint scrolls here,
                 // inside its own column, instead of scrolling the page and
                 // taking the header and the usage list with it.
-                <ul className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                /* `max-h` for every layout except the pinned one, where the
+                   flex chain has already measured the height and a cap would
+                   only fight it. Without it a thirty-section blueprint on a
+                   narrow window is thirty rows of page scroll again, which is
+                   the thing the switch above exists to stop. */
+                <ul className="mt-4 max-h-[46vh] min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 workspace:max-h-none">
                   {sections.map((r, idx) => {
                     const meta = KIND_META[r.kind];
                     const Icon = meta.icon;
@@ -2589,7 +2707,13 @@ function BlueprintsTab(props: {
              * became a 20rem column: the short title is the one that survives
              * the narrower measure, and it names the same thing.
              */}
-            <div className={cn(SURFACE_CARD, "flex min-h-0 flex-col p-4 sm:p-5")}>
+            <div
+              className={cn(
+                SURFACE_CARD,
+                "flex min-h-0 flex-col p-4 sm:p-5",
+                pane !== "applied" && "max-xl:hidden",
+              )}
+            >
               <div className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                 <h3 className="text-sm font-bold tracking-tight">Applied to</h3>
                 {/* The count lives with the list it counts. The blueprint's own
@@ -2624,7 +2748,7 @@ function BlueprintsTab(props: {
                    the screen it sat over page padding and hit nothing; now the
                    last row of the ledger ends where it begins, instead of
                    under it where it cannot be clicked. */
-                <ul className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 workspace:pb-12">
+                <ul className="mt-3 max-h-[46vh] min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 workspace:max-h-none workspace:pb-12">
                   {selectedApplications.map((a) => {
                     const total = Object.values(a.counts ?? {}).reduce((x, y) => x + y, 0);
                     return (
