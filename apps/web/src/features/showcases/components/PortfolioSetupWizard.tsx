@@ -15,7 +15,13 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { usePortfolioSiteDraft } from "@/features/showcases/site-draft";
 import type { PortfolioDetail } from "@/lib/portfolio.functions";
-import { HeroPickerDialog, SITE_STEPS, type StepCtx } from "./PortfolioSiteSteps";
+import {
+  HeroPickerDialog,
+  SITE_STEPS,
+  StepTrail,
+  siteProgress,
+  type StepCtx,
+} from "./PortfolioSiteSteps";
 import { PortfolioLivePreview } from "./PortfolioLivePreview";
 
 /**
@@ -32,6 +38,16 @@ import { PortfolioLivePreview } from "./PortfolioLivePreview";
  *   - Enter moves on, because the fastest path through a form is the keyboard;
  *   - every step past the third can be skipped, and the finish screen offers
  *     the skipped ones back rather than trapping anyone in a queue.
+ *
+ * The second pass over this screen was about air, not structure. The client's
+ * note on the first version was "improve the look and feel... we can make this
+ * set up page more spacious", and the crowding had three causes, all fixed
+ * here: the guided step list was a strip of eight tight pills that scrolled
+ * sideways, the question sat squashed into the top of the same card as the
+ * fields, and the whole thing was a white card on a white page with nothing
+ * separating them. So the trail is now a full-width numbered stepper, the
+ * question is a page-sized heading above the card, and the page sits on a
+ * tinted ground the card floats off.
  */
 export function PortfolioSetupWizard({
   portfolio,
@@ -70,7 +86,7 @@ export function PortfolioSetupWizard({
 
   const done = index >= SITE_STEPS.length;
   const step = done ? null : SITE_STEPS[index];
-  const percent = Math.round((Math.min(index, SITE_STEPS.length) / SITE_STEPS.length) * 100);
+  const progress = siteProgress(draft, portfolio);
 
   const goTo = (next: number) => {
     setIndex(next);
@@ -104,17 +120,23 @@ export function PortfolioSetupWizard({
   );
 
   return (
-    <div className="px-4 pb-24 pt-6 sm:px-8 sm:pt-8">
+    // A tinted ground under the whole build. The card was white on a white
+    // page before, which is what made a screen with plenty of padding still
+    // read as one undifferentiated sheet.
+    <div className="min-h-full bg-muted/30 px-4 pb-32 pt-6 sm:px-8 sm:pt-10 lg:px-12">
       <div ref={topRef} className="mx-auto max-w-6xl scroll-mt-6">
         {/* ---- Header: where am I, and how do I get out ---- */}
-        <div className="flex flex-wrap items-center gap-3">
+        <header className="flex flex-wrap items-start gap-x-6 gap-y-4">
           <div className="min-w-0 flex-1">
             <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
               Build your site
             </p>
-            <h1 className="mt-1 font-display text-2xl font-bold leading-none tracking-[-0.8px] text-foreground sm:text-3xl">
+            <h1 className="mt-2 font-display text-[32px] font-bold leading-none tracking-[-1.1px] text-foreground sm:text-[38.4px] sm:tracking-[-1.344px]">
               {done ? "You're all set" : `Step ${index + 1} of ${SITE_STEPS.length}`}
             </h1>
+            <p className="mt-3 font-manrope text-sm text-muted-foreground">
+              {progress.done} of {progress.total} sections filled in. Everything saves as you go.
+            </p>
           </div>
           <div className="flex items-center gap-3">
             {(dirty || saving || everSaved) && (
@@ -139,54 +161,32 @@ export function PortfolioSetupWizard({
                 )}
               </span>
             )}
-            <Button type="button" variant="ghost" onClick={() => void exit()} disabled={saving}>
+            <Button
+              type="button"
+              variant="outline"
+              className="bg-card"
+              onClick={() => void exit()}
+              disabled={saving}
+            >
               <X className="mr-1.5 h-4 w-4" /> Save and exit
             </Button>
           </div>
-        </div>
+        </header>
 
-        {/* ---- Progress. The dots double as navigation once visited. ---- */}
-        <div className="mt-5">
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-500"
-              style={{ width: `${Math.max(percent, 4)}%` }}
-            />
-          </div>
-          <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
-            {SITE_STEPS.map((s, i) => {
-              const reachable = i <= furthest;
-              const active = i === index;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  disabled={!reachable}
-                  onClick={() => void commitAnd(i)}
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition",
-                    active
-                      ? "border-primary bg-primary/10 text-primary"
-                      : s.isDone(draft, portfolio)
-                        ? "border-border text-muted-foreground hover:text-foreground"
-                        : "border-dashed border-border text-muted-foreground",
-                    !reachable && "opacity-40",
-                  )}
-                >
-                  {s.isDone(draft, portfolio) && !active ? (
-                    <Check className="h-3 w-3" />
-                  ) : (
-                    <s.icon className="h-3 w-3" />
-                  )}
-                  {s.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <StepTrail
+          index={index}
+          furthest={furthest}
+          draft={draft}
+          portfolio={portfolio}
+          onJump={(i) => void commitAnd(i)}
+        />
 
         {/* ---- The step itself ---- */}
-        <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+        {/* The preview waits for xl. It used to appear at lg, where it left the
+            form a 270px gutter and put a truncated site address next to a
+            thumbnail nobody asked for yet. Below xl the questions get the whole
+            width instead, which is the point of this pass. */}
+        <div className="mt-10 grid gap-10 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px] 2xl:gap-12">
           <div className="min-w-0">
             {step ? (
               <StepScreen
@@ -218,11 +218,14 @@ export function PortfolioSetupWizard({
           {/* Hidden on small screens on purpose: the point of this rewrite is to
               stop making people scroll, and on a phone the preview would sit a
               screen and a half below the field it is previewing. */}
-          <div className="hidden lg:block">
+          <div className="hidden xl:block">
             <div className="sticky top-24">
-              <p className="mb-2 text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
-                Live preview
-              </p>
+              <div className="mb-3 flex items-baseline justify-between gap-3">
+                <p className="text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
+                  Live preview
+                </p>
+                <span className="text-[11px] text-muted-foreground">Updates as you type</span>
+              </div>
               <PortfolioLivePreview
                 draft={draft}
                 heroPreview={site.heroPreview}
@@ -230,6 +233,7 @@ export function PortfolioSetupWizard({
                 projectCount={projectCount}
                 googleRating={portfolio.google_rating}
                 googleReviewCount={portfolio.google_review_count}
+                className="shadow-sm"
               />
             </div>
           </div>
@@ -269,25 +273,30 @@ function StepScreen({
         onNext();
       }}
     >
-      <div className="rounded-2xl border border-border bg-card p-6 sm:p-8">
-        <div className="flex items-start gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-            <step.icon className="h-5 w-5" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="text-balance font-display text-xl font-bold leading-tight tracking-tight text-foreground sm:text-2xl">
-              {step.question}
-            </h2>
-            <p className="mt-1.5 text-pretty text-sm text-muted-foreground">{step.hint}</p>
-          </div>
+      {/* The question owns the page rather than a strip inside the card. That
+          is most of what "more spacious" means here: asked at heading size,
+          with the card below holding nothing but the answer. */}
+      <div className="flex items-start gap-4">
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
+          <step.icon className="h-6 w-6" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-balance font-display text-[28px] font-bold leading-[1.05] tracking-[-0.8px] text-foreground sm:text-[34px]">
+            {step.question}
+          </h2>
+          <p className="mt-2.5 max-w-xl text-pretty text-sm text-muted-foreground sm:text-base">
+            {step.hint}
+          </p>
         </div>
+      </div>
 
-        <div className="mt-7 space-y-6">
+      <div className="mt-7 rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-9">
+        <div className="space-y-8">
           <Fields ctx={ctx} />
         </div>
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center gap-3">
+      <div className="mt-7 flex flex-wrap items-center gap-3">
         {onBack && (
           <Button type="button" variant="ghost" onClick={onBack} disabled={saving}>
             <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
@@ -299,7 +308,7 @@ function StepScreen({
               Skip for now
             </Button>
           )}
-          <Button type="submit" size="lg" disabled={saving}>
+          <Button type="submit" size="lg" className="h-12 px-8" disabled={saving}>
             {saving ? (
               <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
             ) : (
@@ -310,7 +319,7 @@ function StepScreen({
         </div>
       </div>
 
-      <p className="mt-3 text-right text-[11px] text-muted-foreground">
+      <p className="mt-3.5 text-right text-[11px] text-muted-foreground">
         Saved automatically as you go.
         {step.enterAdvances && " Press Enter to continue."}
       </p>
@@ -351,20 +360,20 @@ function FinishScreen({
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-6 text-center sm:p-10">
-      <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary">
-        <PartyPopper className="h-7 w-7" />
+    <div className="rounded-3xl border border-border bg-card p-8 text-center shadow-sm sm:p-12">
+      <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-primary/10 text-primary">
+        <PartyPopper className="h-8 w-8" />
       </span>
-      <h2 className="mt-4 text-balance font-display text-2xl font-bold tracking-tight text-foreground">
+      <h2 className="mt-6 text-balance font-display text-[30px] font-bold leading-none tracking-[-0.9px] text-foreground sm:text-[34px]">
         Your site is built
       </h2>
-      <p className="mx-auto mt-2 max-w-md text-pretty text-sm text-muted-foreground">
+      <p className="mx-auto mt-3 max-w-md text-pretty text-sm text-muted-foreground sm:text-base">
         {published
           ? "It's live. Send the link to your next prospect."
           : "Publish it to get a shareable link, then add the projects that fill it."}
       </p>
 
-      <div className="mx-auto mt-6 flex max-w-md items-center gap-2 rounded-xl border border-border bg-muted/40 p-2 pl-4">
+      <div className="mx-auto mt-8 flex max-w-md items-center gap-2 rounded-xl border border-border bg-muted/40 p-2 pl-4">
         <span className="min-w-0 flex-1 truncate text-left text-sm font-bold text-foreground">
           {siteUrl}
         </span>
@@ -373,9 +382,15 @@ function FinishScreen({
         </Button>
       </div>
 
-      <div className="mt-6 flex flex-wrap justify-center gap-2">
+      <div className="mt-7 flex flex-wrap justify-center gap-3">
         {!published ? (
-          <Button type="button" size="lg" disabled={publishing} onClick={() => onPublish(true)}>
+          <Button
+            type="button"
+            size="lg"
+            className="h-12 px-8"
+            disabled={publishing}
+            onClick={() => onPublish(true)}
+          >
             {publishing ? (
               <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
             ) : (
@@ -384,32 +399,38 @@ function FinishScreen({
             Publish my site
           </Button>
         ) : (
-          <Button type="button" size="lg" asChild>
+          <Button type="button" size="lg" className="h-12 px-8" asChild>
             <a href={siteUrl} target="_blank" rel="noreferrer">
               <ExternalLink className="mr-1.5 h-4 w-4" /> View my site
             </a>
           </Button>
         )}
-        <Button type="button" size="lg" variant="outline" onClick={onGoToProjects}>
+        <Button
+          type="button"
+          size="lg"
+          variant="outline"
+          className="h-12 px-8"
+          onClick={onGoToProjects}
+        >
           <Layers className="mr-1.5 h-4 w-4" /> Add projects
         </Button>
       </div>
 
       {missing.length > 0 && (
-        <div className="mx-auto mt-8 max-w-md rounded-xl border border-dashed border-border p-4 text-left">
+        <div className="mx-auto mt-10 max-w-md rounded-2xl border border-dashed border-border p-5 text-left">
           <p className="text-xs font-bold text-foreground">
             {missing.length === 1 ? "One thing left" : `${missing.length} things left`}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Skipped, not lost. Each one makes the site read better to a prospect.
           </p>
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          <div className="mt-4 flex flex-wrap gap-2">
             {missing.map((m) => (
               <button
                 key={m.id}
                 type="button"
                 onClick={() => onJump(m.id)}
-                className="rounded-full border border-dashed border-border px-3 py-1.5 text-xs font-bold text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
+                className="rounded-full border border-dashed border-border px-3.5 py-2 text-xs font-bold text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
               >
                 {m.label}
               </button>
@@ -421,7 +442,7 @@ function FinishScreen({
       <button
         type="button"
         onClick={onEdit}
-        className="mt-8 text-xs font-bold text-muted-foreground underline-offset-4 hover:underline"
+        className="mt-9 text-xs font-bold text-muted-foreground underline-offset-4 hover:underline"
       >
         Open the full editor instead
       </button>

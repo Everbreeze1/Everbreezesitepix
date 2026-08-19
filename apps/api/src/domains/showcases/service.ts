@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { sanitizeCaption } from "@sitepix/shared";
+import { humanizeServiceType, sanitizeCaption } from "@sitepix/shared";
 import type { AuthedContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { signPhotoUrls } from "../../lib/photo-urls";
@@ -289,7 +289,9 @@ export async function listShowcasesService(
       created_at: r.created_at,
       updated_at: r.updated_at,
       slug: r.slug ?? null,
-      service_type: r.service_type ?? null,
+      // Same formatting the public grid applies, so the builder's own list
+      // never shows a badge the live site would print differently.
+      service_type: humanizeServiceType(r.service_type) || null,
       city: r.city ?? null,
       state: r.state ?? null,
       on_site: r.on_site ?? true,
@@ -336,7 +338,10 @@ export async function getShowcaseService(
       : null,
     sections,
     slug: row.slug ?? null,
-    service_type: row.service_type ?? null,
+    // The editor loads this straight into its Service type field, so handing
+    // back the formatted value is also how an old row heals: open the project,
+    // save it, and the stored value stops being a slug.
+    service_type: humanizeServiceType(row.service_type) || null,
     products_used: row.products_used ?? [],
     summary: row.summary ?? null,
     city: row.city ?? null,
@@ -449,7 +454,15 @@ export async function createShowcaseFromProjectService(
     throw Object.assign(new Error("This project has no photos yet."), { status: 400 });
   }
 
-  const address = [project.street, project.city, project.state].filter(Boolean).join(", ");
+  // Town and state, and deliberately not `project.street`.
+  //
+  // A showcase is a public web page. Both fields this feeds - the tagline
+  // under the project title and the summary under its card - used to be built
+  // from the full site address, which on a residential job is a customer's
+  // home address published to anyone with the link, by default, without the
+  // contractor being asked. The town is what makes the work findable; the
+  // house number only identifies a client.
+  const location = [project.city, project.state].filter(Boolean).join(", ");
   // "Completed" is the last time anyone photographed the job - the only date
   // the data actually supports. Photos are ordered ascending, so take the tail.
   const lastShot = [...photos].reverse().find((p) => p.taken_at || p.created_at);
@@ -486,7 +499,7 @@ export async function createShowcaseFromProjectService(
       team_id: teamId,
       created_by: ctx.userId,
       title: project.name,
-      tagline: address || null,
+      tagline: location || null,
       // `featured` bleeds each section's lead photo edge to edge. That is
       // striking once or twice and relentless four times over, so it is only
       // the default for short showcases.
@@ -503,7 +516,7 @@ export async function createShowcaseFromProjectService(
       // Denormalised from the project on purpose: a published portfolio has to
       // keep rendering (and keep its map pin) after the project is deleted.
       slug: await nextShowcaseSlug(ctx.supabase, teamId, project.name ?? "project"),
-      summary: address ? `${project.name} - ${address}` : null,
+      summary: location ? `${project.name} - ${location}` : null,
       // A project's first tag is how teams already label the trade ("Roofing",
       // "Kitchen"), so it is the best available guess at a service type. The
       // user can correct it in the builder; guessing beats an empty facet that

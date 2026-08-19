@@ -186,3 +186,45 @@ export function assignmentPatch(
     assigned_by: assigneeId ? actorId : null,
   };
 }
+
+/* ---------------------------------------------------------------- ceremony */
+
+export interface OverrideConfirmCopy {
+  title: string;
+  description: string;
+  confirmText: string;
+}
+
+/**
+ * The sentence shown before one person closes another person's work.
+ *
+ * `completionRights` decides *whether* the ceremony is owed; this decides what
+ * it says. It lives here for the same reason the rule does: the complaint that
+ * reopened this was that the warning appeared on the status button and not in
+ * the edit dialog, so a manager could close a tech's task silently just by
+ * taking the long way round. One helper means a new completion path either uses
+ * the shared wording or is obviously missing it.
+ *
+ * `detail` is for what is true of one surface and not the others (a checklist
+ * seals a snapshot, a photo task closes one picture out of twelve); the first
+ * two sentences are identical everywhere.
+ */
+export function overrideConfirm(input: {
+  /** The thing being closed, quoted back to the user. */
+  what: string;
+  /** Who it belongs to, already resolved to a name. */
+  who: string;
+  detail?: string | null;
+  confirmText?: string;
+}): OverrideConfirmCopy {
+  const who = input.who.trim() || "the assignee";
+  const detail = input.detail?.trim();
+  return {
+    title: `Complete this for ${who}?`,
+    description:
+      `“${input.what}” is assigned to ${who}. You can close it, but the record will show ` +
+      `you closed it, not ${who}.` +
+      (detail ? ` ${detail}` : ""),
+    confirmText: input.confirmText ?? "Complete anyway",
+  };
+}

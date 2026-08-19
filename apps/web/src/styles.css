@@ -7,6 +7,18 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * "Wide and tall enough to run a pinned, multi-pane workspace."
+ *
+ * A width breakpoint alone is not the question a layout like the Templates
+ * blueprints tab is asking. Pinning three panes to the viewport needs room in
+ * both axes: below 1280px there is no width for a second detail column, and
+ * below 640px of height the panes would each be a hundred pixels of scrollbar.
+ * Outside this variant the cards simply stack and the page scrolls, which is
+ * the right answer on a phone and on a short window alike.
+ */
+@custom-variant workspace (@media (min-width: 1280px) and (min-height: 640px));
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

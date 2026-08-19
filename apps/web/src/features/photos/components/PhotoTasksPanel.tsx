@@ -17,9 +17,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useConfirm } from "@/hooks/use-confirm";
 import { useTeamMembers } from "@/hooks/use-team-members";
 import { useAssignableTeammates } from "@/hooks/use-assignable-teammates";
-import { completionRights } from "@/lib/assignment";
+import { completionRights, overrideConfirm } from "@/lib/assignment";
 import {
   TASK_PHOTO_ITEMS_TABLE,
   TASK_PHOTO_ITEM_COLUMNS,
@@ -111,6 +112,7 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
   /** Task id whose "what was done" note is being edited on this photo. */
   const [noteFor, setNoteFor] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
+  const confirm = useConfirm();
 
   /*
    * The whole crew, not only the people who have already touched this project.
@@ -234,6 +236,13 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
     setAssignee("");
   };
 
+  const taskAssigneeName = (t: Task) =>
+    t.assignee_user_id
+      ? (contribById.get(t.assignee_user_id)?.fullName ??
+        contribById.get(t.assignee_user_id)?.email ??
+        "the assignee")
+      : (t.assignee_email ?? "the assignee");
+
   const taskRights = (t: Task) =>
     completionRights(
       { assignedTo: t.assignee_user_id, assignedBy: t.assigned_by },
@@ -275,6 +284,17 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
       if (!rights.canComplete) {
         toast.error(rights.reason ?? "You can't mark this task done.");
         return;
+      }
+      if (rights.isOverride) {
+        const ok = await confirm(
+          overrideConfirm({
+            what: t.title,
+            who: taskAssigneeName(t),
+            detail: "This photo will be recorded as done by you.",
+            confirmText: "Mark photo done",
+          }),
+        );
+        if (!ok) return;
       }
     }
 
@@ -337,6 +357,16 @@ export function PhotoTasksPanel({ photoId, projectId, currentUserId, contributor
       if (!rights.canComplete) {
         toast.error(rights.reason ?? "You can't mark this task done.");
         return;
+      }
+      if (rights.isOverride) {
+        const ok = await confirm(
+          overrideConfirm({
+            what: t.title,
+            who: taskAssigneeName(t),
+            confirmText: "Mark done",
+          }),
+        );
+        if (!ok) return;
       }
     }
 

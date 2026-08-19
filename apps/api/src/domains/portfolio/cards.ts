@@ -1,3 +1,4 @@
+import { humanizeServiceType } from "@sitepix/shared";
 import { CARD_THUMB_WIDTH, resolvePhotoUrls } from "../showcases/service";
 
 /**
@@ -115,7 +116,12 @@ export async function loadShowcaseCards(
       slug: r.slug ?? r.id,
       title: r.title,
       summary: r.summary,
-      service_type: r.service_type,
+      // Formatted here rather than in each of the four places that print it.
+      // This is also what makes the fix retroactive: rows written before the
+      // write path formatted anything are still stored as "led-lighting", and
+      // every facet, badge and "more of this work" match downstream is built
+      // from this value.
+      service_type: humanizeServiceType(r.service_type) || null,
       products_used: r.products_used ?? [],
       city: r.city,
       state: r.state,

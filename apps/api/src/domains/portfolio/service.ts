@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { humanizeServiceType, normalizeExternalUrl } from "@sitepix/shared";
 import type { AuthedContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { requireTeamPlan } from "../../lib/team-plan";
@@ -278,6 +279,23 @@ const optionalText = (max: number) =>
     .optional()
     .transform((v) => (v == null ? v : v.trim() === "" ? null : v.trim()));
 
+/**
+ * A link that will actually work in an `href`, or a clear refusal.
+ *
+ * Clearing the field is always allowed - an empty CTA link means "dial my
+ * phone number", which is a real answer. What is refused is text that can
+ * never resolve, because storing it produces a dead button rather than an
+ * error anybody sees.
+ */
+function requireLinkOrNull(raw: string | null, label: string): string | null {
+  if (raw == null || raw.trim() === "") return null;
+  const url = normalizeExternalUrl(raw);
+  if (!url) {
+    badRequest(`${label} needs to be a web address, like https://acmeroofing.com/quote`);
+  }
+  return url;
+}
+
 /** Deduped, trimmed, empties dropped - these render as filter chips. */
 const tagList = (max: number) =>
   z
@@ -347,9 +365,17 @@ export async function updatePortfolioService(
   if (data.phone !== undefined) patch.phone = data.phone;
   if (data.email !== undefined) patch.email = data.email;
   if (data.address !== undefined) patch.address = data.address;
-  if (data.websiteUrl !== undefined) patch.website_url = data.websiteUrl;
+  // Both of these end up in an `href` on a public page. A value with no scheme
+  // resolves against the current URL, so "acmeroofing.com" used to store fine
+  // and render a button that went nowhere - the failure only visible on the
+  // live site, which is the one place the owner does not test.
+  if (data.websiteUrl !== undefined) {
+    patch.website_url = requireLinkOrNull(data.websiteUrl, "Your main website");
+  }
   if (data.ctaLabel !== undefined) patch.cta_label = data.ctaLabel;
-  if (data.ctaUrl !== undefined) patch.cta_url = data.ctaUrl;
+  if (data.ctaUrl !== undefined) {
+    patch.cta_url = requireLinkOrNull(data.ctaUrl, "The button link");
+  }
   if (data.showMap !== undefined) patch.show_map = data.showMap;
   if (data.showReviews !== undefined) patch.show_reviews = data.showReviews;
   if (data.published !== undefined) patch.published = data.published;
@@ -490,7 +516,12 @@ export async function updateShowcaseSiteService(
       patch.slug = clean;
     }
   }
-  if (data.serviceType !== undefined) patch.service_type = data.serviceType;
+  // Stored the way it will be printed. The badge renders this verbatim on the
+  // grid, the project page and the carousel, and the value is often a project
+  // tag ("led-lighting") that nobody chose as public copy.
+  if (data.serviceType !== undefined) {
+    patch.service_type = humanizeServiceType(data.serviceType) || null;
+  }
   if (data.productsUsed !== undefined) patch.products_used = data.productsUsed;
   if (data.summary !== undefined) patch.summary = data.summary;
   if (data.city !== undefined) patch.city = data.city;

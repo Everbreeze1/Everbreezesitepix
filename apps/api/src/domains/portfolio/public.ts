@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeExternalUrl } from "@sitepix/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import {
   loadSections,
@@ -134,9 +135,12 @@ function toSite(row: any, heroImageUrl: string | null): PublicPortfolioSite {
     phone: row.phone ?? null,
     email: row.email ?? null,
     address: row.address ?? null,
-    website_url: row.website_url ?? null,
+    // Repaired on the way out, not just on the way in: a site saved before the
+    // write path checked these is live right now with "acmeroofing.com" in its
+    // header button, and that link resolves against /p/<slug> and 404s.
+    website_url: normalizeExternalUrl(row.website_url),
     cta_label: row.cta_label ?? null,
-    cta_url: row.cta_url ?? null,
+    cta_url: normalizeExternalUrl(row.cta_url),
     show_map: row.show_map ?? true,
     show_reviews: row.show_reviews ?? true,
     seo_title: row.seo_title ?? null,
