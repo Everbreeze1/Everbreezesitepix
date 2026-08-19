@@ -199,7 +199,15 @@ const PLACEHOLDERS: { token: string; label: string; group: string }[] = [
   { token: "prepared_by", label: "Prepared by", group: "General" },
   // Labels match apps/api/.../pages.ts PLACEHOLDER_LABELS: the same field is
   // named to the author here and to the reader in the document itself.
-  { token: "prepared_by_title", label: "Job title", group: "General" },
+  //
+  // The token has to match too. This chip used to insert a merge tag named
+  // prepared_by_title under a label reading "Job title", so the raw template
+  // disagreed with the panel that wrote it, and anyone reading the HTML
+  // afterwards had to work out whether the two were the same field. The old
+  // spelling still resolves - see PLACEHOLDER_LABELS in apps/api - so every
+  // template already written keeps working; it is simply not what a new one
+  // gets any more.
+  { token: "job_title", label: "Job title", group: "General" },
   { token: "weather", label: "Weather", group: "General" },
   { token: "company_name", label: "Company name", group: "Company" },
   { token: "company_address", label: "Company address", group: "Company" },
@@ -214,7 +222,7 @@ const RELEVANT_BY_STYLE: Record<string, string[]> = {
     "project_address",
     "date",
     "prepared_by",
-    "prepared_by_title",
+    "job_title",
     "company_name",
   ],
   letter: [
@@ -224,7 +232,7 @@ const RELEVANT_BY_STYLE: Record<string, string[]> = {
     "project_address",
     "project_name",
     "prepared_by",
-    "prepared_by_title",
+    "job_title",
     "company_name",
   ],
   checklist: ["project_name", "date", "prepared_by"],
@@ -235,7 +243,7 @@ const RELEVANT_BY_STYLE: Record<string, string[]> = {
     "date",
     "weather",
     "prepared_by",
-    "prepared_by_title",
+    "job_title",
     "client_name",
   ],
   sitelog: [
@@ -245,7 +253,7 @@ const RELEVANT_BY_STYLE: Record<string, string[]> = {
     "date",
     "weather",
     "prepared_by",
-    "prepared_by_title",
+    "job_title",
     "company_name",
   ],
 };
@@ -350,7 +358,7 @@ const STYLE_PRESETS: {
 <table><tbody><tr><th><p>Item</p></th><th><p>Detail</p></th><th><p>By when</p></th></tr><tr><td><p>[Item]</p></td><td><p>[Detail]</p></td><td><p>[Date]</p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
 <p>Please come back to us with anything you need from our side.</p>
 <p>Sincerely,</p>
-<p>{{prepared_by}}<br>{{prepared_by_title}}<br>{{company_name}}</p>`,
+<p>{{prepared_by}}<br>{{job_title}}<br>{{company_name}}</p>`,
   },
   {
     key: "checklist",
@@ -368,7 +376,7 @@ const STYLE_PRESETS: {
 <h2>Still open</h2>
 <table><tbody><tr><th><p>Item</p></th><th><p>Why it is open</p></th><th><p>Owner</p></th><th><p>By when</p></th></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
 <hr>
-<p><span style="color: rgb(120,128,142)">Signed {{prepared_by}}, {{prepared_by_title}} &nbsp;·&nbsp; {{date}}</span></p>`,
+<p><span style="color: rgb(120,128,142)">Signed {{prepared_by}}, {{job_title}} &nbsp;·&nbsp; {{date}}</span></p>`,
   },
   {
     key: "memo",
@@ -376,7 +384,7 @@ const STYLE_PRESETS: {
     icon: FileText,
     description: "Short internal note with a header block and an action list.",
     html: `<h1>Memorandum</h1>
-<table><tbody><tr><th><p>To</p></th><td><p>{{client_name}}</p></td></tr><tr><th><p>From</p></th><td><p>{{prepared_by}}, {{prepared_by_title}}</p></td></tr><tr><th><p>Date</p></th><td><p>{{date}}</p></td></tr><tr><th><p>Re</p></th><td><p>{{project_name}}</p></td></tr></tbody></table>
+<table><tbody><tr><th><p>To</p></th><td><p>{{client_name}}</p></td></tr><tr><th><p>From</p></th><td><p>{{prepared_by}}, {{job_title}}</p></td></tr><tr><th><p>Date</p></th><td><p>{{date}}</p></td></tr><tr><th><p>Re</p></th><td><p>{{project_name}}</p></td></tr></tbody></table>
 <hr>
 <p><em><span style="color: rgb(140,148,162)">Lead with the decision or the ask. Detail underneath it.</span></em></p>
 <p>[The point of this memo]</p>
@@ -395,7 +403,7 @@ const STYLE_PRESETS: {
 <hr>
 <table><tbody><tr><th><p>Project #</p></th><td><p>{{project_number}}</p></td></tr><tr><th><p>Weather</p></th><td><p>{{weather}}</p></td></tr><tr><th><p>Purpose</p></th><td><p>[Progress / handover / snag review]</p></td></tr></tbody></table>
 <h2>Attendees</h2>
-<table><tbody><tr><th><p>Name</p></th><th><p>Role</p></th><th><p>Company</p></th></tr><tr><td><p>{{prepared_by}}</p></td><td><p>{{prepared_by_title}}</p></td><td><p>{{company_name}}</p></td></tr><tr><td><p>{{client_name}}</p></td><td><p>[Role]</p></td><td><p>[Company]</p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
+<table><tbody><tr><th><p>Name</p></th><th><p>Role</p></th><th><p>Company</p></th></tr><tr><td><p>{{prepared_by}}</p></td><td><p>{{job_title}}</p></td><td><p>{{company_name}}</p></td></tr><tr><td><p>{{client_name}}</p></td><td><p>[Role]</p></td><td><p>[Company]</p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table>
 <h2>Area 1</h2>
 <p><em><span style="color: rgb(140,148,162)">Name the area, then what you saw and whether it is on track.</span></em></p>
 <table><tbody><tr><th><p>Area</p></th><td><p>[Area]</p></td></tr><tr><th><p>Observation</p></th><td><p>[What was seen]</p></td></tr><tr><th><p>Status</p></th><td><p>[On track / delayed / needs attention]</p></td></tr></tbody></table>
@@ -434,7 +442,7 @@ const STYLE_PRESETS: {
 <h2>Plan for tomorrow</h2>
 <table><tbody><tr><th><p>Priority</p></th><th><p>Trade responsible</p></th></tr><tr><td><p>[Task]</p></td><td><p>[Trade]</p></td></tr><tr><td><p></p></td><td><p></p></td></tr></tbody></table>
 <hr>
-<p><span style="color: rgb(120,128,142)">Signed {{prepared_by}}, {{prepared_by_title}} &nbsp;·&nbsp; {{date}}</span></p>`,
+<p><span style="color: rgb(120,128,142)">Signed {{prepared_by}}, {{job_title}} &nbsp;·&nbsp; {{date}}</span></p>`,
   },
 ];
 
@@ -481,6 +489,7 @@ const SAMPLE: Record<string, string> = {
     day: "numeric",
   }),
   prepared_by: "Alex Morgan",
+  job_title: "Project Manager",
   prepared_by_title: "Project Manager",
   weather: "Sunny, 72°F",
   company_name: "Everbreeze Construction",
@@ -517,6 +526,18 @@ function escapeAttr(s: string) {
  * identical "Company name" chips inserting different tokens.
  */
 const SNIPPET_ALIASES: Record<string, string> = { company: "Company name" };
+
+/**
+ * Tokens the chips no longer insert but templates in the wild still contain.
+ *
+ * `prepared_by_title` is the old spelling of `job_title`: it is all over the
+ * seed migrations and in any template a team wrote before the two names were
+ * brought together. The resolver still fills it, so the panel and the preview
+ * have to name it too - otherwise the one place it ever shows up is as its own
+ * lowercased token text, which is exactly the "unfriendly info" the rename was
+ * meant to remove.
+ */
+const LEGACY_TOKEN_LABELS: Record<string, string> = { prepared_by_title: "Job title" };
 
 /** Mirrors `fieldLabel` in apps/api/.../pages.ts, for text the server never sees. */
 function snippetLabel(token: string): string {
@@ -562,7 +583,7 @@ const LABEL_BY_TOKEN: Record<string, string> = PLACEHOLDERS.reduce(
     acc[p.token] = p.label;
     return acc;
   },
-  {} as Record<string, string>,
+  { ...LEGACY_TOKEN_LABELS } as Record<string, string>,
 );
 
 export const placeholderChipsKey = new PluginKey("placeholder-chips");

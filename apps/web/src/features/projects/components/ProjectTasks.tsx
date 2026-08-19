@@ -1107,182 +1107,202 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
     const assigneeBlocked = m?.emailConfirmed === false;
 
     return (
-      <li key={t.id}>
-        <div
-          onClick={() => setEditing(t)}
-          className={`group flex cursor-pointer items-center justify-between gap-4 rounded-2xl border-[0.8px] p-4 transition ${
-            isSelected
-              ? "border-primary/50 bg-primary/[0.06]"
-              : done
-                ? "border-[#34D399]/30 bg-[#34D399]/[0.06]"
-                : "border-border bg-card/70 hover:bg-card"
-          }`}
-        >
-          <div className="flex min-w-0 items-center gap-3">
-            {/* Hidden until it is useful: a checkbox column on every row all the
-                time turns a punch list into a spreadsheet. It appears on hover,
-                and stays put once anything is selected. */}
-            <span
-              onClick={(e) => e.stopPropagation()}
-              className={`shrink-0 transition ${
-                isSelected || selected.size > 0
-                  ? "opacity-100"
-                  : "opacity-0 group-hover:opacity-100"
-              }`}
-            >
-              <Checkbox
-                checked={isSelected}
-                onCheckedChange={() => toggleSelected(t.id)}
-                aria-label={`Select ${t.title}`}
-              />
-            </span>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                void cycleStatus(t);
-              }}
-              aria-label={`Status: ${STATUS_META[t.status].label} - click to advance`}
-              title={`Status: ${STATUS_META[t.status].label} - click to advance`}
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[0.8px] transition ${
-                done
-                  ? "border-[#34D399] bg-[#34D399] text-sidebar"
-                  : t.status === "in_progress"
-                    ? "border-[#F59E0B] bg-[#F59E0B]/15"
-                    : "border-border bg-card"
-              }`}
-            >
-              {done && <CheckCircle2 className="h-4 w-4" strokeWidth={2.5} />}
-            </button>
-            <div className="min-w-0">
-              <p
-                className={`font-manrope truncate text-sm font-extrabold text-foreground ${done ? "line-through opacity-60" : ""}`}
+      <li key={t.id} className="group">
+        {/*
+          A selection gutter OUTSIDE the card, rather than a checkbox inside it.
+
+          The first cut put the checkbox immediately left of the status circle,
+          and the two read as a pair of near-identical round controls sitting
+          together - one that selects the row and one that advances the job.
+          Tapping the wrong one silently moves a task to In progress, which is a
+          bad thing to learn by accident on a punch list.
+
+          The gutter always occupies its width, even when the checkbox is
+          invisible. Collapsing it would make every row jump sideways on hover,
+          and a list that twitches under the cursor is worse than a 28px indent
+          nobody notices.
+        */}
+        {/* `items-center` rather than a hardcoded gutter height: a row grows
+            with an assignee line, a photo-progress bar or a priority chip, and
+            a fixed height would leave the checkbox drifting away from the card
+            it selects. */}
+        <div className="flex items-center gap-2">
+          <span
+            onClick={(e) => e.stopPropagation()}
+            className={`flex w-5 shrink-0 items-center justify-center transition ${
+              isSelected || selected.size > 0
+                ? "opacity-100"
+                : "opacity-0 focus-within:opacity-100 group-hover:opacity-100"
+            }`}
+          >
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => toggleSelected(t.id)}
+              aria-label={`Select ${t.title}`}
+            />
+          </span>
+          <div
+            onClick={() => setEditing(t)}
+            className={`flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-4 rounded-2xl border-[0.8px] p-4 transition ${
+              isSelected
+                ? "border-primary/50 bg-primary/[0.06]"
+                : done
+                  ? "border-[#34D399]/30 bg-[#34D399]/[0.06]"
+                  : "border-border bg-card/70 hover:bg-card"
+            }`}
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void cycleStatus(t);
+                }}
+                aria-label={`Status: ${STATUS_META[t.status].label} - click to advance`}
+                title={`Status: ${STATUS_META[t.status].label} - click to advance`}
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[0.8px] transition ${
+                  done
+                    ? "border-[#34D399] bg-[#34D399] text-sidebar"
+                    : t.status === "in_progress"
+                      ? "border-[#F59E0B] bg-[#F59E0B]/15"
+                      : "border-border bg-card"
+                }`}
               >
-                {t.title}
-              </p>
-              {/*
+                {done && <CheckCircle2 className="h-4 w-4" strokeWidth={2.5} />}
+              </button>
+              <div className="min-w-0">
+                <p
+                  className={`font-manrope truncate text-sm font-extrabold text-foreground ${done ? "line-through opacity-60" : ""}`}
+                >
+                  {t.title}
+                </p>
+                {/*
                 The line the client said was missing. A task raised against a
                 set of photos says how much of the set is handled, right where
                 the single "Completed" pill used to be the whole story.
               */}
-              {photoDriven && progress.total > 0 && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleExpanded(t.id);
-                  }}
-                  aria-expanded={isOpen}
-                  className="mt-1.5 flex items-center gap-2 font-manrope text-xs font-bold text-muted-foreground transition hover:text-foreground"
-                >
-                  <ListChecks className="h-3.5 w-3.5" />
-                  <span className="tabular-nums">{progress.label}</span>
-                  <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
-                    <span
-                      className="block h-full rounded-full bg-[#10B981] transition-all"
-                      style={{ width: `${progress.percent}%` }}
+                {photoDriven && progress.total > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleExpanded(t.id);
+                    }}
+                    aria-expanded={isOpen}
+                    className="mt-1.5 flex items-center gap-2 font-manrope text-xs font-bold text-muted-foreground transition hover:text-foreground"
+                  >
+                    <ListChecks className="h-3.5 w-3.5" />
+                    <span className="tabular-nums">{progress.label}</span>
+                    <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                      <span
+                        className="block h-full rounded-full bg-[#10B981] transition-all"
+                        style={{ width: `${progress.percent}%` }}
+                      />
+                    </span>
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
                     />
-                  </span>
-                  <ChevronDown
-                    className={`h-3.5 w-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                  />
-                </button>
-              )}
-              {/*
+                  </button>
+                )}
+                {/*
                 And the other half of it: what was actually done, not just that
                 something was. First note only on the row - the rest are one
                 click away in the breakdown.
               */}
-              {photoDriven && summary.done.length > 0 && !isOpen && (
-                <p className="mt-1 truncate text-[11px] leading-4 text-muted-foreground">
-                  {summary.done[0]}
-                  {summary.done.length > 1 && ` (+${summary.done.length - 1} more)`}
-                </p>
-              )}
-              {(assigneeName || t.priority !== "normal") && (
-                <div className="mt-1 flex items-center gap-3">
-                  {assigneeName && (
-                    <span className="inline-flex items-center gap-1.5 font-manrope text-xs font-bold text-muted-foreground">
-                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-sidebar text-[7px] font-bold text-sidebar-foreground">
-                        {assigneeInitials}
-                      </span>
-                      Assigned to {assigneeName}
-                      {/* The task the client found: assigned, and invisible to
+                {photoDriven && summary.done.length > 0 && !isOpen && (
+                  <p className="mt-1 truncate text-[11px] leading-4 text-muted-foreground">
+                    {summary.done[0]}
+                    {summary.done.length > 1 && ` (+${summary.done.length - 1} more)`}
+                  </p>
+                )}
+                {(assigneeName || t.priority !== "normal") && (
+                  <div className="mt-1 flex items-center gap-3">
+                    {assigneeName && (
+                      <span className="inline-flex items-center gap-1.5 font-manrope text-xs font-bold text-muted-foreground">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-sidebar text-[7px] font-bold text-sidebar-foreground">
+                          {assigneeInitials}
+                        </span>
+                        Assigned to {assigneeName}
+                        {/* The task the client found: assigned, and invisible to
                           its assignee because their account is not confirmed.
                           Said on the row, not only behind the dialog, because
                           the whole problem is that nothing about the list looked
                           wrong. */}
-                      {assigneeBlocked && (
-                        <span
-                          title={`${assigneeName} has not confirmed their email and cannot sign in yet`}
-                          className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-700 dark:text-amber-300"
-                        >
-                          <ShieldAlert className="h-2.5 w-2.5" />
-                          Cannot sign in
-                        </span>
-                      )}
-                    </span>
-                  )}
-                  {t.priority !== "normal" && (
-                    <Badge
-                      variant="secondary"
-                      className={`px-1.5 py-0 text-[10px] ${PRIORITY_META[t.priority].cls}`}
-                    >
-                      <Flag className="mr-1 h-2.5 w-2.5" />
-                      {PRIORITY_META[t.priority].label}
-                    </Badge>
-                  )}
-                </div>
-              )}
+                        {assigneeBlocked && (
+                          <span
+                            title={`${assigneeName} has not confirmed their email and cannot sign in yet`}
+                            className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-700 dark:text-amber-300"
+                          >
+                            <ShieldAlert className="h-2.5 w-2.5" />
+                            Cannot sign in
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    {t.priority !== "normal" && (
+                      <Badge
+                        variant="secondary"
+                        className={`px-1.5 py-0 text-[10px] ${PRIORITY_META[t.priority].cls}`}
+                      >
+                        <Flag className="mr-1 h-2.5 w-2.5" />
+                        {PRIORITY_META[t.priority].label}
+                      </Badge>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {done ? (
-              <span className="rounded-full bg-[#10B981] px-3 py-1.5 font-manrope text-[10px] font-extrabold text-white">
-                Completed
-              </span>
-            ) : (
-              <>
-                {/* Partial progress deserves its own pill. "3/12" beside a due
+            <div className="flex shrink-0 items-center gap-2">
+              {done ? (
+                <span className="rounded-full bg-[#10B981] px-3 py-1.5 font-manrope text-[10px] font-extrabold text-white">
+                  Completed
+                </span>
+              ) : (
+                <>
+                  {/* Partial progress deserves its own pill. "3/12" beside a due
                     date is the difference between a task nobody has touched and
                     one that is nearly finished, which the old row could not
                     tell apart. */}
-                {photoDriven && progress.done > 0 && (
-                  <span className="rounded-full border-[0.8px] border-[#10B981]/40 bg-[#10B981]/10 px-2.5 py-1.5 font-manrope text-[10px] font-extrabold tabular-nums text-[#10B981]">
-                    {progress.shortLabel}
-                  </span>
-                )}
-                {due && (
-                  <span
-                    className={`rounded-full px-3 py-1.5 font-manrope text-[10px] font-extrabold ${
-                      due.overdue ? "bg-red-500 text-white" : "bg-primary text-primary-foreground"
-                    }`}
-                  >
-                    {due.overdue ? `Overdue · ${due.label}` : due.label}
-                  </span>
-                )}
-              </>
-            )}
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation();
-                void removeTask(t);
-              }}
-              aria-label="Delete task"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+                  {photoDriven && progress.done > 0 && (
+                    <span className="rounded-full border-[0.8px] border-[#10B981]/40 bg-[#10B981]/10 px-2.5 py-1.5 font-manrope text-[10px] font-extrabold tabular-nums text-[#10B981]">
+                      {progress.shortLabel}
+                    </span>
+                  )}
+                  {due && (
+                    <span
+                      className={`rounded-full px-3 py-1.5 font-manrope text-[10px] font-extrabold ${
+                        due.overdue ? "bg-red-500 text-white" : "bg-primary text-primary-foreground"
+                      }`}
+                    >
+                      {due.overdue ? `Overdue · ${due.label}` : due.label}
+                    </span>
+                  )}
+                </>
+              )}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void removeTask(t);
+                }}
+                aria-label="Delete task"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* Opened in place rather than behind the dialog: a crew member working
-            down a punch list ticks photos off, they do not edit a record. */}
+            down a punch list ticks photos off, they do not edit a record.
+
+            Indented to clear the selection gutter, so the breakdown lines up
+            with the card it belongs to rather than with the checkbox. */}
         {photoDriven && isOpen && (
           <div
-            className="mt-1.5 rounded-2xl border-[0.8px] border-border bg-muted/25 p-3"
+            className="ml-7 mt-1.5 rounded-2xl border-[0.8px] border-border bg-muted/25 p-3"
             onClick={(e) => e.stopPropagation()}
           >
             <TaskPhotoChecklist

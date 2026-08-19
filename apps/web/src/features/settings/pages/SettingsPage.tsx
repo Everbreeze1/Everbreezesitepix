@@ -471,7 +471,8 @@ function ProfileSection() {
 
   /*
    * The job title is the one entry in `extras` that is no longer local: it is
-   * merged into documents as `{{prepared_by_title}}`, so it has to live on the
+   * merged into documents as `{{job_title}}` (and as `{{prepared_by_title}}`,
+   * the older spelling of the same field), so it has to live on the
    * profile. The stored copy wins over whatever localStorage still holds, and
    * `save` writes it back - which quietly migrates anyone whose title only ever
    * existed in this browser.

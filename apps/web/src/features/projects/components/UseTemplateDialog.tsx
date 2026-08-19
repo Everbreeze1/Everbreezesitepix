@@ -253,6 +253,10 @@ const EXAMPLES: Record<string, string> = {
   client_name: "Sarah Whitfield",
   client_contact: "sarah@example.com",
   project_number: "PRJ-00421",
+  // Both spellings of the author's job title: templates written since the
+  // Fields panel started inserting `{{job_title}}` use the new one, and the
+  // seeded library still carries the old.
+  job_title: "Project Manager",
   prepared_by_title: "Project Manager",
 };
 
