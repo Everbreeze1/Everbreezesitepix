@@ -1249,13 +1249,26 @@ export async function lookupInviteService(data: any) {
     .select("id, team_id, email, role, expires_at, accepted_at")
     .eq("token", data.token)
     .maybeSingle();
-  if (!invite) return { invite: null, team: null };
+  if (!invite) return { invite: null, team: null, tier: "starter" as const };
   const { data: team } = await supabaseAdmin
     .from("teams" as any)
     .select("id, name")
     .eq("id", (invite as any).team_id)
     .single();
-  return { invite, team };
+  /*
+   * The tier comes back so the invite page can name the seat the way this team
+   * names it: Team runs a hierarchy and calls the base seat Standard, flatter
+   * plans call it Member. Without it that page printed the raw `role` column
+   * under a CSS capitalize, so it said "Member" to somebody joining a Team
+   * workspace where every other screen will say Standard.
+   *
+   * Deliberately the only thing added. This endpoint is public - it is reached
+   * before the invitee has an account - so it stays limited to what the person
+   * holding a valid, unexpired, single-use token needs in order to decide
+   * whether to accept: the team's name, and what they are being offered.
+   */
+  const tier = await callerTierForTeam(supabaseAdmin, (invite as any).team_id);
+  return { invite, team, tier };
 }
 
 export async function acceptInviteService(ctx: AuthedContext, data: any) {

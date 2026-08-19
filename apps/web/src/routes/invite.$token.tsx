@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/sitepix/client";
 import { lookupInvite, acceptInvite, acceptInviteSignup } from "@/lib/teams.functions";
 import heroImg from "@/assets/hero-construction.png";
+import { can, roleLabelForTier, type BillingTier } from "@sitepix/shared/team-permissions";
 
 export const Route = createFileRoute("/invite/$token")({
   head: () => ({ meta: [{ title: "Accept your invitation - Everbreeze SitePix" }] }),
@@ -45,6 +46,9 @@ function AcceptInvitePage() {
   );
   const [team, setTeam] = useState<{ id: string; name: string } | null>(null);
   const [invite, setInvite] = useState<any | null>(null);
+  // The plan this team is on, only so the seat is named the way that tier
+  // names it. Starter until the lookup says otherwise.
+  const [tier, setTier] = useState<BillingTier>("starter");
   const [message, setMessage] = useState<string>("");
 
   const [fullName, setFullName] = useState("");
@@ -74,6 +78,7 @@ function AcceptInvitePage() {
         }
         setInvite(inv);
         setTeam(res?.team ?? null);
+        setTier((res?.tier as BillingTier) ?? "starter");
         setState("ready");
       } catch (e: any) {
         setState("error");
@@ -201,10 +206,49 @@ function AcceptInvitePage() {
               <h2 className="font-display mt-3 text-[48px] font-black uppercase leading-[0.92] tracking-[-1.68px] text-foreground">
                 Join {teamName}.
               </h2>
+              {/*
+                What you are actually accepting.
+
+                This printed `invite.role` raw under a CSS capitalize - the same
+                unfriendly-value pattern the roster, Settings and Collaborators
+                each carried - and then promised "access to all of the team's
+                projects" regardless of which role it had just named. For a
+                Restricted invite that sentence was simply false: they get the
+                jobs they are ticked into and nothing else. Telling somebody the
+                wrong thing at the moment they accept is the worst place in the
+                product to get this wrong, so both halves now come from the
+                shared matrix.
+              */}
+              {/*
+                "Your role will be X", not "You've been invited as a X".
+                Three of the five labels are adjectives - Standard, Restricted -
+                so the old article-plus-noun frame produced "invited as a
+                Standard". It read fine only while this page was printing the
+                raw column, where the value happened to be the noun "member".
+              */}
               <p className="font-manrope mt-4 text-sm leading-[24px] text-muted-foreground">
-                You've been invited as a{" "}
-                <span className="font-bold capitalize text-foreground">{invite.role}</span>. You'll
-                get access to all of {teamName}'s projects, photos, and reports.
+                Your role will be{" "}
+                <span className="font-bold text-foreground">
+                  {roleLabelForTier(invite.role, tier)}
+                </span>
+                .{" "}
+                {can(invite.role, "view_all_projects")
+                  ? `You'll get access to all of ${teamName}'s projects, photos, and reports.`
+                  : `You'll get access to the jobs ${teamName} puts you on, and nothing else in the workspace.`}
+              </p>
+              {/*
+                Second person, because the reader is the one holding the role.
+
+                This briefly rendered `ROLE_DESCRIPTION` directly, which is
+                written for the admin doing the assigning: a Restricted invitee
+                was told "Sees only the jobs you assign them", making the reader
+                both the assigner and the assignee in one sentence. Same matrix,
+                same facts, addressed to the person actually reading it.
+              */}
+              <p className="font-manrope mt-2 text-sm leading-[24px] text-muted-foreground">
+                {can(invite.role, "billing")
+                  ? "You'll be able to manage the team, billing and every project."
+                  : "You won't be able to manage the team or billing."}
               </p>
 
               {loading ? (

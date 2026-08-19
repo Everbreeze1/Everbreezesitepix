@@ -460,3 +460,52 @@ describe("family: one role vocabulary, not one per screen", () => {
     }
   });
 });
+
+describe("family: the invite page states the offer accurately", () => {
+  const read = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
+
+  /*
+   * The last place a raw role reached a person, and the highest-stakes one.
+   *
+   * `/invite/$token` printed `invite.role` straight from the column under a CSS
+   * capitalize - the same unfriendly-value pattern the roster, Settings and
+   * Collaborators each carried - and then promised, for every role alike,
+   * "access to all of the team's projects, photos, and reports". For a
+   * Restricted invite that was flatly untrue: they get the jobs they are ticked
+   * into and nothing else. It is the one screen somebody reads while deciding
+   * whether to accept, so a wrong promise there is the worst version of this
+   * bug, not the mildest.
+   */
+  it("names the role through the shared matrix, not the raw column", () => {
+    const src = read("apps/web/src/routes/invite.$token.tsx");
+    expect(src).toMatch(/roleLabelForTier\(invite\.role, tier\)/);
+    /*
+     * The role explanation on this page is written in SECOND person from the
+     * matrix rather than lifted from ROLE_DESCRIPTION, which addresses the
+     * admin doing the assigning: rendering it verbatim told a Restricted
+     * invitee "Sees only the jobs you assign them", making the reader both the
+     * assigner and the assignee in one sentence.
+     */
+    expect(src).toMatch(/can\(invite\.role, "billing"\)/);
+    expect(src).not.toMatch(/capitalize text-foreground">\{invite\.role\}/);
+  });
+
+  it("promises blanket access only to roles that actually have it", () => {
+    const src = read("apps/web/src/routes/invite.$token.tsx");
+    expect(src).toMatch(/can\(invite\.role, "view_all_projects"\)/);
+    // The matrix is what makes the two branches correct.
+    expect(can("standard", "view_all_projects")).toBe(true);
+    expect(can("restricted", "view_all_projects")).toBe(false);
+  });
+
+  it("the lookup returns the tier, or the page cannot name the seat", () => {
+    // Team calls the base seat Standard and flatter plans call it Member, so
+    // without the tier this page had to guess - and guessed wrong for one of
+    // them whichever way it went.
+    const src = read("apps/api/src/domains/teams/service.ts");
+    expect(src).toMatch(
+      /const tier = await callerTierForTeam\(supabaseAdmin, \(invite as any\)\.team_id\)/,
+    );
+    expect(src).toMatch(/return \{ invite, team, tier \}/);
+  });
+});

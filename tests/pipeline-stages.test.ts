@@ -26,6 +26,7 @@ const SETTINGS_SHEET = read("apps/web/src/features/projects/components/BoardSett
 const ADD_DIALOG = read("apps/web/src/features/projects/components/AddProjectToStageDialog.tsx");
 const PROJECTS_PAGE = read("apps/web/src/features/projects/pages/ProjectsPage.tsx");
 const STAGE_CHIP = read("apps/web/src/features/projects/components/ProjectStageChip.tsx");
+const TAB_STRIP = read("apps/web/src/features/projects/components/PipelineTabStrip.tsx");
 const DETAIL_PAGE = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
 
 /**
@@ -351,6 +352,73 @@ describe("pipeline stages", () => {
       // A dead dropdown is worse than no dropdown.
       expect(STAGE_CHIP).toContain("if (boards.length === 0) return null;");
       expect(PROJECTS_PAGE).toContain("stageOptions.length > 0 &&");
+    });
+  });
+
+  /*
+   * The client's second round, after using it:
+   *
+   *   "when i add pipelines it gets created on the right side but no arrow to
+   *    move it, it hides there."
+   *
+   *   "when i pick a project for a pipeline it attaches it nicely but I also
+   *    have to click done ... Done is extra click thats not needed."
+   */
+  describe("a new pipeline does not hide, and nothing pretends to need saving", () => {
+    it("gives the tab strip arrows, and only on the side with more to see", () => {
+      // The strip scrolled and hid its scrollbar, so a tab past the edge was
+      // reachable by trackpad swipe and nothing else.
+      expect(TAB_STRIP).toContain("Scroll pipelines left");
+      expect(TAB_STRIP).toContain("Scroll pipelines right");
+      expect(TAB_STRIP).toContain("{overflow.left && <ArrowButton");
+      expect(TAB_STRIP).toContain("{overflow.right && <ArrowButton");
+      // Measured, not assumed, and re-measured when the box or the list changes.
+      expect(TAB_STRIP).toContain("ResizeObserver");
+    });
+
+    it("keeps the create button out of the part that scrolls", () => {
+      // It used to scroll away with the tabs, so once the strip overflowed
+      // there was no way to reach "Create pipeline" either.
+      const scrollerEnd = TAB_STRIP.indexOf("pointer-events-none absolute inset-y-0 left-0");
+      const plusAt = TAB_STRIP.indexOf('aria-label="Create pipeline"');
+      expect(scrollerEnd).toBeGreaterThan(0);
+      expect(plusAt).toBeGreaterThan(scrollerEnd);
+      expect(TAB_STRIP).toContain("creating a pipeline is always an option");
+    });
+
+    it("scrolls the strip, never the page, to reveal the selected tab", () => {
+      // scrollIntoView on a horizontal strip inside a scrolling page also
+      // scrolls the page, which yanks the board out from under the reader.
+      expect(TAB_STRIP).not.toContain("scrollIntoView(");
+      expect(TAB_STRIP).toContain("el.scrollTo({");
+    });
+
+    it("selects the pipeline it just created", () => {
+      expect(PROJECTS_PAGE).toContain("justCreatedBoardId.current = board.id;");
+      expect(PROJECTS_PAGE).toContain("setActiveBoard(board);");
+      // A refetch that races the insert comes back without the new board, and
+      // the "keep the pointer valid" effect then bounces to another tab.
+      expect(PROJECTS_PAGE).toContain("qc.setQueryData(");
+      expect(PROJECTS_PAGE).not.toContain("invalidateQueries({ queryKey: qk.projectBoards");
+      expect(PROJECTS_PAGE).toContain(
+        "if (justCreatedBoardId.current === current.id) return current;",
+      );
+    });
+
+    it("drops the Done button that read like a save step", () => {
+      expect(ADD_DIALOG).not.toContain("DialogFooter");
+      expect(ADD_DIALOG).not.toMatch(/>\s*Done\s*</);
+      // The dialog still closes: DialogContent ships its own X, and Escape and
+      // click-outside are Radix defaults.
+      expect(ADD_DIALOG).toContain("onOpenChange={(v) => !v && onClose()}");
+    });
+
+    it("says the picks are already saved, and counts them", () => {
+      expect(ADD_DIALOG).toContain("Each pick is saved as you make it");
+      expect(ADD_DIALOG).toContain("setMovedCount((n) => n + 1)");
+      expect(ADD_DIALOG).toContain('moved into "{stage.name}"');
+      // Reset per opening, or the tally reads as the total of all time.
+      expect(ADD_DIALOG).toContain("setMovedCount(0)");
     });
   });
 });

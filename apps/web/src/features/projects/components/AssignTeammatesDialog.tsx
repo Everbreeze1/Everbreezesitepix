@@ -19,7 +19,7 @@ import { useTeamMembers } from "@/hooks/use-team-members";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useProjectAssignees, useApplyProjectAssignees } from "@/hooks/use-project-assignees";
 import { setProjectAssignees } from "@/lib/teams.functions";
-import { normaliseRole, roleLabelForTier } from "@sitepix/shared/team-permissions";
+import { normaliseRole } from "@sitepix/shared/team-permissions";
 import { RoleBadge } from "@/features/teams/components/RoleBadge";
 
 /**
@@ -83,6 +83,22 @@ export function AssignTeammatesDialog({
     );
   }, [members, query]);
 
+  /** Whether this workspace holds anyone whose access the crew list decides. */
+  const hasRestricted = members.some((m) => normaliseRole(m.role) === "restricted");
+
+  /*
+   * Has anything actually changed?
+   *
+   * Opening the dialog to check who is on a job and closing it with Save is a
+   * normal thing to do, and it used to fire a write and a toast announcing a
+   * change that had not happened. Comparing against what was loaded makes Save
+   * mean "apply my edit" rather than "submit the form".
+   */
+  const dirty = useMemo(() => {
+    const before = [...(current ?? [])].sort().join(",");
+    return [...selected].sort().join(",") !== before;
+  }, [selected, current]);
+
   const restrictedSelected = members.filter(
     (m) => selected.includes(m.user_id) && normaliseRole(m.role) === "restricted",
   ).length;
@@ -115,9 +131,22 @@ export function AssignTeammatesDialog({
             <Users className="h-4 w-4 text-primary" />
             Who is on {projectName}?
           </DialogTitle>
+          {/*
+            The "does this grant anything?" question, answered once.
+
+            It has a different answer per plan, so it is worth the sentence: on
+            a workspace that can hold a Restricted member the crew list is also
+            that person's fence, and everywhere else it is purely a record of
+            who is working the job. Saying it here, keyed off the roster the
+            admin is actually looking at, replaced the same claim repeated on
+            every single row.
+          */}
           <DialogDescription className="font-manrope">
             Pick the teammates working this job. They show as its crew everywhere the project
-            appears.
+            appears.{" "}
+            {hasRestricted
+              ? "For a Restricted member it is also what they can open; for everyone else it changes nothing about what they see."
+              : "It does not change what anyone can see."}
           </DialogDescription>
         </DialogHeader>
 
@@ -151,6 +180,21 @@ export function AssignTeammatesDialog({
                   const checked = selected.includes(m.user_id);
                   const role = normaliseRole(m.role);
                   const name = m.full_name || m.email || "Teammate";
+                  /*
+                   * Restricted gets a line that changes with the tick, because
+                   * there the tick is the access. Everyone else gets their
+                   * email, which is the one thing that tells two people with
+                   * the same first name apart - and nothing at all when the
+                   * email is already serving as their name.
+                   */
+                  const secondary =
+                    role === "restricted"
+                      ? checked
+                        ? "Can open this job because it is ticked here"
+                        : "Sees only the jobs ticked for them"
+                      : m.email && m.email !== name
+                        ? m.email
+                        : "";
                   return (
                     <label
                       key={m.user_id}
@@ -178,13 +222,36 @@ export function AssignTeammatesDialog({
                           </span>
                           <RoleBadge role={m.role} tier={tier} size="xs" />
                         </span>
-                        <span className="block truncate font-manrope text-xs text-muted-foreground">
-                          {role === "restricted"
-                            ? checked
-                              ? "Can open this job because it is ticked here"
-                              : "Sees only the jobs ticked for them"
-                            : `${roleLabelForTier(m.role, tier)} - already sees every project`}
-                        </span>
+                        {/*
+                          The email, not a restatement of the role.
+
+                          Every non-Restricted row used to read "<Role> -
+                          already sees every project", so a ten-person crew got
+                          ten identical lines saying a thing that is true of the
+                          workspace rather than of the person. It is stated once
+                          in the description above now, and this line does the
+                          job only it can: telling two people apart. The role is
+                          already on the badge beside the name.
+
+                          Restricted keeps a line of its own because there the
+                          tick genuinely changes per person, which is the one
+                          case where this row is not just a label.
+                        */}
+                        {/*
+                          Nothing at all rather than the name twice.
+
+                          `name` already falls back to the email for somebody
+                          who never set a full name, which is most people on a
+                          new workspace - so printing the email underneath drew
+                          the same address on two lines and read as a rendering
+                          bug. The line earns its height only when it adds
+                          something.
+                        */}
+                        {secondary && (
+                          <span className="block truncate font-manrope text-xs text-muted-foreground">
+                            {secondary}
+                          </span>
+                        )}
                       </span>
                     </label>
                   );
@@ -218,17 +285,36 @@ export function AssignTeammatesDialog({
           </p>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!canAssign || busy || save.isPending}
-            onClick={() => save.mutate()}
-            className="font-manrope font-bold"
-          >
-            {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save crew"}
-          </Button>
+        <DialogFooter className="items-center gap-2 sm:justify-between">
+          {/*
+            What you are about to save, next to the button that saves it. The
+            dialog is a list of tickboxes in a scroll area, so the people you
+            chose are frequently scrolled out of sight by the time you reach
+            Save.
+          */}
+          <span className="font-manrope text-xs text-muted-foreground">
+            {selected.length === 0
+              ? "Nobody selected"
+              : `${selected.length} ${selected.length === 1 ? "person" : "people"} on this job`}
+          </span>
+          <span className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!canAssign || busy || save.isPending || !dirty}
+              onClick={() => save.mutate()}
+              className="font-manrope font-bold"
+            >
+              {save.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : dirty ? (
+                "Save crew"
+              ) : (
+                "No changes"
+              )}
+            </Button>
+          </span>
         </DialogFooter>
       </DialogContent>
     </Dialog>
