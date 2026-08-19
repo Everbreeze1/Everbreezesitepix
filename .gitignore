@@ -51,4 +51,5 @@ apps/api/.env.local
 *.sln
 *.sw?
 /CLAUDE.md
+.claude/
 /LAUNCH.md

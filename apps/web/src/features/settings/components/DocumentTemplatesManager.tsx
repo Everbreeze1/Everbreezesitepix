@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
+import { HelpTip } from "@/components/HelpTip";
 import { SectionHeading, SURFACE_BUTTON, SURFACE_CARD_INTERACTIVE } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
@@ -1182,7 +1183,16 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
       <ChipStyles />
       <SectionHeading
         eyebrow="Reusable documents"
-        title="Document templates"
+        title={
+          <span className="inline-flex items-center gap-2">
+            Document templates
+            <HelpTip label="a document template" side="bottom" align="start" className="w-80">
+              A document you write once and reuse on every job: an invoice, a site log, a scope of
+              work. The placeholders in it fill themselves in from the project you use it on, so the
+              client name, address and dates are never typed twice.
+            </HelpTip>
+          </span>
+        }
         description="Word-style templates with dynamic placeholders that auto-fill from project data."
         actions={
           <>
@@ -1193,6 +1203,13 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
             >
               {showArchived ? "Hide archived" : "Show archived"}
             </Button>
+            {/* Sits with the button rather than on it, so the button keeps its
+                own click and the explanation keeps its own hover. */}
+            <HelpTip label="archiving" side="bottom" align="end" className="w-72">
+              Archiving takes a template out of this list and out of the project picker without
+              deleting it. Documents already made from it are untouched. Turn this on to see the
+              archived ones and restore any of them.
+            </HelpTip>
             {canManage && (
               <Button className={SURFACE_BUTTON} onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4" /> New template
@@ -1202,20 +1219,39 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
         }
       />
 
-      <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
-        <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
-        {/*
-          States the model outright, because the page previously implied a
-          different one. "Duplicate to edit" sat next to "Use in a project" at
-          the same weight, so the obvious reading was that a template has to be
-          copied before it can be changed - and following that reading leaves a
-          new template behind on every job. The client's words: "Clean templates
-          should be allowed to be applied to projects ... creating duplicates is
-          a big mess."
-        */}
-        <div>
-          <p className="font-semibold">Templates stay clean. Your edits live on the job.</p>
-          <p className="mt-0.5 text-blue-900/80 dark:text-blue-200/80">
+      {/*
+        The model in one line, with the whole of it one hover away.
+
+        The paragraphs that used to print here were right, and nobody read them:
+        six lines of prose above the templates is a wall, and the one sentence
+        that changes behaviour was buried in the middle of it. The client's
+        instruction was to keep the sentence and hide the rest - "replace the
+        long paragraph with 'Templates stay clean, choose a Document Template,
+        assign to and modify in a Project', make it hidden behind a question
+        mark". Nothing was cut; the old copy is in the HelpTip verbatim.
+
+        It still states the model outright, because the page once implied a
+        different one. "Duplicate to edit" sat next to "Use in a project" at the
+        same weight, so the obvious reading was that a template has to be copied
+        before it can be changed - and following that reading leaves a new
+        template behind on every job. The client's words: "Clean templates
+        should be allowed to be applied to projects ... creating duplicates is
+        a big mess."
+      */}
+      <div className="flex items-center gap-2.5 rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
+        <Sparkles className="h-4 w-4 shrink-0" />
+        <p className="font-semibold">
+          Templates stay clean. Choose a document template, assign it to a project and modify it
+          there.
+        </p>
+        <HelpTip
+          label="using a template on a job"
+          side="bottom"
+          align="start"
+          className="w-[24rem] space-y-2"
+          triggerClassName="opacity-70"
+        >
+          <p>
             Hit <strong>Use in a project</strong> on any template below and pick the job. You get a
             preview with that project&rsquo;s details already merged in, plus a box for each thing
             it can&rsquo;t know, so the document arrives finished. It&rsquo;s filed under that
@@ -1223,12 +1259,12 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
             job needs: the template itself never changes, and no copy of it is created. The same
             templates are in a project under <strong>Documents → Create → More Templates</strong>.
           </p>
-          <p className="mt-1.5 text-blue-900/80 dark:text-blue-200/80">
+          <p>
             To change a template for good, hit <strong>Edit</strong>. On an example that gives you
             your company&rsquo;s own version, which takes the example&rsquo;s place here and in the
             project picker, so the list stays the same length. Delete it and the example is back.
           </p>
-        </div>
+        </HelpTip>
       </div>
 
       {/* Trade filter. Eleven sections is a long page to scroll, so a sparky can
@@ -1240,8 +1276,13 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
           than wherever the fixed order happens to put it. */}
       {sections.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-[10px] font-extrabold uppercase tracking-[1.4px] text-muted-foreground">
+          <span className="mr-1 inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[1.4px] text-muted-foreground">
             Trade
+            <HelpTip label="the trade filter" side="bottom" align="start" className="w-72">
+              Cuts the page down to the templates filed under one trade. It only changes what you
+              are looking at, nothing is hidden from anyone else, and the star marks your own trade
+              from your business profile.
+            </HelpTip>
           </span>
           <button
             type="button"
