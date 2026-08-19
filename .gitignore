@@ -51,6 +51,7 @@ apps/api/.env.local
 *.sln
 *.sw?
 /CLAUDE.md
+.claude/
 /LAUNCH.md
 branch_structure.json
 temp_auto_push.bat
