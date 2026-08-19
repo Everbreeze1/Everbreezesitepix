@@ -42,10 +42,10 @@ const r = (n) => Math.round(n * 0.8);
 const EXPECT = [
   { var: "STRIPE_PRICE_STARTER", label: "Starter monthly", interval: "month", included: 1, flat: 24, per: 19 },
   { var: "STRIPE_PRICE_PRO", label: "Pro monthly", interval: "month", included: 3, flat: 79, per: 24 },
-  { var: "STRIPE_PRICE_TEAM", label: "Team monthly", interval: "month", included: 3, flat: 179, per: 24 },
+  { var: "STRIPE_PRICE_TEAM", label: "Team monthly", interval: "month", included: 3, flat: 169, per: 24 },
   { var: "STRIPE_PRICE_STARTER_ANNUAL", label: "Starter annual", interval: "year", included: 1, flat: r(24) * 12, per: r(19) * 12 },
   { var: "STRIPE_PRICE_PRO_ANNUAL", label: "Pro annual", interval: "year", included: 3, flat: r(79) * 12, per: r(24) * 12 },
-  { var: "STRIPE_PRICE_TEAM_ANNUAL", label: "Team annual", interval: "year", included: 3, flat: r(179) * 12, per: r(24) * 12 },
+  { var: "STRIPE_PRICE_TEAM_ANNUAL", label: "Team annual", interval: "year", included: 3, flat: r(169) * 12, per: r(24) * 12 },
 ];
 
 let bad = 0;

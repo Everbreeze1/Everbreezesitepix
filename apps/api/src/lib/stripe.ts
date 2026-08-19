@@ -40,15 +40,16 @@ function requirePriceEnv(name: string): string {
  *   Tier 1 - first 3 units:  flat fee $79, per-unit $0
  *   Tier 2 - 4 and above:    per-unit $24
  *
- * Team is the same shape and the same boundary - flat $179 for the first 3
+ * Team is the same shape and the same boundary - flat $169 for the first 3
  * units, then $24 each. Starter is a narrower version: flat $24 for the first
  * unit, then $19, and it caps at 2 so tier 2 is only ever one seat wide.
  *
- * ALL THREE changed when the Starter-to-Pro gap was closed: Pro 119 -> 79 with
- * its extra seat 29 -> 24, Team's extra seat 39 -> 24 (base unchanged at 179),
- * Starter's second seat 15 -> 19. The Price objects in Stripe are the source of
- * truth for what a card is actually charged, so until every one of them is
- * updated, /pricing advertises one number and checkout bills another.
+ * Every one of these numbers has moved at least once: Pro 119 -> 79 with its
+ * extra seat 29 -> 24, Team 179 -> 199 -> 179 -> 169 with its extra seat
+ * 39 -> 24, Starter's second seat 15 -> 19. The Price objects in Stripe are the
+ * source of truth for what a card is actually charged, so until every one of
+ * them is updated, /pricing advertises one number and checkout bills another.
+ * Run scripts/verify-stripe-prices.mjs after any change here.
  *
  * A plain flat per-unit Price is WRONG here: at quantity=5 it would bill
  * 5 x $79 = $395 instead of the advertised $79 + 2 x $24 = $127. The tier
