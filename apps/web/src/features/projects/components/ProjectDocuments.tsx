@@ -1056,6 +1056,11 @@ export function ProjectDocuments({
                             p.sourceTemplateId ? blueprintSources?.[p.sourceTemplateId] : null
                           }
                         />
+                        {p.bucket === "invoice" && (
+                          <span className="shrink-0 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600">
+                            Invoice
+                          </span>
+                        )}
                       </p>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground sm:hidden">
                         Page · Updated {relativeTime(p.updatedAt)}
@@ -1064,7 +1069,7 @@ export function ProjectDocuments({
                   </button>
                 </div>
                 <span className="hidden w-28 shrink-0 text-xs text-muted-foreground transition-colors group-hover:text-foreground sm:inline">
-                  Page
+                  {p.bucket === "invoice" ? "Invoice" : "Page"}
                 </span>
                 <span className="hidden w-36 shrink-0 text-xs text-muted-foreground sm:inline">
                   {relativeTime(p.updatedAt)}
