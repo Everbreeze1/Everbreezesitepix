@@ -179,7 +179,21 @@ const run = async () => {
   current = "projects";
   await page.goto(`${BASE}/projects`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector('a[aria-label^="Open "]', { timeout: 90000 }).catch(() => {});
-  await page.waitForTimeout(4000);
+  /*
+   * The cards and the crew are two different requests.
+   *
+   * A card link appears as soon as the project list resolves; the crew stack
+   * waits on `getProjectAssignees`, which lands later. A flat 4s covered that
+   * gap on a quiet machine and stopped covering it on a busy one, at which
+   * point this run reported "no crew chip on any card" for a feature that was
+   * present and working. Wait for the thing being asserted.
+   */
+  await page
+    .getByRole("button", { name: /Assign teammates to this job|Change the crew/i })
+    .first()
+    .waitFor({ state: "visible", timeout: 45000 })
+    .catch(() => {});
+  await page.waitForTimeout(1500);
   await page.screenshot({ path: `${SHOTS}/03-projects-list.png` });
 
   const firstCardName = await page
@@ -251,6 +265,59 @@ const run = async () => {
         ok("the dialog names each teammate's role");
       else bad("the dialog names each teammate's role", body.slice(0, 240));
 
+      /* ------------------------- an in-progress edit survives a background refetch */
+      {
+        /*
+         * React Query refetches on window focus by default, and the dialog
+         * seeds its tickboxes from the query result. If that seeding runs again
+         * on a refetch it overwrites whatever the person has ticked since they
+         * opened it - silently, with the server's older answer.
+         *
+         * Tabbing away and back is the everyday way to trigger it: look
+         * something up, come back, and the boxes you ticked are cleared. This
+         * fires the same `focus` event Query listens for.
+         */
+        const meRow = dialog
+          .locator("label")
+          .filter({ hasText: new RegExp(email.split("@")[0], "i") })
+          .first();
+        const box = meRow.locator('button[role="checkbox"]');
+        const started = await box.getAttribute("data-state");
+        await box.click();
+        await page.waitForTimeout(300);
+        const ticked = await box.getAttribute("data-state");
+
+        /*
+         * The 31s wait is load-bearing, not padding.
+         *
+         * `useProjectAssignees` sets staleTime: 30_000, and Query skips a focus
+         * refetch while the data is still fresh. Firing focus immediately
+         * "passed" and proved nothing. The scenario that bites a real person is
+         * exactly the one that outlives the stale window: open the dialog, go
+         * and look something up, come back a minute later.
+         */
+        await page.waitForTimeout(31000);
+        await page.evaluate(() => {
+          window.dispatchEvent(new Event("focus"));
+          document.dispatchEvent(new Event("visibilitychange"));
+        });
+        await page.waitForTimeout(5000);
+
+        const after = await box.getAttribute("data-state");
+        if (after === ticked) ok("an in-progress edit survives a background refetch", after);
+        else
+          bad(
+            "an in-progress edit survives a background refetch",
+            `ticked to ${ticked}, refetch reverted it to ${after} (was ${started})`,
+          );
+        // Put the box back the way it was found; the save block below drives
+        // the real write.
+        if (after !== started) {
+          await box.click();
+          await page.waitForTimeout(300);
+        }
+      }
+
       /* ------------------------------------- save, verify, and put it back */
       // Ticking YOURSELF is the one write that reaches nobody:
       // `insertNotification` drops a row whose recipient is the actor.
@@ -268,6 +335,25 @@ const run = async () => {
 
         await box.click();
         await page.waitForTimeout(400);
+        /*
+         * Record toasts as they appear rather than going looking for one.
+         *
+         * A sonner toast auto-dismisses, so every sampling approach races it:
+         * waiting for the selector then reading innerText still lost, because
+         * the node detached between the handle resolving and the read. An
+         * observer catches the text at the moment it is added and keeps it, so
+         * the assertion no longer depends on how busy the machine was.
+         */
+        await page.evaluate(() => {
+          window.__toasts = [];
+          const seen = () =>
+            document.querySelectorAll("[data-sonner-toast]").forEach((n) => {
+              const t = n.innerText;
+              if (t && !window.__toasts.includes(t)) window.__toasts.push(t);
+            });
+          new MutationObserver(seen).observe(document.body, { childList: true, subtree: true });
+          seen();
+        });
         await dialog.getByRole("button", { name: "Save crew" }).click();
         /*
          * The dialog closing IS the signal that the save resolved.
@@ -284,12 +370,14 @@ const run = async () => {
         await page.waitForTimeout(2500);
         await page.screenshot({ path: `${SHOTS}/06-after-save.png` });
 
-        const toast = await page
-          .locator("[data-sonner-toast]")
-          .innerText()
-          .catch(() => "");
-        if (/on this job/i.test(toast)) ok("saving the crew confirms what happened", toast.trim());
-        else bad("saving the crew confirms what happened", toast.slice(0, 160) || "no toast");
+        const toasts = await page.evaluate(() => window.__toasts ?? []);
+        const confirmation = toasts.find((t) => /on this job/i.test(t));
+        if (confirmation) ok("saving the crew confirms what happened", confirmation.trim());
+        else
+          bad(
+            "saving the crew confirms what happened",
+            toasts.join(" | ").slice(0, 160) || "no toast appeared",
+          );
 
         // Ticked from empty -> the card must now draw the crew. Unticked from
         // staffed -> it must go back to offering Assign. Either way it changes.
@@ -345,17 +433,53 @@ const run = async () => {
       skip("the project header carries a crew row", "no project to open");
     } else {
       await open.click();
-      await page.waitForTimeout(9000);
-      await page.screenshot({ path: `${SHOTS}/07-project-header.png` });
-
+      /*
+       * Waited for, not slept through. A project page resolves several RPCs
+       * before the hero paints, and a flat 9s sleep reported "no crew control"
+       * on a run that was simply slower than the one before it. The control
+       * itself is the signal that the header has finished.
+       */
+      /*
+       * Wait for the PAGE first, then for the control.
+       *
+       * Waiting only on the crew chip cannot tell "the header rendered and has
+       * no crew row" from "the header never rendered". On one run the
+       * screenshot showed a spinner at 61s, so the check was reporting a slow
+       * dev server as a missing feature. The heading is the page; the chip is
+       * the claim; and the failure message now says which one is missing.
+       */
+      /*
+       * The project's OWN heading, not `h1`.first().
+       *
+       * `.first()` picked whichever h1 came first in the DOM, which can be a
+       * hidden one from the shell, so the wait timed out and the failure said
+       * "never finished loading" about a page that had loaded - the check right
+       * after it passed on the same page. A diagnostic that lies is worse than
+       * no diagnostic.
+       */
+      const heading = firstCardName
+        ? page.locator("h1", { hasText: firstCardName }).first()
+        : page.locator("h1").first();
+      await heading.waitFor({ state: "visible", timeout: 90000 }).catch(() => {});
       const crewChip = page
         .getByRole("button", { name: /Assign teammates to this job|Change the crew/i })
         .first();
+      await crewChip.waitFor({ state: "visible", timeout: 30000 }).catch(() => {});
+      await page.waitForTimeout(1500);
+      await page.screenshot({ path: `${SHOTS}/07-project-header.png` });
+
       if (await shown(crewChip)) ok("the project header carries a crew row", firstCardName);
-      else bad("the project header carries a crew row", "no crew control in the hero");
+      else
+        bad(
+          "the project header carries a crew row",
+          (await shown(heading))
+            ? "the header rendered without a crew row"
+            : "the project page never finished loading",
+        );
 
       // The report was that hovering "N contributors" gave nothing back.
-      const contribChip = page.getByRole("button", { name: /contributors/i }).first();
+      const contribChip = page.getByRole("button", { name: /contributors?/i }).first();
+      await contribChip.waitFor({ state: "visible", timeout: 30000 }).catch(() => {});
       if (await shown(contribChip)) {
         await contribChip.click();
         await page.waitForTimeout(1200);
@@ -378,7 +502,13 @@ const run = async () => {
   /* ==================================================================== */
   current = "settings";
   await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(5000);
+  // The badge waits on getMyTeam, which lands after the shell paints.
+  await page
+    .getByText(/Workspace settings/i)
+    .first()
+    .waitFor({ state: "visible", timeout: 60000 })
+    .catch(() => {});
+  await page.waitForTimeout(3000);
   await page.screenshot({ path: `${SHOTS}/09-settings.png` });
   {
     // `body` alone: "header, ..., body" matched two elements and Playwright
@@ -395,7 +525,13 @@ const run = async () => {
 
   current = "collaborators";
   await page.goto(`${BASE}/collaborators`, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(5000);
+  // Same again: the roster is an RPC, so wait for the roster, not the clock.
+  await page
+    .getByText(/Team contributions/i)
+    .first()
+    .waitFor({ state: "visible", timeout: 60000 })
+    .catch(() => {});
+  await page.waitForTimeout(2000);
   await page.screenshot({ path: `${SHOTS}/10-collaborators.png` });
   {
     const body = await page.locator("body").innerText();

@@ -10,6 +10,7 @@ import {
   projectDocumentTitle,
   uniqueDocumentTitle,
 } from "./page-title";
+import { classifyPage, parseFilesUnder, type FilingBucket } from "./page-filing";
 
 const IMG_TAG_RE = /<img\b[^>]*\bdata-photo-id="([0-9a-fA-F-]{36})"[^>]*>/g;
 
@@ -166,6 +167,15 @@ export interface DocumentTreePage {
    * encoding.
    */
   sourceTemplateId: string | null;
+  /**
+   * Which list this page belongs to - see page-filing.ts.
+   *
+   * Resolved here rather than in the browser because it needs the document
+   * template's `filesUnder`, and shipping every template's body to the client
+   * so it could work that out for itself would be a much larger payload for a
+   * question the server can answer in one extra query.
+   */
+  bucket: FilingBucket;
 }
 
 /** `document_template:<uuid>` → `<uuid>`; every other encoding → null. */
@@ -218,6 +228,40 @@ export async function listProjectDocumentTreeService(
   if (pErr) throw new Error(pErr.message);
   if (dErr) throw new Error(dErr.message);
 
+  /*
+   * One query for the templates this project's pages actually came from, not
+   * every template the team owns. A project with thirty pages made from three
+   * templates asks for three rows.
+   *
+   * A page whose template has since been deleted simply gets no entry, and
+   * `classifyPage` files it as a document rather than guessing - see the note
+   * there. The lookup is also allowed to fail without taking the tab down:
+   * losing it means pages fall back to their source_template alone, so the AI
+   * output still reaches Reports and template pages land in Documents, which
+   * is a degraded list rather than an error screen.
+   */
+  const templateIds = [
+    ...new Set(
+      ((pageRows as any[]) ?? [])
+        .map((p) => documentTemplateId(p.source_template))
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+  const filesUnderById = new Map<string, FilingBucket>();
+  if (templateIds.length > 0) {
+    const { data: tplRows, error: tErr } = await (ctx.supabase as any)
+      .from("document_templates")
+      .select("id, body")
+      .in("id", templateIds);
+    if (tErr) {
+      console.warn("[document-tree] template filing lookup failed", { message: tErr.message });
+    } else {
+      for (const t of (tplRows as any[]) ?? []) {
+        filesUnderById.set(t.id as string, parseFilesUnder(t.body));
+      }
+    }
+  }
+
   return {
     folders: ((folderRows as any[]) ?? []).map((f) => ({
       id: f.id,
@@ -231,6 +275,13 @@ export async function listProjectDocumentTreeService(
       title: p.title,
       updatedAt: p.updated_at,
       sourceTemplateId: documentTemplateId(p.source_template),
+      bucket: classifyPage(
+        p.source_template,
+        (() => {
+          const id = documentTemplateId(p.source_template);
+          return id ? (filesUnderById.get(id) ?? null) : null;
+        })(),
+      ),
     })),
     files: ((fileRows as any[]) ?? []).map((f) => ({
       id: f.id,

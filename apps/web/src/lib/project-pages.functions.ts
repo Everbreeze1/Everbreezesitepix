@@ -5,6 +5,15 @@ export interface DocumentTreeFolder {
   name: string;
   createdAt: string;
 }
+/**
+ * Which of the project's two lists a page belongs to.
+ *
+ * Decided on the server (apps/api/src/domains/projects/page-filing.ts) so the
+ * Reports tab, the Documents tab and the tab counts can never disagree about
+ * what a report is. Invoices are a Documents category, not a third tab.
+ */
+export type FilingBucket = "report" | "invoice" | "document";
+
 export interface DocumentTreePage {
   id: string;
   kind: "page";
@@ -13,6 +22,12 @@ export interface DocumentTreePage {
   updatedAt: string;
   /** Document template this came from, for the blueprint badge. */
   sourceTemplateId: string | null;
+  /**
+   * Reports tab or Documents tab. Optional so a browser still holding the
+   * previous bundle against a newer API, or the reverse, degrades to filing
+   * everything under Documents instead of emptying both lists.
+   */
+  bucket?: FilingBucket;
 }
 export interface DocumentTreeFile {
   id: string;

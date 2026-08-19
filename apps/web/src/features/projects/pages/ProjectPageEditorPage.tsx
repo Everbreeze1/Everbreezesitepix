@@ -996,7 +996,7 @@ export function ProjectPageEditorPage() {
                 navigate({
                   to: "/projects/$projectId",
                   params: { projectId },
-                  search: { panel: "reports" },
+                  search: { panel: "documents" },
                 })
               }
             >

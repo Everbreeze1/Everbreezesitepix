@@ -12,6 +12,7 @@ import {
   ImageOff,
   Upload,
   FileText,
+  ClipboardList,
   AlertTriangle,
   CheckCircle2,
   FileDown,
@@ -60,6 +61,8 @@ import { PageTabStrip } from "@/components/PageTabStrip";
 import { ProjectWorkflows } from "@/features/projects/components/ProjectWorkflows";
 import { ProjectTasks, type ProjectTasksHandle } from "@/features/projects/components/ProjectTasks";
 import { ProjectDocuments } from "@/features/projects/components/ProjectDocuments";
+import { ProjectReports } from "@/features/projects/components/ProjectReports";
+import { listProjectDocumentTree, type DocumentTreePage } from "@/lib/project-pages.functions";
 import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
 import { ContributorsChip } from "@/features/projects/components/ProjectContributors";
 import { ProjectCrew } from "@/features/projects/components/ProjectCrew";
@@ -169,7 +172,15 @@ const MAX_TRANSCRIPTION_BYTES = 12_500_000;
 export type ProjectDetailSearch = {
   camera?: 1;
   walkthrough?: 1;
-  panel?: "tasks" | "checklists" | "walkthroughs" | "reports" | "workflows" | "trash" | "calendar";
+  panel?:
+    | "tasks"
+    | "checklists"
+    | "walkthroughs"
+    | "documents"
+    | "reports"
+    | "workflows"
+    | "trash"
+    | "calendar";
   /** Photo id to open the viewer on. See the effect that consumes it. */
   photo?: string;
   /** Task id to open on the Tasks tab. See the effect that consumes it. */
@@ -292,6 +303,15 @@ export function ProjectDetailPage() {
     documents: 0,
     workflows: 0,
   });
+  /**
+   * The report-bucket pages, held here rather than inside the Reports tab.
+   *
+   * The tab strip has to show a count whether or not the tab is open, so this
+   * list is loaded once with the rest of the project and handed down. Loading
+   * it inside ProjectReports would mean the count could only appear after you
+   * had already clicked the thing the count is meant to help you decide about.
+   */
+  const [reportPages, setReportPages] = useState<DocumentTreePage[]>([]);
   const [trashCount, setTrashCount] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const tasksRef = useRef<ProjectTasksHandle>(null);
@@ -375,6 +395,18 @@ export function ProjectDetailPage() {
   // navigation restores the tab the user was on instead of resetting to Photos.
   type PanelKey = NonNullable<ProjectDetailSearch["panel"]>;
   const panel: PanelKey | null = search.panel ?? null;
+  /**
+   * Walkthrough summaries the Reports tab will list, for its tab count.
+   *
+   * Same predicate as ProjectReports uses, and that duplication is the point of
+   * the comment: the count and the list must agree, so if one changes the other
+   * has to. Kept as a number here rather than lifting the whole filter out,
+   * because the tab strip needs a count long before the tab needs rows.
+   */
+  const reportSummaryCount = walkthroughs.filter(
+    (w) => w.status === "ready" && (w.summary_markdown ?? "").trim() !== "",
+  ).length;
+
   function setPanel(next: PanelKey | null | ((cur: PanelKey | null) => PanelKey | null)) {
     const resolved = typeof next === "function" ? next(panel) : next;
     navigate({
@@ -631,7 +663,7 @@ export function ProjectDetailPage() {
       (async () => {
         // Load counts for secondary feature cards (best-effort; ignore errors)
         try {
-          const [tasksAll, tasksOpen, chk, rep, docs, pages, wf] = await Promise.all([
+          const [tasksAll, tasksOpen, chk, rep, tree, wf] = await Promise.all([
             supabase
               .from("tasks" as any)
               .select("id", { count: "exact", head: true })
@@ -649,25 +681,37 @@ export function ProjectDetailPage() {
               .from("project_reports" as any)
               .select("id", { count: "exact", head: true })
               .eq("project_id", projectId),
-            supabase
-              .from("project_documents" as any)
-              .select("id", { count: "exact", head: true })
-              .eq("project_id", projectId),
-            supabase
-              .from("project_pages" as any)
-              .select("id", { count: "exact", head: true })
-              .eq("project_id", projectId),
+            /*
+             * The tree, not two `count` queries.
+             *
+             * Documents and Reports are now two tabs over the same two tables,
+             * and which row belongs to which is decided by the document
+             * template a page came from (see page-filing.ts). A `head: true`
+             * count cannot answer that - it would have to count every page and
+             * then attribute them, which is the tree call anyway. One request
+             * returns both numbers and the report rows the tab needs.
+             */
+            listProjectDocumentTree({ data: { projectId } }).catch(() => null),
             supabase
               .from("project_workflows" as any)
               .select("id", { count: "exact", head: true })
               .eq("project_id", projectId),
           ]);
+          /*
+           * Reports counts what the Reports tab lists, which includes the
+           * walkthrough summaries below - so it is assembled after the
+           * walkthroughs are in hand, in the effect underneath. This sets the
+           * page half; `reportPages` carries the rows.
+           */
+          const treePages = tree?.pages ?? [];
+          const reportRows = treePages.filter((pg) => pg.bucket === "report");
+          setReportPages(reportRows);
           setCounts({
             tasksTotal: tasksAll.count ?? 0,
             tasksOpen: tasksOpen.count ?? 0,
             checklists: chk.count ?? 0,
-            reports: rep.count ?? 0,
-            documents: (docs.count ?? 0) + (pages.count ?? 0),
+            reports: reportRows.length,
+            documents: (tree?.files.length ?? 0) + (treePages.length - reportRows.length),
             workflows: wf.count ?? 0,
           });
         } catch {
@@ -2468,7 +2512,7 @@ export function ProjectDetailPage() {
   // (AI report generation lives in the global sidebar, not this page.)
 
   // Full-page panel view - replaces the project page when a tab is opened.
-  // Walkthroughs, Checklists, Documents, Workflows, Tasks and Calendar render
+  // Walkthroughs, Checklists, Documents, Reports, Workflows, Tasks and Calendar
   // inline instead (alongside the hero + tab nav), see below. Anything missing
   // from this list falls through to the full-page branch, which only knows how
   // to draw Trash - so it would render as an empty page.
@@ -2476,6 +2520,7 @@ export function ProjectDetailPage() {
     panel &&
     panel !== "walkthroughs" &&
     panel !== "checklists" &&
+    panel !== "documents" &&
     panel !== "reports" &&
     panel !== "workflows" &&
     panel !== "tasks" &&
@@ -2687,13 +2732,13 @@ export function ProjectDetailPage() {
                 trigger={
                   <Button className="h-10 rounded-lg bg-sidebar-foreground px-5 font-bold text-sidebar shadow-sm hover:bg-sidebar-foreground/90">
                     <Sparkles className="mr-2 h-4 w-4 text-sidebar-ring" />
-                    Create document
+                    Create
                   </Button>
                 }
               />
               {/*
                 Starter-tier only. Pro/Team generate documents with AI via
-                "Create document", so the hand-built photo report is clutter
+                the Create menu, so the hand-built photo report is clutter
                 for them - see canUseManualPhotoReport in use-subscription.
               */}
               {canUseManualPhotoReport && (
@@ -2752,7 +2797,14 @@ export function ProjectDetailPage() {
               */}
               <span className="inline-flex items-center gap-2">
                 <Camera className="h-4 w-4 text-sidebar-ring" />
-                {(totalPhotos || photos.length).toLocaleString()} field captures
+                {/*
+                  A project with one photo read "1 field captures". The count is
+                  the first thing on a new job, so the singular is not the rare
+                  case here - it is what every project shows on the day it is
+                  created.
+                */}
+                {(totalPhotos || photos.length).toLocaleString()}{" "}
+                {(totalPhotos || photos.length) === 1 ? "field capture" : "field captures"}
               </span>
               <span className="inline-flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-sidebar-ring" />
@@ -2768,7 +2820,19 @@ export function ProjectDetailPage() {
         value={panel ?? "photos"}
         items={[
           { key: "photos", label: "Photos", count: photos.length, icon: Camera },
-          { key: "reports", label: "Documents", count: counts.documents, icon: FileText },
+          /*
+           * Two tabs, and the keys finally say what they hold. This was one
+           * entry keyed "reports" and labelled "Documents", which is the bug
+           * the client had been looking at: generated reports and stored
+           * paperwork were the same list, under a name that matched neither.
+           */
+          { key: "documents", label: "Documents", count: counts.documents, icon: FileText },
+          {
+            key: "reports",
+            label: "Reports",
+            count: counts.reports + reportSummaryCount,
+            icon: ClipboardList,
+          },
           { key: "checklists", label: "Checklists", count: counts.checklists, icon: ListChecks },
           {
             key: "walkthroughs",
@@ -3058,7 +3122,7 @@ export function ProjectDetailPage() {
           />
         </div>
       )}
-      {panel === "reports" && (
+      {panel === "documents" && (
         <div className="mt-9">
           <ProjectDocuments
             projectId={project.id}
@@ -3070,6 +3134,17 @@ export function ProjectDetailPage() {
               caption: p.caption,
               taken_at: p.taken_at,
             }))}
+            onChanged={() => void load({ silent: true })}
+          />
+        </div>
+      )}
+      {panel === "reports" && (
+        <div className="mt-9">
+          <ProjectReports
+            projectId={project.id}
+            pages={reportPages}
+            walkthroughs={walkthroughs}
+            loading={loading}
             onChanged={() => void load({ silent: true })}
           />
         </div>
