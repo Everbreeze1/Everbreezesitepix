@@ -41,12 +41,17 @@ import { useAuth } from "@/hooks/use-auth";
 import { clampPhotosPerPage, useProfile } from "@/hooks/use-profile";
 import { PhotosPerPagePicker } from "@/features/projects/components/PhotosPerPagePicker";
 import { useTheme } from "@/hooks/use-theme";
-import { useSubscription, PRO_AUTO_REPORTS_PER_MONTH } from "@/hooks/use-subscription";
+import {
+  useSubscription,
+  PRO_AUTO_REPORTS_PER_MONTH,
+  type BillingTier,
+} from "@/hooks/use-subscription";
 import { supabase } from "@/integrations/sitepix/client";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { getMyTeam, createBillingPortalSession } from "@/features/settings/api";
 // Same matrix the billing RPC enforces with - see domains/billing/service.ts.
 import { can } from "@sitepix/shared/team-permissions";
+import { RoleBadge } from "@/features/teams/components/RoleBadge";
 import {
   parseNotificationPrefs,
   prefEnabled,
@@ -159,12 +164,26 @@ interface ProfileExtras {
 }
 const DEFAULT_EXTRAS: ProfileExtras = { firstName: "", lastName: "", phone: "", jobTitle: "" };
 
-function roleTitleFor(role: string | null) {
-  if (role === "owner") return "Workspace admin";
-  if (role === "admin") return "Project manager";
-  if (role === "member") return "Crew member";
-  return "Workspace admin";
-}
+/*
+ * `roleTitleFor` used to live here, with a vocabulary of its own:
+ *
+ *   owner  -> "Workspace admin"
+ *   admin  -> "Project manager"
+ *   member -> "Crew member"
+ *   everything else -> "Workspace admin"
+ *
+ * Both halves of that were wrong once the roles matrix existed. It called an
+ * Admin a "Project manager" while Manager became a real, separate, Team-only
+ * role - so the two most senior roles in the product swapped names on this one
+ * screen. And Manager, Standard and Restricted all fell through to the default,
+ * which means a Restricted member opened their own settings and was told they
+ * were a Workspace admin. That is worse than the missing badge on the roster:
+ * missing information makes you go and look, wrong information does not.
+ *
+ * Replaced by `RoleBadge`, which reads the one matrix in
+ * packages/shared/src/team-permissions.ts and names the role the way this
+ * customer's tier names it.
+ */
 
 export function SettingsPage() {
   const { user, signOut } = useAuth();
@@ -219,8 +238,13 @@ export function SettingsPage() {
               <div className="truncate font-manrope text-sm font-extrabold text-foreground">
                 {displayName}
               </div>
-              <div className="truncate font-manrope text-[11px] font-bold text-muted-foreground">
-                {roleTitleFor(myTeamRole)}
+              {/*
+                Your own role, named and explained by the same badge the roster
+                uses. Hovering says what it grants, which is the one place a
+                person is most likely to ask.
+              */}
+              <div className="mt-0.5">
+                <RoleBadge role={myTeamRole} tier={tier} size="xs" />
               </div>
             </div>
           </div>
@@ -304,7 +328,7 @@ export function SettingsPage() {
                 isOwner={can(myTeamRole, "billing")}
               />
             )}
-            {active === "team" && <TeamSection isTeam={isTeam} teamData={teamData} />}
+            {active === "team" && <TeamSection isTeam={isTeam} teamData={teamData} tier={tier} />}
             {active === "reviews" && <ReviewLinksSection isTeam={isTeam} />}
 
             {/* Mobile sign out */}
@@ -1457,13 +1481,26 @@ function BillingSection({
 const MEMBER_AVATAR_PALETTE = ["#059669", "#7C3AED", "#D97706", "#DB2777", "#0EA5E9", "#65A30D"];
 const memberAvatarColor = (role: string, index: number) =>
   role === "owner" ? "#101929" : MEMBER_AVATAR_PALETTE[index % MEMBER_AVATAR_PALETTE.length];
-const memberRoleTitle: Record<string, string> = {
-  owner: "Workspace admin",
-  admin: "Project manager",
-  member: "Crew member",
-};
+/*
+ * A second private role map lived here, identical in shape to the one the top
+ * of this page carried and identical in consequence: a Manager, a Standard or a
+ * Restricted teammate fell past its three keys to `?? m.role` and this list
+ * printed the raw database value at them. Members is the one screen in Settings
+ * where roles are the subject, so it was the worst place for it.
+ *
+ * Same replacement as everywhere else - RoleBadge, reading the one matrix.
+ */
 
-function TeamSection({ isTeam, teamData }: { isTeam: boolean; teamData: any }) {
+function TeamSection({
+  isTeam,
+  teamData,
+  tier,
+}: {
+  isTeam: boolean;
+  teamData: any;
+  /** Only to name roles the way this tier names them - see RoleBadge. */
+  tier: BillingTier;
+}) {
   if (!isTeam) {
     return (
       <div className="rounded-2xl border border-border bg-card/70 p-8 text-center">
@@ -1520,8 +1557,8 @@ function TeamSection({ isTeam, teamData }: { isTeam: boolean; teamData: any }) {
                 <div className="truncate font-manrope text-sm font-extrabold text-foreground">
                   {m.full_name || m.email}
                 </div>
-                <div className="truncate font-manrope text-xs text-muted-foreground">
-                  {memberRoleTitle[m.role] ?? m.role}
+                <div className="mt-0.5">
+                  <RoleBadge role={m.role} tier={tier} size="xs" />
                 </div>
               </div>
             </div>

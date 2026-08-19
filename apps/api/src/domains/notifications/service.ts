@@ -27,7 +27,12 @@ export interface Notification {
     // right to reopen.
     | "task_comment"
     | "task_watching"
-    | "task_updated";
+    | "task_updated"
+    // Somebody put you on a job. Raised by `setProjectAssignees` in the teams
+    // domain, from 20260919000000_project_assignment_notifications.sql. Not the
+    // same message as `task_assigned`: that hands over one piece of work, this
+    // says which site you are on.
+    | "project_assigned";
   title: string;
   body: string | null;
   linkPath: string | null;

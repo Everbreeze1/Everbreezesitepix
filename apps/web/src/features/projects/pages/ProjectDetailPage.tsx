@@ -36,7 +36,6 @@ import {
   StickyNote,
   Type as TypeIcon,
   Copy as CopyIcon,
-  Users,
   Download,
 } from "lucide-react";
 import { formatBytes } from "@/hooks/use-storage-usage";
@@ -52,6 +51,7 @@ import { NewReportDialog } from "@/features/projects/components/NewReportDialog"
 import { ProjectActionsMenu } from "@/features/projects/components/ProjectActionsMenu";
 import { ProjectChecklists } from "@/features/projects/components/ProjectChecklists";
 import { ProjectBlueprintOrigin } from "@/features/projects/components/ProjectBlueprintOrigin";
+import { ProjectStageChip } from "@/features/projects/components/ProjectStageChip";
 import { useProjectBlueprintOrigin } from "@/hooks/use-project-blueprint-origin";
 import { startOfMonth } from "date-fns";
 import { PhotoCalendar, type CalendarPhoto } from "@/features/gallery/components/PhotoCalendar";
@@ -61,7 +61,10 @@ import { ProjectWorkflows } from "@/features/projects/components/ProjectWorkflow
 import { ProjectTasks, type ProjectTasksHandle } from "@/features/projects/components/ProjectTasks";
 import { ProjectDocuments } from "@/features/projects/components/ProjectDocuments";
 import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
-import { ProjectContributors } from "@/features/projects/components/ProjectContributors";
+import { ContributorsChip } from "@/features/projects/components/ProjectContributors";
+import { ProjectCrew } from "@/features/projects/components/ProjectCrew";
+import { AssignTeammatesDialog } from "@/features/projects/components/AssignTeammatesDialog";
+import { useProjectAssignees } from "@/hooks/use-project-assignees";
 import { PhotoTagPopoverBody } from "@/features/photos/components/PhotoTagPopoverBody";
 import { sharePhotoNative } from "@/lib/native-share";
 import { VideoRecorder } from "@/features/photos/components/VideoRecorder";
@@ -175,7 +178,6 @@ export type ProjectDetailSearch = {
 
 import type { Project, Photo, Report } from "../types";
 import { STATUS_DOT } from "../constants";
-import { heroInitials } from "../utils/hero-initials";
 import { PhotoCarousel } from "../components/PhotoCarousel";
 
 export function ProjectDetailPage() {
@@ -309,12 +311,22 @@ export function ProjectDetailPage() {
   const [ocrCopied, setOcrCopied] = useState(false);
   const runOcr = extractPhotoText;
   const [contributors, setContributors] = useState<CommentContributor[]>([]);
+  /*
+   * The same people, with what each of them actually did here.
+   *
+   * `contributors` above is narrowed to `CommentContributor` because that is
+   * what the mention and assignee pickers consume. The header's chip needs the
+   * counts too - a panel that says "3 contributors" and then lists three names
+   * with nothing after them is the same dead end in a bigger box.
+   */
+  const [contributorRows, setContributorRows] = useState<any[]>([]);
   const fetchContribs = getProjectContributors;
   useEffect(() => {
     let cancelled = false;
     fetchContribs({ data: { projectId } })
       .then((res: any) => {
         if (cancelled) return;
+        setContributorRows(res.contributors ?? []);
         setContributors(
           (res.contributors ?? []).map((c: any) => ({
             userId: c.userId,
@@ -329,6 +341,14 @@ export function ProjectDetailPage() {
       cancelled = true;
     };
   }, [projectId, fetchContribs]);
+  /*
+   * Who is staffed on this job, as opposed to who has touched it. Both are in
+   * the header because they answer different questions and the header used to
+   * answer only the second one, in a word nobody could hover.
+   */
+  const { byProject: assigneesByProject, canAssign } = useProjectAssignees([projectId]);
+  const assignees = assigneesByProject[projectId] ?? [];
+  const [assignOpen, setAssignOpen] = useState(false);
   const [phaseFilter, setPhaseFilter] = useState<"all" | "before" | "after" | "untagged">("all");
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [showTags, setShowTags] = useState(false);
@@ -2509,6 +2529,16 @@ export function ProjectDetailPage() {
         />
       )}
 
+      {/* Staffing this job, from the job. Same rows the roster's picker writes. */}
+      {project && (
+        <AssignTeammatesDialog
+          projectId={projectId}
+          projectName={project.name}
+          open={assignOpen}
+          onOpenChange={setAssignOpen}
+        />
+      )}
+
       {project && (
         <NewReportDialog
           open={createReportOpen}
@@ -2587,6 +2617,19 @@ export function ProjectDetailPage() {
                     {(STATUS_DOT[project.status] ?? STATUS_DOT.active).label}
                   </span>
                   {/*
+                    Status above is the wide bucket; this is where the job sits
+                    inside it. Two fields, side by side, because that is the
+                    clearest way to see they answer different questions. Renders
+                    nothing until the team has a pipeline.
+                  */}
+                  <ProjectStageChip
+                    projectId={project.id}
+                    stageId={project.pipeline_stage_id}
+                    onChanged={(stageId) =>
+                      setProject((p) => (p ? ({ ...p, pipeline_stage_id: stageId } as Project) : p))
+                    }
+                  />
+                  {/*
                    * Origin is identity, not a statistic. This used to sit at the
                    * end of the metadata strip below, in 12px at 60% opacity
                    * behind three numeric stats, where it read as a footnote about
@@ -2611,17 +2654,23 @@ export function ProjectDetailPage() {
                     <span className="truncate">{projectAddress(project) ?? project.location}</span>
                   </a>
                 )}
-                {contributors.length > 0 && (
-                  <div className="mt-4 flex items-center gap-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sidebar-ring text-[8px] font-semibold text-sidebar-foreground">
-                      {heroInitials(contributors[0].fullName, contributors[0].email)}
-                    </span>
-                    <span className="text-xs font-semibold text-sidebar-foreground">
-                      {contributors.length}{" "}
-                      {contributors.length === 1 ? "contributor" : "contributors"}
-                    </span>
-                  </div>
-                )}
+                {/*
+                  Two people rows, because there are two questions and they have
+                  different answers. The crew is who was put on this job and is
+                  the one an admin can change from here; contributors is the
+                  record of who has actually worked in it. Previously the header
+                  showed only the second, as one initial and a count with
+                  nothing behind either.
+                */}
+                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <ProjectCrew
+                    userIds={assignees}
+                    canAssign={canAssign}
+                    onAssign={() => setAssignOpen(true)}
+                    variant="dark"
+                  />
+                  <ContributorsChip contributors={contributorRows} variant="dark" />
+                </div>
               </div>
             </div>
 
@@ -2692,12 +2741,15 @@ export function ProjectDetailPage() {
               />
             </div>
             <div className="flex flex-wrap items-center gap-5 text-xs font-bold text-sidebar-foreground/60">
-              {contributors.length > 0 && (
-                <span className="inline-flex items-center gap-2">
-                  <Users className="h-4 w-4 text-sidebar-ring" />
-                  {contributors.length} {contributors.length === 1 ? "contributor" : "contributors"}
-                </span>
-              )}
+              {/*
+                The second "N contributors" is gone rather than explained.
+                It was the same count as the one in the block above, forty
+                pixels away, in a rail of hard numbers where it read as a third
+                statistic - which is how one word ended up on this header twice
+                with nothing behind either copy. The chip above now carries the
+                names, the counts and what the word means; repeating the number
+                here would only give a reader a second thing to hover.
+              */}
               <span className="inline-flex items-center gap-2">
                 <Camera className="h-4 w-4 text-sidebar-ring" />
                 {(totalPhotos || photos.length).toLocaleString()} field captures

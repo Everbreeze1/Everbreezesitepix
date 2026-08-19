@@ -14,7 +14,9 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -25,6 +27,13 @@ import { softDeleteProject } from "@/lib/trash.functions";
 import { toast } from "sonner";
 import { MapPin, Trash2 } from "lucide-react";
 import { writeWithNewColumns, PROJECT_CLIENT_KEYS } from "@/lib/merge-field-columns";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
+import { qk } from "@/lib/query-keys";
+import { listProjectBoards, setProjectPipelineStage } from "@/lib/project-boards.functions";
+
+/** The Select's stand-in for NULL: Radix reserves the empty string. */
+const NO_STAGE = "__none__";
 
 export interface EditableProject {
   id: string;
@@ -38,6 +47,14 @@ export interface EditableProject {
   latitude?: number | null;
   longitude?: number | null;
   status: string;
+  /**
+   * Where the project is in its pipeline. One value, always: this is the field
+   * that replaced the tag-per-column pipelines, so setting it here and dragging
+   * the card on the board are the same single write. Optional because a
+   * database that predates 20260917000000_pipeline_stages.sql will not return
+   * it.
+   */
+  pipeline_stage_id?: string | null;
   /*
    * Merge fields. Every document template asks for these, and before they had
    * a home here the "Use in a project" step asked for them again on every
@@ -68,12 +85,28 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
     latitude: project.latitude ?? (null as number | null),
     longitude: project.longitude ?? (null as number | null),
     status: project.status,
+    pipeline_stage_id: project.pipeline_stage_id ?? null,
     client_name: project.client_name ?? "",
     client_contact: project.client_contact ?? "",
     project_number: project.project_number ?? "",
   });
   const [saving, setSaving] = useState(false);
   const [trashing, setTrashing] = useState(false);
+  const { user } = useAuth();
+
+  /*
+   * The stage list comes from the team's pipelines rather than a fixed enum,
+   * because stages are editable per board. Grouped by pipeline in the dropdown
+   * so "In Progress" on two different boards is still two distinct choices.
+   */
+  const boardsQuery = useQuery({
+    queryKey: qk.projectBoards(user?.id ?? ""),
+    queryFn: async () => (await listProjectBoards()).boards,
+    enabled: open && !!user,
+    staleTime: 60_000,
+  });
+  const boards = boardsQuery.data ?? [];
+  const hasStages = boards.some((b) => b.stages.length > 0);
   const navigate = useNavigate();
   const confirm = useConfirm();
   const trash = softDeleteProject;
@@ -107,10 +140,31 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
           .eq("id", project.id),
       "Saved without the client details",
     );
+    if (error) {
+      setSaving(false);
+      return toast.error(error.message);
+    }
+
+    // Separate write on purpose: it goes through the same validated op the
+    // board's drag uses, and it keeps the stage out of the retry above, which
+    // exists for databases missing the client columns.
+    const nextStage = form.pipeline_stage_id;
+    if (nextStage !== (project.pipeline_stage_id ?? null)) {
+      try {
+        await setProjectPipelineStage({
+          data: { projectId: project.id, stageId: nextStage },
+        });
+      } catch (e: any) {
+        setSaving(false);
+        toast.error(e?.message ?? "Saved, but could not change the pipeline stage");
+        onSaved({ ...project, ...patch });
+        return;
+      }
+    }
+
     setSaving(false);
-    if (error) return toast.error(error.message);
     toast.success("Project updated");
-    onSaved({ ...project, ...patch });
+    onSaved({ ...project, ...patch, pipeline_stage_id: nextStage });
     onOpenChange(false);
   };
 
@@ -165,6 +219,43 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
               </SelectContent>
             </Select>
           </div>
+
+          {hasStages && (
+            <div className="space-y-1.5">
+              <Label htmlFor="ep-stage">Pipeline stage</Label>
+              <Select
+                value={form.pipeline_stage_id ?? NO_STAGE}
+                onValueChange={(v) =>
+                  setForm({ ...form, pipeline_stage_id: v === NO_STAGE ? null : v })
+                }
+              >
+                <SelectTrigger id="ep-stage">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_STAGE}>Not in a pipeline</SelectItem>
+                  {boards
+                    .filter((b) => b.stages.length > 0)
+                    .map((b) => (
+                      <SelectGroup key={b.id}>
+                        <SelectLabel>{b.name}</SelectLabel>
+                        {[...b.stages]
+                          .sort((x, y) => x.position - y.position)
+                          .map((st) => (
+                            <SelectItem key={st.id} value={st.id}>
+                              {st.name}
+                            </SelectItem>
+                          ))}
+                      </SelectGroup>
+                    ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Where the job is in the process. Status above is the wider bucket; this tracks
+                movement inside it, and a project holds one stage at a time.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="ep-loc">Address search</Label>

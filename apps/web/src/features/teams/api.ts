@@ -11,6 +11,8 @@ export {
   updateMemberRole,
   setMemberProjects,
   getMemberProjects,
+  getProjectAssignees,
+  setProjectAssignees,
   leaveTeam,
   resendInvite,
   resendMemberConfirmation,

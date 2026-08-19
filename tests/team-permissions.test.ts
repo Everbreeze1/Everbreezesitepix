@@ -9,6 +9,9 @@ import {
   canManageMember,
   normaliseRole,
   roleAllowedOnTier,
+  roleDescriptionForTier,
+  roleLabelForTier,
+  tierHasJobScoping,
   type TeamRole,
 } from "@sitepix/shared/team-permissions";
 
@@ -76,10 +79,86 @@ describe("roles are gated by tier, which is what the pricing page sells", () => 
     expect(roleAllowedOnTier("restricted", "starter")).toBe(false);
   });
 
-  it("Manager is the Pro differentiator, Restricted is the Team one", () => {
-    expect(roleAllowedOnTier("manager", "pro")).toBe(true);
+  /*
+   * Manager used to sit on Pro. It moved.
+   *
+   * With Manager on Pro, a Pro customer held Admin / Manager / Standard - two
+   * thirds of the hierarchy - and Team added one row on top of it. "Advanced
+   * roles & permissions" then described something Pro mostly already had,
+   * which is the same complaint that produced this matrix, one tier down. Pro
+   * is flat on purpose now: Admin and Member, one level apart.
+   */
+  it("Pro is flat: Admin and Member, nothing between and nothing scoped", () => {
+    expect(roleAllowedOnTier("admin", "pro")).toBe(true);
+    expect(roleAllowedOnTier("standard", "pro")).toBe(true);
+    expect(roleAllowedOnTier("manager", "pro")).toBe(false);
     expect(roleAllowedOnTier("restricted", "pro")).toBe(false);
+    expect(assignableRoles("pro", { assignmentsEnforced: true })).toEqual(["admin", "standard"]);
+  });
+
+  it("the middle tier and the scoped tier are both Team's", () => {
+    expect(roleAllowedOnTier("manager", "team")).toBe(true);
     expect(roleAllowedOnTier("restricted", "team")).toBe(true);
+    expect(assignableRoles("team", { assignmentsEnforced: true })).toEqual([
+      "admin",
+      "manager",
+      "standard",
+      "restricted",
+    ]);
+  });
+
+  it("Starter and Pro offer the same two roles, so Pro's depth is seats not roles", () => {
+    expect(assignableRoles("starter", { assignmentsEnforced: true })).toEqual(
+      assignableRoles("pro", { assignmentsEnforced: true }),
+    );
+  });
+});
+
+describe("each tier names the base seat the way it sells it", () => {
+  it("Team calls it Standard, flatter tiers call it Member", () => {
+    expect(roleLabelForTier("standard", "team")).toBe("Standard");
+    expect(roleLabelForTier("standard", "pro")).toBe("Member");
+    expect(roleLabelForTier("standard", "starter")).toBe("Member");
+    // The historical column value renders as the same thing as the spec's name.
+    expect(roleLabelForTier("member", "pro")).toBe("Member");
+    expect(roleLabelForTier("member", "team")).toBe("Standard");
+  });
+
+  it("every other role keeps one name on every tier", () => {
+    for (const tier of ["starter", "pro", "team"] as const) {
+      for (const role of ["owner", "admin", "manager", "restricted"] as const) {
+        expect(roleLabelForTier(role, tier)).toBe(ROLE_LABEL[role]);
+      }
+    }
+  });
+
+  it("a legacy role a tier can no longer hold still renders as itself", () => {
+    // A Pro workspace that held a Manager before the tier moved must not draw
+    // that person as nothing, or as a Member they are not.
+    expect(roleLabelForTier("manager", "pro")).toBe("Manager");
+    expect(roleDescriptionForTier("manager", "pro")).toBe(ROLE_DESCRIPTION.manager);
+  });
+
+  it("every role has a one-liner on every tier, because the picker renders one", () => {
+    for (const tier of ["starter", "pro", "team"] as const) {
+      for (const role of ALL) {
+        expect(roleDescriptionForTier(role, tier).length).toBeGreaterThan(10);
+      }
+    }
+  });
+
+  it("the flat plans say out loud that Member is one level below Admin", () => {
+    expect(roleDescriptionForTier("standard", "pro")).toMatch(/one level below admin/i);
+    expect(roleDescriptionForTier("standard", "team")).toBe(ROLE_DESCRIPTION.standard);
+  });
+
+  it("job scoping is Team's, and is the same answer as the Restricted role", () => {
+    expect(tierHasJobScoping("starter")).toBe(false);
+    expect(tierHasJobScoping("pro")).toBe(false);
+    expect(tierHasJobScoping("team")).toBe(true);
+    for (const tier of ["starter", "pro", "team"] as const) {
+      expect(tierHasJobScoping(tier)).toBe(roleAllowedOnTier("restricted", tier));
+    }
   });
 });
 
@@ -258,5 +337,126 @@ describe("family: no capability is declared without a call site", () => {
     expect(can("manager", "manage_users")).toBe(false);
     expect(can("manager", "destructive_actions")).toBe(false);
     expect(can("manager", "manage_templates")).toBe(false);
+  });
+});
+
+describe("family: the roster shows the role, and the picker explains it", () => {
+  const read = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
+
+  /*
+   * Two reports, one root cause: the Team roster held the whole permission
+   * model and displayed almost none of it.
+   *
+   *   "there's no way to see what role a member currently has (no badge on
+   *    their row, and reopening the Manage menu shows no checkmark or
+   *    indicator next to their current role)"
+   *   "none of the three roles have any explanation of what they actually
+   *    grant, so an admin is guessing when they assign one"
+   *
+   * `ROLE_LABEL` and `ROLE_DESCRIPTION` had both existed in this file for a
+   * round while the roster printed only the description, in grey, as though it
+   * were status text - and the menu deleted the current role from the list
+   * entirely, which is the one row that answers "where do they stand now".
+   * These assertions are here because a constant that exists and is not
+   * rendered is indistinguishable from a shipped feature.
+   */
+  it("every member row carries a role badge", () => {
+    const src = read("apps/web/src/features/teams/pages/TeamsPage.tsx");
+    expect(src).toMatch(/<RoleBadge role=\{m\.role\} tier=\{plan\}/);
+  });
+
+  it("the badge names and explains the role the way this tier does", () => {
+    const src = read("apps/web/src/features/teams/components/RoleBadge.tsx");
+    expect(src).toMatch(/roleLabelForTier\(/);
+    expect(src).toMatch(/roleDescriptionForTier\(/);
+  });
+
+  it("the Manage menu keeps the current role in the list and marks it", () => {
+    const src = read("apps/web/src/features/teams/pages/TeamsPage.tsx");
+    // The filter that removed it is what made the menu unable to answer
+    // "what are they now?".
+    expect(src).not.toMatch(/\.filter\(\(role\) => role !== normaliseRole\(m\.role\)\)/);
+    expect(src).toMatch(/const currentRole = normaliseRole\(m\.role\)/);
+    expect(src).toMatch(/const isCurrent = role === currentRole/);
+    // A role this plan can no longer hand out is still listed for whoever
+    // holds it, or the tick would be missing for exactly the rows whose role
+    // is least obvious - a Manager left on a workspace that downgraded.
+    expect(src).toMatch(/current, not on this plan/);
+    expect(src).toMatch(/<Check className="h-4 w-4 text-primary" \/>/);
+  });
+
+  it("every role option renders its one-liner", () => {
+    const src = read("apps/web/src/features/teams/pages/TeamsPage.tsx");
+    expect(src).toMatch(/\{roleTitle\(role, plan\)\}/);
+  });
+
+  it("the job-scoping row is gated on the tier that has scoping", () => {
+    const src = read("apps/web/src/features/teams/pages/TeamsPage.tsx");
+    expect(src).toMatch(/tierHasJobScoping\(plan\)/);
+  });
+});
+
+describe("family: one role vocabulary, not one per screen", () => {
+  const read = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
+
+  /*
+   * Three screens showed a role and all three had invented their own words for
+   * it. The roster printed the description in grey and no name at all; Settings
+   * called an Admin a "Project manager" and defaulted everything it did not
+   * recognise - Manager, Standard, Restricted - to "Workspace admin", so a
+   * Restricted member opened their own settings and was told they were a
+   * workspace admin; Collaborators held a three-entry map and fell through to
+   * the raw column, rendering "restricted" in lower case under a CSS capitalize.
+   *
+   * The client's report was "there's no way to see what role a member currently
+   * has". The narrow reading is a missing badge on one list. The actual state
+   * was three inconsistent answers to the same question, one of which was
+   * wrong, and wrong is worse than missing: missing information makes you go
+   * and look.
+   *
+   * So the rule is that a screen showing a role renders `RoleBadge`, which
+   * reads the one matrix. These assertions are what keeps a fourth vocabulary
+   * from being added the next time somebody needs a role on a page.
+   */
+  const ROLE_SURFACES = [
+    "apps/web/src/features/teams/pages/TeamsPage.tsx",
+    "apps/web/src/features/teams/pages/CollaboratorsPage.tsx",
+    "apps/web/src/features/settings/pages/SettingsPage.tsx",
+    "apps/web/src/features/projects/components/AssignTeammatesDialog.tsx",
+  ];
+
+  it("every screen that shows a role uses the shared badge", () => {
+    for (const path of ROLE_SURFACES) {
+      expect(read(path), path).toMatch(/<RoleBadge\b/);
+    }
+  });
+
+  /*
+   * Two things are removed before matching.
+   *
+   * Comments: the retired names are quoted in the notes that record why they
+   * went, and a test that forbade naming a mistake would push the next person
+   * to delete the explanation rather than the code.
+   *
+   * Placeholders: "Project manager" is also a perfectly good thing to type into
+   * the free-text Job title field on the profile form, and that placeholder has
+   * nothing to do with workspace roles. Flagging it would be the test failing to
+   * make the distinction this whole describe block is about.
+   */
+  const strip = (src: string) =>
+    src
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "")
+      .replace(/placeholder="[^"]*"/g, "");
+
+  it("no screen keeps a private map of role names", () => {
+    for (const path of ROLE_SURFACES) {
+      const src = strip(read(path));
+      // The three shapes that were actually there: two local label lookups and
+      // the Settings helper that renamed Admin to "Project manager".
+      expect(src, path).not.toMatch(/const \w*[rR]ole\w*: Record<string, string> =/);
+      expect(src, path).not.toMatch(/function roleTitleFor\(/);
+      expect(src, path).not.toMatch(/"Project manager"|"Crew member"|"Workspace admin"/);
+    }
   });
 });

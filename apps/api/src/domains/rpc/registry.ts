@@ -88,6 +88,8 @@ import {
   updateMemberRoleService,
   setMemberProjectsService,
   getMemberProjectsService,
+  getProjectAssigneesService,
+  setProjectAssigneesService,
 } from "../teams/service";
 import {
   acceptSubcontractorInviteService,
@@ -195,6 +197,8 @@ import {
   deleteProjectBoardInputSchema,
   deleteProjectBoardService,
   listProjectBoardsService,
+  setProjectPipelineStageInputSchema,
+  setProjectPipelineStageService,
   updateProjectBoardInputSchema,
   updateProjectBoardService,
 } from "../projects/boards";
@@ -675,6 +679,33 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     (d) => z.object({ memberId: z.string().uuid() }).parse(d),
     getMemberProjectsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
+  /*
+   * The crew on a job, read from the project rather than from the roster. Same
+   * `project_assignments` table as setMemberProjects - see the note above
+   * `getProjectAssigneesService` for why one table serves both directions.
+   */
+  getProjectAssignees: authed(
+    (d) =>
+      z
+        .object({
+          // A list, because the projects grid asks about every visible card at
+          // once. Capped at the page size a browser would ever render.
+          projectIds: z.array(z.string().uuid()).max(200),
+        })
+        .parse(d),
+    getProjectAssigneesService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  setProjectAssignees: authed(
+    (d) =>
+      z
+        .object({
+          projectId: z.string().uuid(),
+          // Empty is allowed: it is how a job is unstaffed.
+          userIds: z.array(z.string().uuid()).max(200),
+        })
+        .parse(d),
+    setProjectAssigneesService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
   leaveTeam: {
     handle: async (ctx) => {
       if (!ctx) throw Object.assign(new Error("Unauthorized"), { status: 401 });
@@ -1043,6 +1074,10 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   deleteProjectBoard: authed(
     (d) => deleteProjectBoardInputSchema.parse(d),
     deleteProjectBoardService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  setProjectPipelineStage: authed(
+    (d) => setProjectPipelineStageInputSchema.parse(d),
+    setProjectPipelineStageService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   listShowcases: {
     handle: async (ctx) => {

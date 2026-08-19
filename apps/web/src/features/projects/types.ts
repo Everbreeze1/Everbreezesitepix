@@ -12,6 +12,13 @@ export interface Project {
   latitude?: number | null;
   longitude?: number | null;
   status: string;
+  /**
+   * Position in a pipeline, single-select. Distinct from `status`, which is the
+   * Active/Completed/Archived bucket, and from `tags`, which stopped doubling
+   * as pipeline columns in 20260917000000_pipeline_stages.sql. NULL means the
+   * project is in no pipeline.
+   */
+  pipeline_stage_id?: string | null;
   created_at: string;
   updated_at: string;
   tags: string[];

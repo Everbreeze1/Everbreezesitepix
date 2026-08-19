@@ -16,6 +16,7 @@ import {
   RefreshCcw,
   UserPlus,
   X,
+  Check,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
@@ -51,15 +53,20 @@ import {
 } from "@/features/teams/api";
 import { relativeTime } from "@sitepix/shared";
 import {
-  ROLE_DESCRIPTION,
   ROLE_LABEL,
   assignableRoles,
   can,
   canManageMember,
   normaliseRole,
+  roleDescriptionForTier,
+  roleLabelForTier,
+  tierHasJobScoping,
+  type AssignableRole,
+  type TeamRole,
 } from "@sitepix/shared/team-permissions";
 import { SubcontractorsPanel } from "../components/SubcontractorsPanel";
 import { AssignJobsDialog } from "../components/AssignJobsDialog";
+import { RoleBadge } from "../components/RoleBadge";
 
 const AVATAR_PALETTE = ["#059669", "#7C3AED", "#D97706", "#DB2777", "#0EA5E9", "#65A30D"];
 const avatarColor = (role: string, index: number) =>
@@ -78,12 +85,16 @@ const roleIcon = (r: string) =>
   );
 
 /*
- * Both maps go through `normaliseRole` so the historical `member` value and the
+ * Both go through `normaliseRole` so the historical `member` value and the
  * spec's `standard` render as one thing. Falling back to the raw value would
  * print "restricted" in lower case next to properly cased labels.
+ *
+ * Both take the plan, because the tiers name the base seat differently on
+ * purpose: Team runs a hierarchy and calls it Standard, Pro is flat and calls
+ * it Member. The rule lives in `team-permissions.ts` so no screen re-derives it.
  */
-const roleLabel = (role: string) => ROLE_LABEL[normaliseRole(role)];
-const roleTitle = (role: string) => ROLE_DESCRIPTION[normaliseRole(role)];
+const roleLabel = (role: string, plan: TeamPlan) => roleLabelForTier(role, plan);
+const roleTitle = (role: string, plan: TeamPlan) => roleDescriptionForTier(role, plan);
 
 function initials(name?: string | null, email?: string | null) {
   const src = (name || email || "?").trim();
@@ -207,7 +218,7 @@ function TeamDesignPreview() {
                       {m.name}
                     </div>
                     <div className="mt-0.5 truncate font-manrope text-xs text-muted-foreground">
-                      {roleTitle(m.role)} · Active {m.active}
+                      {roleTitle(m.role, "team")} · Active {m.active}
                     </div>
                   </div>
                 </div>
@@ -430,7 +441,7 @@ function TeamDashboard({
       <SubcontractorsPanel isTeamPlan={plan === "team"} />
 
       {invites.length > 0 && (
-        <PendingInvites invites={invites} canManage={canManage} onChange={onChange} />
+        <PendingInvites invites={invites} canManage={canManage} plan={plan} onChange={onChange} />
       )}
 
       <InviteDialog
@@ -623,10 +634,13 @@ function InviteDialog({
 function PendingInvites({
   invites,
   canManage,
+  plan,
   onChange,
 }: {
   invites: any[];
   canManage: boolean;
+  /** Only to name the pending role the way this tier names it. */
+  plan: TeamPlan;
   onChange: () => void;
 }) {
   const revoke = revokeInvite;
@@ -655,8 +669,12 @@ function PendingInvites({
                 <div className="truncate font-manrope text-sm font-extrabold text-foreground">
                   {inv.email}
                 </div>
-                <div className="font-manrope text-xs capitalize text-muted-foreground">
-                  {inv.role} ·{" "}
+                {/* The tier's own word for the role, not the raw column. It
+                    used to print the stored value with a CSS capitalize on it,
+                    so a Pro workspace read "Member" by luck and a Team one would
+                    have read "Member" wrongly. */}
+                <div className="font-manrope text-xs text-muted-foreground">
+                  {roleLabel(inv.role, plan)} ·{" "}
                   {expired ? (
                     <span className="text-destructive">expired</span>
                   ) : (
@@ -838,6 +856,26 @@ function MembersList({
             const canEdit = canManageMember(myRole, m.role);
             const canRemove = (myRole === "owner" || myRole === "admin") && m.role !== "owner";
             const unconfirmed = m.emailConfirmed === false;
+            /*
+             * The roles this plan may hand out, plus - if it is not already in
+             * there - the one this person actually holds.
+             *
+             * The second half matters for a workspace that downgraded, or that
+             * held a Manager before Manager became Team-only. Their row still
+             * says Manager, correctly, and without this the menu would open on
+             * a list with no tick anywhere in it: the same "where do they stand
+             * now?" dead end, reintroduced for exactly the people whose role is
+             * least obvious. It renders disabled, so it says where they are
+             * without offering to put anybody else there.
+             */
+            const currentRole = normaliseRole(m.role);
+            const offered = assignableRoles(plan, { assignmentsEnforced: true });
+            // Owner is never in the list: it is transferred, not assigned, and
+            // `canEdit` is false for that row anyway.
+            const roleOptions: AssignableRole[] =
+              currentRole === "owner" || (offered as TeamRole[]).includes(currentRole)
+                ? offered
+                : [currentRole, ...offered];
             const canResend = myRole === "owner" || myRole === "admin";
             return (
               <li key={m.id} className="flex items-center justify-between gap-4 p-5">
@@ -849,10 +887,21 @@ function MembersList({
                     {initials(m.profile?.full_name, email)}
                   </span>
                   <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span className="truncate font-manrope text-sm font-extrabold text-foreground">
                         {name}
                       </span>
+                      {/*
+                        The role, as a badge, on the row.
+                        Until this landed the only trace of somebody's role was
+                        the sentence below in muted grey, which reads as status
+                        text next to "Active 2h ago" rather than as a
+                        permission. An owner scanning the roster could not tell
+                        their two Admins from their four Members without reading
+                        every line. A permission you cannot see is a permission
+                        you cannot audit.
+                      */}
+                      <RoleBadge role={m.role} tier={plan} />
                       {unconfirmed && (
                         <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 font-manrope text-[10px] font-extrabold uppercase tracking-[0.5px] text-amber-600 dark:text-amber-400">
                           Email not confirmed
@@ -860,7 +909,7 @@ function MembersList({
                       )}
                     </div>
                     <div className="mt-0.5 truncate font-manrope text-xs text-muted-foreground">
-                      {roleTitle(m.role)}
+                      {roleTitle(m.role, plan)}
                       {unconfirmed ? (
                         <> · Cannot sign in until they confirm their email</>
                       ) : (
@@ -892,36 +941,159 @@ function MembersList({
                           Manage
                         </button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {/* Driven by the shared matrix rather than a hardcoded
-                            pair, so the picker and the server's own check read
-                            the same list and a tier can never be offered a role
-                            the RPC will refuse. */}
-                        {canEdit &&
-                          assignableRoles(plan, { assignmentsEnforced: true })
-                            .filter((role) => role !== normaliseRole(m.role))
-                            .map((role) => (
-                              <DropdownMenuItem
-                                key={role}
-                                onClick={async () => {
-                                  try {
-                                    await updateRole({ data: { memberId: m.id, role } });
-                                    toast.success(`Set as ${ROLE_LABEL[role]}`);
-                                    onChange();
-                                  } catch (e: any) {
-                                    toast.error(e?.message ?? "Could not change role");
+                      <DropdownMenuContent align="end" className="w-72 max-w-[calc(100vw-2rem)]">
+                        {/*
+                          The whole list, with the current one marked, and each
+                          one saying what it grants.
+
+                          Two separate reports, one shape. The menu used to
+                          FILTER OUT the role the member already held, so
+                          reopening it showed no tick, no highlight and no
+                          mention of where they stand - the only way to answer
+                          "what is this person now?" was to close the menu and
+                          read the row. And every remaining row was two words,
+                          "Make Manager", with the difference between the roles
+                          written down nowhere a customer could reach. Both are
+                          the same failure: a permissions picker that does not
+                          state the permissions.
+
+                          So the current role stays in the list, disabled and
+                          ticked, and every row carries its one-liner from the
+                          shared matrix - the same sentences the server gates on.
+                        */}
+                        {canEdit && (
+                          <>
+                            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Role
+                            </DropdownMenuLabel>
+                            {roleOptions.map((role) => {
+                              const isCurrent = role === currentRole;
+                              return (
+                                <DropdownMenuItem
+                                  key={role}
+                                  disabled={isCurrent}
+                                  /*
+                                   * `data-[disabled]:opacity-100`, not a plain
+                                   * `opacity-100`. Radix dims a disabled item
+                                   * with `data-[disabled]:opacity-50`, and a
+                                   * bare opacity utility does not conflict with
+                                   * a variant one, so tailwind-merge kept both
+                                   * and the browser applied the variant. The
+                                   * screenshot showed the current role as the
+                                   * FAINTEST row in the menu, which is the
+                                   * opposite of the point.
+                                   */
+                                  className={
+                                    isCurrent
+                                      ? "bg-accent/60 data-[disabled]:opacity-100"
+                                      : undefined
                                   }
-                                }}
-                              >
-                                <Shield className="mr-2 h-4 w-4" /> Make {ROLE_LABEL[role]}
+                                  onClick={async () => {
+                                    if (isCurrent) return;
+                                    try {
+                                      const res: any = await updateRole({
+                                        data: { memberId: m.id, role },
+                                      });
+                                      /*
+                                       * Restricted is the one role where the
+                                       * next question is always "which jobs?".
+                                       * Whatever crew rows this person already
+                                       * had just became their entire view of
+                                       * the workspace, so the toast says how
+                                       * many that is and the picker opens
+                                       * rather than waiting to be found.
+                                       */
+                                      if (role === "restricted") {
+                                        const n = res?.scopedProjectCount ?? 0;
+                                        toast.success(`Set as ${roleLabel(role, plan)}`, {
+                                          description:
+                                            n === 0
+                                              ? "They cannot open any job until you pick some."
+                                              : `They keep the ${n} job${n === 1 ? "" : "s"} they are already on, and nothing else.`,
+                                        });
+                                        setAssigning({ id: m.id, name });
+                                      } else {
+                                        toast.success(`Set as ${roleLabel(role, plan)}`);
+                                      }
+                                      onChange();
+                                    } catch (e: any) {
+                                      toast.error(e?.message ?? "Could not change role");
+                                    }
+                                  }}
+                                >
+                                  <span className="mr-2 flex h-4 w-4 shrink-0 items-center justify-center">
+                                    {isCurrent ? (
+                                      <Check className="h-4 w-4 text-primary" />
+                                    ) : (
+                                      <Shield className="h-4 w-4 text-muted-foreground" />
+                                    )}
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span className="block font-semibold">
+                                      {roleLabel(role, plan)}
+                                      {isCurrent && (
+                                        <span className="ml-1.5 font-normal text-muted-foreground">
+                                          {offered.includes(role as never)
+                                            ? "(current)"
+                                            : "(current, not on this plan)"}
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span className="block text-xs font-normal leading-snug text-muted-foreground">
+                                      {roleTitle(role, plan)}
+                                    </span>
+                                  </span>
+                                </DropdownMenuItem>
+                              );
+                            })}
+                          </>
+                        )}
+                        {/*
+                          Only Restricted members are scoped, so this is the
+                          only role for which "which jobs?" is a question - and
+                          Restricted is Team-only, so on Pro this row is absent
+                          rather than present-and-inert. Putting somebody on a
+                          job is a different thing and lives on the project
+                          itself, where every plan has it.
+                        */}
+                        {canEdit &&
+                          tierHasJobScoping(plan) &&
+                          normaliseRole(m.role) === "restricted" && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => setAssigning({ id: m.id, name })}>
+                                <UserIcon className="mr-2 h-4 w-4" />
+                                <span className="min-w-0">
+                                  <span className="block font-semibold">Choose their jobs</span>
+                                  <span className="block text-xs font-normal leading-snug text-muted-foreground">
+                                    The jobs you tick are the only ones they can open.
+                                  </span>
+                                </span>
                               </DropdownMenuItem>
-                            ))}
-                        {/* Only Restricted members are scoped, so this is the
-                            only role for which "which jobs?" is a question. */}
-                        {canEdit && normaliseRole(m.role) === "restricted" && (
-                          <DropdownMenuItem onClick={() => setAssigning({ id: m.id, name })}>
-                            <UserIcon className="mr-2 h-4 w-4" /> Choose their jobs
-                          </DropdownMenuItem>
+                            </>
+                          )}
+                        {/*
+                          The honest version of the upsell: it names what is
+                          missing rather than the plan. Shown only to someone
+                          who is actually picking a role, and only where the
+                          missing tiers are real - a Team workspace sees the
+                          full list and never sees this.
+                        */}
+                        {canEdit && plan !== "team" && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild>
+                              <Link to="/pricing">
+                                <Sparkles className="mr-2 h-4 w-4 text-primary" />
+                                <span className="min-w-0">
+                                  <span className="block font-semibold">Need a middle tier?</span>
+                                  <span className="block text-xs font-normal leading-snug text-muted-foreground">
+                                    Managers, and scoping someone to named jobs, are on Team.
+                                  </span>
+                                </span>
+                              </Link>
+                            </DropdownMenuItem>
+                          </>
                         )}
                         {canRemove && (
                           <>
@@ -940,7 +1112,7 @@ function MembersList({
                     <button
                       type="button"
                       disabled
-                      title={`${roleLabel(m.role)} - no actions available`}
+                      title={`${roleLabel(m.role, plan)} - no actions available`}
                       className="cursor-default rounded-xl bg-muted px-3 py-2 font-manrope text-xs font-extrabold text-muted-foreground/50"
                     >
                       Manage

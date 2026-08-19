@@ -148,7 +148,15 @@ export const PLANS: PlanPricing[] = [
       // this list is what they land on - it named every other Team feature
       // except the one they clicked for.
       "Client-facing Portfolio site + website embeds",
-      "Advanced roles & permissions",
+      /*
+       * Named, not gestured at. Pro is deliberately flat - Admin and Member,
+       * one level apart - so this line has to say what the extra depth
+       * actually is, or a Pro customer reading "advanced roles" has no way to
+       * tell whether they already have it. The two things it names are the two
+       * things `MIN_TIER` in packages/shared/src/team-permissions.ts holds back
+       * to this tier: the Manager row, and scoping a person to named jobs.
+       */
+      "Advanced roles & permissions: Manager tier, job-scoped access",
       // The tier's stated upgrade reason: on Pro, a one-day sub costs a full
       // seat. Enforced in RLS (20260910000000_subcontractor_access.sql), not
       // just hidden in the UI.
