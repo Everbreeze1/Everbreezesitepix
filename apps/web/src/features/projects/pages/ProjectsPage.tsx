@@ -1,5 +1,5 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query-keys";
 import { PhotoThumb } from "@/components/PhotoThumb";
@@ -78,6 +78,7 @@ import {
 } from "@/features/projects/components/CreateGroupDialog";
 import { CreateBoardDialog } from "@/features/projects/components/CreateBoardDialog";
 import { PipelineBoardView } from "@/features/projects/components/PipelineBoardView";
+import { PipelineTabStrip } from "@/features/projects/components/PipelineTabStrip";
 import { BoardSettingsSheet } from "@/features/projects/components/BoardSettingsSheet";
 import { AssignTeammatesDialog } from "@/features/projects/components/AssignTeammatesDialog";
 import { ProjectCrew } from "@/features/projects/components/ProjectCrew";
@@ -659,6 +660,18 @@ export function ProjectsPage() {
     if (boardsQuery.data) setBoards(boardsQuery.data);
   }, [boardsQuery.data]);
 
+  /*
+   * A pipeline that was only just created is not "missing", it is in flight.
+   *
+   * The effect below falls back to the first tab whenever the selected board is
+   * absent from the list, which is right for a board somebody deleted and wrong
+   * for one created a moment ago: `onCreated` selects it, then the refetch it
+   * kicks off lands a list that does not have it yet, and the selection snaps
+   * back to a different tab. That is what the client saw as the new pipeline
+   * "hiding" - it really was created, and really was deselected again.
+   */
+  const justCreatedBoardId = useRef<string | null>(null);
+
   // Boards are tabs now, so one is always selected - keep the pointer valid as
   // boards are created/renamed/deleted.
   useEffect(() => {
@@ -668,7 +681,20 @@ export function ProjectsPage() {
     }
     setActiveBoard((current) => {
       if (!current) return boards[0];
-      return boards.find((b) => b.id === current.id) ?? boards[0];
+      const found = boards.find((b) => b.id === current.id);
+      if (found) return found;
+      /*
+       * Hold the selection while the list catches up with the write.
+       *
+       * Deliberately not cleared the first time the board shows up. The local
+       * `setBoards` puts it in the list immediately, so clearing on the first
+       * match would drop the guard a moment before the refetch - which is the
+       * one list that might not have it yet - lands and knocks the selection
+       * onto another tab. The guard is released when a person picks a
+       * different tab, which is the only point at which it could be wrong.
+       */
+      if (justCreatedBoardId.current === current.id) return current;
+      return boards[0];
     });
   }, [boards]);
 
@@ -1713,33 +1739,17 @@ export function ProjectsPage() {
                     than in a second header block below it.
                   */}
                   <div className="mb-5 flex items-center gap-1 border-b border-border">
-                    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      {boards.map((b) => {
-                        const isActive = activeBoard?.id === b.id;
-                        return (
-                          <button
-                            key={b.id}
-                            type="button"
-                            onClick={() => setActiveBoard(b)}
-                            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-bold transition-colors ${
-                              isActive
-                                ? "border-foreground text-foreground"
-                                : "border-transparent text-muted-foreground hover:text-foreground"
-                            }`}
-                          >
-                            {b.name}
-                          </button>
-                        );
-                      })}
-                      <button
-                        type="button"
-                        onClick={() => setCreateBoardOpen(true)}
-                        aria-label="Create pipeline"
-                        className="-mb-px shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
-                    </div>
+                    <PipelineTabStrip
+                      boards={boards}
+                      activeId={activeBoard?.id ?? null}
+                      onSelect={(b) => {
+                        // Picking a tab by hand releases the just-created guard:
+                        // from here on the selection is the person's, not ours.
+                        justCreatedBoardId.current = null;
+                        setActiveBoard(b);
+                      }}
+                      onCreate={() => setCreateBoardOpen(true)}
+                    />
                     {activeBoard && (
                       <Button
                         variant="ghost"
@@ -1849,7 +1859,28 @@ export function ProjectsPage() {
             projectNames={allProjects.map((p) => p.name)}
             onCreated={(board) => {
               setBoards((prev) => [board, ...prev]);
-              void qc.invalidateQueries({ queryKey: qk.projectBoards(user?.id ?? "") });
+              // Select it, or creating a pipeline looks like it did nothing:
+              // the tab appears somewhere in a strip that may already be
+              // scrolled, and the board underneath keeps showing the old one.
+              // The strip scrolls the selected tab into view.
+              justCreatedBoardId.current = board.id;
+              setActiveBoard(board);
+              /*
+               * Write it into the cache rather than invalidating.
+               *
+               * `invalidateQueries` here kicks off a refetch that races the
+               * insert it is meant to pick up - and when the older response
+               * wins, the list comes back without the new pipeline and the
+               * selection jumps to a different tab. Seeding the cache keeps
+               * the query and the local list saying the same thing, and the
+               * next natural refetch reconciles from a point where the write
+               * is definitely visible.
+               */
+              qc.setQueryData(
+                qk.projectBoards(user?.id ?? ""),
+                (prev: ProjectBoard[] | undefined) =>
+                  prev ? [board, ...prev.filter((b) => b.id !== board.id)] : [board],
+              );
             }}
           />
 

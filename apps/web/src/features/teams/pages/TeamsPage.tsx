@@ -931,6 +931,19 @@ function MembersList({
                       {resendingId === m.id ? "Sending…" : "Resend confirmation"}
                     </button>
                   )}
+                  {/*
+                    A row with no actions gets no button.
+
+                    The owner's row used to render a disabled "Manage" styled
+                    like the live one, with the reason in a `title` attribute -
+                    so it read as an available control, sat there inviting a
+                    click, and did nothing. The automated driver for this page
+                    hung on it for thirty seconds mistaking it for actionable,
+                    which is a fair simulation of a person. The row still says
+                    everything it needs to: the Owner badge next to the name
+                    carries "Full control, including billing. Cannot be
+                    removed." on hover.
+                  */}
                   {canEdit || canRemove ? (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -1108,16 +1121,7 @@ function MembersList({
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled
-                      title={`${roleLabel(m.role, plan)} - no actions available`}
-                      className="cursor-default rounded-xl bg-muted px-3 py-2 font-manrope text-xs font-extrabold text-muted-foreground/50"
-                    >
-                      Manage
-                    </button>
-                  )}
+                  ) : null}
                 </div>
               </li>
             );

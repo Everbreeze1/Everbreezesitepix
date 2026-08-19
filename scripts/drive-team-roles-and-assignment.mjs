@@ -134,9 +134,13 @@ const run = async () => {
   {
     // "reopening the Manage menu shows no checkmark or indicator next to their
     // current role" - the current role must be IN the list and marked.
-    // NOT `.first()`: the owner row renders a Manage button that is correctly
-    // disabled - the owner is immune to everyone, including themselves - and
-    // clicking it hangs. The first ENABLED one is the teammate.
+    /*
+     * Still `:not([disabled])` even though the owner row no longer renders a
+     * dead Manage button at all. That button was removed BECAUSE this locator
+     * had to learn about it: the driver hung thirty seconds on a control it
+     * reasonably took for actionable, which is what a person does too. The
+     * guard stays as the regression net.
+     */
     const manage = page.locator("button:not([disabled])", { hasText: /^Manage$/ }).first();
     if (await shown(manage)) {
       await manage.click();
@@ -261,8 +265,14 @@ const run = async () => {
 
       // Roles are named and explained here too, so an admin staffing a job can
       // see who they are handing it to.
-      if (/OWNER/i.test(body) && /already sees every project/i.test(body))
-        ok("the dialog names each teammate's role");
+      /*
+       * The badge carries the role; the line under each name carries the
+       * email. That secondary line used to restate the role on every row
+       * ("Standard - already sees every project"), which is why this check
+       * looked for it. It is stated once in the description now.
+       */
+      if (/OWNER/i.test(body) && body.includes(email))
+        ok("the dialog names each teammate's role", "badge + email per row");
       else bad("the dialog names each teammate's role", body.slice(0, 240));
 
       /* ------------------------- an in-progress edit survives a background refetch */
@@ -493,6 +503,49 @@ const run = async () => {
         await page.keyboard.press("Escape");
       } else {
         skip("the contributors chip explains itself", "this project has no contributors yet");
+      }
+    }
+  }
+
+  /* ==================================================================== */
+  /* 3b. THE PIPELINES TAB - the projects page's other view                */
+  /* ==================================================================== */
+  /*
+   * "Assign them projects from the projects page" is true of that page's card
+   * grid AND of its Pipelines board, and a pipeline is where staffing actually
+   * gets decided: you drag a job into Scheduled and the next question is who is
+   * doing it. Covering only the grid would have left the ask half done in the
+   * view most likely to be used for it.
+   */
+  current = "pipelines";
+  {
+    await page.goto(`${BASE}/projects`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(3000);
+    const tab = page.getByRole("button", { name: /Pipelines/i }).first();
+    if (!(await shown(tab))) {
+      skip("the pipeline board can staff a job", "no Pipelines tab");
+    } else {
+      await tab.click();
+      // Wait for a board card's move menu, which is the board having rendered.
+      const cardMenu = page.getByRole("button", { name: /Move .* to another stage/i }).first();
+      await cardMenu.waitFor({ state: "visible", timeout: 60000 }).catch(() => {});
+      await page.waitForTimeout(1500);
+      await page.screenshot({ path: `${SHOTS}/13-pipeline-board.png` });
+
+      if (!(await shown(cardMenu))) {
+        skip("the pipeline board can staff a job", "no cards on the board");
+      } else {
+        await cardMenu.click();
+        await page.waitForTimeout(800);
+        const menu = await popover()
+          .innerText()
+          .catch(() => "");
+        await page.screenshot({ path: `${SHOTS}/14-pipeline-card-menu.png` });
+        if (/Assign teammates|Change crew/i.test(menu))
+          ok("the pipeline board can staff a job", menu.split("\n").slice(-3).join(" / "));
+        else bad("the pipeline board can staff a job", menu.slice(0, 200));
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(400);
       }
     }
   }

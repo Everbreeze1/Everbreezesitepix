@@ -1,16 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Search, ArrowRight } from "lucide-react";
+import { Loader2, Search, ArrowRight, Check } from "lucide-react";
 import { toast } from "sonner";
 import { setProjectPipelineStage, type PipelineStage } from "@/lib/project-boards.functions";
 
@@ -53,6 +51,21 @@ export function AddProjectToStageDialog({
 }: Props) {
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
+  /*
+   * How many landed while this has been open.
+   *
+   * There is no Done button any more, so this is what tells the person their
+   * picks were saved. It also answers "how many did I just do" for the case the
+   * dialog is built around: adding several in a row.
+   */
+  const [movedCount, setMovedCount] = useState(0);
+
+  useEffect(() => {
+    if (open) {
+      setQuery("");
+      setMovedCount(0);
+    }
+  }, [open]);
 
   const filtered = projects.filter((p) => {
     const q = query.trim().toLowerCase();
@@ -67,7 +80,7 @@ export function AddProjectToStageDialog({
     onMoved(project.id);
     try {
       await setProjectPipelineStage({ data: { projectId: project.id, stageId: stage.id } });
-      toast.success(`Moved to "${stage.name}"`);
+      setMovedCount((n) => n + 1);
     } catch (e: any) {
       toast.error(e?.message ?? "Could not move project");
       onFailed(project.id, previous);
@@ -82,8 +95,18 @@ export function AddProjectToStageDialog({
         <DialogHeader>
           <DialogTitle>Move a project to "{stage.name}"</DialogTitle>
           <DialogDescription>
-            A project sits in one stage at a time, so this moves it out of whichever stage it is in
-            now.
+            {/*
+              "Saved as you pick" is the important half.
+
+              There used to be a Done button in the footer, and the client read
+              it as the step that committed the picks: "Done is extra click
+              thats not needed." They were right twice over - each pick is
+              already written when the row disappears, and the dialog's own X,
+              Escape and click-outside all close it. A second close control that
+              looks like a Save is worse than no control at all.
+            */}
+            Each pick is saved as you make it, so keep going for as many as you need. A project sits
+            in one stage at a time, so this moves it out of whichever stage it is in now.
           </DialogDescription>
         </DialogHeader>
         <div className="relative">
@@ -132,11 +155,17 @@ export function AddProjectToStageDialog({
             )}
           </div>
         </ScrollArea>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
-            Done
-          </Button>
-        </DialogFooter>
+
+        {/*
+          The receipt that replaced the Done button. It states what has already
+          been written, rather than offering to write it.
+        */}
+        {movedCount > 0 && (
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-500">
+            <Check className="h-3.5 w-3.5 shrink-0" />
+            {movedCount} moved into "{stage.name}". Close when you are finished.
+          </p>
+        )}
       </DialogContent>
     </Dialog>
   );
