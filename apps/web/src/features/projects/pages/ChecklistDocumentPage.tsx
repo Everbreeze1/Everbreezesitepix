@@ -48,7 +48,13 @@ import { usePrompt } from "@/hooks/use-prompt";
 import { useProfile } from "@/hooks/use-profile";
 import { useTeamMembers } from "@/hooks/use-team-members";
 import { AssigneeField, AssignmentStatusPill } from "@/components/AssignmentControls";
-import { assignmentPatch, assignmentStatus, canReopen, completionRights } from "@/lib/assignment";
+import {
+  assignmentPatch,
+  assignmentStatus,
+  canReopen,
+  completionRights,
+  overrideConfirm,
+} from "@/lib/assignment";
 import { TYPE_META, TYPE_ORDER, hasResponse, type ItemType } from "@/lib/checklist-items";
 import { friendlyError, isPendingMigrationError } from "@/lib/supabase-errors";
 import { cn } from "@/lib/utils";
@@ -694,13 +700,14 @@ export function ChecklistDocumentPage() {
       return;
     }
     if (rights.isOverride) {
-      const who = memberLabel(subject.assignedTo);
       if (
-        !(await confirm({
-          title: `Complete this for ${who}?`,
-          description: `“${checklist.name}” is assigned to ${who}. You can close it, but the sealed record will show you as the person who completed it - not ${who} - and they will not be asked to confirm.`,
-          confirmText: "Complete anyway",
-        }))
+        !(await confirm(
+          overrideConfirm({
+            what: checklist.name,
+            who: memberLabel(subject.assignedTo) ?? "the assignee",
+            detail: "The sealed record is signed in your name and they are not asked to confirm.",
+          }),
+        ))
       )
         return;
     }

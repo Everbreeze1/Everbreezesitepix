@@ -7,6 +7,7 @@ import {
   canReopen,
   completionRights,
   isManagerRole,
+  overrideConfirm,
 } from "../apps/web/src/lib/assignment";
 
 /*
@@ -257,5 +258,176 @@ describe("the SQL half still says the same thing", () => {
       expect(p).not.toMatch(/FOR INSERT/);
       expect(p).not.toMatch(/WITH CHECK/);
     }
+  });
+});
+
+/*
+ * The client's re-report: the warning fired on the task row's progress button
+ * but not when the same task was opened and completed from its edit dialog, so
+ * a manager could close a tech's work silently by taking the long way round.
+ *
+ * The rule was never the problem - every screen imported it. What differed was
+ * the ceremony: some callers checked `canComplete` (may I?) and skipped
+ * `isOverride` (is this someone else's name?). These lock the pairing, because
+ * the next completion path added will be tempted to do the same.
+ */
+describe("the override confirmation", () => {
+  it("names the assignee and says who the record will credit", () => {
+    const copy = overrideConfirm({ what: "Fix gutter", who: "Jackson" });
+    expect(copy.title).toContain("Jackson");
+    expect(copy.description).toContain("Fix gutter");
+    expect(copy.description).toContain("Jackson");
+    // The point of the sentence: closing it does not read as Jackson's sign-off.
+    expect(copy.description).toContain("you closed it, not Jackson");
+    expect(copy.confirmText).toBe("Complete anyway");
+  });
+
+  it("appends what is true only of one surface, and nothing when there is none", () => {
+    const withDetail = overrideConfirm({
+      what: "Roof inspection",
+      who: "Ana",
+      detail: "The sealed record is signed in your name.",
+    });
+    expect(withDetail.description).toContain("The sealed record is signed in your name.");
+    expect(overrideConfirm({ what: "Roof inspection", who: "Ana" }).description).not.toContain(
+      "sealed",
+    );
+  });
+
+  it("falls back to a phrase rather than printing an empty name", () => {
+    expect(overrideConfirm({ what: "Task", who: "   " }).title).toContain("the assignee");
+  });
+
+  /*
+   * Every screen that can close assigned work, listed by path because that is
+   * the only way to catch the one that quietly does not ask. If a file moves,
+   * move it here too.
+   */
+  const COMPLETION_SITES = [
+    "apps/web/src/features/projects/components/ProjectTasks.tsx",
+    "apps/web/src/features/photos/components/PhotoTasksPanel.tsx",
+    "apps/web/src/features/projects/pages/GroupPage.tsx",
+    "apps/web/src/features/projects/components/ProjectWorkflows.tsx",
+    "apps/web/src/features/projects/pages/ChecklistDocumentPage.tsx",
+  ];
+
+  it("is asked wherever completion is refused", () => {
+    for (const rel of COMPLETION_SITES) {
+      const src = readFileSync(join(ROOT, rel), "utf8");
+      const guards = [...src.matchAll(/if \(!rights\.canComplete\) \{/g)];
+      expect(guards.length, `${rel} checks the rule`).toBeGreaterThan(0);
+      for (const g of guards) {
+        // The override branch sits directly after the refusal branch at every
+        // one of these sites; a guard without one is a path that closes
+        // somebody else's work without saying so.
+        const after = src.slice(g.index!, g.index! + 900);
+        expect(after, `${rel} confirms the override at index ${g.index}`).toContain(
+          "rights.isOverride",
+        );
+      }
+      expect(src, `${rel} uses the shared wording`).toContain("overrideConfirm(");
+    }
+  });
+
+  /*
+   * The edit dialog judges the values on screen, not the row it opened with.
+   * Assigning a task to someone and marking it done in the same save is exactly
+   * the case that has to warn, and reading `task.assignee_user_id` would judge
+   * it against the person who held it a moment ago - or, for a task being
+   * created, against nobody at all.
+   */
+  it("judges the task dialog on the assignee it is about to save", () => {
+    const src = readFileSync(
+      join(ROOT, "apps/web/src/features/projects/components/ProjectTasks.tsx"),
+      "utf8",
+    );
+    expect(src).toContain("assignedTo: assigneeUserId || null, assignedBy: pendingAssignedBy");
+    // Re-saving an already-done task is not a completion and must not re-ask.
+    expect(src).toContain('const completesNow = status === "done" && task?.status !== "done"');
+  });
+});
+
+/*
+ * `assigned_by` was added after tasks were, so rows predating it hold NULL. The
+ * dialog backfills it on save, which is right for notifications and wrong as an
+ * input to the rule: reading a value you are about to write is how the person
+ * doing the writing ends up qualifying as the assignor.
+ */
+describe("tasks that predate the assignor column", () => {
+  it("does not let an editor become the assignor of work assigned to someone else", () => {
+    const legacy = { assignedTo: "other", assignedBy: null };
+    expect(completionRights(legacy, CREW, "Jackson").canComplete).toBe(false);
+    // A manager still can, and it is still called an override.
+    const asManager = completionRights(legacy, MANAGER, "Jackson");
+    expect(asManager.canComplete).toBe(true);
+    expect(asManager.isOverride).toBe(true);
+  });
+});
+
+/*
+ * Found by driving the browser, not by reading the code: the confirmation is
+ * rendered as a SIBLING modal layer, so the pointerdown that answers it counts
+ * as an interaction outside the dialog beneath - and Radix dismissed that
+ * dialog too. Declining to complete somebody else's task therefore threw away
+ * every edit in the window, which is a worse outcome than the missing warning
+ * this change set out to fix.
+ *
+ * The guard has to read the DOM rather than React state: the dismissal and the
+ * confirmation's own close land on the same event, so by the time the close is
+ * processed any state flag reads back false. That subtlety is exactly what a
+ * later refactor would drop, so it is pinned here.
+ */
+describe("a dialog that raises a confirmation", () => {
+  /*
+   * The fix lives on the shared primitives, not at the call sites. A sweep of
+   * every screen that raises a confirmation found eight raised from inside a
+   * dialog or sheet - project edit, board settings, combine projects, the
+   * template editor's discard prompt and four in tasks - so a per-screen guard
+   * would have been eight chances to forget it, and one more for every dialog
+   * added later.
+   */
+  const dialog = readFileSync(join(ROOT, "apps/web/src/components/ui/dialog.tsx"), "utf8");
+  const sheet = readFileSync(join(ROOT, "apps/web/src/components/ui/sheet.tsx"), "utf8");
+  const layers = readFileSync(join(ROOT, "apps/web/src/lib/modal-layers.ts"), "utf8");
+
+  it("does not close itself when the confirmation is answered", () => {
+    for (const [name, src] of [
+      ["dialog", dialog],
+      ["sheet", sheet],
+    ] as const) {
+      expect(src, `${name} guards pointerdown`).toContain(
+        "onPointerDownOutside={keepOpenUnderConfirmation(onPointerDownOutside)}",
+      );
+      expect(src, `${name} guards focus`).toContain(
+        "onFocusOutside={keepOpenUnderConfirmation(onFocusOutside)}",
+      );
+      expect(src, `${name} guards interaction`).toContain(
+        "onInteractOutside={keepOpenUnderConfirmation(onInteractOutside)}",
+      );
+    }
+  });
+
+  /*
+   * The DOM question, not the state question: the dismissal and the
+   * confirmation's own close land on the same pointerdown, so an
+   * `isConfirmOpen` flag reads back false by the time the close is processed.
+   * A state-based version of this guard was written first and did not work.
+   */
+  it("asks the DOM which layer the interaction landed in", () => {
+    expect(layers).toContain(`target.closest('[role="alertdialog"]')`);
+  });
+
+  /*
+   * The photo lightbox is a hand-rolled portal, not a Radix layer, so it gets
+   * no outside-interaction callback to guard - it listens for Escape on the
+   * window, which closed it along with the confirmation raised inside it.
+   */
+  it("keeps the hand-rolled lightbox out of the confirmation's keyboard", () => {
+    const lightbox = readFileSync(
+      join(ROOT, "apps/web/src/features/photos/components/PhotoLightbox.tsx"),
+      "utf8",
+    );
+    expect(lightbox).toContain("if (confirmationIsOpen()) return;");
+    expect(layers).toContain("export function confirmationIsOpen()");
   });
 });

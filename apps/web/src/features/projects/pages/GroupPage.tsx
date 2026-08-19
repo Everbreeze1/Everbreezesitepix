@@ -73,8 +73,9 @@ import {
 } from "@/lib/project-groups.functions";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { useTeamMembers } from "@/hooks/use-team-members";
-import { completionRights } from "@/lib/assignment";
+import { completionRights, overrideConfirm } from "@/lib/assignment";
 import {
   TASK_PHOTO_ITEMS_TABLE,
   TASK_PHOTO_ITEM_COLUMNS,
@@ -113,7 +114,8 @@ export function GroupPage() {
   const { groupId } = useParams({ from: "/_app/groups/$groupId" });
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isManager } = useTeamMembers();
+  const { isManager, members } = useTeamMembers();
+  const confirm = useConfirm();
   const fetchGroup = getProjectGroup;
   const updateGroup = updateProjectGroup;
   const removeGroup = deleteProjectGroup;
@@ -273,6 +275,8 @@ export function GroupPage() {
     taskId: string,
     nextStatus: string,
     task?: {
+      title?: string | null;
+      assignee_email?: string | null;
       assignee_user_id: string | null;
       assigned_by: string | null;
       photo_ids?: string[] | null;
@@ -282,13 +286,28 @@ export function GroupPage() {
     // still a place work gets closed from, and this one used to be the way
     // round every check the others made.
     if (nextStatus === "done" && task) {
+      const member = task.assignee_user_id
+        ? members.find((m) => m.user_id === task.assignee_user_id)
+        : null;
+      const who = member?.full_name || member?.email || task.assignee_email || "the assignee";
       const rights = completionRights(
         { assignedTo: task.assignee_user_id, assignedBy: task.assigned_by },
         { userId: user?.id ?? null, isManager },
+        who,
       );
       if (!rights.canComplete) {
         toast.error(rights.reason ?? "You can't mark this task done.");
         return;
+      }
+      if (rights.isOverride) {
+        const ok = await confirm(
+          overrideConfirm({
+            what: task.title?.trim() || "This task",
+            who,
+            confirmText: "Mark done",
+          }),
+        );
+        if (!ok) return;
       }
     }
 

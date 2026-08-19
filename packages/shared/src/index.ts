@@ -97,3 +97,11 @@ export {
   photoPageGroups,
   type PhotoRowMode,
 } from "./photo-row-layout";
+export {
+  humanizeServiceType,
+  normalizeExternalUrl,
+  serviceAreaKey,
+  mergeServiceArea,
+  looksLikeStreetAddress,
+  withoutStreetAddress,
+} from "./portfolio-fields";

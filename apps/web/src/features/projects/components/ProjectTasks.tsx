@@ -41,7 +41,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
-import { completionRights, isManagerRole } from "@/lib/assignment";
+import { completionRights, isManagerRole, overrideConfirm } from "@/lib/assignment";
 import { getMyTeam } from "@/lib/teams.functions";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
@@ -406,6 +406,20 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
         toast.error(rights.reason ?? "You can't mark this task done.");
         return;
       }
+      // Ticking one photo off is closing part of somebody else's job, so it
+      // owes the same sentence the whole-task button gives. Without it the
+      // breakdown was the quiet way round the warning.
+      if (rights.isOverride) {
+        const ok = await confirm(
+          overrideConfirm({
+            what: t.title,
+            who: taskAssigneeName(t),
+            detail: "This photo will be recorded as done by you.",
+            confirmText: "Mark photo done",
+          }),
+        );
+        if (!ok) return;
+      }
     }
 
     const before = photoItems;
@@ -519,13 +533,14 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
         return;
       }
       if (rights.isOverride) {
-        const who = taskAssigneeName(t);
         if (
-          !(await confirm({
-            title: `Mark this done for ${who}?`,
-            description: `“${t.title}” is assigned to ${who}. You can close it, but it will be recorded as done without ${who} marking it.`,
-            confirmText: "Mark done",
-          }))
+          !(await confirm(
+            overrideConfirm({
+              what: t.title,
+              who: taskAssigneeName(t),
+              confirmText: "Mark done",
+            }),
+          ))
         )
           return;
       }
@@ -1117,10 +1132,10 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
           projectPhotos={projectPhotos}
           members={members}
           seedPhotoIds={seedPhotoIds}
-          /* A new task is nobody's yet, so it can be filed as done outright;
-             an existing one obeys the same rule as the row buttons. */
-          canComplete={editing ? taskRights(editing).canComplete : true}
-          completionReason={editing ? taskRights(editing).reason : null}
+          /* The viewer rather than a verdict about them: the dialog can change
+             the assignee, so who may close the task is a question about the
+             values on screen and has to be asked again as they are edited. */
+          isManager={viewer.isManager}
           /* Only an existing task has a breakdown: a task being created has no
              row for its photos to hang off yet, and the photos it is about to
              carry are all outstanding by definition. */
@@ -1151,8 +1166,7 @@ function TaskDialog({
   projectPhotos,
   members,
   seedPhotoIds,
-  canComplete,
-  completionReason,
+  isManager,
   items,
   photoItemsReady,
   pendingPhotos,
@@ -1167,8 +1181,7 @@ function TaskDialog({
   projectPhotos: ProjectPhoto[];
   members: TeamMemberLite[];
   seedPhotoIds: string[];
-  canComplete: boolean;
-  completionReason: string | null;
+  isManager: boolean;
   items: Map<string, TaskPhotoItem> | null;
   photoItemsReady: boolean;
   pendingPhotos: Set<string>;
@@ -1191,6 +1204,43 @@ function TaskDialog({
    */
   const [photoIds, setPhotoIds] = useState<string[]>(taskPhotoIds(task?.photo_ids ?? seedPhotoIds));
   const [saving, setSaving] = useState(false);
+  const confirm = useConfirm();
+
+  /*
+   * Who this task will belong to once saved - not who it belonged to when the
+   * dialog opened.
+   *
+   * The assignor half has to be predicted the same way `save` writes it, or
+   * assigning a task to someone and closing it in the same edit would be judged
+   * against the old row and pass unremarked. Reassigning makes the editor the
+   * assignor, which is exactly the case the confirmation exists for.
+   *
+   * Leaving the assignee alone keeps whatever assignor is recorded, including
+   * none. `save` backfills a missing one to the editor so old rows stop
+   * notifying nobody, but that backfill must not be read back as a right: a
+   * crew member opening a pre-`assigned_by` task would otherwise make
+   * themselves its assignor and unlock a completion the row buttons refuse.
+   */
+  const pendingAssignedBy = assigneeUserId
+    ? task?.assignee_user_id === assigneeUserId
+      ? (task.assigned_by ?? null)
+      : userId
+    : null;
+  const pendingAssigneeName = assigneeUserId
+    ? memberName(members.find((m) => m.user_id === assigneeUserId))
+    : assigneeEmail.trim() || null;
+  const rights = completionRights(
+    { assignedTo: assigneeUserId || null, assignedBy: pendingAssignedBy },
+    { userId: userId || null, isManager },
+    pendingAssigneeName,
+  );
+  const canComplete = rights.canComplete;
+  /*
+   * Only a save that actually closes the task owes the ceremony. Re-saving a
+   * task that was already done (fixing its title, say) is not a completion and
+   * must not ask again.
+   */
+  const completesNow = status === "done" && task?.status !== "done";
 
   /*
    * The breakdown covers the photos the task already carries, not the working
@@ -1221,6 +1271,28 @@ function TaskDialog({
     if (!userId) {
       toast.error("Not signed in");
       return;
+    }
+    /*
+     * The reported hole: this dialog wrote `status` straight out, so opening a
+     * task and picking "Done" here closed somebody else's work with none of the
+     * warning the progress button gives. Same rule, same sentence, asked before
+     * anything is written.
+     */
+    if (completesNow) {
+      if (!rights.canComplete) {
+        toast.error(rights.reason ?? "You can't mark this task done.");
+        return;
+      }
+      if (rights.isOverride) {
+        const ok = await confirm(
+          overrideConfirm({
+            what: title.trim(),
+            who: pendingAssigneeName ?? "the assignee",
+            confirmText: "Save and complete",
+          }),
+        );
+        if (!ok) return;
+      }
     }
     setSaving(true);
     const selectedMember = members.find((m) => m.user_id === assigneeUserId);
@@ -1282,6 +1354,9 @@ function TaskDialog({
         if (!o) onClose();
       }}
     >
+      {/* The confirmations raised from in here would otherwise dismiss this
+          dialog when answered; DialogContent guards that for every dialog.
+          See lib/modal-layers.ts. */}
       <DialogContent className="max-w-3xl p-6 sm:p-8">
         <DialogHeader>
           <DialogTitle>{task ? "Edit task" : "New task"}</DialogTitle>
@@ -1329,7 +1404,14 @@ function TaskDialog({
               </Select>
               {!canComplete ? (
                 <p className="mt-1 text-[10.5px] text-muted-foreground">
-                  Only the assignee or a manager can mark this done.
+                  {rights.reason ?? "Only the assignee or a manager can mark this done."}
+                </p>
+              ) : rights.isOverride && completesNow ? (
+                /* Allowed, but it is someone else's name being overridden -
+                   said here as well as in the confirmation, so the choice is
+                   informed before it is made. */
+                <p className="mt-1 text-[10.5px] text-amber-600 dark:text-amber-500">
+                  {rights.reason}
                 </p>
               ) : doneIsDerived ? (
                 <p className="mt-1 text-[10.5px] text-muted-foreground">
@@ -1493,7 +1575,7 @@ function TaskDialog({
                 photos={projectPhotos}
                 items={items}
                 canComplete={canComplete}
-                cannotCompleteReason={canComplete ? null : completionReason}
+                cannotCompleteReason={canComplete ? null : rights.reason}
                 pending={
                   new Set(
                     task

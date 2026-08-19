@@ -1,5 +1,6 @@
 import { Component, useEffect, useState, useCallback, type ErrorInfo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { confirmationIsOpen } from "@/lib/modal-layers";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import {
   X,
@@ -114,6 +115,13 @@ export function PhotoLightbox({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      /*
+       * A confirmation raised from inside the lightbox (ticking a photo off a
+       * task assigned to someone else, say) owns the keyboard while it is up.
+       * Without this, the Escape that dismisses it closes the lightbox as well,
+       * and the arrow keys page through photos behind it.
+       */
+      if (confirmationIsOpen()) return;
       if (e.key === "Escape") onClose();
       else if (e.key === "ArrowLeft") go(-1);
       else if (e.key === "ArrowRight") go(1);

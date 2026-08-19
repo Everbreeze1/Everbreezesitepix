@@ -86,7 +86,13 @@ function AppLayout() {
           <div className="flex-1 flex flex-col min-w-0 bg-background">
             {!isActive && <UpgradeBanner activating={justCheckedOut && checkoutAttempts < 6} />}
             <AppHeader />
-            <main className="flex-1 min-w-0 pb-20 md:pb-0">
+            {/* `flex flex-col` so a page can claim the height left under the
+                header by asking for `flex-1`, without having to know how tall
+                the header is - or whether the upgrade banner above it is
+                showing, which changes that number per account. A page that
+                does not ask still sizes to its own content, because a flex
+                item's `min-height: auto` refuses to shrink below it. */}
+            <main className="flex min-w-0 flex-1 flex-col pb-20 md:pb-0">
               <Outlet />
             </main>
             <MobileTabBar />

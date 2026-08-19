@@ -54,6 +54,7 @@ import {
   assignmentPatch,
   assignmentStatus,
   completionRights,
+  overrideConfirm,
   type CompletionRights,
 } from "@/lib/assignment";
 import { toast } from "sonner";
@@ -1040,13 +1041,13 @@ export function ProjectWorkflows({
         return;
       }
       if (rights.isOverride) {
-        const who = assigneeLabel(members, wf.assigned_to);
         if (
-          !(await confirm({
-            title: `Complete this for ${who}?`,
-            description: `“${wf.name}” is assigned to ${who}. You can close it, but the record will show it was closed without ${who} marking it done.`,
-            confirmText: "Complete anyway",
-          }))
+          !(await confirm(
+            overrideConfirm({
+              what: wf.name,
+              who: assigneeLabel(members, wf.assigned_to) ?? "the assignee",
+            }),
+          ))
         )
           return;
       }

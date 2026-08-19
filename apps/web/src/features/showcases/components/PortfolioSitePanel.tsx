@@ -4,16 +4,22 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { usePortfolioSiteDraft } from "@/features/showcases/site-draft";
 import type { PortfolioDetail } from "@/lib/portfolio.functions";
-import { HeroPickerDialog, SITE_STEPS, siteProgress, type StepCtx } from "./PortfolioSiteSteps";
+import {
+  HeroPickerDialog,
+  SITE_STEPS,
+  StepTrail,
+  siteProgress,
+  type StepCtx,
+} from "./PortfolioSiteSteps";
 import { PortfolioLivePreview } from "./PortfolioLivePreview";
 
 /**
  * The site editor for someone who already built it and wants to change one
  * thing.
  *
- * Same seven steps as the guided build, minus the queue: a rail on the left,
- * one section on screen at a time, and the same live preview on the right. The
- * old version stacked all nineteen fields into one long scroll, which the
+ * Same steps as the guided build, minus the queue: the same trail across the
+ * top, one section on screen at a time, and the same live preview beside it.
+ * The old version stacked all nineteen fields into one long scroll, which the
  * client called "very crowded… information scattered having to scroll down".
  * Nothing was removed to fix that - it is the same form, shown one answer at a
  * time, so finding the field you came for is a click instead of a hunt.
@@ -104,81 +110,77 @@ export function PortfolioSitePanel({
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)_320px]">
-        {/* Rail. Horizontal and scrollable on a phone, where a column of eight
-            rows would push the fields off the screen. */}
-        <nav
-          aria-label="Site sections"
-          className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0"
-        >
-          {SITE_STEPS.map((s) => {
-            const active = s.id === activeId;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setActiveId(s.id)}
-                aria-current={active ? "true" : undefined}
-                className={cn(
-                  "inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold transition lg:w-full",
-                  active
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <s.icon className="h-4 w-4 shrink-0" />
-                <span className="truncate">{s.label}</span>
-                {s.isDone(draft, portfolio) && (
-                  <Check
-                    className={cn(
-                      "ml-auto hidden h-3.5 w-3.5 shrink-0 lg:block",
-                      active ? "text-primary" : "text-emerald-600",
-                    )}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </nav>
+      {/* The same trail the guided build draws, doing the same job.
 
+          There used to be two of these: the wizard's stepper and this panel's
+          own rail of eight rows, listing the same eight sections with the same
+          ticks in a different shape. The client's read was exactly that - "there
+          is a guided set up flow and there is a list that shows the same things
+          kinda bolted together" - and that the guided steps were the half worth
+          keeping. So the rail is gone and the trail is shared. The difference
+          between the two screens is now what it should have been: the wizard
+          walks you through in order, this one lets you jump straight to the
+          section you came for. */}
+      <StepTrail
+        index={index}
+        draft={draft}
+        portfolio={portfolio}
+        onJump={(i) => setActiveId(SITE_STEPS[i].id)}
+        className="mt-2"
+      />
+
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0">
-          <section className="rounded-2xl border border-border bg-card p-6">
-            <div className="flex items-start gap-3">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                <step.icon className="h-4 w-4" />
+          <section className="rounded-2xl border border-border bg-card p-6 sm:p-8">
+            <div className="flex items-start gap-3.5">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                <step.icon className="h-[18px] w-[18px]" />
               </span>
               <div className="min-w-0">
-                <h2 className="text-balance text-base font-extrabold leading-tight text-foreground">
+                <h2 className="text-balance text-lg font-extrabold leading-tight text-foreground">
                   {step.question}
                 </h2>
-                <p className="mt-1 text-pretty text-xs text-muted-foreground">{step.hint}</p>
+                <p className="mt-1.5 text-pretty text-sm text-muted-foreground">{step.hint}</p>
               </div>
             </div>
 
-            <div className="mt-6 space-y-6">
+            <div className="mt-7 space-y-7">
               <Fields ctx={ctx} />
             </div>
           </section>
 
+          {/* Named after where they go, and absent when there is nowhere to go.
+              The last section used to end on a disabled button reading "Next",
+              which reads as something broken rather than as the end of the
+              list. Saving is the sticky bar's job on this screen, so the end of
+              the sections needs no button at all. */}
           <div className="mt-4 flex items-center justify-between gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={index === 0}
-              onClick={() => setActiveId(SITE_STEPS[index - 1].id)}
-            >
-              <ArrowLeft className="mr-1.5 h-4 w-4" />
-              {index === 0 ? "Back" : SITE_STEPS[index - 1].label}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={index === SITE_STEPS.length - 1}
-              onClick={() => setActiveId(SITE_STEPS[index + 1].id)}
-            >
-              {index === SITE_STEPS.length - 1 ? "Next" : SITE_STEPS[index + 1].label}
-              <ArrowRight className="ml-1.5 h-4 w-4" />
-            </Button>
+            {index > 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setActiveId(SITE_STEPS[index - 1].id)}
+              >
+                <ArrowLeft className="mr-1.5 h-4 w-4" />
+                {SITE_STEPS[index - 1].label}
+              </Button>
+            ) : (
+              <span />
+            )}
+            {index < SITE_STEPS.length - 1 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setActiveId(SITE_STEPS[index + 1].id)}
+              >
+                {SITE_STEPS[index + 1].label}
+                <ArrowRight className="ml-1.5 h-4 w-4" />
+              </Button>
+            ) : (
+              <span className="text-xs font-bold text-muted-foreground">
+                That&rsquo;s every section
+              </span>
+            )}
           </div>
         </div>
 

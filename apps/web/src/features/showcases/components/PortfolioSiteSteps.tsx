@@ -19,7 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { richIsEmpty } from "@sitepix/shared";
+import { normalizeExternalUrl, richIsEmpty } from "@sitepix/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +32,7 @@ import type { PortfolioDetail } from "@/lib/portfolio.functions";
 import type { Draft, PortfolioSiteDraft, SlugState } from "@/features/showcases/site-draft";
 import { GoogleBusinessConnect } from "./GoogleBusinessConnect";
 import { ShowcasePhotoPickerDialog } from "./ShowcasePhotoPickerDialog";
+import { PlaceTagInput } from "./PlaceTagInput";
 import { TagInput } from "./TagInput";
 
 /**
@@ -405,10 +406,10 @@ function AreasFields({ ctx }: { ctx: StepCtx }) {
         label="Towns and cities"
         hint="Leave empty and the cities on your projects are used instead."
       >
-        <TagInput
+        <PlaceTagInput
           value={draft.serviceAreas}
           onChange={(v) => set("serviceAreas", v)}
-          placeholder="Sacramento, Elk Grove, Roseville"
+          placeholder="Sacramento"
           max={40}
         />
       </Field>
@@ -758,20 +759,20 @@ function ContactFields({ ctx }: { ctx: StepCtx }) {
       </Field>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Button link" hint="Optional. Empty means the button dials you.">
-          <Input
-            value={draft.ctaUrl}
-            onChange={(e) => set("ctaUrl", e.target.value)}
-            placeholder="https://acmeroofing.com/quote"
-          />
-        </Field>
-        <Field label="Your main website" hint="Optional.">
-          <Input
-            value={draft.websiteUrl}
-            onChange={(e) => set("websiteUrl", e.target.value)}
-            placeholder="https://acmeroofing.com"
-          />
-        </Field>
+        <UrlField
+          label="Button link"
+          hint="Optional. Empty means the button dials you."
+          value={draft.ctaUrl}
+          onChange={(v) => set("ctaUrl", v)}
+          placeholder="acmeroofing.com/quote"
+        />
+        <UrlField
+          label="Your main website"
+          hint="Optional. Linked from your site's footer."
+          value={draft.websiteUrl}
+          onChange={(v) => set("websiteUrl", v)}
+          placeholder="acmeroofing.com"
+        />
       </div>
     </>
   );
@@ -988,6 +989,69 @@ export function Field({
   );
 }
 
+/**
+ * A link field that fixes what it can and says so when it cannot.
+ *
+ * Both fields this is used for end up in an `href` on the public site, where
+ * "acmeroofing.com" with no scheme resolves against the current page and gives
+ * a prospect a 404 instead of a quote form. The owner never sees it, because
+ * the builder shows the text they typed and the button only misbehaves for
+ * visitors.
+ *
+ * Fixing on blur rather than on every keystroke is deliberate: prepending
+ * https:// while someone is still typing the third character moves their
+ * cursor and looks broken. The API applies the same rule, so a value that
+ * reaches the row by any other route is checked too.
+ */
+function UrlField({
+  label,
+  hint,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  const [touched, setTouched] = useState(false);
+  const normalized = normalizeExternalUrl(value);
+  const unusable = touched && value.trim() !== "" && !normalized;
+
+  return (
+    <Field label={label} hint={hint}>
+      <Input
+        value={value}
+        inputMode="url"
+        aria-invalid={unusable || undefined}
+        className={cn(
+          "h-11 text-base",
+          unusable && "border-destructive focus-visible:ring-destructive",
+        )}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => {
+          setTouched(true);
+          if (normalized && normalized !== value.trim()) onChange(normalized);
+        }}
+      />
+      {unusable ? (
+        <p className="mt-1.5 inline-flex items-start gap-1.5 text-xs font-bold text-destructive">
+          <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          That is not a web address. Use something like https://acmeroofing.com/quote
+        </p>
+      ) : (
+        normalized &&
+        normalized !== value.trim() && (
+          <p className="mt-1.5 text-[11px] text-muted-foreground">Saved as {normalized}</p>
+        )
+      )}
+    </Field>
+  );
+}
+
 function ToggleRow({
   label,
   hint,
@@ -1069,5 +1133,162 @@ export function HeroPickerDialog({ ctx }: { ctx: StepCtx }) {
         if (photo) ctx.pickHero(photo);
       }}
     />
+  );
+}
+/**
+ * The trail of steps, and what has already been ticked off.
+ *
+ * The client asked for the guided list to be part of the look rather than a
+ * band squeezed above the form, so on anything wider than a phone it is a
+ * full-width stepper: a filled node with a check for every answered step, an
+ * outlined ring on the one being asked, and a rule that fills in behind.
+ * Visited nodes stay clickable, which is how someone goes back to fix their
+ * headline without walking the queue backwards.
+ *
+ * A phone gets the bar and a scrollable row instead. Eight labelled nodes
+ * across 360px would be unreadable, and that is the one screen size where the
+ * fields themselves need every pixel.
+ */
+export function StepTrail({
+  index,
+  furthest,
+  draft,
+  portfolio,
+  onJump,
+  className,
+}: {
+  index: number;
+  /**
+   * How far the queue has been walked, for the guided build where a step you
+   * have not reached yet is not a place you can jump to. The editor passes
+   * nothing: it is a desk, and every section is always open.
+   */
+  furthest?: number;
+  draft: Draft;
+  portfolio: PortfolioDetail;
+  onJump: (index: number) => void;
+  className?: string;
+}) {
+  const total = SITE_STEPS.length;
+  const reachableTo = furthest ?? total;
+  const chips = useRef<HTMLDivElement | null>(null);
+  // Node centres sit half a column in from each end, so the rule that joins
+  // them has to start and stop there rather than at the edge of the row.
+  const edge = 50 / total;
+  const reached = Math.min(index, total - 1);
+  const fill = index >= total ? 1 : reached / (total - 1);
+  const percent = Math.round((Math.min(index, total) / total) * 100);
+
+  // The phone's row is wider than the phone. Step six sitting off the right
+  // edge is how it reads as a strip of three steps rather than a list of eight.
+  // `block: "nearest"` keeps it from dragging the page vertically as well.
+  useEffect(() => {
+    chips.current
+      ?.querySelector(`[data-step-index="${index}"]`)
+      ?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  }, [index]);
+
+  return (
+    <nav aria-label="Setup steps" className={cn("mt-9", className)}>
+      <div className="relative hidden md:block">
+        <div
+          className="absolute top-[19px] h-0.5 rounded-full bg-border"
+          style={{ left: `${edge}%`, right: `${edge}%` }}
+        />
+        <div
+          className="absolute top-[19px] h-0.5 rounded-full bg-primary transition-all duration-500"
+          style={{ left: `${edge}%`, width: `calc((100% - ${edge * 2}%) * ${fill})` }}
+        />
+        <ol
+          className="relative grid"
+          style={{ gridTemplateColumns: `repeat(${total}, minmax(0, 1fr))` }}
+        >
+          {SITE_STEPS.map((s, i) => {
+            const filled = s.isDone(draft, portfolio);
+            const active = i === index;
+            const reachable = i <= reachableTo;
+            return (
+              <li key={s.id} className="flex flex-col items-center gap-2.5 px-1">
+                <button
+                  type="button"
+                  disabled={!reachable}
+                  onClick={() => onJump(i)}
+                  aria-current={active ? "step" : undefined}
+                  // Opaque in every state on purpose: a translucent node would
+                  // let the rule behind it draw a line straight through the
+                  // icon.
+                  className={cn(
+                    "grid h-10 w-10 shrink-0 place-items-center rounded-full border-2 transition",
+                    active
+                      ? "border-primary bg-background text-primary ring-4 ring-primary/15"
+                      : filled
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background text-muted-foreground",
+                    reachable
+                      ? "cursor-pointer hover:border-primary/70"
+                      : "cursor-default opacity-55",
+                  )}
+                >
+                  {filled && !active ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <s.icon className="h-4 w-4" />
+                  )}
+                </button>
+                <span
+                  className={cn(
+                    "min-h-[28px] text-balance text-center text-[11px] font-bold leading-tight",
+                    active ? "text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  {s.label}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+
+      <div className="md:hidden">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary transition-all duration-500"
+            style={{ width: `${Math.max(percent, 4)}%` }}
+          />
+        </div>
+        <div ref={chips} className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1">
+          {SITE_STEPS.map((s, i) => {
+            const filled = s.isDone(draft, portfolio);
+            const active = i === index;
+            const reachable = i <= reachableTo;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                data-step-index={i}
+                disabled={!reachable}
+                onClick={() => onJump(i)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-bold transition",
+                  active
+                    ? "border-primary bg-primary/10 text-primary"
+                    : filled
+                      ? "border-border bg-card text-muted-foreground"
+                      : "border-dashed border-border text-muted-foreground",
+                  !reachable && "opacity-40",
+                )}
+              >
+                {filled && !active ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <s.icon className="h-3.5 w-3.5" />
+                )}
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </nav>
   );
 }

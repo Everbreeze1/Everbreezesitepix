@@ -40,7 +40,10 @@ import {
 } from "@/lib/showcases.functions";
 import { getMyPortfolio, type MyPortfolio } from "@/lib/portfolio.functions";
 import { ShowcaseShareDialog } from "@/features/showcases/components/ShowcaseShareDialog";
-import { ShowcaseSiteCard } from "@/features/showcases/components/ShowcaseSiteCard";
+import {
+  AddressPrivacyNotice,
+  ShowcaseSiteCard,
+} from "@/features/showcases/components/ShowcaseSiteCard";
 import {
   ShowcasePhotoPickerDialog,
   type PickedPhoto,
@@ -624,6 +627,16 @@ export function ShowcaseBuilderPage() {
                     onChange={(e) => setTagline(e.target.value)}
                     rows={2}
                     placeholder="One line about what makes this work stand out"
+                  />
+                  {/* The same guard as the card summary, because this is the
+                      line printed under the title on the public project page -
+                      and on a showcase generated before the defaults changed,
+                      it is the job's full street address. */}
+                  <AddressPrivacyNotice
+                    value={tagline}
+                    city={detail?.city ?? ""}
+                    state={detail?.state ?? ""}
+                    onUseCityOnly={setTagline}
                   />
                 </div>
               </div>
