@@ -25,6 +25,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useConfirm } from "@/hooks/use-confirm";
+import { confirmationIsOpen } from "@/lib/modal-layers";
 import { cn } from "@/lib/utils";
 
 type Tool =
@@ -174,6 +176,7 @@ export function PhotoAnnotator({
   canMeasure = false,
   initialTool,
 }: Props) {
+  const confirm = useConfirm();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -839,17 +842,136 @@ export function PhotoAnnotator({
     );
   };
 
+  /*
+   * Escape, in two stages.
+   * ---------------------------------------------------------------------
+   * Escape used to close the whole editor and bin every unsaved mark. The old
+   * handler here did try to back out of the in-progress action, but it never
+   * stopped the key: Radix's dialog has its own Escape-to-dismiss, so the same
+   * press cleared the draft *and* tore down the editor behind it. Reflexive
+   * key, no prompt, all the work gone - the worst kind of data loss, because
+   * nothing about pressing Escape says "delete".
+   *
+   * So Escape now means "back out one level", and only means "close" when
+   * there is no level left to back out of:
+   *
+   *   1. Something in progress (an open toolbar popover, a text box being
+   *      typed, a measurement waiting to be calibrated, a half-placed line, a
+   *      shape mid-drag, a crop rectangle, a selection) - cancel just that,
+   *      innermost first, and the editor stays exactly where it was.
+   *   2. Nothing in progress but unsaved work on the canvas - ask before
+   *      discarding it.
+   *   3. A clean, untouched editor - close, no prompt. Nothing to lose.
+   *
+   * Radix never gets the key either way (`onEscapeKeyDown` is prevented on the
+   * DialogContent), so this is the only thing that decides what Escape does.
+   */
+
+  /**
+   * Backs out of the innermost in-progress action. False when there was none,
+   * which is the only case where Escape is allowed to mean "close".
+   */
+  const cancelInProgress = (): boolean => {
+    /*
+     * Popovers first: they sit on top of everything else, and since this
+     * listener swallows Escape in the capture phase, Radix would otherwise
+     * never see the key it normally closes them with.
+     */
+    if (stickerPickerOpen || colorPickerOpen || adjustOpen) {
+      setStickerPickerOpen(false);
+      setColorPickerOpen(false);
+      setAdjustOpen(false);
+      return true;
+    }
+    if (textPrompt) {
+      setTextPrompt(null);
+      return true;
+    }
+    if (calibrate) {
+      setCalibrate(null);
+      return true;
+    }
+    if (cropDraft) {
+      setCropDraft(null);
+      return true;
+    }
+    if (polyDraft) {
+      setPolyDraft(null);
+      return true;
+    }
+    if (draft) {
+      // Mid-drag. `onPointerUp` bails on a null draft, so the pointer release
+      // that follows will not quietly commit the shape we just threw away.
+      setDraft(null);
+      return true;
+    }
+    if (selectedId) {
+      setSelectedId(null);
+      return true;
+    }
+    return false;
+  };
+
+  /**
+   * Is there work here that closing would throw away? Crop, rotate and the
+   * colour sliders count: they are edits to the image the user would have to
+   * redo, even though they are not shapes.
+   */
+  const isDirty =
+    shapes.length > 0 ||
+    !!draft ||
+    (!!polyDraft && polyDraft.points.length > 0) ||
+    !!cropRect ||
+    rotation !== 0 ||
+    brightness !== 100 ||
+    contrast !== 100 ||
+    saturation !== 100;
+
+  /** Guards against a second prompt while the first one is still up. */
+  const closingRef = useRef(false);
+
+  const requestClose = async () => {
+    if (saving || closingRef.current) return;
+    if (!isDirty) {
+      onClose();
+      return;
+    }
+    closingRef.current = true;
+    try {
+      const ok = await confirm({
+        title: "Discard your annotations?",
+        description:
+          "This photo has mark-up that has not been saved yet. Closing now throws it away.",
+        confirmText: "Discard",
+        cancelText: "Keep editing",
+        variant: "destructive",
+      });
+      if (ok) onClose();
+    } finally {
+      closingRef.current = false;
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
+      /*
+       * The discard confirmation is a sibling layer rendered at the root, so
+       * the Escape that dismisses it also reaches this listener. Without the
+       * guard, declining "Discard?" would immediately re-ask. Same reasoning as
+       * the photo lightbox; see lib/modal-layers.ts.
+       */
+      if (confirmationIsOpen()) return;
       if ((e.key === "Delete" || e.key === "Backspace") && selectedId && !textPrompt) {
         e.preventDefault();
         deleteSelected();
       }
       if (e.key === "Escape") {
-        setSelectedId(null);
-        setTextPrompt(null);
-        setPolyDraft(null);
+        // Swallowed either way: nothing behind this editor should act on the
+        // same press.
+        e.preventDefault();
+        e.stopPropagation();
+        if (!cancelInProgress()) void requestClose();
       }
       if (e.key === "Enter" && polyDraft) {
         e.preventDefault();
@@ -866,10 +988,37 @@ export function PhotoAnnotator({
         redo();
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    /*
+     * Capture phase. Radix's own Escape handler is document-level and bubbles,
+     * and a text input inside the editor stops the key before it ever reaches
+     * `window`, so listening on the way down is what makes the two-stage
+     * behaviour hold everywhere in the editor rather than only over the canvas.
+     */
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+    // The list carries everything Escape now inspects, not just what the old
+    // Delete/undo handling needed - a stale `draft` or `rotation` here would
+    // make it prompt on a clean editor or close on a dirty one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, selectedId, textPrompt, polyDraft, shapes]);
+  }, [
+    open,
+    selectedId,
+    textPrompt,
+    polyDraft,
+    shapes,
+    draft,
+    cropDraft,
+    cropRect,
+    calibrate,
+    rotation,
+    brightness,
+    contrast,
+    saturation,
+    saving,
+    stickerPickerOpen,
+    colorPickerOpen,
+    adjustOpen,
+  ]);
 
   const startEditText = (s: Shape) => {
     if (s.kind !== "text") return;
@@ -983,12 +1132,20 @@ export function PhotoAnnotator({
     <Dialog
       open={open}
       onOpenChange={(o) => {
-        if (!o) onClose();
+        // Every dismissal route goes through the same guard, so unsaved mark-up
+        // survives an accidental outside click as well as an accidental Escape.
+        if (!o) void requestClose();
       }}
     >
       <DialogContent
         className="max-w-none w-screen h-[100dvh] p-0 gap-0 overflow-hidden border-0 rounded-none bg-neutral-950 text-white sm:rounded-none z-[120] [&>button[aria-label='Close']]:hidden"
         style={{ zIndex: 120 }}
+        /*
+         * The window listener above owns Escape outright: it has to, because
+         * Radix's version cannot tell "cancel the measurement I am placing"
+         * from "close the editor". Letting both run is what discarded the work.
+         */
+        onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogHeader className="sr-only">
           <DialogTitle>Annotate photo</DialogTitle>
@@ -999,7 +1156,7 @@ export function PhotoAnnotator({
           <div className="flex items-center justify-between px-3 py-2.5 bg-neutral-950/95 backdrop-blur border-b border-white/5 z-30">
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => void requestClose()}
               disabled={saving}
               className="flex h-10 items-center gap-1.5 rounded-full px-3 text-sm text-white/90 hover:bg-white/10 active:bg-white/15 transition"
             >
