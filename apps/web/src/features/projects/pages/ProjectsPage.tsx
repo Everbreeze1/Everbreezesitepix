@@ -1025,7 +1025,7 @@ export function ProjectsPage() {
   const bodyShownCount = tab === "groups" ? groups.length : filteredProjects.length;
   const bodyDescription =
     tab === "groups"
-      ? `${bodyShownCount} ${bodyShownCount === 1 ? "group" : "groups"} - related projects sharing photos, stats and views.`
+      ? `${bodyShownCount} ${bodyShownCount === 1 ? "group" : "groups"}. Bundle projects that belong together - one client, one building, or a multi-site contract - to see their photos, stats and views in one place.`
       : `${bodyShownCount} ${bodyShownCount === 1 ? "project" : "projects"} shown, most recently updated first.`;
 
   /**
@@ -1711,6 +1711,18 @@ export function ProjectsPage() {
                 <>
                   {searchInput}
                   {tab === "projects" && filtersPopover}
+                  {/* Groups had no create action outside the empty state, so once
+                      one group existed the only route left was a project's
+                      "File under a group" menu. This is the tab's own action. */}
+                  {tab === "groups" && (
+                    <Button
+                      size="sm"
+                      className="h-8 shrink-0 gap-1.5 text-xs"
+                      onClick={() => setCreateGroupOpen(true)}
+                    >
+                      <FolderPlus className="h-3.5 w-3.5" /> New Group
+                    </Button>
+                  )}
                 </>
               }
             />
@@ -1937,7 +1949,7 @@ function GroupsGrid({
         description={
           query.trim()
             ? "Try a different search term."
-            : 'Group related projects (e.g. "Starbucks Locations") to see combined photos, stats, and shared views.'
+            : 'Bundle projects that belong together - one client, one building, or a multi-site contract (e.g. "Starbucks Locations") - to see combined photos, stats, and shared views.'
         }
         action={
           !query.trim() ? (
