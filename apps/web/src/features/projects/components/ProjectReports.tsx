@@ -6,6 +6,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { SURFACE_CARD } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import { relativeTime } from "@sitepix/shared";
+import { BlueprintItemBadge } from "./BlueprintItemBadge";
+import type { ItemOrigin } from "@/hooks/use-project-blueprint-origin";
 import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
 import type { DocumentTreePage } from "@/lib/project-pages.functions";
 
@@ -45,6 +47,7 @@ export function ProjectReports({
   walkthroughs,
   loading,
   onChanged,
+  originOf,
 }: {
   projectId: string;
   /** Pages the server classified into the report bucket - see page-filing.ts. */
@@ -52,6 +55,15 @@ export function ProjectReports({
   walkthroughs: ReportWalkthrough[];
   loading?: boolean;
   onChanged?: () => void;
+  /**
+   * Recorded blueprint origin for one row, by its own id.
+   *
+   * Only pages can answer. A walkthrough summary is produced from photos and is
+   * never something a blueprint creates, so those rows pass no id and stay
+   * unbadged rather than being labelled "Added manually" for a question that was
+   * never asked of them.
+   */
+  originOf?: (itemId: string, sourceTemplateId?: string | null) => ItemOrigin;
 }) {
   const [kind, setKind] = useState<"all" | "summary" | "daily_log" | "report">("all");
 
@@ -78,11 +90,16 @@ export function ProjectReports({
       kind: "summary" | "daily_log" | "report";
       to: string;
       params: Record<string, string>;
+      /** The row's own id where one exists, for the blueprint origin lookup. */
+      originId: string | null;
     }> = [];
 
     for (const w of summaries) {
       out.push({
         key: `w-${w.id}`,
+        // Summaries come from photos, never from a blueprint: nothing to
+        // attribute, so no badge is drawn at all.
+        originId: null,
         title: w.title,
         at: w.created_at,
         kind: "summary",
@@ -93,6 +110,7 @@ export function ProjectReports({
     for (const p of pages) {
       out.push({
         key: `p-${p.id}`,
+        originId: p.id,
         title: p.title,
         at: p.updatedAt,
         /*
@@ -246,6 +264,14 @@ export function ProjectReports({
                       {meta.label} · {relativeTime(r.at)}
                     </span>
                   </span>
+                  {/* Which blueprint put this report here, if any. Working that
+                      out used to mean cross-checking the blueprint panel
+                      against this tab by hand. */}
+                  {r.originId && (
+                    <span className="shrink-0">
+                      <BlueprintItemBadge origin={originOf?.(r.originId)} />
+                    </span>
+                  )}
                 </Link>
               </li>
             );

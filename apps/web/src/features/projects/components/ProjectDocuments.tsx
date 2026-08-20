@@ -53,6 +53,7 @@ import { MAX_UPLOAD_BYTES, isOverUploadLimit } from "@/lib/upload-limits";
 import { uploadWithResume } from "@/lib/resumable-upload";
 import { relativeTime } from "@sitepix/shared";
 import { BlueprintItemBadge } from "./BlueprintItemBadge";
+import type { ItemOrigin } from "@/hooks/use-project-blueprint-origin";
 import { downloadBase64File } from "@/lib/download-file";
 import {
   listProjectDocumentTree,
@@ -107,6 +108,15 @@ interface Props {
    * blueprint actually contains are badged.
    */
   blueprintSources?: Record<string, { blueprintId: string | null; blueprintName: string | null }>;
+  /**
+   * Recorded blueprint origin for one row, by its own id.
+   *
+   * Supersedes `blueprintSources`, which keys on the SOURCE TEMPLATE and so
+   * cannot tell a blueprint-created row from one a user added by hand from the
+   * same template. `blueprintSources` stays as the fallback for a database
+   * still waiting on 20260924000000; the hook decides which is in play.
+   */
+  originOf?: (itemId: string, sourceTemplateId?: string | null) => ItemOrigin;
   onChanged?: () => void;
 }
 
@@ -180,6 +190,7 @@ export function ProjectDocuments({
   projectName,
   projectPhotos,
   blueprintSources,
+  originOf,
   onChanged,
 }: Props) {
   const { user } = useAuth();
@@ -1052,6 +1063,7 @@ export function ProjectDocuments({
                         </span>
                         <BlueprintItemBadge
                           className="shrink-0"
+                          origin={originOf?.(p.id, p.sourceTemplateId)}
                           source={
                             p.sourceTemplateId ? blueprintSources?.[p.sourceTemplateId] : null
                           }

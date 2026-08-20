@@ -3116,6 +3116,7 @@ export function ProjectDetailPage() {
           <ProjectChecklists
             projectId={project.id}
             blueprintSources={blueprintOrigin.itemSources}
+            originOf={blueprintOrigin.originOf}
             onChanged={() => void load({ silent: true })}
           />
         </div>
@@ -3153,6 +3154,7 @@ export function ProjectDetailPage() {
             projectId={project.id}
             projectName={project.name}
             blueprintSources={blueprintOrigin.itemSources}
+            originOf={blueprintOrigin.originOf}
             projectPhotos={photos.map((p) => ({
               id: p.id,
               url: p.image_url ?? signed[p.storage_path] ?? "",
@@ -3171,6 +3173,7 @@ export function ProjectDetailPage() {
             walkthroughs={walkthroughs}
             loading={loading}
             onChanged={() => void load({ silent: true })}
+            originOf={blueprintOrigin.originOf}
           />
         </div>
       )}
@@ -3184,6 +3187,7 @@ export function ProjectDetailPage() {
             <ProjectWorkflows
               projectId={project.id}
               blueprintSources={blueprintOrigin.itemSources}
+              originOf={blueprintOrigin.originOf}
               onChanged={() => void load({ silent: true })}
             />
           ) : (

@@ -224,6 +224,27 @@ export async function applyProjectBlueprintService(
     author_name: data.preparedBy ?? "",
   };
 
+  /*
+   * The ids this apply created, per table.
+   *
+   * Every row below lands as an ordinary project row, and until now that was
+   * the end of it: the ledger recorded that a blueprint ran and how many of
+   * each kind it made, never which rows. The project header made up the
+   * difference by inferring - matching each row's `template_id` against the
+   * blueprint's current contents - which mislabels a row a user added by hand
+   * from the same template, and silently re-labels old projects whenever the
+   * blueprint is edited.
+   *
+   * Collecting the ids here and stamping them after the ledger row exists
+   * replaces that guess with a recorded fact.
+   */
+  const createdIds: Record<string, string[]> = {
+    project_checklists: [],
+    project_reports: [],
+    project_workflows: [],
+    project_pages: [],
+  };
+
   for (const it of allItems) {
     try {
       if (it.kind === "checklist") {
@@ -244,6 +265,7 @@ export async function applyProjectBlueprintService(
           .select("id")
           .single();
         if (!created) continue;
+        createdIds.project_checklists.push((created as any).id);
         const { data: tItems } = await supabaseAdmin
           .from("checklist_template_items" as any)
           .select("position, label, required, item_type, description")
@@ -273,7 +295,7 @@ export async function applyProjectBlueprintService(
         // createPageFromTemplateService also resolves the placeholder tokens
         // against the project itself, so the copy here no longer has to guess
         // at the project's name and address.
-        await createPageFromTemplateService(ctx, {
+        const madePage = await createPageFromTemplateService(ctx, {
           projectId: data.projectId,
           templateId: it.ref_id,
           resolveTokens: true,
@@ -281,6 +303,8 @@ export async function applyProjectBlueprintService(
           // cannot fill in arrives as a labelled blank in the document.
           values: {},
         });
+        const madePageId = (madePage as any)?.page?.id;
+        if (madePageId) createdIds.project_pages.push(madePageId);
         counts.documents++;
       } else if (it.kind === "report") {
         const { data: r } = await supabaseAdmin
@@ -356,6 +380,7 @@ export async function applyProjectBlueprintService(
         if (reportErr || !createdReport) {
           throw new Error(reportErr?.message ?? "Failed to create report");
         }
+        createdIds.project_reports.push((createdReport as any).id);
 
         if (structure.items.length) {
           const sectionRows = structure.items.map((s, idx) => ({
@@ -431,6 +456,7 @@ export async function applyProjectBlueprintService(
           .select("id")
           .single();
         if (!created) continue;
+        createdIds.project_workflows.push((created as any).id);
         for (const p of (phases as any[]) ?? []) {
           const { data: newPhase } = await supabaseAdmin
             .from("project_workflow_phases" as any)
@@ -514,6 +540,7 @@ export async function applyProjectBlueprintService(
           .single();
         if (createdErr) throw new Error(createdErr.message);
         if (!created) continue;
+        createdIds.project_workflows.push((created as any).id);
 
         /*
          * One phase, holding every shot.
@@ -600,7 +627,7 @@ export async function applyProjectBlueprintService(
     counts,
     failed_count: failed.length,
   };
-  let { error: ledgerErr } = await supabaseAdmin
+  let { data: ledgerRow, error: ledgerErr } = await supabaseAdmin
     .from("project_blueprint_applications" as any)
     .insert({
       ...ledgerBase,
@@ -618,7 +645,9 @@ export async function applyProjectBlueprintService(
        * or snapshot the component data onto the project-level instance".
        */
       blueprint_version: blueprintVersion,
-    } as any);
+    } as any)
+    .select("id")
+    .single();
   /*
    * A ladder, not a single fallback. PostgREST rejects the whole row over one
    * unknown column, so a database missing a column has to be retried with less;
@@ -629,13 +658,15 @@ export async function applyProjectBlueprintService(
    */
   if (ledgerErr && isMissingColumn(ledgerErr)) {
     console.warn("blueprint ledger: retrying without blueprint_version", ledgerErr.message);
-    ({ error: ledgerErr } = await supabaseAdmin
+    ({ data: ledgerRow, error: ledgerErr } = await supabaseAdmin
       .from("project_blueprint_applications" as any)
       .insert({
         ...ledgerBase,
         blueprint_name: blueprintName,
         origin: "applied",
-      } as any));
+      } as any)
+      .select("id")
+      .single());
   }
   if (ledgerErr && isMissingColumn(ledgerErr)) {
     /*
@@ -645,11 +676,50 @@ export async function applyProjectBlueprintService(
      * breaking something that worked.
      */
     console.warn("blueprint ledger: retrying without blueprint_name/origin", ledgerErr.message);
-    ({ error: ledgerErr } = await supabaseAdmin
+    ({ data: ledgerRow, error: ledgerErr } = await supabaseAdmin
       .from("project_blueprint_applications" as any)
-      .insert(ledgerBase as any));
+      .insert(ledgerBase as any)
+      .select("id")
+      .single());
   }
   if (ledgerErr) console.error("record blueprint application failed", ledgerErr);
+
+  /*
+   * Stamp the rows this apply created with the ledger row that made them.
+   *
+   * Done here rather than at insert time on purpose: the ledger row carries the
+   * final counts, so it cannot exist until the fan-out above has finished. One
+   * `.in()` per table costs four round trips at the very end instead of a
+   * column on every insert, and it leaves the carefully-laddered insert path
+   * above untouched.
+   *
+   * Every part of this is best-effort, for the same reason the ledger write is:
+   * the items really were created, and a database still waiting on
+   * 20260924000000 must not turn a successful apply into a failed one. A
+   * missing column here costs the badges, nothing else.
+   */
+  const ledgerId = (ledgerRow as any)?.id ?? null;
+  let originTagged = false;
+  if (ledgerId) {
+    originTagged = true;
+    for (const [table, ids] of Object.entries(createdIds)) {
+      if (!ids.length) continue;
+      const { error: tagErr } = await supabaseAdmin
+        .from(table as any)
+        .update({ blueprint_application_id: ledgerId } as any)
+        .in("id", ids);
+      if (!tagErr) continue;
+      originTagged = false;
+      if (isMissingColumn(tagErr)) {
+        console.warn(
+          `blueprint origin: ${table} has no blueprint_application_id yet`,
+          tagErr.message,
+        );
+      } else {
+        console.error(`blueprint origin: tagging ${table} failed`, tagErr.message);
+      }
+    }
+  }
 
   /*
    * Best-effort stays non-throwing - the items really were created and that must
@@ -658,18 +728,77 @@ export async function applyProjectBlueprintService(
    * "which blueprint set this up?" became unanswerable with nothing anywhere
    * having said so.
    */
-  return { counts, failed, ledgerRecorded: !ledgerErr };
+  return { counts, failed, ledgerRecorded: !ledgerErr, originTagged };
 }
 
 /* -------------------------------------------------------------------------- */
 /*  Reading provenance back                                                    */
 /* -------------------------------------------------------------------------- */
 
+/** Items to `{ checklists: 2, reports: 1 }`, using the ledger's own plural keys. */
+function liveCountsFor(items: BlueprintOriginItem[]): Record<string, number> {
+  // Same key vocabulary the apply writes into `counts`, so the panel can put
+  // the frozen number and the live number side by side without translating.
+  const KEY: Record<BlueprintOriginItem["kind"], string> = {
+    checklist: "checklists",
+    report: "reports",
+    workflow: "workflows",
+    document: "documents",
+  };
+  const out: Record<string, number> = {};
+  for (const it of items) {
+    const k = KEY[it.kind];
+    out[k] = (out[k] ?? 0) + 1;
+  }
+  return out;
+}
+
 export const getProjectBlueprintOriginInputSchema = z.object({
   projectId: z.string().uuid(),
 });
 
+/** One row a blueprint apply created, as the project panel lists it. */
+export type BlueprintOriginItem = {
+  id: string;
+  /** Which project tab this lives in. */
+  kind: "checklist" | "report" | "workflow" | "document";
+  name: string;
+  createdAt: string;
+  /** Display name of whoever the row is credited to; email, then null. */
+  createdByName: string | null;
+  /** Last edit, when the database records one. Null before 20260925000000. */
+  updatedAt: string | null;
+  /** Who made that last edit. Null when only server-side writes have touched it. */
+  updatedByName: string | null;
+  /**
+   * True when 20260924000000's backfill attributed this row by matching its
+   * template and its timestamp, rather than the apply having recorded it. An
+   * inference must never be presented as an observation.
+   */
+  inferred: boolean;
+};
+
 export type BlueprintOriginApplication = {
+  /** The ledger row itself, so items can be grouped against it. */
+  applicationId: string;
+  /** Who ran the apply. Null when the account is gone or unreadable. */
+  appliedByName: string | null;
+  /**
+   * What this apply's items number RIGHT NOW, by kind.
+   *
+   * `counts` beside it is the tally frozen at apply time, and the two answer
+   * different questions: "what did this blueprint deliver" versus "how much of
+   * it is still here". The client saw a panel reading "1 checklist" beside a
+   * tab reading 2 and reasonably called it a bug - it was two different
+   * measurements wearing one label.
+   *
+   * Null, not `{}`, when per-item origin cannot be read at all (the migration
+   * is pending): no number is very different from zero, and the panel says so
+   * rather than claiming the blueprint delivered nothing.
+   */
+  liveCounts: Record<string, number> | null;
+  /** The rows themselves, newest first. Empty when `liveCounts` is null. */
+  items: BlueprintOriginItem[];
   /** null once the blueprint has been deleted; `blueprintName` still names it. */
   blueprintId: string | null;
   blueprintName: string | null;
@@ -745,7 +874,7 @@ export async function getProjectBlueprintOriginService(
   // that migration falls back to the original column list - the names then come
   // from the lookup below and every row reads as a real apply, which is exactly
   // what it was before `origin` existed.
-  const LEDGER_BASE = "blueprint_id, counts, failed_count, created_at";
+  const LEDGER_BASE = "id, blueprint_id, applied_by, counts, failed_count, created_at";
   const LEDGER_V2 = `${LEDGER_BASE}, blueprint_name, origin`;
   let { data: rows, error } = await supabaseAdmin
     .from("project_blueprint_applications" as any)
@@ -780,6 +909,8 @@ export async function getProjectBlueprintOriginService(
   }
 
   const ledger = ((rows as any[]) ?? []) as Array<{
+    id: string;
+    applied_by: string | null;
     blueprint_id: string | null;
     blueprint_name: string | null;
     counts: Record<string, number> | null;
@@ -840,7 +971,149 @@ export async function getProjectBlueprintOriginService(
     }
   }
 
+  /*
+   * The rows each apply actually created, read back by the origin column.
+   *
+   * This is the whole point of 20260924000000. Before it, provenance was
+   * inferred from `template_id` against the blueprint's CURRENT contents,
+   * which mislabelled hand-added rows and quietly rewrote history whenever a
+   * blueprint was edited. Reading a recorded pointer instead makes the answer
+   * exact and stable.
+   *
+   * Read with the admin client to match the ledger read above: a teammate can
+   * see the project, and the panel must not go blank for them.
+   */
+  const APPLIED_TABLES = [
+    { table: "project_checklists", kind: "checklist" as const, nameCol: "name" },
+    { table: "project_reports", kind: "report" as const, nameCol: "title" },
+    { table: "project_workflows", kind: "workflow" as const, nameCol: "name" },
+    { table: "project_pages", kind: "document" as const, nameCol: "title" },
+  ];
+  const applicationIds = ledger.map((r) => r.id).filter(Boolean);
+  /** Items plus the uid they are credited to, resolved to a name further down. */
+  const itemsByApplication = new Map<
+    string,
+    Array<BlueprintOriginItem & { uid: string | null; editorUid: string | null }>
+  >();
+  /*
+   * False the moment any table cannot answer, which on a database still
+   * waiting for the migration is all of them. It becomes `liveCounts: null`
+   * below, so the panel falls back to the frozen counts and says which it is
+   * showing rather than silently mixing the two.
+   */
+  let originTracked = applicationIds.length > 0;
+  const creatorIds = new Set<string>();
+
+  if (applicationIds.length) {
+    for (const spec of APPLIED_TABLES) {
+      /*
+       * Two rungs, because the origin columns (20260924000000) and the edit
+       * attribution columns (20260925000000) are separate migrations and a
+       * database can sit between them. Asking for both in one select and
+       * giving up on any error would mean the second migration being pending
+       * costs the whole panel - not just the "edited by" line it adds.
+       */
+      const originCols = `id, ${spec.nameCol}, created_by, created_at, blueprint_application_id, blueprint_origin_inferred`;
+      // The column list is built at runtime, so postgrest-js cannot type it -
+      // it tries to parse the template literal and fails. The shape is checked
+      // by hand where the rows are read below.
+      type ItemRead = { data: any[] | null; error: { code?: string; message?: string } | null };
+      let { data: itemRows, error: itemErr } = (await supabaseAdmin
+        .from(spec.table as any)
+        .select(`${originCols}, updated_at, updated_by`)
+        .in("blueprint_application_id", applicationIds)) as ItemRead;
+      if (itemErr && isMissingColumn(itemErr)) {
+        ({ data: itemRows, error: itemErr } = (await supabaseAdmin
+          .from(spec.table as any)
+          .select(originCols)
+          .in("blueprint_application_id", applicationIds)) as ItemRead);
+      }
+      if (itemErr) {
+        // A missing column is the pending migration and is expected; anything
+        // else is a real fault and must not be mistaken for "no items".
+        if (isMissingColumn(itemErr)) {
+          console.warn(`blueprint origin: ${spec.table} has no origin column yet`, itemErr.message);
+        } else {
+          console.error(`blueprint origin: reading ${spec.table} failed`, itemErr.message);
+        }
+        originTracked = false;
+        continue;
+      }
+      for (const row of ((itemRows as any[]) ?? []) as any[]) {
+        const appId = row.blueprint_application_id as string | null;
+        if (!appId) continue;
+        if (row.created_by) creatorIds.add(row.created_by as string);
+        if (row.updated_by) creatorIds.add(row.updated_by as string);
+        const item = {
+          id: row.id as string,
+          kind: spec.kind,
+          name: String(row[spec.nameCol] ?? "Untitled"),
+          createdAt: row.created_at as string,
+          createdByName: null as string | null,
+          // `updated_at` is absent on the older rung, and equal to created_at
+          // on a row nobody has touched since. Both read as "no edit yet".
+          updatedAt: (row.updated_at as string | null) ?? null,
+          updatedByName: null as string | null,
+          inferred: row.blueprint_origin_inferred === true,
+          uid: (row.created_by as string | null) ?? null,
+          editorUid: (row.updated_by as string | null) ?? null,
+        };
+        const bucket = itemsByApplication.get(appId);
+        if (bucket) bucket.push(item);
+        else itemsByApplication.set(appId, [item]);
+      }
+    }
+  }
+
+  /*
+   * Names for the "who" half of the client's ask - on each item and on the
+   * apply itself - resolved in one lookup rather than per row. `full_name`
+   * first, then email, then null: a raw uuid on screen is exactly the
+   * "unfriendly info" this product keeps being told off for.
+   */
+  for (const r of ledger) if (r.applied_by) creatorIds.add(r.applied_by);
+  const nameByUser = new Map<string, string>();
+  if (creatorIds.size) {
+    const { data: profileRows, error: profErr } = await supabaseAdmin
+      .from("profiles" as any)
+      .select("id, full_name, email")
+      .in("id", Array.from(creatorIds));
+    if (profErr) console.warn("blueprint origin: profile lookup failed", profErr.message);
+    for (const pr of ((profileRows as any[]) ?? []) as Array<{
+      id: string;
+      full_name: string | null;
+      email: string | null;
+    }>) {
+      const label = pr.full_name?.trim() || pr.email?.trim();
+      if (label) nameByUser.set(pr.id, label);
+    }
+  }
+
+  /** Newest first, names filled in, and the internal uids dropped on the way out. */
+  const itemsFor = (appId: string): BlueprintOriginItem[] =>
+    (itemsByApplication.get(appId) ?? [])
+      .slice()
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+      .map(({ uid, editorUid, ...rest }) => ({
+        ...rest,
+        createdByName: uid ? (nameByUser.get(uid) ?? null) : null,
+        /*
+         * Only a real, later edit counts. A row still at its creation state has
+         * updated_at == created_at and an updated_by that is either null or the
+         * creator, and reporting that as "edited by" would invent an event that
+         * never happened.
+         */
+        updatedByName:
+          editorUid && rest.updatedAt && rest.updatedAt > rest.createdAt
+            ? (nameByUser.get(editorUid) ?? null)
+            : null,
+      }));
+
   const applications: BlueprintOriginApplication[] = ledger.map((r) => ({
+    applicationId: r.id,
+    appliedByName: r.applied_by ? (nameByUser.get(r.applied_by) ?? null) : null,
+    liveCounts: originTracked ? liveCountsFor(itemsFor(r.id)) : null,
+    items: originTracked ? itemsFor(r.id) : [],
     blueprintId: r.blueprint_id,
     blueprintName:
       r.blueprint_name ?? (r.blueprint_id ? (nameFallback.get(r.blueprint_id) ?? null) : null),

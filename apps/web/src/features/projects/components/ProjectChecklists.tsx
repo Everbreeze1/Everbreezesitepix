@@ -38,6 +38,7 @@ import {
 } from "./runner/runner-ui";
 import { toneForProgress } from "./runner/runner-tokens";
 import { BlueprintItemBadge } from "./BlueprintItemBadge";
+import type { ItemOrigin } from "@/hooks/use-project-blueprint-origin";
 
 /**
  * The Checklists panel: a list of records on this job, and the fastest possible
@@ -102,6 +103,7 @@ const UNTITLED = "Untitled checklist";
 export function ProjectChecklists({
   projectId,
   blueprintSources,
+  originOf,
   onChanged,
 }: {
   projectId: string;
@@ -112,6 +114,15 @@ export function ProjectChecklists({
    * badge hand-applied checklists as blueprint output.
    */
   blueprintSources?: Record<string, { blueprintId: string | null; blueprintName: string | null }>;
+  /**
+   * Recorded blueprint origin for one row, by its own id.
+   *
+   * Supersedes `blueprintSources`, which keys on the SOURCE TEMPLATE and so
+   * cannot tell a blueprint-created row from one a user added by hand from the
+   * same template. `blueprintSources` stays as the fallback for a database
+   * still waiting on 20260924000000; the hook decides which is in play.
+   */
+  originOf?: (itemId: string, sourceTemplateId?: string | null) => ItemOrigin;
   /** Lets the host refresh its tab counts without remounting this panel. */
   onChanged?: () => void;
 }) {
@@ -520,6 +531,7 @@ export function ProjectChecklists({
                         <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                           <span>{`${done}/${snapItems.length} answered`}</span>
                           <BlueprintItemBadge
+                            origin={originOf?.(c.id, c.template_id)}
                             source={c.template_id ? blueprintSources?.[c.template_id] : null}
                           />
                         </span>
@@ -573,6 +585,7 @@ export function ProjectChecklists({
                           {its.length === 0 ? "No items yet" : `${done}/${its.length} done`}
                         </span>
                         <BlueprintItemBadge
+                          origin={originOf?.(cl.id, cl.template_id)}
                           source={cl.template_id ? blueprintSources?.[cl.template_id] : null}
                         />
                       </span>

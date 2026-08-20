@@ -33,6 +33,32 @@ const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 const stripComments = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
+/**
+ * The brace-balanced region that starts at `marker`.
+ *
+ * Anchoring an assertion at a marker and then slicing to the end of the file is
+ * how you write a test that cannot fail. The first version of the Escape tests
+ * below did exactly that, and `PhotoAnnotator` has three more
+ * `stopPropagation` calls further down the file - so the assertion guarding the
+ * one line whose absence *was* the reported bug still passed with that line
+ * deleted. Checked by deleting it: 33 of 33 green.
+ *
+ * Brace counting is enough for the blocks used here; none of them contains a
+ * brace inside a string or a template literal.
+ */
+function block(code: string, marker: string): string {
+  const start = code.indexOf(marker);
+  if (start < 0) throw new Error(`marker not found: ${marker}`);
+  const open = code.indexOf("{", start);
+  if (open < 0) throw new Error(`no block opens after: ${marker}`);
+  let depth = 0;
+  for (let i = open; i < code.length; i++) {
+    if (code[i] === "{") depth++;
+    else if (code[i] === "}" && --depth === 0) return code.slice(start, i + 1);
+  }
+  throw new Error(`unbalanced block at: ${marker}`);
+}
+
 // ── The burnt-in UNTAGGED chip ──────────────────────────────────────────────
 
 /**
@@ -127,8 +153,13 @@ describe("Escape in the Annotate editor backs out one step, it does not bin the 
    * prompt. Stopping the key is the half that was missing.
    */
   it("stops the key rather than letting the dialog underneath also act on it", () => {
-    const handler = CODE.slice(CODE.indexOf('if (e.key === "Escape")'));
-    expect(handler).toMatch(/e\.stopPropagation\(\)/);
+    // Scoped to the Escape branch itself. The pointer handlers further down the
+    // file also call stopPropagation, and matching one of those instead is
+    // precisely how this test passed while the fix was absent.
+    const handler = block(CODE, 'if (e.key === "Escape")');
+    expect(handler).toContain("e.stopPropagation();");
+    expect(handler).toContain("e.preventDefault();");
+    expect(handler).toContain("if (!cancelInProgress()) void requestClose();");
   });
 
   it("takes Escape away from Radix outright", () => {
@@ -140,30 +171,23 @@ describe("Escape in the Annotate editor backs out one step, it does not bin the 
     expect(CODE).toMatch(/window\.removeEventListener\("keydown", onKey, true\)/);
   });
 
-  it("cancels the in-progress action first and only then considers closing", () => {
-    expect(CODE).toMatch(/if \(!cancelInProgress\(\)\) void requestClose\(\)/);
-  });
-
   it("backs out of a measurement waiting to be calibrated, the reported case", () => {
-    const cancel = CODE.slice(CODE.indexOf("const cancelInProgress"));
-    for (const state of [
-      "textPrompt",
-      "calibrate",
-      "cropDraft",
-      "polyDraft",
-      "draft",
-      "selectedId",
-    ])
-      expect(cancel).toContain(state);
+    const cancel = block(CODE, "const cancelInProgress");
+    // Each one must actually be cleared in there, not merely mentioned.
+    expect(cancel).toContain("setCalibrate(null);");
+    expect(cancel).toContain("setTextPrompt(null);");
+    expect(cancel).toContain("setCropDraft(null);");
+    expect(cancel).toContain("setPolyDraft(null);");
+    expect(cancel).toContain("setDraft(null);");
+    expect(cancel).toContain("setSelectedId(null);");
   });
 
   it("closes an open toolbar popover before anything else", () => {
     // This listener swallows Escape, so Radix never sees the key it would
     // normally close a popover with. Missing this trades one bug for another.
-    const cancel = CODE.slice(CODE.indexOf("const cancelInProgress"));
-    const popovers = cancel.indexOf("stickerPickerOpen");
-    expect(popovers).toBeGreaterThanOrEqual(0);
-    expect(popovers).toBeLessThan(cancel.indexOf("textPrompt"));
+    const cancel = block(CODE, "const cancelInProgress");
+    expect(cancel).toContain("setStickerPickerOpen(false);");
+    expect(cancel.indexOf("stickerPickerOpen")).toBeLessThan(cancel.indexOf("textPrompt"));
   });
 
   it("asks before discarding unsaved work, counting crop and rotate as work", () => {
@@ -174,7 +198,11 @@ describe("Escape in the Annotate editor backs out one step, it does not bin the 
   });
 
   it("does not prompt on a clean editor, where there is nothing to lose", () => {
-    expect(CODE).toMatch(/if \(!isDirty\) \{\s*onClose\(\);/);
+    const close = block(CODE, "const requestClose");
+    expect(close).toMatch(/if \(!isDirty\) \{\s*onClose\(\);\s*return;/);
+    // And the prompt is genuinely awaited before closing, not fired and ignored.
+    expect(close).toMatch(/const ok = await confirm\(/);
+    expect(close).toMatch(/if \(ok\) onClose\(\);/);
   });
 
   it("routes Cancel and the outside click through the same guard as Escape", () => {
@@ -238,9 +266,10 @@ describe("the Gallery grid can select photos, which the Help Center has always s
 
   it("does not nest the tick box inside the tile button", () => {
     // Two buttons, one inside the other, is invalid and browsers disagree about
-    // which one owns the click.
-    const tile = CODE.slice(CODE.indexOf("visiblePhotos.map((p) => {"));
-    expect(tile.slice(0, tile.indexOf("</div>"))).not.toMatch(/<button[\s\S]*<button/);
+    // which one owns the click. Matches an opening <button> reached before the
+    // previous one closed, anywhere in the page - which is the actual defect,
+    // rather than "there is only one button in the first few lines of a tile".
+    expect(CODE).not.toMatch(/<button\b(?:(?!<\/button>)[\s\S])*?<button\b/);
   });
 
   it("drops photos from the selection once a filter hides them", () => {
