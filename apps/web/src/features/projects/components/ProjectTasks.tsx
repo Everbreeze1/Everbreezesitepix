@@ -46,6 +46,7 @@ import {
   calendarDueLabel,
   formatCalendarDate,
   isCalendarDateOverdue,
+  isPlausibleCalendarDate,
   todayCalendarDate,
 } from "@sitepix/shared";
 import { notifyTaskChanged } from "@/lib/tasks.functions";
@@ -1685,8 +1686,24 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
               type="date"
               disabled={bulkBusy}
               defaultValue={selectionDue && selectionDue !== "mixed" ? selectionDue : ""}
+              /*
+               * `isPlausibleCalendarDate`, not just a truthy check.
+               *
+               * A date input emits a COMPLETE, VALID value on every segment
+               * change, so typing the year 2026 arrives here as 0002, 0020,
+               * 0202 and only then 2026. A truthy check let all four through,
+               * and each one is a bulk write across every selected task
+               * followed by `notifyTaskChanged` per task - so typing a year on
+               * a batch of six sent three rounds of "your task is due" mail
+               * announcing the years 2, 20 and 202 before the real one.
+               *
+               * Found while fixing the same bug on the workspace Schedule,
+               * where the client reported it. This one was worse: that field
+               * writes one row and shows a toast, this one writes N rows and
+               * sends N emails. See packages/shared/src/calendar-date.ts.
+               */
               onChange={(e) =>
-                e.target.value &&
+                isPlausibleCalendarDate(e.target.value) &&
                 void bulkPatch(
                   { due_date: e.target.value },
                   `${selected.size} due ${formatCalendarDate(e.target.value)}`,

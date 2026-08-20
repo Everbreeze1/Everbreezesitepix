@@ -7,6 +7,9 @@ export {
   isCalendarDateOverdue,
   formatCalendarDate,
   calendarDueLabel,
+  isPlausibleCalendarDate,
+  MIN_PLAUSIBLE_YEAR,
+  MAX_PLAUSIBLE_YEAR,
   type DueLabel,
 } from "./calendar-date";
 export {

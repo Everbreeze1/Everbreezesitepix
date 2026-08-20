@@ -1,21 +1,26 @@
 /**
- * Drives the new workspace Calendar tab on /projects in a real browser.
+ * Drives the workspace Schedule tab on /projects in a real browser.
  *
- * WRITES NOTHING. It logs in, opens the tab four ways (click, and the
- * `?tab=calendar` address), reads the grid and the rail, and screenshots.
- * The database is shared with production, so this run is a reader: it never
- * touches a date control, and until
- * supabase/migrations/20260923000000_project_scheduled_date.sql is applied
- * there are no date controls to touch.
+ * Reads by default: it logs in, opens the tab three ways (clicking the pill,
+ * the `?tab=schedule` address, and the legacy `?tab=calendar` one that links
+ * shared before the rename still carry), checks the grid, the legend, the rail
+ * and the out-of-window warning, and screenshots.
  *
- * Run with: node scripts/drive-workspace-calendar.mjs
- * Screenshots land in artifacts/workspace-calendar/.
+ * WRITE=1 adds the round trip that needs a row to exist: it books a day by
+ * TYPING the date rather than picking it, which is the only way to reproduce
+ * the year-segment bug, counts the PATCHes that typing produces, clicks the
+ * resulting chip on the grid to prove it opens, and then clears the date back
+ * to NULL. The database is shared with production, so that is opt-in and every
+ * row it touches is reported.
+ *
+ * Run with: node scripts/drive-workspace-schedule.mjs
+ * Screenshots land in artifacts/workspace-schedule/.
  */
 import { chromium } from "playwright";
 import { readFileSync, mkdirSync } from "node:fs";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:8080";
-const SHOTS = "artifacts/workspace-calendar";
+const SHOTS = "artifacts/workspace-schedule";
 mkdirSync(SHOTS, { recursive: true });
 
 function env(path) {
@@ -42,6 +47,27 @@ const IGNORE = [
   /favicon/i,
   /net::ERR_/i,
 ];
+
+/**
+ * Wait for the Schedule tab to reach a state it will not leave on its own.
+ *
+ * A fixed sleep made this driver a coin toss: the tab renders an empty state
+ * while its three reads are still landing, so a 6-second wait sometimes caught
+ * the transient version and sometimes the settled one. Waiting on the outcome
+ * instead is what turned that flicker from an intermittent test failure into a
+ * bug with a cause.
+ */
+const settled = (page) =>
+  page
+    .waitForFunction(
+      () => {
+        const t = document.body.innerText;
+        return /Workspace schedule/.test(t) || /Nothing is dated yet/.test(t);
+      },
+      undefined,
+      { timeout: 60000 },
+    )
+    .catch(() => {});
 
 const run = async () => {
   const { email, password } = env(".env");
@@ -90,9 +116,9 @@ const run = async () => {
   await page.waitForTimeout(5000);
   await page.screenshot({ path: `${SHOTS}/01-projects-tabs.png` });
 
-  const tab = page.getByRole("button", { name: /^Calendar/ }).first();
-  if (await tab.count()) ok("calendar pill is on the strip");
-  else bad("calendar pill is on the strip", "no button whose name starts with Calendar");
+  const tab = page.getByRole("button", { name: /^Schedule/ }).first();
+  if (await tab.count()) ok("Schedule pill is on the strip");
+  else bad("Schedule pill is on the strip", "no button whose name starts with Schedule");
 
   const strip = await page
     .locator('[aria-current="page"], button:has-text("Pipelines")')
@@ -102,21 +128,21 @@ const run = async () => {
   ok("strip reads", String(strip).trim());
 
   /* -------------------------------------------------------------- open it */
-  current = "calendar";
+  current = "schedule";
   await tab.click();
   await page.waitForTimeout(3500);
-  await page.screenshot({ path: `${SHOTS}/02-calendar.png`, fullPage: true });
+  await page.screenshot({ path: `${SHOTS}/02-schedule.png`, fullPage: true });
 
   const url = new URL(page.url());
-  if (url.searchParams.get("tab") === "calendar") ok("clicking the pill writes ?tab=calendar");
-  else bad("clicking the pill writes ?tab=calendar", `url is ${page.url()}`);
+  if (url.searchParams.get("tab") === "schedule") ok("clicking the pill writes ?tab=schedule");
+  else bad("clicking the pill writes ?tab=schedule", `url is ${page.url()}`);
 
   const heading = await page
     .locator("text=Workspace schedule")
     .first()
     .isVisible()
     .catch(() => false);
-  heading ? ok("the calendar card rendered") : bad("the calendar card rendered");
+  heading ? ok("the schedule card rendered") : bad("the schedule card rendered");
 
   for (const probe of ["due today", "in the next 7 days"]) {
     const seen = await page
@@ -150,8 +176,8 @@ const run = async () => {
 
   /* --------------------------------------------------- the address works */
   current = "deep link";
-  await page.goto(`${BASE}/projects?tab=calendar`, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(6000);
+  await page.goto(`${BASE}/projects?tab=schedule`, { waitUntil: "domcontentloaded" });
+  await settled(page);
   const deepLinked =
     (await page
       .locator("text=Workspace schedule")
@@ -164,9 +190,40 @@ const run = async () => {
       .isVisible()
       .catch(() => false));
   deepLinked
-    ? ok("?tab=calendar opens on the Calendar")
-    : bad("?tab=calendar opens on the Calendar");
+    ? ok("?tab=schedule opens on the Schedule")
+    : bad("?tab=schedule opens on the Schedule");
   await page.screenshot({ path: `${SHOTS}/03-deep-link.png`, fullPage: true });
+
+  const legend = await page
+    .locator("text=Job booked")
+    .first()
+    .isVisible()
+    .catch(() => false);
+  legend ? ok("the marker legend is on screen") : bad("the marker legend is on screen");
+
+  /* -------------------------- the address people already have keeps working */
+  /*
+   * `?tab=calendar` was the address for a release and the group page linked to
+   * it. Renaming the tab must not turn a link somebody already sent into the
+   * project list.
+   */
+  current = "legacy link";
+  await page.goto(`${BASE}/projects?tab=calendar`, { waitUntil: "domcontentloaded" });
+  await settled(page);
+  const legacy =
+    (await page
+      .locator("text=Workspace schedule")
+      .first()
+      .isVisible()
+      .catch(() => false)) ||
+    (await page
+      .locator("text=Nothing is dated yet")
+      .first()
+      .isVisible()
+      .catch(() => false));
+  legacy
+    ? ok("the old ?tab=calendar link still opens the Schedule")
+    : bad("the old ?tab=calendar link still opens the Schedule");
 
   /* ---------------------------------------------- month paging still works */
   current = "paging";
@@ -187,7 +244,7 @@ const run = async () => {
    * silently none of the tasks. It has to say so.
    */
   current = "coverage";
-  await page.goto(`${BASE}/projects?tab=calendar`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${BASE}/projects?tab=schedule`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector("text=Workspace schedule", { timeout: 60000 }).catch(() => {});
   const back = page.getByRole("button", { name: "Previous month" }).first();
   for (let i = 0; i < 8; i++) {
@@ -215,21 +272,54 @@ const run = async () => {
    */
   if (process.env.WRITE === "1") {
     current = "write";
-    await page.goto(`${BASE}/projects?tab=calendar`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE}/projects?tab=schedule`, { waitUntil: "domcontentloaded" });
+    await settled(page);
     await page
       .waitForSelector('input[aria-label^="Book a day for"]', { timeout: 60000 })
       .catch(() => {});
     const booker = page.locator('input[aria-label^="Book a day for"]').first();
     if (!(await booker.count())) {
-      ok("write round trip", "skipped: nothing awaiting a date");
+      bad("write round trip", "no job awaiting a date to book - cannot exercise the write path");
     } else {
       const who = await booker.getAttribute("aria-label");
       const today = new Date();
       const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(
         today.getDate(),
       ).padStart(2, "0")}`;
-      await booker.fill(iso);
-      await page.waitForTimeout(3500);
+
+      /*
+       * TYPED, not filled.
+       *
+       * `fill()` sets the whole value in one go, which is what the native date
+       * picker does and is exactly the path that never had the bug. Typing is
+       * the path that did: each segment change emits a complete valid date, so
+       * the year arrives as 0002, 0020, 0202 and only then 2026. Count the
+       * PATCHes to see whether the intermediate three are being written.
+       */
+      let patches = 0;
+      const countPatch = (req) => {
+        if (req.method() === "PATCH" && /\/rest\/v1\/projects/.test(req.url())) patches += 1;
+      };
+      page.on("request", countPatch);
+
+      // focus(), not click(): a click lands on whichever segment is under the
+      // cursor, and the digits then go into the wrong one.
+      await booker.focus();
+      const digits = `${String(today.getMonth() + 1).padStart(2, "0")}${String(
+        today.getDate(),
+      ).padStart(2, "0")}${today.getFullYear()}`;
+      for (const d of digits) {
+        await page.keyboard.press(`Digit${d}`);
+        await page.waitForTimeout(140);
+      }
+      await page.waitForTimeout(4000);
+      page.off("request", countPatch);
+      ok("typed value", `${digits} -> "${await booker.inputValue().catch(() => "?")}"`);
+
+      patches === 1
+        ? ok("typing a year writes once, not once per digit", `${patches} PATCH`)
+        : bad("typing a year writes once, not once per digit", `${patches} PATCH, expected 1`);
+
       await page.screenshot({ path: `${SHOTS}/06-booked.png`, fullPage: true });
       const landed = await page
         .locator("text=/1 due today|Scheduled for/i")
@@ -238,20 +328,67 @@ const run = async () => {
         .catch(() => false);
       landed ? ok("booking a day lands on the grid", `${who} -> ${iso}`) : bad("booking a day");
 
-      const clear = page.getByRole("button", { name: "Clear" }).first();
-      if (await clear.count()) {
-        await clear.click();
-        await page.waitForTimeout(3500);
-        await page.screenshot({ path: `${SHOTS}/07-cleared.png`, fullPage: true });
-        const back = await page
-          .locator("text=/awaiting a date/i")
-          .first()
-          .isVisible()
-          .catch(() => false);
-        back ? ok("Clear puts the row back to NULL") : bad("Clear puts the row back to NULL");
+      /* ------------------------------ clicking the item ON THE GRID opens it */
+      /*
+       * The client: "clicking a task directly on the calendar grid does
+       * nothing - only the same item in the sidebar is clickable".
+       */
+      current = "grid click";
+      const chip = page.locator('a[aria-label^="Job booked"], a[aria-label^="Task due"]').first();
+      if (await chip.count()) {
+        const label = await chip.getAttribute("aria-label");
+        await chip.click();
+        await page.waitForURL(/\/projects\/[0-9a-f-]{36}/, { timeout: 30000 }).catch(() => {});
+        const opened = /\/projects\/[0-9a-f-]{36}/.test(new URL(page.url()).pathname);
+        opened
+          ? ok("clicking an item on the grid opens its project", label)
+          : bad("clicking an item on the grid opens its project", `url is ${page.url()}`);
+        await page.screenshot({ path: `${SHOTS}/09-grid-click.png` });
+        await page.goto(`${BASE}/projects?tab=schedule`, { waitUntil: "domcontentloaded" });
+        await settled(page);
       } else {
-        bad("Clear puts the row back to NULL", "no Clear button after booking");
+        bad("clicking an item on the grid opens its project", "no chip on the grid to click");
       }
+    }
+
+    /*
+     * Put the row back, whether this run booked it or a previous one did.
+     *
+     * Deliberately outside the booking branch. Nested inside it, a run that
+     * found the job already booked skipped the cleanup as well as the booking,
+     * so a failed clear stayed failed and left a date on the customer's project
+     * for the next run to find. Cleanup has to be reachable from whatever state
+     * the last run left behind.
+     */
+    current = "cleanup";
+    await page.goto(`${BASE}/projects?tab=schedule`, { waitUntil: "domcontentloaded" });
+    await settled(page);
+    await page.waitForSelector('button:has-text("Clear")', { timeout: 30000 }).catch(() => {});
+    const clear = page.getByRole("button", { name: "Clear" }).first();
+    if (await clear.count()) {
+      await clear.click();
+      await page.waitForTimeout(4000);
+      await page.screenshot({ path: `${SHOTS}/07-cleared.png`, fullPage: true });
+      const back = await page
+        .locator("text=/awaiting a date/i")
+        .first()
+        .isVisible()
+        .catch(() => false);
+      back ? ok("the row is back to NULL") : bad("the row is back to NULL", "still booked");
+    } else {
+      /*
+       * No Clear button is the RIGHT answer when nothing is booked. Reporting
+       * it as a failure made a clean run look broken and buried the one case
+       * that matters: a date left behind on the customer's project.
+       */
+      const alreadyClear = await page
+        .locator("text=/awaiting a date/i")
+        .first()
+        .isVisible()
+        .catch(() => false);
+      alreadyClear
+        ? ok("the row is back to NULL", "nothing was booked to clear")
+        : bad("the row is back to NULL", "no Clear button and the job is not awaiting a date");
     }
   }
 

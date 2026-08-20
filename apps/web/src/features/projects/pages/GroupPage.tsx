@@ -571,7 +571,7 @@ export function GroupPage() {
                       ever read - the button did nothing at all. The Calendar
                       tab is the cross-project view of task due dates that link
                       was reaching for, and it now has an address. */}
-                  <Link to="/projects" search={{ tab: "calendar" } as any}>
+                  <Link to="/projects" search={{ tab: "schedule" } as any}>
                     <CheckSquare className="mr-1.5 h-3.5 w-3.5" /> All task dates
                   </Link>
                 </Button>

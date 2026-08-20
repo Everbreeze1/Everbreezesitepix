@@ -25,7 +25,7 @@
  *
  * This module turns both into one flat list of dated entries, and is
  * deliberately pure: no Supabase, no React, no `new Date()` except through an
- * injected `now`. That is what lets tests/workspace-calendar.test.ts pin the
+ * injected `now`. That is what lets tests/workspace-schedule.test.ts pin the
  * bucketing and the overdue rules to fixed days instead of to whenever the
  * suite happens to run.
  *
@@ -106,6 +106,40 @@ export interface ScheduleEntry {
   taskId: string | null;
 }
 
+/**
+ * What an entry IS, in words, for a screen reader and for the legend.
+ *
+ * The client, looking at the first grid:
+ *
+ *   "The calendar pulls in multiple item types - pipeline/job status entries
+ *    (like Scheduled or Completed), checklists, and tasks - but they all render
+ *    identically on the grid. Each type should get its own badge or marker
+ *    style so users can tell what they're looking at without opening it."
+ *
+ * They are right about the symptom and the fix. Every chip was the same shape
+ * with a coloured dot, and colour alone is not a distinction: it fails for
+ * anyone who cannot separate the hues, and it was already spent on the stage
+ * colour and the task priority, so it could not also carry the type.
+ *
+ * So each type gets a marker with a SHAPE and an ICON as well as a colour, and
+ * this function is the words behind them. Kept here rather than in the view so
+ * the chip's `aria-label`, the rail row and the legend cannot drift apart, and
+ * so a test can hold the vocabulary still.
+ *
+ * On checklists, which the report lists as a third type: they are not on the
+ * calendar and cannot be. `project_checklists` has no due date and no
+ * scheduled date - only `created_at` and `completed_at` - so there is no day
+ * to draw one on. Adding one is a data-model change, not a rendering one.
+ */
+export function entryTypeLabel(entry: Pick<ScheduleEntry, "kind" | "done" | "overdue">): string {
+  if (entry.kind === "job") {
+    if (entry.done) return "Job completed";
+    return entry.overdue ? "Job overdue" : "Job booked";
+  }
+  if (entry.done) return "Task done";
+  return entry.overdue ? "Task overdue" : "Task due";
+}
+
 /** A job in a "Scheduled"-shaped stage that nobody has given a day to yet. */
 export interface AwaitingDateJob {
   projectId: string;
@@ -136,7 +170,7 @@ export interface TaskCoverage {
   capped: boolean;
 }
 
-export interface WorkspaceSchedule {
+export interface ScheduleData {
   entries: ScheduleEntry[];
   /** Keyed by "YYYY-MM-DD", each already in display order. */
   byDate: Map<string, ScheduleEntry[]>;
@@ -237,7 +271,7 @@ export function buildWorkspaceSchedule(input: {
   /** What the task read reached. Null while it is still in flight. */
   taskCoverage?: TaskCoverage | null;
   now?: Date;
-}): WorkspaceSchedule {
+}): ScheduleData {
   const { stagesById, now = new Date() } = input;
   const today = todayCalendarDate(now);
 
@@ -372,6 +406,6 @@ export function addCalendarDays(date: string, days: number): string {
  * because a task is due next spring tells nobody anything; "3" when three
  * things are waiting on you today is the whole feature in one number.
  */
-export function attentionCount(schedule: WorkspaceSchedule): number {
+export function attentionCount(schedule: ScheduleData): number {
   return schedule.overdue.length + schedule.today.filter((e) => !e.done).length;
 }

@@ -2,27 +2,31 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { isScheduledStageName } from "../packages/shared/src/pipeline-stages";
+import { isPlausibleCalendarDate } from "../packages/shared/src/calendar-date";
 import {
   addCalendarDays,
   attentionCount,
   buildWorkspaceSchedule,
   coversRange,
+  entryTypeLabel,
   supportsScheduledDate,
   type SchedulableProject,
   type SchedulableTask,
   type StageLite,
-} from "../apps/web/src/lib/workspace-calendar";
+} from "../apps/web/src/lib/workspace-schedule";
 
 const ROOT = resolve(__dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
 const MIGRATION = read("supabase/migrations/20260923000000_project_scheduled_date.sql");
 const PROJECTS_PAGE = read("apps/web/src/features/projects/pages/ProjectsPage.tsx");
-const CALENDAR = read("apps/web/src/features/projects/components/WorkspaceCalendar.tsx");
+const SCHEDULE = read("apps/web/src/features/projects/components/WorkspaceSchedule.tsx");
+const LIB = read("apps/web/src/lib/workspace-schedule.ts");
 const PHOTO_CALENDAR = read("apps/web/src/features/gallery/components/PhotoCalendar.tsx");
 const DETAIL_PAGE = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
 const INDEX_ROUTE = read("apps/web/src/routes/_app.projects.index.tsx");
 const HOOK = read("apps/web/src/hooks/use-workspace-schedule.ts");
+const TASKS = read("apps/web/src/features/projects/components/ProjectTasks.tsx");
 
 /*
  * The client's report, in full:
@@ -464,9 +468,9 @@ describe("saying when the answer is short", () => {
   });
 
   it("is stated on screen both ways", () => {
-    expect(CALENDAR).toContain("coversRange");
-    expect(CALENDAR).toContain("Task due dates aren&apos;t loaded this far out");
-    expect(CALENDAR).toContain("schedule.taskCoverage?.capped");
+    expect(SCHEDULE).toContain("coversRange");
+    expect(SCHEDULE).toContain("Task due dates aren&apos;t loaded this far out");
+    expect(SCHEDULE).toContain("schedule.taskCoverage?.capped");
   });
 
   it("walks the window's far end back to what the capped read actually returned", () => {
@@ -474,6 +478,76 @@ describe("saying when the answer is short", () => {
     // silent lie one level down.
     expect(HOOK).toContain("tasks.length >= TASK_LIMIT");
     expect(HOOK).toContain("to: lastDate");
+  });
+});
+
+/*
+ * "Please check the year-segment handling on that date input."
+ *
+ * `<input type="date">` emits a COMPLETE, VALID value on every segment change.
+ * Typing the year 2026 therefore produces 0002, 0020, 0202 and then 2026, and
+ * the first cut wrote all four to the database with a toast each, moving the
+ * booked job two millennia up the grid between keystrokes.
+ */
+describe("typing a year into a date field", () => {
+  it("rejects the years that are only half typed", () => {
+    for (const partial of ["0002-08-24", "0020-08-24", "0202-08-24"]) {
+      expect(isPlausibleCalendarDate(partial), partial).toBe(false);
+    }
+  });
+
+  it("accepts the year once it is finished", () => {
+    expect(isPlausibleCalendarDate("2026-08-24")).toBe(true);
+    expect(isPlausibleCalendarDate("1999-12-31")).toBe(true);
+  });
+
+  /*
+   * The check has to be a RANGE and not a length: the browser zero-pads, so
+   * "0202" is four characters and a length check would wave it through.
+   */
+  it("cannot be replaced by a length check, because the browser zero-pads", () => {
+    expect("0202-08-24".length).toBe("2026-08-24".length);
+    expect(isPlausibleCalendarDate("0202-08-24")).toBe(false);
+  });
+
+  it("still refuses what was never a date", () => {
+    expect(isPlausibleCalendarDate("2026-02-31")).toBe(false);
+    expect(isPlausibleCalendarDate("not a date")).toBe(false);
+    expect(isPlausibleCalendarDate("")).toBe(false);
+    expect(isPlausibleCalendarDate(null)).toBe(false);
+  });
+
+  it("is what the schedule's date field commits through", () => {
+    expect(SCHEDULE).toContain("function ScheduleDateInput");
+    expect(SCHEDULE).toContain("isPlausibleCalendarDate(next)");
+    expect(SCHEDULE).toContain("isPlausibleCalendarDate(draft)");
+  });
+
+  /*
+   * The same defect, found one screen over while checking this one, and worse
+   * there: the task list's bulk due-date field writes across EVERY selected
+   * task and then calls notifyTaskChanged on each, so typing a year on a batch
+   * of six sent three rounds of "your task is due" mail announcing the years 2,
+   * 20 and 202 before the real one. It is uncontrolled, so it needed the guard
+   * and not the draft.
+   */
+  it("also guards the bulk due-date field, which writes N rows and sends N emails", () => {
+    expect(TASKS).toContain("isPlausibleCalendarDate(e.target.value)");
+    expect(TASKS).not.toContain("e.target.value &&\n                void bulkPatch(");
+  });
+
+  /*
+   * The other half. A field controlled on the SAVED value re-renders the
+   * segments from whatever was last written while the person is still typing
+   * into them, so the field holds its own draft and only follows the saved
+   * value when that changes underneath it.
+   */
+  it("holds a draft, so nothing rewrites the segments mid-keystroke", () => {
+    expect(SCHEDULE).toContain("const [draft, setDraft] = useState(value)");
+    expect(SCHEDULE).toContain("setDraft(value)");
+    // The two raw controlled inputs the fix replaced are gone.
+    expect(SCHEDULE).not.toContain("value={entry.date}\n            onChange=");
+    expect(SCHEDULE).not.toContain('value=""\n            onChange=');
   });
 });
 
@@ -503,24 +577,169 @@ describe("the column that makes a booked day possible", () => {
 
 describe("the tab itself", () => {
   it("is the fourth destination, not a filter over the project list", () => {
-    expect(PROJECTS_PAGE).toContain('type TabKey = "projects" | "groups" | "boards" | "calendar"');
-    expect(PROJECTS_PAGE).toContain('{ key: "calendar", label: "Calendar"');
-    expect(PROJECTS_PAGE).toContain("<WorkspaceCalendar");
+    expect(PROJECTS_PAGE).toContain('type TabKey = "projects" | "groups" | "boards" | "schedule"');
+    expect(PROJECTS_PAGE).toContain('{ key: "schedule", label: "Schedule"');
+    expect(PROJECTS_PAGE).toContain("<WorkspaceSchedule");
+  });
+
+  /*
+   * "This new workspace-level tab is currently called 'Calendar,' which
+   * collides with the existing per-project 'Calendar' tab (the historical
+   * photo capture log) - two different features with the same name will
+   * confuse users."
+   *
+   * The word "Calendar" now belongs to exactly one thing in this product, and
+   * that thing is the per-project capture log.
+   */
+  it("does not call itself Calendar anywhere a person can read", () => {
+    expect(PROJECTS_PAGE).not.toContain('label: "Calendar"');
+    expect(SCHEDULE).not.toContain("Workspace calendar");
+    expect(SCHEDULE).toContain("Workspace schedule");
   });
 
   it("has an address, so it can be linked to and bookmarked", () => {
     expect(INDEX_ROUTE).toContain("validateSearch");
-    expect(INDEX_ROUTE).toContain('"calendar"');
+    expect(INDEX_ROUTE).toContain('"schedule"');
     expect(PROJECTS_PAGE).toContain('routeSearch.tab ?? "projects"');
+  });
+
+  /*
+   * `?tab=calendar` was live for a release and the group page linked to it.
+   * A rename must not break an address somebody already sent.
+   */
+  it("still opens on a link written before the rename", () => {
+    expect(INDEX_ROUTE).toContain("RENAMED");
+    expect(INDEX_ROUTE).toContain('calendar: "schedule"');
   });
 
   it("counts on the tab strip what needs acting on, not what exists", () => {
     expect(PROJECTS_PAGE).toContain("attentionCount(schedule)");
   });
 
+  /*
+   * Caught by the browser driver on a slow load, not by any assertion here.
+   *
+   * "Nothing is dated yet" is a claim about the data, and it was being made
+   * while the pipelines read was still in flight - so `stagesById` was empty,
+   * no project matched a Scheduled stage, the awaiting rail came out empty and
+   * the tab showed an empty state over a workspace that had a booked job in
+   * it. It corrected itself when the boards landed, which is exactly what
+   * makes it the kind of bug people report as "it flickers".
+   */
+  it("waits for all three reads before claiming the workspace is empty", () => {
+    expect(PROJECTS_PAGE).toContain("scheduleLoading || loading || boardsLoading");
+    expect(SCHEDULE).toContain("!loading && !error && schedule.entries.length === 0");
+  });
+
   it("sends every entry straight to its project, and a task to that task", () => {
-    expect(CALENDAR).toContain('to="/projects/$projectId"');
-    expect(CALENDAR).toContain("{ task: entry.taskId }");
+    expect(SCHEDULE).toContain('to: "/projects/$projectId" as const');
+    expect(SCHEDULE).toContain("{ task: entry.taskId }");
+  });
+});
+
+/*
+ * "Clicking a task directly on the calendar grid does nothing - only the same
+ * item in the sidebar is clickable - the grid items need the same click-to-open
+ * behavior."
+ *
+ * The cell was one `<button>` with inert `<span>` chips in it. A link cannot be
+ * nested inside a button, so the fix is a full-bleed day button UNDER the
+ * content with the chips as real links above it.
+ */
+describe("clicking an item on the grid", () => {
+  it("makes every chip a link, not a span inside the day button", () => {
+    expect(SCHEDULE).toContain("function EntryChip");
+    expect(SCHEDULE).toContain("pointer-events-auto");
+    expect(SCHEDULE).toContain("entryLink(entry)");
+  });
+
+  it("routes the grid chip and the rail row through one link builder", () => {
+    // Two call sites, one definition: the same item cannot lead to two places.
+    expect(SCHEDULE.match(/entryLink\(entry\)/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("keeps the day itself selectable, behind the chips", () => {
+    expect(SCHEDULE).toContain("absolute inset-0 rounded-xl");
+    expect(SCHEDULE).toContain("pointer-events-none relative flex min-w-0");
+  });
+
+  it("does not nest a link inside a button, which no browser agrees on", () => {
+    /*
+     * The invariant, stated where it can actually be checked: the day surface
+     * is a self-closing element. A button with no children cannot contain a
+     * link, whatever anyone edits around it. Anchored on the class that is
+     * unique to it rather than on a regex sweep of the file, which would match
+     * any button and any link anywhere and prove nothing.
+     */
+    expect(SCHEDULE).toMatch(/ring-primary\/50"\s*\/>/);
+    // The old shape: one <button> wrapping the day number AND the entries.
+    expect(SCHEDULE).not.toContain("flex min-h-[74px] flex-col gap-1 rounded-xl border p-1.5");
+  });
+});
+
+/*
+ * "The calendar pulls in multiple item types ... but they all render
+ * identically on the grid. Each type should get its own badge or marker style
+ * so users can tell what they're looking at without opening it."
+ */
+describe("telling one kind of item from another", () => {
+  it("names every type and state in words, for the legend and the screen reader", () => {
+    const job = { kind: "job" as const, done: false, overdue: false };
+    expect(entryTypeLabel(job)).toBe("Job booked");
+    expect(entryTypeLabel({ ...job, overdue: true })).toBe("Job overdue");
+    expect(entryTypeLabel({ ...job, done: true })).toBe("Job completed");
+
+    const task = { kind: "task" as const, done: false, overdue: false };
+    expect(entryTypeLabel(task)).toBe("Task due");
+    expect(entryTypeLabel({ ...task, overdue: true })).toBe("Task overdue");
+    expect(entryTypeLabel({ ...task, done: true })).toBe("Task done");
+  });
+
+  it("carries the type on the chip's own label, not only in its colour", () => {
+    expect(SCHEDULE).toContain("aria-label={`${entryTypeLabel(entry)}: ${entry.title}`}");
+  });
+
+  /*
+   * Colour cannot be the distinction: it is already spent on the stage and on
+   * the task priority, and it is no distinction at all for a reader who cannot
+   * separate the hues. Shape and icon carry the type instead.
+   */
+  it("gives each type a shape and an icon, not just a hue", () => {
+    // Icon for the job chip, priority dot for the task chip.
+    expect(SCHEDULE).toContain("<Layers aria-hidden");
+    // Square marker for a job, round for a task, on the grid and in the rail.
+    expect(SCHEDULE).toContain('e.kind === "job" ? "rounded-[1px]" : "rounded-full"');
+    expect(SCHEDULE).toContain('entry.kind === "job" ? "rounded-[2px]" : "rounded-full"');
+  });
+
+  /*
+   * The key and the chips have to say the same words. Hardcoding them in the
+   * legend meant two copies of the vocabulary that could drift the first time
+   * anyone reworded one, so the legend reads its labels out of the same
+   * function the chips' aria-labels come from.
+   */
+  it("prints a key, worded by the same function as the chips", () => {
+    expect(SCHEDULE).toContain("function Legend");
+    expect(SCHEDULE).toContain("<Legend />");
+    expect(SCHEDULE).toContain(
+      'const JOB_LABEL = entryTypeLabel({ kind: "job", done: false, overdue: false })',
+    );
+    expect(SCHEDULE).toContain("{JOB_LABEL}");
+    expect(SCHEDULE).toContain("{TASK_LABEL}");
+  });
+
+  /*
+   * The report lists checklists as a third type on the grid. They are not
+   * there, and they cannot be: `project_checklists` carries created_at and
+   * completed_at and no due or scheduled date, so there is no day to draw one
+   * on. Probed against the live database on 2026-08-21, because the migration
+   * folder is not a reliable picture of that schema. This test exists so the
+   * next person reads the reason rather than the absence.
+   */
+  it("has no checklist type, because a checklist has no date to be drawn on", () => {
+    expect(SCHEDULE).not.toContain("project_checklists");
+    expect(LIB).toContain("project_checklists");
+    expect(LIB).toContain("no due date");
   });
 });
 
@@ -539,8 +758,8 @@ describe("the per-project Calendar the client asked to keep", () => {
   it("is a different component from the workspace one, reading different tables", () => {
     // The workspace calendar must never grow a photo read, and the capture
     // calendar must never grow a task read. They answer opposite questions.
-    expect(CALENDAR).not.toContain('from("photos"');
-    expect(CALENDAR).not.toContain("site-photos");
+    expect(SCHEDULE).not.toContain('from("photos"');
+    expect(SCHEDULE).not.toContain("site-photos");
     expect(PHOTO_CALENDAR).not.toContain('from("tasks"');
   });
 });
