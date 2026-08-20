@@ -1,3 +1,4 @@
+import type { ProjectStatus } from "@sitepix/shared";
 import { rpcOp } from "./sitepix-api";
 
 /** One column of a pipeline. Owned by the board, never borrowed from a tag. */
@@ -7,6 +8,11 @@ export interface PipelineStage {
   name: string;
   color: string;
   position: number;
+  /**
+   * Which of the three project buckets a job standing in this stage counts as.
+   * The stage owns the status: see packages/shared/src/pipeline-stages.ts.
+   */
+  status: ProjectStatus;
 }
 
 export interface ProjectBoard {
@@ -23,6 +29,7 @@ export interface PipelineStageInput {
   id?: string;
   name: string;
   color: string;
+  status: ProjectStatus;
 }
 
 export const listProjectBoards = rpcOp<undefined, { boards: ProjectBoard[] }>("listProjectBoards");
@@ -50,5 +57,9 @@ export const deleteProjectBoard = rpcOp<{ id: string }, { ok: true }>("deletePro
  */
 export const setProjectPipelineStage = rpcOp<
   { projectId: string; stageId: string | null },
-  { ok: true; stageId: string | null }
+  /**
+   * `status` is what the project's bucket became, so a caller can update its
+   * own row without a refetch. Null only for a project that has none.
+   */
+  { ok: true; stageId: string | null; status: ProjectStatus | null }
 >("setProjectPipelineStage");

@@ -2,7 +2,11 @@ import { z } from "zod";
 import {
   DEFAULT_PIPELINE_STAGES,
   MAX_PIPELINE_STAGES,
+  PROJECT_STATUSES,
+  defaultStatusForStageName,
+  isProjectStatus,
   normalizePipelineName,
+  type ProjectStatus,
 } from "@sitepix/shared";
 import type { AuthedContext } from "../../lib/user-context";
 
@@ -23,6 +27,12 @@ export interface PipelineStage {
   name: string;
   color: string;
   position: number;
+  /**
+   * Which of the three project buckets a job standing in this stage counts as.
+   * See supabase/migrations/20260922000000_pipeline_stage_status.sql: the stage
+   * owns the status, so the map and the project page cannot disagree.
+   */
+  status: ProjectStatus;
 }
 
 export interface ProjectBoard {
@@ -36,6 +46,47 @@ export interface ProjectBoard {
 
 const BOARD_COLS = "id, name, created_by, created_at, updated_at";
 const STAGE_COLS = "id, board_id, name, color, position";
+const STAGE_COLS_WITH_STATUS = `${STAGE_COLS}, status`;
+
+/**
+ * A database that has not had 20260922000000_pipeline_stage_status.sql applied
+ * yet still has to serve pipelines.
+ *
+ * The column is new, and this repo's migrations are applied by hand in the
+ * Supabase SQL editor, so there is a window where this build is live and the
+ * column is not there. Selecting it in that window would fail the whole read
+ * and take the Pipelines tab down, which is a far worse outcome than a stage
+ * whose bucket is guessed from its name for an afternoon - and the guess is
+ * the same rule the migration seeds with, so nothing changes under the team
+ * when it does land.
+ */
+function mentionsMissingStatusColumn(error: unknown): boolean {
+  const message = String((error as { message?: string } | null)?.message ?? "");
+  return /status/i.test(message) && /(column|schema cache)/i.test(message);
+}
+
+function withStageStatus(rows: Array<Record<string, any>>): PipelineStage[] {
+  return rows.map((r) => ({
+    id: r.id,
+    board_id: r.board_id,
+    name: r.name,
+    color: r.color,
+    position: r.position,
+    status: isProjectStatus(r.status) ? r.status : defaultStatusForStageName(r.name),
+  }));
+}
+
+/** Runs a stage write, and once more without `status` if the column is absent. */
+type WriteResult = { error: { message: string } | null };
+
+async function writeStages(
+  rows: Array<Record<string, unknown>>,
+  run: (rows: Array<Record<string, unknown>>) => Promise<WriteResult>,
+): Promise<WriteResult> {
+  const first = await run(rows);
+  if (!first.error || !mentionsMissingStatusColumn(first.error)) return first;
+  return run(rows.map(({ status: _dropped, ...rest }) => rest));
+}
 
 async function myTeamId(ctx: AuthedContext): Promise<string | null> {
   const { data } = await ctx.supabase
@@ -63,12 +114,26 @@ function assertDistinctStageNames(names: string[]): void {
 
 async function stagesFor(ctx: AuthedContext, boardIds: string[]): Promise<PipelineStage[]> {
   if (boardIds.length === 0) return [];
-  const { data } = await (ctx.supabase as any)
-    .from("pipeline_stages")
-    .select(STAGE_COLS)
-    .in("board_id", boardIds)
-    .order("position", { ascending: true });
-  return (data as PipelineStage[]) ?? [];
+  const read = (cols: string) =>
+    (ctx.supabase as any)
+      .from("pipeline_stages")
+      .select(cols)
+      .in("board_id", boardIds)
+      .order("position", { ascending: true });
+
+  const withStatus = await read(STAGE_COLS_WITH_STATUS);
+  if (!withStatus.error) return withStageStatus((withStatus.data as any[]) ?? []);
+  const base = await read(STAGE_COLS);
+  return withStageStatus((base.data as any[]) ?? []);
+}
+
+async function stageById(ctx: AuthedContext, stageId: string): Promise<PipelineStage | null> {
+  const read = (cols: string) =>
+    (ctx.supabase as any).from("pipeline_stages").select(cols).eq("id", stageId).maybeSingle();
+
+  const withStatus = await read(STAGE_COLS_WITH_STATUS);
+  const row = withStatus.error ? (await read(STAGE_COLS)).data : withStatus.data;
+  return row ? withStageStatus([row as Record<string, any>])[0] : null;
 }
 
 function attachStages(
@@ -148,7 +213,28 @@ const stageSeedSchema = z.object({
     .string()
     .trim()
     .regex(/^#[0-9a-fA-F]{6}$/, "Stage colour must be a hex value like #3b82f6"),
+  /**
+   * Omitted means "guess from the name", which is what an older client that
+   * does not know about the field sends, and what a newly typed stage starts
+   * at in the editor.
+   */
+  status: z.enum([...PROJECT_STATUSES] as [ProjectStatus, ...ProjectStatus[]]).optional(),
 });
+
+/** The stage as it goes into the table: the bucket resolved, never left blank. */
+function stageRow(
+  stage: { name: string; color: string; status?: ProjectStatus },
+  boardId: string,
+  position: number,
+): Record<string, unknown> {
+  return {
+    board_id: boardId,
+    name: stage.name.trim(),
+    color: stage.color,
+    position,
+    status: stage.status ?? defaultStatusForStageName(stage.name),
+  };
+}
 
 export const createProjectBoardInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -174,13 +260,9 @@ export async function createProjectBoardService(
     .single();
   if (error) throw badRequest(error.message);
 
-  const { error: stageError } = await (ctx.supabase as any).from("pipeline_stages").insert(
-    seeds.map((s, i) => ({
-      board_id: (row as { id: string }).id,
-      name: s.name.trim(),
-      color: s.color,
-      position: i,
-    })),
+  const { error: stageError } = await writeStages(
+    seeds.map((s, i) => stageRow(s, (row as { id: string }).id, i)),
+    (rows) => (ctx.supabase as any).from("pipeline_stages").insert(rows),
   );
   if (stageError) {
     // A pipeline with no columns is not a pipeline. Take the board back out
@@ -287,20 +369,26 @@ export async function updateProjectBoardService(
     }
 
     for (const [i, stage] of data.stages.entries()) {
+      const { board_id: _board, ...fields } = stageRow(stage, data.id, i);
       if (stage.id && current.some((c) => c.id === stage.id)) {
-        const { error } = await (ctx.supabase as any)
-          .from("pipeline_stages")
-          .update({ name: stage.name.trim(), color: stage.color, position: i })
-          .eq("id", stage.id)
-          .eq("board_id", data.id);
+        /*
+         * Changing what a stage counts as re-stamps the jobs standing in it -
+         * that happens in the database (see the pipeline_stages_restamp_projects
+         * trigger in 20260922000000_pipeline_stage_status.sql), not here, so a
+         * board edited from anywhere lands the same way.
+         */
+        const { error } = await writeStages([fields], ([row]) =>
+          (ctx.supabase as any)
+            .from("pipeline_stages")
+            .update(row)
+            .eq("id", stage.id)
+            .eq("board_id", data.id),
+        );
         if (error) throw badRequest(error.message);
       } else {
-        const { error } = await (ctx.supabase as any).from("pipeline_stages").insert({
-          board_id: data.id,
-          name: stage.name.trim(),
-          color: stage.color,
-          position: i,
-        });
+        const { error } = await writeStages([stageRow(stage, data.id, i)], (rows) =>
+          (ctx.supabase as any).from("pipeline_stages").insert(rows),
+        );
         if (error) throw badRequest(error.message);
       }
     }
@@ -326,6 +414,13 @@ export async function deleteProjectBoardService(
  * This is a single assignment and not an add plus a remove, which is the whole
  * difference from the tag boards it replaces: there is no window in which the
  * project is in two columns, and no failure mode that leaves it in both.
+ *
+ * The move carries the project's status with it, because the stage owns it: a
+ * job dragged to "Paid" stops being an Active green pin on the map in the same
+ * write. The database enforces this too, so a move made anywhere else lands
+ * identically; it is written here as well so the new status can be returned to
+ * the caller without a second read, and so the rule holds on a database that
+ * has not had the migration applied yet.
  */
 export const setProjectPipelineStageInputSchema = z.object({
   projectId: z.string().uuid(),
@@ -335,22 +430,33 @@ export const setProjectPipelineStageInputSchema = z.object({
 export async function setProjectPipelineStageService(
   ctx: AuthedContext,
   data: z.infer<typeof setProjectPipelineStageInputSchema>,
-): Promise<{ ok: true; stageId: string | null }> {
+): Promise<{ ok: true; stageId: string | null; status: string | null }> {
+  let stage: PipelineStage | null = null;
   if (data.stageId) {
     // RLS already hides other teams' stages from this read, so a miss here is
     // either a deleted stage or somebody else's board.
-    const { data: stage } = await (ctx.supabase as any)
-      .from("pipeline_stages")
-      .select("id")
-      .eq("id", data.stageId)
-      .maybeSingle();
-    if (!stage) throw badRequest("That stage no longer exists.");
+    const found = await stageById(ctx, data.stageId);
+    if (!found) throw badRequest("That stage no longer exists.");
+    stage = found;
   }
+
+  const { data: project } = await (ctx.supabase as any)
+    .from("projects")
+    .select("status")
+    .eq("id", data.projectId)
+    .maybeSingle();
+  const currentStatus = (project as { status?: string } | null)?.status ?? null;
+
+  const patch: Record<string, unknown> = { pipeline_stage_id: data.stageId };
+  // Archiving is its own lifecycle. Dragging a card is not a reason to put an
+  // archived job back on the active list.
+  const nextStatus = stage && currentStatus !== "archived" ? stage.status : currentStatus;
+  if (nextStatus !== currentStatus) patch.status = nextStatus;
 
   const { error } = await (ctx.supabase as any)
     .from("projects")
-    .update({ pipeline_stage_id: data.stageId })
+    .update(patch)
     .eq("id", data.projectId);
   if (error) throw badRequest(error.message);
-  return { ok: true, stageId: data.stageId };
+  return { ok: true, stageId: data.stageId, status: nextStatus };
 }

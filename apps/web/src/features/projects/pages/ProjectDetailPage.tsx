@@ -54,7 +54,6 @@ import { NewReportDialog } from "@/features/projects/components/NewReportDialog"
 import { ProjectActionsMenu } from "@/features/projects/components/ProjectActionsMenu";
 import { ProjectChecklists } from "@/features/projects/components/ProjectChecklists";
 import { ProjectBlueprintOrigin } from "@/features/projects/components/ProjectBlueprintOrigin";
-import { ProjectStageChip } from "@/features/projects/components/ProjectStageChip";
 import { ProjectStatusChip } from "@/features/projects/components/ProjectStatusChip";
 import { useProjectBlueprintOrigin } from "@/hooks/use-project-blueprint-origin";
 import { startOfMonth } from "date-fns";
@@ -2568,7 +2567,14 @@ export function ProjectDetailPage() {
         description="Compressing and saving to this project"
       />
 
-      {project && (
+      {/*
+        Mounted only once opened, not kept alive behind the page. The form
+        seeds itself from the project in a useState initialiser, so a dialog
+        that has existed since the page loaded is a form frozen at page load:
+        change the status from the header chip, open this, and it would offer
+        to write the old one back over it.
+      */}
+      {project && editOpen && (
         <EditProjectDialog
           project={project}
           open={editOpen}
@@ -2669,28 +2675,28 @@ export function ProjectDetailPage() {
                     Project record
                   </span>
                   {/*
-                    The status reads the same as it always did, but it is now
-                    the control for the field as well as the display of it.
-                    Marking a job complete from its own page used to mean the
-                    overflow menu, "Edit details", and a form of eleven fields
-                    to change one select.
+                    One chip, because there is one answer to "where is this
+                    job". It carried two for a while - the Active/On hold
+                    bucket beside the pipeline stage - and the client read them
+                    the only way they can be read: as two statuses that could
+                    disagree. The stage owns the bucket now, so this shows the
+                    stage where there is one and the bucket where there is not,
+                    and setting either goes through here.
                   */}
                   <ProjectStatusChip
                     projectId={project.id}
                     status={project.status}
-                    onChanged={(status) => setProject((p) => (p ? { ...p, status } : p))}
-                  />
-                  {/*
-                    Status above is the wide bucket; this is where the job sits
-                    inside it. Two fields, side by side, because that is the
-                    clearest way to see they answer different questions. Renders
-                    nothing until the team has a pipeline.
-                  */}
-                  <ProjectStageChip
-                    projectId={project.id}
                     stageId={project.pipeline_stage_id}
-                    onChanged={(stageId) =>
-                      setProject((p) => (p ? ({ ...p, pipeline_stage_id: stageId } as Project) : p))
+                    onChanged={(next) =>
+                      setProject((p) =>
+                        p
+                          ? ({
+                              ...p,
+                              status: next.status,
+                              pipeline_stage_id: next.stageId,
+                            } as Project)
+                          : p,
+                      )
                     }
                   />
                   {/*
