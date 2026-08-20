@@ -544,23 +544,43 @@ describe("family: per-item blueprint badges must not key off template_id being s
    * on `template_id !== null` would therefore label hand-applied items as
    * blueprint output - a confident, wrong attribution.
    *
-   * The badge is driven by the ledger's `itemSources` lookup instead, so it fires
-   * only for templates a blueprint applied to this project actually contains.
+   * The badge is driven by a lookup instead, so it fires only for rows a
+   * blueprint actually produced.
+   *
+   * Since 20260924000000 there are two lookups, and the order matters. `origin`
+   * is the RECORDED answer - the row points at the apply that created it - and
+   * is exact. `source` is the older `itemSources` inference, kept only for
+   * databases where that migration has not run; it cannot tell a blueprint's
+   * checklist from one applied by hand from the same template. Neither may be
+   * replaced by a `template_id !== null` test, which is what this family exists
+   * to prevent.
    */
   const BADGED = [
     "apps/web/src/features/projects/components/ProjectChecklists.tsx",
     "apps/web/src/features/projects/components/ProjectWorkflows.tsx",
   ];
 
-  it.each(BADGED)("%s resolves the badge through blueprintSources", (rel) => {
+  it.each(BADGED)("%s resolves the badge through a lookup, not template_id", (rel) => {
     const src = read(rel);
     expect(src).toMatch(/BlueprintItemBadge/);
+    // The recorded lookup, and the inference kept behind it as the fallback.
+    expect(src).toMatch(/originOf\?\.\(/);
     expect(src).toMatch(/blueprintSources\?\.\[/);
   });
 
-  it("the badge renders nothing without a resolved source", () => {
+  it("the badge renders nothing without a resolved origin", () => {
     const src = read("apps/web/src/features/projects/components/BlueprintItemBadge.tsx");
-    expect(src).toMatch(/if\s*\(!source\)\s*return null;/);
+    // Recorded origin first, inference second, and nothing at all when neither
+    // answers - the null return is what stops an unresolved row being badged.
+    expect(src).toMatch(/const resolved = origin \?\? source;/);
+    expect(src).toMatch(/if\s*\(!resolved\)\s*return null;/);
+  });
+
+  it("an inferred attribution is never presented as a recorded one", () => {
+    const src = read("apps/web/src/features/projects/components/BlueprintItemBadge.tsx");
+    // The whole point of the backfill flag: a guess has to look like a guess.
+    expect(src).toMatch(/inferred/);
+    expect(src).toMatch(/not recorded at the time it was applied/);
   });
 });
 

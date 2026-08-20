@@ -22,7 +22,40 @@ export const applyProjectBlueprint = rpcOp<
   }
 >("applyProjectBlueprint");
 
+/** One row a blueprint apply created, as the project panel lists it. */
+export interface BlueprintOriginItem {
+  id: string;
+  /** Which project tab this lives in. */
+  kind: "checklist" | "report" | "workflow" | "document";
+  name: string;
+  createdAt: string;
+  /** Display name, then email, then null - never a raw uuid. */
+  createdByName: string | null;
+  /** Last edit, when the database records one. Null before 20260925000000. */
+  updatedAt: string | null;
+  /**
+   * Who made that last edit, and only when there genuinely was one - a row
+   * still in its created state reports null rather than naming its creator a
+   * second time.
+   */
+  updatedByName: string | null;
+  /** Attributed by the 20260924000000 backfill rather than recorded at apply time. */
+  inferred: boolean;
+}
+
 export interface BlueprintOriginApplication {
+  /** The ledger row, so items can be grouped against it. */
+  applicationId: string;
+  /** Who ran the apply. */
+  appliedByName: string | null;
+  /**
+   * What this apply's items number now, by kind - as opposed to `counts`,
+   * which is the tally frozen at apply time. Null when per-item origin cannot
+   * be read at all, which is very different from zero and is rendered as such.
+   */
+  liveCounts: Record<string, number> | null;
+  /** The rows themselves, newest first. Empty when `liveCounts` is null. */
+  items: BlueprintOriginItem[];
   /** null once the blueprint has been deleted; `blueprintName` still names it. */
   blueprintId: string | null;
   blueprintName: string | null;
