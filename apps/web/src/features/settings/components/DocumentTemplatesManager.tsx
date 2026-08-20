@@ -2569,10 +2569,7 @@ function DocumentEditorSurface({
             the paper no longer fits, and a narrowed column would put the
             guides in the wrong place - which is worse than a scrollbar. */}
         <div className="flex-1 overflow-y-auto overflow-x-auto">
-          <div
-            className="mx-auto px-4 py-6"
-            style={{ width: `calc(${PAGE_IN.width}in + 2rem)`, maxWidth: "100%" }}
-          >
+          <div className="mx-auto px-4 py-6" style={{ width: `calc(${PAGE_IN.width}in + 2rem)` }}>
             {mode === "preview" ? (
               <>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
