@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Card } from "@/components/ui/card";
+import { SURFACE_CARD_INTERACTIVE } from "@/components/ui/surface";
+import { cn } from "@/lib/utils";
 import { FolderKanban, ImageOff } from "lucide-react";
 
 interface Props {
@@ -14,7 +16,9 @@ export function GroupCard({ id, name, description, projectCount, thumbnails }: P
   const thumbs = thumbnails.slice(0, 4);
   return (
     <Link to="/groups/$groupId" params={{ groupId: id }} className="group block" preload="intent">
-      <Card className="overflow-hidden border-border/60 p-0 transition-all group-hover:-translate-y-0.5 group-hover:border-primary/40 group-hover:shadow-md">
+      {/* The house surface, so a group card sits in the same grid as the
+          project cards beside it and opens a page that matches it. */}
+      <Card className={cn(SURFACE_CARD_INTERACTIVE, "overflow-hidden p-0")}>
         <div className="relative grid aspect-[16/9] grid-cols-2 grid-rows-2 gap-0.5 bg-muted">
           {thumbs.length === 0 ? (
             <div className="col-span-2 row-span-2 flex flex-col items-center justify-center gap-1 text-muted-foreground">

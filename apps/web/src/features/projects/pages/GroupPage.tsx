@@ -90,6 +90,8 @@ import {
 } from "@/lib/task-photo-items";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
+import { SectionHeading, SURFACE_CARD, SURFACE_CARD_INTERACTIVE } from "@/components/ui/surface";
+import { cn } from "@/lib/utils";
 import { EditGroupProjectsDialog } from "@/features/projects/components/EditGroupProjectsDialog";
 import type { ProjectPickerRow } from "@/features/projects/components/CreateGroupDialog";
 
@@ -368,121 +370,149 @@ export function GroupPage() {
 
   if (loading || !data) {
     return (
-      <div className="container mx-auto max-w-6xl px-4 py-10">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading group…
-        </div>
+      <div className="container mx-auto flex items-center justify-center px-4 py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   const { group, projects, recent_photos, totals } = data;
 
+  /*
+   * The four totals used to sit in a band of four plain cards under the
+   * heading. They are the same kind of fact the Projects hero and a project's
+   * own hero carry in their footer rail, so they read there now - one band
+   * fewer before the first project, and nothing is lost.
+   */
+  const heroStats = [
+    { key: "photos", icon: Camera, count: totals.photos, one: "photo", many: "photos" },
+    { key: "reports", icon: FileText, count: totals.reports, one: "report", many: "reports" },
+    {
+      key: "checklists",
+      icon: ListChecks,
+      count: totals.checklists,
+      one: "checklist",
+      many: "checklists",
+    },
+    { key: "tasks", icon: CheckSquare, count: totals.tasks, one: "task", many: "tasks" },
+  ];
+
   return (
-    <div className="container mx-auto max-w-6xl px-4 pb-24 pt-6 md:pt-10">
-      {/* Header */}
-      <div className="mb-6">
-        <Button
-          asChild
-          variant="ghost"
-          size="sm"
-          className="mb-3 -ml-2 h-8 gap-1 text-muted-foreground"
-        >
-          <Link to="/projects">
-            <ArrowLeft className="h-3.5 w-3.5" /> Projects
-          </Link>
-        </Button>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="truncate text-2xl font-bold tracking-tight md:text-3xl">{group.name}</h1>
-            {group.description && (
-              <p className="mt-1 text-sm text-muted-foreground">{group.description}</p>
-            )}
-            <p className="mt-1 text-xs text-muted-foreground">
-              {totals.projects} {totals.projects === 1 ? "project" : "projects"} · updated{" "}
-              {timeAgo(group.updated_at)}
-            </p>
+    /* Same container as the Projects list and a project's own page, so the
+       content edge does not jump when you click a group card. */
+    <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pt-10">
+      <Link
+        to="/projects"
+        className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-muted-foreground transition hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Projects
+      </Link>
+
+      {/*
+        Hero - the same shell, ornament ring, eyebrow, display title and stats
+        rail as the two screens either side of it. This page had kept the plain
+        heading it was built with, so opening a group landed you somewhere that
+        did not look like the page you clicked from.
+      */}
+      <div className="relative overflow-hidden rounded-[32px] bg-sidebar">
+        <div className="pointer-events-none absolute -right-24 -top-28 h-[288px] w-[288px] rounded-full border-[28px] border-sidebar-ring/20" />
+        <div className="relative flex flex-col gap-7 p-6 sm:px-10 sm:py-9">
+          <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="inline-flex items-center rounded-full bg-sidebar-ring px-3 py-1 text-[10px] font-extrabold uppercase tracking-[1.4px] text-sidebar-foreground">
+                  Project group
+                </span>
+              </div>
+              <h1 className="font-display mt-3 truncate text-2xl font-bold leading-tight tracking-tight text-sidebar-foreground sm:text-3xl">
+                {group.name}
+              </h1>
+              {group.description && (
+                <p className="mt-4 max-w-3xl text-sm leading-relaxed text-sidebar-foreground/65">
+                  {group.description}
+                </p>
+              )}
+            </div>
+
+            {/* Actions - the hero's own button treatment, not outline-on-white. */}
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                onClick={() => setEditProjectsOpen(true)}
+                className="h-10 rounded-lg bg-sidebar-foreground px-5 font-bold text-sidebar shadow-sm hover:bg-sidebar-foreground/90"
+              >
+                <ListChecks className="mr-2 h-4 w-4 text-sidebar-ring" /> Edit Projects
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label="Group actions"
+                    className="h-10 w-10 rounded-xl border-sidebar-foreground/15 bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/20 hover:text-sidebar-foreground"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onClick={() => setRenameOpen(true)}>
+                    <Pencil className="mr-2 h-4 w-4" /> Edit Group Details
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setEditProjectsOpen(true)}>
+                    <ListChecks className="mr-2 h-4 w-4" /> Edit Projects
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/projects/new">
+                      <FolderPlus className="mr-2 h-4 w-4" /> Add New Project
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete Group
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setEditProjectsOpen(true)}>
-              <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit Projects
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-9 w-9"
-                  aria-label="Group actions"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={() => setRenameOpen(true)}>
-                  <Pencil className="mr-2 h-4 w-4" /> Edit Group Details
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setEditProjectsOpen(true)}>
-                  <ListChecks className="mr-2 h-4 w-4" /> Edit Projects
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/projects/new">
-                    <FolderPlus className="mr-2 h-4 w-4" /> Add New Project
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={() => setDeleteOpen(true)}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" /> Delete Group
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+
+          {/* Stats rail */}
+          <div className="flex flex-col gap-4 border-t border-sidebar-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-[10px] font-extrabold uppercase tracking-[1.5px] text-sidebar-foreground/45">
+                In this group
+              </span>
+              <span className="text-xs font-bold text-sidebar-foreground">
+                {totals.projects} {totals.projects === 1 ? "project" : "projects"}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-5 text-xs font-bold text-sidebar-foreground/60">
+              {heroStats.map((s) => (
+                <span key={s.key} className="inline-flex items-center gap-2">
+                  <s.icon className="h-4 w-4 text-sidebar-ring" />
+                  {s.count.toLocaleString()} {s.count === 1 ? s.one : s.many}
+                </span>
+              ))}
+              <span className="inline-flex items-center gap-2">
+                <Clock className="h-4 w-4 text-sidebar-ring" />
+                Updated {timeAgo(group.updated_at)}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Overview stats */}
-      <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
-        <Card className="p-3 sm:p-4">
-          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground sm:text-xs">
-            <Camera className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Photos
-          </div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums sm:text-3xl">
-            {totals.photos}
-          </div>
-        </Card>
-        <Card className="p-3 sm:p-4">
-          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground sm:text-xs">
-            <FileText className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Reports
-          </div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums sm:text-3xl">
-            {totals.reports}
-          </div>
-        </Card>
-        <Card className="p-3 sm:p-4">
-          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground sm:text-xs">
-            <ListChecks className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Checklists
-          </div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums sm:text-3xl">
-            {totals.checklists}
-          </div>
-        </Card>
-        <Card className="p-3 sm:p-4">
-          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground sm:text-xs">
-            <CheckSquare className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Tasks
-          </div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums sm:text-3xl">{totals.tasks}</div>
-        </Card>
-      </div>
-
       {/* Recent photos across group */}
       {recent_photos.length > 0 && (
-        <div className="mb-6">
-          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold sm:text-base">
-            <Clock className="h-3.5 w-3.5" /> Combined recent photos
-          </h2>
+        <div className="mt-8">
+          <SectionHeading
+            className="mb-4"
+            eyebrow="Across the group"
+            title="Combined recent photos"
+            description="The latest captures from every project filed here."
+          />
           <div className="-mx-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex gap-3">
               {recent_photos.map((p: any) => (
@@ -492,7 +522,7 @@ export function GroupPage() {
                   params={{ projectId: p.project_id }}
                   className="group block w-36 shrink-0 sm:w-40"
                 >
-                  <Card className="overflow-hidden border-border/60 p-0 transition-all group-hover:-translate-y-0.5 group-hover:shadow-md">
+                  <Card className={cn(SURFACE_CARD_INTERACTIVE, "overflow-hidden p-0")}>
                     <div className="relative aspect-square bg-muted">
                       {p.url ? (
                         <img
@@ -522,29 +552,39 @@ export function GroupPage() {
       )}
 
       {/* Projects list */}
-      <div>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold tracking-tight sm:text-xl">Projects in group</h2>
-          {projects.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-                <Link to="/projects" search={{ tab: "checklists" } as any}>
-                  <ListChecks className="mr-1.5 h-3.5 w-3.5" /> View all checklists
-                </Link>
-              </Button>
-              <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-                <Link to="/projects" search={{ tab: "tasks" } as any}>
-                  <CheckSquare className="mr-1.5 h-3.5 w-3.5" /> View all tasks
-                </Link>
-              </Button>
-            </div>
-          )}
-        </div>
+      <div className="mt-8">
+        <SectionHeading
+          className="mb-4"
+          eyebrow="Filed here"
+          title="Projects in group"
+          description="Every project in this group, with its checklists and open tasks."
+          actions={
+            projects.length > 0 ? (
+              <>
+                <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+                  <Link to="/projects" search={{ tab: "checklists" } as any}>
+                    <ListChecks className="mr-1.5 h-3.5 w-3.5" /> View all checklists
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+                  <Link to="/projects" search={{ tab: "tasks" } as any}>
+                    <CheckSquare className="mr-1.5 h-3.5 w-3.5" /> View all tasks
+                  </Link>
+                </Button>
+              </>
+            ) : undefined
+          }
+        />
         {projects.length === 0 ? (
           <EmptyState
             icon={FolderPlus}
             title="No projects in this group yet"
-            description="Add projects with Edit Projects to build a shared view."
+            description="Pick the projects that belong here to see their photos, checklists and tasks in one place."
+            action={
+              <Button onClick={() => setEditProjectsOpen(true)}>
+                <ListChecks className="mr-2 h-4 w-4" /> Edit Projects
+              </Button>
+            }
           />
         ) : (
           <div className="flex flex-col gap-3">
@@ -573,7 +613,10 @@ export function GroupPage() {
               return (
                 <Card
                   key={p.id}
-                  className="group relative overflow-hidden border-border/60 p-0 shadow-sm transition-all hover:border-primary/40 hover:shadow-md"
+                  className={cn(
+                    SURFACE_CARD,
+                    "group relative overflow-hidden p-0 transition-colors hover:border-primary/30",
+                  )}
                 >
                   <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 p-4 sm:gap-6 sm:p-5">
                     <Link
@@ -649,7 +692,7 @@ export function GroupPage() {
                   <div className="grid gap-4 border-t border-border/60 bg-muted/20 p-4 sm:grid-cols-2 sm:p-5">
                     {/* Checklists */}
                     <div>
-                      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <div className="mb-2 flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[1.5px] text-muted-foreground">
                         <ListChecks className="h-3.5 w-3.5" />
                         Checklists
                         <Badge
@@ -761,7 +804,7 @@ export function GroupPage() {
 
                     {/* Tasks */}
                     <div>
-                      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <div className="mb-2 flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[1.5px] text-muted-foreground">
                         <CheckSquare className="h-3.5 w-3.5" />
                         Tasks
                         <Badge
