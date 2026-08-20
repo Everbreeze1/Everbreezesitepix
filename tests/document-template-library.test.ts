@@ -1154,3 +1154,120 @@ describe("unsaved work survives a stray click", () => {
     expect(guards.length).toBe(2);
   });
 });
+
+/*
+ * "we need a clear indication of where the page break is when we Edit these
+ * templates. when I edit them I export and the page breaks the paragraph or
+ * photo set up. it should be clearly visible on Edit page for that Template."
+ *
+ * A guide line is only worth drawing if it is telling the truth. The editor
+ * used to lay the document out in a 48rem column at 15px while the export used
+ * a 0.85in margin at 12pt, so the two wrapped text in different places and
+ * there was no honest answer to "where does page 2 start". These pin the page
+ * box down as one shared number, and pin the export to it.
+ *
+ * The geometry itself - that the guides land within a pixel of the boundary -
+ * is checked in a real browser by scripts/drive-template-page-breaks.mjs. What
+ * a source test can hold is that neither surface grew its own copy of the
+ * numbers again.
+ */
+describe("the editor shows where the printed page ends", () => {
+  const PAGE_PDF = readFileSync(join(ROOT, "apps/api/src/domains/projects/page-pdf.ts"), "utf8");
+
+  /**
+   * The stylesheet exportPdf writes into the print window.
+   *
+   * Found forwards from its own @page rule, because ChipStyles closes a
+   * <style> of its own earlier in the file - searching for "</style>" from the
+   * top lands on that one and returns an empty slice.
+   */
+  const printCss = () => {
+    const from = MANAGER.indexOf("@page { size: Letter");
+    expect(from, "exportPdf no longer declares an @page").toBeGreaterThan(0);
+    return MANAGER.slice(from, MANAGER.indexOf("</style>", from));
+  };
+
+  it("keeps the page box in one place", () => {
+    expect(MANAGER).toMatch(/const PAGE_IN = \{ width: 8\.5, height: 11, margin: 0\.75 }/);
+    // Derived, not restated: a second literal is how the two drift apart.
+    expect(MANAGER).toMatch(/width: PAGE_IN\.width - PAGE_IN\.margin \* 2/);
+    expect(MANAGER).toMatch(/height: PAGE_IN\.height - PAGE_IN\.margin \* 2/);
+  });
+
+  it("uses the same margin the PDF renderer does", () => {
+    /*
+     * page-pdf.ts works in points at 72 to the inch, so its MARGIN of 54 is
+     * 0.75in. Matching it means a template authored against these guides has
+     * the same column in the API's PDF as in the browser's.
+     */
+    const margin = /const MARGIN = (\d+);/.exec(PAGE_PDF);
+    expect(margin, "page-pdf.ts no longer declares MARGIN").toBeTruthy();
+    expect(Number(margin![1]) / 72).toBe(0.75);
+  });
+
+  it("prints the page at the size the editor drew it", () => {
+    const css = printCss();
+    expect(css).toContain("@page { size: Letter; margin: ${PAGE_IN.margin}in; }");
+    // One typography block for the editor, the preview and the export.
+    expect(MANAGER).toContain("const DOC_TYPOGRAPHY");
+    expect(css).toContain("${DOC_TYPOGRAPHY}");
+  });
+
+  it("stops the printer slicing a photo, a table or a quote in half", () => {
+    /*
+     * The cause behind the report. Nothing told the printer which blocks are
+     * indivisible, so whatever straddled the boundary got cut - and a guide
+     * that predicts a cut through a photo row is not much of an improvement on
+     * no guide at all.
+     */
+    const css = printCss();
+    expect(css).toMatch(/table, tr, img, blockquote, li \{ break-inside: avoid/);
+    expect(css).toMatch(/p:has\(> img\) \{ break-inside: avoid/);
+    expect(css).toMatch(/h1, h2, h3 \{ break-after: avoid/);
+    // Tables printed borderless before, which is most of the built-in library.
+    expect(css).toMatch(/table \{ border-collapse: collapse/);
+  });
+
+  it("draws one guide per boundary and no guide on a one-page template", () => {
+    const block = MANAGER.slice(
+      MANAGER.indexOf("const paperRef"),
+      MANAGER.indexOf("function insertPlaceholder"),
+    );
+    expect(block.length).toBeGreaterThan(200);
+    // Measured off the rendered box, so an image finishing loading counts.
+    expect(block).toContain("ResizeObserver");
+    expect(block).toMatch(/Math\.ceil\(height \/ PAGE_CONTENT_PX/);
+    // `pageCount - 1` boundaries: a single-page template gets none.
+    expect(MANAGER).toMatch(/length: pageCount - 1/);
+  });
+});
+
+/*
+ * "the contrast on the form filing on the right side is too little. its hiding
+ * alot of text."
+ *
+ * Every box in the Fields panel shows its sample value as a placeholder until
+ * somebody types over it, so the placeholder colour is not an edge case - it is
+ * most of the words on that panel. It was gray-400 on a hardcoded white input,
+ * 2.6:1, on a panel that follows the theme.
+ */
+describe("the Fields panel is readable", () => {
+  it("uses the app's own Input rather than a hand-rolled light-mode one", () => {
+    const panel = MANAGER.slice(
+      MANAGER.indexOf("Editable fields"),
+      MANAGER.indexOf("All placeholders"),
+    );
+    expect(panel.length).toBeGreaterThan(200);
+    expect(panel).toMatch(/<Input\s/);
+    // The colours that made it unreadable, gone rather than merely darkened.
+    expect(panel).not.toContain("placeholder:text-gray-400");
+    expect(panel).not.toMatch(/className="[^"]*bg-white[^"]*"/);
+  });
+
+  it("does not pin a light-mode panel onto a themed dialog", () => {
+    const aside = MANAGER.slice(MANAGER.indexOf("<aside"), MANAGER.indexOf("</aside>"));
+    expect(aside.length).toBeGreaterThan(200);
+    expect(aside).not.toContain("bg-white");
+    expect(aside).not.toContain("text-blue-700");
+  });
+});

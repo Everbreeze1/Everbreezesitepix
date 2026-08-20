@@ -481,6 +481,51 @@ function extractFields(html: string): string[] {
   return Array.from(set).sort();
 }
 
+/*
+ * Letter, in inches, and the ONE place either surface gets it from.
+ *
+ * "we need a clear indication of where the page break is when we Edit these
+ * templates. when I edit them I export and the page breaks the paragraph or
+ * photo set up."
+ *
+ * A guide line is only worth drawing if it is telling the truth, and it could
+ * not be before: the editor laid the document out in a 48rem column at 15px
+ * with 3.5rem of padding, while the export used a 0.85in margin at 12pt. Two
+ * different column widths wrap text in two different places, so there was no
+ * honest answer to "where does page 2 start" to draw.
+ *
+ * These numbers are now the editor's paper AND the export's @page, so a line
+ * in the editor is a line on the paper. 0.75in matches the margin the API's
+ * PDF renderer uses (MARGIN = 54pt in apps/api/.../page-pdf.ts), so the two
+ * exports agree on the column as well.
+ *
+ * CSS treats 1in as exactly 96px regardless of the screen, which is what makes
+ * the arithmetic below safe to do in either unit.
+ */
+const PAGE_IN = { width: 8.5, height: 11, margin: 0.75 };
+/** The printable box: what actually holds content once the margins are off. */
+const CONTENT_IN = {
+  width: PAGE_IN.width - PAGE_IN.margin * 2,
+  height: PAGE_IN.height - PAGE_IN.margin * 2,
+};
+const PX_PER_IN = 96;
+const PAGE_CONTENT_PX = CONTENT_IN.height * PX_PER_IN;
+
+/**
+ * The typography the editor, the preview and the export all share.
+ *
+ * Everything is in `em` off a 12pt base so there is one size to change and the
+ * three surfaces cannot drift apart again. Previously the export restated all
+ * of it in points, slightly differently, and shipped no table rules at all -
+ * so a template built out of tables, which most of the built-ins are, exported
+ * borderless.
+ */
+const DOC_TYPOGRAPHY = `
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 12pt;
+  line-height: 1.6;
+`;
+
 const SAMPLE: Record<string, string> = {
   project_name: "Maple Ridge Renovation",
   project_address: "1234 Elm Street, Springfield",
@@ -2090,18 +2135,61 @@ function ChipStyles() {
       }
       .doc-page .ProseMirror {
         outline: none;
-        min-height: 60vh;
-        font-family: ui-serif, Georgia, "Times New Roman", serif;
-        font-size: 15px;
-        line-height: 1.7;
+        /* One empty page, not an arbitrary slice of the viewport - so a blank
+           template shows exactly one page's worth of paper and no guide. */
+        min-height: ${CONTENT_IN.height}in;
+        ${DOC_TYPOGRAPHY}
       }
+      /*
+       * Where each printed page ends.
+       *
+       * Absolutely positioned over the paper at every multiple of the
+       * printable height, and inert - it changes nothing about the layout, it
+       * only says where the layout is about to be cut. Drawn from the same
+       * constants the export's @page uses, which is the only reason it can be
+       * trusted.
+       */
+      /*
+       * Blue and dashed, because that is already what a page break looks like
+       * in this app: the report builder draws its manual breaks as a 2px
+       * dashed var(--primary) rule with an uppercase caption (see .tiptap hr
+       * in styles.css). Same idea, same look - and unmistakably a guide rather
+       * than a rule somebody put in the document.
+       */
+      .doc-page-break-guide {
+        position: absolute;
+        left: 0;
+        right: 0;
+        border-top: 2px dashed color-mix(in oklab, var(--primary) 60%, transparent);
+        pointer-events: none;
+        z-index: 4;
+      }
+      .doc-page-break-guide::after {
+        content: attr(data-label);
+        position: absolute;
+        /* Inside the right margin, where the text never reaches, so the
+           caption cannot sit on top of a word. */
+        right: 0.1in;
+        top: -0.85em;
+        padding: 0 7px;
+        background: #ffffff;
+        border: 1px solid color-mix(in oklab, var(--primary) 35%, transparent);
+        border-radius: 999px;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: var(--primary);
+        white-space: nowrap;
+      }
+      /* The label rides in the right-hand margin, where there is never text
+         to sit on top of. */
       /* The preview pane is the same document, so it gets the same face and
          measure - otherwise "preview" means "the same words in a different
          typeface". */
       .doc-page .doc-preview {
-        font-family: ui-serif, Georgia, "Times New Roman", serif;
-        font-size: 15px;
-        line-height: 1.7;
+        ${DOC_TYPOGRAPHY}
         color: #111827;
       }
       /* Every rule below is shared with .doc-preview, the read-only pane the
@@ -2289,6 +2377,28 @@ function DocumentEditorSurface({
     view.dispatch(view.state.tr.setMeta(placeholderChipsKey, sampleOverrides));
   }, [sampleOverrides, tiptap]);
 
+  /*
+   * How many pages the document currently runs to.
+   *
+   * Measured off the rendered height rather than counted from the markup:
+   * every element on the paper contributes, images and tables included, and a
+   * ResizeObserver catches a photo finishing loading as readily as a keystroke.
+   */
+  const paperRef = useRef<HTMLDivElement | null>(null);
+  const [pageCount, setPageCount] = useState(1);
+  useEffect(() => {
+    const body = paperRef.current?.querySelector<HTMLElement>(".ProseMirror");
+    if (!body) return;
+    const measure = () => {
+      const height = body.getBoundingClientRect().height;
+      setPageCount(Math.max(1, Math.ceil(height / PAGE_CONTENT_PX - 0.001)));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(body);
+    return () => observer.disconnect();
+  }, [tiptap, mode]);
+
   function insertPlaceholder(token: string) {
     if (!tiptap) return;
     tiptap.chain().focus().insertContent(`{{${token}}}`).run();
@@ -2311,14 +2421,40 @@ function DocumentEditorSurface({
       title,
     )}</title>
       <style>
-        @page { size: Letter; margin: 0.85in; }
-        body { font-family: ui-serif, Georgia, "Times New Roman", serif; color: #111827; font-size: 12pt; line-height: 1.6; }
-        h1 { font-size: 22pt; margin: 0 0 8pt; }
-        h2 { font-size: 15pt; margin: 16pt 0 6pt; border-bottom: 1px solid #e5e7eb; padding-bottom: 4pt; }
-        h3 { font-size: 12.5pt; margin: 12pt 0 4pt; }
-        p { margin: 6pt 0; }
-        ul, ol { margin: 4pt 0 6pt 20pt; }
-        hr { border: 0; border-top: 1px solid #e5e7eb; margin: 12pt 0; }
+        /* Same page box the editor draws its guides against. */
+        @page { size: Letter; margin: ${PAGE_IN.margin}in; }
+        body { ${DOC_TYPOGRAPHY} color: #111827; margin: 0; }
+        /* Sizes in em off the 12pt base, identical to the editor's rules, so
+           the two wrap in the same places. */
+        h1 { font-size: 1.85em; font-weight: 700; margin: 0.6em 0 0.35em; letter-spacing: -0.01em; }
+        h2 { font-size: 1.35em; font-weight: 700; margin: 1.1em 0 0.35em; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+        h3 { font-size: 1.1em; font-weight: 600; margin: 0.9em 0 0.3em; }
+        p { margin: 0.5em 0; }
+        ul, ol { margin: 0.4em 0 0.6em 1.4em; }
+        li { margin: 0.2em 0; }
+        hr { border: 0; border-top: 1px solid #e5e7eb; margin: 1.4em 0; }
+        blockquote { margin: 0.8em 0; padding: 0.4em 1em; border-left: 3px solid #93c5fd; background: #f8fafc; color: #334155; border-radius: 0 6px 6px 0; }
+        /* Tables had NO rules here at all, so a template made of tables - which
+           most of the built-in ones are - printed as unaligned runs of text. */
+        table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 1em 0; }
+        td, th { border: 1px solid #d8dce4; padding: 0.5em 0.625em; vertical-align: top; }
+        th { background: #f1f3f7; font-weight: 700; text-align: left; }
+        table p { margin: 0; }
+        img { max-width: 100%; }
+        p > img { display: inline-block; vertical-align: top; margin-right: 6px; }
+        /*
+         * "the page breaks the paragraph or photo set up."
+         *
+         * Nothing here told the printer which blocks are indivisible, so a
+         * photo row, a table or a signature block was sliced wherever the page
+         * happened to end. These push the break out to the nearest gap between
+         * blocks instead - which is also what makes the editor's guides
+         * predictive rather than decorative.
+         */
+        table, tr, img, blockquote, li { break-inside: avoid; page-break-inside: avoid; }
+        p:has(> img) { break-inside: avoid; page-break-inside: avoid; }
+        /* A heading stranded at the foot of a page belongs with what follows. */
+        h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
         .doc-chip { display: inline-block; padding: 0 6pt; border-radius: 999pt; font-size: 0.9em; }
         .doc-chip-filled { background: #dcfce7; color: #14532d; border: 1px solid #86efac; }
         .doc-chip-missing { background: #fef3c7; color: #78350f; border: 1px solid #fcd34d; }
@@ -2389,7 +2525,8 @@ function DocumentEditorSurface({
         <div className="ml-auto flex items-center gap-2">
           <div className="hidden text-xs text-muted-foreground md:block">
             {wordCount} words · {detected.length} placeholder
-            {detected.length === 1 ? "" : "s"}
+            {detected.length === 1 ? "" : "s"} · {pageCount} page
+            {pageCount === 1 ? "" : "s"}
           </div>
           <Button
             variant={sidePanel ? "default" : "outline"}
@@ -2428,8 +2565,14 @@ function DocumentEditorSurface({
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl px-4 py-6">
+        {/* Horizontal scroll rather than a squeezed page: below about 900px
+            the paper no longer fits, and a narrowed column would put the
+            guides in the wrong place - which is worse than a scrollbar. */}
+        <div className="flex-1 overflow-y-auto overflow-x-auto">
+          <div
+            className="mx-auto px-4 py-6"
+            style={{ width: `calc(${PAGE_IN.width}in + 2rem)`, maxWidth: "100%" }}
+          >
             {mode === "preview" ? (
               <>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -2464,7 +2607,7 @@ function DocumentEditorSurface({
                     </button>
                   </div>
                 </div>
-                <div className="doc-page px-14 py-16">
+                <div className="doc-page flow-root" style={{ padding: `${PAGE_IN.margin}in` }}>
                   <div
                     className="doc-preview prose prose-neutral max-w-none prose-headings:font-semibold"
                     dangerouslySetInnerHTML={{
@@ -2474,7 +2617,7 @@ function DocumentEditorSurface({
                 </div>
               </>
             ) : (
-              <div className="doc-page">
+              <div className="doc-page" ref={paperRef}>
                 {/*
                   Quick fields - the narrow-screen home for the same values the
                   Fields panel holds. Editing either updates the matching
@@ -2548,7 +2691,25 @@ function DocumentEditorSurface({
                     </div>
                   </div>
                 )}
-                <div className="px-14 py-12">
+                {/*
+                  The printable box, at the size it prints at, with a marker
+                  wherever the printer will cut. `relative` is what the guides
+                  are positioned against; they sit inside the padding so their
+                  offsets start where the text does.
+                */}
+                <div className="relative flow-root" style={{ padding: `${PAGE_IN.margin}in` }}>
+                  {Array.from({ length: pageCount - 1 }, (_, i) => {
+                    const at = `calc(${PAGE_IN.margin}in + ${(i + 1) * CONTENT_IN.height}in)`;
+                    return (
+                      <div
+                        key={i}
+                        className="doc-page-break-guide"
+                        style={{ top: at }}
+                        data-label={`Page ${i + 2}`}
+                        aria-hidden="true"
+                      />
+                    );
+                  })}
                   <EditorContent editor={tiptap} />
                 </div>
               </div>
@@ -2563,10 +2724,12 @@ function DocumentEditorSurface({
              whole job is showing you what you typed. "The fields should be
              larger to view what we type."
           */
-          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l bg-muted/30 md:block lg:w-96 xl:w-[26rem]">
+          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l bg-card text-card-foreground md:block lg:w-96 xl:w-[26rem]">
             <div className="p-4">
               <div className="mb-3 flex items-center justify-between">
-                <div className="text-base font-semibold">Fields for {stylePreset.label}</div>
+                <div className="text-base font-semibold text-foreground">
+                  Fields for {stylePreset.label}
+                </div>
                 <button
                   className="text-muted-foreground hover:text-foreground"
                   onClick={() => setSidePanel(false)}
@@ -2583,7 +2746,7 @@ function DocumentEditorSurface({
                   <button
                     key={p.token}
                     onClick={() => insertPlaceholder(p.token)}
-                    className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-xs font-medium text-blue-700 transition hover:border-blue-400 hover:bg-blue-50"
+                    className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition hover:border-primary/60 hover:bg-primary/20"
                     title={`Insert {{${p.token}}}`}
                   >
                     {p.label}
@@ -2625,9 +2788,21 @@ function DocumentEditorSurface({
                           >
                             {snippetLabel(token)}
                           </label>
-                          <input
+                          {/*
+                            The app's own Input, not a hand-rolled one.
+
+                            This was white-with-gray-400-placeholder, pinned
+                            that way in both themes - and the panel behind it
+                            follows the theme, so in dark mode it was a white
+                            card holding 2.6:1 grey text. Every box here shows
+                            its placeholder until somebody types, so that grey
+                            was most of the words on the panel: "the contrast
+                            on the form filling on the right side is too
+                            little. its hiding alot of text."
+                          */}
+                          <Input
                             id={`doc-field-${token}`}
-                            className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
+                            className="h-10 text-sm"
                             value={sampleOverrides[token] ?? ""}
                             onChange={(e) =>
                               setSampleOverrides((s) => ({ ...s, [token]: e.target.value }))
@@ -2640,7 +2815,7 @@ function DocumentEditorSurface({
                   );
                 })()}
               </div>
-              <details className="mt-4 rounded-md border bg-white/60 p-2 text-xs">
+              <details className="mt-4 rounded-md border bg-muted/40 p-2 text-xs">
                 <summary className="cursor-pointer font-medium text-muted-foreground">
                   All placeholders
                 </summary>
@@ -2651,7 +2826,7 @@ function DocumentEditorSurface({
                     <button
                       key={p.token}
                       onClick={() => insertPlaceholder(p.token)}
-                      className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-xs text-blue-700 transition hover:border-blue-400 hover:bg-blue-50"
+                      className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition hover:border-primary/60 hover:bg-primary/20"
                       title={`Insert {{${p.token}}}`}
                     >
                       {p.label}

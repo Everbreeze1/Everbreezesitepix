@@ -278,7 +278,7 @@ export function DocumentToolbar({
                 {(editor.getAttributes("textStyle").fontFamily as string | undefined)?.replace(
                   /,.*/,
                   "",
-                ) ?? "Font"}
+                ) || "Font"}
                 <ChevronDown className="opacity-60" />
               </Button>
             </DropdownMenuTrigger>
@@ -311,7 +311,7 @@ export function DocumentToolbar({
                 {(editor.getAttributes("textStyle").fontSize as string | undefined)?.replace(
                   "px",
                   "",
-                ) ?? "Size"}
+                ) || "Size"}
                 <ChevronDown className="opacity-60" />
               </Button>
             </DropdownMenuTrigger>
