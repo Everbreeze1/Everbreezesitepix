@@ -24,6 +24,7 @@ import {
   Users as UsersIcon,
   Calendar as CalendarIcon,
   Bookmark,
+  CalendarClock,
   Trash2,
   Layers,
   Settings2,
@@ -83,10 +84,10 @@ import { PipelineTabStrip } from "@/features/projects/components/PipelineTabStri
 import { BoardSettingsSheet } from "@/features/projects/components/BoardSettingsSheet";
 import { AssignTeammatesDialog } from "@/features/projects/components/AssignTeammatesDialog";
 import { ProjectCrew } from "@/features/projects/components/ProjectCrew";
-import { WorkspaceCalendar } from "@/features/projects/components/WorkspaceCalendar";
+import { WorkspaceSchedule } from "@/features/projects/components/WorkspaceSchedule";
 import { useProjectAssignees } from "@/hooks/use-project-assignees";
 import { useWorkspaceSchedule } from "@/hooks/use-workspace-schedule";
-import { attentionCount, type StageLite } from "@/lib/workspace-calendar";
+import { attentionCount, type StageLite } from "@/lib/workspace-schedule";
 
 /**
  * The stage filter's stand-in for NULL.
@@ -236,7 +237,7 @@ interface ProjectRow {
  * (discoverable). What is left is the three things that are genuinely
  * different content: the project list, saved Groups, and Pipelines.
  *
- * Calendar is the fourth of those, and it earns the slot on the same test. It
+ * Schedule is the fourth of those, and it earns the slot on the same test. It
  * is not the project list sorted by a date: it is task due dates and booked
  * job days from every project on one grid, which no filter over `allProjects`
  * can produce. The client's report is the shape of the gap:
@@ -245,12 +246,23 @@ interface ProjectRow {
  *    due today' or 'what's scheduled this week' without opening each project
  *    individually."
  *
- * Not to be confused with the per-project Calendar tab, which is
- * `PhotoCalendar` and plots capture activity on one job. That one looks
- * backwards at one project and is untouched. See
- * apps/web/src/lib/workspace-calendar.ts.
+ * ## Why it is not called Calendar
+ *
+ * It was, for one release, and the client caught it:
+ *
+ *   "This new workspace-level tab is currently called 'Calendar,' which
+ *    collides with the existing per-project 'Calendar' tab (the historical
+ *    photo capture log) - two different features with the same name will
+ *    confuse users."
+ *
+ * They are right, and the collision was worse than a label clash: the two mean
+ * opposite things. The per-project Calendar (`PhotoCalendar`) is a backwards
+ * record of which days a crew shot photos on one job. This is forward-looking
+ * and spans every job. One word cannot carry both, so this one took the name
+ * it already used internally, and the per-project tab keeps Calendar. The
+ * module behind it is named to match: apps/web/src/lib/workspace-schedule.ts.
  */
-type TabKey = "projects" | "groups" | "boards" | "calendar";
+type TabKey = "projects" | "groups" | "boards" | "schedule";
 
 /** What `/projects` accepts in its query string. Validated by the route. */
 export type ProjectsIndexSearch = {
@@ -1065,7 +1077,7 @@ export function ProjectsPage() {
      * today is the entire feature in one number, and it is legible without
      * opening the tab. See attentionCount().
      */
-    { key: "calendar", label: "Calendar", count: attentionCount(schedule), icon: CalendarIcon },
+    { key: "schedule", label: "Schedule", count: attentionCount(schedule), icon: CalendarClock },
   ];
 
   /**
@@ -1864,7 +1876,7 @@ export function ProjectsPage() {
           {/* Same reasoning as Pipelines below: the Calendar owns its own
               header (the month, and the three counts), and neither the search
               box nor the Filters popover acts on it. One title per screen. */}
-          {tab !== "boards" && tab !== "calendar" && (
+          {tab !== "boards" && tab !== "schedule" && (
             <SectionHeading
               className="mt-8"
               eyebrow={tab === "groups" ? "Saved collections" : "Field records"}
@@ -1898,11 +1910,23 @@ export function ProjectsPage() {
               time. One title per screen - and it is why the search box and
               Filters button, which do not act on a board, disappear here.
             */}
-            <div className={tab === "boards" || tab === "calendar" ? "mt-8" : "mt-5"}>
-              {tab === "calendar" ? (
-                <WorkspaceCalendar
+            <div className={tab === "boards" || tab === "schedule" ? "mt-8" : "mt-5"}>
+              {tab === "schedule" ? (
+                <WorkspaceSchedule
                   schedule={schedule}
-                  loading={scheduleLoading || loading}
+                  /*
+                   * All THREE reads, and the third one is not optional.
+                   *
+                   * The "awaiting a date" rail is built by matching a project's
+                   * stage name, so it needs the pipelines. Left out, this said
+                   * `loading` was over while `stagesById` was still empty, no
+                   * stage matched, and the tab drew "Nothing is dated yet" over
+                   * a workspace that had a job sitting in Scheduled - then
+                   * corrected itself a moment later when the boards landed. An
+                   * empty state is a claim about the data, so it must not be
+                   * made until every read behind it has answered.
+                   */
+                  loading={scheduleLoading || loading || boardsLoading}
                   error={scheduleError}
                   onRetry={refetchSchedule}
                   canSchedule={canSchedule}

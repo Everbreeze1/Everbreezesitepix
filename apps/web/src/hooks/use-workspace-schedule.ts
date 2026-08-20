@@ -12,8 +12,8 @@ import {
   type SchedulableTask,
   type StageLite,
   type TaskCoverage,
-  type WorkspaceSchedule,
-} from "@/lib/workspace-calendar";
+  type ScheduleData,
+} from "@/lib/workspace-schedule";
 
 /**
  * The one read the workspace calendar adds, and the shaping around it.
@@ -92,7 +92,7 @@ async function loadDatedTasks(): Promise<DatedTasks> {
 }
 
 export interface WorkspaceScheduleState {
-  schedule: WorkspaceSchedule;
+  schedule: ScheduleData;
   loading: boolean;
   /** The task read's failure, if any. Null is not the same as "no entries". */
   error: string | null;

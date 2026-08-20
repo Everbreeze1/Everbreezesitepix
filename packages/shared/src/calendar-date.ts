@@ -123,3 +123,44 @@ export function calendarDueLabel(
   if (days === -1) return { label: "Yesterday", overdue: true, days };
   return { label: dated, overdue: days < 0, days };
 }
+
+/**
+ * The years a person could plausibly mean when they book a job or set a due
+ * date. Everything outside this is a half-typed year, not a decision.
+ */
+export const MIN_PLAUSIBLE_YEAR = 1900;
+export const MAX_PLAUSIBLE_YEAR = 2999;
+
+/**
+ * Is this a calendar date somebody actually meant?
+ *
+ * `<input type="date">` is a three-segment control, and it emits a COMPLETE,
+ * VALID value every time any one segment changes. Typing the year 2026 into it
+ * therefore produces four of them in a row:
+ *
+ *     0002-08-24   0020-08-24   0202-08-24   2026-08-24
+ *
+ * Every one of those passes `parseCalendarDate`, because every one of them is a
+ * real day. The client found what that costs on the schedule rail, where the
+ * handler wrote straight through to the database: typing a year saved four
+ * times, three of them to the year 2, 20 and 202, each with its own green
+ * toast, and the entry jumped two millennia up the calendar between keystrokes.
+ * A controlled input then re-rendered from the value it had just saved, so the
+ * segments changed under the person still typing into them.
+ *
+ * The fix has to be a range check rather than a length check: the browser
+ * zero-pads, so "0202" is four characters and looks finished. A year under
+ * 1900 is a year still being typed, and nothing in this product is scheduled
+ * before it either way.
+ *
+ * This does NOT replace `parseCalendarDate`. That answers "is this a date";
+ * this answers "is this a date worth writing down", and a caller committing to
+ * storage wants both.
+ */
+export function isPlausibleCalendarDate(value: string | null | undefined): boolean {
+  const m = CALENDAR_DATE.exec(String(value ?? "").trim());
+  if (!m) return false;
+  if (!parseCalendarDate(value)) return false;
+  const year = Number(m[1]);
+  return year >= MIN_PLAUSIBLE_YEAR && year <= MAX_PLAUSIBLE_YEAR;
+}

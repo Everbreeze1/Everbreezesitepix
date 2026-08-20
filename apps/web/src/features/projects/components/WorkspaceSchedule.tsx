@@ -18,36 +18,45 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  CheckSquare,
   CircleSlash,
-  FolderKanban,
   Layers,
 } from "lucide-react";
-import { formatCalendarDate, todayCalendarDate } from "@sitepix/shared";
+import { formatCalendarDate, isPlausibleCalendarDate, todayCalendarDate } from "@sitepix/shared";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SURFACE_CARD } from "@/components/ui/surface";
 import { EmptyState } from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
-import { coversRange } from "@/lib/workspace-calendar";
-import type { AwaitingDateJob, ScheduleEntry, WorkspaceSchedule } from "@/lib/workspace-calendar";
+import { coversRange, entryTypeLabel } from "@/lib/workspace-schedule";
+import type { AwaitingDateJob, ScheduleEntry, ScheduleData } from "@/lib/workspace-schedule";
 
 /**
- * The workspace calendar: every project's forward-looking dates on one grid.
+ * The workspace Schedule: every project's forward-looking dates on one grid.
  *
  * The fourth destination on the projects page, beside Projects, Groups and
  * Pipelines, and a peer of them rather than a refinement: it is a different
  * kind of content, not a filtered project list. The client's words for why it
- * exists are quoted in full in apps/web/src/lib/workspace-calendar.ts, which
+ * exists are quoted in full in apps/web/src/lib/workspace-schedule.ts, which
  * is also where the two data sources and the ordering rules live. This file is
  * only the rendering.
  *
- * ## Why this is not the Calendar that already existed
+ * ## Why this is Schedule and not Calendar
+ *
+ * It shipped as "Calendar" for one release, and the client sent it back:
+ *
+ *   "This new workspace-level tab is currently called 'Calendar,' which
+ *    collides with the existing per-project 'Calendar' tab (the historical
+ *    photo capture log) - two different features with the same name will
+ *    confuse users. Since the feature already carries the internal label
+ *    'Workspace Schedule,' we'd suggest renaming the tab itself to 'Schedule'."
  *
  * `PhotoCalendar` is a per-project view of capture activity: which days the
  * crew shot photos on that one job. It looks backwards and it is scoped to a
- * single project, and it stays exactly as it is, because reviewing a job's
- * capture history is a real thing people do. This is the other axis: every
- * project, and only dates that have not happened yet or have been missed.
+ * single project, and it keeps the name Calendar, because reviewing a job's
+ * capture history is a real thing people do and that is what it is. This is
+ * the opposite axis - every project, and only what has not happened yet or has
+ * been missed - so it takes the name it was already using in its own header.
  *
  * ## The layout, and why the rail is not optional
  *
@@ -76,7 +85,112 @@ const CELL_ENTRY_LIMIT = 3;
 
 const dayKey = (d: Date) => format(d, "yyyy-MM-dd");
 
-export function WorkspaceCalendar({
+/**
+ * Where an entry goes when you click it.
+ *
+ * A task carries `?task=<id>`, which the project route already understands: it
+ * opens the Tasks tab with that task expanded. A job has nowhere more specific
+ * to land than its own page. One hop either way, which is the whole point of
+ * aggregating in the first place. Shared by the grid chip and the rail row so
+ * the two can never disagree about where the same item leads.
+ */
+const entryLink = (entry: ScheduleEntry) => ({
+  to: "/projects/$projectId" as const,
+  params: { projectId: entry.projectId },
+  search: entry.taskId ? { task: entry.taskId } : {},
+});
+
+/**
+ * The type markers, in one place.
+ *
+ * A job is a solid chip with a square colour bar and the Pipelines icon: it is
+ * a block of work with a stage behind it. A task is an open chip with a round
+ * dot and a checkbox icon: it is one item on a list. Shape, icon and fill all
+ * say the same thing, so the type survives a reader who cannot separate the
+ * colours - which matters here because colour is already spent twice over, on
+ * the stage and on the priority.
+ */
+const JOB_LABEL = entryTypeLabel({ kind: "job", done: false, overdue: false });
+const TASK_LABEL = entryTypeLabel({ kind: "task", done: false, overdue: false });
+
+function EntryChip({ entry }: { entry: ScheduleEntry }) {
+  return (
+    <Link
+      {...entryLink(entry)}
+      title={`${entryTypeLabel(entry)}: ${entry.title}`}
+      aria-label={`${entryTypeLabel(entry)}: ${entry.title}`}
+      className={cn(
+        "pointer-events-auto flex min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-[10px] font-bold leading-tight transition hover:ring-1 hover:ring-primary/40",
+        entry.kind === "job" ? "border-l-[3px] bg-muted/80" : "bg-transparent",
+        entry.done && "opacity-60",
+        entry.overdue
+          ? "text-destructive"
+          : entry.done
+            ? "text-muted-foreground"
+            : "text-foreground",
+        entry.done && "line-through",
+      )}
+      style={entry.kind === "job" ? { borderLeftColor: entry.color } : undefined}
+    >
+      {/* The job gets the icon and the task gets the dot, not one each: at 10px
+          a chip carrying both an icon and a priority dot is mush, and the two
+          marks already differ in shape, weight and fill. The dot is the task's
+          priority, which is the thing you scan a punch list for. */}
+      {entry.kind === "job" ? (
+        <Layers aria-hidden className="h-2.5 w-2.5 shrink-0" />
+      ) : (
+        <span
+          aria-hidden
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: entry.color }}
+        />
+      )}
+      <span className="truncate">{entry.title}</span>
+    </Link>
+  );
+}
+
+/**
+ * The key to the markers.
+ *
+ * "So users can tell what they're looking at without opening it" is only half
+ * answered by making the two look different - they also have to know which is
+ * which. Four rows, because done and overdue are states a person scans for as
+ * hard as they scan for the type.
+ *
+ * The words come from `entryTypeLabel`, the same function behind every chip's
+ * `aria-label`, so a key that says one thing while the chips say another is
+ * not a mistake anyone can make here.
+ */
+function Legend() {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border/60 pt-3 text-[11px] font-semibold text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          aria-hidden
+          className="flex h-3.5 items-center gap-1 rounded-[3px] border-l-[3px] border-l-muted-foreground bg-muted px-1"
+        >
+          <Layers className="h-2 w-2" />
+        </span>
+        {JOB_LABEL}
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+        {TASK_LABEL}
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <CheckSquare aria-hidden className="h-3 w-3" />
+        <span className="line-through">Done</span>
+      </span>
+      <span className="inline-flex items-center gap-1.5 text-destructive">
+        <AlertTriangle aria-hidden className="h-3 w-3" />
+        Overdue
+      </span>
+    </div>
+  );
+}
+
+export function WorkspaceSchedule({
   schedule,
   loading,
   error,
@@ -84,7 +198,7 @@ export function WorkspaceCalendar({
   canSchedule,
   onSetScheduledDate,
 }: {
-  schedule: WorkspaceSchedule;
+  schedule: ScheduleData;
   loading: boolean;
   /** Non-null when the task read failed, so an empty month cannot pose as a quiet one. */
   error: string | null;
@@ -138,7 +252,7 @@ export function WorkspaceCalendar({
       <EmptyState
         icon={CalendarClock}
         title="Nothing is dated yet"
-        description="This calendar reads two things across every project: the due dates on tasks, and the day a job is booked for. Put a due date on a task, or give a job in a Scheduled pipeline stage a date, and it lands here."
+        description="The schedule reads two things across every project: the due dates on tasks, and the day a job is booked for. Put a due date on a task, or give a job in a Scheduled pipeline stage a date, and it lands here."
       />
     );
   }
@@ -267,16 +381,28 @@ export function WorkspaceCalendar({
             const hasLate = entries.some((e) => e.overdue);
 
             return (
-              <button
+              /*
+               * The cell is a container, not a button.
+               *
+               * It used to be one big `<button>` with inert `<span>` chips
+               * inside it, and the client found exactly what that costs:
+               * "clicking a task directly on the calendar grid does nothing -
+               * only the same item in the sidebar is clickable". A chip that
+               * names a task and does not open it is a dead control on the
+               * busiest surface of the screen.
+               *
+               * It cannot be fixed by nesting: a link inside a button is
+               * invalid HTML and browsers disagree about which one a click
+               * belongs to. So the day surface is a full-bleed button UNDER the
+               * content, and each chip is a real link ABOVE it with pointer
+               * events switched back on. Empty space in the cell still selects
+               * the day; a chip opens what it names; both are reachable by
+               * keyboard, in reading order.
+               */
+              <div
                 key={k}
-                type="button"
-                onClick={() => setSelectedDay(k)}
-                aria-pressed={isSelected}
-                aria-label={`${format(day, "EEEE d MMMM")}, ${entries.length} ${
-                  entries.length === 1 ? "entry" : "entries"
-                }`}
                 className={cn(
-                  "flex min-h-[74px] flex-col gap-1 rounded-xl border p-1.5 text-left transition sm:min-h-[104px]",
+                  "group/cell relative flex min-h-[74px] flex-col rounded-xl border p-1.5 transition sm:min-h-[104px]",
                   outside
                     ? "border-transparent bg-transparent opacity-40"
                     : "border-border hover:border-primary/50",
@@ -284,70 +410,83 @@ export function WorkspaceCalendar({
                   !outside && entries.length === 0 && "bg-muted/20",
                 )}
               >
-                <span className="flex items-center justify-between gap-1">
-                  <span
-                    className={cn(
-                      "text-[11px] font-extrabold tabular-nums",
-                      isToday(day)
-                        ? "flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {format(day, "d")}
-                  </span>
-                  {hasLate && (
-                    <span
-                      aria-hidden
-                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive"
-                      title="Something here is overdue"
-                    />
-                  )}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDay(k)}
+                  aria-pressed={isSelected}
+                  aria-label={`${format(day, "EEEE d MMMM")}, ${entries.length} ${
+                    entries.length === 1 ? "entry" : "entries"
+                  }`}
+                  className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                />
 
-                {/* Phones get dots, because a 48px-wide cell cannot hold a
-                    readable title and a truncated one is worse than a mark
-                    saying "there is something here". */}
-                {entries.length > 0 && (
-                  <span className="flex flex-wrap gap-0.5 sm:hidden">
-                    {entries.slice(0, 4).map((e) => (
-                      <span
-                        key={e.key}
-                        aria-hidden
-                        className={cn("h-1.5 w-1.5 rounded-full", e.done && "opacity-40")}
-                        style={{ backgroundColor: e.color }}
-                      />
-                    ))}
-                  </span>
-                )}
-
-                <span className="hidden min-w-0 flex-col gap-0.5 sm:flex">
-                  {entries.slice(0, CELL_ENTRY_LIMIT).map((e) => (
+                {/* Above the day surface, and transparent to the pointer except
+                    where a chip switches it back on. */}
+                <div className="pointer-events-none relative flex min-w-0 flex-col gap-1">
+                  <div className="flex items-center justify-between gap-1">
                     <span
-                      key={e.key}
                       className={cn(
-                        "flex min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-[10px] font-bold leading-tight",
-                        e.done ? "text-muted-foreground line-through" : "text-foreground",
-                        e.kind === "job" ? "bg-muted/70" : "bg-transparent",
+                        "text-[11px] font-extrabold tabular-nums",
+                        isToday(day)
+                          ? "flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                          : "text-muted-foreground",
                       )}
                     >
+                      {format(day, "d")}
+                    </span>
+                    {hasLate && (
                       <span
                         aria-hidden
-                        className="h-1.5 w-1.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: e.color }}
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive"
+                        title="Something here is overdue"
                       />
-                      <span className="truncate">{e.title}</span>
-                    </span>
-                  ))}
-                  {entries.length > CELL_ENTRY_LIMIT && (
-                    <span className="px-1 text-[10px] font-extrabold text-muted-foreground">
-                      +{entries.length - CELL_ENTRY_LIMIT} more
-                    </span>
+                    )}
+                  </div>
+
+                  {/* Phones get markers, because a 48px-wide cell cannot hold a
+                      readable title and a truncated one is worse than a mark
+                      saying "there is something here". Square for a job, round
+                      for a task: the shape is the type, so it survives being
+                      too small for an icon and being read by someone who cannot
+                      separate the colours. */}
+                  {entries.length > 0 && (
+                    <div className="flex flex-wrap gap-0.5 sm:hidden">
+                      {entries.slice(0, 4).map((e) => (
+                        <span
+                          key={e.key}
+                          aria-hidden
+                          className={cn(
+                            "h-1.5 w-1.5",
+                            e.kind === "job" ? "rounded-[1px]" : "rounded-full",
+                            e.done && "opacity-40",
+                          )}
+                          style={{ backgroundColor: e.color }}
+                        />
+                      ))}
+                    </div>
                   )}
-                </span>
-              </button>
+
+                  <div className="hidden min-w-0 flex-col gap-0.5 sm:flex">
+                    {entries.slice(0, CELL_ENTRY_LIMIT).map((e) => (
+                      <EntryChip key={e.key} entry={e} />
+                    ))}
+                    {entries.length > CELL_ENTRY_LIMIT && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDay(k)}
+                        className="pointer-events-auto rounded px-1 text-left text-[10px] font-extrabold text-muted-foreground hover:text-foreground"
+                      >
+                        +{entries.length - CELL_ENTRY_LIMIT} more
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
             );
           })}
         </div>
+
+        <Legend />
       </Card>
 
       {/* The rail: where a day is actually read. */}
@@ -430,6 +569,84 @@ export function WorkspaceCalendar({
   );
 }
 
+/**
+ * A date field that does not write down a year somebody is halfway through
+ * typing.
+ *
+ * The client: "please check the year-segment handling on that date input."
+ * They were right to. `<input type="date">` emits a complete, valid value
+ * every time ANY segment changes, so typing 2026 into the year produces four
+ * of them - 0002, 0020, 0202, 2026 - and the first cut wrote each one straight
+ * to the database. Booking a job for next Tuesday saved four times, three of
+ * them to the years 2, 20 and 202, each with its own green toast, and the
+ * entry jumped two millennia up the grid between keystrokes. Because the input
+ * was controlled on the saved value, React then re-rendered the segments from
+ * the garbage under the person still typing into them.
+ *
+ * Two changes fix it, and both are needed:
+ *
+ *   - The field holds its own draft while it is being edited, so nothing
+ *     rewrites what is on screen mid-keystroke.
+ *   - A value is only committed once it is plausible. See
+ *     `isPlausibleCalendarDate`: a year under 1900 is a year still being typed,
+ *     and a length check cannot tell, because the browser zero-pads "202" to
+ *     the four characters "0202".
+ *
+ * Picking from the native date picker still commits on the first change, since
+ * what it produces is plausible immediately. Blur is the backstop: it commits a
+ * pending draft, and puts back the last good value if what is there is not a
+ * date anybody meant.
+ */
+function ScheduleDateInput({
+  value,
+  onCommit,
+  ariaLabel,
+}: {
+  /** The saved date, or "" when none. */
+  value: string;
+  onCommit: (date: string | null) => void;
+  ariaLabel: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  // Follow the saved value when it changes underneath (another edit, a revert
+  // after a failed write), without fighting the person typing.
+  const [lastSaved, setLastSaved] = useState(value);
+  if (value !== lastSaved) {
+    setLastSaved(value);
+    setDraft(value);
+  }
+
+  const commit = (next: string) => {
+    if (next === value) return;
+    onCommit(next === "" ? null : next);
+  };
+
+  return (
+    <input
+      type="date"
+      value={draft}
+      onChange={(ev) => {
+        const next = ev.target.value;
+        setDraft(next);
+        // Clearing is a deliberate act, but mid-edit the field also reads ""
+        // for a moment; the blur handler is what turns a left-empty field into
+        // a cleared date.
+        if (next !== "" && isPlausibleCalendarDate(next)) commit(next);
+      }}
+      onBlur={() => {
+        if (draft === "") {
+          commit("");
+          return;
+        }
+        if (isPlausibleCalendarDate(draft)) commit(draft);
+        else setDraft(value);
+      }}
+      className="w-[118px] bg-transparent text-[11px] font-semibold outline-none"
+      aria-label={ariaLabel}
+    />
+  );
+}
+
 function RailSection({
   icon: Icon,
   title,
@@ -488,15 +705,17 @@ function EntryRow({
         entry.overdue && "border-destructive/40 bg-destructive/5",
       )}
     >
-      <Link
-        to="/projects/$projectId"
-        params={{ projectId: entry.projectId }}
-        search={entry.taskId ? { task: entry.taskId } : {}}
-        className="flex min-w-0 items-start gap-2"
-      >
+      <Link {...entryLink(entry)} className="flex min-w-0 items-start gap-2">
+        {/* Same shape vocabulary as the grid: square for a job, round for a
+            task. A person who learns it on the grid should not have to learn
+            it again three inches to the right. */}
         <span
           aria-hidden
-          className={cn("mt-1 h-2 w-2 shrink-0 rounded-full", entry.done && "opacity-40")}
+          className={cn(
+            "mt-1 h-2 w-2 shrink-0",
+            entry.kind === "job" ? "rounded-[2px]" : "rounded-full",
+            entry.done && "opacity-40",
+          )}
           style={{ backgroundColor: entry.color }}
         />
         <span className="min-w-0 flex-1">
@@ -512,7 +731,7 @@ function EntryRow({
             {entry.kind === "job" ? (
               <Layers className="h-3 w-3 shrink-0" />
             ) : (
-              <FolderKanban className="h-3 w-3 shrink-0" />
+              <CheckSquare className="h-3 w-3 shrink-0" />
             )}
             <span className="truncate">
               {entry.kind === "job" ? (entry.detail ?? "No pipeline stage") : entry.projectName}
@@ -543,12 +762,10 @@ function EntryRow({
       {entry.kind === "job" && canSchedule && (
         <div className="mt-1.5 flex items-center gap-1.5 border-t border-border/50 pt-1.5">
           <CalendarDays className="h-3 w-3 shrink-0 text-muted-foreground" />
-          <input
-            type="date"
+          <ScheduleDateInput
             value={entry.date}
-            onChange={(ev) => onSetScheduledDate(entry.projectId, ev.target.value || null)}
-            className="w-[118px] bg-transparent text-[11px] font-semibold outline-none"
-            aria-label={`Reschedule ${entry.projectName}`}
+            onCommit={(date) => onSetScheduledDate(entry.projectId, date)}
+            ariaLabel={`Reschedule ${entry.projectName}`}
           />
           <button
             type="button"
@@ -594,12 +811,14 @@ function AwaitingRow({
       {canSchedule && (
         <div className="mt-1.5 flex items-center gap-1.5 border-t border-border/50 pt-1.5">
           <CalendarDays className="h-3 w-3 shrink-0 text-muted-foreground" />
-          <input
-            type="date"
+          {/* This one bit hardest before the fix: `value=""` was a controlled
+              empty, so React reset the segments on every render, and the first
+              plausible-looking intermediate committed and unmounted the row out
+              from under the person still typing the year. */}
+          <ScheduleDateInput
             value=""
-            onChange={(ev) => ev.target.value && onSetScheduledDate(job.projectId, ev.target.value)}
-            className="w-[118px] bg-transparent text-[11px] font-semibold outline-none"
-            aria-label={`Book a day for ${job.projectName}`}
+            onCommit={(date) => date && onSetScheduledDate(job.projectId, date)}
+            ariaLabel={`Book a day for ${job.projectName}`}
           />
         </div>
       )}
