@@ -1378,7 +1378,7 @@ const FIELD_TOKENS = [
   { label: "Company name", key: "company" },
   { label: "Project name", key: "project_name" },
   { label: "Project address", key: "project_address" },
-  { label: "Today's date", key: "date" },
+  { label: "Date", key: "date" },
 ];
 
 export type TokenValues = Record<string, { label: string; empty: boolean }>;

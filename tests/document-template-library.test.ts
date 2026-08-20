@@ -2,7 +2,11 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { sanitizePageHtml } from "../apps/api/src/domains/projects/sanitize-page-html";
-import { bracketsToFillFields, SUPPORTED_TOKENS } from "../apps/api/src/domains/projects/pages";
+import {
+  bracketsToFillFields,
+  fieldLabel,
+  SUPPORTED_TOKENS,
+} from "../apps/api/src/domains/projects/pages";
 import { nextCopyName } from "../apps/web/src/lib/duplicate-name";
 
 /*
@@ -450,6 +454,74 @@ describe("the style presets the Templates page writes", () => {
       );
     }
   });
+
+  it("names every chip the same thing as the merge tag it writes", () => {
+    /*
+     * The client's report: 'clicking a Fields panel chip like "Job title"
+     * inserts a merge tag named {{prepared_by_title}}, which doesn't match its
+     * own label and would confuse anyone debugging the raw template later.'
+     *
+     * So the rule is that the token IS the label, lowercased and joined with
+     * underscores. Strong on purpose: the panel is the only place a token is
+     * ever given a friendly name, and the template it writes gets read later by
+     * somebody who has nothing in front of them but the raw HTML.
+     */
+    const chips = [...MANAGER.matchAll(/\{ token: "(\w+)", label: "([^"]+)"/g)];
+    expect(chips.length).toBeGreaterThan(6);
+    for (const [, token, label] of chips) {
+      const slug = label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "");
+      expect(slug, `chip "${label}" inserts {{${token}}}`).toBe(token);
+    }
+  });
+
+  it("calls a field the same thing in the panel and in the finished document", () => {
+    // The panel's label and the [Blank] the resolver leaves behind are the same
+    // words, so the person authoring the template and the customer holding the
+    // PDF are looking at one name for one field.
+    const chips = [...MANAGER.matchAll(/\{ token: "(\w+)", label: "([^"]+)"/g)];
+    for (const [, token, label] of chips) {
+      expect(fieldLabel(token), `${token} is labelled twice over`).toBe(label);
+    }
+  });
+
+  it("still resolves the merge tag every existing template was written with", () => {
+    /*
+     * `prepared_by_title` is the name `job_title` went by first. It is all over
+     * the seed migrations and in every template a team wrote before the rename,
+     * and a token the resolver has never heard of prints as [Prepared by title]
+     * in front of a customer. It is not offered any more; it still works.
+     */
+    expect(SUPPORTED_TOKENS.has("prepared_by_title")).toBe(true);
+    expect(fieldLabel("prepared_by_title")).toBe("Job title");
+    expect(fieldLabel("job_title")).toBe("Job title");
+  });
+
+  it("keeps authoring a template on a desktop, and using one everywhere", () => {
+    /*
+     * "This feature can be only used on desktop ... Mobile can apply templates
+     * and use it." Every route that opens the editor checks the screen first;
+     * the route that applies a template to a project does not.
+     */
+    // Comments stripped: this component quotes the client's old wording back at
+    // itself all over the place, and a comment is not a gate.
+    const src = MANAGER.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+    expect(src).toContain("function editorNeedsDesktop()");
+    for (const opener of ["setCreateOpen(true)", "void edit(t)", "void copyForEditing(t)"]) {
+      const at = src.indexOf(opener);
+      expect(at, `${opener} is not in the component any more`).toBeGreaterThan(0);
+      const before = src.slice(Math.max(0, at - 400), at);
+      expect(before, `${opener} opens the editor without checking the screen`).toContain(
+        "editorNeedsDesktop()",
+      );
+    }
+    // Using a template is untouched: nothing between the button and openUse.
+    const useAt = src.indexOf("openUse(t)");
+    expect(useAt).toBeGreaterThan(0);
+    expect(src.slice(Math.max(0, useAt - 400), useAt)).not.toContain("editorNeedsDesktop");
+  });
 });
 
 describe("the built-in template library - what survives being applied to a page", () => {
@@ -824,10 +896,25 @@ describe("copying is not how a template gets used", () => {
     expect(block.length).toBeGreaterThan(100);
     expect(block).toMatch(/if \(t\.team_id !== null\) return openForEdit\(t\)/);
     expect(block).toContain("copyForEditing(t)");
-    // The Edit button is no longer withheld from examples, and Duplicate is no
-    // longer offered on them - there is nothing left for it to do there.
-    expect(rendered(MANAGER)).toMatch(/canManage && \(\s*<Button size="sm" variant="outline"/);
-    expect(rendered(MANAGER)).toMatch(/canManage && !isExample && \(\s*<DropdownMenu>/);
+    /*
+     * The Edit button is no longer withheld from examples, and Duplicate is no
+     * longer offered on them - there is nothing left for it to do there.
+     *
+     * Asserted on the guard in front of Edit rather than on the button's own
+     * markup: it is several lines of JSX now that tapping it on a phone has to
+     * explain itself instead of opening the editor, and a test that pins the
+     * formatting of a button is a test that fails the next time someone styles
+     * it.
+     */
+    const src = rendered(MANAGER);
+    const editAt = src.indexOf("/> Edit");
+    expect(editAt, "no Edit button on the card").toBeGreaterThan(0);
+    const guardAt = src.lastIndexOf("{canManage", editAt);
+    expect(guardAt, "Edit is not behind canManage").toBeGreaterThan(0);
+    expect(src.slice(guardAt, editAt), "Edit is gated on isExample again").not.toContain(
+      "isExample",
+    );
+    expect(src).toMatch(/canManage && !isExample && \(\s*<DropdownMenu>/);
   });
 
   it("the company's version replaces the example instead of joining it", () => {

@@ -24,6 +24,7 @@ import {
   AlignRight,
   LayoutList,
   Images,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -184,24 +185,41 @@ export function DocumentToolbar({
   };
 
   const prompt = usePrompt();
-  // Darker resting colour and a heavier icon stroke: these were muted-grey 16px
-  // glyphs that read as disabled. Active state now uses the accent so the
-  // current formatting is obvious at a glance.
+  /*
+   * Full-contrast at rest, unmistakable when on.
+   *
+   * These were muted-grey 16px glyphs; a heavier stroke and a darker resting
+   * colour fixed most of it, but 75% opacity still read as a disabled control
+   * to anyone who had not tried clicking one - "most of the formatting icons
+   * look grayed-out/disabled by default even though they're clickable". There
+   * is no disabled state in this toolbar for that greying to distinguish it
+   * from, so it bought nothing and cost the whole row its legibility.
+   *
+   * The active state carries a ring as well as a tint: a 10%-primary fill
+   * alone is a couple of percent of contrast against the paper, which is not
+   * enough to answer "is bold on right now" at a glance.
+   */
   const btnCls = (active?: boolean) =>
     cn(
-      "rounded-md p-2 text-foreground/75 transition-colors hover:bg-muted hover:text-foreground",
+      "rounded-md p-2 text-foreground transition-colors hover:bg-muted hover:text-foreground",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       "[&_svg]:h-4 [&_svg]:w-4 [&_svg]:stroke-[2.25]",
-      active && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+      active &&
+        "bg-primary/15 text-primary ring-1 ring-inset ring-primary/40 hover:bg-primary/20 hover:text-primary",
     );
   const inTable = editor.isActive("table");
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex flex-wrap items-center gap-0.5 border-t border-border px-4 py-1.5 sm:px-6">
+      <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 border-t border-border px-4 py-2 sm:px-6">
         <DropdownMenu>
           <ToolbarHint label="Text style">
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-bold">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 border border-border bg-background px-2 text-xs font-bold shadow-sm hover:bg-muted"
+              >
                 {editor.isActive("heading", { level: 1 })
                   ? "Heading 1"
                   : editor.isActive("heading", { level: 2 })
@@ -209,6 +227,7 @@ export function DocumentToolbar({
                     : editor.isActive("heading", { level: 3 })
                       ? "Heading 3"
                       : "Paragraph"}
+                <ChevronDown className="opacity-60" />
               </Button>
             </DropdownMenuTrigger>
           </ToolbarHint>
@@ -251,11 +270,16 @@ export function DocumentToolbar({
         <DropdownMenu>
           <ToolbarHint label="Font family">
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-bold">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 border border-border bg-background px-2 text-xs font-bold shadow-sm hover:bg-muted"
+              >
                 {(editor.getAttributes("textStyle").fontFamily as string | undefined)?.replace(
                   /,.*/,
                   "",
                 ) ?? "Font"}
+                <ChevronDown className="opacity-60" />
               </Button>
             </DropdownMenuTrigger>
           </ToolbarHint>
@@ -279,11 +303,16 @@ export function DocumentToolbar({
         <DropdownMenu>
           <ToolbarHint label="Font size">
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-bold">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 border border-border bg-background px-2 text-xs font-bold shadow-sm hover:bg-muted"
+              >
                 {(editor.getAttributes("textStyle").fontSize as string | undefined)?.replace(
                   "px",
                   "",
                 ) ?? "Size"}
+                <ChevronDown className="opacity-60" />
               </Button>
             </DropdownMenuTrigger>
           </ToolbarHint>

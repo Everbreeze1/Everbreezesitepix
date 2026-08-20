@@ -21,6 +21,8 @@ import {
   X,
   Plus,
   Check,
+  Pause,
+  Archive,
   Video,
   Footprints,
   Mic,
@@ -53,6 +55,7 @@ import { ProjectActionsMenu } from "@/features/projects/components/ProjectAction
 import { ProjectChecklists } from "@/features/projects/components/ProjectChecklists";
 import { ProjectBlueprintOrigin } from "@/features/projects/components/ProjectBlueprintOrigin";
 import { ProjectStageChip } from "@/features/projects/components/ProjectStageChip";
+import { ProjectStatusChip } from "@/features/projects/components/ProjectStatusChip";
 import { useProjectBlueprintOrigin } from "@/hooks/use-project-blueprint-origin";
 import { startOfMonth } from "date-fns";
 import { PhotoCalendar, type CalendarPhoto } from "@/features/gallery/components/PhotoCalendar";
@@ -2637,11 +2640,25 @@ export function ProjectDetailPage() {
                     </div>
                   )}
                 </div>
+                {/*
+                  The badge takes its colour from the status, so its glyph has
+                  to agree with it. It was a tick for every status, which was
+                  survivable while changing the status meant opening a form and
+                  most projects stayed Active - now that the chip below changes
+                  it in one click, a paused job with a tick on it is the first
+                  thing you would see.
+                */}
                 <span
                   className="absolute -bottom-1.5 -right-1.5 flex h-7 w-7 items-center justify-center rounded-full border-4 border-sidebar"
                   style={{ background: (STATUS_DOT[project.status] ?? STATUS_DOT.active).dot }}
                 >
-                  <Check className="h-3.5 w-3.5 text-[#101929]" strokeWidth={3} />
+                  {project.status === "on_hold" ? (
+                    <Pause className="h-3.5 w-3.5 text-[#101929]" strokeWidth={3} />
+                  ) : project.status === "archived" ? (
+                    <Archive className="h-3.5 w-3.5 text-[#101929]" strokeWidth={3} />
+                  ) : (
+                    <Check className="h-3.5 w-3.5 text-[#101929]" strokeWidth={3} />
+                  )}
                 </span>
               </div>
 
@@ -2651,16 +2668,18 @@ export function ProjectDetailPage() {
                   <span className="inline-flex items-center rounded-full bg-sidebar-ring px-3 py-1 text-[10px] font-extrabold uppercase tracking-[1.4px] text-sidebar-foreground">
                     Project record
                   </span>
-                  <span
-                    className="inline-flex items-center gap-1.5 text-xs font-bold"
-                    style={{ color: (STATUS_DOT[project.status] ?? STATUS_DOT.active).text }}
-                  >
-                    <span
-                      className="h-1.5 w-1.5 rounded-full"
-                      style={{ background: (STATUS_DOT[project.status] ?? STATUS_DOT.active).dot }}
-                    />
-                    {(STATUS_DOT[project.status] ?? STATUS_DOT.active).label}
-                  </span>
+                  {/*
+                    The status reads the same as it always did, but it is now
+                    the control for the field as well as the display of it.
+                    Marking a job complete from its own page used to mean the
+                    overflow menu, "Edit details", and a form of eleven fields
+                    to change one select.
+                  */}
+                  <ProjectStatusChip
+                    projectId={project.id}
+                    status={project.status}
+                    onChanged={(status) => setProject((p) => (p ? { ...p, status } : p))}
+                  />
                   {/*
                     Status above is the wide bucket; this is where the job sits
                     inside it. Two fields, side by side, because that is the
