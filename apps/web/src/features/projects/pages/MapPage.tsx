@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { PageLoader } from "@/components/PageLoader";
 import { qk } from "@/lib/query-keys";
+import { listProjectBoards } from "@/lib/project-boards.functions";
 
 type StatusFilter = "active" | "all" | "on_hold" | "completed";
 
@@ -19,6 +20,13 @@ interface ProjectPin {
   id: string;
   name: string;
   status: string;
+  /**
+   * Where the job is in the team's own words. The three statuses below are the
+   * roll-up of it - see packages/shared/src/pipeline-stages.ts - so this is
+   * what a pin is labelled with when the project is in a pipeline, and the
+   * bucket is what colours it, filters it and counts it.
+   */
+  pipeline_stage_id: string | null;
   street: string | null;
   city: string | null;
   state: string | null;
@@ -113,6 +121,30 @@ export function MapPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const geocode = geocodeAddress;
+
+  /*
+   * The map used to speak only in Active / On hold / Completed, which is how a
+   * job could read "Invoiced" on its own page and "Active" here. The stage now
+   * owns the bucket, so the two can no longer disagree - and where a team has
+   * named the step themselves, the map says their word for it rather than the
+   * roll-up of it. The pin colours, the filter and the counts stay on the three
+   * buckets: that is what makes one legend cover every pipeline a team invents.
+   */
+  const boardsQuery = useQuery({
+    queryKey: qk.projectBoards(user?.id ?? ""),
+    queryFn: async () => (await listProjectBoards()).boards,
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  const stageLookup = useMemo(() => {
+    const out: Record<string, { name: string; color: string }> = {};
+    for (const b of boardsQuery.data ?? []) {
+      for (const s of b.stages) out[s.id] = { name: s.name, color: s.color };
+    }
+    return out;
+  }, [boardsQuery.data]);
+  const stageOf = (p: ProjectPin) =>
+    (p.pipeline_stage_id ? stageLookup[p.pipeline_stage_id] : null) ?? null;
   const [projects, setProjects] = useState<ProjectPin[]>([]);
   const [stats, setStats] = useState<Record<string, ProjectStats>>({});
   const [filter, setFilter] = useState<StatusFilter>("active");
@@ -133,9 +165,12 @@ export function MapPage() {
   }, [stats]);
 
   const load = useCallback(async () => {
-    const { data } = await supabase
+    // `as any`, like every other read of this column: the generated Supabase
+    // types predate 20260917000000_pipeline_stages.sql and do not know
+    // `pipeline_stage_id` exists.
+    const { data } = await (supabase as any)
       .from("projects")
-      .select("id, name, status, street, city, state, zip, latitude, longitude");
+      .select("id, name, status, pipeline_stage_id, street, city, state, zip, latitude, longitude");
     const all = ((data as ProjectPin[]) ?? []).filter(hasAddress);
 
     /*
@@ -345,7 +380,7 @@ export function MapPage() {
       <div style="font-weight:600;font-size:13px;line-height:1.2;margin-bottom:2px;">${name}</div>
       <div style="font-size:11px;color:#475569;margin-bottom:6px;">${addr}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-        <span style="padding:2px 8px;border-radius:999px;background:${color};color:#fff;font-size:10px;font-weight:600;text-transform:capitalize;">${statusLabel[p.status] ?? p.status}</span>
+        <span style="padding:2px 8px;border-radius:999px;background:${escapeXml(stageOf(p)?.color ?? color)};color:#fff;font-size:10px;font-weight:600;text-transform:capitalize;">${escapeXml(stageOf(p)?.name ?? statusLabel[p.status] ?? p.status)}</span>
         <span style="font-size:11px;color:#475569;">${photoCount} photo${photoCount === 1 ? "" : "s"}</span>
       </div>
       <div style="font-size:10px;color:#64748b;margin-top:4px;">${activity}</div>
@@ -409,7 +444,10 @@ export function MapPage() {
     } else {
       mapInstance.current.fitBounds(bounds, { top: 100, right: 100, bottom: 100, left: 100 });
     }
-  }, [mappable, mapReady, navigate]);
+    // stageLookup is in here because each marker's hover card is built from the
+    // closure this effect ran in: without it, pins created before the pipelines
+    // finished loading would keep showing the roll-up under their own name.
+  }, [mappable, mapReady, navigate, stageLookup]);
 
   if (loading) return <PageLoader />;
 
@@ -509,6 +547,17 @@ export function MapPage() {
                       <span className="text-foreground/80">{statusLabel[s]}</span>
                     </div>
                   ))}
+                  {/*
+                    Said out loud, because a pin labelled "Invoiced" sitting on
+                    a Completed colour is only confusing while you think they
+                    are two competing statuses. They are one: the stage is the
+                    detail, these three are what it counts as.
+                  */}
+                  {Object.keys(stageLookup).length > 0 && (
+                    <p className="mt-1 max-w-[190px] border-t border-border pt-1.5 text-[10px] leading-snug text-muted-foreground">
+                      Pipeline stages roll up into these three.
+                    </p>
+                  )}
                 </div>
                 {/* Count chip */}
                 <div className="font-manrope pointer-events-none absolute right-4 top-4 rounded-full border-[0.8px] border-border bg-card/85 px-3 py-1.5 text-xs font-medium text-foreground shadow-lg backdrop-blur-md">
@@ -549,6 +598,8 @@ export function MapPage() {
                 const hasCoords = p.latitude != null && p.longitude != null;
                 const isSelected = selected?.id === p.id;
                 const badge = statusBadgeStyle[p.status] ?? statusBadgeStyle.completed;
+                // The team's word for where the job is, where they have one.
+                const stage = stageOf(p);
                 return (
                   <button
                     key={p.id}
@@ -564,9 +615,18 @@ export function MapPage() {
                       </p>
                       <span
                         className="font-manrope shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold"
-                        style={{ background: badge.bg, color: badge.text }}
+                        style={
+                          stage
+                            ? { background: stage.color, color: "#ffffff" }
+                            : { background: badge.bg, color: badge.text }
+                        }
+                        title={
+                          stage
+                            ? `${stage.name}, which counts as ${statusLabel[p.status] ?? p.status}`
+                            : undefined
+                        }
                       >
-                        {statusLabel[p.status] ?? p.status.replace("_", " ")}
+                        {stage ? stage.name : (statusLabel[p.status] ?? p.status.replace("_", " "))}
                       </span>
                     </div>
                     <div className="font-manrope mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">

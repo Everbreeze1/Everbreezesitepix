@@ -29,6 +29,8 @@ const env = (p) => {
   return o;
 };
 
+const BUCKETS = ["Active", "On hold", "Completed"];
+
 const results = [];
 const ok = (n, d = "") => results.push({ pass: true, n, d });
 const bad = (n, d = "") => results.push({ pass: false, n, d });
@@ -50,6 +52,8 @@ const main = async () => {
     .then((c) => c.newPage());
   let original = null;
   let projectUrl = null;
+  /** The stage it was standing in when we found it, if it was in a pipeline. */
+  let startedInStage = null;
 
   try {
     await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
@@ -97,19 +101,40 @@ const main = async () => {
     ok("status is a control in the header", `reads "${original}"`);
     await page.screenshot({ path: `${SHOTS}/10-header.png` });
 
-    /* ------------------------------------------------------- open and choose */
+    /*
+     * This script covers the project that is in NO pipeline, which is the only
+     * case where the three buckets are set by hand. A project standing in a
+     * stage takes its bucket from that stage instead - see
+     * drive-status-stage-reconciliation.mjs - so take it out of the pipeline
+     * first, and put it back in the finally block.
+     */
     await chip.click();
-    const menu = page.locator('[role="menu"]').filter({ hasText: "Set status" });
+    let menu = page.locator('[role="menu"]').last();
     await menu.waitFor({ state: "visible", timeout: 10000 });
-    // The menu fades in; a screenshot taken on the same tick catches it half transparent.
     await page.waitForTimeout(700);
+    const outOfPipeline = menu.getByRole("menuitem", { name: /Not in a pipeline/i });
+    if ((await outOfPipeline.isEnabled().catch(() => false)) === true) {
+      startedInStage = original;
+      await outOfPipeline.click();
+      for (let i = 0; i < 30; i++) {
+        await page.waitForTimeout(400);
+        if (BUCKETS.includes(await statusOf(page))) break;
+      }
+      original = await statusOf(page);
+      ok("a project can be taken out of its pipeline", `now reads "${original}"`);
+      await chip.click();
+      menu = page.locator('[role="menu"]').last();
+      await menu.waitFor({ state: "visible", timeout: 10000 });
+      await page.waitForTimeout(700);
+    }
+
+    /* ------------------------------------------------------- open and choose */
     for (const label of ["Active", "On hold", "Completed"]) {
       const item = menu.getByRole("menuitem", { name: label, exact: true });
       if (await item.isVisible().catch(() => false)) ok(`"${label}" is offered`);
       else bad(`"${label}" is offered`, "missing from the menu");
     }
     await page.screenshot({ path: `${SHOTS}/20-menu-open.png` });
-
     const target = original === "On hold" ? "Completed" : "On hold";
     await menu.getByRole("menuitem", { name: target, exact: true }).click();
 
@@ -166,23 +191,38 @@ const main = async () => {
   } catch (e) {
     bad("run", e?.message ?? String(e));
   } finally {
-    /* Put it back exactly as it was. */
-    if (original && projectUrl) {
+    /*
+     * Put it back exactly as it was: the bucket first, then the stage it was
+     * standing in - in that order, because moving it back into the stage is
+     * what re-stamps the bucket, and doing the bucket second would leave the
+     * two disagreeing, which is the state this whole round exists to remove.
+     */
+    const restoreTo = startedInStage ?? original;
+    if (restoreTo && projectUrl) {
       try {
         await page.goto(projectUrl, { waitUntil: "networkidle" });
         await page.waitForTimeout(3000);
-        if ((await statusOf(page)) !== original) {
+        if (!startedInStage && (await statusOf(page)) !== original) {
           await chipOf(page).click();
           await page
             .locator('[role="menu"]')
-            .filter({ hasText: "Set status" })
+            .last()
             .getByRole("menuitem", { name: original, exact: true })
             .click();
           await page.waitForTimeout(2500);
         }
-        console.log(`restored status to "${original}"`);
+        if (startedInStage && (await statusOf(page)) !== startedInStage) {
+          await chipOf(page).click();
+          await page
+            .locator('[role="menu"]')
+            .last()
+            .getByRole("menuitem", { name: new RegExp(`^${startedInStage}\\b`) })
+            .click();
+          await page.waitForTimeout(2500);
+        }
+        console.log(`restored to "${restoreTo}"`);
       } catch (e) {
-        console.log(`COULD NOT RESTORE status to "${original}": ${e?.message ?? e}`);
+        console.log(`COULD NOT RESTORE to "${restoreTo}": ${e?.message ?? e}`);
       }
     }
     await browser.close();

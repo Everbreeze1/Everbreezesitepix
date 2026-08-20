@@ -18,12 +18,23 @@ import {
   DEFAULT_PIPELINE_STAGES,
   MAX_PIPELINE_STAGES,
   PIPELINE_STAGE_COLORS,
+  PROJECT_STATUSES,
+  PROJECT_STATUS_LABELS,
+  defaultStatusForStageName,
   nextPipelineStageColor,
   normalizePipelineName,
+  type ProjectStatus,
 } from "@sitepix/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { PipelineStage, PipelineStageInput } from "@/lib/project-boards.functions";
 
@@ -40,6 +51,20 @@ export interface StageDraft {
   id?: string;
   name: string;
   color: string;
+  /**
+   * Which of the three buckets a job in this stage counts as. The map's pins,
+   * the project list's filters and every count read that bucket, so this is
+   * the field that stops a pipeline and a status ever disagreeing - see
+   * packages/shared/src/pipeline-stages.ts.
+   */
+  status: ProjectStatus;
+  /**
+   * Set once somebody picks a bucket by hand. Until then the guess follows
+   * whatever they type, so naming a stage "Paid" lands on Completed without
+   * anyone being asked - and stops second-guessing them the moment they
+   * disagree with it.
+   */
+  statusTouched?: boolean;
 }
 
 function newKey(): string {
@@ -49,15 +74,33 @@ function newKey(): string {
 export function draftsFromStages(stages: readonly PipelineStage[]): StageDraft[] {
   return [...stages]
     .sort((a, b) => a.position - b.position)
-    .map((s) => ({ key: s.id, id: s.id, name: s.name, color: s.color }));
+    .map((s) => ({
+      key: s.id,
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      status: s.status ?? defaultStatusForStageName(s.name),
+      statusTouched: true,
+    }));
 }
 
 export function defaultStageDrafts(): StageDraft[] {
-  return DEFAULT_PIPELINE_STAGES.map((s) => ({ key: newKey(), name: s.name, color: s.color }));
+  return DEFAULT_PIPELINE_STAGES.map((s) => ({
+    key: newKey(),
+    name: s.name,
+    color: s.color,
+    status: s.status,
+    statusTouched: true,
+  }));
 }
 
 export function draftsToInput(drafts: readonly StageDraft[]): PipelineStageInput[] {
-  return drafts.map((d) => ({ id: d.id, name: d.name.trim(), color: d.color }));
+  return drafts.map((d) => ({
+    id: d.id,
+    name: d.name.trim(),
+    color: d.color,
+    status: d.status ?? defaultStatusForStageName(d.name),
+  }));
 }
 
 /** The first thing wrong with the list, or null when it is savable. */
@@ -128,6 +171,15 @@ export function PipelineStageEditor({
 
   return (
     <div>
+      {/*
+        Said once here rather than as a hint under twenty rows. A team that
+        never opens the dropdown still gets a sensible answer: the bucket
+        follows the stage name until somebody changes it.
+      */}
+      <p className="mb-2 text-xs leading-snug text-muted-foreground">
+        Each stage also says whether a job in it is live, paused or done. That is what the map and
+        the project filters read, so a job at Invoiced stops showing as an active one.
+      </p>
       {drafts.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
           No stages yet.
@@ -143,8 +195,15 @@ export function PipelineStageEditor({
                   index={i}
                   holding={draft.id ? (countByStageId[draft.id] ?? 0) : 0}
                   canRemove={drafts.length > 1}
-                  onName={(name) => patch(draft.key, { name })}
+                  onName={(name) =>
+                    patch(draft.key, {
+                      name,
+                      // Only while nobody has said otherwise. See statusTouched.
+                      ...(draft.statusTouched ? {} : { status: defaultStatusForStageName(name) }),
+                    })
+                  }
                   onColor={(color) => patch(draft.key, { color })}
+                  onStatus={(status) => patch(draft.key, { status, statusTouched: true })}
                   onRemove={() => onChange(drafts.filter((d) => d.key !== draft.key))}
                 />
               ))}
@@ -162,7 +221,12 @@ export function PipelineStageEditor({
         onClick={() =>
           onChange([
             ...drafts,
-            { key: newKey(), name: "", color: nextPipelineStageColor(drafts.length) },
+            {
+              key: newKey(),
+              name: "",
+              color: nextPipelineStageColor(drafts.length),
+              status: "active",
+            },
           ])
         }
       >
@@ -182,6 +246,7 @@ function StageRow({
   canRemove,
   onName,
   onColor,
+  onStatus,
   onRemove,
 }: {
   draft: StageDraft;
@@ -190,6 +255,7 @@ function StageRow({
   canRemove: boolean;
   onName: (v: string) => void;
   onColor: (v: string) => void;
+  onStatus: (v: ProjectStatus) => void;
   onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -256,6 +322,29 @@ function StageRow({
         aria-label={`Stage ${index + 1} name`}
         className="h-8 min-w-0 flex-1"
       />
+
+      {/*
+        What a job standing here counts as. This is the whole reconciliation in
+        one control: the map, the filters and the counts read the bucket, the
+        board reads the stage, and this is where a team says which is which -
+        "Invoiced" is finished work even though the money has not landed.
+      */}
+      <Select value={draft.status} onValueChange={(v) => onStatus(v as ProjectStatus)}>
+        <SelectTrigger
+          aria-label={`What ${draft.name || `stage ${index + 1}`} counts as`}
+          title="What a job in this stage counts as on the map and in filters"
+          className="h-8 w-[104px] shrink-0 px-2 text-xs"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {PROJECT_STATUSES.map((s) => (
+            <SelectItem key={s} value={s} className="text-xs">
+              {PROJECT_STATUS_LABELS[s]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       <button
         type="button"

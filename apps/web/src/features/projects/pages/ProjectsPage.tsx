@@ -1,6 +1,7 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { PROJECT_STATUS_LABELS, type ProjectStatus } from "@sitepix/shared";
 import { qk } from "@/lib/query-keys";
 import { PhotoThumb } from "@/components/PhotoThumb";
 import {
@@ -830,14 +831,25 @@ export function ProjectsPage() {
   /**
    * The board's optimistic move, and its undo.
    *
-   * The write itself lives in the board view (one RPC, one field). This only
-   * moves the local row, which is all a re-render needs: a card's column is
-   * `pipeline_stage_id` and nothing else, so there is no second list to keep in
-   * step the way the tag boards needed.
+   * The write itself lives in the board view (one RPC, one field). This moves
+   * the local row, and with it the status: the stage owns the bucket now (see
+   * packages/shared/src/pipeline-stages.ts), so a card dragged to "Paid" has to
+   * lose its green Active badge in the same render, the way it does in the
+   * database. Passing `null` for the stage leaves the status alone - a job
+   * taken out of a pipeline keeps whatever it had counted as.
    */
   const setPipelineStageLocally = (projectId: string, stageId: string | null) => {
+    const bucket = stageId ? stageLookup[stageId]?.status : undefined;
     setAllProjects((ps) =>
-      ps.map((p) => (p.id === projectId ? { ...p, pipeline_stage_id: stageId } : p)),
+      ps.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              pipeline_stage_id: stageId,
+              status: bucket && p.status !== "archived" ? bucket : p.status,
+            }
+          : p,
+      ),
     );
   };
 
@@ -862,9 +874,14 @@ export function ProjectsPage() {
 
   /** Stage id to how it should be drawn, plus which pipeline it belongs to. */
   const stageLookup = useMemo(() => {
-    const out: Record<string, { name: string; color: string; boardName: string }> = {};
+    const out: Record<
+      string,
+      { name: string; color: string; boardName: string; status: ProjectStatus }
+    > = {};
     for (const b of boards) {
-      for (const s of b.stages) out[s.id] = { name: s.name, color: s.color, boardName: b.name };
+      for (const s of b.stages) {
+        out[s.id] = { name: s.name, color: s.color, boardName: b.name, status: s.status };
+      }
     }
     return out;
   }, [boards]);
@@ -2064,6 +2081,7 @@ function ProjectsList({
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {projects.map((p) => {
           const badge = statusBadge(p.status);
+          const stage = p.pipeline_stage_id ? stageLookup[p.pipeline_stage_id] : undefined;
           const cover = coverUrls[p.id];
           const photoCount = photoCounts[p.id] ?? 0;
           const reportCount = reportCounts[p.id] ?? 0;
@@ -2098,11 +2116,32 @@ function ProjectsList({
                     <span className="text-[10px] uppercase tracking-wider">No photos</span>
                   </div>
                 )}
+                {/*
+                  One badge, not two. This card used to carry the Active/On
+                  hold bucket here and the pipeline stage again lower down,
+                  which is the pair the client asked us to reconcile. The stage
+                  is the more precise of the two and now owns the other, so it
+                  is what the card shows wherever a team has one.
+                */}
                 <span
-                  className={`absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full ${badge.badgeClass} px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white shadow`}
+                  className={`absolute left-3 top-3 inline-flex max-w-[calc(100%-5rem)] items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white shadow ${stage ? "" : badge.badgeClass}`}
+                  style={
+                    stage
+                      ? { background: stage.color, color: stageChipTextColor(stage.color) }
+                      : undefined
+                  }
+                  title={
+                    stage
+                      ? `${stage.boardName}: ${stage.name}, which counts as ${statusBadge(p.status).label}`
+                      : undefined
+                  }
                 >
-                  <span className="h-1.5 w-1.5 rounded-full bg-white/90" />
-                  {badge.label}
+                  {stage ? (
+                    <GitBranch className="h-3 w-3 shrink-0" />
+                  ) : (
+                    <span className="h-1.5 w-1.5 rounded-full bg-white/90" />
+                  )}
+                  <span className="truncate">{stage ? stage.name : badge.label}</span>
                 </span>
                 <button
                   type="button"
@@ -2147,30 +2186,47 @@ function ProjectsList({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
-                      <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Set status
-                      </DropdownMenuLabel>
-                      <DropdownMenuItem
-                        disabled={p.status === "active"}
-                        onClick={() => onStatus(p.id, "active")}
-                      >
-                        <span className="mr-2 h-2 w-2 rounded-full bg-emerald-400" />
-                        Active
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={p.status === "on_hold"}
-                        onClick={() => onStatus(p.id, "on_hold")}
-                      >
-                        <span className="mr-2 h-2 w-2 rounded-full bg-amber-400" />
-                        On hold
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={p.status === "completed"}
-                        onClick={() => onStatus(p.id, "completed")}
-                      >
-                        <span className="mr-2 h-2 w-2 rounded-full bg-violet-400" />
-                        Completed
-                      </DropdownMenuItem>
+                      {/*
+                        A project standing in a pipeline takes its status from
+                        its stage, so these three are offered only where there
+                        is no stage to disagree with. Leaving both in was what
+                        the client saw on the project page: "there is another
+                        status also that says complete, Active or onhold. we
+                        have to reconcile between these two statuses."
+                      */}
+                      {stage ? (
+                        <DropdownMenuLabel className="text-[10px] font-normal normal-case leading-snug text-muted-foreground">
+                          At <span className="font-bold text-foreground">{stage.name}</span>, which
+                          counts as {badge.label.toLowerCase()}.
+                        </DropdownMenuLabel>
+                      ) : (
+                        <>
+                          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            Set status
+                          </DropdownMenuLabel>
+                          <DropdownMenuItem
+                            disabled={p.status === "active"}
+                            onClick={() => onStatus(p.id, "active")}
+                          >
+                            <span className="mr-2 h-2 w-2 rounded-full bg-emerald-400" />
+                            Active
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={p.status === "on_hold"}
+                            onClick={() => onStatus(p.id, "on_hold")}
+                          >
+                            <span className="mr-2 h-2 w-2 rounded-full bg-amber-400" />
+                            On hold
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={p.status === "completed"}
+                            onClick={() => onStatus(p.id, "completed")}
+                          >
+                            <span className="mr-2 h-2 w-2 rounded-full bg-violet-400" />
+                            Completed
+                          </DropdownMenuItem>
+                        </>
+                      )}
                       {/*
                       Moving a job along without opening the board.
 
@@ -2207,7 +2263,11 @@ function ProjectsList({
                                         className="mr-2 h-2.5 w-2.5 shrink-0 rounded-full"
                                         style={{ background: s.color }}
                                       />
-                                      <span className="truncate">{s.name}</span>
+                                      <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                                      {/* What moving there does to the status, before you move there. */}
+                                      <span className="ml-2 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                        {PROJECT_STATUS_LABELS[s.status]}
+                                      </span>
                                     </DropdownMenuItem>
                                   ))}
                                 </div>
@@ -2275,28 +2335,6 @@ function ProjectsList({
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
-
-                {/*
-                  Where the job is in its process, on the card.
-
-                  The stage lived only on the Pipelines tab until now, which
-                  made it feel like a property of the board rather than of the
-                  project. It is a field on the project, so it reads here too,
-                  and the same chip colour ties it back to its column.
-                */}
-                {p.pipeline_stage_id && stageLookup[p.pipeline_stage_id] && (
-                  <span
-                    className="inline-flex w-fit max-w-full items-center gap-1.5 truncate rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider"
-                    style={{
-                      background: stageLookup[p.pipeline_stage_id].color,
-                      color: stageChipTextColor(stageLookup[p.pipeline_stage_id].color),
-                    }}
-                    title={`${stageLookup[p.pipeline_stage_id].boardName}: ${stageLookup[p.pipeline_stage_id].name}`}
-                  >
-                    <GitBranch className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{stageLookup[p.pipeline_stage_id].name}</span>
-                  </span>
-                )}
 
                 {(p.labels ?? []).length > 0 && (
                   <div className="flex flex-wrap items-center gap-1">

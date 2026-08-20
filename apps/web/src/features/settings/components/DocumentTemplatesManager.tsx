@@ -181,6 +181,15 @@ interface EditorState {
    * and toasted, so a click made out of curiosity left a permanent card behind.
    */
   fresh?: boolean;
+  /**
+   * The name and body as they were the moment the editor opened.
+   *
+   * The only reliable answer to "has this been edited yet". Comparing against
+   * `template.body` does not work: `openForEdit` loads the html back through
+   * the API sanitiser, so the string in hand differs from the column it came
+   * from before anybody has touched anything, and every close would ask.
+   */
+  original: { name: string; html: string };
 }
 
 interface Props {
@@ -942,10 +951,13 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     setNewStyle("report");
     setNewCategory(GENERAL_CATEGORY);
     setItems((prev) => [data as unknown as DocumentTemplate, ...prev]);
+    const created = data as unknown as DocumentTemplate;
+    const createdBody = parseBody(created.body);
     setEditor({
-      template: data as unknown as DocumentTemplate,
-      name: (data as unknown as DocumentTemplate).name,
-      body: parseBody((data as unknown as DocumentTemplate).body),
+      template: created,
+      name: created.name,
+      body: createdBody,
+      original: { name: created.name, html: createdBody.html },
     });
   }
 
@@ -973,10 +985,12 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     const local = parseBody(t.body);
     try {
       const fresh = await getDocumentTemplate({ data: { templateId: t.id } });
+      const html = (fresh as { html?: string })?.html ?? "";
       setEditor({
         template: t,
         name: t.name,
-        body: { ...local, html: (fresh as { html?: string })?.html ?? "" },
+        body: { ...local, html },
+        original: { name: t.name, html },
       });
     } catch (e: any) {
       // Never fall back to the unsanitised local copy - that is the bug.
@@ -1098,36 +1112,57 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
      * the page - which is the thing being fixed. `persist` reloads the library,
      * and `closeEditor` deletes the row if nothing came of the edit.
      */
-    setEditor({ template: copy, name: copy.name, body: parseBody(copy.body), fresh: true });
+    const copyBody = parseBody(copy.body);
+    setEditor({
+      template: copy,
+      name: copy.name,
+      body: copyBody,
+      fresh: true,
+      original: { name: copy.name, html: copyBody.html },
+    });
   }
 
   /**
-   * Leave the editor, throwing away a copy that never became its own document.
+   * Leave the editor. Never silently, if there is anything to lose.
    *
-   * Only ever deletes a row this session created (`fresh`) and has not saved,
-   * so an existing template is never at risk. An edited-but-unsaved copy asks
-   * first: those edits are lost either way, but losing them silently AND losing
-   * the row is not something to do on a stray Escape.
+   * This used to discard an ordinary edit without a word. The `fresh` branch
+   * below asked before throwing away an unsaved COPY, because that also deletes
+   * a row - but editing a template you already own fell through to
+   * `setEditor(null)`, so every keystroke since the last Save went with it.
+   * Nothing on this screen autosaves, and the editor is opened from a dialog
+   * whose overlay is one stray click away from the document.
+   *
+   * The client, having done exactly that: "i just opened one to fill it out,
+   * when i clicked out of it accidentally the whole thing disappeared."
+   *
+   * So there are two questions now, in this order. Is there unsaved work? Ask.
+   * Is this a copy that never became a template? Say so, and delete the row.
+   * A clean editor still closes on the first press, because adding friction to
+   * "I opened this to look at it" is how confirmations start being ignored.
    */
   async function closeEditor() {
     const open = editor;
-    if (!open?.fresh || !open.template) {
+    if (!open) return;
+    const edited = open.body.html !== open.original.html || open.name !== open.original.name;
+
+    if (edited) {
+      const isCopy = Boolean(open.fresh && open.template);
+      const ok = await confirm({
+        title: isCopy ? "Discard this copy?" : "Discard your changes?",
+        description: isCopy
+          ? `"${open.template!.name}" hasn't been saved, so nothing is added to your templates.`
+          : `Your edits to "${open.name || "this template"}" haven't been saved. Closing now loses them.`,
+        confirmText: isCopy ? "Discard copy" : "Discard changes",
+        cancelText: "Keep editing",
+        variant: "destructive",
+      });
+      if (!ok) return;
+    }
+
+    if (!open.fresh || !open.template) {
       setEditor(null);
       return;
     }
-    const stored = parseBody(open.template.body);
-    const untouched = open.body.html === stored.html && open.name === open.template.name;
-    if (
-      !untouched &&
-      !(await confirm({
-        title: "Discard this copy?",
-        description: `"${open.template.name}" hasn't been saved, so nothing is added to your templates.`,
-        confirmText: "Discard copy",
-        cancelText: "Keep editing",
-        variant: "destructive",
-      }))
-    )
-      return;
     setEditor(null);
     const { error } = await supabase
       .from("document_templates" as any)
@@ -1700,7 +1735,9 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-3xl">
+        {/* Closes on the X, Cancel or Escape - not on a click past the edge,
+            which would take the name and the layout chosen with it. */}
+        <DialogContent onInteractOutside={(e) => e.preventDefault()} className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>New document template</DialogTitle>
           </DialogHeader>
@@ -1783,12 +1820,25 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
       <Dialog
         open={!!editor}
         onOpenChange={(v) => {
-          // Escape and the overlay close through the same path as the X, so a
-          // never-saved copy is cleaned up however the editor is left.
+          // Escape and Back close through one path, so a never-saved copy is
+          // cleaned up however the editor is left - and unsaved work is asked
+          // about however it is left, too. The overlay no longer closes at all.
           if (!v) void closeEditor();
         }}
       >
         <DialogContent
+          /*
+           * A click outside does nothing at all here.
+           *
+           * The surface is w-screen/h-screen, so "outside" is a few pixels of
+           * overlay at the edge and whatever sits under a menu that is closing
+           * - which is to say the only clicks that land there are accidents.
+           * Weighed against a document somebody has been typing into, with no
+           * autosave behind it, there is no version of that click worth
+           * honouring. Escape and Back still leave, and both ask first when
+           * there is unsaved work; this just stops the mouse from doing it.
+           */
+          onInteractOutside={(e) => e.preventDefault()}
           className="max-w-none w-screen h-screen p-0 gap-0 rounded-none border-0 sm:rounded-none [&>button]:hidden"
           style={{ background: "var(--muted)" }}
         >

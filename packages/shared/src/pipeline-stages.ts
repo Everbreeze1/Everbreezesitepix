@@ -24,9 +24,80 @@
  * name-normalising rule that decides when two names are the same name.
  */
 
+/**
+ * ONE STATUS, NOT TWO.
+ *
+ * The client, looking at a project header that showed both at once:
+ *
+ *   "Beside the statuses where Invoiced, Scheduled is, there is another status
+ *    also that says complete, Active or onhold. we have to reconcile between
+ *    these two statuses. The active onhold status is also on maps."
+ *
+ * They are right, and the header only made visible what the data already did.
+ * `projects.status` is a fixed three-value bucket that the map's pins, the
+ * project list's filters and every count on the dashboard are built on.
+ * `projects.pipeline_stage_id` is the team's own vocabulary, and it says the
+ * same thing in more detail: a job at "Paid" is not a live job, whatever its
+ * status column happened to say. Nothing kept the two in step, so a project
+ * could read Invoiced on its own page and Active on the map, and both were
+ * "right".
+ *
+ * The reconciliation, which 20260917000000_pipeline_stages.sql deliberately
+ * left as a later decision: THE STAGE OWNS THE STATUS. Every stage declares
+ * which of the three buckets a project standing in it counts as, moving a
+ * project to a stage writes both fields, and the buckets stay exactly what
+ * they always were for the map and the filters. A team with no pipeline sets
+ * the bucket directly, as before, because for them there is only ever one
+ * status to set.
+ *
+ * See supabase/migrations/20261005000000_pipeline_stage_status.sql, which adds
+ * the column, backfills it from these rules and makes the invariant a database
+ * trigger rather than a promise the clients keep.
+ */
+export const PROJECT_STATUSES = ["active", "on_hold", "completed"] as const;
+
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  active: "Active",
+  on_hold: "On hold",
+  completed: "Completed",
+};
+
+export function isProjectStatus(value: unknown): value is ProjectStatus {
+  return typeof value === "string" && (PROJECT_STATUSES as readonly string[]).includes(value);
+}
+
+/**
+ * Which bucket a stage counts as before anyone says otherwise.
+ *
+ * Used in three places that must agree: the migration seeds the new column
+ * with the same rules in SQL, the API falls back to it for a database where
+ * the migration has not been applied yet, and a stage typed into the editor
+ * starts here rather than at a blank choice.
+ *
+ * The guesses are only a starting point. "Snagging" and "Awaiting parts" mean
+ * nothing to a regular expression, which is exactly why the mapping is an
+ * editable field per stage instead of a rule hidden in code.
+ *
+ * Order matters: "On hold" is checked first, because a stage called "Complete
+ * - on hold for payment" is a held job.
+ */
+export function defaultStatusForStageName(name: string): ProjectStatus {
+  const n = normalizePipelineName(name);
+  if (!n) return "active";
+  if (/hold|paused|pause|waiting|awaiting|blocked|snooze|stalled|parked/.test(n)) return "on_hold";
+  if (/complete|finished|done|closed|cancelled|canceled|paid|invoiced|handover|delivered/.test(n)) {
+    return "completed";
+  }
+  return "active";
+}
+
 export interface PipelineStageSeed {
   name: string;
   color: string;
+  /** Which of the three buckets a project standing in this stage counts as. */
+  status: ProjectStatus;
 }
 
 /**
@@ -42,12 +113,14 @@ export interface PipelineStageSeed {
  * tests/pipeline-stages.test.ts.
  */
 export const DEFAULT_PIPELINE_STAGES: readonly PipelineStageSeed[] = [
-  { name: "Lead/Quoted", color: "#64748b" },
-  { name: "Scheduled", color: "#3b82f6" },
-  { name: "In Progress", color: "#f59e0b" },
-  { name: "Completed", color: "#10b981" },
-  { name: "Invoiced", color: "#8b5cf6" },
-  { name: "Paid", color: "#0f766e" },
+  { name: "Lead/Quoted", color: "#64748b", status: "active" },
+  { name: "Scheduled", color: "#3b82f6", status: "active" },
+  { name: "In Progress", color: "#f59e0b", status: "active" },
+  { name: "Completed", color: "#10b981", status: "completed" },
+  // Invoiced and Paid are bookkeeping on a job whose work is over. Counting
+  // them as live is what put finished jobs back on the map as green pins.
+  { name: "Invoiced", color: "#8b5cf6", status: "completed" },
+  { name: "Paid", color: "#0f766e", status: "completed" },
 ];
 
 /** Colour offered to a stage added beyond the defaults, cycled by position. */

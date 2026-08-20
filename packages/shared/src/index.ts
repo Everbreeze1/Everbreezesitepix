@@ -128,6 +128,10 @@ export {
   DEFAULT_PIPELINE_STAGES,
   PIPELINE_STAGE_COLORS,
   MAX_PIPELINE_STAGES,
+  PROJECT_STATUSES,
+  PROJECT_STATUS_LABELS,
+  defaultStatusForStageName,
+  isProjectStatus,
   nextPipelineStageColor,
   normalizePipelineName,
   samePipelineName,
@@ -136,4 +140,5 @@ export {
   pipelineNameMessage,
   type PipelineStageSeed,
   type PipelineNameIssue,
+  type ProjectStatus,
 } from "./pipeline-stages";

@@ -981,18 +981,19 @@ describe("copying is not how a template gets used", () => {
     );
     expect(block.length).toBeGreaterThan(200);
     // Only ever a row this session created and never saved.
-    expect(block).toMatch(/if \(!open\?\.fresh \|\| !open\.template\)/);
+    expect(block).toMatch(/if \(!open\.fresh \|\| !open\.template\)/);
     expect(block).toMatch(/\.delete\(\)/);
     // Edits that were never saved are still edits: they are confirmed away,
-    // not dropped on a stray Escape.
-    expect(block).toMatch(/const untouched =/);
+    // not dropped on a stray Escape. That guard covers an ordinary edit too
+    // now, so the flag it reads is `edited` rather than `untouched`.
+    expect(block).toMatch(/const edited =/);
     expect(block).toMatch(/await confirm\(/);
   });
 
   it("both ways out of the editor run that cleanup", () => {
     // The X inside the surface, and Escape / the overlay via the Dialog.
     expect(MANAGER).toContain("onClose={() => void closeEditor()}");
-    expect(MANAGER).toMatch(/onOpenChange=\{\(v\) => \{[\s\S]{0,200}void closeEditor\(\)/);
+    expect(MANAGER).toMatch(/onOpenChange=\{\(v\) => \{[\s\S]{0,400}void closeEditor\(\)/);
   });
 
   it("a document can improve the template it came from instead of adding one", () => {
@@ -1063,5 +1064,93 @@ describe("copying is not how a template gets used", () => {
     expect(block).toMatch(/defaultValue: clash \? nextCopyName\(title, taken\) : title/);
     // And it says what it is for, since the menu item alone reads like "save".
     expect(block).toMatch(/description:/);
+  });
+});
+
+/*
+ * "i just opened one to fill it out, when i clicked out of it accidentally the
+ * whole thing disappeared. I was filling out the header field etc."
+ *
+ * Two dialogs in this flow hold typing that exists nowhere else until a button
+ * is pressed, and both used to dismiss on any click that landed outside them.
+ * The rule these pin down is the same for both: a click outside is never
+ * destructive, and a deliberate close asks first when there is something to
+ * lose - but only then, because a confirmation on every close is a
+ * confirmation nobody reads.
+ */
+const USE_DIALOG = readFileSync(
+  join(ROOT, "apps/web/src/features/projects/components/UseTemplateDialog.tsx"),
+  "utf8",
+);
+
+describe("unsaved work survives a stray click", () => {
+  const stripComments = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+
+  it("the fill-in step does not close on a click outside it", () => {
+    /*
+     * The likeliest surface behind the report: a centred dialog with a 320px
+     * column of boxes, so most of a 1440px window is overlay - and the boxes
+     * are the document's header fields. Reopening does not bring them back
+     * either; the effect keyed on templateId resets all of them.
+     */
+    const src = stripComments(USE_DIALOG);
+    expect(src).toMatch(/onInteractOutside=\{\(e\) => e\.preventDefault\(\)\}/);
+  });
+
+  it("...and asks before throwing away what was typed, but only then", () => {
+    const src = stripComments(USE_DIALOG);
+    // A baseline to compare the title against, or "did they rename it" has no
+    // answer and the dialog either always asks or never does.
+    expect(src).toContain("suggestedTitle");
+    expect(src).toMatch(/const dirty =[\s\S]{0,200}Object\.values\(values\)\.some/);
+    // The guard is on the dirty flag, not on every close.
+    expect(src).toMatch(/dirty &&\s*!\(await confirm\(/);
+    // Escape, the X and Cancel all arrive at the same place.
+    expect(src).toMatch(/onOpenChange=\{\(v\) => \{[\s\S]{0,160}requestClose\(\)/);
+    expect(src).toMatch(/onClick=\{\(\) => void requestClose\(\)\}/);
+  });
+
+  it("the template editor asks before discarding an ordinary edit", () => {
+    /*
+     * The editor is w-screen/h-screen so there is no overlay to click, but
+     * Escape reached the same silent `setEditor(null)`. Only the unsaved-COPY
+     * branch ever asked, so editing a template the team already owned lost
+     * every keystroke since the last Save without a word.
+     */
+    const src = stripComments(MANAGER);
+    const block = src.slice(
+      src.indexOf("async function closeEditor"),
+      src.indexOf("async function assignTrade"),
+    );
+    expect(block.length).toBeGreaterThan(200);
+    // Dirtiness is measured against what was loaded, not against the stored
+    // row: openForEdit returns sanitised html, so the column never matches.
+    expect(block).toMatch(/open\.body\.html !== open\.original\.html/);
+    expect(block).toMatch(/open\.name !== open\.original\.name/);
+    // Asked for an edit as well as for a copy...
+    expect(block).toMatch(/if \(edited\)/);
+    expect(block).toContain("Discard your changes?");
+    expect(block).toContain("Discard this copy?");
+    // ...and not asked at all when nothing was touched.
+    expect(block).toMatch(/if \(!open\.fresh \|\| !open\.template\) \{\s*setEditor\(null\)/);
+  });
+
+  it("every way into the editor records what it opened with", () => {
+    // Without a baseline on all three, one of them would ask on every close.
+    const src = stripComments(MANAGER);
+    const opens = [...src.matchAll(/setEditor\(\{[\s\S]*?\}\);/g)].map((m) => m[0]);
+    expect(opens.length).toBeGreaterThanOrEqual(3);
+    for (const open of opens) {
+      expect(open, `an editor is opened without an original: ${open.slice(0, 80)}`).toContain(
+        "original:",
+      );
+    }
+  });
+
+  it("the editor and the New template dialog ignore clicks outside", () => {
+    const src = stripComments(MANAGER);
+    const guards = [...src.matchAll(/onInteractOutside=\{\(e\) => e\.preventDefault\(\)\}/g)];
+    expect(guards.length).toBe(2);
   });
 });

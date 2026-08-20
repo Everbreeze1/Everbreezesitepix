@@ -31,6 +31,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { qk } from "@/lib/query-keys";
 import { listProjectBoards, setProjectPipelineStage } from "@/lib/project-boards.functions";
+import { PROJECT_STATUSES, PROJECT_STATUS_LABELS } from "@sitepix/shared";
 
 /** The Select's stand-in for NULL: Radix reserves the empty string. */
 const NO_STAGE = "__none__";
@@ -107,6 +108,20 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
   });
   const boards = boardsQuery.data ?? [];
   const hasStages = boards.some((b) => b.stages.length > 0);
+
+  /*
+   * This form is the third place that used to offer both statuses at once, and
+   * the only one that could write them in the same submit. The stage owns the
+   * bucket (see packages/shared/src/pipeline-stages.ts), so where the form has
+   * a stage the Status select shows what that stage counts as and stops being
+   * editable, and the save leaves `status` out of the patch entirely - the
+   * stage write below sets it.
+   */
+  const selectedStage = form.pipeline_stage_id
+    ? boards.flatMap((b) => b.stages).find((s) => s.id === form.pipeline_stage_id)
+    : undefined;
+  const stageOwnsStatus = !!selectedStage;
+  const shownStatus = selectedStage ? selectedStage.status : form.status;
   const navigate = useNavigate();
   const confirm = useConfirm();
   const trash = softDeleteProject;
@@ -123,7 +138,9 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
       zip: form.zip.trim() || null,
       latitude: form.latitude,
       longitude: form.longitude,
-      status: form.status,
+      // Omitted where a stage decides it, so this save cannot contradict the
+      // stage write that follows.
+      ...(stageOwnsStatus ? {} : { status: form.status }),
       client_name: form.client_name.trim() || null,
       client_contact: form.client_contact.trim() || null,
       project_number: form.project_number.trim() || null,
@@ -164,7 +181,10 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
 
     setSaving(false);
     toast.success("Project updated");
-    onSaved({ ...project, ...patch, pipeline_stage_id: nextStage });
+    // `shownStatus` rather than the patch's: where a stage decided it, the
+    // patch does not carry a status at all, and the caller still has to repaint
+    // its header with the one the stage just wrote.
+    onSaved({ ...project, ...patch, status: shownStatus, pipeline_stage_id: nextStage });
     onOpenChange(false);
   };
 
@@ -208,16 +228,30 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
 
           <div className="space-y-1.5">
             <Label htmlFor="ep-status">Status</Label>
-            <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+            <Select
+              value={shownStatus}
+              onValueChange={(v) => setForm({ ...form, status: v })}
+              disabled={stageOwnsStatus}
+            >
               <SelectTrigger id="ep-status">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="on_hold">On hold</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
+                {PROJECT_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {PROJECT_STATUS_LABELS[s]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            {stageOwnsStatus && (
+              <p className="text-xs leading-snug text-muted-foreground">
+                Set by the stage below. {selectedStage!.name} counts as{" "}
+                {PROJECT_STATUS_LABELS[shownStatus as (typeof PROJECT_STATUSES)[number]] ??
+                  shownStatus}
+                , which is what the map and the project filters read.
+              </p>
+            )}
           </div>
 
           {hasStages && (
@@ -251,8 +285,8 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Where the job is in the process. Status above is the wider bucket; this tracks
-                movement inside it, and a project holds one stage at a time.
+                Where the job is in the process, one stage at a time. The stage sets the status
+                above, so the two can never say different things.
               </p>
             </div>
           )}

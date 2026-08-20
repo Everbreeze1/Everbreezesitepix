@@ -4,6 +4,8 @@ import { join, resolve } from "node:path";
 import {
   DEFAULT_PIPELINE_STAGES,
   MAX_PIPELINE_STAGES,
+  PROJECT_STATUSES,
+  defaultStatusForStageName,
   nextPipelineStageColor,
   normalizePipelineName,
   pipelineNameBlocks,
@@ -18,6 +20,9 @@ const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 const MIGRATION = read("supabase/migrations/20260917000000_pipeline_stages.sql");
 const DROP_TAGS = read("supabase/migrations/20260918000000_project_boards_drop_tag_ids.sql");
 const TEAM_SCOPE = read("supabase/migrations/20260920000000_pipeline_stage_team_scope.sql");
+const STATUS_MIGRATION = read("supabase/migrations/20260922000000_pipeline_stage_status.sql");
+const MAP_PAGE = read("apps/web/src/features/projects/pages/MapPage.tsx");
+const EDIT_DIALOG = read("apps/web/src/features/projects/components/EditProjectDialog.tsx");
 const API = read("apps/api/src/domains/projects/boards.ts");
 const BOARD_VIEW = read("apps/web/src/features/projects/components/PipelineBoardView.tsx");
 const STAGE_EDITOR = read("apps/web/src/features/projects/components/PipelineStageEditor.tsx");
@@ -25,7 +30,7 @@ const CREATE_DIALOG = read("apps/web/src/features/projects/components/CreateBoar
 const SETTINGS_SHEET = read("apps/web/src/features/projects/components/BoardSettingsSheet.tsx");
 const ADD_DIALOG = read("apps/web/src/features/projects/components/AddProjectToStageDialog.tsx");
 const PROJECTS_PAGE = read("apps/web/src/features/projects/pages/ProjectsPage.tsx");
-const STAGE_CHIP = read("apps/web/src/features/projects/components/ProjectStageChip.tsx");
+const STATUS_CHIP = read("apps/web/src/features/projects/components/ProjectStatusChip.tsx");
 const TAB_STRIP = read("apps/web/src/features/projects/components/PipelineTabStrip.tsx");
 const EDGE_SCROLL = read("apps/web/src/hooks/use-edge-scroll.ts");
 const DETAIL_PAGE = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
@@ -322,8 +327,8 @@ describe("pipeline stages", () => {
       // on the one screen that draws it as a column.
       expect(PROJECTS_PAGE).toContain("stageLookup[p.pipeline_stage_id]");
       expect(PROJECTS_PAGE).toContain("Set pipeline stage");
-      expect(STAGE_CHIP).toContain("setProjectPipelineStage");
-      expect(DETAIL_PAGE).toContain("<ProjectStageChip");
+      expect(STATUS_CHIP).toContain("setProjectPipelineStage");
+      expect(DETAIL_PAGE).toContain("<ProjectStatusChip");
     });
 
     it("filters the project list by stage, and by having no stage at all", () => {
@@ -349,9 +354,11 @@ describe("pipeline stages", () => {
       expect(SETTINGS_SHEET).toContain("{!looksStandard && (");
     });
 
-    it("hides the stage control entirely when the team has no pipeline", () => {
-      // A dead dropdown is worse than no dropdown.
-      expect(STAGE_CHIP).toContain("if (boards.length === 0) return null;");
+    it("offers no stage row at all when the team has no pipeline", () => {
+      // A dead dropdown is worse than no dropdown. The chip still opens, and
+      // for a team with no pipeline it holds the three buckets and nothing
+      // else, which for them is the only status there has ever been.
+      expect(STATUS_CHIP).toContain("{boards.length > 0 && (");
       expect(PROJECTS_PAGE).toContain("stageOptions.length > 0 &&");
     });
   });
@@ -478,6 +485,199 @@ describe("pipeline stages", () => {
     it("shares one scroller with the pipeline tabs, so both behave the same", () => {
       expect(BOARD_VIEW).toContain("useEdgeScroll");
       expect(TAB_STRIP).toContain("useEdgeScroll");
+    });
+  });
+});
+
+/*
+ * The client's third round, after using the reconciled header:
+ *
+ *   "Beside the statuses where Invoiced, Scheduled is, there is another status
+ *    also that says complete, Active or onhold. we have to reconcile between
+ *    these two statuses. The active onhold status is also on maps."
+ *
+ * 20260917000000_pipeline_stages.sql had left this open on purpose ("merging
+ * them later stays a decision rather than an unpick"). This is the decision:
+ * the stage owns the bucket, the bucket stays what the map and the filters
+ * read, and no screen offers both at once.
+ */
+describe("one status, not two", () => {
+  describe("a stage says what a job in it counts as", () => {
+    it("gives every default stage a bucket, and the finished ones are not live", () => {
+      expect(DEFAULT_PIPELINE_STAGES.map((s) => [s.name, s.status])).toEqual([
+        ["Lead/Quoted", "active"],
+        ["Scheduled", "active"],
+        ["In Progress", "active"],
+        ["Completed", "completed"],
+        ["Invoiced", "completed"],
+        ["Paid", "completed"],
+      ]);
+    });
+
+    it("guesses the same bucket from the name that the default set declares", () => {
+      // Boards seeded by the older migration get their statuses from the name
+      // rule instead of from this list, so the two have to land in the same
+      // place or a migrated team sees different buckets from a new one.
+      for (const s of DEFAULT_PIPELINE_STAGES) {
+        expect(defaultStatusForStageName(s.name), s.name).toBe(s.status);
+      }
+    });
+
+    it("reads a held job as held, whatever the punctuation", () => {
+      for (const name of ["On hold", "on-hold", "ON HOLD", "Awaiting parts", "Parked"]) {
+        expect(defaultStatusForStageName(name), name).toBe("on_hold");
+      }
+      // Held wins over finished: a stage that says both is a job that is stopped.
+      expect(defaultStatusForStageName("Complete - on hold for payment")).toBe("on_hold");
+    });
+
+    it("falls back to live for a name that means nothing to a regular expression", () => {
+      for (const name of ["Snagging", "Site visit", "Phase 2", ""]) {
+        expect(defaultStatusForStageName(name), name).toBe("active");
+      }
+    });
+
+    it("uses the same rules in SQL that the shared module uses in TypeScript", () => {
+      // Two copies of the mapping is one copy plus a future disagreement. The
+      // SQL needs its own because it seeds the column before any TypeScript runs.
+      const source = read("packages/shared/src/pipeline-stages.ts");
+      const held = /if \(\/([^/]+)\/\.test\(n\)\) return "on_hold";/.exec(source);
+      const done = /if \(\/([^/]+)\/\.test\(n\)\) \{\s*return "completed";/.exec(source);
+      expect(held, "the on_hold pattern").toBeTruthy();
+      expect(done, "the completed pattern").toBeTruthy();
+      expect(STATUS_MIGRATION).toContain(held![1]);
+      expect(STATUS_MIGRATION).toContain(done![1]);
+      // And the same normalising the unique indexes use, so "On Hold",
+      // "on-hold" and "ON HOLD" are one name in both places.
+      expect(STATUS_MIGRATION).toContain("regexp_replace(lower(name), '[^a-z0-9]', '', 'g')");
+    });
+  });
+
+  describe("the status migration", () => {
+    it("adds the column with the three buckets and nothing else", () => {
+      expect(STATUS_MIGRATION).toContain("ADD COLUMN status text NOT NULL DEFAULT 'active'");
+      expect(STATUS_MIGRATION).toContain("CHECK (status IN ('active', 'on_hold', 'completed'))");
+      for (const s of PROJECT_STATUSES) expect(STATUS_MIGRATION).toContain(`'${s}'`);
+    });
+
+    it("reconciles the work that already exists rather than only the next move", () => {
+      expect(STATUS_MIGRATION).toContain("UPDATE public.projects p");
+      expect(STATUS_MIGRATION).toContain("WHERE p.pipeline_stage_id = ps.id");
+    });
+
+    it("never overwrites a mapping a team has since edited", () => {
+      // Applied by hand in the SQL editor, so it will be re-run. The seeding
+      // and the backfill are gated on the column being new.
+      expect(STATUS_MIGRATION).toContain("information_schema.columns");
+      expect(STATUS_MIGRATION).toContain("IF NOT fresh THEN");
+    });
+
+    it("leaves an archived job archived", () => {
+      // Archiving is a different lifecycle with its own menu item. Dragging a
+      // card is not a reason to put an archived job back on the active list.
+      const guards = STATUS_MIGRATION.match(/<> 'archived'/g) ?? [];
+      expect(guards.length).toBeGreaterThanOrEqual(2);
+      expect(STATUS_MIGRATION).toContain("IF NEW.status = 'archived' THEN");
+    });
+
+    it("makes the rule the database's, not each client's", () => {
+      expect(STATUS_MIGRATION).toContain(
+        "BEFORE INSERT OR UPDATE OF pipeline_stage_id ON public.projects",
+      );
+      expect(STATUS_MIGRATION).toContain("AFTER UPDATE OF status ON public.pipeline_stages");
+    });
+
+    it("does not re-stamp a status when the stage did not actually change", () => {
+      expect(STATUS_MIGRATION).toContain(
+        "NEW.pipeline_stage_id IS NOT DISTINCT FROM OLD.pipeline_stage_id",
+      );
+    });
+  });
+
+  describe("the API", () => {
+    it("carries the status with the move, in the same write", () => {
+      expect(API).toContain("patch.status = nextStatus");
+      expect(API).toContain("return { ok: true, stageId: data.stageId, status: nextStatus }");
+    });
+
+    it("does not un-archive a project by moving its card", () => {
+      expect(API).toContain('currentStatus !== "archived"');
+    });
+
+    it("serves pipelines on a database that has not had the migration applied", () => {
+      // The column is new and migrations here are applied by hand, so there is
+      // a window where this build is live and the column is not there.
+      // Selecting it blind would take the Pipelines tab down for that window.
+      expect(API).toContain("mentionsMissingStatusColumn");
+      expect(API).toContain("defaultStatusForStageName(r.name)");
+    });
+
+    it("resolves a bucket for every stage it writes", () => {
+      expect(API).toContain("status: stage.status ?? defaultStatusForStageName(stage.name)");
+    });
+  });
+
+  describe("no screen offers both statuses at once", () => {
+    it("puts one chip in the project header, not two", () => {
+      expect(DETAIL_PAGE).toContain("<ProjectStatusChip");
+      expect(DETAIL_PAGE).not.toContain("<ProjectStageChip");
+      expect(STATUS_CHIP).toContain("setProjectPipelineStage");
+    });
+
+    it("hides the three buckets while a stage is deciding them", () => {
+      // Offering both is offering a way to make them disagree again.
+      expect(STATUS_CHIP).toContain("{current ? (");
+      expect(STATUS_CHIP).toContain("counts as");
+      expect(PROJECTS_PAGE).toContain("{stage ? (");
+    });
+
+    it("does not flash the bucket at a job whose stage has not loaded yet", () => {
+      // The pipelines arrive a moment after the project does. Falling back to
+      // the bucket in that gap shows "Active" on a job the team calls
+      // "Invoiced" - a smaller version of the confusion being removed here.
+      expect(STATUS_CHIP).toContain("const stagePending = !!stageId && !current");
+      expect(STATUS_CHIP).toContain("if (stagePending) {");
+    });
+
+    it("says what a move will do to the bucket before the move is made", () => {
+      expect(STATUS_CHIP).toContain("PROJECT_STATUS_LABELS[s.status]");
+      expect(PROJECTS_PAGE).toContain("PROJECT_STATUS_LABELS[s.status]");
+    });
+
+    it("labels a project card with its stage, and keeps one badge", () => {
+      expect(PROJECTS_PAGE).toContain("{stage ? stage.name : badge.label}");
+      // The second copy, lower down the card, is gone rather than restyled.
+      expect(PROJECTS_PAGE).not.toContain("stageLookup[p.pipeline_stage_id].boardName}:");
+    });
+
+    it("moves the card's badge and its status together, in one render", () => {
+      expect(PROJECTS_PAGE).toContain("const bucket = stageId ? stageLookup[stageId]?.status");
+    });
+
+    it("names a pin on the map the way the project page names it", () => {
+      // "The active onhold status is also on maps" - so the map had to learn
+      // the same vocabulary. Colours stay on the three buckets, which is what
+      // makes one legend cover every pipeline a team invents.
+      expect(MAP_PAGE).toContain("pipeline_stage_id");
+      expect(MAP_PAGE).toContain("stage ? stage.name :");
+      expect(MAP_PAGE).toContain("Pipeline stages roll up into these three.");
+    });
+
+    it("keeps the edit form from writing a status the stage disagrees with", () => {
+      // The one screen that could write both fields in a single submit.
+      expect(EDIT_DIALOG).toContain("stageOwnsStatus ? {} : { status: form.status }");
+      expect(EDIT_DIALOG).toContain("disabled={stageOwnsStatus}");
+      // And it seeds itself from the project in a useState initialiser, so it
+      // has to be mounted when it opens rather than kept alive behind the page:
+      // otherwise it offers to write back whatever the status was at page load.
+      expect(DETAIL_PAGE).toContain("{project && editOpen && (");
+    });
+
+    it("lets a team say what their own stage counts as", () => {
+      expect(STAGE_EDITOR).toContain("onStatus");
+      expect(STAGE_EDITOR).toContain("PROJECT_STATUS_LABELS[s]");
+      // And follows the name until they say otherwise, so nobody has to.
+      expect(STAGE_EDITOR).toContain("draft.statusTouched ? {} : { status:");
     });
   });
 });
