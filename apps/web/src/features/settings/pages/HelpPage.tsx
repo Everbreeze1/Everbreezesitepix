@@ -3,10 +3,14 @@ import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Camera,
+  CheckSquare,
   ClipboardCheck,
+  FolderKanban,
+  FolderOpen,
   Workflow,
   Video,
   FileText,
+  Layers,
   Users,
   LayoutTemplate,
   Sparkles,
@@ -40,46 +44,180 @@ type Category = {
   guides: Guide[];
 };
 
+/*
+ * These articles are written against the app as it is, not as it once was.
+ * Three failure modes had accumulated, and they are the ones to check for the
+ * next time this file is edited:
+ *
+ *   1. A thing was renamed and the article kept the old word. "Report issue"
+ *      became Feedback, Showcases became Portfolio, and the AI stopped having
+ *      a product name at all.
+ *   2. A thing was rebuilt and the article kept the old steps. Roles went from
+ *      Owner/Admin/Member/Viewer to the matrix in
+ *      packages/shared/src/team-permissions.ts - Owner, Admin, Manager,
+ *      Standard, Restricted - plus a subcontractor tier that is not a team
+ *      role at all and does not occupy a seat.
+ *   3. A thing shipped and no article followed. Blueprints, Portfolio and
+ *      Tasks were entirely undocumented, which is worse than a stale article:
+ *      searching for them returned nothing, so the page implied they did not
+ *      exist.
+ *
+ * Plan gates and role gates are stated in the article rather than left for
+ * someone to discover at the moment they press the button.
+ */
 const CATEGORIES: Category[] = [
+  {
+    id: "projects",
+    title: "Projects & pipelines",
+    icon: FolderKanban,
+    blurb: "Create jobs, group them, and move them through your stages.",
+    guides: [
+      {
+        id: "create-project",
+        title: "Create a project",
+        summary: "Start a job from a blueprint, or from blank.",
+        steps: [
+          "Open Projects in the sidebar and click Create project.",
+          "On the Team plan the first step is choosing a blueprint. Pick one, or Start blank. If your trade has a default blueprint it is already selected for you.",
+          "Enter the address (this is what pins the job on the Map), then the project name, client and job number.",
+          "Click Create & start taking photos. Everything the blueprint carries is created on the project straight away.",
+        ],
+        tips: [
+          "Below the Team plan there is no blueprint step, so you go straight to the details form.",
+        ],
+      },
+      {
+        id: "project-tabs",
+        title: "What each project tab holds",
+        summary:
+          "Photos, Documents, Reports, Checklists, Walkthroughs, Workflows, Tasks, Calendar.",
+        steps: [
+          "Photos: everything captured on the job. Select photos here to tag, share, or generate a document from them.",
+          "Documents: paperwork produced from your document templates.",
+          "Reports: client-ready PDFs and AI summaries.",
+          "Checklists and Workflows: the work the crew runs on site.",
+          "Tasks: who is doing what, by when.",
+          "Calendar: the same photos laid out by the day they were taken.",
+        ],
+      },
+      {
+        id: "project-groups",
+        title: "Group related projects",
+        summary: "Bundle jobs that belong to one client or programme.",
+        steps: [
+          "Open Projects, switch to the Groups tab and click New Group.",
+          "Name it (for example, Starbucks Locations) and add a description.",
+          "Add the projects that belong to it, then open the group for a view across all of them at once.",
+        ],
+      },
+      {
+        id: "pipelines",
+        title: "Track jobs on a pipeline",
+        summary: "Drag a project from one stage to the next.",
+        steps: [
+          "Open Projects, switch to the Pipelines tab and click New Pipeline.",
+          "Name the pipeline and set its stages, in the order work moves through them.",
+          "Add projects to the board. Each project sits in one stage at a time, and dragging its card is what changes that stage.",
+        ],
+      },
+    ],
+  },
   {
     id: "photos",
     title: "Photo capture & tagging",
     icon: Camera,
-    blurb: "Snap, annotate, geotag, and organize photos.",
+    blurb: "Capture, annotate, tag and organise site photos.",
     guides: [
       {
         id: "capture",
         title: "Capture photos on site",
-        summary: "Take photos from any project without leaving the app.",
+        summary: "Shoot into a project without leaving the app.",
         steps: [
-          "Open a project and tap the floating camera button in the bottom-right.",
-          "Snap one or more shots - each is geotagged and timestamped automatically.",
-          "Add an optional caption or voice note before saving.",
-          "Photos sync in the background; you can keep shooting offline.",
+          "Open a project and tap the round camera button at the bottom-right. From anywhere else in the app, the same button shoots into your most recent project.",
+          "Choose a capture mode along the bottom: Picture, Before/After, Untagged, Scan, Video or Walkthrough. Measure is on the Pro and Team plans.",
+          "Take the shot, then add a caption (there is a Voice button if you would rather dictate it) and any tags.",
+          "Save. Photos are geotagged and timestamped automatically, and upload in the background.",
         ],
-        tips: ["Long-press the camera button to record video instead of a still."],
+        tips: [
+          "Scan mode boosts contrast for documents and can be exported as a single-page PDF.",
+          "Video and Walkthrough hand off to the walkthrough recorder, which captures narration alongside the photos.",
+        ],
       },
       {
         id: "annotate",
         title: "Annotate & mark up a photo",
         summary: "Draw arrows, circles, and text directly on any photo.",
         steps: [
-          "Open the photo in the lightbox from the Gallery or project view.",
-          "Click the pencil icon to enter the annotator.",
-          "Pick a color and tool (arrow, box, freehand, text), draw, then Save.",
-          "The annotated copy replaces the thumbnail; the original is kept.",
+          "Open the photo from the Gallery or a project, then click the pencil (Annotate).",
+          "Pick a tool: Freehand, Line, Arrow, Circle, Rectangle, Text or Timestamp. Measure is on the Pro and Team plans.",
+          "Crop, rotate and adjust sit in the same toolbar.",
+          "Save. The mark-up is stored as a new photo captioned “Annotated: …”, so the original is left untouched.",
         ],
       },
       {
         id: "tags",
         title: "Tag photos & bulk-tag",
-        summary: "Group photos by trade, area, or custom label.",
+        summary: "Group photos by trade, area, or custom tag.",
         steps: [
           "Select one or more photos and click Tag in the action bar.",
-          "Pick existing tags or create a new one (colors are auto-assigned).",
-          "Filter the Gallery by tag using the chips at the top.",
+          "Tick any existing tags, or type into Add new tag to create one on the spot.",
+          "Filter the Gallery by tag from the Tags chip in the toolbar.",
         ],
-        tips: ["Manage the full tag catalog in Account → Labels & tags."],
+        tips: [
+          "Photo tags and project labels are two different catalogues. Labels, which file projects and templates by trade, region or priority, are managed under Templates, Labels tab.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "tasks",
+    title: "Tasks",
+    icon: CheckSquare,
+    blurb: "Assign work, set priorities and due dates, and track it to done.",
+    guides: [
+      {
+        id: "create-task",
+        title: "Create and assign a task",
+        summary: "Assignee, priority, due date, and the photos it is about.",
+        steps: [
+          "Open a project and go to the Tasks tab.",
+          "Type into “Add a task” and press Enter for a quick one, or click Add task for the full form.",
+          "Set the assignee. One person holds a task; anyone else you want kept in the loop is copied in from the task's Activity.",
+          "Set a priority (Low, Normal, High or Urgent) and a due date.",
+          "Attach photos if the task is about something you have already shot, then save.",
+        ],
+        tips: [
+          "If the person you assign has not confirmed their email address yet, you get a warning before it saves. They still receive the email about it.",
+        ],
+      },
+      {
+        id: "task-status",
+        title: "Move a task through its statuses",
+        summary: "Open, In progress, Done.",
+        steps: [
+          "Click the status circle on a task row to advance it.",
+          "The counts above the list are filters: click one to show only those tasks.",
+          "A task with photos attached is completed by its photos, so ticking off the last photo closes the task.",
+        ],
+      },
+      {
+        id: "task-bulk",
+        title: "Change many tasks at once",
+        summary: "Reassign or re-date a whole selection in one go.",
+        steps: [
+          "Tick the checkbox on several tasks. A bulk bar appears.",
+          "Set the assignee, priority, due date or status for the entire selection.",
+        ],
+      },
+      {
+        id: "task-notifications",
+        title: "Who gets told about a task",
+        summary: "What triggers an email, and how to change it.",
+        steps: [
+          "Assigning a task emails the assignee. Comments and mentions in a task's Activity notify the people on it.",
+          "Each person controls their own email under Account & settings, Notifications: tasks assigned to me, comments and mentions, tasks I am copied in on, and work I assigned is done.",
+          "The in-app bell always shows everything, whether or not email is switched on.",
+        ],
       },
     ],
   },
@@ -87,26 +225,30 @@ const CATEGORIES: Category[] = [
     id: "checklists",
     title: "Checklists",
     icon: ClipboardCheck,
-    blurb: "Simple task lists for QA, punch, and safety walks.",
+    blurb: "Flat task lists for QA, punch, and safety walks.",
     guides: [
       {
         id: "apply-checklist",
-        title: "Apply a checklist to a project",
-        summary: "Use a saved template or start from scratch.",
+        title: "Add a checklist to a project",
+        summary: "Use a saved template, or start from blank.",
         steps: [
-          "From a project page, open the Checklists tab.",
-          "Click New checklist → pick a template or Blank.",
-          "Assign items to teammates and check them off as you complete work.",
+          "Open a project and go to the Checklists tab.",
+          "Click New checklist. Choose Blank checklist to type your own items, or pick one of your saved templates from the same menu.",
+          "Work through the items on site. Each one records who completed it and when.",
         ],
       },
       {
         id: "create-checklist-template",
         title: "Create a reusable checklist template",
-        summary: "Save a checklist so your whole team can apply it to any project.",
+        summary: "Save a checklist so the whole team can apply it to any project.",
         steps: [
-          "Go to Templates (sidebar) → Checklists → New template.",
-          "Name the template and add items. Set an item type (text, photo required, sign-off).",
-          "Click Save. The template is now available on every project.",
+          "Open Templates in the sidebar, go to the Checklists tab, then click New template.",
+          "Name the template and add its items.",
+          "Give each item an answer type: Checkbox, Pass / Fail, Yes / No, Rating (1-5), Numeric, or Text / Notes.",
+          "Mark the items the crew must answer as required, then save. The template is now offered on every project.",
+        ],
+        tips: [
+          "Templates need the Pro or Team plan. Creating and editing them needs the Owner or Admin role.",
         ],
       },
     ],
@@ -115,37 +257,38 @@ const CATEGORIES: Category[] = [
     id: "workflows",
     title: "Workflows",
     icon: Workflow,
-    blurb: "Multi-phase standardized processes with sign-offs.",
+    blurb: "Multi-phase processes with photo prompts and sign-offs.",
     guides: [
       {
         id: "workflow-vs-checklist",
-        title: "Workflows vs Checklists - what's the difference?",
-        summary: "Both track work; workflows add structure.",
+        title: "Workflows vs Checklists: what's the difference?",
+        summary: "Both track work; workflows add phases and sign-off.",
         steps: [
-          "Checklists are a single flat task list - good for QA or punch items.",
-          "Workflows are multi-phase processes (e.g. Install: Site Assessment → Removal → Installation → Testing → Sign-off).",
-          "Each workflow phase can contain its own checklists, required photos, and sign-offs.",
+          "A checklist is a single flat list of items, good for QA, punch lists and safety walks.",
+          "A workflow is a multi-phase process, for example Site assessment, then Removal, then Installation, then Testing, then Sign-off.",
+          "Each phase holds its own steps, and can require a signature before the job moves on.",
         ],
       },
       {
         id: "create-workflow",
         title: "Create a workflow template",
-        summary: "Design a repeatable multi-step job process.",
+        summary: "Design a repeatable multi-phase job process.",
         steps: [
-          "Go to Templates → Workflows → New workflow.",
-          "Name the workflow, then add phases in order.",
-          "In each phase, add checklist items, required photos, and sign-offs.",
-          "Click Save to publish. Apply it to any project from the Workflows tab.",
+          "Open Templates in the sidebar, go to the Workflows tab and click New workflow.",
+          "Name it, then add phases in the order the work actually happens.",
+          "Inside a phase, add steps. A step is a Checklist item (the crew ticks it off), a Photo prompt (the crew must capture a photo), or a Note field (the crew types a short answer).",
+          "Tick Requires sign-off on any phase that has to be signed before the next one starts, then save.",
         ],
       },
       {
         id: "track-workflow",
-        title: "Track workflow progress on a project",
-        summary: "Move through phases as work is completed.",
+        title: "Run a workflow on a project",
+        summary: "Move through the phases as work is completed.",
         steps: [
-          "Open a project → Workflows tab and select the active workflow.",
-          "Complete items inside the current phase.",
-          "When a phase is fully complete, mark it done to unlock the next one.",
+          "Open a project, go to the Workflows tab and click Add workflow.",
+          "Pick one of your workflow templates. Workflows always start from a template, so if the menu is empty, build one under Templates first.",
+          "Complete the steps in the current phase, capture the photos it asks for, and collect the sign-off.",
+          "Finishing a phase unlocks the next one.",
         ],
       },
     ],
@@ -159,119 +302,294 @@ const CATEGORIES: Category[] = [
       {
         id: "record-walkthrough",
         title: "Record a walkthrough",
-        summary: "Capture a narrated video tour of the site.",
+        summary: "Capture a narrated tour of the site.",
         steps: [
-          "From a project, open Walkthroughs → New walkthrough.",
-          "Allow camera & microphone access and start recording.",
-          "Narrate as you walk; tap Stop when finished.",
-          "The walkthrough uploads automatically and generates a shareable link.",
+          "Open a project, go to the Walkthroughs tab and click Record walkthrough.",
+          "Allow camera and microphone access, then narrate as you walk.",
+          "Stop when you are finished. The recording uploads and the narration is turned into a summary automatically.",
+        ],
+        tips: [
+          "Recording is on the Pro and Team plans. A walkthrough can run up to 10 minutes on Pro and 20 minutes on Team.",
         ],
       },
       {
         id: "share-walkthrough",
         title: "Share a walkthrough with a client",
-        summary: "Send a link - no login required.",
+        summary: "Send a link, no login required.",
         steps: [
-          "Open the walkthrough and click Share.",
-          "Copy the public link and send it via email or text.",
-          "Clients can view (and download a PDF summary) without signing up.",
+          "Open the walkthrough and click Share. That switches on a public link and copies it.",
+          "Click PDF to download the same summary as a document instead.",
+          "Anyone with the link can view it without an account. Switch the link off again whenever you like.",
         ],
       },
     ],
   },
   {
     id: "reports",
-    title: "Reports",
+    title: "Reports & documents",
     icon: FileText,
-    blurb: "Client-ready PDFs from photos, notes, and checklists.",
+    blurb: "Client-ready PDFs and paperwork built from your photos.",
     guides: [
       {
         id: "create-report",
-        title: "Create a report",
+        title: "Build a report",
         summary: "Turn project photos and notes into a branded PDF.",
         steps: [
-          "From a project → Reports tab → New report.",
-          "Pick photos, add sections, and drag to reorder.",
-          "Let AI auto-draft captions and summaries if you want.",
-          "Preview, then Save. Share via link or download as PDF.",
+          "Open a project, go to the Reports tab and click New report.",
+          "Choose a starting point: blank, one of the built-in starters, or one of your team's saved report templates.",
+          "Add photo sections, drag to reorder them, and set the cover page.",
+          "Preview, then save. Share it by link or download the PDF.",
         ],
       },
       {
-        id: "auto-report",
-        title: "AI-generated site logs & walkthrough reports",
-        summary: "Let AI draft a first pass for you.",
+        id: "generate-document",
+        title: "Generate a document from photos",
+        summary: "One menu, four outputs, all AI-drafted.",
         steps: [
-          "In a project's Documents tab, open Site Logs and pick photos.",
-          "AI scans photos, tags, and any voice notes and drafts a structured recap.",
-          "Review, edit any section, and export a branded PDF.",
+          "Select photos in a project or in the Gallery, then click Generate.",
+          "Summary writes a short shareable brief. It is saved under Walkthroughs and listed in Reports.",
+          "Daily Log writes quick internal bullets, and Report writes a client-ready document with a title page, summary, photo sections and conclusion. Both are saved under Reports.",
+          "Under the Documents heading of the same menu you can generate from one of your document templates instead, which fills the project's details in for you.",
+        ],
+        tips: [
+          "Generating from the document library needs the Pro or Team plan. If a draft fails, the item is still saved without the AI text and tells you so.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "blueprints",
+    title: "Project blueprints",
+    icon: FolderOpen,
+    blurb: "One bundle that sets a whole job up in a single click.",
+    guides: [
+      {
+        id: "blueprint-what",
+        title: "What a blueprint is",
+        summary: "The whole job setup, bundled and reusable.",
+        steps: [
+          "A blueprint is a complete job setup in one bundle: the checklists the crew runs, the workflows it follows, the walkthrough shot lists it works to, the paperwork it produces, and the labels that file it.",
+          "The pieces themselves live on the other Templates tabs. A blueprint only bundles references to them, so editing a checklist template updates every blueprint that uses it.",
+          "Blueprints are the first tab of Templates, called Project blueprints.",
+        ],
+      },
+      {
+        id: "create-blueprint",
+        title: "Create a blueprint",
+        summary: "Start from a pre-built one, or build your own.",
+        steps: [
+          "Open Templates in the sidebar. You land on Project blueprints.",
+          "Click “Start from a pre-built blueprint” to install a complete worked example, or New blueprint to build your own.",
+          "With the blueprint selected, add sections from the picker: checklists, workflows, walkthroughs, documents, reports and label sets.",
+          "Drag the sections into the order you want them created in.",
+        ],
+        tips: [
+          "Set a Trade on the blueprint and tick “Default for that trade”, and a new project of that trade starts pre-selected on it. Only one blueprint per trade can be the default.",
+        ],
+      },
+      {
+        id: "apply-blueprint",
+        title: "Apply a blueprint to projects",
+        summary: "One click on a new job, or a dozen already running.",
+        steps: [
+          "Select the blueprint and click Apply to projects.",
+          "Tick one project or a dozen. Nothing is created until you confirm.",
+          "Everything lands in the matching project tab, pre-filled with that project's details. The result screen lists exactly what was created on each job.",
+          "To start a fresh job from it instead, use More actions, then New project from this.",
+        ],
+        tips: [
+          "Building blueprints is available on Pro and Team. Applying them to projects is a Team plan feature, enforced on the server as well as in the app.",
         ],
       },
     ],
   },
   {
     id: "templates",
-    title: "Templates",
+    title: "Templates library",
     icon: LayoutTemplate,
-    blurb: "Central library for reusable checklists and workflows.",
+    blurb: "The shared library every project draws from.",
     guides: [
       {
         id: "templates-hub",
         title: "Templates hub",
-        summary: "One place to manage every template your team uses.",
+        summary: "Eight tabs, one place to manage every reusable piece.",
         steps: [
-          "Open Templates in the sidebar.",
-          "Tabs: Checklists, Workflows, Reports.",
-          "Create, edit, duplicate, or delete templates here.",
-          "You can also create & edit templates directly from any project - you'll be returned to the project when you save.",
+          "Open Templates in the sidebar. Project blueprints comes first, and bundles everything below it into one job setup.",
+          "Checklists holds flat item lists. Workflows holds multi-phase processes with sign-offs.",
+          "Walkthroughs holds shot lists: the sequence of shots a crew works through, so the same job is documented the same way every time.",
+          "Documents holds Word-style templates with placeholders that auto-fill from project data. Reports holds report layouts.",
+          "Label sets bundles related labels so you can apply them together. Labels is the catalogue of the individual labels themselves.",
+          "Create, edit, duplicate, archive or delete from any tab. Anything you save from inside a project lands here too.",
+        ],
+      },
+      {
+        id: "templates-access",
+        title: "Who can use and edit templates",
+        summary: "The plan gate and the role gate are different.",
+        steps: [
+          "Templates need the Pro or Team plan. Below that, the section shows an upgrade card instead.",
+          "Everyone on the plan can apply templates to their own projects.",
+          "Only the account owner and Admins can create or edit them. Managers and Standard members see the library read-only.",
         ],
       },
     ],
   },
   {
     id: "teams",
-    title: "Team collaboration",
+    title: "Team, roles & permissions",
     icon: Users,
-    blurb: "Invite crew, assign roles, and share work.",
+    blurb: "Invite your crew, set what they can reach, and bring in subcontractors.",
     guides: [
       {
         id: "invite",
         title: "Invite a teammate",
-        summary: "Add a crew member to your account.",
+        summary: "Add a crew member to your workspace.",
         steps: [
-          "Go to Your Company → Team Members.",
-          "Click Invite and enter their email.",
-          "Pick a role: Owner, Admin, Member, or Viewer.",
-          "They'll get an email invite to join your workspace.",
+          "Open Teams in the sidebar and click Invite teammate.",
+          "Enter their email and send. There is no role to choose here: everyone joins at the base level.",
+          "Once they appear on the roster, open the menu on their row to change their role.",
+        ],
+        tips: [
+          "Below the Team plan the invite dialog shows how many seats you have left. Subcontractors never use a seat.",
         ],
       },
       {
         id: "roles",
         title: "Roles & permissions",
-        summary: "Control who can create, edit, and share.",
+        summary: "Owner, Admin, Manager, Standard, Restricted.",
         steps: [
-          "Owner: full access, billing.",
-          "Admin: manage projects, templates, team members.",
-          "Member: work on projects they're added to.",
-          "Viewer: read-only.",
+          "Owner: whoever created the account. Full control including billing, and the only role that cannot be removed or re-roled, so a workspace can never end up with nobody who can pay the bill.",
+          "Admin: the same access as the Owner. Billing, the team, every project, and the template library.",
+          "Manager: runs their own crew and sees every project. They can re-role Standard and Restricted members, but never another Manager or an Admin. No billing, and no editing of the shared template library. Team plan only.",
+          "Standard: works on every project, but cannot manage the team or billing. On Starter and Pro this seat is simply called Member, because on a flat plan there is no tier above or below it to be standard compared to.",
+          "Restricted: sees only the jobs you assign them, and nothing else in the workspace. Team plan only.",
+        ],
+        tips: [
+          "Starter is one Admin plus one Member. Pro is deliberately flat: Admins and Members, one level apart. The middle tier (Manager) and per-person job scoping (Restricted) are what the Team plan adds.",
+          "Deleting projects, and editing templates and blueprints, need Owner or Admin. Every gate is enforced on the server as well as hidden in the app.",
+        ],
+      },
+      {
+        id: "job-scoping",
+        title: "Scope somebody to named jobs",
+        summary: "The Restricted role, and how to pick their jobs.",
+        steps: [
+          "On the Teams page, open the menu on that person's row and set their role to Restricted.",
+          "Open the menu again and choose “Choose their jobs”.",
+          "Tick the jobs they may open. Those are the only ones they can see. With nothing ticked they keep their seat and see no jobs at all.",
+        ],
+        tips: [
+          "Putting a teammate on a job (the crew list on a project) is a different thing, and every plan has it. Scoping a person so that those jobs are all they can reach is the Restricted role, and that is what the Team plan sells.",
+        ],
+      },
+      {
+        id: "subcontractors",
+        title: "Give a subcontractor access",
+        summary: "An outside crew, on named jobs, without a seat.",
+        steps: [
+          "Open Teams in the sidebar and scroll to the Subcontractors panel.",
+          "Click Invite subcontractor and enter their email, plus their company name if you want it shown next to their uploads.",
+          "Tick the jobs they can reach, then send. They get their own login.",
+          "On those jobs they can view and add photos, and nothing else. They cannot see billing, your team, or any other project.",
+        ],
+        tips: [
+          "Subcontractor access is a Team plan feature, and a subcontractor does not occupy a paid seat.",
+          "Only the account owner and Admins can invite or manage subcontractors.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "portfolio",
+    title: "Portfolio",
+    icon: Layers,
+    blurb: "A shareable mini-site of your best work.",
+    guides: [
+      {
+        id: "portfolio-what",
+        title: "What the Portfolio is",
+        summary: "A public mini-site built from jobs you have already shot.",
+        steps: [
+          "Portfolio is a public mini-site made from work already in your account: one page per project, plus embeds for a website you already own.",
+          "Open Portfolio in the sidebar. It has three tabs: Site (the mini-site itself), Projects (the pages that fill it), and Embeds (putting it on your own website).",
+          "The band above the tabs is the publish switch. It tells you whether the site is live, and gives you its address.",
+        ],
+        tips: [
+          "Portfolio is a Team plan feature. On other plans the row stays in the sidebar with a padlock, so you can still see what it does.",
+        ],
+      },
+      {
+        id: "portfolio-site",
+        title: "Set up your portfolio site",
+        summary: "A guided build, with a live preview beside it.",
+        steps: [
+          "Open Portfolio, then the Site tab. The first time through you get a guided build; you can switch to the full editor whenever you like.",
+          "Work through the steps: Business (name, logo, brand colour), What you do, Cover, Where you work, About, Reviews, Contact, and Web address.",
+          "The preview beside the form is exactly what visitors will see.",
+          "Publish from the band at the top when you are happy with it.",
+        ],
+      },
+      {
+        id: "portfolio-projects",
+        title: "Add a project page",
+        summary: "Each item on the site is one project page.",
+        steps: [
+          "Open Portfolio, then the Projects tab, and click New project. Give it a title, for example “Kitchen & Bath Remodels”.",
+          "In the builder, choose a cover photo, add a tagline and a description, then add sections and pull photos in from your real jobs.",
+          "Back on the Projects tab, use the toggle to decide whether it shows on the site, and the star to badge it as featured.",
+          "Drag the cards to set the order visitors see them in.",
+        ],
+      },
+      {
+        id: "portfolio-embeds",
+        title: "Put your work on your own website",
+        summary: "A gallery and a map you can paste anywhere.",
+        steps: [
+          "Open Portfolio, then the Embeds tab. There are two snippets: a website gallery and a website map.",
+          "Copy a snippet and paste it into an Embed, Custom HTML or Code block on your own site.",
+          "Embeds read from the same published work as your portfolio site, so they stay empty until something is published.",
+        ],
+        tips: [
+          "If a snippet ends up somewhere it should not be, rotate the embed key. Any embed already installed elsewhere stops working until you paste the new snippet; your portfolio address is unaffected.",
         ],
       },
     ],
   },
   {
     id: "ai",
-    title: "Breeze AI assistant",
+    title: "AI assistance",
     icon: Sparkles,
-    blurb: "Ask questions about your photos and projects.",
+    blurb: "AI drafts the writing, so you only have to check it.",
     guides: [
       {
         id: "ai-usage",
-        title: "Ask Breeze about a project",
-        summary: "Natural-language Q&A across your photos.",
+        title: "What the AI does",
+        summary: "No separate chatbot to learn.",
         steps: [
-          "Open Breeze from the sidebar.",
-          "Pick a project scope or ask across all projects.",
-          "Try questions like 'What hazards did we photograph this week?' or 'List every model number from the panel photos.'",
+          "AI runs inside the features you already use, rather than in a chat window of its own.",
+          "It analyses photos, drafts report and document text, turns a walkthrough's narration into a written summary, and pulls text out of a photo.",
+          "Everything it writes is editable before you send it. If a draft fails, the item is still saved without the AI text and says so.",
         ],
+      },
+      {
+        id: "ai-photo-analysis",
+        title: "Analyse a photo",
+        summary: "Let AI describe what is in the shot.",
+        steps: [
+          "Open a photo in the Gallery, and open the AI Analysis panel beside it.",
+          "Click Run AI analysis. The result is saved with the photo.",
+        ],
+        tips: ["AI photo analysis needs an active paid subscription. Scans are unlimited."],
+      },
+      {
+        id: "ai-walkthrough-report",
+        title: "Turn a walkthrough into a report",
+        summary: "Narration and photos in, structured write-up out.",
+        steps: [
+          "Open a recorded walkthrough and generate its report. AI turns the narration and the photos into a structured document.",
+          "Edit any section, then share the link or download the PDF.",
+        ],
+        tips: ["Auto Reports from walkthroughs are on the Pro and Team plans."],
       },
     ],
   },
@@ -279,16 +597,19 @@ const CATEGORIES: Category[] = [
     id: "map",
     title: "Map & Gallery",
     icon: MapIcon,
-    blurb: "See projects on a map, browse all photos in one place.",
+    blurb: "See jobs on a map, browse every photo in one place.",
     guides: [
       {
         id: "map",
-        title: "Use the Map view",
-        summary: "See every project pinned to its address.",
+        title: "Use the project map",
+        summary: "Every project with an address, pinned.",
         steps: [
-          "Open Maps from the sidebar.",
-          "Click a pin to jump to that project.",
-          "Filter by team member, status, or tag.",
+          "Open Maps in the sidebar.",
+          "Filter with the chips at the top: Active, On hold, Completed, or All.",
+          "Click a pin to open that project.",
+        ],
+        tips: [
+          "A job only appears once its address has been located, so fill the address in when you create the project.",
         ],
       },
       {
@@ -296,32 +617,63 @@ const CATEGORIES: Category[] = [
         title: "Browse the Gallery",
         summary: "Cross-project photo grid with filters.",
         steps: [
-          "Open Gallery from the sidebar.",
-          "Filter by project, tag, date, or captured-by.",
-          "Select photos to bulk-tag, move, share, or delete.",
+          "Open Gallery in the sidebar to see every photo across every project.",
+          "Filter by project, by tag, or by a date range using the chips in the toolbar. Clear all resets them.",
+          "Switch between Grid and Calendar with the toggle on the right.",
+          "Select photos to download, tag, print, share, generate a report from, hide, move to another project, or send to Trash.",
         ],
       },
     ],
   },
   {
     id: "account",
-    title: "Account & settings",
+    title: "Account & workspace",
     icon: Settings,
-    blurb: "Profile, notifications, appearance, security.",
+    blurb: "Profile, notifications, deleted items, and feedback.",
     guides: [
       {
         id: "profile",
         title: "Update your profile",
         summary: "Change your name, photo, phone, or job title.",
-        steps: ["Open Account (sidebar) → Profile.", "Edit fields and click Save."],
+        steps: [
+          "Click your name at the bottom of the sidebar to open Account & settings, then Profile.",
+          "Edit the fields and click Save.",
+        ],
       },
       {
         id: "notifications",
         title: "Manage notifications",
-        summary: "Control what you're pinged about.",
+        summary: "Control what you are emailed about.",
         steps: [
-          "Account → Notifications.",
-          "Toggle email and in-app notifications per event type.",
+          "Go to Account & settings, then Notifications.",
+          "The master Email switch turns every notification email off at once.",
+          "Under it, choose per event: tasks assigned to me, comments and mentions, tasks I am copied in on, and work I assigned is done.",
+          "The in-app bell always shows everything. Invitations, password resets and other account email are always sent.",
+        ],
+        tips: ["Push notifications are not available yet."],
+      },
+      {
+        id: "trash",
+        title: "Restore something you deleted",
+        summary: "Deleted projects and photos are recoverable for 60 days.",
+        steps: [
+          "Open Trash under Workspace tools at the bottom of the sidebar. The badge on it is how many items are waiting there.",
+          "Each item shows how many days are left before it is removed for good.",
+          "Restore what you need, or purge it yourself if you want it gone sooner.",
+        ],
+        tips: [
+          "After 60 days items are removed automatically and cannot be recovered, so restore sooner rather than later.",
+        ],
+      },
+      {
+        id: "feedback",
+        title: "Report a problem or suggest a feature",
+        summary: "Both go straight to the team.",
+        steps: [
+          "Open Feedback under Workspace tools at the bottom of the sidebar.",
+          "Choose Report a problem, or Suggest a feature.",
+          "Describe it. Your device details are filled in for you, and you can attach screenshots to a problem report.",
+          "We reply to the email address on your account if we need more detail.",
         ],
       },
     ],
@@ -383,7 +735,7 @@ export function HelpPage() {
         Support
       </p>
       <h1 className="font-display mt-3 text-[38.4px] font-bold leading-9 tracking-[-1.34px] text-foreground">
-        Help center
+        Knowledge base
       </h1>
       <p className="font-manrope mt-3 max-w-[576px] text-sm leading-6 text-muted-foreground">
         Guides, tips, and answers for every SitePix workflow.
@@ -403,7 +755,7 @@ export function HelpPage() {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search help - e.g. “annotate”, “PDF”, “offline”…"
+              placeholder="Search help - e.g. “blueprint”, “roles”, “tasks”…"
               className="h-11 rounded-xl pl-9 pr-9 text-sm font-medium"
               aria-label="Search help topics"
             />
@@ -519,18 +871,29 @@ export function HelpPage() {
         )}
       </div>
 
+      {/*
+        Points at Feedback, which is where support actually is.
+
+        This used to send people to "Account -> Chat with support" and to a
+        "Report issue button in the sidebar". Neither exists: the settings
+        support panes are unreachable dead code, and the sidebar row was renamed
+        to Feedback when it grew to cover suggestions as well as bugs. A footer
+        naming two things that are not there is worse than no footer, because it
+        is the last thing somebody reads before giving up.
+      */}
       <div className="mt-8 max-w-4xl rounded-2xl border-[0.8px] border-border bg-card/60 p-6 text-center">
         <h3 className="font-manrope text-base font-bold text-foreground">
           Can't find what you need?
         </h3>
         <p className="font-manrope mt-1 text-sm text-muted-foreground">
-          Head to Account → Chat with support, or use the Report issue button in the sidebar.
+          Open Feedback in the sidebar to report a problem or suggest a feature. Both go straight to
+          the team.
         </p>
         <Link
-          to="/settings"
+          to="/report-issue"
           className="font-manrope mt-3 inline-block text-sm font-bold text-primary hover:underline"
         >
-          Go to Support settings →
+          Go to Feedback →
         </Link>
       </div>
     </div>

@@ -62,7 +62,9 @@ const pricingItem = { title: "Upgrade", url: "/pricing", icon: Crown } as const;
  * and the window closes on a timer they cannot see.
  */
 const trashItem = { title: "Trash", url: "/projects/trash", icon: Trash2 } as const;
-const helpItem = { title: "Help Center", url: "/help", icon: HelpCircle } as const;
+// "Knowledge Base" rather than "Help Center": this row is an article library,
+// and the path to a human is the separate Feedback row directly below it.
+const helpItem = { title: "Knowledge Base", url: "/help", icon: HelpCircle } as const;
 // Covers bugs *and* feature suggestions now, so "Report issue" undersold it.
 const reportIssueItem = { title: "Feedback", url: "/report-issue", icon: LifeBuoy } as const;
 

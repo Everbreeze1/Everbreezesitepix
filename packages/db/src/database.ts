@@ -176,12 +176,15 @@ export type Database = {
       };
       issue_reports: {
         Row: {
+          attachments: string[] | null;
+          client_info: Json | null;
           created_at: string;
           email: string | null;
           description: string | null;
           feature: string | null;
           id: string;
           kind: string;
+          project_id: string | null;
           sentiment: string | null;
           source: string;
           status: string;
@@ -190,12 +193,15 @@ export type Database = {
           user_id: string | null;
         };
         Insert: {
+          attachments?: string[] | null;
+          client_info?: Json | null;
           created_at?: string;
           description?: string | null;
           email?: string | null;
           feature?: string | null;
           id?: string;
           kind?: string;
+          project_id?: string | null;
           sentiment?: string | null;
           source?: string;
           status?: string;
@@ -204,12 +210,15 @@ export type Database = {
           user_id?: string | null;
         };
         Update: {
+          attachments?: string[] | null;
+          client_info?: Json | null;
           created_at?: string;
           description?: string | null;
           email?: string | null;
           feature?: string | null;
           id?: string;
           kind?: string;
+          project_id?: string | null;
           sentiment?: string | null;
           source?: string;
           status?: string;

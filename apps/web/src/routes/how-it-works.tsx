@@ -42,7 +42,7 @@ const steps = [
   {
     step: "03",
     title: "Share & report",
-    desc: "Send a clean gallery to a client, or let Breeze AI draft the progress report. Everyone stays aligned, no group chats required.",
+    desc: "Send a clean gallery to a client, or let AI draft the progress report. Everyone stays aligned, no group chats required.",
   },
 ];
 

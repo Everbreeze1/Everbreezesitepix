@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { useEdgeScroll } from "@/hooks/use-edge-scroll";
 import { cn } from "@/lib/utils";
 import type { ProjectBoard } from "@/lib/project-boards.functions";
 
@@ -37,31 +38,9 @@ export function PipelineTabStrip({
   onSelect: (board: ProjectBoard) => void;
   onCreate: () => void;
 }) {
-  const scroller = useRef<HTMLDivElement>(null);
-  const [overflow, setOverflow] = useState({ left: false, right: false });
-
-  const measure = useCallback(() => {
-    const el = scroller.current;
-    if (!el) return;
-    // A pixel of slack: fractional widths mean scrollLeft rarely reaches the
-    // exact maximum, which would leave the right arrow permanently lit.
-    const max = el.scrollWidth - el.clientWidth;
-    setOverflow({ left: el.scrollLeft > 1, right: el.scrollLeft < max - 1 });
-  }, []);
-
-  useLayoutEffect(measure, [measure, boards.length]);
-
-  useEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    el.addEventListener("scroll", measure, { passive: true });
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => {
-      el.removeEventListener("scroll", measure);
-      ro.disconnect();
-    };
-  }, [measure]);
+  // Arrows, fades and the measuring behind them are shared with the board's
+  // column strip, which the client asked to behave the same way.
+  const { ref: scroller, overflow, nudge } = useEdgeScroll<HTMLDivElement>([boards.length]);
 
   /*
    * Bring the selected tab into view, including the one that was just created.
@@ -84,15 +63,8 @@ export function PipelineTabStrip({
     } else if (right > el.scrollLeft + el.clientWidth - pad) {
       el.scrollTo({ left: right - el.clientWidth + pad, behavior: "smooth" });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, boards.length]);
-
-  function nudge(direction: -1 | 1) {
-    const el = scroller.current;
-    if (!el) return;
-    // Most of a screenful, so a click makes obvious progress but never jumps
-    // clean past a tab you were looking for.
-    el.scrollBy({ left: direction * Math.max(160, el.clientWidth * 0.7), behavior: "smooth" });
-  }
 
   return (
     <div className="flex min-w-0 flex-1 items-center gap-1">

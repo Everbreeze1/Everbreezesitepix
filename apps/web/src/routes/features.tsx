@@ -50,7 +50,7 @@ const features = [
   {
     icon: FileText,
     title: "Professional reports",
-    desc: "Turn a day of photos into a branded, automated progress report. Breeze AI drafts it, you send it.",
+    desc: "Turn a day of photos into a branded, automated progress report. AI drafts it, you send it.",
   },
   {
     icon: ClipboardCheck,

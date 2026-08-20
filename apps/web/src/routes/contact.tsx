@@ -98,17 +98,17 @@ function ContactPage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">Already signed in?</h2>
             <p className="text-muted-foreground">
-              The in-app Help Center has step-by-step guides for photo capture, checklists,
-              workflows, walkthroughs, reports and team management - most questions are answered
-              there without waiting for a reply. You can also report a bug straight from the app,
-              which sends us the context we need automatically.
+              The in-app Knowledge Base has step-by-step guides for photo capture, tasks,
+              checklists, workflows, walkthroughs, reports, blueprints, the portfolio site and team
+              roles - most questions are answered there without waiting for a reply. You can also
+              report a bug straight from the app, which sends us the context we need automatically.
             </p>
             <div className="mt-3 flex flex-wrap gap-3">
               <Link
                 to="/help"
                 className="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
               >
-                Open the Help Center
+                Open the Knowledge Base
               </Link>
               <Link
                 to="/report-issue"

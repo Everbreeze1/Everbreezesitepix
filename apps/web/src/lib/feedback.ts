@@ -1,4 +1,6 @@
 import { supabase } from "@/integrations/sitepix/client";
+import { isPendingMigrationError } from "@/lib/supabase-errors";
+import { summarizeClient, type ClientContext } from "@/lib/feedback-context";
 
 export type FeedbackKind = "bug" | "idea" | "praise";
 export type FeedbackSentiment = "good" | "bad";
@@ -13,23 +15,132 @@ export interface SubmitFeedbackInput {
   source: FeedbackSource;
   userId?: string | null;
   email?: string | null;
+  /** Optional, and only ever the project's id - no photos, documents or notes. */
+  projectId?: string | null;
+  /** Browser/OS/screen, read from the browser rather than typed by the reporter. */
+  client?: ClientContext | null;
+  /** Storage paths in the `feedback-attachments` bucket, uploaded before this call. */
+  attachments?: string[] | null;
 }
 
-export async function submitFeedback(input: SubmitFeedbackInput): Promise<void> {
-  const { error } = await supabase.from("issue_reports").insert({
+/**
+ * The structured half of a report, rendered back into text.
+ *
+ * Used only by the fallback in `submitFeedback`: if the columns these values
+ * belong in are not on the table yet, the context is appended to the
+ * description rather than dropped. A report that arrives slightly untidy beats
+ * one that arrives with the device details missing.
+ */
+function contextAsText(input: SubmitFeedbackInput): string {
+  const lines: string[] = [];
+  if (input.projectId) lines.push(`Project: ${input.projectId}`);
+  if (input.client) {
+    lines.push(
+      `Device: ${summarizeClient(input.client)}`,
+      `Screen: ${input.client.screen} (window ${input.client.viewport})`,
+      `Time zone: ${input.client.timezone}`,
+    );
+  }
+  if (input.attachments?.length) lines.push(`Attachments: ${input.attachments.join(", ")}`);
+  return lines.length ? `\n\n---\n${lines.join("\n")}` : "";
+}
+
+/** The columns `issue_reports` has had since 20260803020000. */
+function baseRow(input: SubmitFeedbackInput, description: string) {
+  return {
     user_id: input.userId ?? null,
     email: input.email ?? null,
     // The table's text column is `description` - NOT `message`, whatever the
     // generated types used to say. See 20260803040000.
-    description: (input.message ?? "").trim().slice(0, 4000),
+    description: description.slice(0, 4000),
     kind: input.kind,
     feature: input.feature ?? null,
     sentiment: input.sentiment ?? null,
     source: input.source,
     url: typeof window !== "undefined" ? window.location.href : null,
-    user_agent: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 500) : null,
+    user_agent: input.client?.userAgent
+      ? input.client.userAgent.slice(0, 500)
+      : typeof navigator !== "undefined"
+        ? navigator.userAgent.slice(0, 500)
+        : null,
+  };
+}
+
+export async function submitFeedback(input: SubmitFeedbackInput): Promise<void> {
+  const description = (input.message ?? "").trim();
+
+  const { error } = await supabase.from("issue_reports").insert({
+    ...baseRow(input, description),
+    project_id: input.projectId ?? null,
+    client_info: input.client ?? null,
+    attachments: input.attachments?.length ? input.attachments : null,
   });
-  if (error) throw new Error(error.message);
+  if (!error) return;
+
+  /*
+   * Migrations here are applied by hand, so there is a real window where the
+   * three columns above are not on the table yet (see 20260921000000). Losing a
+   * bug report to that would be the worst outcome for the one page whose job is
+   * receiving them, so retry once with the long-standing columns and fold the
+   * structured context into the text.
+   */
+  if (!isPendingMigrationError(error)) throw new Error(error.message);
+
+  const { error: retryError } = await supabase
+    .from("issue_reports")
+    .insert(baseRow(input, `${description}${contextAsText(input)}`));
+  if (retryError) throw new Error(retryError.message);
+}
+
+// ---------------------------------------------------------------------------
+// Attachments
+// ---------------------------------------------------------------------------
+
+export const FEEDBACK_BUCKET = "feedback-attachments";
+/** Screenshots, not site photography. Big enough for a full-page grab. */
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+export const MAX_ATTACHMENTS = 3;
+export const ATTACHMENT_ACCEPT = "image/png,image/jpeg,image/gif,image/webp,application/pdf";
+
+function safeName(name: string): string {
+  const cleaned = name
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return (cleaned || "attachment").slice(-80);
+}
+
+/**
+ * Uploads at send time rather than at file-pick time.
+ *
+ * Picking a file is not a commitment to send, and a bucket full of screenshots
+ * from reports nobody finished would be nobody's job to clean up.
+ *
+ * Never throws. A failed upload must not swallow the report that came with it,
+ * so the caller sends the text regardless and tells the user which files did
+ * not make it.
+ */
+export async function uploadFeedbackAttachments(
+  userId: string,
+  files: File[],
+): Promise<{ paths: string[]; failed: string[] }> {
+  const paths: string[] = [];
+  const failed: string[] = [];
+  const stamp = Date.now();
+
+  for (const [i, file] of files.entries()) {
+    const path = `${userId}/${stamp}-${i}-${safeName(file.name)}`;
+    try {
+      const { error } = await supabase.storage
+        .from(FEEDBACK_BUCKET)
+        .upload(path, file, { contentType: file.type || "application/octet-stream" });
+      if (error) throw error;
+      paths.push(path);
+    } catch {
+      failed.push(file.name);
+    }
+  }
+  return { paths, failed };
 }
 
 // ---------------------------------------------------------------------------

@@ -81,7 +81,7 @@ const howItWorks = [
   {
     step: "03",
     title: "Share & report",
-    desc: "Send a clean gallery to a client, or let Breeze AI draft the progress report. Everyone stays aligned, no group chats required.",
+    desc: "Send a clean gallery to a client, or let AI draft the progress report. Everyone stays aligned, no group chats required.",
   },
 ];
 
@@ -174,7 +174,7 @@ const testimonials = [
   },
   {
     quote:
-      "Breeze writes our weekly client reports now. What used to eat my Friday nights takes about thirty seconds.",
+      "SitePix writes our weekly client reports now. What used to eat my Friday nights takes about thirty seconds.",
     name: "Dana Whitfield",
     role: "Project Manager, Harbor & Stone",
   },

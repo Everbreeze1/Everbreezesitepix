@@ -48,8 +48,8 @@ const FAQS: { q: string; a: string }[] = [
     a: "Camera rolls and group chats lose photos. SitePix files every photo on the right project automatically - timestamped, GPS-tagged and searchable - so you can find any moment from any job in seconds, even years later.",
   },
   {
-    q: "What is Breeze AI and what can it do?",
-    a: "Breeze AI runs in the background to auto-draft site logs from your photos, summarize walkthrough audio into reports, and enrich report captions. Ask it a question about a project and it answers from your photos and notes - no separate chatbot to learn.",
+    q: "What can the built-in AI do?",
+    a: "It runs inside the features you already use, so there's no separate chatbot to learn. It analyzes photos, drafts daily logs and client-ready reports from a set of shots, turns a walkthrough's narration into a written summary, and fills your document templates in from project data. Everything it writes is editable before you send it.",
   },
   {
     q: "Do I need a credit card to start?",
