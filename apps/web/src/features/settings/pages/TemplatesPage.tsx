@@ -361,7 +361,7 @@ export function TemplatesPage() {
     (next: TemplateTabKey) => {
       void navigate({
         to: "/templates",
-        search: (prev: TemplatesSearch) => ({ ...prev, tab: next }),
+        search: (prev) => ({ ...(prev as TemplatesSearch), tab: next }),
         replace: true,
       });
     },
@@ -576,9 +576,9 @@ export function TemplatesPage() {
     setSelectedId(search.blueprint);
     void navigate({
       to: "/templates",
-      search: (prev: TemplatesSearch): TemplatesSearch => ({
-        ...prev,
-        tab: "blueprints",
+      search: (prev) => ({
+        ...(prev as TemplatesSearch),
+        tab: "blueprints" as const,
         blueprint: undefined,
       }),
       replace: true,

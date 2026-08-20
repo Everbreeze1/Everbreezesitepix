@@ -567,8 +567,12 @@ export function GroupPage() {
                   </Link>
                 </Button>
                 <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-                  <Link to="/projects" search={{ tab: "tasks" } as any}>
-                    <CheckSquare className="mr-1.5 h-3.5 w-3.5" /> View all tasks
+                  {/* Was `?tab=tasks`, which nothing on the projects page has
+                      ever read - the button did nothing at all. The Calendar
+                      tab is the cross-project view of task due dates that link
+                      was reaching for, and it now has an address. */}
+                  <Link to="/projects" search={{ tab: "calendar" } as any}>
+                    <CheckSquare className="mr-1.5 h-3.5 w-3.5" /> All task dates
                   </Link>
                 </Button>
               </>

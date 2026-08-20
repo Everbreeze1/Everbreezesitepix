@@ -132,6 +132,7 @@ export {
   PROJECT_STATUS_LABELS,
   defaultStatusForStageName,
   isProjectStatus,
+  isScheduledStageName,
   nextPipelineStageColor,
   normalizePipelineName,
   samePipelineName,

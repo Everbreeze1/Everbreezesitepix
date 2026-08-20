@@ -14,6 +14,12 @@ export const qk = {
   projectsList: (userId: string) => ["projects-list", userId] as const,
   projectGroups: (userId: string) => ["project-groups", userId] as const,
   projectBoards: (userId: string) => ["project-boards", userId] as const,
+  /**
+   * Every dated task in the workspace, behind the Calendar tab. Not scoped to
+   * a project: the whole point of that tab is that it does not ask you which
+   * one first.
+   */
+  workspaceSchedule: (userId: string) => ["workspace-schedule", userId] as const,
   /** Omit `filters` to get the base key - invalidating the base key clears
    * every filter variant for that user, since React Query matches by key prefix. */
   galleryPhotos: (

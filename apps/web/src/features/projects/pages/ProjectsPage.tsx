@@ -1,7 +1,7 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { PROJECT_STATUS_LABELS, type ProjectStatus } from "@sitepix/shared";
+import { PROJECT_STATUS_LABELS, formatCalendarDate, type ProjectStatus } from "@sitepix/shared";
 import { qk } from "@/lib/query-keys";
 import { PhotoThumb } from "@/components/PhotoThumb";
 import {
@@ -83,7 +83,10 @@ import { PipelineTabStrip } from "@/features/projects/components/PipelineTabStri
 import { BoardSettingsSheet } from "@/features/projects/components/BoardSettingsSheet";
 import { AssignTeammatesDialog } from "@/features/projects/components/AssignTeammatesDialog";
 import { ProjectCrew } from "@/features/projects/components/ProjectCrew";
+import { WorkspaceCalendar } from "@/features/projects/components/WorkspaceCalendar";
 import { useProjectAssignees } from "@/hooks/use-project-assignees";
+import { useWorkspaceSchedule } from "@/hooks/use-workspace-schedule";
+import { attentionCount, type StageLite } from "@/lib/workspace-calendar";
 
 /**
  * The stage filter's stand-in for NULL.
@@ -208,6 +211,16 @@ interface ProjectRow {
    * no longer double as stages. NULL means the project is in no pipeline.
    */
   pipeline_stage_id?: string | null;
+  /**
+   * The day this job is booked for, and the only thing that can put a project
+   * on the Calendar tab's grid. Optional in the type rather than nullable
+   * because the column arrives with
+   * 20260923000000_project_scheduled_date.sql: until that is applied the key
+   * is absent from the row entirely, which is how `supportsScheduledDate`
+   * knows to hide the date controls instead of offering a write that can only
+   * fail.
+   */
+  scheduled_date?: string | null;
 }
 
 /**
@@ -222,8 +235,28 @@ interface ProjectRow {
  * they followed, onto the hero stats rail (one click) and the Filters popover
  * (discoverable). What is left is the three things that are genuinely
  * different content: the project list, saved Groups, and Pipelines.
+ *
+ * Calendar is the fourth of those, and it earns the slot on the same test. It
+ * is not the project list sorted by a date: it is task due dates and booked
+ * job days from every project on one grid, which no filter over `allProjects`
+ * can produce. The client's report is the shape of the gap:
+ *
+ *   "With dozens of active projects, there's no single place to answer 'what's
+ *    due today' or 'what's scheduled this week' without opening each project
+ *    individually."
+ *
+ * Not to be confused with the per-project Calendar tab, which is
+ * `PhotoCalendar` and plots capture activity on one job. That one looks
+ * backwards at one project and is untouched. See
+ * apps/web/src/lib/workspace-calendar.ts.
  */
-type TabKey = "projects" | "groups" | "boards";
+type TabKey = "projects" | "groups" | "boards" | "calendar";
+
+/** What `/projects` accepts in its query string. Validated by the route. */
+export type ProjectsIndexSearch = {
+  q?: string;
+  tab?: TabKey;
+};
 
 /** Status is a refinement of the project list, reachable from the hero stats and the Filters popover. */
 type StatusFilter = "any" | "active" | "completed";
@@ -266,7 +299,7 @@ export function ProjectsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { guard } = useSubscriptionGate();
-  const routeSearch = useSearch({ strict: false }) as { q?: string };
+  const routeSearch = useSearch({ strict: false }) as ProjectsIndexSearch;
   const [allProjects, setAllProjects] = useState<ProjectRow[]>([]);
   const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
   const [coverPaths, setCoverPaths] = useState<Record<string, string>>({});
@@ -281,8 +314,9 @@ export function ProjectsPage() {
   const [projectTagMap, setProjectTagMap] = useState<Record<string, TagRow[]>>({});
   const [allTags, setAllTags] = useState<TagRow[]>([]);
 
-  // Tab + search state
-  const [tab, setTab] = useState<TabKey>("projects");
+  // Tab + search state. The tab opens where the URL says, so a Calendar link
+  // lands on the Calendar rather than on the project list.
+  const [tab, setTab] = useState<TabKey>(routeSearch.tab ?? "projects");
   const [query, setQuery] = useState(routeSearch.q ?? "");
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   /** Stage ids, plus NO_STAGE for "not in a pipeline". Empty means no filter. */
@@ -899,6 +933,80 @@ export function ProjectsPage() {
     [boards],
   );
 
+  /*
+   * The Calendar tab's inputs.
+   *
+   * Both halves of it are already on this page: the projects (and with them
+   * `scheduled_date`, which rides along on the `select("*")` above) and the
+   * pipeline stages that say which column a job is standing in. Only the task
+   * due dates are a new read, and that is one query for the whole workspace
+   * rather than one per project. It runs whichever tab is open, because the
+   * count on the tab is the answer to "what's due today" and a badge you have
+   * to open the tab to see is not a badge.
+   *
+   * `stagesById` is a second, narrower shape of the same data as
+   * `stageLookup`. Kept separate so the calendar module can be a plain
+   * function over plain data, testable without a board or a React tree.
+   */
+  const stagesById = useMemo(() => {
+    const m = new Map<string, StageLite>();
+    for (const b of boards) {
+      for (const s of b.stages) m.set(s.id, { id: s.id, name: s.name, color: s.color });
+    }
+    return m;
+  }, [boards]);
+
+  const {
+    schedule,
+    loading: scheduleLoading,
+    error: scheduleError,
+    refetch: refetchSchedule,
+    canSchedule,
+  } = useWorkspaceSchedule(allProjects, stagesById);
+
+  /**
+   * Book a job for a day, or take the day back off it.
+   *
+   * Optimistic like every other write on this page, and it also writes the
+   * React Query snapshot rather than only the local array. The others get away
+   * with local-only because nothing they change survives a refetch being
+   * interesting; a date somebody just typed reverting under them when the
+   * 60-second staleTime lapses is exactly the kind of thing that makes a
+   * calendar untrustworthy.
+   */
+  const setScheduledDate = async (projectId: string, date: string | null) => {
+    const previous = allProjects.find((p) => p.id === projectId)?.scheduled_date ?? null;
+    if (previous === date) return;
+
+    const apply = (value: string | null) => {
+      setAllProjects((ps) =>
+        ps.map((p) => (p.id === projectId ? { ...p, scheduled_date: value } : p)),
+      );
+      qc.setQueryData(qk.projectsList(user?.id ?? ""), (prev: ProjectsSnapshot | undefined) =>
+        prev
+          ? {
+              ...prev,
+              projects: prev.projects.map((p) =>
+                p.id === projectId ? { ...p, scheduled_date: value } : p,
+              ),
+            }
+          : prev,
+      );
+    };
+
+    apply(date);
+    const { error } = await (supabase as any)
+      .from("projects")
+      .update({ scheduled_date: date })
+      .eq("id", projectId);
+    if (error) {
+      apply(previous);
+      toast.error(error.message);
+      return;
+    }
+    toast.success(date ? `Scheduled for ${formatCalendarDate(date)}` : "Date cleared");
+  };
+
   /** How many projects each stage holds, so removing one can say what it costs. */
   const projectCountByStage = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -939,7 +1047,7 @@ export function ProjectsPage() {
   const starredCount = allProjects.filter((p) => p.starred && !p.archived).length;
   const archivedCount = allProjects.filter((p) => p.archived).length;
 
-  // Three destinations, one per kind of thing. Every pill carries an icon so
+  // Four destinations, one per kind of thing. Every pill carries an icon so
   // the run reads as one navigation control - the same strip, now literally the
   // same component, that the project home page uses.
   const tabs = [
@@ -948,6 +1056,16 @@ export function ProjectsPage() {
     // Key stays "boards" (route/state/table naming); only the label is
     // user-facing, and "Pipeline" describes what the columns actually are.
     { key: "boards", label: "Pipelines", count: boards.length, icon: Layers },
+    /*
+     * The one count on this strip that is not "how many of these exist".
+     *
+     * The other three are inventory. This one is a workload: open work that is
+     * due today or already late. "Calendar 214" because a task is due next
+     * spring says nothing; "Calendar 3" when three things are waiting on you
+     * today is the entire feature in one number, and it is legible without
+     * opening the tab. See attentionCount().
+     */
+    { key: "calendar", label: "Calendar", count: attentionCount(schedule), icon: CalendarIcon },
   ];
 
   /**
@@ -1705,7 +1823,32 @@ export function ProjectsPage() {
             className="mt-3.5"
             items={tabs}
             value={tab}
-            onChange={(key) => setTab(key as TabKey)}
+            onChange={(key) => {
+              const next = key as TabKey;
+              setTab(next);
+              /*
+               * `replace`, not push. A tab is where you are on this screen, not
+               * a place you travelled to: pushing would make Back walk you
+               * through every pill you clicked before it left the page, which
+               * is the behaviour people complain about. Replacing still gives
+               * the tab an address to copy or bookmark, which is the point.
+               */
+              void navigate({
+                to: "/projects",
+                /*
+                 * `prev` is annotated by cast rather than in the signature:
+                 * TanStack types the reducer's argument as the union of every
+                 * route's search schema, and `tab` now means one set of values
+                 * here and another on /templates. Narrowing in the parameter
+                 * position is what makes that union fail to line up.
+                 */
+                search: (prev) => ({
+                  ...(prev as ProjectsIndexSearch),
+                  tab: next === "projects" ? undefined : next,
+                }),
+                replace: true,
+              });
+            }}
           />
 
           {/*
@@ -1718,7 +1861,10 @@ export function ProjectsPage() {
             The project home page states the section and puts the controls that
             act on it on the same line, so this does too.
           */}
-          {tab !== "boards" && (
+          {/* Same reasoning as Pipelines below: the Calendar owns its own
+              header (the month, and the three counts), and neither the search
+              box nor the Filters popover acts on it. One title per screen. */}
+          {tab !== "boards" && tab !== "calendar" && (
             <SectionHeading
               className="mt-8"
               eyebrow={tab === "groups" ? "Saved collections" : "Field records"}
@@ -1744,7 +1890,7 @@ export function ProjectsPage() {
               }
             />
           )}
-          {/* Projects / Groups / Pipelines */}
+          {/* Projects / Groups / Pipelines / Calendar */}
           <div>
             {/*
               No header on the Pipelines tab: the pipeline strip below already
@@ -1752,8 +1898,17 @@ export function ProjectsPage() {
               time. One title per screen - and it is why the search box and
               Filters button, which do not act on a board, disappear here.
             */}
-            <div className={tab === "boards" ? "mt-8" : "mt-5"}>
-              {tab === "groups" ? (
+            <div className={tab === "boards" || tab === "calendar" ? "mt-8" : "mt-5"}>
+              {tab === "calendar" ? (
+                <WorkspaceCalendar
+                  schedule={schedule}
+                  loading={scheduleLoading || loading}
+                  error={scheduleError}
+                  onRetry={refetchSchedule}
+                  canSchedule={canSchedule}
+                  onSetScheduledDate={(projectId, date) => void setScheduledDate(projectId, date)}
+                />
+              ) : tab === "groups" ? (
                 <GroupsGrid
                   groups={groups}
                   loading={groupsLoading}

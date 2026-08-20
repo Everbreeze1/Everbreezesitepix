@@ -93,6 +93,36 @@ export function defaultStatusForStageName(name: string): ProjectStatus {
   return "active";
 }
 
+/**
+ * Names that read as "this job has a day booked", and the ones that only look
+ * like they do.
+ *
+ * The workspace calendar has to answer "what is scheduled this week" across
+ * every project, and a stage is free text a team types for itself. Nothing on
+ * the row says which column means booked work, so the name is the only signal
+ * there is. Same trade-off `defaultStatusForStageName` makes, for the same
+ * reason, and like that one it is a starting point rather than a rule: a job
+ * carrying a `scheduled_date` is on the calendar whatever its stage is called.
+ *
+ * The negative list is the half that earns its keep. "Unscheduled", "To
+ * schedule" and "Awaiting scheduling" are all ordinary column names, all
+ * contain the word, and all mean the queue of jobs that have NO day yet, which
+ * is the exact opposite of the question. Matching them would have filled the
+ * calendar's scheduled rail with the un-booked backlog.
+ */
+const NOT_YET_SCHEDULED =
+  /unschedul|notschedul|noschedul|toschedul|tobeschedul|needsschedul|awaitingschedul|pendingschedul/;
+
+/** The positive form: a column a job lands in once a day has been agreed. */
+const IS_SCHEDULED = /schedul|booked|booking|dispatch|appointment/;
+
+export function isScheduledStageName(name: string): boolean {
+  const n = normalizePipelineName(name);
+  if (!n) return false;
+  if (NOT_YET_SCHEDULED.test(n)) return false;
+  return IS_SCHEDULED.test(n);
+}
+
 export interface PipelineStageSeed {
   name: string;
   color: string;
