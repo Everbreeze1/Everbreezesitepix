@@ -95,7 +95,12 @@ export interface ScheduleEntry {
   done: boolean;
   /** In the past and still open. Never true for something already finished. */
   overdue: boolean;
-  /** Second line: the stage a job sits in, or who a task is on. */
+  /**
+   * The second line's extra: the stage a booked job sits in, or the address a
+   * task is assigned to. Null when there is neither. A task's project name is
+   * NOT in here - the rail always shows that, so folding it in would render it
+   * twice on any task nobody has been given.
+   */
   detail: string | null;
   /** Set for tasks, so the link can open the project on that one task. */
   taskId: string | null;
@@ -109,6 +114,28 @@ export interface AwaitingDateJob {
   stageColor: string;
 }
 
+/**
+ * How much of the answer is actually in the answer.
+ *
+ * Task due dates are read inside a bounded window and under a row cap, and the
+ * month grid pages without limit, so the two do not line up: page far enough
+ * and every cell goes empty. That empty month is indistinguishable from a
+ * genuinely quiet one, and booked jobs are NOT windowed, so it would render as
+ * half-true - jobs drawn, tasks silently absent.
+ *
+ * PhotoCalendar states the same problem in its own words ("the calendar's
+ * whole job is the counts, so a count that is quietly short is worse than no
+ * calendar") and answers it the same way: carry the limits out with the data
+ * and let the view say so.
+ */
+export interface TaskCoverage {
+  /** Inclusive "YYYY-MM-DD" bounds the task read actually covered. */
+  from: string;
+  to: string;
+  /** True when the row cap was hit, so even inside the window there is more. */
+  capped: boolean;
+}
+
 export interface WorkspaceSchedule {
   entries: ScheduleEntry[];
   /** Keyed by "YYYY-MM-DD", each already in display order. */
@@ -120,6 +147,14 @@ export interface WorkspaceSchedule {
   /** Open entries from today to six days out, the "this week" answer. */
   next7: ScheduleEntry[];
   awaitingDate: AwaitingDateJob[];
+  /** Null while the task read has not reported yet. */
+  taskCoverage: TaskCoverage | null;
+}
+
+/** Does the task read cover this whole "YYYY-MM-DD" span? */
+export function coversRange(coverage: TaskCoverage | null, from: string, to: string): boolean {
+  if (!coverage) return true;
+  return coverage.from <= from && coverage.to >= to;
 }
 
 /**
@@ -199,6 +234,8 @@ export function buildWorkspaceSchedule(input: {
   tasks: readonly SchedulableTask[];
   /** Every pipeline column the viewer can see, keyed by stage id. */
   stagesById: ReadonlyMap<string, StageLite>;
+  /** What the task read reached. Null while it is still in flight. */
+  taskCoverage?: TaskCoverage | null;
   now?: Date;
 }): WorkspaceSchedule {
   const { stagesById, now = new Date() } = input;
@@ -267,7 +304,7 @@ export function buildWorkspaceSchedule(input: {
       color: PRIORITY_COLOR[priority],
       done,
       overdue: date < today && !done,
-      detail: task.assignee_email ?? project.name,
+      detail: task.assignee_email ?? null,
       taskId: task.id,
     });
     rank.set(key, PRIORITY_RANK[priority]);
@@ -309,6 +346,7 @@ export function buildWorkspaceSchedule(input: {
     today: byDate.get(today) ?? [],
     next7: entries.filter((e) => !e.done && e.date >= today && e.date <= horizon),
     awaitingDate: awaitingDate.sort((a, b) => a.projectName.localeCompare(b.projectName)),
+    taskCoverage: input.taskCoverage ?? null,
   };
 }
 

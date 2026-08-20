@@ -6,6 +6,7 @@ import {
   addCalendarDays,
   attentionCount,
   buildWorkspaceSchedule,
+  coversRange,
   supportsScheduledDate,
   type SchedulableProject,
   type SchedulableTask,
@@ -21,6 +22,7 @@ const CALENDAR = read("apps/web/src/features/projects/components/WorkspaceCalend
 const PHOTO_CALENDAR = read("apps/web/src/features/gallery/components/PhotoCalendar.tsx");
 const DETAIL_PAGE = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
 const INDEX_ROUTE = read("apps/web/src/routes/_app.projects.index.tsx");
+const HOOK = read("apps/web/src/hooks/use-workspace-schedule.ts");
 
 /*
  * The client's report, in full:
@@ -409,6 +411,69 @@ describe("a database where the migration has not been applied yet", () => {
     });
     expect(schedule.today).toHaveLength(1);
     expect(schedule.awaitingDate).toHaveLength(1);
+  });
+});
+
+/*
+ * Caught reviewing the first cut of this, not by any of the tests above.
+ *
+ * Task due dates are read inside a bounded window and under a row cap. Booked
+ * jobs are not: they ride along on the projects the page already holds. The
+ * month grid pages without limit, so paging past the window drew the jobs and
+ * silently none of the tasks - a month that is half true and reads as a quiet
+ * one. PhotoCalendar had already written down why that is the worst possible
+ * failure for a calendar ("a count that is quietly short is worse than no
+ * calendar") and shipped a `capped` warning for it; this had neither.
+ */
+describe("saying when the answer is short", () => {
+  it("treats a month inside the window as fully covered", () => {
+    const coverage = { from: "2026-02-21", to: "2028-02-21", capped: false };
+    expect(coversRange(coverage, "2026-08-01", "2026-08-31")).toBe(true);
+  });
+
+  it("flags a month the task read never reached", () => {
+    const coverage = { from: "2026-02-21", to: "2028-02-21", capped: false };
+    expect(coversRange(coverage, "2025-03-01", "2025-03-31")).toBe(false);
+    expect(coversRange(coverage, "2028-06-01", "2028-06-30")).toBe(false);
+  });
+
+  it("says nothing while the read is still in flight, rather than crying wolf", () => {
+    expect(coversRange(null, "1999-01-01", "2099-12-31")).toBe(true);
+  });
+
+  it("flags the month the window ends in, not just the ones past it", () => {
+    // Half a month of tasks is still a month drawn short.
+    const coverage = { from: "2026-02-21", to: "2026-08-15", capped: false };
+    expect(coversRange(coverage, "2026-08-01", "2026-08-31")).toBe(false);
+  });
+
+  it("carries the coverage out with the schedule so the view can render it", () => {
+    const coverage = { from: "2026-02-21", to: "2026-08-15", capped: true };
+    const schedule = buildWorkspaceSchedule({
+      projects: [project({ id: "p1" })],
+      tasks: [],
+      stagesById: STAGES,
+      taskCoverage: coverage,
+      now: NOW,
+    });
+    expect(schedule.taskCoverage).toEqual(coverage);
+  });
+
+  it("is null when nothing has reported, which is the loading state", () => {
+    expect(build([project({ id: "p1" })]).taskCoverage).toBeNull();
+  });
+
+  it("is stated on screen both ways", () => {
+    expect(CALENDAR).toContain("coversRange");
+    expect(CALENDAR).toContain("Task due dates aren&apos;t loaded this far out");
+    expect(CALENDAR).toContain("schedule.taskCoverage?.capped");
+  });
+
+  it("walks the window's far end back to what the capped read actually returned", () => {
+    // Claiming the full window after the cap cut it short would be the same
+    // silent lie one level down.
+    expect(HOOK).toContain("tasks.length >= TASK_LIMIT");
+    expect(HOOK).toContain("to: lastDate");
   });
 });
 

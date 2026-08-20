@@ -11,6 +11,7 @@ import {
   type SchedulableProject,
   type SchedulableTask,
   type StageLite,
+  type TaskCoverage,
   type WorkspaceSchedule,
 } from "@/lib/workspace-calendar";
 
@@ -49,24 +50,45 @@ const LOOK_AHEAD_DAYS = 550;
  */
 const TASK_LIMIT = 2000;
 
-async function loadDatedTasks(): Promise<SchedulableTask[]> {
+interface DatedTasks {
+  tasks: SchedulableTask[];
+  coverage: TaskCoverage;
+}
+
+async function loadDatedTasks(): Promise<DatedTasks> {
   const today = todayCalendarDate();
+  const from = addCalendarDays(today, -LOOK_BACK_DAYS);
+  const to = addCalendarDays(today, LOOK_AHEAD_DAYS);
+
   const { data, error } = await supabase
     .from("tasks" as any)
     .select("id, project_id, title, status, priority, due_date, assignee_email")
     .not("due_date", "is", null)
-    .gte("due_date", addCalendarDays(today, -LOOK_BACK_DAYS))
-    .lte("due_date", addCalendarDays(today, LOOK_AHEAD_DAYS))
+    .gte("due_date", from)
+    .lte("due_date", to)
     .order("due_date", { ascending: true })
     .limit(TASK_LIMIT);
 
   if (error) {
     // Same tolerance ProjectTasks applies: a database that predates the tasks
     // table should render an empty calendar, not a red banner.
-    if (String(error.message).includes("does not exist")) return [];
+    if (String(error.message).includes("does not exist")) {
+      return { tasks: [], coverage: { from, to, capped: false } };
+    }
     throw new Error(error.message);
   }
-  return (data ?? []) as unknown as SchedulableTask[];
+
+  const tasks = (data ?? []) as unknown as SchedulableTask[];
+  /*
+   * A full page is the only evidence there is that rows were left behind, so
+   * it is treated as "capped" even in the rare case the count landed exactly
+   * on the limit. Ordered ascending, so what the cap drops is the far end of
+   * the window: `to` is walked back to the last date actually returned rather
+   * than left claiming a reach the read did not have.
+   */
+  const capped = tasks.length >= TASK_LIMIT;
+  const lastDate = capped ? (tasks[tasks.length - 1]?.due_date ?? to) : to;
+  return { tasks, coverage: { from, to: lastDate, capped } };
 }
 
 export interface WorkspaceScheduleState {
@@ -95,7 +117,13 @@ export function useWorkspaceSchedule(
 
   const tasks = tasksQuery.data;
   const schedule = useMemo(
-    () => buildWorkspaceSchedule({ projects, tasks: tasks ?? [], stagesById }),
+    () =>
+      buildWorkspaceSchedule({
+        projects,
+        tasks: tasks?.tasks ?? [],
+        stagesById,
+        taskCoverage: tasks?.coverage ?? null,
+      }),
     [projects, tasks, stagesById],
   );
 

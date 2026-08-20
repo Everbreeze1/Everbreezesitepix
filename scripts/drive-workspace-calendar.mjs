@@ -180,6 +180,31 @@ const run = async () => {
     ok("month paging", "skipped: empty state, no grid to page");
   }
 
+  /* ------------------------------------- the month past the task read's reach */
+  /*
+   * The grid pages without limit, the task read is windowed, and booked jobs
+   * are not windowed at all. Paging past the window used to draw the jobs and
+   * silently none of the tasks. It has to say so.
+   */
+  current = "coverage";
+  await page.goto(`${BASE}/projects?tab=calendar`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("text=Workspace schedule", { timeout: 60000 }).catch(() => {});
+  const back = page.getByRole("button", { name: "Previous month" }).first();
+  for (let i = 0; i < 8; i++) {
+    await back.click();
+    await page.waitForTimeout(150);
+  }
+  await page.waitForTimeout(1200);
+  const warned = await page
+    .locator("text=/aren.t loaded this far out/i")
+    .first()
+    .isVisible()
+    .catch(() => false);
+  warned
+    ? ok("a month outside the task window says so")
+    : bad("a month outside the task window says so");
+  await page.screenshot({ path: `${SHOTS}/08-outside-window.png` });
+
   /* ------------------------------------------------ the one write, opt-in */
   /*
    * WRITE=1 books the first "awaiting a date" job for today through the UI,

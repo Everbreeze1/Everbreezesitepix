@@ -28,6 +28,7 @@ import { Card } from "@/components/ui/card";
 import { SURFACE_CARD } from "@/components/ui/surface";
 import { EmptyState } from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
+import { coversRange } from "@/lib/workspace-calendar";
 import type { AwaitingDateJob, ScheduleEntry, WorkspaceSchedule } from "@/lib/workspace-calendar";
 
 /**
@@ -106,6 +107,17 @@ export function WorkspaceCalendar({
         end: endOfWeek(endOfMonth(month)),
       }),
     [month],
+  );
+
+  /*
+   * The grid pages without limit; the task read does not. Booked jobs are not
+   * windowed either, so a month outside the read would draw jobs and silently
+   * no tasks - a half-true month that reads as a quiet one. Say it instead.
+   */
+  const monthCovered = coversRange(
+    schedule.taskCoverage,
+    dayKey(startOfMonth(month)),
+    dayKey(endOfMonth(month)),
   );
 
   const dayEntries = schedule.byDate.get(selectedDay) ?? [];
@@ -218,6 +230,20 @@ export function WorkspaceCalendar({
               )}
               {loading && (
                 <span className="text-[11.5px] font-semibold text-muted-foreground">Loading…</span>
+              )}
+              {/* Both of these are "what you are looking at is short, and here
+                  is why", which is the one thing a calendar must never leave
+                  the reader to work out. */}
+              {!monthCovered && (
+                <span className="inline-flex items-center gap-1.5 text-[11.5px] font-bold text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Task due dates aren&apos;t loaded this far out. Booked jobs still show.
+                </span>
+              )}
+              {schedule.taskCoverage?.capped && (
+                <span className="text-[11.5px] font-bold text-amber-600 dark:text-amber-400">
+                  Too many dated tasks to load at once - the far future is cut off
+                </span>
               )}
             </>
           )}
@@ -491,6 +517,12 @@ function EntryRow({
             <span className="truncate">
               {entry.kind === "job" ? (entry.detail ?? "No pipeline stage") : entry.projectName}
             </span>
+            {/* Who it is on. "What's due today" is half an answer without it,
+                and it is the one field a person would otherwise open the task
+                to read. */}
+            {entry.kind === "task" && entry.detail && (
+              <span className="hidden shrink-0 truncate opacity-80 sm:inline">{entry.detail}</span>
+            )}
             {showDate && (
               <span className="shrink-0 tabular-nums">{formatCalendarDate(entry.date)}</span>
             )}
