@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,6 +79,7 @@ import {
   PanelRightOpen,
   PanelRightClose,
   MoreHorizontal,
+  Monitor,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -195,7 +197,7 @@ const PLACEHOLDERS: { token: string; label: string; group: string }[] = [
   { token: "project_number", label: "Project number", group: "Project" },
   { token: "client_name", label: "Client name", group: "Project" },
   { token: "client_contact", label: "Client contact", group: "Project" },
-  { token: "date", label: "Today's date", group: "General" },
+  { token: "date", label: "Date", group: "General" },
   { token: "prepared_by", label: "Prepared by", group: "General" },
   // Labels match apps/api/.../pages.ts PLACEHOLDER_LABELS: the same field is
   // named to the author here and to the reader in the document itself.
@@ -217,14 +219,7 @@ type Placeholder = (typeof PLACEHOLDERS)[number];
 
 // Relevant placeholder tokens per template style, in preferred order.
 const RELEVANT_BY_STYLE: Record<string, string[]> = {
-  report: [
-    "project_name",
-    "project_address",
-    "date",
-    "prepared_by",
-    "job_title",
-    "company_name",
-  ],
+  report: ["project_name", "project_address", "date", "prepared_by", "job_title", "company_name"],
   letter: [
     "date",
     "client_name",
@@ -492,6 +487,7 @@ const SAMPLE: Record<string, string> = {
   job_title: "Project Manager",
   prepared_by_title: "Project Manager",
   weather: "Sunny, 72°F",
+  company: "Everbreeze Construction",
   company_name: "Everbreeze Construction",
   company_address: "800 Harbor Blvd, Suite 210",
   company_phone: "(555) 123-4567",
@@ -666,6 +662,33 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const confirm = useConfirm();
+  /*
+   * Authoring is a desktop job; using a template is not.
+   *
+   * The editor is a full-bleed page of paper with a two-row formatting toolbar
+   * on top and a fields panel down the side. Below 768px the panel is not
+   * rendered at all, the toolbar wraps to four rows, and the paper is narrower
+   * than the tables the built-in templates are made of - so what a phone
+   * offers is not a smaller version of the editor, it is a worse one. The
+   * client's call, and it matches what the surface can actually do: "the edits
+   * should only be available to be created on desktop. Mobile can apply
+   * templates and use it."
+   *
+   * So every route into the editor - New template, Edit, Duplicate - says so
+   * on a phone instead of opening it, and "Use in a project" is untouched.
+   * The controls stay on the card either way: a button that vanishes on a
+   * phone reads as a missing feature, and someone who taps it deserves to be
+   * told where it lives rather than left guessing.
+   */
+  const isMobile = useIsMobile();
+  function editorNeedsDesktop(): boolean {
+    if (!isMobile) return false;
+    toast.info("Template editing needs a bigger screen", {
+      description:
+        "Open Templates on a desktop or tablet to write or change one. On a phone you can still use any template on a project.",
+    });
+    return true;
+  }
   const [items, setItems] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
@@ -1232,8 +1255,15 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
               archived ones and restore any of them.
             </HelpTip>
             {canManage && (
-              <Button className={SURFACE_BUTTON} onClick={() => setCreateOpen(true)}>
+              <Button
+                className={SURFACE_BUTTON}
+                onClick={() => {
+                  if (editorNeedsDesktop()) return;
+                  setCreateOpen(true);
+                }}
+              >
                 <Plus className="h-4 w-4" /> New template
+                {isMobile && <Monitor className="h-3.5 w-3.5 opacity-70" />}
               </Button>
             )}
           </>
@@ -1287,6 +1317,21 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
           </p>
         </HelpTip>
       </div>
+
+      {/* What a phone can do here, said once at the top rather than only when
+          somebody taps Edit and gets a toast back. Same breakpoint as the
+          editor's own `md` split. */}
+      {isMobile && canManage && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/50 px-4 py-3 text-sm">
+          <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <p className="text-muted-foreground">
+            <span className="font-semibold text-foreground">
+              Writing and editing templates is a desktop job.
+            </span>{" "}
+            On a phone you can use any template on a project and finish the document there.
+          </p>
+        </div>
+      )}
 
       {/* Trade filter. Eleven sections is a long page to scroll, so a sparky can
           cut it to the one that is theirs. Hidden when everything on the page
@@ -1503,8 +1548,20 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                           <FilePlus2 className="mr-1 h-3.5 w-3.5" /> Use in a project
                         </Button>
                         {canManage && (
-                          <Button size="sm" variant="outline" onClick={() => void edit(t)}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={cn(isMobile && "text-muted-foreground")}
+                            title={
+                              isMobile ? "Editing a template needs a desktop or tablet" : undefined
+                            }
+                            onClick={() => {
+                              if (editorNeedsDesktop()) return;
+                              void edit(t);
+                            }}
+                          >
                             <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                            {isMobile && <Monitor className="ml-1 h-3.5 w-3.5" />}
                           </Button>
                         )}
                         {canManage && !isExample && (
@@ -1523,7 +1580,19 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                               <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
                                 Changes the library, not this job
                               </DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => void copyForEditing(t)}>
+                              <DropdownMenuItem
+                                onSelect={(e) => {
+                                  // Duplicating opens the editor on the new row,
+                                  // and closing it unedited deletes that row
+                                  // again - so on a phone this would write and
+                                  // then abandon a template for nothing.
+                                  if (editorNeedsDesktop()) {
+                                    e.preventDefault();
+                                    return;
+                                  }
+                                  void copyForEditing(t);
+                                }}
+                              >
                                 <Copy className="mr-2 h-4 w-4" />
                                 <span>
                                   <span className="block font-bold">Duplicate</span>
@@ -1531,6 +1600,7 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                                     A second template you can change without touching this one.
                                   </span>
                                 </span>
+                                {isMobile && <Monitor className="ml-auto h-3.5 w-3.5 opacity-70" />}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => void toggleArchive(t)}>
@@ -1921,6 +1991,53 @@ function ChipStyles() {
         border-radius: 8px;
         box-shadow: 0 10px 30px -12px rgba(0,0,0,0.15), 0 2px 6px rgba(0,0,0,0.06);
       }
+      /*
+       * The paper, and the chrome sitting on it, are permanently in light mode.
+       *
+       * .doc-page is hardcoded white in both themes, above. Everything drawn on
+       * it is not: the formatting toolbar and the Add section / Insert
+       * placeholder row are the app's own shadcn components, and the document
+       * body is a TipTap editor picking up the .tiptap rules in styles.css -
+       * all of which resolve their colours through the theme variables.
+       *
+       * In dark mode that pairing is what the client photographed. The toolbar
+       * icons resolve text-foreground to near-white and vanish into the page
+       * ("most of the formatting icons look grayed-out/disabled"); the two
+       * outline Buttons resolve bg-background to the app's dark navy and land
+       * on the white row as unreadable pills; and inside the document every
+       * table header resolves .tiptap table th's var(--muted) to dark navy and
+       * then prints .doc-page's #111827 text on top of it.
+       *
+       * Rather than hardcode a colour per control - which would mean editing
+       * DocumentToolbar, shared with the project page editor, and the .tiptap
+       * block, shared with every other editor in the app - this pins the light
+       * palette for the subtree. Everything inside then renders exactly as it
+       * does in light mode, which is the mode a sheet of paper is permanently
+       * in. Values copied from the :root block in styles.css.
+       *
+       * Radix portals its menus to the body, so the dropdowns these triggers
+       * open are deliberately NOT covered: they float over the app, not over
+       * the page, and they should keep matching the app.
+       */
+      .doc-page,
+      .doc-chrome {
+        --background: oklch(0.99 0.005 240);
+        --foreground: oklch(0.22 0.04 250);
+        --card: oklch(1 0 0);
+        --card-foreground: oklch(0.22 0.04 250);
+        --primary: oklch(0.45 0.14 245);
+        --primary-foreground: oklch(0.99 0.005 240);
+        --secondary: oklch(0.96 0.01 240);
+        --secondary-foreground: oklch(0.3 0.05 250);
+        --muted: oklch(0.96 0.008 240);
+        --muted-foreground: oklch(0.5 0.03 250);
+        --accent: oklch(0.94 0.03 240);
+        --accent-foreground: oklch(0.3 0.07 250);
+        --border: oklch(0.91 0.013 245);
+        --input: oklch(0.91 0.013 245);
+        --ring: oklch(0.55 0.14 245);
+        color: oklch(0.22 0.04 250);
+      }
       .doc-page .ProseMirror {
         outline: none;
         min-height: 60vh;
@@ -1984,6 +2101,36 @@ function ChipStyles() {
          wraps each image in that span); the bare img covers the preview, which
          renders the stored HTML directly. Tailwind's preflight sets images to
          display:block, which is what stacks them. */
+      /* Tables.
+         The editor picks up .tiptap table in styles.css; the preview pane does
+         not, because it renders the stored HTML into a plain div with no
+         .tiptap class on it. So a template full of tables - which most of the
+         built-ins are - previewed borderless, as an unaligned run of text. The
+         light palette above is what keeps the header row readable; these rules
+         are what make the two panes the same document. */
+      .doc-page .ProseMirror table,
+      .doc-page .doc-preview table {
+        border-collapse: collapse;
+        table-layout: fixed;
+        width: 100%;
+        margin: 1em 0;
+      }
+      .doc-page .ProseMirror table td, .doc-page .ProseMirror table th,
+      .doc-page .doc-preview table td, .doc-page .doc-preview table th {
+        border: 1px solid #d8dce4;
+        padding: 0.5em 0.625em;
+        vertical-align: top;
+        min-width: 3rem;
+      }
+      .doc-page .ProseMirror table th,
+      .doc-page .doc-preview table th {
+        background: #f1f3f7;
+        color: #111827;
+        font-weight: 700;
+        text-align: left;
+      }
+      .doc-page .ProseMirror table p,
+      .doc-page .doc-preview table p { margin: 0; }
       .doc-page img { max-width: 100%; border-radius: 6px; }
       .doc-page img[width][height] { object-fit: cover; }
       .doc-page p > img,
@@ -2149,7 +2296,10 @@ function DocumentEditorSurface({
             const name = e.target.value;
             setEditor((prev) => (prev ? { ...prev, name } : prev));
           }}
-          className="h-8 max-w-xs font-medium"
+          // Wide enough to read a real template name back. "Electrical Panel &
+          // Circuit Inspection (copy)" is 42 characters, and max-w-xs at h-8
+          // showed about half of it in the one box you rename it from.
+          className="h-9 w-64 max-w-sm text-sm font-semibold"
           placeholder="Untitled document"
         />
         <Badge variant="secondary" className="hidden gap-1 md:inline-flex">
@@ -2311,7 +2461,7 @@ function DocumentEditorSurface({
                             {p.label}
                           </span>
                           <input
-                            className="w-full rounded border border-blue-200 bg-white px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            className="h-10 w-full rounded-md border border-blue-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
                             value={sampleOverrides[p.token] ?? ""}
                             placeholder={SAMPLE[p.token] ?? p.label}
                             onChange={(e) =>
@@ -2332,11 +2482,19 @@ function DocumentEditorSurface({
                     snippets, running header/footer) are omitted: a template has
                     no project behind it and uses photo *slots* instead. */}
                 {tiptap && (
-                  <div className="sticky top-0 z-20 -mx-px rounded-t-lg border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
+                  /* `doc-chrome` pins the light palette for everything in here
+                     - see the note beside the class in ChipStyles. The toolbar
+                     sits on the white page, so in dark mode its icons were
+                     near-white on white and its two menu buttons were the app's
+                     dark navy on white. */
+                  <div className="doc-chrome sticky top-0 z-20 -mx-px rounded-t-lg border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
                     <DocumentToolbar editor={tiptap} />
-                    <div className="flex items-center gap-1 border-t border-gray-100 px-3 py-1.5">
+                    <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 bg-slate-50/80 px-3 py-2">
                       <SectionMenu onInsert={insertSection} />
                       <PlaceholderMenu onInsert={insertPlaceholder} />
+                      <span className="ml-auto hidden text-[11px] text-slate-500 lg:inline">
+                        Placeholders fill themselves in from the project this is used on.
+                      </span>
                     </div>
                   </div>
                 )}
@@ -2348,10 +2506,17 @@ function DocumentEditorSurface({
           </div>
         </div>
         {sidePanel && mode === "edit" && (
-          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l bg-muted/30 md:block">
+          /*
+             Wider from lg up. At a flat 320px the value inputs below are about
+             270px of usable width, which truncates "1234 Elm Street,
+             Springfield" and every company address - in the one panel whose
+             whole job is showing you what you typed. "The fields should be
+             larger to view what we type."
+          */
+          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l bg-muted/30 md:block lg:w-96 xl:w-[26rem]">
             <div className="p-4">
               <div className="mb-3 flex items-center justify-between">
-                <div className="text-sm font-semibold">Fields for {stylePreset.label}</div>
+                <div className="text-base font-semibold">Fields for {stylePreset.label}</div>
                 <button
                   className="text-muted-foreground hover:text-foreground"
                   onClick={() => setSidePanel(false)}
@@ -2368,8 +2533,8 @@ function DocumentEditorSurface({
                   <button
                     key={p.token}
                     onClick={() => insertPlaceholder(p.token)}
-                    className="rounded-full border bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50"
-                    title={`{{${p.token}}}`}
+                    className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-xs font-medium text-blue-700 transition hover:border-blue-400 hover:bg-blue-50"
+                    title={`Insert {{${p.token}}}`}
                   >
                     {p.label}
                   </button>
@@ -2401,19 +2566,23 @@ function DocumentEditorSurface({
                     right-hand half of the client's screenshot.
                   */
                   return (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {editableTokens.map((token) => (
-                        <div key={token} className="space-y-0.5">
-                          <label className="text-[11px] font-medium text-muted-foreground">
-                            {LABEL_BY_TOKEN[token] ?? token}
+                        <div key={token} className="space-y-1">
+                          <label
+                            htmlFor={`doc-field-${token}`}
+                            className="block text-xs font-semibold text-foreground"
+                          >
+                            {snippetLabel(token)}
                           </label>
                           <input
-                            className="w-full rounded border bg-white px-2 py-1 text-sm"
+                            id={`doc-field-${token}`}
+                            className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
                             value={sampleOverrides[token] ?? ""}
                             onChange={(e) =>
                               setSampleOverrides((s) => ({ ...s, [token]: e.target.value }))
                             }
-                            placeholder={SAMPLE[token] ?? token}
+                            placeholder={SAMPLE[token] ?? snippetLabel(token)}
                           />
                         </div>
                       ))}
@@ -2432,7 +2601,8 @@ function DocumentEditorSurface({
                     <button
                       key={p.token}
                       onClick={() => insertPlaceholder(p.token)}
-                      className="rounded-full border bg-white px-2 py-0.5 text-[11px] text-blue-700 hover:bg-blue-50"
+                      className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-xs text-blue-700 transition hover:border-blue-400 hover:bg-blue-50"
+                      title={`Insert {{${p.token}}}`}
                     >
                       {p.label}
                     </button>
