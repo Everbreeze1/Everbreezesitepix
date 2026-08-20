@@ -35,23 +35,48 @@ interface ProjectPin {
   longitude: number | null;
 }
 
+/*
+ * Archived is the fourth status a project can hold - see the archive action on
+ * the project page - and archived jobs are plotted like any other under the All
+ * filter. The map had no entry for it, so an archived pin fell through to the
+ * same slate as Completed and the legend documented neither.
+ *
+ * The two greys are the pair STATUS_DOT already uses in features/projects/
+ * constants, deliberately: a finished job and a filed one both read as "not
+ * live work", so they share a family and differ by one step, and the map now
+ * says it the same way the project page does. Going darker than slate-500 for
+ * Archived was the first attempt and it failed in the dark theme - the legend
+ * swatch came out at 1.75:1 against its own card, documenting a colour nobody
+ * could see. Anything added here has to survive both themes.
+ */
 const statusColor: Record<string, string> = {
   active: "#16a34a",
   on_hold: "#eab308",
-  completed: "#64748b",
+  completed: "#94a3b8",
+  archived: "#64748b",
 };
+
+// Anything outside the four above is an unknown status; it borrows Completed's
+// slate rather than inventing a fifth colour the legend cannot explain.
+const FALLBACK_PIN_COLOR = "#94a3b8";
 
 const statusLabel: Record<string, string> = {
   active: "Active",
   on_hold: "On hold",
   completed: "Completed",
+  archived: "Archived",
 };
 
 const statusBadgeStyle: Record<string, { bg: string; text: string }> = {
   active: { bg: "#ECFDF5", text: "#047857" },
   on_hold: { bg: "#FEFCE8", text: "#A16207" },
   completed: { bg: "#F1F5F9", text: "#475569" },
+  archived: { bg: "#E2E8F0", text: "#334155" },
 };
+
+// Legend order, and the only place the set of documented colours is written
+// down. Archived is last because it is the only one the map hides by default.
+const LEGEND_STATUSES = ["active", "on_hold", "completed", "archived"] as const;
 
 const formatAddress = (p: ProjectPin) =>
   [p.street, [p.city, p.state].filter(Boolean).join(", "), p.zip].filter(Boolean).join(" ");
@@ -132,7 +157,7 @@ const pinSvg = (color: string, label: string | null, selected: boolean) => {
 const paintMarker = (marker: any, p: ProjectPin, state: PinState) => {
   const label = state === "idle" ? null : p.name;
   marker.setIcon({
-    url: pinSvg(statusColor[p.status] ?? "#64748b", label, state === "selected"),
+    url: pinSvg(statusColor[p.status] ?? FALLBACK_PIN_COLOR, label, state === "selected"),
     scaledSize: new window.google.maps.Size(pinIconWidth(label), PIN_H + 4),
     anchor: new window.google.maps.Point(PIN_W / 2, PIN_H),
   });
@@ -244,8 +269,17 @@ export function MapPage() {
     }
     return out;
   }, [boardsQuery.data]);
+  /*
+   * Archiving a project leaves its pipeline_stage_id alone, so an archived job
+   * is still standing in whatever stage it was in when it was filed. Showing
+   * that stage would put a live-looking "Scheduled" chip next to an archived
+   * pin, which is the contradiction the legend then has to explain away. The
+   * project page already resolves it this way - see ProjectStatusChip, where an
+   * archived project keeps its own status rather than the stage's.
+   */
   const stageOf = (p: ProjectPin) =>
-    (p.pipeline_stage_id ? stageLookup[p.pipeline_stage_id] : null) ?? null;
+    (p.status !== "archived" && p.pipeline_stage_id ? stageLookup[p.pipeline_stage_id] : null) ??
+    null;
   const [projects, setProjects] = useState<ProjectPin[]>([]);
   const [stats, setStats] = useState<Record<string, ProjectStats>>({});
   // The filter is part of "where I was", so a return trip restores it with the
@@ -302,11 +336,16 @@ export function MapPage() {
   const buildPreviewCard = useCallback(
     (p: ProjectPin) => {
       const st = statsRef.current[p.id];
-      const stage = (p.pipeline_stage_id ? stageLookup[p.pipeline_stage_id] : null) ?? null;
+      // Same rule as stageOf, inlined so this callback depends on the lookup
+      // rather than on a function rebuilt every render.
+      const stage =
+        (p.status !== "archived" && p.pipeline_stage_id
+          ? stageLookup[p.pipeline_stage_id]
+          : null) ?? null;
       const name = escapeXml(p.name);
       const addr = escapeXml(formatAddress(p) || "No address on file");
       const badgeText = escapeXml(stage?.name ?? statusLabel[p.status] ?? p.status);
-      const badgeColor = escapeXml(stage?.color ?? statusColor[p.status] ?? "#64748b");
+      const badgeColor = escapeXml(stage?.color ?? statusColor[p.status] ?? FALLBACK_PIN_COLOR);
       const photoCount = st?.photoCount ?? 0;
       const activity = st?.lastActivity
         ? `Last activity ${new Date(st.lastActivity).toLocaleDateString(undefined, {
@@ -735,6 +774,10 @@ export function MapPage() {
     completed: projects.filter((p) => p.status === "completed").length,
     all: projects.length,
   };
+  // Drives the Archived legend row. Read off every project the map knows about,
+  // not just the visible ones, so switching to Active does not retract the
+  // explanation for pins the All filter will show again a click later.
+  const hasArchived = projects.some((p) => p.status === "archived");
 
   /*
    * A list row is a preview too: it flies to the pin and opens the same card,
@@ -829,7 +872,13 @@ export function MapPage() {
                   <div className="font-manrope mb-0.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     <Layers className="h-3 w-3" /> Legend
                   </div>
-                  {(["active", "on_hold", "completed"] as const).map((s) => (
+                  {/*
+                    Archived earns its row only where there is an archived job
+                    to explain. Every colour the map can paint is listed here,
+                    which is the point of a legend: no pin should be a colour
+                    the panel has no word for.
+                  */}
+                  {LEGEND_STATUSES.filter((s) => s !== "archived" || hasArchived).map((s) => (
                     <div key={s} className="flex items-center gap-2">
                       <span
                         className="h-2.5 w-2.5 rounded-full ring-2 ring-card"
@@ -838,16 +887,19 @@ export function MapPage() {
                       <span className="text-foreground/80">{statusLabel[s]}</span>
                     </div>
                   ))}
-                  {/*
-                    Said out loud, because a pin labelled "Invoiced" sitting on
-                    a Completed colour is only confusing while you think they
-                    are two competing statuses. They are one: the stage is the
-                    detail, these three are what it counts as.
-                  */}
-                  {Object.keys(stageLookup).length > 0 && (
-                    <p className="mt-1 max-w-[190px] border-t border-border pt-1.5 text-[10px] leading-snug text-muted-foreground">
-                      Pipeline stages roll up into these three.
-                    </p>
+                  {(hasArchived || Object.keys(stageLookup).length > 0) && (
+                    <div className="mt-1 max-w-[190px] space-y-1 border-t border-border pt-1.5 text-[10px] leading-snug text-muted-foreground">
+                      {/*
+                        Said out loud, because a pin labelled "Invoiced" sitting
+                        on a Completed colour is only confusing while you think
+                        they are two competing statuses. They are one: the stage
+                        is the detail, the bucket is what it counts as.
+                      */}
+                      {Object.keys(stageLookup).length > 0 && (
+                        <p>Pipeline stages roll up into Active, On hold and Completed.</p>
+                      )}
+                      {hasArchived && <p>Archived jobs are only plotted under the All filter.</p>}
+                    </div>
                   )}
                 </div>
                 {/* Count chip */}
