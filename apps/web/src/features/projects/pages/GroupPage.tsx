@@ -420,7 +420,7 @@ export function GroupPage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuItem onClick={() => setRenameOpen(true)}>
-                  <Pencil className="mr-2 h-4 w-4" /> Rename Group
+                  <Pencil className="mr-2 h-4 w-4" /> Edit Group Details
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setEditProjectsOpen(true)}>
                   <ListChecks className="mr-2 h-4 w-4" /> Edit Projects
@@ -939,11 +939,11 @@ export function GroupPage() {
         )}
       </div>
 
-      {/* Rename dialog */}
+      {/* Group details dialog - name and description, not just the name */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Rename Group</DialogTitle>
+            <DialogTitle>Edit Group Details</DialogTitle>
             <DialogDescription>Update the group name and description.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

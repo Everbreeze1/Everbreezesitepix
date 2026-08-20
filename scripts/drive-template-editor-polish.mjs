@@ -24,7 +24,14 @@ import { chromium } from "playwright";
 import { readFileSync, mkdirSync } from "node:fs";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:8080";
-const SHOTS = "artifacts/template-editor-polish";
+/*
+ * Dark is the mode the bug was reported in, so it is the default. Light matters
+ * too: the paper pins the light palette by redefining the theme variables to
+ * the values :root already holds, so light mode should be untouched - and
+ * "should be" is worth one run of THEME=light to confirm.
+ */
+const THEME = process.env.THEME === "light" ? "light" : "dark";
+const SHOTS = `artifacts/template-editor-polish${THEME === "light" ? "-light" : ""}`;
 mkdirSync(SHOTS, { recursive: true });
 
 function env() {
@@ -72,7 +79,7 @@ const run = async () => {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({
     viewport: { width: 1440, height: 900 },
-    colorScheme: "dark",
+    colorScheme: THEME,
   });
   const page = await ctx.newPage();
 
@@ -93,18 +100,21 @@ const run = async () => {
   if (/\/login/.test(new URL(page.url()).pathname)) throw new Error("login failed");
   console.log("login OK");
 
-  // ---------- force the app into dark mode ----------
-  await page.evaluate(() => {
-    localStorage.setItem("theme", "dark");
-    document.documentElement.classList.add("dark");
-  });
+  // ---------- force the app into the mode under test ----------
+  await page.evaluate((theme) => {
+    localStorage.setItem("theme", theme);
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  }, THEME);
 
   // ---------- templates -> documents ----------
   await page.goto(`${BASE}/templates?tab=documents`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector("text=Use in a project", { timeout: 90000 });
   await page.waitForTimeout(1500);
-  await page.evaluate(() => document.documentElement.classList.add("dark"));
-  await page.screenshot({ path: `${SHOTS}/01-library-dark.png` });
+  await page.evaluate(
+    (theme) => document.documentElement.classList.toggle("dark", theme === "dark"),
+    THEME,
+  );
+  await page.screenshot({ path: `${SHOTS}/01-library.png` });
 
   // ---------- open one the team owns, so nothing is written ----------
   const editable = await page.evaluate(() => {
@@ -144,7 +154,7 @@ const run = async () => {
   await page.getByRole("button", { name: "Edit", exact: true }).nth(target).click();
   await page.waitForSelector("text=Save template", { timeout: 60000 });
   await page.waitForTimeout(2500);
-  await page.screenshot({ path: `${SHOTS}/02-editor-dark.png` });
+  await page.screenshot({ path: `${SHOTS}/02-editor.png` });
 
   // ---------- measure the toolbar ----------
   const report = await page.evaluate(() => {
@@ -259,6 +269,26 @@ const run = async () => {
     document.body.innerText.includes("Writing and editing templates is a desktop job"),
   );
   console.log(`\nphone: desktop-only note shown = ${gated}`);
+
+  // Tapping Edit explains itself rather than opening the editor.
+  await phone.getByRole("button", { name: "Edit", exact: true }).first().click();
+  await phone.waitForTimeout(1200);
+  const phoneBody = await phone.locator("body").innerText();
+  console.log(
+    `phone: Edit toasts instead of opening = ${
+      phoneBody.includes("needs a bigger screen") && !phoneBody.includes("Save template")
+    }`,
+  );
+  await phone.screenshot({ path: `${SHOTS}/05-phone-edit-blocked.png` });
+
+  // ...and using one still works, which is the half that has to keep working.
+  await phone.getByRole("button", { name: "Use in a project" }).first().click();
+  await phone.waitForTimeout(2500);
+  const picker = await phone.locator("body").innerText();
+  console.log(`phone: Use in a project opens = ${/Pick a project/i.test(picker)}`);
+  await phone.screenshot({ path: `${SHOTS}/06-phone-use.png` });
+  await phone.keyboard.press("Escape");
+  await phone.waitForTimeout(800);
 
   await browser.close();
   console.log(`\nshots in ${SHOTS}`);

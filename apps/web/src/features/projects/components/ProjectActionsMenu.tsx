@@ -618,8 +618,8 @@ export function ProjectActionsMenu({
           <DialogHeader>
             <DialogTitle>File under a group</DialogTitle>
             <DialogDescription>
-              File “{project.name}” under an existing group. You can create new groups from the
-              dashboard.
+              File “{project.name}” under an existing group. New groups are created on the Projects
+              page, under the Groups tab.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
