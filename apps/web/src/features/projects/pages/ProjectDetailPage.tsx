@@ -107,6 +107,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 
 import { SlidersHorizontal } from "lucide-react";
+import { onEscapeOutsideModals } from "@/lib/modal-layers";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -395,6 +396,44 @@ export function ProjectDetailPage() {
     setSelectedPhotoIds([]);
     setPhotoSelectMode(false);
   };
+  /*
+   * A selection only ever means the photos you can currently see.
+   *
+   * Tick some photos, then switch the phase chip to "After work" or filter by a
+   * tag: the ones that no longer match are off screen but were still in
+   * `selectedPhotoIds`, so the bar counted them, Hide hid them and Trash
+   * deleted them, with nothing on screen ever having shown them. The Gallery
+   * has had this guard since its own review; the project grid did not, and
+   * putting a discoverable Select control on it is not something to do while
+   * that is still true.
+   *
+   * Declared here rather than beside the grid so it sits with the state it
+   * prunes. `filteredPhotos` is defined further down; the effect only reads it
+   * when it runs, which is after render.
+   */
+  useEffect(() => {
+    setSelectedPhotoIds((s) => {
+      if (s.length === 0) return s;
+      const onScreen = new Set(filteredPhotos.map((p) => p.id));
+      const next = s.filter((id) => onScreen.has(id));
+      return next.length === s.length ? s : next;
+    });
+    // Keyed on the inputs that produce `filteredPhotos` rather than the array
+    // itself, which `.filter()` rebuilds on every single render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photos, phaseFilter, tagFilter, tagLogic, mediaType]);
+
+  /*
+   * Escape drops out of picking - but only against the bare grid. Any layer
+   * above owns its own Escape (the lightbox, the bulk Tag, Share and Move
+   * dialogs, a confirmation), and that press is not about the selection
+   * underneath. Same rule, same helper, as the Gallery.
+   */
+  useEffect(() => {
+    if (!photoSelectMode && selectedPhotoIds.length === 0) return;
+    return onEscapeOutsideModals(clearSelection);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoSelectMode, selectedPhotoIds.length]);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [mobileWalkId, setMobileWalkId] = useState<string | null>(null);
 
@@ -3673,6 +3712,7 @@ export function ProjectDetailPage() {
               showTags={false}
               selectedIds={selectedPhotoIds}
               onToggleSelect={toggleSelect}
+              selectMode={photoSelectMode}
             />
           )}
 

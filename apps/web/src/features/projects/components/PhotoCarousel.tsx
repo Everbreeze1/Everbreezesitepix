@@ -12,6 +12,7 @@ export function PhotoCarousel({
   showTags = false,
   selectedIds,
   onToggleSelect,
+  selectMode = false,
 }: {
   photos: Photo[];
   photoSrc: (p: Photo) => string;
@@ -21,6 +22,15 @@ export function PhotoCarousel({
   showTags?: boolean;
   selectedIds?: string[];
   onToggleSelect?: (id: string) => void;
+  /**
+   * The Select control in the Photos toolbar is on.
+   *
+   * Without this the carousel could only be told about selection AFTER a first
+   * photo had been ticked, and the only way to tick one was to hover a tile -
+   * so pressing Select in carousel view appeared to do nothing, and on a touch
+   * screen there was no way in at all.
+   */
+  selectMode?: boolean;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const scrollBy = (dir: 1 | -1) => {
@@ -31,7 +41,7 @@ export function PhotoCarousel({
   const recent = photos.slice(0, 24);
   const sizeCls = size === "sm" ? "h-36 sm:h-40" : size === "lg" ? "h-72 sm:h-80" : "h-52 sm:h-60";
   const selSet = new Set(selectedIds ?? []);
-  const inSelectionMode = selSet.size > 0;
+  const inSelectionMode = selectMode || selSet.size > 0;
   return (
     <div className="relative mt-4">
       <button
@@ -107,7 +117,10 @@ export function PhotoCarousel({
                   className={`absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-md border-2 shadow-md transition ${
                     selected
                       ? "border-primary bg-primary text-primary-foreground opacity-100"
-                      : "border-sidebar-foreground/90 bg-sidebar/30 text-transparent opacity-0 backdrop-blur-sm group-hover:opacity-100"
+                      : `border-sidebar-foreground/90 bg-sidebar/30 text-transparent backdrop-blur-sm group-hover:opacity-100 ${
+                          // Pinned open in select mode: hover never fires on touch.
+                          inSelectionMode ? "opacity-100" : "opacity-0"
+                        }`
                   }`}
                 >
                   <Check className="h-4 w-4" />

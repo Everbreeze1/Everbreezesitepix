@@ -219,8 +219,27 @@ const run = async () => {
     .count();
   if (spinning === 0) ok("Share button is not left spinning");
   else bad("Share button is not left spinning", `${spinning} spinner(s)`);
+  /*
+   * Escape must close the dialog and leave the selection alone. This is the one
+   * check here that no source test can stand in for: the old guard read
+   * correctly and behaved wrongly, because it ran in the bubble phase after
+   * Radix had already unmounted the dialog. Closing by the X button always
+   * worked, so only the key press proves it.
+   */
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(900);
+  await page.waitForTimeout(1200);
+  const dialogGone = !(await page
+    .locator('[role="dialog"]')
+    .first()
+    .isVisible()
+    .catch(() => false));
+  const barSurvived = await bar.isVisible().catch(() => false);
+  if (dialogGone && barSurvived) ok("Escape closes the dialog without clearing the selection");
+  else
+    bad(
+      "Escape closes the dialog without clearing the selection",
+      JSON.stringify({ dialogGone, barSurvived }),
+    );
 
   /* ------------------------------------------------------------------ Move */
   await bar.getByRole("button", { name: "Move" }).click();
