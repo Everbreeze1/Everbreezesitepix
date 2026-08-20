@@ -620,6 +620,7 @@ const CATEGORIES: Category[] = [
           "Open Gallery in the sidebar to see every photo across every project.",
           "Filter by project, by tag, or by a date range using the chips in the toolbar. Clear all resets them.",
           "Switch between Grid and Calendar with the toggle on the right.",
+          "Click Select in the toolbar, or the tick box that appears on a photo as you hover it, to start picking. A bulk bar appears.",
           "Select photos to download, tag, print, share, generate a report from, hide, move to another project, or send to Trash.",
         ],
       },

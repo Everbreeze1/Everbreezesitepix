@@ -66,7 +66,7 @@ function truncateToWidth(ctx: CanvasRenderingContext2D, text: string, maxWidth: 
 /**
  * Draws a balanced, premium photo overlay:
  * - Top-left: project address (white text with subtle shadow)
- * - Top-right: prominent BEFORE/AFTER pill (or small UNTAGGED chip)
+ * - Top-right: prominent BEFORE/AFTER pill, and nothing at all otherwise
  * - Bottom-right: semi-transparent company logo
  * Layout adapts to portrait and landscape via minDim scaling.
  */
@@ -82,19 +82,36 @@ export async function drawWatermark(
   const pad = Math.round(minDim * 0.035);
   ctx.textBaseline = "alphabetic";
 
-  // ---- Top-right: BEFORE/AFTER pill, or small UNTAGGED chip ----
+  /*
+   * ---- Top-right: BEFORE/AFTER pill ----
+   *
+   * Only before/after get drawn. This used to stamp a slate "UNTAGGED" chip
+   * whenever the capture mode was anything else, and that word is burnt into
+   * the JPEG forever: tag the photo "Condenser Being Washed" a minute later
+   * and the Details panel says one thing while the pixels next to it still
+   * say UNTAGGED. Nothing can resync them, because there is no live badge to
+   * resync - the contradiction is inside the image.
+   *
+   * It was also the wrong word. "Untagged" here only ever meant "the shooter
+   * picked the Untagged capture mode rather than Before or After"; it says
+   * nothing about `photos.tags`, which is the catalogue the Details panel, the
+   * tag filter and bulk-tag all read. Two unrelated ideas sharing one label,
+   * with the useless one printed on the customer's photo.
+   *
+   * `share.projects.$token.tsx` already reached this conclusion for the
+   * on-screen chip ("`untagged` is not a phase"); this is its burnt-in twin.
+   * Before/After stay: those the shooter deliberately chose, and they are what
+   * the pill is for.
+   */
   let tagBoxLeft = w; // for address truncation
   let tagBoxBottom = pad;
-  {
-    const isTagged = opts.tag === "before" || opts.tag === "after";
-    const text = isTagged ? opts.tag!.toUpperCase() : "UNTAGGED";
-    const tagSize = isTagged
-      ? Math.max(30, Math.round(minDim * 0.082))
-      : Math.max(14, Math.round(minDim * 0.03));
-    ctx.font = `${isTagged ? 800 : 700} ${tagSize}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial`;
+  if (opts.tag === "before" || opts.tag === "after") {
+    const text = opts.tag.toUpperCase();
+    const tagSize = Math.max(30, Math.round(minDim * 0.082));
+    ctx.font = `800 ${tagSize}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial`;
     const tm = ctx.measureText(text);
-    const px = Math.round(tagSize * (isTagged ? 0.78 : 0.7));
-    const py = Math.round(tagSize * (isTagged ? 0.45 : 0.4));
+    const px = Math.round(tagSize * 0.78);
+    const py = Math.round(tagSize * 0.45);
     const boxW = Math.round(tm.width + px * 2);
     const boxH = Math.round(tagSize + py * 2);
     const bx = w - pad - boxW;
@@ -103,23 +120,20 @@ export async function drawWatermark(
 
     ctx.save();
     ctx.shadowColor = "rgba(0,0,0,0.45)";
-    ctx.shadowBlur = isTagged ? 18 : 8;
-    ctx.shadowOffsetY = isTagged ? 4 : 2;
-    ctx.fillStyle = isTagged
-      ? opts.tag === "before"
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetY = 4;
+    ctx.fillStyle =
+      opts.tag === "before"
         ? "rgba(37,99,235,0.96)" // blue
-        : "rgba(16,185,129,0.96)" // green
-      : "rgba(15,23,42,0.62)"; // slate, low-key
+        : "rgba(16,185,129,0.96)"; // green
     roundRect(ctx, bx, by, boxW, boxH, r);
     ctx.fill();
     ctx.restore();
 
-    if (isTagged) {
-      ctx.strokeStyle = "rgba(255,255,255,0.55)";
-      ctx.lineWidth = Math.max(1, Math.round(minDim * 0.003));
-      roundRect(ctx, bx, by, boxW, boxH, r);
-      ctx.stroke();
-    }
+    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    ctx.lineWidth = Math.max(1, Math.round(minDim * 0.003));
+    roundRect(ctx, bx, by, boxW, boxH, r);
+    ctx.stroke();
 
     ctx.fillStyle = "#ffffff";
     ctx.textBaseline = "middle";

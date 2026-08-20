@@ -26,6 +26,8 @@ import {
   MessageSquare,
   LayoutGrid,
   CalendarDays,
+  Check,
+  CheckSquare,
 } from "lucide-react";
 import { startOfMonth } from "date-fns";
 import { PhotoCalendar } from "@/features/gallery/components/PhotoCalendar";
@@ -77,9 +79,14 @@ import { extractPhotoMeta, mergePhotoMeta } from "@/lib/photo-exif";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { PhotoLightbox } from "@/features/photos/components/PhotoLightbox";
+import {
+  PhotoBulkActionBar,
+  type BulkPhoto,
+} from "@/features/photos/components/PhotoBulkActionBar";
 import { PhotoTagPopoverBody } from "@/features/photos/components/PhotoTagPopoverBody";
 import { TagPill } from "@/features/photos/components/TagPill";
 import { ensureGlobalTag } from "@/hooks/use-tag-colors";
+import { modalLayerIsOpen } from "@/lib/modal-layers";
 import { cleanCaption } from "@sitepix/shared";
 
 interface Photo {
@@ -91,6 +98,10 @@ interface Photo {
   image_url: string | null;
   caption: string | null;
   created_at: string;
+  /** When the shot was taken, where EXIF gave one. Falls back to `created_at`. */
+  taken_at?: string | null;
+  /** Kept out of the project timeline, but still listed here. */
+  hidden?: boolean | null;
   phase?: string | null;
   tags?: string[] | null;
 }
@@ -199,6 +210,23 @@ export function GalleryPage() {
   const [globalTags, setGlobalTags] = useState<string[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [signed, setSigned] = useState<Record<string, string>>({});
+  /*
+   * Bulk selection.
+   *
+   * The Help Center has always told people they can "select photos to download,
+   * tag, print, share, generate a report from, hide, move to another project,
+   * or send to Trash" here, and the project Photos tab has done exactly that
+   * for a while. The Gallery never grew the selection layer, so the promise
+   * only held in one of the two places it was made.
+   *
+   * `selectMode` is separate from "is anything selected" on purpose. On the
+   * project tab the checkbox appears on hover, which is invisible on a phone
+   * and undiscoverable on a laptop - there is nothing to tell you the feature
+   * is there. The Select button in the toolbar pins the checkboxes on, so the
+   * affordance is visible before the first pick as well as after it.
+   */
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState<string | null>(null);
   const [analyzeStep, setAnalyzeStep] = useState(0);
@@ -566,6 +594,63 @@ export function GalleryPage() {
     tagFilter.length === 0
       ? photos
       : photos.filter((p) => (p.tags ?? []).some((t) => tagFilter.includes(t)));
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const clearSelection = () => {
+    setSelectedIds([]);
+    setSelectMode(false);
+  };
+
+  /*
+   * A selection only ever means the photos you can currently see.
+   *
+   * Change a filter with photos ticked and the ones that no longer match are
+   * off screen but still in `selectedIds`, so the bar would count them, Trash
+   * would delete them, and nothing on screen would ever have shown them. Prune
+   * on every change of the visible set instead, which also covers switching to
+   * the calendar (it replaces `photos` with one day's worth).
+   */
+  useEffect(() => {
+    setSelectedIds((s) => {
+      if (s.length === 0) return s;
+      const onScreen = new Set(visiblePhotos.map((p) => p.id));
+      const next = s.filter((id) => onScreen.has(id));
+      return next.length === s.length ? s : next;
+    });
+    // Keyed on the two states that produce `visiblePhotos` rather than the
+    // array itself, which is rebuilt by `.filter()` on every single render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photos, tagFilter]);
+
+  /*
+   * Escape drops out of picking - but only against the bare grid. Any layer
+   * above owns its own Escape (the lightbox, the bulk Tag and Move dialogs, a
+   * confirmation), and that press is not about the selection underneath.
+   */
+  useEffect(() => {
+    if (!selectMode && selectedIds.length === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !modalLayerIsOpen()) clearSelection();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectMode, selectedIds.length]);
+
+  const selectedPhotos = visiblePhotos.filter((p) => selectedIds.includes(p.id));
+  /**
+   * The project every selected photo shares, or null across a mixed selection.
+   * See the note on `PhotoBulkActionBar`'s `projectId`.
+   */
+  const selectionProjectId =
+    selectedPhotos.length > 0 &&
+    selectedPhotos.every((p) => p.project_id === selectedPhotos[0].project_id)
+      ? selectedPhotos[0].project_id
+      : null;
+  const selectionProjectName = selectionProjectId
+    ? (projects.find((pr) => pr.id === selectionProjectId)?.name ?? "Project")
+    : "Gallery photos";
 
   const filtersActive = projectFilter.length > 0 || tagFilter.length > 0 || !!dateFrom || !!dateTo;
   /**
@@ -1434,6 +1519,34 @@ export function GalleryPage() {
                 </span>
               )}
 
+              {/*
+                Select. The one thing that makes bulk actions discoverable
+                without a photo already ticked, and the only way in at all on
+                touch, where the hover checkbox never appears.
+
+                Grid only: the calendar is a day viewer, and the bar's actions
+                (move, trash, hide) would be reordering the very list it reads
+                from underneath it.
+              */}
+              {!calendarView && visiblePhotos.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectMode || selectedIds.length > 0) clearSelection();
+                    else setSelectMode(true);
+                  }}
+                  aria-pressed={selectMode || selectedIds.length > 0}
+                  className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 font-manrope text-xs font-bold transition ${
+                    selectMode || selectedIds.length > 0
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <CheckSquare className="h-3.5 w-3.5" />
+                  {selectMode || selectedIds.length > 0 ? "Done" : "Select"}
+                </button>
+              )}
+
               {/* Grid vs calendar. Segmented, so the current mode is never in doubt. */}
               <div className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-muted p-0.5">
                 {(
@@ -1526,50 +1639,125 @@ export function GalleryPage() {
           ) : (
             visiblePhotos.map((p) => {
               const project = projects.find((pr) => pr.id === p.project_id);
+              const selected = selectedIds.includes(p.id);
+              // Once anything is ticked, a plain click keeps selecting. Being
+              // sent to the lightbox on the third photo of a run is the fastest
+              // way to lose a selection you were halfway through building.
+              const picking = selectMode || selectedIds.length > 0;
               return (
-                <button
+                /*
+                 * The tick box is a sibling of the tile button, not a child of
+                 * it: a button inside a button is invalid, and browsers do not
+                 * agree on which one a click belongs to.
+                 */
+                <div
                   key={p.id}
-                  onClick={() => openPhoto(p)}
-                  className="group flex flex-col overflow-hidden rounded-3xl bg-sidebar text-left shadow-[0_20px_35px_-26px_rgba(16,25,41,0.55)] transition-transform hover:-translate-y-0.5"
+                  className={`group relative rounded-3xl transition-transform hover:-translate-y-0.5 ${
+                    selected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
+                  }`}
                 >
-                  <div className="relative aspect-[4/3] w-full overflow-hidden">
-                    {/* Thumbnail, not the camera original - a 200-photo grid of
+                  <button
+                    type="button"
+                    onClick={() => (picking ? toggleSelect(p.id) : void openPhoto(p))}
+                    aria-pressed={picking ? selected : undefined}
+                    aria-label={
+                      picking
+                        ? `${selected ? "Deselect" : "Select"} ${cleanCaption(p.caption) ?? "photo"}`
+                        : undefined
+                    }
+                    className="flex w-full flex-col overflow-hidden rounded-3xl bg-sidebar text-left shadow-[0_20px_35px_-26px_rgba(16,25,41,0.55)]"
+                  >
+                    <div className="relative aspect-[4/3] w-full overflow-hidden">
+                      {/* Thumbnail, not the camera original - a 200-photo grid of
                       full-res site photos is the single heaviest thing in the
                       app on a phone. Falls back to the full image if the
                       project's plan has no image transformation. */}
-                    <PhotoThumb
-                      storagePath={p.storage_path}
-                      thumbPath={p.thumb_path}
-                      fallbackUrl={signed[p.id]}
-                      width={400}
-                      alt={p.caption ?? ""}
-                      className="transition duration-300 group-hover:scale-105"
-                    />
-                    {watermarkUrl && signed[p.id] && (
-                      <img
-                        src={watermarkUrl}
-                        alt=""
-                        aria-hidden
-                        className="pointer-events-none absolute bottom-2 right-2 h-7 w-auto max-w-[35%] opacity-40 drop-shadow-sm"
+                      <PhotoThumb
+                        storagePath={p.storage_path}
+                        thumbPath={p.thumb_path}
+                        fallbackUrl={signed[p.id]}
+                        width={400}
+                        alt={p.caption ?? ""}
+                        className="transition duration-300 group-hover:scale-105"
                       />
-                    )}
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-sidebar/90 to-transparent px-4 pb-3 pt-8">
-                      <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[1.2px] text-sidebar-foreground/90">
-                        Site record
+                      {watermarkUrl && signed[p.id] && (
+                        <img
+                          src={watermarkUrl}
+                          alt=""
+                          aria-hidden
+                          className="pointer-events-none absolute bottom-2 right-2 h-7 w-auto max-w-[35%] opacity-40 drop-shadow-sm"
+                        />
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-sidebar/90 to-transparent px-4 pb-3 pt-8">
+                        <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[1.2px] text-sidebar-foreground/90">
+                          Site record
+                        </p>
+                      </div>
+                    </div>
+                    <div className="px-4 py-3">
+                      <p className="truncate font-manrope text-[11px] font-bold text-sidebar-foreground/70">
+                        {cleanCaption(p.caption) ??
+                          `${project?.name ?? "Unassigned"} · ${timeAgo(p.created_at)}`}
                       </p>
                     </div>
-                  </div>
-                  <div className="px-4 py-3">
-                    <p className="truncate font-manrope text-[11px] font-bold text-sidebar-foreground/70">
-                      {cleanCaption(p.caption) ??
-                        `${project?.name ?? "Unassigned"} · ${timeAgo(p.created_at)}`}
-                    </p>
-                  </div>
-                </button>
+                  </button>
+
+                  {/* Always visible while picking, hover-only otherwise, so the
+                      resting grid stays as clean as it was. */}
+                  <button
+                    type="button"
+                    onClick={() => toggleSelect(p.id)}
+                    aria-label={selected ? "Deselect photo" : "Select photo"}
+                    className={`absolute left-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-md border-2 shadow transition ${
+                      selected
+                        ? "border-primary bg-primary text-primary-foreground opacity-100"
+                        : `border-white/90 bg-black/30 text-transparent backdrop-blur-sm hover:text-white/70 group-hover:opacity-100 focus-visible:opacity-100 ${
+                            picking ? "opacity-100" : "opacity-0"
+                          }`
+                    }`}
+                  >
+                    <Check className="h-4 w-4" />
+                  </button>
+                </div>
               );
             })
           )}
         </div>
+      )}
+
+      {/*
+        The same bar the project Photos tab mounts, so "act on several photos"
+        means one thing in both places rather than two half-features. It renders
+        nothing at all until something is ticked.
+      */}
+      {!calendarView && (
+        <PhotoBulkActionBar
+          projectId={selectionProjectId}
+          projectName={selectionProjectName}
+          userId={user?.id ?? null}
+          selectedIds={selectedIds}
+          photosById={
+            new Map<string, BulkPhoto>(
+              visiblePhotos.map((p) => [
+                p.id,
+                {
+                  id: p.id,
+                  url: signed[p.id] ?? p.image_url ?? "",
+                  caption: p.caption,
+                  taken_at: p.taken_at ?? null,
+                  created_at: p.created_at,
+                  hidden: !!p.hidden,
+                  tags: p.tags ?? undefined,
+                },
+              ]),
+            )
+          }
+          totalVisible={visiblePhotos.length}
+          allExistingTags={globalTags}
+          onClear={clearSelection}
+          onSelectAll={() => setSelectedIds(visiblePhotos.map((p) => p.id))}
+          onRefresh={() => void invalidatePhotoCaches()}
+        />
       )}
 
       {projects.length > 0 && (

@@ -67,3 +67,23 @@ export function confirmationIsOpen(): boolean {
   if (typeof document === "undefined") return false;
   return document.querySelector('[role="alertdialog"]') !== null;
 }
+
+/**
+ * Is anything modal on screen - a dialog, a sheet, the photo lightbox, a
+ * confirmation?
+ *
+ * For page-level Escape shortcuts, which are the bottom of the stack and must
+ * not act on a key that belongs to a layer above them. The Gallery's grid
+ * selection is the case this exists for: Escape out of the bulk Tag dialog, or
+ * out of the lightbox opened from a ticked photo, and the same press reached
+ * the page underneath and threw the selection away - so backing out of one step
+ * silently cost you the run of photos you had just picked.
+ *
+ * Asked of the DOM rather than tracked in state, for the reason at the top of
+ * this file: the layer above may already be unmounting when the page's own
+ * handler runs, and any React flag would read back stale.
+ */
+export function modalLayerIsOpen(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
+}

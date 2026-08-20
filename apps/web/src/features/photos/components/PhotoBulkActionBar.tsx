@@ -59,7 +59,18 @@ export interface BulkPhoto {
 }
 
 interface Props {
-  projectId: string;
+  /**
+   * The one project every selected photo belongs to, or null when the
+   * selection spans several.
+   *
+   * The Gallery is cross-project, so it can hand over a mixed selection. Most
+   * of this bar does not care - a download, a tag, a print sheet, a hide or a
+   * trash is per-photo either way. Reports and Generate do care: a report lives
+   * on a project, so there is no honest answer to "which one" for a mixed set.
+   * Those two are disabled and say why, rather than silently filing photos
+   * under whichever project happened to sort first.
+   */
+  projectId: string | null;
   projectName: string;
   userId: string | null;
   selectedIds: string[];
@@ -376,10 +387,16 @@ export function PhotoBulkActionBar(props: Props) {
               <ActionBtn label="Share" icon={Share2} onClick={doShare} busy={busy === "share"} />
 
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+                <DropdownMenuTrigger asChild disabled={!projectId}>
                   <Button
                     size="sm"
                     variant="ghost"
+                    disabled={!projectId}
+                    title={
+                      projectId
+                        ? "Report"
+                        : "These photos are from more than one project. Narrow the selection to one to build a report."
+                    }
                     className="h-11 gap-1.5 rounded-xl px-2.5 hover:bg-muted"
                   >
                     <FileText className="h-[18px] w-[18px]" />
@@ -425,21 +442,34 @@ export function PhotoBulkActionBar(props: Props) {
                 everywhere. It opens its own photo picker with this selection
                 already ticked rather than asking for the photos twice.
               */}
-              <GenerateDocumentMenu
-                projectId={projectId}
-                photoIds={selectedIds}
-                align="start"
-                trigger={
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-11 gap-1.5 rounded-xl px-2.5 hover:bg-muted"
-                  >
-                    <Sparkles className="h-[18px] w-[18px]" />
-                    <span className="hidden text-sm font-medium sm:inline">Generate</span>
-                  </Button>
-                }
-              />
+              {projectId ? (
+                <GenerateDocumentMenu
+                  projectId={projectId}
+                  photoIds={selectedIds}
+                  align="start"
+                  trigger={
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-11 gap-1.5 rounded-xl px-2.5 hover:bg-muted"
+                    >
+                      <Sparkles className="h-[18px] w-[18px]" />
+                      <span className="hidden text-sm font-medium sm:inline">Generate</span>
+                    </Button>
+                  }
+                />
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled
+                  title="These photos are from more than one project. Narrow the selection to one to generate a document."
+                  className="h-11 gap-1.5 rounded-xl px-2.5 hover:bg-muted"
+                >
+                  <Sparkles className="h-[18px] w-[18px]" />
+                  <span className="hidden text-sm font-medium sm:inline">Generate</span>
+                </Button>
+              )}
 
               <div className="mx-1 h-8 w-px bg-border" />
 
@@ -499,25 +529,31 @@ export function PhotoBulkActionBar(props: Props) {
         }}
       />
 
-      <NewReportDialog
-        open={newReportOpen}
-        onOpenChange={setNewReportOpen}
-        projectId={projectId}
-        projectName={projectName}
-        attachPhotos={selectedPhotos.map((p) => ({ id: p.id, caption: p.caption }))}
-      />
+      {/* Both report dialogs are project-scoped, and the Report button that
+          opens them is disabled without one, so they simply do not mount. */}
+      {projectId && (
+        <NewReportDialog
+          open={newReportOpen}
+          onOpenChange={setNewReportOpen}
+          projectId={projectId}
+          projectName={projectName}
+          attachPhotos={selectedPhotos.map((p) => ({ id: p.id, caption: p.caption }))}
+        />
+      )}
 
       {/*
         Neither dialog clears the selection on success: both open the report
         builder, which unmounts this project screen and its selection with it.
         Clearing first would unmount the open dialog mid-submit.
       */}
-      <AddToReportDialog
-        open={addToReportOpen}
-        onClose={() => setAddToReportOpen(false)}
-        projectId={projectId}
-        selectedPhotos={selectedPhotos}
-      />
+      {projectId && (
+        <AddToReportDialog
+          open={addToReportOpen}
+          onClose={() => setAddToReportOpen(false)}
+          projectId={projectId}
+          selectedPhotos={selectedPhotos}
+        />
+      )}
     </>
   );
 }
@@ -689,7 +725,7 @@ function MoveDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  projectId: string;
+  projectId: string | null;
   selectedIds: string[];
   onDone: () => void;
 }) {
@@ -705,10 +741,10 @@ function MoveDialog({
     setTarget("");
     setQ("");
     (async () => {
-      const { data } = await supabase
-        .from("projects")
-        .select("id, name")
-        .neq("id", projectId)
+      // Hiding the source project keeps the list to real destinations. A mixed
+      // selection has no single source, so every project is a real destination.
+      const query = supabase.from("projects").select("id, name");
+      const { data } = await (projectId ? query.neq("id", projectId) : query)
         .order("updated_at", { ascending: false })
         .limit(200);
       setProjects((data as any[]) ?? []);
@@ -767,7 +803,7 @@ function MoveDialog({
             </div>
           ) : filtered.length === 0 ? (
             <p className="p-4 text-center text-xs text-muted-foreground">
-              No other projects found.
+              {projectId ? "No other projects found." : "No projects found."}
             </p>
           ) : (
             filtered.map((p) => (
