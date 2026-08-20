@@ -28,6 +28,7 @@ import { BlueprintOutcomePreview } from "@/features/settings/components/Blueprin
 import { useBlueprintContents } from "@/hooks/use-blueprint-contents";
 import { GENERAL_CATEGORY, makeCategoryRank } from "@/lib/template-categories";
 import { cn } from "@/lib/utils";
+import { newProjectName } from "@sitepix/shared";
 import { toast } from "sonner";
 import { qk } from "@/lib/query-keys";
 import { writeWithNewColumns, PROJECT_CLIENT_KEYS } from "@/lib/merge-field-columns";
@@ -355,7 +356,10 @@ export function NewProjectPage() {
       data: {
         blueprintId: templateId,
         projectId,
-        projectName: form.name.trim() || form.street.trim() || "Untitled project",
+        projectName: newProjectName(
+          { name: form.name, street: form.street, client_name: form.client_name },
+          new Date(),
+        ),
         projectAddress:
           [form.street, form.city, form.state, form.zip].filter(Boolean).join(", ") || null,
       },
@@ -366,7 +370,17 @@ export function NewProjectPage() {
 
   const doCreate = async () => {
     if (!user) return;
-    const name = form.name.trim() || form.street.trim() || "Untitled project";
+    /*
+     * Stamped when the crew gave us nothing to go on. The bare constant is what
+     * filled workspaces with rows of interchangeable "Untitled project"
+     * entries - identical in every picker, and the Move destination list was
+     * the place it hurt, because picking the wrong one moves photos. Fixed
+     * here, at the only place that mints the name, rather than in each picker.
+     */
+    const name = newProjectName(
+      { name: form.name, street: form.street, client_name: form.client_name },
+      new Date(),
+    );
     setSaving(true);
     // Retried without the client columns if this database predates them, so
     // creating a project never fails over a field the user may not have filled.

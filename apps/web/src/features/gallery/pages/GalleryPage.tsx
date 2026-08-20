@@ -1602,6 +1602,47 @@ export function GalleryPage() {
         />
       )}
 
+      {/*
+        The same bar the project Photos tab mounts, so "act on several photos"
+        means one thing in both places rather than two half-features. It renders
+        nothing at all until something is ticked.
+
+        Above the grid, because the bar is `sticky` in the content column now
+        rather than fixed over the window - it used to cover the header's search
+        box and hide the notification bell and account menu outright. A sticky
+        element mounted after the grid would only ever stick to the bottom of
+        the page, so the mount point is part of the fix, not cosmetic.
+      */}
+      {!calendarView && (
+        <PhotoBulkActionBar
+          projectId={selectionProjectId}
+          projectName={selectionProjectName}
+          userId={user?.id ?? null}
+          selectedIds={selectedIds}
+          photosById={
+            new Map<string, BulkPhoto>(
+              visiblePhotos.map((p) => [
+                p.id,
+                {
+                  id: p.id,
+                  url: signed[p.id] ?? p.image_url ?? "",
+                  caption: p.caption,
+                  taken_at: p.taken_at ?? null,
+                  created_at: p.created_at,
+                  hidden: !!p.hidden,
+                  tags: p.tags ?? undefined,
+                },
+              ]),
+            )
+          }
+          totalVisible={visiblePhotos.length}
+          allExistingTags={globalTags}
+          onClear={clearSelection}
+          onSelectAll={() => setSelectedIds(visiblePhotos.map((p) => p.id))}
+          onRefresh={() => void invalidatePhotoCaches()}
+        />
+      )}
+
       {/* Unmounted rather than hidden in calendar view - a `hidden` grid still
           mounts every tile and fires a signed-thumbnail request per photo. */}
       {!calendarView && (
@@ -1723,41 +1764,6 @@ export function GalleryPage() {
             })
           )}
         </div>
-      )}
-
-      {/*
-        The same bar the project Photos tab mounts, so "act on several photos"
-        means one thing in both places rather than two half-features. It renders
-        nothing at all until something is ticked.
-      */}
-      {!calendarView && (
-        <PhotoBulkActionBar
-          projectId={selectionProjectId}
-          projectName={selectionProjectName}
-          userId={user?.id ?? null}
-          selectedIds={selectedIds}
-          photosById={
-            new Map<string, BulkPhoto>(
-              visiblePhotos.map((p) => [
-                p.id,
-                {
-                  id: p.id,
-                  url: signed[p.id] ?? p.image_url ?? "",
-                  caption: p.caption,
-                  taken_at: p.taken_at ?? null,
-                  created_at: p.created_at,
-                  hidden: !!p.hidden,
-                  tags: p.tags ?? undefined,
-                },
-              ]),
-            )
-          }
-          totalVisible={visiblePhotos.length}
-          allExistingTags={globalTags}
-          onClear={clearSelection}
-          onSelectAll={() => setSelectedIds(visiblePhotos.map((p) => p.id))}
-          onRefresh={() => void invalidatePhotoCaches()}
-        />
       )}
 
       {projects.length > 0 && (
