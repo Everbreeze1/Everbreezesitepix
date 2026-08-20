@@ -2,7 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MapPin, Layers, Maximize2 } from "lucide-react";
-import { MarkerClusterer } from "@googlemaps/markerclusterer";
+import { MarkerClusterer, SuperClusterAlgorithm } from "@googlemaps/markerclusterer";
 import { supabase } from "@/integrations/sitepix/client";
 import { useAuth } from "@/hooks/use-auth";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
@@ -59,7 +59,6 @@ const formatAddress = (p: ProjectPin) =>
 const hasAddress = (p: ProjectPin) =>
   Boolean((p.street && p.street.trim()) || (p.city && p.city.trim()) || (p.zip && p.zip.trim()));
 
-// Larger teardrop pin with an always-visible label pill that bakes in the project name.
 const escapeXml = (s: string) =>
   s.replace(
     /[<>&'"]/g,
@@ -77,16 +76,39 @@ const PIN_H = 60;
 const PILL_H = 30;
 const PILL_GAP = 6;
 
-const pinWithLabelSvg = (color: string, label: string) => {
-  const raw = label.length > 24 ? label.slice(0, 23) + "…" : label;
-  const text = escapeXml(raw);
-  // rough character-width estimate at font-size 14, weight 600
-  const textWidth = Math.max(48, Math.min(240, Math.round(raw.length * 8.4)));
-  const pillW = textWidth + 24;
-  const totalW = PIN_W + PILL_GAP + pillW;
+/*
+ * How much of a pin gets drawn. Every pin used to bake its project name into
+ * the icon, which reads fine right up until a cluster opens into a dozen
+ * neighbouring jobs and the name pills overlap into mush. The name is now
+ * painted only for the pin under the cursor and the pin whose preview card is
+ * open; the rest stay bare teardrops.
+ */
+type PinState = "idle" | "hover" | "selected";
+
+const truncateLabel = (label: string) => (label.length > 24 ? label.slice(0, 23) + "…" : label);
+
+// rough character-width estimate at font-size 14, weight 600, plus padding
+const labelPillWidth = (label: string) =>
+  Math.max(48, Math.min(240, Math.round(truncateLabel(label).length * 8.4))) + 24;
+
+const pinIconWidth = (label: string | null) =>
+  label ? PIN_W + PILL_GAP + labelPillWidth(label) : PIN_W;
+
+const pinSvg = (color: string, label: string | null, selected: boolean) => {
+  const totalW = pinIconWidth(label);
   const totalH = PIN_H + 4;
-  const pillX = PIN_W + PILL_GAP;
-  const pillY = (PIN_H - PILL_H) / 2;
+  const ring = selected
+    ? `<circle cx="24" cy="22" r="15.5" fill="none" stroke="#0ea5e9" stroke-width="3"/>`
+    : "";
+  let pill = "";
+  if (label) {
+    const text = escapeXml(truncateLabel(label));
+    const pillW = labelPillWidth(label);
+    const pillX = PIN_W + PILL_GAP;
+    const pillY = (PIN_H - PILL_H) / 2;
+    pill = `<rect x="${pillX}" y="${pillY}" rx="15" ry="15" width="${pillW}" height="${PILL_H}" fill="#ffffff" stroke="${selected ? "#0ea5e9" : color}" stroke-width="2"/>
+        <text x="${pillX + pillW / 2}" y="${pillY + 20}" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif" font-size="14" font-weight="600" fill="#0f172a">${text}</text>`;
+  }
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}">
       <defs>
@@ -95,25 +117,104 @@ const pinWithLabelSvg = (color: string, label: string) => {
         </filter>
       </defs>
       <g filter="url(#s)">
-        <rect x="${pillX}" y="${pillY}" rx="15" ry="15" width="${pillW}" height="${PILL_H}" fill="#ffffff" stroke="${color}" stroke-width="2"/>
-        <text x="${pillX + pillW / 2}" y="${pillY + 20}" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif" font-size="14" font-weight="600" fill="#0f172a">${text}</text>
+        ${pill}
         <path d="M24 2 C13 2 4 11 4 22 c0 14 20 36 20 36 s20 -22 20 -36 C44 11 35 2 24 2 z" fill="${color}" stroke="#ffffff" stroke-width="2.5"/>
         <circle cx="24" cy="22" r="7" fill="#ffffff"/>
+        ${ring}
       </g>
     </svg>`,
   )}`;
 };
 
-// Approximate width so we can return a properly-sized icon to Google Maps.
-const pinTotalWidth = (label: string) => {
-  const len = Math.min(24, label.length);
-  const textWidth = Math.max(48, Math.min(240, Math.round(len * 8.4)));
-  return PIN_W + PILL_GAP + textWidth + 24;
+// Repaints one marker for the state it is in. Module-level so both the effect
+// that builds the marker layer and the one that follows the selection can call
+// it without threading a callback between them.
+const paintMarker = (marker: any, p: ProjectPin, state: PinState) => {
+  const label = state === "idle" ? null : p.name;
+  marker.setIcon({
+    url: pinSvg(statusColor[p.status] ?? "#64748b", label, state === "selected"),
+    scaledSize: new window.google.maps.Size(pinIconWidth(label), PIN_H + 4),
+    anchor: new window.google.maps.Point(PIN_W / 2, PIN_H),
+  });
+  marker.setZIndex(state === "idle" ? 10 : state === "hover" ? 40 : 60);
+};
+
+/*
+ * Past this zoom SuperCluster hands every point back on its own, so a cluster
+ * click that lands beyond it is guaranteed to break into individual pins. That
+ * is what stops a tight knot of neighbouring jobs from needing two or three
+ * clicks to open.
+ */
+const CLUSTER_MAX_ZOOM = 15;
+
+// The zoom at which `bounds` fits inside the map's viewport, less padding.
+const zoomForBounds = (map: any, bounds: any, padding = 64) => {
+  const div = map.getDiv() as HTMLElement | null;
+  const width = Math.max(64, (div?.clientWidth ?? 800) - padding * 2);
+  const height = Math.max(64, (div?.clientHeight ?? 600) - padding * 2);
+  const ne = bounds.getNorthEast();
+  const sw = bounds.getSouthWest();
+  const latRad = (lat: number) => {
+    const s = Math.sin((lat * Math.PI) / 180);
+    return Math.log((1 + s) / (1 - s)) / 2;
+  };
+  const latFraction = Math.abs(latRad(ne.lat()) - latRad(sw.lat())) / (2 * Math.PI);
+  let lngSpan = ne.lng() - sw.lng();
+  if (lngSpan < 0) lngSpan += 360;
+  const zoomFor = (px: number, fraction: number) =>
+    fraction <= 0 ? 21 : Math.log2(px / 256 / fraction);
+  return Math.min(
+    21,
+    Math.floor(Math.min(zoomFor(height, latFraction), zoomFor(width, lngSpan / 360))),
+  );
+};
+
+/*
+ * Where the map was left, deliberately kept outside the component. Opening a
+ * project unmounts MapPage, so the browser's back button used to rebuild it at
+ * the default country-wide zoom and throw away whichever cluster had been
+ * drilled into. The module-level copy covers that back trip; the sessionStorage
+ * copy covers a reload.
+ */
+interface MapView {
+  center: { lat: number; lng: number };
+  zoom: number;
+  filter: StatusFilter;
+}
+
+const VIEW_STORAGE_KEY = "sitepix:map-view";
+let lastMapView: MapView | null = null;
+
+const readMapView = (): MapView | null => {
+  if (lastMapView) return lastMapView;
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(VIEW_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MapView;
+    if (typeof parsed?.zoom !== "number" || typeof parsed?.center?.lat !== "number") return null;
+    lastMapView = parsed;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const writeMapView = (view: MapView) => {
+  lastMapView = view;
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify(view));
+  } catch {
+    // Private mode, or a full quota: the module-level copy still covers back.
+  }
 };
 
 interface ProjectStats {
   photoCount: number;
   lastActivity: string | null;
+  /** Object path of the newest photo, signed in one batch below. */
+  thumbPath: string | null;
   thumbUrl: string | null;
 }
 
@@ -147,7 +248,9 @@ export function MapPage() {
     (p.pipeline_stage_id ? stageLookup[p.pipeline_stage_id] : null) ?? null;
   const [projects, setProjects] = useState<ProjectPin[]>([]);
   const [stats, setStats] = useState<Record<string, ProjectStats>>({});
-  const [filter, setFilter] = useState<StatusFilter>("active");
+  // The filter is part of "where I was", so a return trip restores it with the
+  // rest of the view rather than snapping back to Active.
+  const [filter, setFilter] = useState<StatusFilter>(() => readMapView()?.filter ?? "active");
   const [selected, setSelected] = useState<ProjectPin | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -158,11 +261,124 @@ export function MapPage() {
   const markers = useRef<any[]>([]);
   const clusterer = useRef<MarkerClusterer | null>(null);
   const infoWindow = useRef<any>(null);
-  const hoverWindow = useRef<any>(null);
+  const markersById = useRef<Record<string, any>>({});
   const statsRef = useRef<Record<string, ProjectStats>>({});
+  // Marker listeners are attached once when the layer is built, so anything
+  // they need to read at click time lives in a ref rather than in that closure.
+  const selectedIdRef = useRef<string | null>(null);
+  // Whether a card is on screen, as opposed to a row merely being selected.
+  const previewOpenRef = useRef(false);
+  const filterRef = useRef<StatusFilter>(filter);
+  // Which filter the map has already framed. Null until the first fit.
+  const fittedFilter = useRef<StatusFilter | null>(null);
   useEffect(() => {
     statsRef.current = stats;
   }, [stats]);
+  useEffect(() => {
+    filterRef.current = filter;
+  }, [filter]);
+
+  const saveCurrentView = useCallback(() => {
+    const map = mapInstance.current;
+    const center = map?.getCenter?.();
+    const zoom = map?.getZoom?.();
+    if (!center || typeof zoom !== "number") return;
+    writeMapView({
+      center: { lat: center.lat(), lng: center.lng() },
+      zoom,
+      filter: filterRef.current,
+    });
+  }, []);
+
+  /*
+   * The preview card. Clicking a pin used to navigate straight to the project,
+   * which made checking a handful of nearby jobs a series of round trips. The
+   * card answers "which job is this" on the map itself, and keeps the trip to
+   * the full page as one deliberate button.
+   *
+   * Built as a real DOM node rather than an HTML string so the button can carry
+   * a router navigation instead of a global callback hung off `window`.
+   */
+  const buildPreviewCard = useCallback(
+    (p: ProjectPin) => {
+      const st = statsRef.current[p.id];
+      const stage = (p.pipeline_stage_id ? stageLookup[p.pipeline_stage_id] : null) ?? null;
+      const name = escapeXml(p.name);
+      const addr = escapeXml(formatAddress(p) || "No address on file");
+      const badgeText = escapeXml(stage?.name ?? statusLabel[p.status] ?? p.status);
+      const badgeColor = escapeXml(stage?.color ?? statusColor[p.status] ?? "#64748b");
+      const photoCount = st?.photoCount ?? 0;
+      const activity = st?.lastActivity
+        ? `Last activity ${new Date(st.lastActivity).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })}`
+        : "No activity yet";
+      const thumbSrc = st?.thumbUrl
+        ? encodeURI(st.thumbUrl).replace(/'/g, "%27").replace(/"/g, "%22")
+        : null;
+      const thumb = thumbSrc
+        ? `<div style="width:100%;height:132px;border-radius:10px;margin-bottom:10px;background:#e2e8f0 center/cover no-repeat url('${thumbSrc}');"></div>`
+        : `<div style="width:100%;height:132px;border-radius:10px;margin-bottom:10px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:11px;font-weight:600;">No photos yet</div>`;
+
+      const el = document.createElement("div");
+      // The API's own bubble pads the left edge only, so the card carries the
+      // other three itself. Without them the button hangs off the white.
+      el.innerHTML = `<div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;width:258px;padding:0 12px 12px 0;color:#0f172a;">
+        ${thumb}
+        <div style="font-size:15px;font-weight:700;line-height:1.25;">${name}</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0 8px;">
+          <span style="padding:2px 9px;border-radius:999px;background:${badgeColor};color:#ffffff;font-size:10px;font-weight:700;">${badgeText}</span>
+          <span style="font-size:11px;color:#475569;">${photoCount} photo${photoCount === 1 ? "" : "s"}</span>
+        </div>
+        <div style="display:flex;gap:6px;font-size:12px;line-height:1.35;color:#475569;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;margin-top:1px;"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span>${addr}</span>
+        </div>
+        <div style="font-size:11px;color:#64748b;margin-top:6px;">${activity}</div>
+        <button type="button" data-open-project style="margin-top:12px;width:100%;border:0;border-radius:9px;background:#0f172a;color:#ffffff;font-size:13px;font-weight:700;padding:9px 12px;cursor:pointer;">View project</button>
+      </div>`;
+      el.querySelector("[data-open-project]")?.addEventListener("click", () => {
+        // Stamp the view before leaving, so back lands on this framing even if
+        // the map never went idle after the last pan.
+        saveCurrentView();
+        navigate({ to: "/projects/$projectId", params: { projectId: p.id }, search: {} as any });
+      });
+      return el;
+    },
+    [navigate, saveCurrentView, stageLookup],
+  );
+
+  const openPreview = useCallback(
+    (p: ProjectPin) => {
+      const map = mapInstance.current;
+      if (!map || !infoWindow.current || !window.google?.maps) return;
+      selectedIdRef.current = p.id;
+      previewOpenRef.current = true;
+      setSelected(p);
+      infoWindow.current.setContent(buildPreviewCard(p));
+      const marker = markersById.current[p.id];
+      if (marker?.getMap?.()) {
+        infoWindow.current.setOptions({ pixelOffset: new window.google.maps.Size(0, 0) });
+        infoWindow.current.open({ anchor: marker, map });
+      } else if (p.latitude != null && p.longitude != null) {
+        // Still folded into a cluster: open on the coordinates instead, so the
+        // card appears on the first click rather than after the cluster opens.
+        infoWindow.current.setOptions({ pixelOffset: new window.google.maps.Size(0, -PIN_H) });
+        infoWindow.current.setPosition({ lat: Number(p.latitude), lng: Number(p.longitude) });
+        infoWindow.current.open({ map });
+      }
+    },
+    [buildPreviewCard],
+  );
+
+  const closePreview = useCallback(() => {
+    infoWindow.current?.close();
+    selectedIdRef.current = null;
+    previewOpenRef.current = false;
+    setSelected(null);
+  }, []);
 
   const load = useCallback(async () => {
     // `as any`, like every other read of this column: the generated Supabase
@@ -204,22 +420,52 @@ export function MapPage() {
             .limit(1),
           supabase
             .from("photos")
-            .select("image_url")
+            .select("thumb_path, storage_path, image_url")
             .eq("project_id", p.id)
             .eq("archived", false)
-            .not("image_url", "is", null)
             .order("created_at", { ascending: false })
             .limit(1),
         ]);
+        const newest = (
+          thumb.data as Array<{
+            thumb_path: string | null;
+            storage_path: string | null;
+            image_url: string | null;
+          }> | null
+        )?.[0];
         agg[p.id] = {
           photoCount: latest.count ?? 0,
           lastActivity:
             (latest.data as Array<{ created_at: string }> | null)?.[0]?.created_at ?? null,
-          thumbUrl:
-            (thumb.data as Array<{ image_url: string | null }> | null)?.[0]?.image_url ?? null,
+          // Prefer the stored thumbnail: the card paints it 258px wide, so the
+          // camera original would be a megabyte spent on a preview.
+          thumbPath: newest?.thumb_path ?? newest?.storage_path ?? null,
+          thumbUrl: newest?.image_url ?? null,
         };
       }),
     );
+
+    /*
+     * Photos live in a private bucket, so `image_url` is null for everything
+     * uploaded since signing came in - which is why the preview card used to
+     * say "no photos yet" next to a project with photos. Sign the newest
+     * photo per project, all of them in one request, the way the gallery does.
+     */
+    const toSign = Object.values(agg)
+      .map((s) => s.thumbPath)
+      .filter((path): path is string => Boolean(path));
+    if (toSign.length > 0) {
+      const { data: signed } = await supabase.storage
+        .from("site-photos")
+        .createSignedUrls(toSign, 3600);
+      const byPath: Record<string, string> = {};
+      signed?.forEach((s, i) => {
+        if (s.signedUrl) byPath[toSign[i]] = s.signedUrl;
+      });
+      for (const s of Object.values(agg)) {
+        if (s.thumbPath && byPath[s.thumbPath]) s.thumbUrl = byPath[s.thumbPath];
+      }
+    }
 
     const missing = all.filter((p) => p.latitude == null || p.longitude == null);
     let resolved = all;
@@ -294,9 +540,10 @@ export function MapPage() {
     loadGoogleMaps()
       .then(() => {
         if (!mapRef.current || mapInstance.current) return;
+        const restored = readMapView();
         mapInstance.current = new window.google.maps.Map(mapRef.current, {
-          center: { lat: 39.5, lng: -98.35 },
-          zoom: 4,
+          center: restored?.center ?? { lat: 39.5, lng: -98.35 },
+          zoom: restored?.zoom ?? 4,
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
@@ -345,12 +592,23 @@ export function MapPage() {
             },
           ],
         });
-        infoWindow.current = new window.google.maps.InfoWindow();
-        hoverWindow.current = new window.google.maps.InfoWindow({ disableAutoPan: true });
+        // A restored view is the user's own framing. Marking it as already
+        // fitted is what keeps the marker layer from re-fitting to every pin
+        // the moment the markers land, which is what used to undo the drill-in.
+        if (restored) fittedFilter.current = restored.filter;
+
+        infoWindow.current = new window.google.maps.InfoWindow({ maxWidth: 300 });
+        infoWindow.current.addListener("closeclick", () => {
+          selectedIdRef.current = null;
+          previewOpenRef.current = false;
+          setSelected(null);
+        });
+        mapInstance.current.addListener("idle", () => saveCurrentView());
+        mapInstance.current.addListener("click", () => closePreview());
         setMapReady(true);
       })
       .catch((e) => setMapError(e.message ?? "Failed to load map"));
-  }, [loading, projects.length]);
+  }, [loading, projects.length, saveCurrentView, closePreview]);
 
   const fitToAll = useCallback(() => {
     if (!mapInstance.current || !window.google?.maps || mappable.length === 0) return;
@@ -364,31 +622,7 @@ export function MapPage() {
     }
   }, [mappable]);
 
-  const buildHoverHtml = (p: ProjectPin, color: string) => {
-    const st = statsRef.current[p.id];
-    const addr = escapeXml(formatAddress(p) || "");
-    const name = escapeXml(p.name);
-    const thumb = st?.thumbUrl
-      ? `<div style="width:100%;height:96px;background:#e2e8f0 center/cover no-repeat url('${st.thumbUrl.replace(/'/g, "%27")}');border-radius:8px;margin-bottom:8px;"></div>`
-      : "";
-    const activity = st?.lastActivity
-      ? `Last activity ${new Date(st.lastActivity).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
-      : "No activity yet";
-    const photoCount = st?.photoCount ?? 0;
-    return `<div style="font-family:ui-sans-serif,system-ui;min-width:220px;max-width:260px;color:#0f172a;">
-      ${thumb}
-      <div style="font-weight:600;font-size:13px;line-height:1.2;margin-bottom:2px;">${name}</div>
-      <div style="font-size:11px;color:#475569;margin-bottom:6px;">${addr}</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-        <span style="padding:2px 8px;border-radius:999px;background:${escapeXml(stageOf(p)?.color ?? color)};color:#fff;font-size:10px;font-weight:600;text-transform:capitalize;">${escapeXml(stageOf(p)?.name ?? statusLabel[p.status] ?? p.status)}</span>
-        <span style="font-size:11px;color:#475569;">${photoCount} photo${photoCount === 1 ? "" : "s"}</span>
-      </div>
-      <div style="font-size:10px;color:#64748b;margin-top:4px;">${activity}</div>
-      <div style="font-size:10px;color:#0ea5e9;margin-top:6px;font-weight:600;">Click to open project →</div>
-    </div>`;
-  };
-
-  // Update markers + fit bounds whenever mappable changes OR map becomes ready
+  // Update markers whenever mappable changes OR map becomes ready
   useEffect(() => {
     if (!mapReady || !mapInstance.current || !window.google?.maps) return;
     if (clusterer.current) {
@@ -397,57 +631,100 @@ export function MapPage() {
     }
     markers.current.forEach((m) => m.setMap(null));
     markers.current = [];
+    markersById.current = {};
     if (mappable.length === 0) return;
 
     const bounds = new window.google.maps.LatLngBounds();
     mappable.forEach((p) => {
       const pos = { lat: Number(p.latitude), lng: Number(p.longitude) };
-      const color = statusColor[p.status] ?? "#64748b";
-      const totalW = pinTotalWidth(p.name);
-      const totalH = PIN_H + 4;
       const marker = new window.google.maps.Marker({
         position: pos,
         title: p.name,
-        icon: {
-          url: pinWithLabelSvg(color, p.name),
-          scaledSize: new window.google.maps.Size(totalW, totalH),
-          anchor: new window.google.maps.Point(PIN_W / 2, PIN_H),
-        },
+        // Lifts the preview card to the top of the pin instead of over its tip.
+        anchorPoint: new window.google.maps.Point(0, -PIN_H),
         optimized: false,
         zIndex: 10,
       });
+      paintMarker(marker, p, selectedIdRef.current === p.id ? "selected" : "idle");
       marker.addListener("mouseover", () => {
-        if (!hoverWindow.current) return;
-        hoverWindow.current.setContent(buildHoverHtml(p, color));
-        hoverWindow.current.open({ anchor: marker, map: mapInstance.current });
+        if (selectedIdRef.current !== p.id) paintMarker(marker, p, "hover");
       });
       marker.addListener("mouseout", () => {
-        hoverWindow.current?.close();
+        if (selectedIdRef.current !== p.id) paintMarker(marker, p, "idle");
       });
-      marker.addListener("click", () => {
-        setSelected(p);
-        hoverWindow.current?.close();
-        navigate({ to: "/projects/$projectId", params: { projectId: p.id }, search: {} as any });
-      });
+      marker.addListener("click", () => openPreview(p));
       markers.current.push(marker);
+      markersById.current[p.id] = marker;
       bounds.extend(pos);
     });
 
     clusterer.current = new MarkerClusterer({
       map: mapInstance.current,
       markers: markers.current,
+      algorithm: new SuperClusterAlgorithm({ maxZoom: CLUSTER_MAX_ZOOM, radius: 70 }),
+      /*
+       * The stock handler is `fitBounds(cluster.bounds)`, which for a tight
+       * knot of neighbouring jobs barely moves the zoom - hence clusters that
+       * took two or three clicks to open. Going in at least one level, and
+       * never stopping short of the zoom where clustering switches off, makes
+       * one click enough.
+       */
+      onClusterClick: (_event, cluster, map) => {
+        const b = cluster.bounds;
+        const current = map.getZoom() ?? 0;
+        if (cluster.position) map.setCenter(cluster.position);
+        else if (b) map.setCenter(b.getCenter());
+        const fitted = b ? zoomForBounds(map, b) : current + 2;
+        map.setZoom(Math.max(current + 1, Math.min(fitted, CLUSTER_MAX_ZOOM + 1)));
+      },
     });
 
+    /*
+     * Rebuilding the layer pulls the old markers off the map, and Google closes
+     * an InfoWindow whose anchor disappears. This effect runs on every refetch
+     * of the project list - a window focus is enough - so without this the card
+     * someone was reading would just shut itself. Re-open it on the new marker.
+     */
+    const openId = previewOpenRef.current ? selectedIdRef.current : null;
+    if (openId) {
+      const still = mappable.find((p) => p.id === openId);
+      if (still) openPreview(still);
+      else previewOpenRef.current = false;
+    }
+
+    // Framing is deliberately NOT part of this effect's job any more: it runs
+    // again on every stats refresh and geocode, and re-fitting each time is
+    // what yanked the map back out of whatever cluster was open. See the
+    // fit-on-filter-change effect below.
+  }, [mappable, mapReady, openPreview]);
+
+  // Frame the pins when the filter changes what "all of them" means, and on a
+  // first visit with no saved view. Never otherwise.
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current || !window.google?.maps) return;
+    if (mappable.length === 0) return;
+    if (fittedFilter.current === filter) return;
+    fittedFilter.current = filter;
+    const bounds = new window.google.maps.LatLngBounds();
+    mappable.forEach((p) => bounds.extend({ lat: Number(p.latitude), lng: Number(p.longitude) }));
     if (mappable.length === 1) {
       mapInstance.current.setCenter(bounds.getCenter());
       mapInstance.current.setZoom(14);
     } else {
       mapInstance.current.fitBounds(bounds, { top: 100, right: 100, bottom: 100, left: 100 });
     }
-    // stageLookup is in here because each marker's hover card is built from the
-    // closure this effect ran in: without it, pins created before the pipelines
-    // finished loading would keep showing the roll-up under their own name.
-  }, [mappable, mapReady, navigate, stageLookup]);
+  }, [mappable, mapReady, filter]);
+
+  // Keep the labelled pin in step with the selection, wherever it came from:
+  // the pin itself, the sidebar list, or the card being dismissed.
+  useEffect(() => {
+    if (!mapReady || !window.google?.maps) return;
+    selectedIdRef.current = selected?.id ?? null;
+    for (const p of mappable) {
+      const marker = markersById.current[p.id];
+      if (marker) paintMarker(marker, p, selected?.id === p.id ? "selected" : "idle");
+    }
+  }, [selected, mappable, mapReady]);
 
   if (loading) return <PageLoader />;
 
@@ -459,16 +736,30 @@ export function MapPage() {
     all: projects.length,
   };
 
+  /*
+   * A list row is a preview too: it flies to the pin and opens the same card,
+   * rather than navigating away. Going past CLUSTER_MAX_ZOOM guarantees the pin
+   * is out of its cluster, so the card lands on the job itself and not on the
+   * cluster bubble that was covering it.
+   */
   const focusProject = (p: ProjectPin) => {
-    setSelected(p);
-    if (p.latitude != null && p.longitude != null && mapInstance.current) {
-      mapInstance.current.panTo({ lat: Number(p.latitude), lng: Number(p.longitude) });
-      mapInstance.current.setZoom(15);
-      const idx = mappable.findIndex((x) => x.id === p.id);
-      const marker = markers.current[idx];
-      if (marker && infoWindow.current) {
-        window.google.maps.event.trigger(marker, "click");
-      }
+    const map = mapInstance.current;
+    if (!map || p.latitude == null || p.longitude == null) {
+      setSelected(p);
+      return;
+    }
+    map.panTo({ lat: Number(p.latitude), lng: Number(p.longitude) });
+    if ((map.getZoom() ?? 0) <= CLUSTER_MAX_ZOOM) map.setZoom(CLUSTER_MAX_ZOOM + 1);
+    openPreview(p);
+    // The clusterer only releases the marker on the next idle, so re-anchor the
+    // card to it once it is actually on the map.
+    if (window.google?.maps) {
+      window.google.maps.event.addListenerOnce(map, "idle", () => {
+        const marker = markersById.current[p.id];
+        if (selectedIdRef.current !== p.id || !marker?.getMap?.()) return;
+        infoWindow.current?.setOptions({ pixelOffset: new window.google.maps.Size(0, 0) });
+        infoWindow.current?.open({ anchor: marker, map });
+      });
     }
   };
 
@@ -647,6 +938,7 @@ export function MapPage() {
                             to="/projects/$projectId"
                             params={{ projectId: p.id }}
                             search={{} as any}
+                            onClick={saveCurrentView}
                           >
                             Open project
                           </Link>
