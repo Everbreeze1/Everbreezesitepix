@@ -27,6 +27,7 @@ const ADD_DIALOG = read("apps/web/src/features/projects/components/AddProjectToS
 const PROJECTS_PAGE = read("apps/web/src/features/projects/pages/ProjectsPage.tsx");
 const STAGE_CHIP = read("apps/web/src/features/projects/components/ProjectStageChip.tsx");
 const TAB_STRIP = read("apps/web/src/features/projects/components/PipelineTabStrip.tsx");
+const EDGE_SCROLL = read("apps/web/src/hooks/use-edge-scroll.ts");
 const DETAIL_PAGE = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
 
 /**
@@ -372,8 +373,10 @@ describe("pipeline stages", () => {
       expect(TAB_STRIP).toContain("Scroll pipelines right");
       expect(TAB_STRIP).toContain("{overflow.left && <ArrowButton");
       expect(TAB_STRIP).toContain("{overflow.right && <ArrowButton");
-      // Measured, not assumed, and re-measured when the box or the list changes.
-      expect(TAB_STRIP).toContain("ResizeObserver");
+      // Measured, not assumed, and re-measured when the box or the list
+      // changes. The measuring moved into the hook the board's columns share.
+      expect(TAB_STRIP).toContain("useEdgeScroll");
+      expect(EDGE_SCROLL).toContain("ResizeObserver");
     });
 
     it("keeps the create button out of the part that scrolls", () => {
@@ -419,6 +422,62 @@ describe("pipeline stages", () => {
       expect(ADD_DIALOG).toContain('moved into "{stage.name}"');
       // Reset per opening, or the tally reads as the total of all time.
       expect(ADD_DIALOG).toContain("setMovedCount(0)");
+    });
+  });
+  /*
+   * The client's third round, after moving a job around a board:
+   *
+   *   "i can move it from side to side with a bar at the bottom but these bars
+   *    will eventually need to go away and have a cleaner look, there should be
+   *    an arrow or something on top to move from side to side for each Pipeline
+   *    Created."
+   */
+  describe("the board scrolls from the top, not from a scrollbar", () => {
+    const stripClass = /ref=\{strip\}\s*\n\s*className="([^"]+)"/.exec(BOARD_VIEW)?.[1] ?? "";
+
+    it("hides the column strip's scrollbar, like every other strip in the app", () => {
+      expect(stripClass).toContain("overflow-x-auto");
+      expect(stripClass).toContain("[scrollbar-width:none]");
+      expect(stripClass).toContain("[&::-webkit-scrollbar]:hidden");
+    });
+
+    it("puts the arrows above the columns, and only when something is off-screen", () => {
+      expect(BOARD_VIEW).toContain('aria-label="Scroll stages left"');
+      expect(BOARD_VIEW).toContain('aria-label="Scroll stages right"');
+      expect(BOARD_VIEW).toContain("{(stripEdge.left || stripEdge.right) && (");
+      // Each arrow greys out at its own end rather than vanishing, so the
+      // toolbar does not reshuffle itself mid-scroll.
+      expect(BOARD_VIEW).toContain("disabled={!stripEdge.left}");
+      expect(BOARD_VIEW).toContain("disabled={!stripEdge.right}");
+      // "On top" is the whole request: the arrows are in the toolbar, which is
+      // written before the columns.
+      const arrowAt = BOARD_VIEW.indexOf('aria-label="Scroll stages left"');
+      const columnsAt = BOARD_VIEW.indexOf("<DndContext");
+      expect(arrowAt).toBeGreaterThan(0);
+      expect(arrowAt).toBeLessThan(columnsAt);
+    });
+
+    it("fades whichever edge still has more behind it", () => {
+      expect(BOARD_VIEW).toContain("{stripEdge.left && (");
+      expect(BOARD_VIEW).toContain("{stripEdge.right && (");
+    });
+
+    it("moves by whole columns, measured off a real one", () => {
+      expect(BOARD_VIEW).toContain("data-pipeline-column");
+      expect(BOARD_VIEW).toContain("column.offsetWidth + 16");
+    });
+
+    it("does not let CSS smooth scrolling throttle a drag to the edge", () => {
+      // dnd-kit writes scrollLeft every frame while a card is held near the
+      // edge; scroll-behavior: smooth animates each of those into a crawl. The
+      // arrows ask for smooth scrolling per call instead.
+      expect(stripClass).not.toContain("scroll-smooth");
+      expect(EDGE_SCROLL).toContain('behavior: "smooth"');
+    });
+
+    it("shares one scroller with the pipeline tabs, so both behave the same", () => {
+      expect(BOARD_VIEW).toContain("useEdgeScroll");
+      expect(TAB_STRIP).toContain("useEdgeScroll");
     });
   });
 });

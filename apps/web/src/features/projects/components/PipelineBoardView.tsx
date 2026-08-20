@@ -13,6 +13,8 @@ import {
   Inbox,
   ChevronLeft,
   ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   Check,
   CircleSlash,
   Users as UsersIcon,
@@ -51,6 +53,7 @@ import { AddProjectToStageDialog } from "@/features/projects/components/AddProje
 import { AssignTeammatesDialog } from "@/features/projects/components/AssignTeammatesDialog";
 import { ProjectCrew } from "@/features/projects/components/ProjectCrew";
 import { useProjectAssignees } from "@/hooks/use-project-assignees";
+import { useEdgeScroll } from "@/hooks/use-edge-scroll";
 import {
   setProjectPipelineStage,
   type PipelineStage,
@@ -226,6 +229,39 @@ export function PipelineBoardView({
   const placedTotal = columns.reduce((n, c) => n + c.total, 0);
   const shownTotal = columns.reduce((n, c) => n + c.projects.length, 0);
 
+  /*
+   * The columns scroll sideways, and now they say so at the top instead of
+   * along the bottom.
+   *
+   * The client, after using the board: "i can move it from side to side with a
+   * bar at the bottom but these bars will eventually need to go away and have a
+   * cleaner look, there should be an arrow or something on top to move from
+   * side to side for each Pipeline Created."
+   *
+   * This strip was the last horizontal scroller in the app still showing a
+   * native scrollbar - the pipeline tabs, the photo carousel and the page tab
+   * strips all hide theirs. Hiding it is only half the job: the hook that gives
+   * the pipeline tabs their arrows gives these columns arrows and edge fades
+   * too, so nothing goes off-screen without a way back to it.
+   */
+  const {
+    ref: strip,
+    overflow: stripEdge,
+    nudge,
+  } = useEdgeScroll<HTMLDivElement>([columns.length, showUnassigned, unassignedAll.length]);
+
+  /**
+   * One click moves whole columns, never a fraction of one, and stops a column
+   * short of a full screenful so something you were looking at stays in view.
+   */
+  function columnStep(): number | undefined {
+    const el = strip.current;
+    const column = el?.querySelector<HTMLElement>("[data-pipeline-column]");
+    if (!el || !column) return undefined;
+    const stride = column.offsetWidth + 16; // gap-4
+    return stride * Math.max(1, Math.floor(el.clientWidth / stride) - 1);
+  }
+
   function labelFor(id: string): string {
     if (id === UNASSIGNED) return "Not in a pipeline";
     return stageById.get(id)?.name ?? "stage";
@@ -319,22 +355,62 @@ export function PipelineBoardView({
           {q ? `${shownTotal} of ${placedTotal} shown` : `${placedTotal} in this pipeline`}
         </p>
 
-        {unassignedAll.length > 0 && (
-          <Button
-            variant={showUnassigned ? "secondary" : "outline"}
-            size="sm"
-            className="ml-auto h-9 text-xs"
-            onClick={() => setShowUnassigned((v) => !v)}
-            aria-pressed={showUnassigned}
-          >
-            {showUnassigned ? (
-              <ChevronLeft className="mr-1.5 h-3.5 w-3.5" />
-            ) : (
-              <ChevronRight className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            {unassignedAll.length} not in a pipeline
-          </Button>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {unassignedAll.length > 0 && (
+            <Button
+              variant={showUnassigned ? "secondary" : "outline"}
+              size="sm"
+              className="h-9 text-xs"
+              onClick={() => setShowUnassigned((v) => !v)}
+              aria-pressed={showUnassigned}
+            >
+              {/*
+                Panel icons, not chevrons: the two scroll arrows now sit beside
+                this button, and a third and fourth chevron pointing the same
+                way would read as more of the same control.
+              */}
+              {showUnassigned ? (
+                <PanelLeftClose className="mr-1.5 h-3.5 w-3.5" />
+              ) : (
+                <PanelLeftOpen className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              {unassignedAll.length} not in a pipeline
+            </Button>
+          )}
+
+          {/*
+            Only when there is something off-screen: a board whose stages all
+            fit needs no control for scrolling it. Once shown, each arrow stays
+            put and greys out at its end of the run, so the toolbar does not
+            reshuffle itself under the cursor halfway across the board.
+          */}
+          {(stripEdge.left || stripEdge.right) && (
+            <div className="flex items-center gap-1" role="group" aria-label="Scroll stages">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                disabled={!stripEdge.left}
+                onClick={() => nudge(-1, columnStep())}
+                aria-label="Scroll stages left"
+                title="Scroll stages left"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                disabled={!stripEdge.right}
+                onClick={() => nudge(1, columnStep())}
+                aria-label="Scroll stages right"
+                title="Scroll stages right"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
       <DndContext
@@ -348,51 +424,72 @@ export function PipelineBoardView({
         onDragEnd={handleDragEnd}
         onDragCancel={endDrag}
       >
-        <div className="flex snap-x gap-4 overflow-x-auto pb-4">
-          {showUnassigned && unassignedAll.length > 0 && (
-            <BoardColumn
-              columnId={UNASSIGNED}
-              title="Not in a pipeline"
-              projects={unassigned}
-              total={unassignedAll.length}
-              filtered={!!q}
-              active={active}
-              suppressClick={suppressClick}
-              coverUrls={coverUrls}
-              photoCounts={photoCounts}
-              reportCounts={reportCounts}
-              stages={stages}
-              onMove={move}
-              crewByProject={crewByProject}
-              canAssign={canAssign}
-              onAssign={setAssignFor}
-              emptyLabel="Every project is on a board."
-            />
-          )}
+        <div className="relative">
+          {/* No scroll-smooth class here on purpose: dnd-kit's auto-scroll writes
+            scrollLeft every frame while a card is held near the edge, and a CSS
+            smooth behaviour animates each of those writes into a crawl. The
+            arrows ask for smooth scrolling themselves instead. */}
+          <div
+            ref={strip}
+            className="flex snap-x gap-4 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {showUnassigned && unassignedAll.length > 0 && (
+              <BoardColumn
+                columnId={UNASSIGNED}
+                title="Not in a pipeline"
+                projects={unassigned}
+                total={unassignedAll.length}
+                filtered={!!q}
+                active={active}
+                suppressClick={suppressClick}
+                coverUrls={coverUrls}
+                photoCounts={photoCounts}
+                reportCounts={reportCounts}
+                stages={stages}
+                onMove={move}
+                crewByProject={crewByProject}
+                canAssign={canAssign}
+                onAssign={setAssignFor}
+                emptyLabel="Every project is on a board."
+              />
+            )}
 
-          {columns.map(({ stage, projects, total }) => (
-            <BoardColumn
-              key={stage.id}
-              columnId={stage.id}
-              title={stage.name}
-              color={stage.color}
-              projects={projects}
-              total={total}
-              filtered={!!q}
-              onAdd={() => setAddingToStage(stage)}
-              active={active}
-              suppressClick={suppressClick}
-              coverUrls={coverUrls}
-              photoCounts={photoCounts}
-              reportCounts={reportCounts}
-              stages={stages}
-              onMove={move}
-              crewByProject={crewByProject}
-              canAssign={canAssign}
-              onAssign={setAssignFor}
-              emptyLabel="No projects at this stage."
-            />
-          ))}
+            {columns.map(({ stage, projects, total }) => (
+              <BoardColumn
+                key={stage.id}
+                columnId={stage.id}
+                title={stage.name}
+                color={stage.color}
+                projects={projects}
+                total={total}
+                filtered={!!q}
+                onAdd={() => setAddingToStage(stage)}
+                active={active}
+                suppressClick={suppressClick}
+                coverUrls={coverUrls}
+                photoCounts={photoCounts}
+                reportCounts={reportCounts}
+                stages={stages}
+                onMove={move}
+                crewByProject={crewByProject}
+                canAssign={canAssign}
+                onAssign={setAssignFor}
+                emptyLabel="No projects at this stage."
+              />
+            ))}
+          </div>
+
+          {/*
+            A column cut off by a hard edge reads as the last one. Under a fade
+            it reads as "there is more", which is what makes the arrow beside it
+            worth pressing.
+          */}
+          {stripEdge.left && (
+            <span className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-background to-transparent" />
+          )}
+          {stripEdge.right && (
+            <span className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent" />
+          )}
         </div>
 
         {/*
@@ -507,7 +604,9 @@ function BoardColumn({
   const isRail = columnId === UNASSIGNED;
 
   return (
-    <div className="flex w-[280px] shrink-0 snap-start flex-col">
+    // data-pipeline-column is what the toolbar arrows measure, so a click moves
+    // by whole columns rather than a guessed number of pixels.
+    <div data-pipeline-column className="flex w-[280px] shrink-0 snap-start flex-col">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {isRail ? (
