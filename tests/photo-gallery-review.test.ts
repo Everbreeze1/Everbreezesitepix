@@ -278,9 +278,20 @@ describe("the Gallery grid can select photos, which the Help Center has always s
   });
 
   it("only lets Escape clear the selection when nothing is layered over the grid", () => {
-    // The bulk Tag dialog and the lightbox own their own Escape; that press is
-    // not about the selection underneath them.
-    expect(CODE).toMatch(/e\.key === "Escape" && !modalLayerIsOpen\(\)/);
+    /*
+     * The bulk Tag dialog and the lightbox own their own Escape; that press is
+     * not about the selection underneath them.
+     *
+     * This used to assert `!modalLayerIsOpen()` inline, and that assertion
+     * passed against code that did not work: the listener bubbled, Radix had
+     * already unmounted the dialog by the time it ran, and the guard saw an
+     * empty page. Driving it in a browser showed Escape closing the dialog and
+     * taking the selection with it. What matters is the PHASE, so that is what
+     * is pinned now - `onEscapeOutsideModals` is the only caller of
+     * `addEventListener` that gets it right.
+     */
+    expect(CODE).toContain("onEscapeOutsideModals");
+    expect(CODE).not.toMatch(/e\.key === "Escape"/);
   });
 
   it("hides selection from the calendar, which the bar's actions would reorder underneath", () => {

@@ -87,3 +87,36 @@ export function modalLayerIsOpen(): boolean {
   if (typeof document === "undefined") return false;
   return document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
 }
+
+/**
+ * Run `handler` on Escape, but only when no modal layer owns that press.
+ *
+ * The phase is the whole point, and the reason this is a helper rather than
+ * three lines at each call site.
+ *
+ * `modalLayerIsOpen()` asks the DOM what is open RIGHT NOW. Radix's
+ * DismissableLayer listens for Escape on the document in the bubble phase and
+ * takes its content out of the DOM there, so a page-level listener that also
+ * bubbles is asking the question after the answer has already changed: it sees
+ * no dialog, concludes the press was meant for the page, and clears the
+ * selection that the user was still working on. Escape out of the bulk Share
+ * dialog and your ticked photos went with it, while closing the same dialog by
+ * its X button left them alone - which is exactly how it behaved in both the
+ * Gallery and the project grid until this was measured in a browser.
+ *
+ * Capture on `window` is the earliest point in the event's path, before any
+ * layer has had a chance to unmount, so the question is asked while the answer
+ * is still true.
+ *
+ * @returns the unsubscribe, for an effect cleanup.
+ */
+export function onEscapeOutsideModals(handler: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key !== "Escape") return;
+    if (modalLayerIsOpen()) return;
+    handler();
+  };
+  window.addEventListener("keydown", onKey, true);
+  return () => window.removeEventListener("keydown", onKey, true);
+}

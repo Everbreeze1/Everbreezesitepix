@@ -86,7 +86,7 @@ import {
 import { PhotoTagPopoverBody } from "@/features/photos/components/PhotoTagPopoverBody";
 import { TagPill } from "@/features/photos/components/TagPill";
 import { ensureGlobalTag } from "@/hooks/use-tag-colors";
-import { modalLayerIsOpen } from "@/lib/modal-layers";
+import { onEscapeOutsideModals } from "@/lib/modal-layers";
 import { cleanCaption } from "@sitepix/shared";
 
 interface Photo {
@@ -630,11 +630,11 @@ export function GalleryPage() {
    */
   useEffect(() => {
     if (!selectMode && selectedIds.length === 0) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !modalLayerIsOpen()) clearSelection();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Capture phase, via the shared helper. Listening on the bubble the way this
+    // used to meant Radix had already unmounted the dialog by the time the guard
+    // asked whether one was open, so Escape out of Tag/Share/Move threw the
+    // selection away after all. See lib/modal-layers.ts.
+    return onEscapeOutsideModals(clearSelection);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectMode, selectedIds.length]);
 

@@ -155,6 +155,58 @@ describe("the project Photos tab is as discoverable as the Gallery's", () => {
       /const clearSelection = \(\) => \{[\s\S]{0,120}setPhotoSelectMode\(false\)/,
     );
   });
+
+  it("reaches the carousel too, not only the grid", () => {
+    // The Select pill renders in both views. Without this prop the carousel
+    // could only learn about selection after a photo was already ticked, so
+    // pressing Select in carousel view did nothing at all.
+    expect(CODE).toMatch(/selectMode=\{photoSelectMode\}/);
+    const carousel = stripComments(
+      read("apps/web/src/features/projects/components/PhotoCarousel.tsx"),
+    );
+    expect(carousel).toMatch(/const inSelectionMode = selectMode \|\| selSet\.size > 0/);
+    expect(carousel).toMatch(/inSelectionMode \? "opacity-100" : "opacity-0"/);
+  });
+
+  it("drops photos from the selection once a filter hides them", () => {
+    // Otherwise Hide and Trash act on photos the user was never shown. The
+    // Gallery has guarded this since its own review; the grid did not.
+    expect(CODE).toMatch(/const onScreen = new Set\(filteredPhotos\.map\(\(p\) => p\.id\)\)/);
+  });
+
+  it("lets Escape leave select mode, but not through an open dialog", () => {
+    expect(CODE).toContain("onEscapeOutsideModals");
+  });
+});
+
+describe("one Escape does not both close a dialog and clear what is behind it", () => {
+  const HELPER = stripComments(read("apps/web/src/lib/modal-layers.ts"));
+
+  /*
+   * Measured, not reasoned about. Both grids shipped a guard that read
+   * `!modalLayerIsOpen()` from a bubble-phase listener; Radix's DismissableLayer
+   * removes its content on the same keypress, also in the bubble phase, so the
+   * guard asked whether a dialog was open after the dialog had gone. In a
+   * browser: Escape out of the bulk Share dialog cleared the ticked photos,
+   * while closing the same dialog by its X button did not.
+   */
+  it("listens in the capture phase, which is the entire fix", () => {
+    expect(HELPER).toMatch(/addEventListener\("keydown", onKey, true\)/);
+    expect(HELPER).toMatch(/removeEventListener\("keydown", onKey, true\)/);
+  });
+
+  it("still asks the DOM rather than a React flag", () => {
+    // A state flag reads back stale: the layer above is already unmounting.
+    expect(HELPER).toMatch(/if \(modalLayerIsOpen\(\)\) return;/);
+  });
+
+  it("is what both grids use, so neither can drift back to the broken shape", () => {
+    for (const rel of [PROJECT, GALLERY]) {
+      const src = stripComments(read(rel));
+      expect(src).toContain("onEscapeOutsideModals");
+      expect(src).not.toMatch(/addEventListener\("keydown"/);
+    }
+  });
 });
 
 describe("no picker prints the same project name twice", () => {
