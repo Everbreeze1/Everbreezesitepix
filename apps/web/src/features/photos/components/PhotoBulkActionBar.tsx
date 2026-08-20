@@ -17,6 +17,9 @@ import {
   Plus,
   Check,
   Sparkles,
+  Copy,
+  Link2,
+  Download as DownloadIcon,
 } from "lucide-react";
 import {
   Dialog,
@@ -28,6 +31,16 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,13 +51,17 @@ import {
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/sitepix/client";
-import { sharePhotoNative } from "@/lib/native-share";
-import { mutateByIds } from "@/lib/chunked-ids";
+import { chunkIds, mutateByIds } from "@/lib/chunked-ids";
 import { ensureGlobalTag } from "@/hooks/use-tag-colors";
 import { useConfirm } from "@/hooks/use-confirm";
-import { useSidebar } from "@/components/ui/sidebar";
 import { clampPhotosPerPage, useProfile } from "@/hooks/use-profile";
-import { cleanCaption, sanitizeCaption } from "@sitepix/shared";
+import { cleanCaption, sanitizeCaption, describeProjects } from "@sitepix/shared";
+import {
+  SharePhotoDialog,
+  SHARE_DURATIONS,
+  shareUrl,
+} from "@/features/photos/components/SharePhotoDialog";
+import { createPhotoShare } from "@/lib/photo-shares.functions";
 import { NewReportDialog } from "@/features/projects/components/NewReportDialog";
 import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
 
@@ -222,12 +239,6 @@ export function PhotoBulkActionBar(props: Props) {
   } = props;
   const confirm = useConfirm();
   const { profile } = useProfile();
-  const { state: sidebarState, isMobile } = useSidebar();
-  const barLeftOffset = isMobile
-    ? 0
-    : sidebarState === "collapsed"
-      ? "var(--sidebar-width-icon)"
-      : "var(--sidebar-width)";
   const count = selectedIds.length;
   const selectedPhotos = useMemo(
     () => selectedIds.map((id) => photosById.get(id)).filter(Boolean) as BulkPhoto[],
@@ -236,6 +247,7 @@ export function PhotoBulkActionBar(props: Props) {
   const allHidden = selectedPhotos.length > 0 && selectedPhotos.every((p) => p.hidden);
 
   const [tagOpen, setTagOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [newReportOpen, setNewReportOpen] = useState(false);
   const [addToReportOpen, setAddToReportOpen] = useState(false);
@@ -275,36 +287,72 @@ export function PhotoBulkActionBar(props: Props) {
       );
     });
 
-  const doShare = () =>
-    withBusy("share", async () => {
-      if (count === 1 && selectedPhotos[0]?.url) {
-        await sharePhotoNative({
-          url: selectedPhotos[0].url,
-          title: selectedPhotos[0].caption ?? "Photo",
-        });
-        return;
-      }
-      const links = selectedPhotos
-        .map((p) => p.url)
-        .filter(Boolean)
-        .join("\n");
-      try {
-        await navigator.clipboard.writeText(links);
-        toast.success(`${count} links copied to clipboard`);
-      } catch {
-        toast.error("Could not copy links");
-      }
-    });
+  /**
+   * Set `hidden` on the selection and report what the database actually did.
+   *
+   * `.select("id")` is not decoration. A plain PostgREST update answers 204 with
+   * no error when it matched no rows, so an update RLS declined came back
+   * indistinguishable from success and the bar cheerfully claimed it had hidden
+   * photos it had not touched. Counting the returned rows is the only honest
+   * answer to "did that work".
+   */
+  const setHidden = async (next: boolean): Promise<number> => {
+    let changed = 0;
+    // Batched - "Select all" is unbounded and a single `.in()` past ~670 ids
+    // is rejected by the gateway on URI length. See lib/chunked-ids.ts.
+    for (const idChunk of chunkIds(selectedIds)) {
+      const { data, error } = await (supabase as any)
+        .from("photos")
+        .update({ hidden: next })
+        .in("id", idChunk)
+        .select("id");
+      if (error) throw error;
+      changed += (data as unknown[] | null)?.length ?? 0;
+    }
+    return changed;
+  };
 
   const doHideToggle = () =>
     withBusy("hide", async () => {
       const next = !allHidden;
-      // Batched - "Select all" is unbounded and a single `.in()` past ~670 ids
-      // is rejected by the gateway on URI length. See lib/chunked-ids.ts.
-      await mutateByIds(selectedIds, (idChunk) =>
-        (supabase as any).from("photos").update({ hidden: next }).in("id", idChunk),
+      const changed = await setHidden(next);
+      if (changed === 0) {
+        toast.error(next ? "Could not hide those photos" : "Could not restore those photos", {
+          description: "Nothing changed. You may not have permission to edit them.",
+        });
+        return;
+      }
+      /*
+       * Both grids keep showing hidden photos, badged, on purpose - this is the
+       * project's own record and hiding is not deleting. That is exactly why the
+       * old bare "N hidden from timeline" read as nothing happening: the count
+       * did not move and the toast never said where the photos went. The
+       * description says which surfaces drop them, and Undo means the user can
+       * find out by trying it.
+       */
+      toast.success(
+        next
+          ? `${changed} photo${changed > 1 ? "s" : ""} hidden`
+          : `${changed} photo${changed > 1 ? "s" : ""} restored`,
+        {
+          description: next
+            ? "They stay in this project, badged Hidden, and drop out of the timeline and calendar."
+            : "They show in the timeline and calendar again.",
+          action: {
+            label: "Undo",
+            onClick: () => {
+              void (async () => {
+                try {
+                  await setHidden(!next);
+                  onRefresh();
+                } catch (e: any) {
+                  toast.error(e?.message ?? "Could not undo");
+                }
+              })();
+            },
+          },
+        },
       );
-      toast.success(next ? `${count} hidden from timeline` : `${count} restored to timeline`);
       onRefresh();
     });
 
@@ -331,79 +379,82 @@ export function PhotoBulkActionBar(props: Props) {
   return (
     <>
       {/*
-        Offset by the sidebar. `inset-x-0` centred this across the whole
-        viewport, so the bar sat on top of the logo and the top nav rows, and
-        centred over the window rather than over the photos it acts on.
+        Docked in the page, not floated over the window.
+        =============================================================
+        This was `fixed top-3` with a sidebar-width left offset, which put it
+        across the top of the viewport: it covered the header's search box and
+        buried the notification bell and the account menu completely, so turning
+        on a selection took global navigation away until you turned it off
+        again. It also landed exactly where sonner draws its toasts
+        (`position="top-center"` in components/ui/sonner.tsx), which is why Hide
+        looked like it did nothing - its toast was appearing behind this bar.
 
-        The offset is read from `useSidebar` rather than hardcoded, because the
-        rail is `collapsible="icon"`: a fixed 16rem would be wrong the moment
-        anyone collapses it. On mobile the sidebar is a sheet over the content,
-        so there is nothing to clear.
+        So: normal flow, `sticky` under the header rather than over it. The
+        caller mounts it directly above the photo grid, so it reads as the
+        grid's own toolbar next to Filters and the phase chips, and it stays on
+        screen while you scroll the photos it acts on.
+
+        `top-[82px]` is AppHeader's height, which is a fixed `h-[82px]` sticky
+        `top-0` row - so the bar parks flush under it however far the page has
+        scrolled. `z-10` keeps it over the tiles and under the header (`z-20`),
+        which is the whole point of the change.
       */}
-      <div
-        style={{ left: barLeftOffset }}
-        className="pointer-events-none fixed right-0 top-3 z-50 flex justify-center px-3 transition-[left] duration-200 ease-linear sm:top-4"
-      >
-        {/*
-          1100 fitted the seven actions this bar shipped with. Generate is an
-          eighth, and clearing the sidebar took 16rem of room away, so the row
-          needed both a higher cap and tighter controls: measured at 1222px it
-          wrapped on any window under 1500. The paddings and gaps below are
-          trimmed to bring that to roughly 1120, which holds one row from a
-          1440 laptop up. Narrower than that it wraps, which is what the
-          flex-wrap is for.
-        */}
-        <div className="pointer-events-auto w-full max-w-[min(1280px,98vw)] rounded-2xl border border-border/70 bg-background/95 shadow-2xl ring-1 ring-primary/10 backdrop-blur-xl animate-in fade-in slide-in-from-top-4 duration-200">
-          <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 sm:px-3 sm:py-3">
-            {/* Count pill */}
-            <div className="flex items-center gap-2">
-              <div className="flex h-10 items-center gap-1.5 rounded-xl bg-primary px-2.5 text-primary-foreground shadow-sm">
-                <CheckSquare className="h-4 w-4" />
-                <span className="text-sm font-semibold tabular-nums">{count}</span>
-                <span className="text-xs font-medium opacity-90">Selected</span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-10 rounded-xl px-2.5 text-xs font-medium"
-                onClick={onSelectAll}
-              >
-                Select all {totalVisible}
-              </Button>
+      <div className="sticky top-[82px] z-10 mt-5 rounded-2xl border border-border bg-card/95 shadow-lg ring-1 ring-primary/10 backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 sm:px-3 sm:py-3">
+          {/* Count pill */}
+          <div className="flex items-center gap-2">
+            <div className="flex h-10 items-center gap-1.5 rounded-xl bg-primary px-2.5 text-primary-foreground shadow-sm">
+              <CheckSquare className="h-4 w-4" />
+              <span className="text-sm font-semibold tabular-nums">{count}</span>
+              <span className="text-xs font-medium opacity-90">Selected</span>
             </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 rounded-xl px-2.5 text-xs font-medium"
+              onClick={onSelectAll}
+            >
+              Select all {totalVisible}
+            </Button>
+          </div>
 
-            <div className="mx-1 hidden h-8 w-px bg-border sm:block" />
+          <div className="mx-1 hidden h-8 w-px bg-border sm:block" />
 
-            {/* Primary actions */}
-            <div className="flex flex-1 flex-wrap items-center gap-1">
-              <ActionBtn
-                label="Download"
-                icon={Download}
-                onClick={doDownload}
-                busy={busy === "dl"}
-              />
-              <ActionBtn label="Tag" icon={TagIcon} onClick={() => setTagOpen(true)} />
-              <ActionBtn label="Print" icon={Printer} onClick={doPrint} busy={busy === "print"} />
-              <ActionBtn label="Share" icon={Share2} onClick={doShare} busy={busy === "share"} />
+          {/* Primary actions */}
+          <div className="flex flex-1 flex-wrap items-center gap-1">
+            <ActionBtn label="Download" icon={Download} onClick={doDownload} busy={busy === "dl"} />
+            <ActionBtn label="Tag" icon={TagIcon} onClick={() => setTagOpen(true)} />
+            <ActionBtn label="Print" icon={Printer} onClick={doPrint} busy={busy === "print"} />
+            {/*
+                Opens the app's own share flow, the same one the public
+                /share/photos/<token> route serves. It used to call the OS share
+                sheet through `sharePhotoNative`, which is where the permanent
+                spinner came from: `navigator.share()` needs the user gesture
+                that opened it, this path awaited a `fetch` of the image first,
+                and the desktop sheet answers a gesture-less call with a promise
+                that never settles - no window, no rejection, nothing for the
+                `finally` to clear the busy flag on. A dialog cannot hang.
+              */}
+            <ActionBtn label="Share" icon={Share2} onClick={() => setShareOpen(true)} />
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild disabled={!projectId}>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={!projectId}
-                    title={
-                      projectId
-                        ? "Report"
-                        : "These photos are from more than one project. Narrow the selection to one to build a report."
-                    }
-                    className="h-11 gap-1.5 rounded-xl px-2.5 hover:bg-muted"
-                  >
-                    <FileText className="h-[18px] w-[18px]" />
-                    <span className="hidden text-sm font-medium sm:inline">Report</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                {/*
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild disabled={!projectId}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={!projectId}
+                  title={
+                    projectId
+                      ? "Report"
+                      : "These photos are from more than one project. Narrow the selection to one to build a report."
+                  }
+                  className="h-11 gap-1.5 rounded-xl px-2.5 hover:bg-muted"
+                >
+                  <FileText className="h-[18px] w-[18px]" />
+                  <span className="hidden text-sm font-medium sm:inline">Report</span>
+                </Button>
+              </DropdownMenuTrigger>
+              {/*
                   Both items hand off to the report flow the rest of the app
                   uses. "Create from template" used to be a third entry here
                   that listed existing *reports* and copied their settings - it
@@ -411,97 +462,96 @@ export function PhotoBulkActionBar(props: Props) {
                   dialog's "Start from" grid is the real one: built-in starters,
                   your team's saved templates, and the Pro gate.
                 */}
-                <DropdownMenuContent align="center" side="bottom" className="w-72">
-                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Reports
-                  </DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => setNewReportOpen(true)}>
-                    <FilePlus2 className="mr-2 mt-0.5 h-4 w-4 shrink-0" />
-                    <span>
-                      <span className="block font-medium">New report</span>
-                      <span className="block text-xs text-muted-foreground">
-                        Blank or from a template, with cover page and layout
-                      </span>
+              <DropdownMenuContent align="center" side="bottom" className="w-72">
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Reports
+                </DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => setNewReportOpen(true)}>
+                  <FilePlus2 className="mr-2 mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    <span className="block font-medium">New report</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Blank or from a template, with cover page and layout
                     </span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setAddToReportOpen(true)}>
-                    <FolderPlus className="mr-2 mt-0.5 h-4 w-4 shrink-0" />
-                    <span>
-                      <span className="block font-medium">Add to existing report</span>
-                      <span className="block text-xs text-muted-foreground">
-                        Files them as one section, at that report's density
-                      </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAddToReportOpen(true)}>
+                  <FolderPlus className="mr-2 mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    <span className="block font-medium">Add to existing report</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Files them as one section, at that report's density
                     </span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  </span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-              {/*
+            {/*
                 The same menu the project header and the Documents tab mount,
                 so "generate something from these photos" means one thing
                 everywhere. It opens its own photo picker with this selection
                 already ticked rather than asking for the photos twice.
               */}
-              {projectId ? (
-                <GenerateDocumentMenu
-                  projectId={projectId}
-                  photoIds={selectedIds}
-                  align="start"
-                  trigger={
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-11 gap-1.5 rounded-xl px-2.5 hover:bg-muted"
-                    >
-                      <Sparkles className="h-[18px] w-[18px]" />
-                      <span className="hidden text-sm font-medium sm:inline">Generate</span>
-                    </Button>
-                  }
-                />
-              ) : (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled
-                  title="These photos are from more than one project. Narrow the selection to one to generate a document."
-                  className="h-11 gap-1.5 rounded-xl px-2.5 hover:bg-muted"
-                >
-                  <Sparkles className="h-[18px] w-[18px]" />
-                  <span className="hidden text-sm font-medium sm:inline">Generate</span>
-                </Button>
-              )}
-
-              <div className="mx-1 h-8 w-px bg-border" />
-
-              <ActionBtn
-                label={allHidden ? "Unhide" : "Hide"}
-                icon={allHidden ? Eye : EyeOff}
-                onClick={doHideToggle}
-                busy={busy === "hide"}
+            {projectId ? (
+              <GenerateDocumentMenu
+                projectId={projectId}
+                photoIds={selectedIds}
+                align="start"
+                trigger={
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-11 gap-1.5 rounded-xl px-2.5 hover:bg-muted"
+                  >
+                    <Sparkles className="h-[18px] w-[18px]" />
+                    <span className="hidden text-sm font-medium sm:inline">Generate</span>
+                  </Button>
+                }
               />
-              <ActionBtn label="Move" icon={MoveRight} onClick={() => setMoveOpen(true)} />
-              <ActionBtn
-                label="Trash"
-                icon={Trash2}
-                onClick={doTrash}
-                busy={busy === "trash"}
-                danger
-              />
-            </div>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled
+                title="These photos are from more than one project. Narrow the selection to one to generate a document."
+                className="h-11 gap-1.5 rounded-xl px-2.5 hover:bg-muted"
+              >
+                <Sparkles className="h-[18px] w-[18px]" />
+                <span className="hidden text-sm font-medium sm:inline">Generate</span>
+              </Button>
+            )}
 
-            <div className="mx-1 hidden h-8 w-px bg-border sm:block" />
+            <div className="mx-1 h-8 w-px bg-border" />
 
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-10 gap-1.5 rounded-xl px-2.5 text-muted-foreground hover:text-foreground"
-              onClick={onClear}
-              aria-label="Clear selection"
-            >
-              <X className="h-4 w-4" />
-              <span className="hidden text-xs font-medium sm:inline">Clear</span>
-            </Button>
+            <ActionBtn
+              label={allHidden ? "Unhide" : "Hide"}
+              icon={allHidden ? Eye : EyeOff}
+              onClick={doHideToggle}
+              busy={busy === "hide"}
+            />
+            <ActionBtn label="Move" icon={MoveRight} onClick={() => setMoveOpen(true)} />
+            <ActionBtn
+              label="Trash"
+              icon={Trash2}
+              onClick={doTrash}
+              busy={busy === "trash"}
+              danger
+            />
           </div>
+
+          <div className="mx-1 hidden h-8 w-px bg-border sm:block" />
+
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-10 gap-1.5 rounded-xl px-2.5 text-muted-foreground hover:text-foreground"
+            onClick={onClear}
+            aria-label="Clear selection"
+          >
+            <X className="h-4 w-4" />
+            <span className="hidden text-xs font-medium sm:inline">Clear</span>
+          </Button>
         </div>
       </div>
 
@@ -516,6 +566,21 @@ export function PhotoBulkActionBar(props: Props) {
           onRefresh();
         }}
       />
+
+      {/*
+        One photo gets the single-photo dialog the rest of the app was written
+        around; several get the batch one. Both mint real `photo_shares` rows,
+        so a link can be revoked later either way.
+      */}
+      {shareOpen && count === 1 ? (
+        <SharePhotoDialog open onClose={() => setShareOpen(false)} photoId={selectedIds[0]} />
+      ) : (
+        <BulkShareDialog
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          photos={selectedPhotos}
+        />
+      )}
 
       <MoveDialog
         open={moveOpen}
@@ -589,6 +654,205 @@ function ActionBtn({
       )}
       <span className="hidden text-sm font-medium sm:inline">{label}</span>
     </Button>
+  );
+}
+
+// ── Bulk share dialog ──────────────────────────────────────────────────────
+/**
+ * Ceiling on one batch of share links.
+ *
+ * Each link is its own `photo_shares` row and its own round trip, sent in
+ * sequence for the same reason the bulk writes are batched: these run from a
+ * phone on site. Forty is a few seconds of work and a list a person can still
+ * read; "Select all" on a real project is thousands, which is not a share, it
+ * is a report.
+ */
+const SHARE_LINK_LIMIT = 40;
+
+function BulkShareDialog({
+  open,
+  onClose,
+  photos,
+}: {
+  open: boolean;
+  onClose: () => void;
+  photos: BulkPhoto[];
+}) {
+  const [duration, setDuration] = useState("168");
+  const [allowDownload, setAllowDownload] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [done, setDone] = useState(0);
+  const [links, setLinks] = useState<string[]>([]);
+  const [failed, setFailed] = useState(0);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setCreating(false);
+    setDone(0);
+    setLinks([]);
+    setFailed(0);
+    setCopied(false);
+  }, [open]);
+
+  const tooMany = photos.length > SHARE_LINK_LIMIT;
+  const linkText = links.join("\n");
+
+  const create = async () => {
+    const preset = SHARE_DURATIONS.find((d) => d.value === duration) ?? SHARE_DURATIONS[2];
+    setCreating(true);
+    setLinks([]);
+    setFailed(0);
+    setDone(0);
+    const made: string[] = [];
+    let lost = 0;
+    for (const p of photos) {
+      try {
+        const row: any = await createPhotoShare({
+          data: { photoId: p.id, expiresInHours: preset.hours, allowDownload },
+        });
+        if (row?.token) made.push(shareUrl(row.token));
+        else lost += 1;
+      } catch {
+        // One photo failing is not the batch failing - the count below says how
+        // many did not make it, and the links that worked are still usable.
+        lost += 1;
+      }
+      setDone((n) => n + 1);
+      setLinks([...made]);
+      setFailed(lost);
+    }
+    setCreating(false);
+    if (made.length === 0) toast.error("Could not create any share links");
+    else if (lost > 0) toast.warning(`${made.length} of ${photos.length} links created`);
+    else toast.success(`${made.length} share links created`);
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(linkText);
+      setCopied(true);
+      toast.success(`${links.length} links copied`);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // The box below holds the same text and is selectable, so this is a
+      // nudge rather than a dead end.
+      toast.error("Could not copy - select the links below and copy them manually");
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o && !creating) onClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            Share {photos.length} photo{photos.length > 1 ? "s" : ""}
+          </DialogTitle>
+          <DialogDescription>
+            One view-only link per photo. Anyone with a link can see that photo and nothing else,
+            and you can revoke any of them later from the photo itself.
+          </DialogDescription>
+        </DialogHeader>
+
+        {tooMany ? (
+          <p className="rounded-xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+            That is {photos.length} separate links. Narrow the selection to {SHARE_LINK_LIMIT} or
+            fewer, or build a report if you want to hand over the whole set at once.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label
+                htmlFor="bulk-share-duration"
+                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                Links expire
+              </Label>
+              <Select value={duration} onValueChange={setDuration} disabled={creating}>
+                <SelectTrigger id="bulk-share-duration" className="h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SHARE_DURATIONS.map((d) => (
+                    <SelectItem key={d.value} value={d.value}>
+                      {d.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
+              <div className="flex items-start gap-2">
+                <DownloadIcon className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <div>
+                  <div className="text-sm font-medium">Allow download</div>
+                  <div className="text-xs text-muted-foreground">
+                    Recipients can save the original JPEG.
+                  </div>
+                </div>
+              </div>
+              <Switch
+                checked={allowDownload}
+                onCheckedChange={setAllowDownload}
+                disabled={creating}
+              />
+            </div>
+
+            {links.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {links.length} link{links.length > 1 ? "s" : ""}
+                    {failed > 0 ? ` · ${failed} failed` : ""}
+                  </span>
+                  <Button size="sm" variant="outline" className="h-8" onClick={() => void copy()}>
+                    {copied ? (
+                      <Check className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+                    ) : (
+                      <Copy className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    Copy all
+                  </Button>
+                </div>
+                <Textarea
+                  readOnly
+                  value={linkText}
+                  rows={5}
+                  className="font-mono text-[11px]"
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={creating}>
+            {links.length > 0 ? "Done" : "Cancel"}
+          </Button>
+          {!tooMany && (
+            <Button onClick={() => void create()} disabled={creating || photos.length === 0}>
+              {creating ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Link2 className="mr-2 h-4 w-4" />
+              )}
+              {creating
+                ? `Creating ${done} of ${photos.length}`
+                : links.length > 0
+                  ? "Create again"
+                  : "Create links"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -716,6 +980,18 @@ function BulkTagDialog({
 }
 
 // ── Move-to-project dialog ─────────────────────────────────────────────────
+interface MoveTarget {
+  id: string;
+  name: string | null;
+  street: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  client_name: string | null;
+  project_number: string | null;
+  created_at: string | null;
+}
+
 function MoveDialog({
   open,
   onClose,
@@ -729,7 +1005,7 @@ function MoveDialog({
   selectedIds: string[];
   onDone: () => void;
 }) {
-  const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
+  const [projects, setProjects] = useState<MoveTarget[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [target, setTarget] = useState<string>("");
@@ -741,21 +1017,43 @@ function MoveDialog({
     setTarget("");
     setQ("");
     (async () => {
-      // Hiding the source project keeps the list to real destinations. A mixed
-      // selection has no single source, so every project is a real destination.
-      const query = supabase.from("projects").select("id, name");
+      /*
+       * Hiding the source project keeps the list to real destinations. A mixed
+       * selection has no single source, so every project is a real destination.
+       *
+       * The columns past `name` are what tells two same-named projects apart.
+       * This picker used to select `id, name` alone and print the name raw,
+       * which is how a workspace with several nameless jobs got a list of
+       * identical rows and no way to know which one it was about to move photos
+       * into. `describeProjects` decides what to show; see
+       * packages/shared/src/project-name.ts.
+       */
+      const query = supabase
+        .from("projects")
+        .select("id, name, street, city, state, zip, client_name, project_number, created_at");
       const { data } = await (projectId ? query.neq("id", projectId) : query)
         .order("updated_at", { ascending: false })
         .limit(200);
-      setProjects((data as any[]) ?? []);
+      setProjects((data as any[] as MoveTarget[]) ?? []);
       setLoading(false);
     })();
   }, [open, projectId]);
 
+  // Labelled once over the whole list, then filtered - a hint has to be unique
+  // among every destination, not just the ones matching what has been typed so
+  // far, or it would appear and vanish as the search narrows.
+  const described = useMemo(() => {
+    const labels = describeProjects(projects);
+    return projects.map((p, i) => ({ ...p, ...labels[i] }));
+  }, [projects]);
+
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    return term ? projects.filter((p) => p.name.toLowerCase().includes(term)) : projects;
-  }, [projects, q]);
+    if (!term) return described;
+    return described.filter(
+      (p) => p.label.toLowerCase().includes(term) || (p.hint ?? "").toLowerCase().includes(term),
+    );
+  }, [described, q]);
 
   const submit = async () => {
     if (!target) return;
@@ -811,12 +1109,19 @@ function MoveDialog({
                 key={p.id}
                 type="button"
                 onClick={() => setTarget(p.id)}
-                className={`flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-sm transition ${
+                className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-sm transition ${
                   target === p.id ? "bg-primary/10 text-foreground" : "hover:bg-muted"
                 }`}
               >
-                <span className="truncate">{p.name}</span>
-                {target === p.id && <Check className="h-4 w-4 text-primary" />}
+                <span className="min-w-0">
+                  <span className="block truncate">{p.label}</span>
+                  {/* Only the rows that collide carry one, so this is a
+                      disambiguator rather than a subtitle on every entry. */}
+                  {p.hint && (
+                    <span className="block truncate text-xs text-muted-foreground">{p.hint}</span>
+                  )}
+                </span>
+                {target === p.id && <Check className="h-4 w-4 shrink-0 text-primary" />}
               </button>
             ))
           )}

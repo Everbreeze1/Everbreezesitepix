@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useConfirm } from "@/hooks/use-confirm";
 import { supabase } from "@/integrations/sitepix/client";
+import { projectDisplayName } from "@sitepix/shared";
 import {
   inviteSubcontractor,
   listSubcontractors,
@@ -301,7 +302,7 @@ function InviteSubcontractorDialog({
                         }
                       />
                       <span className="font-manrope text-sm text-foreground">
-                        {p.name || "Untitled project"}
+                        {projectDisplayName(p)}
                       </span>
                     </label>
                   ))}

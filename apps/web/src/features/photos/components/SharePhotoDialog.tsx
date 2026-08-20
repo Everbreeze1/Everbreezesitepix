@@ -29,15 +29,21 @@ interface ShareRow {
   revoked_at: string | null;
 }
 
-const DURATIONS: Array<{ value: string; label: string; hours: number }> = [
+/**
+ * Exported so the bulk bar offers the same expiry choices rather than a second
+ * list that drifts from this one. Same reason for `shareUrl`: the public route
+ * is spelled in exactly one place.
+ */
+export const SHARE_DURATIONS: Array<{ value: string; label: string; hours: number }> = [
   { value: "1", label: "1 hour", hours: 1 },
   { value: "24", label: "24 hours", hours: 24 },
   { value: "168", label: "7 days", hours: 24 * 7 },
   { value: "720", label: "30 days", hours: 24 * 30 },
   { value: "0", label: "Never expires", hours: 0 },
 ];
+const DURATIONS = SHARE_DURATIONS;
 
-function shareUrl(token: string) {
+export function shareUrl(token: string) {
   if (typeof window === "undefined") return `/share/photos/${token}`;
   return `${window.location.origin}/share/photos/${token}`;
 }

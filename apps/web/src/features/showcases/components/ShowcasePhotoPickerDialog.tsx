@@ -13,6 +13,7 @@ import { Loader2, Search, Check } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/sitepix/client";
 import { PhotoThumb } from "@/components/PhotoThumb";
+import { UNTITLED_PROJECT } from "@sitepix/shared";
 
 interface PhotoRow {
   id: string;
@@ -106,7 +107,7 @@ export function ShowcasePhotoPickerDialog({
       const rows = raw.map((r) => ({
         id: r.id,
         project_id: r.project_id,
-        project_name: names[r.project_id] ?? "Untitled project",
+        project_name: names[r.project_id] ?? UNTITLED_PROJECT,
         storage_path: r.storage_path,
         thumb_path: r.thumb_path ?? null,
         image_url: r.image_url,

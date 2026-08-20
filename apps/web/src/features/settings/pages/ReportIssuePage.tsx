@@ -34,6 +34,7 @@ import {
   type FeedbackKind,
 } from "@/lib/feedback";
 import { clientContextRows, readClientContext, type ClientContext } from "@/lib/feedback-context";
+import { projectDisplayName } from "@sitepix/shared";
 
 /** The two things people actually come here to do. */
 const MODES: Array<{
@@ -141,7 +142,7 @@ export function ReportIssuePage() {
       setProjects(
         ((data as ProjectOption[]) ?? []).map((p) => ({
           id: p.id,
-          name: p.name?.trim() || "Untitled project",
+          name: projectDisplayName(p),
         })),
       );
     })();

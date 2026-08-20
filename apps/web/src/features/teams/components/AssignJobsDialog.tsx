@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/sitepix/client";
 import { getMemberProjects, setMemberProjects } from "@/features/teams/api";
+import { projectDisplayName } from "@sitepix/shared";
 
 /**
  * Which jobs a Restricted member can reach.
@@ -106,7 +107,7 @@ export function AssignJobsDialog({
                       }
                     />
                     <span className="font-manrope text-sm text-foreground">
-                      {p.name || "Untitled project"}
+                      {projectDisplayName(p)}
                     </span>
                   </label>
                 ))}

@@ -380,9 +380,21 @@ export function ProjectDetailPage() {
   const [photoView, setPhotoView] = useState<"carousel" | "grid">("grid");
   const [photoLimit, setPhotoLimit] = useState<number>(120);
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
+  /*
+   * Separate from "is anything selected", the same way the Gallery's is.
+   * The tick box on a tile only appears on hover, so on a touch screen there
+   * was no way into bulk actions here at all, and on a desktop it was a corner
+   * you had to already know about. The Select pill in the toolbar is the
+   * discoverable way in; this flag is what it turns on before there is a first
+   * photo ticked.
+   */
+  const [photoSelectMode, setPhotoSelectMode] = useState(false);
   const toggleSelect = (id: string) =>
     setSelectedPhotoIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
-  const clearSelection = () => setSelectedPhotoIds([]);
+  const clearSelection = () => {
+    setSelectedPhotoIds([]);
+    setPhotoSelectMode(false);
+  };
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [mobileWalkId, setMobileWalkId] = useState<string | null>(null);
 
@@ -3241,6 +3253,27 @@ export function ProjectDetailPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {/*
+                The way in to bulk actions that does not depend on hovering the
+                corner of a tile. Same control, same wording and same behaviour
+                as the Gallery's, so "select some photos" is one thing in both
+                grids rather than a hover trick here and a button there.
+              */}
+              {filteredPhotos.length > 0 && mediaType !== "videos" && (
+                <Button
+                  variant={photoSelectMode || selectedPhotoIds.length > 0 ? "default" : "outline"}
+                  size="sm"
+                  className="h-8 text-xs"
+                  aria-pressed={photoSelectMode || selectedPhotoIds.length > 0}
+                  onClick={() => {
+                    if (photoSelectMode || selectedPhotoIds.length > 0) clearSelection();
+                    else setPhotoSelectMode(true);
+                  }}
+                >
+                  <CheckSquare className="mr-1.5 h-3.5 w-3.5" />
+                  {photoSelectMode || selectedPhotoIds.length > 0 ? "Done" : "Select"}
+                </Button>
+              )}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="sm" className="h-8 text-xs">
@@ -3432,6 +3465,43 @@ export function ProjectDetailPage() {
             </div>
           )}
 
+          {/*
+            Above the grid, not floating over the window.
+            The bar is `sticky` inside this column now (see PhotoBulkActionBar),
+            so it has to sit in the flow where it belongs: after the filters,
+            before the photos it acts on. Mounted after the grid - where it was -
+            a sticky element would only ever stick to the bottom of the page.
+          */}
+          {mediaType !== "videos" && (
+            <PhotoBulkActionBar
+              projectId={projectId}
+              projectName={project?.name ?? "Project"}
+              userId={user?.id ?? null}
+              selectedIds={selectedPhotoIds}
+              photosById={
+                new Map<string, BulkPhoto>(
+                  filteredPhotos.map((p) => [
+                    p.id,
+                    {
+                      id: p.id,
+                      url: photoSrc(p),
+                      caption: p.caption,
+                      taken_at: p.taken_at,
+                      created_at: p.created_at,
+                      hidden: !!p.hidden,
+                      tags: p.tags,
+                    },
+                  ]),
+                )
+              }
+              totalVisible={filteredPhotos.length}
+              allExistingTags={allPhotoTags}
+              onClear={clearSelection}
+              onSelectAll={() => setSelectedPhotoIds(filteredPhotos.map((p) => p.id))}
+              onRefresh={() => void load({ silent: true })}
+            />
+          )}
+
           {mediaType === "videos" ? null : photos.length === 0 ? (
             <Card className="mt-3 flex flex-col items-center p-10 text-center border-dashed">
               <ImageOff className="h-9 w-9 text-muted-foreground" />
@@ -3472,7 +3542,7 @@ export function ProjectDetailPage() {
                 {filteredPhotos.map((p, idx) => {
                   const url = photoSrc(p);
                   const selected = selectedPhotoIds.includes(p.id);
-                  const inSelectionMode = selectedPhotoIds.length > 0;
+                  const inSelectionMode = photoSelectMode || selectedPhotoIds.length > 0;
                   const phase = normalizedPhase(p);
                   const when = p.taken_at ?? p.created_at;
                   return (
@@ -3553,7 +3623,11 @@ export function ProjectDetailPage() {
                           className={`absolute left-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-md border-2 shadow transition ${
                             selected
                               ? "border-primary bg-primary text-primary-foreground opacity-100"
-                              : "border-sidebar-foreground/90 bg-sidebar/30 text-transparent opacity-0 backdrop-blur-sm group-hover:opacity-100"
+                              : `border-sidebar-foreground/90 bg-sidebar/30 text-transparent backdrop-blur-sm group-hover:opacity-100 ${
+                                  // Select mode pins every box open: on touch the
+                                  // hover state it otherwise waits for never arrives.
+                                  inSelectionMode ? "opacity-100" : "opacity-0"
+                                }`
                           }`}
                         >
                           <Check className="h-3.5 w-3.5" />
@@ -3601,34 +3675,6 @@ export function ProjectDetailPage() {
               onToggleSelect={toggleSelect}
             />
           )}
-
-          <PhotoBulkActionBar
-            projectId={projectId}
-            projectName={project?.name ?? "Project"}
-            userId={user?.id ?? null}
-            selectedIds={selectedPhotoIds}
-            photosById={
-              new Map<string, BulkPhoto>(
-                filteredPhotos.map((p) => [
-                  p.id,
-                  {
-                    id: p.id,
-                    url: photoSrc(p),
-                    caption: p.caption,
-                    taken_at: p.taken_at,
-                    created_at: p.created_at,
-                    hidden: !!p.hidden,
-                    tags: p.tags,
-                  },
-                ]),
-              )
-            }
-            totalVisible={filteredPhotos.length}
-            allExistingTags={allPhotoTags}
-            onClear={clearSelection}
-            onSelectAll={() => setSelectedPhotoIds(filteredPhotos.map((p) => p.id))}
-            onRefresh={() => void load({ silent: true })}
-          />
 
           {/* Walkthrough Notes - rendered inside the three-dot menu modal below */}
 

@@ -146,3 +146,11 @@ export {
   type PipelineNameIssue,
   type ProjectStatus,
 } from "./pipeline-stages";
+export {
+  UNTITLED_PROJECT,
+  projectDisplayName,
+  describeProjects,
+  newProjectName,
+  type ProjectNameFields,
+  type DescribedProject,
+} from "./project-name";
