@@ -27,9 +27,9 @@ const SHOTS = "artifacts/summary-daily-log";
 mkdirSync(SHOTS, { recursive: true });
 
 const PROJECT_ID = process.argv[2];
-const WALKTHROUGH_ID = process.argv[3];
-if (!PROJECT_ID || !WALKTHROUGH_ID) {
-  throw new Error("usage: node scripts/drive-summary-daily-log.mjs <projectId> <walkthroughId>");
+const SUMMARY_ID = process.argv[3];
+if (!PROJECT_ID || !SUMMARY_ID) {
+  throw new Error("usage: node scripts/drive-summary-daily-log.mjs <projectId> <summaryId>");
 }
 
 function env(file) {
@@ -145,14 +145,29 @@ const run = async () => {
   });
   await settle("text=New report");
   const reportsText = await body();
-  check("AI Summary is listed", /AI Summary/i.test(reportsText));
-  check("Reports are listed", /\bReport\b/.test(reportsText));
+  /*
+   * Deliberately matched against the ROW list rather than the whole page: the
+   * tab's own explanatory copy now contains the words "AI Summaries live with
+   * their walkthrough", so a naive /AI Summary/ over the body passes for the
+   * wrong reason - which is exactly what an earlier version of this script did.
+   */
+  // Scoped to report rows by href, not `ul li a` - that matched the sidebar
+  // nav and made the assertion pass while measuring the wrong list entirely.
+  const reportRows = await page.locator('a[href*="/pages/"]').allInnerTexts();
   check(
-    "no Daily Log row or filter chip",
-    !/Daily Logs?\b/i.test(reportsText.replace(/Daily logs are\s+internal[\s\S]*/i, "")),
-    "the bucket has left this tab",
+    "Reports lists no AI Summary rows",
+    !reportRows.some((t) => /AI Summary/i.test(t)),
+    `${reportRows.length} rows: ${reportRows
+      .map((t) => t.split("\n")[0])
+      .join(" | ")
+      .slice(0, 120)}`,
   );
-  check("the tab explains where daily logs went", /Daily logs are\s+internal/i.test(reportsText));
+  check(
+    "Reports still lists reports",
+    reportRows.some((t) => /Report/i.test(t)),
+  );
+  check("the tab says where summaries went", /AI Summaries live with their/i.test(reportsText));
+  check("the tab explains where daily logs went", /daily logs are internal/i.test(reportsText));
   await page.screenshot({ path: `${SHOTS}/2-reports-tab.png`, fullPage: true });
 
   // The generation menu must offer exactly the two client-facing artefacts.
@@ -174,23 +189,71 @@ const run = async () => {
   await page.keyboard.press("Escape");
   await page.waitForTimeout(1000);
 
-  // ---------------------------------------------------- 3. the Summary page
-  current = "walkthrough detail";
-  console.log("\n3. Walkthrough detail (a photo Summary - no narration write)");
+  // ---------------------------------- 2b. Walkthroughs tab, two sub-sections
+  current = "walkthroughs tab";
+  console.log("\n2b. Walkthroughs tab");
   ops.length = 0;
-  await page.goto(`${BASE}/walkthroughs/${WALKTHROUGH_ID}`, { waitUntil: "domcontentloaded" });
-  await settle("text=Photos in this summary");
-  const walkText = await body();
-  check("the summary renders", /AI summary|Photos in this summary/i.test(walkText));
-  // The guard that keeps this run read-only, asserted rather than assumed.
+  await page.goto(`${BASE}/projects/${PROJECT_ID}?panel=walkthroughs`, {
+    waitUntil: "domcontentloaded",
+  });
+  await settle("text=Walk the site from anywhere");
+  check("summaries load as their own list", ops.includes("listProjectSummaries"));
+  const videosBtn = page.getByRole("button", { name: /^Videos/ }).first();
+  const summariesBtn = page.getByRole("button", { name: /^Summaries/ }).first();
+  check("a Videos section exists", (await videosBtn.count()) > 0);
+  check("a Summaries section exists", (await summariesBtn.count()) > 0);
+  await summariesBtn.click();
+  await page.waitForTimeout(2500);
+  check("the migrated summary is listed under Summaries", /AI Summary/i.test(await body()));
+  await page.screenshot({ path: `${SHOTS}/2b-walkthrough-sections.png`, fullPage: true });
+
+  // ------------------------------------ 3. the Summary, on a route of its own
+  current = "summary detail";
+  console.log("\n3. Summary detail");
+  ops.length = 0;
+  await page.goto(`${BASE}/summaries/${SUMMARY_ID}`, { waitUntil: "domcontentloaded" });
+  await settle("h2");
+  const sumText = await body();
+
+  check("it stayed on /summaries/, not a walkthrough URL", /\/summaries\//.test(page.url()));
+  check("the browser tab reads Summary", (await page.title()).startsWith("Summary"));
+  check("no video player on a summary with no walk", (await page.locator("video").count()) === 0);
+  check("it is labelled an AI Summary", /AI Summary/i.test(sumText));
+
+  // The ordering the client asked to be reversed, measured on the rendered page
+  // rather than asserted against the source.
+  const order = await page.evaluate(() => {
+    const heads = [...document.querySelectorAll("h2")];
+    const find = (re) => heads.find((h) => re.test((h.textContent ?? "").trim()));
+    const a = find(/^Summary$/i);
+    const b = find(/^Photos$/i);
+    if (!a || !b) return null;
+    return {
+      summaryTop: a.getBoundingClientRect().top + window.scrollY,
+      photosTop: b.getBoundingClientRect().top + window.scrollY,
+    };
+  });
   check(
-    "no narration generated for a photo summary",
-    !ops.includes("generateWalkthroughNarration"),
-    `ops: ${[...new Set(ops)].join(", ") || "none"}`,
+    "the text sits above the photos on screen",
+    !!order && order.summaryTop < order.photosTop,
+    order
+      ? `text @${Math.round(order.summaryTop)}px, photos @${Math.round(order.photosTop)}px`
+      : "headings not found",
   );
+
+  /*
+   * Every pre-split summary embedded a photo gallery in its prose. Rendered as
+   * plain Markdown those `photo:` refs are broken images, and the same photos
+   * appear again below in their own list.
+   */
+  const broken = await page.evaluate(
+    () => [...document.images].filter((i) => !i.currentSrc || i.naturalWidth === 0).length,
+  );
+  check("no broken images from the old embedded gallery", broken === 0, `${broken} broken`);
+  check("no leftover photo: refs in the prose", !/photo:[0-9a-f-]{8}/i.test(sumText));
   check(
-    "no video player on a walkthrough with no walk",
-    (await page.locator("video").count()) === 0,
+    "each photo carries a note",
+    (await page.locator("li").filter({ hasText: /Note/ }).count()) > 0,
   );
   await page.screenshot({ path: `${SHOTS}/4-summary-detail.png`, fullPage: true });
 

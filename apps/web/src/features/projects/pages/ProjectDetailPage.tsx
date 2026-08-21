@@ -63,8 +63,15 @@ import { PageTabStrip } from "@/components/PageTabStrip";
 import { ProjectWorkflows } from "@/features/projects/components/ProjectWorkflows";
 import { ProjectTasks, type ProjectTasksHandle } from "@/features/projects/components/ProjectTasks";
 import { ProjectDocuments } from "@/features/projects/components/ProjectDocuments";
-import { ProjectReports, isReportSummary } from "@/features/projects/components/ProjectReports";
+import { ProjectReports } from "@/features/projects/components/ProjectReports";
 import { ProjectDailyLog } from "@/features/projects/components/ProjectDailyLog";
+import { cn } from "@/lib/utils";
+import { ProjectSummaries } from "@/features/walkthroughs/components/ProjectSummaries";
+import {
+  generateSummaryFromPhotos,
+  listProjectSummaries,
+  type ProjectSummaryListItem,
+} from "@/lib/summaries.functions";
 import { listProjectDocumentTree, type DocumentTreePage } from "@/lib/project-pages.functions";
 import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
 import { ContributorsChip } from "@/features/projects/components/ProjectContributors";
@@ -274,6 +281,17 @@ export function ProjectDetailPage() {
   const [dailyLogs, setDailyLogs] = useState<DailyLogSummary[]>([]);
   /** A capture session has finished and its log section is being written. */
   const [dailyLogBusy, setDailyLogBusy] = useState(false);
+  /**
+   * The Walkthroughs tab's two sub-sections.
+   *
+   * "Under WT tab should be two sub sections for WT videos alone and another
+   * for Summaries generated for each walkthrough." They are separate object
+   * types now, so this is a real split of two lists rather than a filter over
+   * one list of mixed rows.
+   */
+  const [walkSection, setWalkSection] = useState<"videos" | "summaries">("videos");
+  const [summaries, setSummaries] = useState<ProjectSummaryListItem[]>([]);
+  const [summariesLoading, setSummariesLoading] = useState(false);
   /**
    * Photos taken since the camera was opened, held until it closes.
    *
@@ -488,16 +506,6 @@ export function ProjectDetailPage() {
   // navigation restores the tab the user was on instead of resetting to Photos.
   type PanelKey = NonNullable<ProjectDetailSearch["panel"]>;
   const panel: PanelKey | null = search.panel ?? null;
-  /**
-   * AI Summaries the Reports tab will list, for its tab count.
-   *
-   * The predicate itself lives in ProjectReports and is imported rather than
-   * restated: the count and the list have to agree, and they used to drift.
-   * They also both now exclude recorded walkthroughs, which is the fix for the
-   * raw video entry that was showing up in the tab's "Summaries" filter.
-   */
-  const reportSummaryCount = walkthroughs.filter((w) => isReportSummary(w)).length;
-
   function setPanel(next: PanelKey | null | ((cur: PanelKey | null) => PanelKey | null)) {
     const resolved = typeof next === "function" ? next(panel) : next;
     navigate({
@@ -813,6 +821,18 @@ export function ProjectDetailPage() {
           });
         } catch {
           /* non-fatal */
+        }
+      })(),
+      (async () => {
+        // Summaries are their own list now, so they load as their own call
+        // rather than arriving mixed into the walkthroughs one.
+        setSummariesLoading(true);
+        try {
+          setSummaries((await listProjectSummaries({ data: { projectId } })) as never);
+        } catch (sErr) {
+          console.warn("[summaries] list failed", sErr, { projectId });
+        } finally {
+          setSummariesLoading(false);
         }
       })(),
       (async () => {
@@ -1592,14 +1612,13 @@ export function ProjectDetailPage() {
   const generateSummaryWalkthrough = async (photoIds: string[]) => {
     setGeneratingSummary(true);
     try {
-      const res = await generateWalkthroughSummary({ data: { projectId, photoIds } });
+      const res = await generateSummaryFromPhotos({ data: { projectId, photoIds } });
       if (res.aiFailed) toast.warning("Saved without AI text", { description: res.aiFailed });
       else toast.success("Summary saved under Walkthroughs");
       setSummaryPickerOpen(false);
-      navigate({
-        to: "/walkthroughs/$walkthroughId",
-        params: { walkthroughId: res.walkthroughId },
-      });
+      // Its own route, with its own title. This used to open
+      // /walkthroughs/$id - a summary wearing a recording's URL.
+      navigate({ to: "/summaries/$summaryId", params: { summaryId: res.summary.id } });
     } catch (e: any) {
       toast.error(e?.message ?? "Could not generate summary");
     } finally {
@@ -3002,14 +3021,16 @@ export function ProjectDetailPage() {
           {
             key: "reports",
             label: "Reports",
-            count: counts.reports + reportSummaryCount,
+            count: counts.reports,
             icon: ClipboardList,
           },
           { key: "checklists", label: "Checklists", count: counts.checklists, icon: ListChecks },
           {
             key: "walkthroughs",
+            // Both sub-sections, because both live behind this tab: the
+            // recordings and the summaries written from them.
             label: "Walkthroughs",
-            count: walkthroughs.length,
+            count: walkthroughs.length + summaries.length,
             icon: Footprints,
           },
           { key: "workflows", label: "Workflows", count: counts.workflows, icon: Workflow },
@@ -3082,7 +3103,41 @@ export function ProjectDetailPage() {
             </div>
           </div>
 
-          {pendingVideoUpload && (
+          {/*
+            Videos and Summaries, as two sections rather than one mixed list.
+
+            "Under WT tab should be two sub sections for WT videos alone and
+            another for Summaries generated for each walkthrough." They are
+            separate object types now, so this switches between two lists of
+            two different things - not a filter over rows that only differed by
+            a discriminator column.
+          */}
+          <div className="mt-6 flex flex-wrap items-center gap-1.5">
+            {(
+              [
+                ["videos", "Videos", walkthroughs.length],
+                ["summaries", "Summaries", summaries.length],
+              ] as const
+            ).map(([key, label, count]) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={walkSection === key}
+                onClick={() => setWalkSection(key)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11.5px] font-bold transition-colors",
+                  walkSection === key
+                    ? "border-primary/30 bg-primary/[0.07] text-foreground"
+                    : "border-border/60 bg-muted/30 text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+                <span className="tabular-nums text-muted-foreground">{count}</span>
+              </button>
+            ))}
+          </div>
+
+          {pendingVideoUpload && walkSection === "videos" && (
             <div
               role="alert"
               className="mt-6 flex flex-wrap items-start justify-between gap-4 rounded-3xl border border-amber-500/40 bg-amber-500/10 p-5"
@@ -3146,7 +3201,16 @@ export function ProjectDetailPage() {
             </div>
           )}
 
-          {walkthroughs.length === 0 ? (
+          {walkSection === "summaries" ? (
+            <ProjectSummaries
+              summaries={summaries}
+              loading={summariesLoading}
+              generating={generatingSummary}
+              onGenerateFromPhotos={() =>
+                guard(() => setSummaryPickerOpen(true), "Subscribe to generate summaries.")
+              }
+            />
+          ) : walkthroughs.length === 0 ? (
             <div className="mt-6 flex flex-col items-center rounded-3xl border border-dashed border-border bg-card/60 p-12 text-center">
               <Mic className="h-10 w-10 text-muted-foreground" />
               <p className="mt-3 max-w-sm text-sm text-muted-foreground">
@@ -3352,7 +3416,6 @@ export function ProjectDetailPage() {
           <ProjectReports
             projectId={project.id}
             pages={reportPages}
-            walkthroughs={walkthroughs}
             loading={loading}
             onChanged={() => void load({ silent: true })}
             originOf={blueprintOrigin.originOf}

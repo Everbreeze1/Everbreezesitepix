@@ -41,10 +41,13 @@ describe("Reports holds only the two outward-facing artefacts", () => {
     expect(src).not.toMatch(/>\s*Daily Log\s*</);
   });
 
-  it("still offers both of the artefacts that stayed", () => {
+  it("offers both report types and the summary", () => {
     const src = read(GENERATE_MENU);
     expect(src).toContain("AI Summary");
-    expect(src).toMatch(/>\s*Report\s*</);
+    // Two reports now, and the difference is what they read rather than how
+    // they look: the whole job, or the photos you pick.
+    expect(src).toContain("Full Project Report");
+    expect(src).toContain("Report from selected photos");
   });
 
   it("has no daily-log row kind left in the Reports tab", () => {
@@ -53,24 +56,25 @@ describe("Reports holds only the two outward-facing artefacts", () => {
     expect(src).not.toContain("Daily Logs");
   });
 
-  it("keeps the raw video walkthrough out of the Summaries bucket", () => {
+  it("lists no walkthrough rows at all", () => {
     /*
-     * The reported bug: "the raw video Walkthrough entry is separately showing
-     * up inside the Reports tab miscategorized under the 'Summaries' filter".
-     * The predicate has to test `source`, not just the presence of
-     * summary_markdown - a generated recording carries that too, which is what
-     * dragged it in.
+     * "The same AI Summary entries currently show up identically in both tabs."
+     *
+     * Fixed at the root rather than by filtering: summaries are their own object
+     * type now and live under Walkthroughs, so this tab has no walkthrough prop
+     * to list from and cannot duplicate one however the predicate is written.
      */
     const src = read(REPORTS_TAB);
-    expect(src).toMatch(/export function isReportSummary/);
-    expect(src).toMatch(/w\.source === "summary"/);
+    expect(src).not.toContain("walkthroughs");
+    expect(src).not.toContain("isReportSummary");
   });
 
-  it("counts the tab badge with the same predicate the list uses", () => {
-    // A count that disagrees with its list sends the user to an empty tab.
+  it("counts only pages in the Reports tab badge", () => {
+    // The badge used to add the walkthrough summaries on top of the pages,
+    // which is the same double-count the list showed.
     const src = read(PROJECT_PAGE);
-    expect(src).toContain("isReportSummary");
-    expect(src).not.toMatch(/reportSummaryCount = walkthroughs\.filter\(\s*\(w\) =>\s*w\.status/);
+    expect(src).not.toContain("reportSummaryCount");
+    expect(src).toContain("count: counts.reports,");
   });
 });
 

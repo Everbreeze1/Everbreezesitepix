@@ -301,3 +301,19 @@ export const getPublicProjectPagePdf = rpcOp<
   { token: string },
   { pdfBase64: string; filename: string }
 >("getPublicProjectPagePdf");
+
+/**
+ * The whole-job Report.
+ *
+ * Takes no photo selection, because it does not want one: it reads every photo
+ * on the project, their labels and metadata, and the client fields off the
+ * project itself. Idempotent so a double-click cannot bill twice.
+ */
+export const generateComprehensiveReport = rpcOp<
+  { projectId: string; title?: string; photosPerPage?: 1 | 2 | 3 | 4 },
+  {
+    page: { id: string; title: string; updated_at: string };
+    aiFailed: string | null;
+    photoCount: number;
+  }
+>("generateComprehensiveReport", { idempotent: true });

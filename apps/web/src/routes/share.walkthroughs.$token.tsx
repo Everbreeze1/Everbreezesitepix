@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Loader2, ImageOff, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -54,6 +54,14 @@ interface Data {
    * run the narration migration - all three fall back to the older rendering.
    */
   narration: WalkthroughNarration | null;
+  /**
+   * Set when this token belongs to a summary rather than a recording.
+   *
+   * Links of this shape were sent to clients before summaries became their own
+   * object type. Rather than render a summary inside the walkthrough page, the
+   * visitor is sent to the page built for it.
+   */
+  redirectToSummary?: string | null;
 }
 
 function PublicWalkthroughPage() {
@@ -110,6 +118,17 @@ function PublicWalkthroughPage() {
       <div className="container mx-auto flex items-center justify-center px-4 py-20">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
+    );
+  }
+
+  /*
+   * An old link that turns out to name a summary. Replace rather than push, so
+   * Back returns the visitor to wherever they came from rather than bouncing
+   * them through this route again.
+   */
+  if (data?.redirectToSummary) {
+    return (
+      <Navigate to="/share/summaries/$token" params={{ token: data.redirectToSummary }} replace />
     );
   }
 

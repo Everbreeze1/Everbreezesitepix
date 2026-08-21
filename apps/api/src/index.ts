@@ -186,6 +186,23 @@ export type {
   NarrationPhoto,
 } from "./domains/walkthroughs/narration";
 
+export { generateComprehensiveReportService } from "./domains/projects/comprehensive-report";
+export {
+  listProjectSummariesService,
+  getWalkthroughSummaryService,
+  generateSummaryFromPhotosService,
+  generateSummaryForWalkthroughService,
+  updateWalkthroughSummaryService,
+  setSummaryShareService,
+  deleteWalkthroughSummaryService,
+  getPublicSummaryService,
+} from "./domains/walkthroughs/summaries";
+export type {
+  WalkthroughSummaryRow,
+  SummaryPhotoNote,
+  ResolvedSummaryPhoto,
+} from "./domains/walkthroughs/summaries";
+
 export {
   listNotificationsService,
   getUnreadNotificationCountService,

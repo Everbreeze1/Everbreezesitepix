@@ -40,6 +40,9 @@ const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 /** `expect` is matched case-insensitively; at least one entry must be present. */
 const ROUTES = [
   { path: `/share/walkthroughs/${NIL_UUID}`, expect: ["walkthrough"] },
+  // A summary is its own object with its own public page, so it needs its own
+  // guard: the loader must degrade to "not available", never to a 500.
+  { path: `/share/summaries/${NIL_UUID}`, expect: ["summary"] },
   // Matched against the route's own <title>, not the URL. "showcase" used to
   // pass on the path segment alone, so the assertion stayed green through the
   // rename without ever reading a byte the route actually rendered. This body
