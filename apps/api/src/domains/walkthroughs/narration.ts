@@ -99,11 +99,62 @@ function clampSeconds(value: unknown, duration: number): number {
   return Math.min(Math.max(0, Math.round(n)), Math.max(0, Math.round(duration)));
 }
 
+/**
+ * A model-supplied string, folded to one line and cut to a word budget.
+ *
+ * Anything that is not a string comes back empty rather than being stringified.
+ * The reply has been through `JSON.parse` and nothing else, so a field can
+ * arrive as a number, an array or a nested object, and `String()` renders those
+ * as "42" and "[object Object]". That is worse than a missing value: the caller
+ * cannot tell it from real narration, so it prints it under a photo.
+ */
 function tidy(value: unknown, maxWords: number): string {
-  const text = normalizeDashesTrimmed(String(value ?? "").replace(/\s+/g, " "));
+  if (typeof value !== "string") return "";
+  const text = normalizeDashesTrimmed(value.replace(/\s+/g, " "));
   if (!text) return "";
   const words = text.split(" ");
   return words.length <= maxWords ? text : `${words.slice(0, maxWords).join(" ")}...`;
+}
+
+/**
+ * Turn a set of chapter starts into a rail the player can actually run on.
+ *
+ * The player asks two things of this list and nothing else: that the highlight
+ * never lands on nothing, and that it never point past the footage. So:
+ * chapters are ordered, the first starts at 0, each one ends where the next
+ * begins, the last ends at the recording's end, and nothing is zero-length.
+ *
+ * The subtle case, and the one that hit real data: a chapter starting AT the
+ * end of the recording. It happens whenever the technician's last photo is
+ * their sign-off shot, taken as they stop recording - three of the first five
+ * live walkthroughs checked. Nudging its end to `start + 1` to avoid a
+ * zero-length chapter produced one that ran a second past the video and left
+ * the real final second unhighlighted. There is no footage for such a chapter
+ * to describe, so it is dropped and the previous one keeps the time instead.
+ *
+ * Shared by the deterministic builder and the model-reply coercion, because
+ * both used to seal their own way and only one of them had the fix.
+ */
+export function sealChapters(raw: NarrationChapter[], duration: number): NarrationChapter[] {
+  const ordered = [...raw]
+    .filter((c) => duration <= 0 || c.start < duration)
+    .sort((a, b) => a.start - b.start);
+
+  const out: NarrationChapter[] = [];
+  for (const chapter of ordered) {
+    // Two chapters cannot begin at the same second: the later would be
+    // zero-length and could never become the active one.
+    if (out.length && chapter.start === out[out.length - 1].start) continue;
+    out.push({ ...chapter });
+  }
+  if (!out.length) return [];
+
+  out[0].start = 0;
+  for (let i = 0; i < out.length; i++) {
+    const next = out[i + 1];
+    out[i].end = next ? next.start : Math.max(duration, out[i].start + 1);
+  }
+  return out;
 }
 
 /**
@@ -192,25 +243,23 @@ export function buildFallbackNarration(source: NarrationSource): WalkthroughNarr
    * is a better cut than slicing the clock into equal parts. With no photos and
    * no speech there is one chapter, because there is one thing to say.
    */
-  const chapters: NarrationChapter[] = [];
+  const draft: NarrationChapter[] = [];
   if (duration >= MIN_SECONDS_FOR_CHAPTERS && photos.length > 1) {
     const step = Math.max(1, Math.ceil(photos.length / MAX_CHAPTERS));
     for (let i = 0; i < photos.length; i += step) {
       const start = i === 0 ? 0 : photos[i].offsetSeconds;
-      const nextIndex = i + step;
-      const end = nextIndex < photos.length ? photos[nextIndex].offsetSeconds : duration;
       const spoken = photoNarration[i]?.spoken;
-      chapters.push({
+      draft.push({
         start,
-        end: Math.max(start + 1, end),
+        // Sealed below. Every end here is provisional: only the neighbour that
+        // survives the seal knows where this one really stops.
+        end: start,
         title: `From ${fmt(start)}`,
-        narration: spoken
-          ? tidy(spoken, 32)
-          : `Walkthrough continues from ${fmt(start)} to ${fmt(end)}.`,
+        narration: spoken ? tidy(spoken, 32) : `Walkthrough continues from ${fmt(start)}.`,
       });
     }
   } else if (duration > 0) {
-    chapters.push({
+    draft.push({
       start: 0,
       end: duration,
       title: "Walkthrough",
@@ -219,6 +268,7 @@ export function buildFallbackNarration(source: NarrationSource): WalkthroughNarr
         : `A ${fmt(duration)} walkthrough with no narration recorded.`,
     });
   }
+  const chapters = sealChapters(draft, duration);
 
   const headline = hasSpeech
     ? tidy(transcript, 24)
@@ -248,7 +298,7 @@ const NARRATION_SYSTEM =
   "Never write an em dash; use a comma, a colon or a plain hyphen.";
 
 /** The JSON contract handed to the model, and re-validated on the way back. */
-function narrationPrompt(source: NarrationSource): string {
+export function narrationPrompt(source: NarrationSource): string {
   const duration = Math.max(0, Math.round(source.durationSeconds || 0));
   const transcript = (source.transcript ?? "").replace(/\s+/g, " ").trim();
   const photos = [...source.photos].sort((a, b) => a.offsetSeconds - b.offsetSeconds);
@@ -322,8 +372,15 @@ ${
 }`;
 }
 
-/** Pull the JSON object out of a reply that may still be fenced or prefaced. */
-function parseNarrationJson(raw: string): any | null {
+/**
+ * Pull the JSON object out of a reply that may still be fenced or prefaced.
+ *
+ * The system prompt asks for bare JSON and the model mostly obliges, but
+ * "mostly" is not a contract: replies come back fenced, prefaced with
+ * "Here is the narration:", or both. Returning null on anything unparseable is
+ * what routes the caller to the deterministic builder instead of throwing.
+ */
+export function parseNarrationJson(raw: string): any | null {
   const text = (raw ?? "").trim();
   if (!text) return null;
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -346,9 +403,19 @@ function parseNarrationJson(raw: string): any | null {
  * field rather than to a deterministic whole payload, so one malformed chapter
  * does not cost the user their photo narration.
  */
-function coerceNarration(parsed: any, source: NarrationSource): WalkthroughNarration {
+export function coerceNarration(parsed: any, source: NarrationSource): WalkthroughNarration {
   const fallback = buildFallbackNarration(source);
   const duration = Math.max(0, Math.round(source.durationSeconds || 0));
+  /*
+   * Did the reply actually contribute anything, or did every field fall back?
+   *
+   * Counted rather than inferred. `aiGenerated` used to be
+   * `photos.some((p) => p.narration)`, and every photo carries narration by
+   * construction - the fallback fills it - so the flag read true for a reply
+   * that was pure garbage. The one thing it exists to tell you is exactly the
+   * thing it could not.
+   */
+  let usedFromModel = 0;
   const photos: NarrationPhoto[] = fallback.photos.map((base) => {
     const raw = Array.isArray(parsed?.photos)
       ? parsed.photos.find((p: any) => String(p?.photo_id ?? p?.photoId) === base.photoId)
@@ -359,6 +426,7 @@ function coerceNarration(parsed: any, source: NarrationSource): WalkthroughNarra
       spokenRaw === null || spokenRaw === undefined || spokenRaw === "null"
         ? null
         : tidy(spokenRaw, 60) || null;
+    if (narration) usedFromModel++;
     return {
       photoId: base.photoId,
       offsetSeconds: base.offsetSeconds,
@@ -369,38 +437,35 @@ function coerceNarration(parsed: any, source: NarrationSource): WalkthroughNarra
     };
   });
 
-  let chapters: NarrationChapter[] = Array.isArray(parsed?.chapters)
-    ? parsed.chapters
-        .slice(0, MAX_CHAPTERS)
-        .map((c: any) => ({
-          start: clampSeconds(c?.start, duration),
-          end: clampSeconds(c?.end, duration),
-          title: tidy(c?.title, 8) || "Walkthrough",
-          narration: tidy(c?.narration, 60),
-        }))
-        .filter((c: NarrationChapter) => c.narration.length > 0)
-        .sort((a: NarrationChapter, b: NarrationChapter) => a.start - b.start)
-    : [];
+  // Ordering, gap-closing and the past-the-end case are `sealChapters`'
+  // problem, not this function's - the model's list gets the identical
+  // treatment the deterministic one does.
+  const chapters = sealChapters(
+    Array.isArray(parsed?.chapters)
+      ? parsed.chapters
+          .slice(0, MAX_CHAPTERS)
+          .map((c: any) => ({
+            start: clampSeconds(c?.start, duration),
+            end: clampSeconds(c?.end, duration),
+            title: tidy(c?.title, 8) || "Walkthrough",
+            narration: tidy(c?.narration, 60),
+          }))
+          .filter((c: NarrationChapter) => c.narration.length > 0)
+      : [],
+    duration,
+  );
 
-  // Close the gaps the model left: a rail that does not cover the whole
-  // recording leaves stretches of playback with nothing highlighted.
-  chapters = chapters.filter((c, i) => i === 0 || c.start > chapters[i - 1].start);
-  if (chapters.length) {
-    chapters[0].start = 0;
-    for (let i = 0; i < chapters.length; i++) {
-      const next = chapters[i + 1];
-      chapters[i].end = next ? next.start : duration;
-      if (chapters[i].end <= chapters[i].start) chapters[i].end = chapters[i].start + 1;
-    }
-  }
+  const headline = tidy(parsed?.headline, 30);
+  if (headline) usedFromModel++;
+  usedFromModel += chapters.length;
 
   return {
     version: WALKTHROUGH_NARRATION_VERSION,
     hasSpeech: fallback.hasSpeech,
-    headline: tidy(parsed?.headline, 30) || fallback.headline,
+    headline: headline || fallback.headline,
     chapters: chapters.length ? chapters : fallback.chapters,
     photos,
-    aiGenerated: chapters.length > 0 || photos.some((p) => p.narration),
+    aiGenerated: usedFromModel > 0,
   };
 }
 

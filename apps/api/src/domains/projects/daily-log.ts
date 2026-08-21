@@ -39,6 +39,11 @@ import { existingPageTitles, projectDocumentTitle, uniqueDocumentTitle } from ".
 /** Photos read per session. The capture flow batches, so this is generous. */
 const MAX_SESSION_PHOTOS = 60;
 
+/** Recent logs scanned to find today's. More than a day's worth, cheaply. */
+const RECENT_LOGS_SCANNED = 8;
+/** Days of history the Capture-flow card can show. */
+const RECENT_LOGS_LISTED = 14;
+
 /** Thumbnail strip width - four across on a page, small on purpose. */
 const LOG_PHOTO_WIDTH = "23%";
 const LOG_PHOTO_HEIGHT = 130;
@@ -49,6 +54,20 @@ export const autoDailyLogInputSchema = z.object({
   photoIds: z.array(z.string().uuid()).min(1).max(MAX_SESSION_PHOTOS),
   /** "camera" | "upload" - only used to word the section heading. */
   source: z.enum(["camera", "upload"]).optional(),
+  /**
+   * The caller's `Date.prototype.getTimezoneOffset()`: minutes to subtract from
+   * UTC to get their wall clock (Sacramento in summer sends 420).
+   *
+   * Load-bearing, not decoration. "Daily" has to mean the technician's day, and
+   * the API runs in UTC: a 6:30pm job in California is already tomorrow to the
+   * server, so grouping on the server's clock filed Wednesday evening's photos
+   * into Thursday's log and then appended Thursday morning's to the same page.
+   * Two work days merged into one, seven hours out of every twenty-four.
+   *
+   * Absent falls back to 0, which is the server's own clock - the old behaviour,
+   * and correct for a caller that really is on UTC.
+   */
+  tzOffsetMinutes: z.number().int().min(-840).max(840).optional(),
 });
 
 export interface AutoDailyLogResult {
@@ -68,12 +87,43 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** Local calendar day of an ISO timestamp, as `YYYY-MM-DD`. */
-function localDayKey(iso: string | Date): string {
-  const d = iso instanceof Date ? iso : new Date(iso);
+/**
+ * The calendar day an instant falls on, in a named offset, as `YYYY-MM-DD`.
+ *
+ * Shifting the instant and then reading its UTC fields is the whole trick: it
+ * gives the wall-clock date in that zone without needing a timezone database,
+ * and without the process's own `TZ` getting a vote. `getFullYear()` and
+ * friends would read the server's zone, which is exactly the bug.
+ *
+ * Fixed-offset, so it does not know that a zone's offset changes at a DST
+ * boundary. The caller sends today's offset and the comparison is against logs
+ * from the last day or two, so the only way to be wrong is a capture session
+ * spanning the hour the clocks move - where either answer is defensible.
+ */
+export function dayKeyInZone(value: string | Date, offsetMinutes: number): string {
+  const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return "";
+  return new Date(d.getTime() - offsetMinutes * 60_000).toISOString().slice(0, 10);
+}
+
+/**
+ * A `YYYY-MM-DD` day key as the date a person would write.
+ *
+ * Formatted through UTC deliberately: the key already carries the technician's
+ * calendar day, so letting the server's zone interpret it again would shift it
+ * straight back by one.
+ */
+function readableDay(dayKey: string): string {
+  const d = new Date(`${dayKey}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return dayKey;
+  return d.toLocaleDateString(undefined, { timeZone: "UTC" });
+}
+
+/** Wall-clock `HH:MM` in the same offset, for the section heading. */
+function timeInZone(value: Date, offsetMinutes: number): string {
+  const shifted = new Date(value.getTime() - offsetMinutes * 60_000);
   const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
 }
 
 /**
@@ -127,6 +177,45 @@ function bulletLines(markdown: string): string[] {
 }
 
 /**
+ * One capture session, as a block of page HTML.
+ *
+ * Exported because this is the string-munging half of the module and the half
+ * that shows up in the technician's document: a heading, the model's bullets,
+ * and the photos. Everything around it is database calls.
+ *
+ * The heading is the timestamp, so the model's own "What was done" heading is
+ * dropped - stacked under "14:32 - Photos captured" it rendered two full-size
+ * headings in a row saying the same thing. A later heading the model emits
+ * ("Follow-ups") is kept, because that one carries what the timestamp does not.
+ *
+ * `entries` is only used when the model gave us nothing: it is the
+ * deterministic floor the caller worked out, and the session gets logged either
+ * way.
+ */
+export function sessionSectionHtml(args: {
+  /** Wall-clock `HH:MM` in the technician's zone. */
+  time: string;
+  source?: "camera" | "upload";
+  /** The model's Markdown, or "" when it was unavailable. */
+  markdown: string;
+  entries: string[];
+  photoIds: string[];
+}): string {
+  const verb = args.source === "upload" ? "Photos uploaded" : "Photos captured";
+  const heading = `<h2>${escapeHtml(args.time)} - ${verb}</h2>`;
+
+  // The prompt is told not to emit a title, but an h1 is stripped defensively:
+  // the page already has a title field.
+  const body = args.markdown.trim()
+    ? markdownToHtml(args.markdown)
+        .replace(/^<h1>.*?<\/h1>/, "")
+        .replace(/^<h2>\s*What was done\s*<\/h2>/i, "")
+    : `<ul>${args.entries.map((e) => `<li><p>${escapeHtml(e)}</p></li>`).join("")}</ul>`;
+
+  return heading + body + photoStripHtml(args.photoIds);
+}
+
+/**
  * Append this capture session to today's Daily Log for the project, creating
  * the page on the day's first session.
  *
@@ -140,7 +229,8 @@ export async function autoDailyLogService(
   data: z.infer<typeof autoDailyLogInputSchema>,
 ): Promise<AutoDailyLogResult> {
   const now = new Date();
-  const today = localDayKey(now);
+  const tz = data.tzOffsetMinutes ?? 0;
+  const today = dayKeyInZone(now, tz);
 
   const { data: project } = await (ctx.supabase as any)
     .from("projects")
@@ -154,25 +244,56 @@ export async function autoDailyLogService(
    *
    * Matched on the created_at day rather than on the title: the title is
    * editable from the moment the page opens, and a log renamed "Tuesday - unit
-   * 4B" is still today's log. Ordered oldest-first so a project that somehow
-   * holds two for one day keeps appending to the first rather than forking.
+   * 4B" is still today's log.
    */
-  const { data: existingRows } = await (ctx.supabase as any)
+  const { data: recentRows } = await (ctx.supabase as any)
     .from("project_pages")
-    .select("id, title, content_html, created_at")
+    .select("id, created_at")
     .eq("project_id", data.projectId)
     .eq("source_template", "daily_log")
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: false })
+    .limit(RECENT_LOGS_SCANNED);
 
-  const existing = ((existingRows as any[]) ?? []).find(
-    (row) => localDayKey(row.created_at) === today,
+  /*
+   * Deliberately two queries. Only today's body is going to be appended to, and
+   * `content_html` is the largest column on the table - selecting it for every
+   * daily log the project has ever held, to read one of them, put the cost of
+   * this call on a busy job's whole history.
+   *
+   * Newest-first with a small limit, then the OLDEST of today's matches: a
+   * project that somehow holds two logs for one day keeps appending to the
+   * first rather than forking a second timeline.
+   */
+  const todayRows = ((recentRows as any[]) ?? []).filter(
+    (row) => dayKeyInZone(row.created_at, tz) === today,
   );
+  const existingId = todayRows.length ? todayRows[todayRows.length - 1].id : null;
+  let existing: { id: string; content_html: string | null } | null = null;
+  if (existingId) {
+    const { data: row } = await (ctx.supabase as any)
+      .from("project_pages")
+      .select("id, content_html")
+      .eq("id", existingId)
+      .maybeSingle();
+    existing = (row as any) ?? null;
+  }
 
-  // Captions the technician already typed in the field. `.in()` returns rows in
-  // arbitrary order, so re-key and walk photoIds to keep capture order.
+  /*
+   * Captions the technician already typed in the field.
+   *
+   * Scoped to the project as well as to the ids. RLS alone would let a caller
+   * name photos from another job they happen to have access to and have them
+   * written into this job's log - not a data leak, since they can read both,
+   * but it would file one site's work under another's, which is the filing
+   * mistake this whole feature exists to stop making.
+   *
+   * `.in()` returns rows in arbitrary order, so re-key and walk photoIds to
+   * keep capture order.
+   */
   const { data: photoRows } = await (ctx.supabase as any)
     .from("photos")
     .select("id, caption")
+    .eq("project_id", data.projectId)
     .in("id", data.photoIds);
   const captionById = new Map<string, string | null>(
     ((photoRows as Array<{ id: string; caption: string | null }>) ?? []).map((r) => [
@@ -213,15 +334,13 @@ export async function autoDailyLogService(
       : [`${photoIds.length} ${photoIds.length === 1 ? "photo" : "photos"} captured on site`];
   }
 
-  const time = now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  const verb = data.source === "upload" ? "Photos uploaded" : "Photos captured";
-  const sectionHtml =
-    `<h2>${escapeHtml(time)} - ${verb}</h2>` +
-    (markdown.trim()
-      ? // The prompt is told not to emit a title, but strip one defensively.
-        markdownToHtml(markdown).replace(/^<h1>.*?<\/h1>/, "")
-      : `<ul>${entries.map((e) => `<li><p>${escapeHtml(e)}</p></li>`).join("")}</ul>`) +
-    photoStripHtml(photoIds);
+  const sectionHtml = sessionSectionHtml({
+    time: timeInZone(now, tz),
+    source: data.source,
+    markdown,
+    entries,
+    photoIds,
+  });
 
   if (existing) {
     const { data: updated, error } = await (ctx.supabase as any)
@@ -243,7 +362,7 @@ export async function autoDailyLogService(
   }
 
   const title = uniqueDocumentTitle(
-    projectDocumentTitle(projectName, `Daily Log - ${now.toLocaleDateString()}`),
+    projectDocumentTitle(projectName, `Daily Log - ${readableDay(today)}`),
     await existingPageTitles(ctx, data.projectId),
   );
   const { data: created, error } = await (ctx.supabase as any)
@@ -276,8 +395,14 @@ export const listProjectDailyLogsInputSchema = z.object({ projectId: z.string().
 export interface DailyLogSummary {
   pageId: string;
   title: string;
-  /** Local calendar day the log covers, `YYYY-MM-DD`. */
-  day: string;
+  /**
+   * No `day` field, on purpose.
+   *
+   * The server cannot say which calendar day a log belongs to without knowing
+   * whose calendar - and `createdAt` is an absolute instant the browser can
+   * resolve against its own clock for free. A day computed here would be the
+   * server's day, which is the mistake this whole module now avoids.
+   */
   createdAt: string;
   updatedAt: string;
   /** Bullets across the whole day, oldest section first. */
@@ -285,8 +410,14 @@ export interface DailyLogSummary {
   photoCount: number;
 }
 
-/** Strip the log body back to its bullet lines, for the Capture-flow card. */
-function entriesFromHtml(html: string | null | undefined): string[] {
+/**
+ * Strip the log body back to its bullet lines, for the Capture-flow card.
+ *
+ * Exported for test. It parses whatever HTML is in the column, which includes
+ * bodies written by generators that predate this module and bodies a technician
+ * has since edited by hand in the rich text editor.
+ */
+export function entriesFromHtml(html: string | null | undefined): string[] {
   const out: string[] = [];
   const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi;
   let m: RegExpExecArray | null;
@@ -322,13 +453,14 @@ export async function listProjectDailyLogsService(
     .eq("project_id", data.projectId)
     .eq("source_template", "daily_log")
     .order("created_at", { ascending: false })
-    .limit(30);
+    // Two weeks of history. The card shows one log and a collapsed list of
+    // earlier days, and every row costs a `content_html` read.
+    .limit(RECENT_LOGS_LISTED);
   if (error) throw new Error(error.message);
 
   return ((rows as any[]) ?? []).map((row) => ({
     pageId: row.id,
     title: row.title,
-    day: localDayKey(row.created_at),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     entries: entriesFromHtml(row.content_html),
