@@ -49,7 +49,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "What can the built-in AI do?",
-    a: "It runs inside the features you already use, so there's no separate chatbot to learn. It analyzes photos, drafts daily logs and client-ready reports from a set of shots, turns a walkthrough's narration into a written summary, and fills your document templates in from project data. Everything it writes is editable before you send it.",
+    a: "It runs inside the features you already use, so there's no separate chatbot to learn. It analyzes photos, writes your daily log for you the moment you finish adding photos, drafts client-ready reports from a set of shots, narrates a recorded walkthrough into an AI Summary with a description of every photo you took along the way, and fills your document templates in from project data. Everything it writes is editable before you send it.",
   },
   {
     q: "Do I need a credit card to start?",

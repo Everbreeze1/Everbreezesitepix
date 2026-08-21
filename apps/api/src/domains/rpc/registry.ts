@@ -131,6 +131,7 @@ import {
   finishWalkthroughSessionService,
   generateWalkthroughReportService,
   generateWalkthroughSummaryInputSchema,
+  generateWalkthroughNarrationService,
   generateWalkthroughSummaryService,
   getPublicWalkthroughService,
   listProjectWalkthroughsService,
@@ -141,6 +142,7 @@ import {
   setWalkthroughStatusService,
   transcribeWalkthroughService,
   updateWalkthroughVideoPathService,
+  walkthroughNarrationInputSchema,
 } from "../walkthroughs/service";
 import {
   getUnreadNotificationCountService,
@@ -243,6 +245,12 @@ import {
   generateProjectPageInputSchema,
   generateProjectPageService,
 } from "../projects/page-generate";
+import {
+  autoDailyLogInputSchema,
+  autoDailyLogService,
+  listProjectDailyLogsInputSchema,
+  listProjectDailyLogsService,
+} from "../projects/daily-log";
 import {
   createPageFromTemplateInputSchema,
   createPageFromTemplateService,
@@ -919,6 +927,15 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     generateWalkthroughReportService as (ctx: ServiceContext, data: never) => Promise<unknown>,
     { idempotent: true },
   ),
+  // The AI narration behind a recorded walkthrough's Summary: timed chapters
+  // for the player and one narration per captured photo. Idempotent because it
+  // returns the stored payload unless `force` is set, so a retry re-reads
+  // rather than re-spending.
+  generateWalkthroughNarration: authed(
+    (d) => walkthroughNarrationInputSchema.parse(d),
+    generateWalkthroughNarrationService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
   setWalkthroughShare: authed(
     (d) =>
       z
@@ -1164,6 +1181,20 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   duplicateProjectPage: authed(
     (d) => duplicateProjectPageInputSchema.parse(d),
     duplicateProjectPageService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  /*
+   * The Daily Log is the one AI artefact nobody asks for: the capture flow
+   * fires this when an upload session finishes and the log is simply there.
+   * Idempotent so a retried upload cannot append the same session twice.
+   */
+  autoDailyLog: authed(
+    (d) => autoDailyLogInputSchema.parse(d),
+    autoDailyLogService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  listProjectDailyLogs: authed(
+    (d) => listProjectDailyLogsInputSchema.parse(d),
+    listProjectDailyLogsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   generateProjectPage: authed(
     (d) => generateProjectPageInputSchema.parse(d),

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ClipboardList, Footprints, Plus, Sparkles, FileSearch } from "lucide-react";
+import { ClipboardList, Plus, Sparkles, FileSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
 import { SURFACE_CARD } from "@/components/ui/surface";
@@ -27,13 +27,39 @@ export interface ReportWalkthrough {
 }
 
 /**
+ * Is this walkthrough row an AI Summary the Reports tab should list?
+ *
+ * Only `source: 'summary'` qualifies, and that is the fix for the bug the
+ * client reported: "the raw video Walkthrough entry is separately showing up
+ * inside the Reports tab miscategorized under the 'Summaries' filter". A
+ * recorded walkthrough is a video artefact. Once it has been generated it
+ * carries `summary_markdown` too, which is what used to drag it into this list
+ * beside the AI-text summaries, under a heading that described neither of them
+ * accurately.
+ *
+ * It is not merely relabelled here, it is gone: a recorded walkthrough is the
+ * Walkthroughs tab's flagship, where the video plays with its AI narration
+ * beside it. Listing it here as a second, worse entry point for the same thing
+ * is exactly the duplication being removed.
+ *
+ * Exported because ProjectDetailPage needs the identical predicate for the tab
+ * count, and a count that disagrees with its list is its own bug.
+ */
+export function isReportSummary(w: ReportWalkthrough): boolean {
+  return w.source === "summary" && w.status === "ready" && (w.summary_markdown ?? "").trim() !== "";
+}
+
+/**
  * "a reports tab for each project that lists the walkthrough Summeries, Daily
  * Log and any reports that have been generated for that project."
  *
- * Three things the client named, from two tables, in one list. They are not
- * merged into a common row type first: a summary links to the walkthrough that
- * produced it and a page links to the page editor, so the only thing they
- * genuinely share is a title, a time and a kind. That is what this row is.
+ * That was the original brief, and it has since narrowed to the two artefacts a
+ * user hands to somebody else: the AI Summary and the Report. The Daily Log
+ * left, because it is written for the technician rather than for a client - it
+ * is generated automatically at the end of a capture session and surfaced in
+ * the Capture flow, which is where it is read. Putting it here meant a trip to
+ * Reports to press a button for a document that should never have needed
+ * asking for.
  *
  * Deliberately not a copy of ProjectDocuments. Documents is a file manager -
  * folders, drag to move, upload, rename, multi-select. A report is finished
@@ -58,36 +84,23 @@ export function ProjectReports({
   /**
    * Recorded blueprint origin for one row, by its own id.
    *
-   * Only pages can answer. A walkthrough summary is produced from photos and is
-   * never something a blueprint creates, so those rows pass no id and stay
-   * unbadged rather than being labelled "Added manually" for a question that was
-   * never asked of them.
+   * Only pages can answer. An AI Summary is produced from photos and is never
+   * something a blueprint creates, so those rows pass no id and stay unbadged
+   * rather than being labelled "Added manually" for a question that was never
+   * asked of them.
    */
   originOf?: (itemId: string, sourceTemplateId?: string | null) => ItemOrigin;
 }) {
-  const [kind, setKind] = useState<"all" | "summary" | "daily_log" | "report">("all");
+  const [kind, setKind] = useState<"all" | "summary" | "report">("all");
 
-  /**
-   * A walkthrough earns a place here once it has a summary to show.
-   *
-   * Both sources qualify: a recorded walk and a photo summary both end up as
-   * `summary_markdown`, and to the person looking for "the summary for this
-   * job" the difference is how it was captured, not what it is. One without a
-   * summary yet is still processing and would be a row that opens onto
-   * nothing.
-   */
-  const summaries = useMemo(
-    () =>
-      walkthroughs.filter((w) => w.status === "ready" && (w.summary_markdown ?? "").trim() !== ""),
-    [walkthroughs],
-  );
+  const summaries = useMemo(() => walkthroughs.filter(isReportSummary), [walkthroughs]);
 
   const rows = useMemo(() => {
     const out: Array<{
       key: string;
       title: string;
       at: string;
-      kind: "summary" | "daily_log" | "report";
+      kind: "summary" | "report";
       to: string;
       params: Record<string, string>;
       /** The row's own id where one exists, for the blueprint origin lookup. */
@@ -114,13 +127,12 @@ export function ProjectReports({
         title: p.title,
         at: p.updatedAt,
         /*
-         * Daily Log and Report are both report-bucket pages and the bucket
-         * alone cannot tell them apart, so the title carries it. That is thin,
-         * but the alternative is shipping `source_template` to the browser
-         * purely to letter a badge - and the generator names these pages
-         * itself, so the string is not user-entered guesswork.
+         * Every page in the report bucket is a Report now. The bucket used to
+         * hold Daily Logs too, which the bucket alone could not tell apart, so
+         * this branched on the title - thin, and no longer needed: a daily log
+         * files under its own bucket and never reaches this list.
          */
-        kind: /daily log/i.test(p.title) ? "daily_log" : "report",
+        kind: "report",
         to: "/projects/$projectId/pages/$pageId",
         params: { projectId, pageId: p.id },
       });
@@ -133,23 +145,16 @@ export function ProjectReports({
   const counts = {
     all: rows.length,
     summary: rows.filter((r) => r.kind === "summary").length,
-    daily_log: rows.filter((r) => r.kind === "daily_log").length,
     report: rows.filter((r) => r.kind === "report").length,
   };
 
   /* `plural` is spelt out rather than label + "s", which produced "Summarys". */
   const META = {
     summary: {
-      label: "Summary",
-      plural: "Summaries",
-      icon: Footprints,
-      tint: "bg-primary/10 text-primary",
-    },
-    daily_log: {
-      label: "Daily Log",
-      plural: "Daily Logs",
+      label: "AI Summary",
+      plural: "AI Summaries",
       icon: Sparkles,
-      tint: "bg-amber-500/10 text-amber-600",
+      tint: "bg-primary/10 text-primary",
     },
     report: {
       label: "Report",
@@ -165,8 +170,8 @@ export function ProjectReports({
         <div className="min-w-0">
           <h2 className="font-display text-lg font-bold tracking-tight">Reports</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Walkthrough summaries, daily logs and generated reports for this job. Stored paperwork
-            lives under Documents.
+            The two things you hand to a client: AI Summaries and generated Reports. Daily logs are
+            internal and live in the Capture flow; stored paperwork lives under Documents.
           </p>
         </div>
         {/* The tab's own create button, offering only what this tab holds. */}
@@ -186,7 +191,7 @@ export function ProjectReports({
       {/* Filter chips. Hidden when there is nothing to narrow. */}
       {rows.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          {(["all", "summary", "daily_log", "report"] as const).map((k) => {
+          {(["all", "summary", "report"] as const).map((k) => {
             const label = k === "all" ? "All" : META[k].plural;
             const n = counts[k];
             if (k !== "all" && n === 0) return null;
@@ -219,7 +224,7 @@ export function ProjectReports({
         <EmptyState
           icon={FileSearch}
           title="No reports yet"
-          description="Walkthrough summaries, daily logs and generated reports for this job will appear here, instead of being filed in among the paperwork."
+          description="AI Summaries and generated Reports for this job will appear here, instead of being filed in among the paperwork."
           action={
             <GenerateDocumentMenu
               projectId={projectId}

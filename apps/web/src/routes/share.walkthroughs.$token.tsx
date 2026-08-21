@@ -11,6 +11,10 @@ import {
   WalkthroughShareButtons,
   type WalkthroughPhotoStep,
 } from "@/components/WalkthroughReport";
+import {
+  AiNarratedPhotoSteps,
+  type WalkthroughNarration,
+} from "@/features/walkthroughs/components/WalkthroughNarration";
 
 export const Route = createFileRoute("/share/walkthroughs/$token")({
   head: () => ({
@@ -41,6 +45,15 @@ interface Data {
   } | null;
   photoUrls: Record<string, string>;
   photoSteps: WalkthroughPhotoStep[];
+  /**
+   * The AI narration behind the Summary, when the walkthrough has one.
+   *
+   * The share link is what a client actually opens, so it gets the same
+   * per-photo narration the owner sees. Null for a photo-only Summary, for a
+   * walkthrough recorded before this feature, and on a database that has not
+   * run the narration migration - all three fall back to the older rendering.
+   */
+  narration: WalkthroughNarration | null;
 }
 
 function PublicWalkthroughPage() {
@@ -56,7 +69,13 @@ function PublicWalkthroughPage() {
       const res = await fetchPublic({ data: { token } });
       setData(res as unknown as Data);
     } catch {
-      setData({ walkthrough: null, project: null, photoUrls: {}, photoSteps: [] });
+      setData({
+        walkthrough: null,
+        project: null,
+        photoUrls: {},
+        photoSteps: [],
+        narration: null,
+      });
     } finally {
       setLoading(false);
     }
@@ -70,7 +89,13 @@ function PublicWalkthroughPage() {
         if (!cancelled) setData(res as unknown as Data);
       } catch {
         if (!cancelled)
-          setData({ walkthrough: null, project: null, photoUrls: {}, photoSteps: [] });
+          setData({
+            walkthrough: null,
+            project: null,
+            photoUrls: {},
+            photoSteps: [],
+            narration: null,
+          });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -157,10 +182,14 @@ function PublicWalkthroughPage() {
         <div className="pt-5">
           {w.summary_markdown ? (
             <>
-              <WalkthroughPhotoSteps
-                steps={data.photoSteps ?? []}
-                variant={isSummary ? "summary" : "recorded"}
-              />
+              {!isSummary && data.narration ? (
+                <AiNarratedPhotoSteps steps={data.photoSteps ?? []} narration={data.narration} />
+              ) : (
+                <WalkthroughPhotoSteps
+                  steps={data.photoSteps ?? []}
+                  variant={isSummary ? "summary" : "recorded"}
+                />
+              )}
               <WalkthroughMarkdown
                 markdown={cleanWalkthroughMarkdown(w.summary_markdown)}
                 photoUrls={data.photoUrls}

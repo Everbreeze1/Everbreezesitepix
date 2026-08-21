@@ -21,10 +21,17 @@ import { clampPhotosPerPage, useProfile } from "@/hooks/use-profile";
 import { useTemplateGate } from "@/features/projects/components/use-template-gate";
 
 /**
- * Summary is deliberately absent: it is not a document. It writes a
- * walkthroughs row and is tracked by its own state below.
+ * What this menu can generate as a project *page*, which is now only the
+ * Report.
+ *
+ * Summary is absent because it is not a document: it writes a walkthroughs row,
+ * tracked by its own state below. Daily Log is absent because nobody generates
+ * one by hand any more - the capture flow writes it the moment a photo session
+ * finishes, and it is read from the Capture flow rather than from here. Leaving
+ * a button for it would put the technician's internal record back in the list
+ * of things you hand a client.
  */
-type AiTemplate = "daily_log" | "report";
+type AiTemplate = "report";
 
 /**
  * The single place a project artefact gets generated - Summary, Daily Log,
@@ -123,7 +130,7 @@ export function GenerateDocumentMenu({
           folderId,
           template: aiTemplate,
           photoIds,
-          ...(aiTemplate === "report" ? { photosPerPage } : {}),
+          photosPerPage,
         },
       });
       if (res.aiFailed) {
@@ -186,9 +193,9 @@ export function GenerateDocumentMenu({
               <DropdownMenuItem onClick={() => setSummaryPickerOpen(true)}>
                 <Footprints className="mr-2 h-4 w-4 text-primary" />
                 <span>
-                  <span className="block font-bold">Summary</span>
+                  <span className="block font-bold">AI Summary</span>
                   <span className="block text-xs text-muted-foreground">
-                    Short shareable brief from your photos
+                    Short shareable brief from photos you already have
                   </span>
                 </span>
               </DropdownMenuItem>
@@ -197,18 +204,6 @@ export function GenerateDocumentMenu({
               <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
                 Saved under Reports
               </DropdownMenuLabel>
-              {/* Label stays "Daily Log": the project already has a separate
-              "Site Logs" feature (project_site_logs), so reusing that name
-              here would point at the wrong thing. */}
-              <DropdownMenuItem onClick={() => setAiTemplate("daily_log")}>
-                <Sparkles className="mr-2 h-4 w-4 text-primary" />
-                <span>
-                  <span className="block font-bold">Daily Log</span>
-                  <span className="block text-xs text-muted-foreground">
-                    Quick internal bullets for your own record
-                  </span>
-                </span>
-              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
                   setPhotosPerPage(clampPhotosPerPage(profile?.report_photos_per_page));
@@ -278,13 +273,12 @@ export function GenerateDocumentMenu({
       <SelectPhotosForPageDialog
         open={!!aiTemplate}
         projectId={projectId}
-        templateLabel={aiTemplate === "daily_log" ? "Daily Log" : "Report"}
+        templateLabel="Report"
         generating={generating}
         initialSelected={photoIds}
         options={
-          aiTemplate === "report" ? (
-            <>
-              {/*
+          <>
+            {/*
                 Same wording, same arithmetic and same 2x2-at-four-up layout as
                 the editor's Insert > "Section with photos" menu, which has said
                 "N photos per page" since long before this control existed. The
@@ -292,19 +286,18 @@ export function GenerateDocumentMenu({
                 photo-row-layout), so a generated document and a hand-built one
                 cannot look like different products.
               */}
-              <PhotosPerPagePicker
-                label="Photos per page"
-                hint={false}
-                value={photosPerPage}
-                onChange={setPhotosPerPage}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                {photosPerPage === 1
-                  ? "One photo per page, each with its own heading and space to write under it."
-                  : `${photosPerPage} photos across, grouped under one "Photographic record" heading.`}
-              </p>
-            </>
-          ) : undefined
+            <PhotosPerPagePicker
+              label="Photos per page"
+              hint={false}
+              value={photosPerPage}
+              onChange={setPhotosPerPage}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {photosPerPage === 1
+                ? "One photo per page, each with its own heading and space to write under it."
+                : `${photosPerPage} photos across, grouped under one "Photographic record" heading.`}
+            </p>
+          </>
         }
         onCancel={() => setAiTemplate(null)}
         onGenerate={handleGenerate}

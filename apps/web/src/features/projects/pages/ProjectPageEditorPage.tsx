@@ -51,8 +51,10 @@ import {
   AlignRight,
   LayoutList,
   Images,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DAILY_LOG_INTERNAL_NOTICE } from "@/features/projects/components/ProjectDailyLog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { RichTextEditor } from "@/components/RichTextEditor";
@@ -167,6 +169,16 @@ export function ProjectPageEditorPage() {
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   /** The document template this page was created from, if it was created from one. */
   const [sourceTemplateId, setSourceTemplateId] = useState<string | null>(null);
+  /**
+   * True when this page is an auto-generated Daily Log.
+   *
+   * Read from the raw `source_template`, not from `sourceTemplateId`: that one
+   * decodes only `document_template:<uuid>` and answers null for every AI kind,
+   * which is exactly the case being detected here. Not inferred from the title
+   * either - the title is editable, and a log renamed by its author must not
+   * quietly lose the label that says who it is for.
+   */
+  const [isDailyLog, setIsDailyLog] = useState(false);
   /**
    * The document library, read once the ··· menu is first opened.
    *
@@ -383,6 +395,9 @@ export function ProjectPageEditorPage() {
         setRevoked(!!res.page.revoked_at);
         setUpdatedAt(res.page.updated_at);
         setSourceTemplateId(res.page.sourceTemplateId ?? null);
+        setIsDailyLog(
+          (res.page as { source_template?: string | null }).source_template === "daily_log",
+        );
         versionRef.current = res.page.updated_at;
         editor?.commands.setContent(res.page.content_html || "", { emitUpdate: false });
         // `emitUpdate: false` keeps loading from counting as an edit, but it
@@ -996,7 +1011,14 @@ export function ProjectPageEditorPage() {
                 navigate({
                   to: "/projects/$projectId",
                   params: { projectId },
-                  search: { panel: "documents" },
+                  /*
+                   * Back to the list this page is actually in. A daily log is in
+                   * neither Documents nor Reports - it is read from the Photos
+                   * tab, beside the capture session that wrote it - so sending
+                   * one back to Documents landed the user in a file manager
+                   * that, correctly, does not contain it.
+                   */
+                  search: { panel: isDailyLog ? undefined : "documents" },
                 })
               }
             >
@@ -1113,6 +1135,28 @@ export function ProjectPageEditorPage() {
           }}
         />
       </div>
+
+      {/*
+        Who this document is for, said before it is read.
+
+        The body carries the same line (see daily-log.ts) so it survives export
+        to PDF; this is the on-screen half, drawn as page chrome so it cannot be
+        deleted by an editing accident the way a paragraph can.
+      */}
+      {isDailyLog && (
+        <div className="mx-auto mt-6 max-w-[850px] px-4 sm:px-0">
+          <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5">
+            <Lock className="h-4 w-4 shrink-0 text-amber-600" />
+            <p className="text-sm font-bold text-amber-800 dark:text-amber-300">
+              {DAILY_LOG_INTERNAL_NOTICE}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Written automatically from your capture sessions. Clients see the AI Summary and the
+              Report, never this.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="mx-auto max-w-[850px] px-4 py-8 sm:px-0">
         <div className="rounded-sm border border-border bg-card p-10 shadow-sm sm:p-14">

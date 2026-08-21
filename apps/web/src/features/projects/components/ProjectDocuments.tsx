@@ -237,7 +237,7 @@ export function ProjectDocuments({
       ]);
       if (error) toast.error("Couldn't load documents", { description: error.message });
       /*
-       * Reports are filtered out here, not hidden further down.
+       * Reports and daily logs are filtered out here, not hidden further down.
        *
        * They have their own tab now, and this component is a file manager -
        * everything below it (folder moves, multi-select, the counts in the
@@ -250,7 +250,10 @@ export function ProjectDocuments({
        * API answering a newer bundle, and showing a document twice is a far
        * smaller failure than a document that has vanished from storage.
        */
-      setTree({ ...t, pages: t.pages.filter((pg) => pg.bucket !== "report") });
+      setTree({
+        ...t,
+        pages: t.pages.filter((pg) => pg.bucket !== "report" && pg.bucket !== "daily_log"),
+      });
       setDocuments((docRows ?? []) as ProjectDocument[]);
     } catch (e: any) {
       toast.error("Couldn't load documents", { description: e?.message });
@@ -784,8 +787,9 @@ export function ProjectDocuments({
           </h2>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
             Storage for every plan, permit, contract and delivery ticket, plus the pages you fill in
-            from a document template. Walkthrough summaries, daily logs and generated reports have
-            their own tab: <span className="font-bold">Reports</span>.
+            from a document template. AI Summaries and generated reports have their own tab:{" "}
+            <span className="font-bold">Reports</span>. Daily logs are internal and sit with the
+            photos they were written from, on the <span className="font-bold">Photos</span> tab.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">

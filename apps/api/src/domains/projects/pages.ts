@@ -10,7 +10,12 @@ import {
   projectDocumentTitle,
   uniqueDocumentTitle,
 } from "./page-title";
-import { classifyPage, parseFilesUnder, type FilingBucket } from "./page-filing";
+import {
+  classifyPage,
+  parseFilesUnder,
+  type FilingBucket,
+  type TemplateFilingBucket,
+} from "./page-filing";
 
 const IMG_TAG_RE = /<img\b[^>]*\bdata-photo-id="([0-9a-fA-F-]{36})"[^>]*>/g;
 
@@ -247,7 +252,7 @@ export async function listProjectDocumentTreeService(
         .filter((id): id is string => id !== null),
     ),
   ];
-  const filesUnderById = new Map<string, FilingBucket>();
+  const filesUnderById = new Map<string, TemplateFilingBucket>();
   if (templateIds.length > 0) {
     const { data: tplRows, error: tErr } = await (ctx.supabase as any)
       .from("document_templates")

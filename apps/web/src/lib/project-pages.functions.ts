@@ -6,13 +6,18 @@ export interface DocumentTreeFolder {
   createdAt: string;
 }
 /**
- * Which of the project's two lists a page belongs to.
+ * Which of the project's lists a page belongs to.
  *
  * Decided on the server (apps/api/src/domains/projects/page-filing.ts) so the
  * Reports tab, the Documents tab and the tab counts can never disagree about
- * what a report is. Invoices are a Documents category, not a third tab.
+ * what a report is. Invoices are a Documents category, not a tab of their own.
+ *
+ * "daily_log" is in neither tab. The Reports tab holds the two outward-facing
+ * artefacts - the AI Summary and the Report - and a Daily Log is the
+ * technician's internal record, surfaced in the Capture flow where it is
+ * written rather than filed among things a client sees.
  */
-export type FilingBucket = "report" | "invoice" | "document";
+export type FilingBucket = "report" | "daily_log" | "invoice" | "document";
 
 export interface DocumentTreePage {
   id: string;
@@ -125,10 +130,14 @@ export const generateProjectPage = rpcOp<
   {
     projectId: string;
     folderId?: string | null;
-    // "summary" is intentionally absent: a Summary is filed under Walkthroughs
-    // now (generateWalkthroughSummary), not as a project page. The server enum
-    // still accepts it so existing pages and any direct RPC caller keep working.
-    template: "daily_log" | "report";
+    /*
+     * "summary" is intentionally absent: a Summary is filed under Walkthroughs
+     * now (generateWalkthroughSummary), not as a project page. "daily_log" is
+     * absent too, and for a different reason - nobody generates one by hand any
+     * more; the capture flow writes it via `autoDailyLog` below. Both stay in
+     * the server enum so existing pages and any direct RPC caller keep working.
+     */
+    template: "report";
     photoIds: string[];
     title?: string;
     /** Report only - the Daily Log is single-column by design. */
@@ -136,6 +145,46 @@ export const generateProjectPage = rpcOp<
   },
   { page: { id: string; title: string; updated_at: string }; aiFailed: string | null }
 >("generateProjectPage", { idempotent: true });
+
+/**
+ * Every field a Daily Log needs to render, without opening the page.
+ *
+ * The client's ask was that the log be "a lightweight, always-available result
+ * right there in the Capture flow", so the Capture-flow card shows the bullets
+ * themselves. Reading `content_html` in the browser to find them would mean
+ * shipping the whole document body to draw four lines of text.
+ */
+export interface DailyLogSummary {
+  pageId: string;
+  title: string;
+  /** Local calendar day the log covers, `YYYY-MM-DD`. */
+  day: string;
+  createdAt: string;
+  updatedAt: string;
+  entries: string[];
+  photoCount: number;
+}
+
+export interface AutoDailyLogResult extends Omit<DailyLogSummary, "day" | "createdAt"> {
+  /** True when this call started today's log rather than appending to it. */
+  created: boolean;
+  aiFailed: string | null;
+}
+
+/**
+ * Append a finished capture session to today's Daily Log, creating it on the
+ * day's first session.
+ *
+ * Idempotent so a retried upload cannot log the same session twice.
+ */
+export const autoDailyLog = rpcOp<
+  { projectId: string; photoIds: string[]; source?: "camera" | "upload" },
+  AutoDailyLogResult
+>("autoDailyLog", { idempotent: true });
+
+export const listProjectDailyLogs = rpcOp<{ projectId: string }, DailyLogSummary[]>(
+  "listProjectDailyLogs",
+);
 
 export interface DocumentTemplateSummary {
   id: string;
