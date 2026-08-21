@@ -3665,7 +3665,6 @@ export function ProjectDetailPage() {
                 )
               }
               totalVisible={filteredPhotos.length}
-              allExistingTags={allPhotoTags}
               onClear={clearSelection}
               onSelectAll={() => setSelectedPhotoIds(filteredPhotos.map((p) => p.id))}
               onRefresh={() => void load({ silent: true })}
@@ -3968,7 +3967,6 @@ export function ProjectDetailPage() {
           if (fileInput.current) fileInput.current.value = "";
         }}
         onSelect={(tag, tags) => void processPendingWithTag(tag, tags)}
-        existingTags={allPhotoTags}
         onCreateTag={createPhotoTag}
       />
 

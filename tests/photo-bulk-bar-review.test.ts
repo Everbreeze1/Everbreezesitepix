@@ -87,8 +87,11 @@ describe("Share opens the app's own share flow instead of the OS sheet", () => {
 
   it("reuses the single-photo dialog rather than growing a second one", () => {
     expect(CODE).toMatch(/count === 1 \? \(\s*<SharePhotoDialog/);
+    // And the public route stays spelled in one place, which is what the
+    // single-photo dialog is imported for.
+    expect(CODE).toContain("shareUrl");
     expect(read("apps/web/src/features/photos/components/SharePhotoDialog.tsx")).toContain(
-      "export const SHARE_DURATIONS",
+      "export function shareUrl",
     );
   });
 

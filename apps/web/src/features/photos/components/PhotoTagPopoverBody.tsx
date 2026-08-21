@@ -25,6 +25,16 @@ interface Props {
    */
   projectTags?: string[];
   onCreate?: (tagName: string) => void | Promise<void>;
+  /**
+   * Overrides "Tag this photo" for callers tagging something other than one
+   * photo, such as the selection bar applying tags to a batch.
+   */
+  heading?: string;
+  /**
+   * Staged callers hold the picked names in their own state and write on Apply,
+   * so the list should not scroll back to the top after every toggle.
+   */
+  keepSearchOnToggle?: boolean;
 }
 
 const PRESET_COLORS = [
@@ -45,7 +55,13 @@ const normalize = (raw: string) => raw.trim().toLowerCase().replace(/\s+/g, "-")
  * the lightbox. Sources tags from the global/company `tags` table so the
  * experience is identical everywhere and tags are shared across projects.
  */
-export function PhotoTagPopoverBody({ photoTags, onToggle, onCreate }: Props) {
+export function PhotoTagPopoverBody({
+  photoTags,
+  onToggle,
+  onCreate,
+  heading = "Tag this photo",
+  keepSearchOnToggle = false,
+}: Props) {
   const { user } = useAuth();
   const [q, setQ] = useState("");
   const [tags, setTags] = useState<GlobalTag[]>([]);
@@ -111,7 +127,7 @@ export function PhotoTagPopoverBody({ photoTags, onToggle, onCreate }: Props) {
 
   const handleToggle = async (tagName: string) => {
     await onToggle(tagName);
-    resetSearch();
+    if (!keepSearchOnToggle) resetSearch();
   };
 
   const create = async () => {
@@ -178,7 +194,7 @@ export function PhotoTagPopoverBody({ photoTags, onToggle, onCreate }: Props) {
     <div className="space-y-2">
       <div className="flex items-center justify-between px-1">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Tag this photo
+          {heading}
         </p>
         {selectedCount > 0 && (
           <span className="text-[10px] text-muted-foreground">{selectedCount} selected</span>

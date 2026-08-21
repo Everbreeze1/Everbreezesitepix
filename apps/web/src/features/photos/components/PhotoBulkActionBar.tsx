@@ -19,7 +19,7 @@ import {
   Sparkles,
   Copy,
   Link2,
-  Download as DownloadIcon,
+  Globe,
 } from "lucide-react";
 import {
   Dialog,
@@ -31,16 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,11 +47,8 @@ import { ensureGlobalTag } from "@/hooks/use-tag-colors";
 import { useConfirm } from "@/hooks/use-confirm";
 import { clampPhotosPerPage, useProfile } from "@/hooks/use-profile";
 import { cleanCaption, sanitizeCaption, describeProjects } from "@sitepix/shared";
-import {
-  SharePhotoDialog,
-  SHARE_DURATIONS,
-  shareUrl,
-} from "@/features/photos/components/SharePhotoDialog";
+import { SharePhotoDialog, shareUrl } from "@/features/photos/components/SharePhotoDialog";
+import { PhotoTagPopoverBody } from "@/features/photos/components/PhotoTagPopoverBody";
 import { createPhotoShare } from "@/lib/photo-shares.functions";
 import { NewReportDialog } from "@/features/projects/components/NewReportDialog";
 import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
@@ -93,7 +81,6 @@ interface Props {
   selectedIds: string[];
   photosById: Map<string, BulkPhoto>;
   totalVisible: number;
-  allExistingTags: string[];
   onClear: () => void;
   onSelectAll: () => void;
   onRefresh: () => void;
@@ -232,7 +219,6 @@ export function PhotoBulkActionBar(props: Props) {
     selectedIds,
     photosById,
     totalVisible,
-    allExistingTags,
     onClear,
     onSelectAll,
     onRefresh,
@@ -559,7 +545,6 @@ export function PhotoBulkActionBar(props: Props) {
         open={tagOpen}
         onClose={() => setTagOpen(false)}
         selectedPhotos={selectedPhotos}
-        allExistingTags={allExistingTags}
         userId={userId}
         onDone={() => {
           setTagOpen(false);
@@ -678,8 +663,6 @@ function BulkShareDialog({
   onClose: () => void;
   photos: BulkPhoto[];
 }) {
-  const [duration, setDuration] = useState("168");
-  const [allowDownload, setAllowDownload] = useState(true);
   const [creating, setCreating] = useState(false);
   const [done, setDone] = useState(0);
   const [links, setLinks] = useState<string[]>([]);
@@ -699,7 +682,6 @@ function BulkShareDialog({
   const linkText = links.join("\n");
 
   const create = async () => {
-    const preset = SHARE_DURATIONS.find((d) => d.value === duration) ?? SHARE_DURATIONS[2];
     setCreating(true);
     setLinks([]);
     setFailed(0);
@@ -709,7 +691,9 @@ function BulkShareDialog({
     for (const p of photos) {
       try {
         const row: any = await createPhotoShare({
-          data: { photoId: p.id, expiresInHours: preset.hours, allowDownload },
+          // Same terms as every other share in the product: live until it is
+          // turned off, and the recipient can save what they were sent.
+          data: { photoId: p.id, expiresInHours: 0, allowDownload: true },
         });
         if (row?.token) made.push(shareUrl(row.token));
         else lost += 1;
@@ -754,8 +738,8 @@ function BulkShareDialog({
             Share {photos.length} photo{photos.length > 1 ? "s" : ""}
           </DialogTitle>
           <DialogDescription>
-            One view-only link per photo. Anyone with a link can see that photo and nothing else,
-            and you can revoke any of them later from the photo itself.
+            One link per photo. Anyone with a link can see that photo and nothing else, and you can
+            turn any of them off later from the photo itself.
           </DialogDescription>
         </DialogHeader>
 
@@ -766,42 +750,14 @@ function BulkShareDialog({
           </p>
         ) : (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label
-                htmlFor="bulk-share-duration"
-                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-              >
-                Links expire
-              </Label>
-              <Select value={duration} onValueChange={setDuration} disabled={creating}>
-                <SelectTrigger id="bulk-share-duration" className="h-10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SHARE_DURATIONS.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>
-                      {d.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
-              <div className="flex items-start gap-2">
-                <DownloadIcon className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                <div>
-                  <div className="text-sm font-medium">Allow download</div>
-                  <div className="text-xs text-muted-foreground">
-                    Recipients can save the original JPEG.
-                  </div>
-                </div>
+            <div className="flex items-center gap-2.5 rounded-lg border border-border p-3">
+              <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-foreground">Anyone with the link</p>
+                <p className="text-xs text-muted-foreground">
+                  Each link stays live until you turn it off on the photo itself.
+                </p>
               </div>
-              <Switch
-                checked={allowDownload}
-                onCheckedChange={setAllowDownload}
-                disabled={creating}
-              />
             </div>
 
             {links.length > 0 && (
@@ -861,25 +817,19 @@ function BulkTagDialog({
   open,
   onClose,
   selectedPhotos,
-  allExistingTags,
   userId,
   onDone,
 }: {
   open: boolean;
   onClose: () => void;
   selectedPhotos: BulkPhoto[];
-  allExistingTags: string[];
   userId: string | null;
   onDone: () => void;
 }) {
   const [picked, setPicked] = useState<string[]>([]);
-  const [newTag, setNewTag] = useState("");
   const [saving, setSaving] = useState(false);
   useEffect(() => {
-    if (open) {
-      setPicked([]);
-      setNewTag("");
-    }
+    if (open) setPicked([]);
   }, [open]);
 
   const toggle = (t: string) =>
@@ -887,8 +837,6 @@ function BulkTagDialog({
 
   const apply = async () => {
     const toApply = [...picked];
-    const nt = newTag.trim().toLowerCase();
-    if (nt && !toApply.includes(nt)) toApply.push(nt);
     if (toApply.length === 0) return;
     setSaving(true);
     try {
@@ -926,46 +874,26 @@ function BulkTagDialog({
             Tags will be merged with any tags already on the photos.
           </DialogDescription>
         </DialogHeader>
-        {allExistingTags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {allExistingTags.map((t) => {
-              const on = picked.includes(t);
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => toggle(t)}
-                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                    on
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background hover:border-foreground/40"
-                  }`}
-                >
-                  {on && <Check className="h-3 w-3" />}#{t}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-          }}
-          className="flex items-center gap-2"
-        >
-          <Input
-            value={newTag}
-            onChange={(e) => setNewTag(e.target.value)}
-            placeholder="New tag…"
-            className="h-9"
-            maxLength={32}
-          />
-        </form>
+        {/*
+         * The same picker the thumbnails and the lightbox use, rather than a
+         * second one that looked nothing like it: this one searches, shows each
+         * tag in its own colour, and reads the workspace `tags` table instead of
+         * whichever names happened to be on the photos already on screen.
+         *
+         * It is fully controlled, so nothing is written until Apply - `picked`
+         * is this dialog's staging list, not the tags of any one photo.
+         */}
+        <PhotoTagPopoverBody
+          photoTags={picked}
+          onToggle={toggle}
+          heading={`Tag ${selectedPhotos.length} photo${selectedPhotos.length > 1 ? "s" : ""}`}
+          keepSearchOnToggle
+        />
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={apply} disabled={saving || (picked.length === 0 && !newTag.trim())}>
+          <Button onClick={apply} disabled={saving || picked.length === 0}>
             {saving ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
