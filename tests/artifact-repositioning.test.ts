@@ -134,9 +134,17 @@ describe("Summary is the premium output of a walkthrough", () => {
   const PLAYER = "apps/web/src/features/walkthroughs/components/WalkthroughNarration.tsx";
 
   it("plays the recording with its narration rather than a thumbnail dialog", () => {
-    const src = read(DETAIL);
-    expect(src).toContain("<WalkthroughNarratedPlayer");
-    expect(src).toContain("<AiNarratedPhotoSteps");
+    expect(read(DETAIL)).toContain("<WalkthroughNarratedPlayer");
+  });
+
+  it("leaves the photo list to the summary", () => {
+    /*
+     * The photo notes moved to the Summary page. "Right now the summery
+     * produces the photo summery and the video in the same card" - the video
+     * page is the video, and the write-up is a document of its own. See the
+     * dedicated suite in walkthrough-summary-split.test.ts.
+     */
+    expect(read(DETAIL)).not.toContain("<AiNarratedPhotoSteps");
   });
 
   it("renders a narrated photo differently from a silent one", () => {

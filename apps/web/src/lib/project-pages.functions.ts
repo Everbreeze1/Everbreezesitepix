@@ -315,5 +315,7 @@ export const generateComprehensiveReport = rpcOp<
     page: { id: string; title: string; updated_at: string };
     aiFailed: string | null;
     photoCount: number;
+    /** Walkthrough write-ups folded into the document. */
+    summaryCount: number;
   }
 >("generateComprehensiveReport", { idempotent: true });

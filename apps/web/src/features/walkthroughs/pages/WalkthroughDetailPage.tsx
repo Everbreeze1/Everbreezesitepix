@@ -44,18 +44,15 @@ import {
   updateWalkthroughVideoPath,
 } from "@/features/walkthroughs/api";
 import { toast } from "sonner";
+import { estimateWalkthroughNote, type WalkthroughPhotoStep } from "@/components/WalkthroughReport";
 import {
-  cleanWalkthroughMarkdown,
-  estimateWalkthroughNote,
-  WalkthroughMarkdown,
-  WalkthroughPhotoSteps,
-  type WalkthroughPhotoStep,
-} from "@/components/WalkthroughReport";
-import { listProjectSummaries, type ProjectSummaryListItem } from "@/lib/summaries.functions";
+  generateSummaryForWalkthrough,
+  listProjectSummaries,
+  type ProjectSummaryListItem,
+} from "@/lib/summaries.functions";
 import { VideoPlayerDialog } from "@/features/photos/components/VideoPlayerDialog";
 import { VideoThumbnail } from "@/features/photos/components/VideoThumbnail";
 import {
-  AiNarratedPhotoSteps,
   WalkthroughNarratedPlayer,
   type WalkthroughNarration as WalkthroughNarrationPayload,
 } from "@/features/walkthroughs/components/WalkthroughNarration";
@@ -120,6 +117,7 @@ export function WalkthroughDetailPage() {
    * page and its own share link.
    */
   const [ownSummaries, setOwnSummaries] = useState<ProjectSummaryListItem[]>([]);
+  const [makingSummary, setMakingSummary] = useState(false);
 
   const regenerate = generateWalkthroughReport;
   const setShare = setWalkthroughShare;
@@ -347,6 +345,30 @@ export function WalkthroughDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walk?.status]);
 
+  /**
+   * Write (or rewrite) this walkthrough's summary.
+   *
+   * Without `force` the service hands back the existing one rather than a
+   * second copy, which is what makes the automatic publish after a recording
+   * safe to retry. Pressing "Regenerate" is the deliberate act that passes it.
+   */
+  const makeSummary = async (force: boolean) => {
+    if (!walk) return;
+    setMakingSummary(true);
+    try {
+      const res = await generateSummaryForWalkthrough({
+        data: { walkthroughId: walk.id, force },
+      });
+      if (res.aiFailed) toast.warning("Saved without AI text", { description: res.aiFailed });
+      else toast.success(force ? "Summary regenerated" : "Summary ready");
+      navigate({ to: "/summaries/$summaryId", params: { summaryId: res.summary.id } });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not generate the summary");
+    } finally {
+      setMakingSummary(false);
+    }
+  };
+
   const save = async () => {
     if (!walk) return;
     setSaving(true);
@@ -461,8 +483,6 @@ export function WalkthroughDetailPage() {
       search: { panel: "walkthroughs" },
     });
   };
-
-  const renderedMarkdown = useMemo(() => cleanWalkthroughMarkdown(markdown), [markdown]);
 
   if (loading || !walk) {
     return (
@@ -677,13 +697,39 @@ export function WalkthroughDetailPage() {
         and this page; the summary has its own share link and its own page, so
         a client can be sent the write-up without the footage.
       */}
-      {ownSummaries.length > 0 && (
-        <Card className="mt-4 p-4">
+      <Card className="mt-4 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-            {ownSummaries.length === 1
-              ? "Summary from this walkthrough"
-              : "Summaries from this walkthrough"}
+            {ownSummaries.length === 0
+              ? "Summary"
+              : ownSummaries.length === 1
+                ? "Summary from this walkthrough"
+                : "Summaries from this walkthrough"}
           </p>
+          {/* Regenerating is a deliberate act, so the button says which it is. */}
+          <Button
+            size="sm"
+            variant={ownSummaries.length ? "outline" : "default"}
+            disabled={makingSummary}
+            onClick={() => void makeSummary(ownSummaries.length > 0)}
+            className="h-8 rounded-lg text-xs font-bold"
+          >
+            {makingSummary ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            {ownSummaries.length ? "Regenerate" : "Generate summary"}
+          </Button>
+        </div>
+
+        {ownSummaries.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Write this walk up as a document: what was said, and every photo you took with a note of
+            its own. It gets its own page and its own share link, so a client can be sent the
+            summary without the footage.
+          </p>
+        ) : (
           <ul className="mt-2 space-y-1.5">
             {ownSummaries.map((s) => (
               <li key={s.id}>
@@ -701,8 +747,8 @@ export function WalkthroughDetailPage() {
               </li>
             ))}
           </ul>
-        </Card>
-      )}
+        )}
+      </Card>
 
       {/*
         The flagship: the recording playing with its AI narration on the same
@@ -759,40 +805,30 @@ export function WalkthroughDetailPage() {
         />
       )}
 
-      {walk.summary_markdown ? (
+      {/*
+        Deliberately no written summary and no photo list on this page.
+
+        "Right now the summery produces the photo summery and the video in the
+        same card." This page is the video: play it, share it, download it. The
+        write-up is a document of its own, at its own URL, with its own share
+        link - which is what lets a client be sent one without the other. The
+        card above links across to it.
+
+        The chapter rail inside the player stays, because that is navigation
+        within the footage rather than a second copy of the summary.
+      */}
+      {editing ? (
         <Card className="mt-4 p-5">
-          {editing ? (
-            <Textarea
-              value={markdown}
-              onChange={(e) => setMarkdown(e.target.value)}
-              rows={28}
-              className="font-mono text-sm leading-relaxed"
-              placeholder="Markdown report…"
-            />
-          ) : (
-            <>
-              {!isSummary && narration ? (
-                <AiNarratedPhotoSteps
-                  steps={photoSteps}
-                  narration={narration}
-                  onSeek={videoUrl ? (sec) => playerRef.current?.seek(sec) : undefined}
-                />
-              ) : (
-                <WalkthroughPhotoSteps
-                  steps={photoSteps}
-                  variant={isSummary ? "summary" : "recorded"}
-                />
-              )}
-              <WalkthroughMarkdown
-                markdown={renderedMarkdown}
-                photoUrls={photoUrls}
-                variant={isSummary ? "summary" : "recorded"}
-                heading={!isSummary && narration ? "Written notes" : undefined}
-              />
-            </>
-          )}
+          <Textarea
+            value={markdown}
+            onChange={(e) => setMarkdown(e.target.value)}
+            rows={28}
+            className="font-mono text-sm leading-relaxed"
+            placeholder="Markdown report…"
+          />
         </Card>
-      ) : walk.status === "generating" || walk.status === "recording" ? (
+      ) : walk.summary_markdown ? null : walk.status === "generating" ||
+        walk.status === "recording" ? (
         <Card className="mt-4 flex flex-col items-center gap-3 p-8 text-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <h2 className="text-lg font-semibold">Report is being generated…</h2>

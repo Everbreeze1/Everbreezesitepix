@@ -315,3 +315,164 @@ describe("summaries written before the split still render", () => {
     expect(notes).toContain("photo.caption !== photo.note");
   });
 });
+
+/*
+ * The video and the summary are two sections, not one card.
+ *
+ * "Under walkthrough Tab we should have Section for Videos of the walkthrough
+ * independent of the summery and a section for the Summery in a document
+ * format... Right now the summery produces the photo summery and the video in
+ * the same card."
+ */
+describe("the video page carries no summary", () => {
+  const WT_PAGE = "apps/web/src/features/walkthroughs/pages/WalkthroughDetailPage.tsx";
+
+  it("renders no photo list and no written summary", () => {
+    const src = read(WT_PAGE);
+    expect(src).not.toContain("<AiNarratedPhotoSteps");
+    expect(src).not.toContain("<WalkthroughPhotoSteps");
+    expect(src).not.toContain("<WalkthroughMarkdown");
+  });
+
+  it("still plays the recording", () => {
+    // The chapter rail stays: that is navigation within the footage, not a
+    // second copy of the write-up.
+    expect(read(WT_PAGE)).toContain("<WalkthroughNarratedPlayer");
+  });
+
+  it("links across to the summary, and can create one", () => {
+    const src = read(WT_PAGE);
+    expect(src).toContain("/summaries/$summaryId");
+    expect(src).toContain("generateSummaryForWalkthrough");
+    expect(src).toContain("Generate summary");
+  });
+});
+
+/*
+ * The comprehensive Report reads the walkthrough write-ups too.
+ *
+ * "The comprehensive longer Report that contains all meta data including all
+ * walkthrough summery data". Those summaries are the only place on a job where
+ * somebody said what was actually happening.
+ */
+describe("the comprehensive Report includes walkthrough summary data", () => {
+  const REPORT = "apps/api/src/domains/projects/comprehensive-report.ts";
+
+  it("reads the summaries for the project", () => {
+    const src = read(REPORT);
+    expect(src).toContain('.from("walkthrough_summaries")');
+    expect(src).toContain("MAX_SUMMARIES_INCLUDED");
+  });
+
+  it("quotes them into the document, not just into the prompt", () => {
+    // "see the walkthrough summary" is not something a client receiving a PDF
+    // can act on.
+    const src = read(REPORT);
+    expect(src).toContain("walkthroughSummariesHtml(summaries)");
+    expect(src).toContain("<h2>Walkthrough Summaries</h2>");
+  });
+
+  it("flattens their headings before using them as prompt context", () => {
+    // A model handed a document containing "## Conclusion" echoes it back.
+    expect(read(REPORT)).toContain("function flattenHeadings");
+  });
+
+  it("omits a narrative section it has no text for", () => {
+    // An empty <h2> is a blank promise on a document handed to a client.
+    const src = read(REPORT);
+    expect(src).toContain(
+      '(summary ? `<h2>Executive Summary</h2>` + markdownToHtml(summary) : "")',
+    );
+    expect(src).not.toContain("`<p></p>`");
+  });
+});
+
+/*
+ * A page break the author places while editing.
+ */
+describe("page break", () => {
+  const NODE = "apps/web/src/lib/tiptap-page-break.ts";
+  const PDF = "apps/api/src/domains/projects/page-pdf.ts";
+
+  it("is its own node, not an overloaded horizontal rule", () => {
+    /*
+     * `<hr>` is spent: the PDF draws it as a visible line and the generated
+     * cover pages use two of them. Overloading it would give every cover page
+     * two silent page breaks.
+     */
+    const node = read(NODE);
+    expect(node).toContain('name: "pageBreak"');
+    expect(node).toContain("data-page-break");
+    expect(node).not.toContain('tag: "hr"');
+  });
+
+  it("is registered in the editor and offered in the Insert menu", () => {
+    expect(read("apps/web/src/features/projects/pages/ProjectPageEditorPage.tsx")).toContain(
+      "PageBreak,",
+    );
+    const toolbar = read("apps/web/src/features/projects/components/DocumentToolbar.tsx");
+    expect(toolbar).toContain('insertContent({ type: "pageBreak" })');
+    expect(toolbar).toContain("Page break");
+  });
+
+  it("actually breaks the page in the PDF", () => {
+    const pdf = read(PDF);
+    expect(pdf).toContain('node.attrs["data-page-break"] !== undefined');
+    expect(pdf).toContain("layout.newPage()");
+  });
+
+  it("does not emit a blank sheet for a break on an empty page", () => {
+    // A break at the very top of a document, or two in a row.
+    expect(read(PDF)).toContain("if (layout.y < layout.pageTop) layout.newPage();");
+  });
+
+  it("is visible while editing", () => {
+    // The node has no content of its own, so with no styling it would be an
+    // invisible blank line and the author could not tell it had landed.
+    const css = read("apps/web/src/styles.css");
+    expect(css).toContain(".tiptap [data-page-break]");
+    expect(css).toContain('content: "Page break"');
+  });
+});
+
+/*
+ * The comprehensive Report reuses summary prose, and that reuse has a shape.
+ *
+ * Every one of these was found by generating the report against real data and
+ * reading the HTML that came out, not by reasoning about the code.
+ */
+describe("summary prose reused inside the Report", () => {
+  const REPORT = "apps/api/src/domains/projects/comprehensive-report.ts";
+
+  it("cleans the prose it reads straight from the table", () => {
+    /*
+     * The report queries `walkthrough_summaries.markdown` directly, which skips
+     * the repair `toSummary` does on every other read. Without this, a summary
+     * written before the split contributed its old `# Title` and its
+     * `![](photo:id)` gallery - and since `markdownToHtml` has no image
+     * support, those came out as literal "![Photo 1](photo:76edc...)" text in a
+     * document meant for a client.
+     */
+    const src = read(REPORT);
+    expect(src).toContain("stripPhotoGallery");
+    expect(src).toContain("function summaryProse");
+  });
+
+  it("does not emit a heading level the converter cannot render", () => {
+    /*
+     * `markdownToHtml` matches `#{1,3}` and nothing deeper
+     * (packages/shared/src/markdown-rich.ts), so a `####` is not a heading -
+     * it renders as the literal text "#### Overview". Bold lead-ins instead,
+     * which also avoids colliding with the <h3> each summary already gets.
+     */
+    const src = read(REPORT);
+    expect(src).not.toContain('"#### "');
+    expect(src).toContain('"**$1**"');
+  });
+
+  it("keeps the converter's limit visible where it matters", () => {
+    // The coupling is invisible from the call site, so it is written down next
+    // to the code that depends on it.
+    expect(read("packages/shared/src/markdown-rich.ts")).toContain("#{1,3}");
+  });
+});

@@ -236,7 +236,18 @@ class Layout {
       });
     }
     if (this.footerWords.length) this.drawRunningLine(this.footerWords, MARGIN - 12);
-    this.y = PAGE_H - MARGIN - (this.headerWords.length ? HEADER_RESERVE : 0);
+    this.y = this.pageTop;
+  }
+
+  /**
+   * The y a fresh page starts at, below any running header.
+   *
+   * Named because two things need it: `newPage` sets the cursor to it, and a
+   * deliberate page break compares against it to tell an already-blank page
+   * from one with content on it.
+   */
+  get pageTop(): number {
+    return PAGE_H - MARGIN - (this.headerWords.length ? HEADER_RESERVE : 0);
   }
 
   ensureSpace(h: number) {
@@ -787,6 +798,20 @@ async function renderNode(
       return;
     }
     case "div": {
+      /*
+       * A deliberate page break, from the editor's Insert > Page break.
+       *
+       * Not `<hr>`: that is the decorative rule this renderer already draws as
+       * a line, and the generated cover pages use two of them. A break needs a
+       * mark of its own - see apps/web/src/lib/tiptap-page-break.ts.
+       *
+       * Skipped when the page is already blank, so a break at the very top of a
+       * document, or two in a row, does not emit an empty sheet.
+       */
+      if (node.attrs["data-page-break"] !== undefined) {
+        if (layout.y < layout.pageTop) layout.newPage();
+        return;
+      }
       // The InfoPanel node - a shaded card. Any other div is a plain wrapper
       // and falls through to the default child walk.
       if (node.attrs["data-panel"]) {
