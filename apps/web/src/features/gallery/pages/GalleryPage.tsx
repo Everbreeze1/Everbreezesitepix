@@ -557,6 +557,24 @@ export function GalleryPage() {
   // it as "still loading".
   const loading = !calendarView && photosQuery.isPending;
 
+  /**
+   * This account has no projects, as opposed to not having been asked yet.
+   *
+   * `projects` seeds empty and fills from an effect, so reading its length
+   * directly answers "none" for every frame before the first response lands.
+   * On the Gallery that put a full-width "No project yet / Create project" card
+   * on screen for a moment on the way in, which is what "I get a momentary
+   * flash of a screen that says Create a project" was - and it flashed hardest
+   * for the accounts that do have projects, since theirs is the render that
+   * gets replaced.
+   *
+   * Keyed on `isSuccess` rather than `!isPending`: the query is disabled until
+   * `user` resolves and a disabled query is pending forever, so pending covers
+   * the auth wait too, and a failed load says nothing rather than inventing an
+   * empty account.
+   */
+  const noProjects = projectsQuery.isSuccess && projects.length === 0;
+
   useEffect(() => {
     if (search.project) setProjectFilter([search.project]);
   }, [search.project]);
@@ -1255,7 +1273,7 @@ export function GalleryPage() {
             />
             <Button
               onClick={openCamera}
-              disabled={uploading || projects.length === 0}
+              disabled={uploading || noProjects}
               className="h-11 flex-1 rounded-lg bg-primary px-5 font-manrope text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 sm:flex-none"
             >
               <Camera className="mr-2 h-4 w-4" />
@@ -1264,7 +1282,7 @@ export function GalleryPage() {
             <Button
               variant="outline"
               onClick={openUpload}
-              disabled={uploading || projects.length === 0}
+              disabled={uploading || noProjects}
               className="h-11 flex-1 rounded-lg border-border bg-card px-4 font-manrope text-sm font-medium text-foreground shadow-sm hover:bg-card/80 sm:flex-none"
             >
               {uploading ? (
@@ -1278,7 +1296,7 @@ export function GalleryPage() {
         }
       />
 
-      {projects.length === 0 && (
+      {noProjects && (
         <Card className="mt-6 flex flex-col items-center p-10 text-center border-dashed">
           <Camera className="h-10 w-10 text-muted-foreground" />
           <h2 className="mt-3 text-lg font-semibold">No project yet</h2>

@@ -29,7 +29,7 @@ import { describeProjects, newProjectName, projectDisplayName } from "@sitepix/s
 const ROOT = resolve(__dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 const stripComments = (src: string) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  src.replace(/(?<![\w"'])\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 const BAR = "apps/web/src/features/photos/components/PhotoBulkActionBar.tsx";
 const PROJECT = "apps/web/src/features/projects/pages/ProjectDetailPage.tsx";

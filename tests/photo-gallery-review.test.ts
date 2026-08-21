@@ -31,7 +31,7 @@ const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
 /** Code only. The fixes quote the broken behaviour in the comments explaining them. */
 const stripComments = (src: string) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  src.replace(/(?<![\w"'])\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 /**
  * The brace-balanced region that starts at `marker`.
@@ -357,5 +357,56 @@ describe("a grid tile does not download the camera original while waiting for it
 
   it("shares one request between two tiles of the same photo", () => {
     expect(CODE).toContain("inflight.get(path)");
+  });
+});
+
+// ── The "Create a project" flash on entering the Gallery ────────────────────
+
+/**
+ *   "When I click on Gallery I get a momentary flash of a screen that says
+ *    Create a project."
+ *
+ * `projects` is `useState([])` filled by an effect from a react-query result,
+ * so every render before the first response answered "this account has no
+ * projects" - and the Gallery put a full-width "No project yet / Create
+ * project" card on screen for saying so. Accounts that do have projects saw it
+ * worst, since theirs is the render that gets thrown away.
+ */
+describe("the Gallery does not claim the account is empty before it has asked", () => {
+  const CODE = stripComments(read("apps/web/src/features/gallery/pages/GalleryPage.tsx"));
+
+  it("gates the create-project card on a loaded result, not a seeded empty array", () => {
+    expect(CODE).toMatch(/\{noProjects && \(\s*<Card/);
+  });
+
+  it("derives that from the query having succeeded", () => {
+    // `!isPending` would be wrong on a failed load: it would invent an empty
+    // account out of a fetch error.
+    expect(CODE).toMatch(/const noProjects = projectsQuery\.isSuccess && projects\.length === 0;/);
+  });
+
+  it("leaves no bare projects.length === 0 to flash from", () => {
+    // Exactly one left, and it is the derivation itself. The three that flashed
+    // were the card and the two upload buttons it disabled; all now read
+    // `noProjects`.
+    expect(CODE.match(/projects\.length === 0/g) ?? []).toHaveLength(1);
+    expect(CODE).toMatch(/const noProjects = projectsQuery\.isSuccess && projects\.length === 0;/);
+  });
+
+  it("does not disable the upload controls while the count is still unknown", () => {
+    // Every upload path already toasts "Create a project first" when there is
+    // no project, so there is nothing to protect by disabling them early.
+    expect(CODE).not.toMatch(/disabled=\{uploading \|\| projects\.length === 0\}/);
+    expect(CODE).toMatch(/disabled=\{uploading \|\| noProjects\}/);
+  });
+
+  it("still shows something while the photos load, rather than a blank grid", () => {
+    expect(CODE).toMatch(/\{loading \? \(\s*<Card[\s\S]{0,120}Loading photos/);
+  });
+
+  it("keeps hiding, not asserting, everything else that reads the count", () => {
+    // `projects.length > 0` fails closed: it withholds the filter bar and the
+    // photo empty state during the wait instead of showing a wrong one.
+    expect(CODE).toMatch(/projects\.length > 0/);
   });
 });

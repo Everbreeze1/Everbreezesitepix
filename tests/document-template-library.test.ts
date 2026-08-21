@@ -507,7 +507,7 @@ describe("the style presets the Templates page writes", () => {
      */
     // Comments stripped: this component quotes the client's old wording back at
     // itself all over the place, and a comment is not a gate.
-    const src = MANAGER.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+    const src = MANAGER.replace(/(?<![\w"'])\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
     expect(src).toContain("function editorNeedsDesktop()");
     for (const opener of ["setCreateOpen(true)", "void edit(t)", "void copyForEditing(t)"]) {
       const at = src.indexOf(opener);
@@ -873,7 +873,7 @@ describe("copying is not how a template gets used", () => {
    * in this component quote the old labels on purpose.
    */
   const rendered = (src: string) =>
-    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+    src.replace(/(?<![\w"'])\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
 
   it("the card leads with using the template, not copying it", () => {
     expect(MANAGER).toContain("Use in a project");
@@ -1085,7 +1085,7 @@ const USE_DIALOG = readFileSync(
 
 describe("unsaved work survives a stray click", () => {
   const stripComments = (src: string) =>
-    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+    src.replace(/(?<![\w"'])\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
 
   it("the fill-in step does not close on a click outside it", () => {
     /*

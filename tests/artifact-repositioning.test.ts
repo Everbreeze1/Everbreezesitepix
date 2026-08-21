@@ -22,7 +22,7 @@ const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
 /** Strip comments, so a guard cannot match the note explaining itself. */
 const stripComments = (src: string) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  src.replace(/(?<![\w"'])\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
 const GENERATE_MENU = "apps/web/src/features/projects/components/GenerateDocumentMenu.tsx";
 const REPORTS_TAB = "apps/web/src/features/projects/components/ProjectReports.tsx";

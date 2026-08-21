@@ -9,7 +9,7 @@ const SRC = readFileSync(
 );
 
 /** Code only. The fixes below quote the broken behaviour in the comments that explain them. */
-const CODE = SRC.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
+const CODE = SRC.replace(/(?<![\w"'])\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 /**
  * The second round of review, after the bulk bar shipped:

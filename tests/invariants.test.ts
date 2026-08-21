@@ -39,7 +39,7 @@ const ALL_WEB_FILES = walk(WEB);
  * naive scan matches its own documentation and fails.
  */
 const stripComments = (src: string) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  src.replace(/(?<![\w"'])\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
 describe("family: soft-delete leakage (photos.deleted_at)", () => {
   // `photos.deleted_at` has no view and no RLS predicate enforcing it, so every
@@ -2626,5 +2626,61 @@ describe("family: a refusal reported as a server fault", () => {
     expect(body).toMatch(/new Error\("Member not found"\), \{ status: 404 \}/);
     // A bare `throw new Error` here would surface as a 500 again.
     expect(body).not.toMatch(/throw new Error\(/);
+  });
+});
+
+describe("family: the test helpers do not silently delete the code under test", () => {
+  /*
+   * `stripComments` used to open a block comment at any slash-star at all,
+   * including the one inside `accept="image/*"`, which appears in eight
+   * components. From there it ran to the next real star-slash and deleted
+   * everything between: 52 lines of GalleryPage, the create-project card and
+   * both upload buttons among them.
+   *
+   * A `toMatch` against a swallowed region fails loudly, which is how this was
+   * found. A `not.toMatch` passes - and that is the dangerous half, because the
+   * forbidden code sits in the hole and the test reports green. The lookbehind
+   * refuses to open a comment straight after a word character or a quote.
+   */
+  /*
+   * Assembled from halves rather than written out, so this file does not read
+   * as its own first offender. The tail is shared with the guarded form, which
+   * is why only the head differs.
+   */
+  const TAIL = String.raw`\/\*[\s\S]*?\*\//g,`;
+  const NAIVE = ".replace(/" + TAIL;
+  const GUARDED = ".replace(/" + String.raw`(?<![\w"'])` + TAIL;
+
+  it("no test file strips block comments in a way a string can trigger", () => {
+    const offenders = readdirSync(join(ROOT, "tests"))
+      .filter((f) => f.endsWith(".test.ts"))
+      .filter((f) => readFileSync(join(ROOT, "tests", f), "utf8").includes(NAIVE));
+    expect(offenders).toEqual([]);
+  });
+
+  it("every stripComments in the suite uses the guarded form", () => {
+    const users = readdirSync(join(ROOT, "tests"))
+      .filter((f) => f.endsWith(".test.ts"))
+      .map((f) => [f, readFileSync(join(ROOT, "tests", f), "utf8")] as const)
+      .filter(([, src]) => src.includes("const stripComments"));
+    expect(users.length).toBeGreaterThan(0);
+    for (const [name, src] of users) {
+      expect(src.includes(GUARDED), `${name} strips comments unguarded`).toBe(true);
+    }
+  });
+
+  it('keeps an accept="image/*" component intact', () => {
+    // The real file, not a fixture: only worth pinning against what broke it.
+    const code = stripComments(read("apps/web/src/features/gallery/pages/GalleryPage.tsx"));
+    expect(code).toContain('accept="image/*"');
+    expect(code).toMatch(/\{noProjects && \(/);
+    expect(code).toContain("Create project");
+  });
+
+  it("still strips the comments it exists to strip", () => {
+    expect(stripComments("a /* gone */ b")).not.toContain("gone");
+    expect(stripComments("a\n// gone\nb")).not.toContain("gone");
+    expect(stripComments("a /* gone */ b")).toContain("a");
+    expect(stripComments("a /* gone */ b")).toContain("b");
   });
 });
