@@ -108,6 +108,23 @@ import { ensureLabel, useLabelCatalog } from "@/hooks/use-label-catalog";
  * Tab keys, exported so the route's `validateSearch` and this page cannot
  * disagree about what a valid tab is.
  */
+/**
+ * Whether walkthrough shot-list templates are offered in the Templates hub.
+ *
+ * Off for now, at the client's request: "Lets Hide Walkthroughs from Templates
+ * Tab for now. Because it gets confusing how to use that and the self generated
+ * walkthrough... at this point its redundant because WT is very improvised."
+ *
+ * Deliberately a flag, not a deletion. "we will revisit that template later...
+ * it maybe useful once we can determine the usefulness." Nothing about the
+ * feature is removed: the manager, the library query, the blueprint section
+ * kind and every existing walkthrough template stay exactly as they are. This
+ * only stops the two places the Templates hub OFFERS one - the tab and the
+ * blueprint "Add section" menu - so no new confusion is created while it is
+ * parked. Flip this back to true to un-hide it, one line, no data migration.
+ */
+export const SHOW_WALKTHROUGH_TEMPLATES = false;
+
 export const TEMPLATE_TAB_KEYS = [
   "blueprints",
   "checklists",
@@ -356,7 +373,15 @@ export function TemplatesPage() {
   const canManage = !myRole || can(myRole, "manage_templates");
   const gated = !isPro;
 
-  const tab: TemplateTabKey = search.tab ?? "blueprints";
+  /*
+   * A link to ?tab=walkthroughs still validates (the key stays legal so old
+   * links do not 404), but with the tab hidden it would render a panel the
+   * strip cannot highlight - a screen that looks half-broken. Fall back to the
+   * default instead.
+   */
+  const requestedTab = search.tab ?? "blueprints";
+  const walkthroughsHidden = !SHOW_WALKTHROUGH_TEMPLATES && requestedTab === "walkthroughs";
+  const tab: TemplateTabKey = walkthroughsHidden ? "blueprints" : requestedTab;
   const setTab = useCallback(
     (next: TemplateTabKey) => {
       void navigate({
@@ -367,6 +392,18 @@ export function TemplatesPage() {
     },
     [navigate],
   );
+
+  /*
+   * Make the address bar honest.
+   *
+   * A deep link to the parked tab renders blueprints (above), but on its own
+   * that leaves ?tab=walkthroughs in the URL - a link that would keep landing
+   * here and reads as though the tab still exists. Rewrite it to what is
+   * actually shown. `replace`, so it does not add a Back-button step.
+   */
+  useEffect(() => {
+    if (walkthroughsHidden) setTab("blueprints");
+  }, [walkthroughsHidden, setTab]);
 
   const [tplItems, setTplItems] = useState<TemplateItem[]>([]);
   const [addKind, setAddKind] = useState<TemplateItemKind | "">("");
@@ -1312,12 +1349,17 @@ export function TemplatesPage() {
               count: tabCounts.workflows,
               icon: WorkflowIcon,
             },
-            {
-              key: "walkthroughs",
-              label: "Walkthroughs",
-              count: tabCounts.walkthroughs,
-              icon: Camera,
-            },
+            // Walkthroughs is parked - see SHOW_WALKTHROUGH_TEMPLATES.
+            ...(SHOW_WALKTHROUGH_TEMPLATES
+              ? [
+                  {
+                    key: "walkthroughs" as const,
+                    label: "Walkthroughs",
+                    count: tabCounts.walkthroughs,
+                    icon: Camera,
+                  },
+                ]
+              : []),
             { key: "documents", label: "Documents", count: tabCounts.documents, icon: FileText },
             { key: "reports", label: "Reports", count: tabCounts.reports, icon: Newspaper },
             {
@@ -2462,7 +2504,13 @@ function BlueprintsTab(props: {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-64">
-                        {KIND_ORDER.map((k) => {
+                        {KIND_ORDER.filter(
+                          // Same parking as the tab: a blueprint must not be a
+                          // second door to the walkthrough templates the hub is
+                          // hiding. Existing walkthrough sections still render;
+                          // this only stops adding new ones.
+                          (k) => SHOW_WALKTHROUGH_TEMPLATES || k !== "walkthrough",
+                        ).map((k) => {
                           const Icon = KIND_META[k].icon;
                           /*
                            * "zero-to-one workflow", from the spec. A workflow
@@ -2844,7 +2892,7 @@ function BlueprintsIntro({
     {
       icon: LayoutTemplate,
       title: "Build the pieces",
-      body: "Checklists, workflows, walkthroughs, documents, reports and label sets - each on its own tab above. Anything you save from a project lands there too.",
+      // Walkthroughs is intentionally absent from this list while it is parked;
     },
     {
       icon: FolderOpen,
