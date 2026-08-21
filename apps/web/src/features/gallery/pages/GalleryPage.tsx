@@ -73,7 +73,6 @@ import { PhotoThumb } from "@/components/PhotoThumb";
 import { photoObjectPaths } from "@sitepix/shared";
 import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import { CameraCapture, compressImageFile } from "@/features/photos/components/CameraCapture";
-import { TagPhotoDialog } from "@/features/photos/components/TagPhotoDialog";
 import { applyWatermarkToFile, type BeforeAfterTag, type WatermarkContext } from "@/lib/watermark";
 import { extractPhotoMeta, mergePhotoMeta } from "@/lib/photo-exif";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
@@ -1636,7 +1635,6 @@ export function GalleryPage() {
             )
           }
           totalVisible={visiblePhotos.length}
-          allExistingTags={globalTags}
           onClear={clearSelection}
           onSelectAll={() => setSelectedIds(visiblePhotos.map((p) => p.id))}
           onRefresh={() => void invalidatePhotoCaches()}

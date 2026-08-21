@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Copy, Check, Link2, Trash2, Download, Clock } from "lucide-react";
+import { Copy, Globe, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -8,15 +8,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
 import { createPhotoShare, listPhotoShares, revokePhotoShare } from "@/lib/photo-shares.functions";
 
@@ -29,32 +22,16 @@ interface ShareRow {
   revoked_at: string | null;
 }
 
-/**
- * Exported so the bulk bar offers the same expiry choices rather than a second
- * list that drifts from this one. Same reason for `shareUrl`: the public route
- * is spelled in exactly one place.
- */
-export const SHARE_DURATIONS: Array<{ value: string; label: string; hours: number }> = [
-  { value: "1", label: "1 hour", hours: 1 },
-  { value: "24", label: "24 hours", hours: 24 },
-  { value: "168", label: "7 days", hours: 24 * 7 },
-  { value: "720", label: "30 days", hours: 24 * 30 },
-  { value: "0", label: "Never expires", hours: 0 },
-];
-const DURATIONS = SHARE_DURATIONS;
-
+/** The public route is spelled in exactly one place. */
 export function shareUrl(token: string) {
   if (typeof window === "undefined") return `/share/photos/${token}`;
   return `${window.location.origin}/share/photos/${token}`;
 }
 
-function formatExpiry(iso: string | null): string {
-  if (!iso) return "Never expires";
-  const ms = new Date(iso).getTime() - Date.now();
-  if (ms <= 0) return "Expired";
-  const h = Math.round(ms / 3_600_000);
-  if (h < 48) return `Expires in ${h}h`;
-  return `Expires in ${Math.round(h / 24)}d`;
+/** A row a visitor could still open right now. */
+function isLive(r: ShareRow): boolean {
+  if (r.revoked_at) return false;
+  return !r.expires_at || new Date(r.expires_at).getTime() > Date.now();
 }
 
 interface Props {
@@ -63,84 +40,97 @@ interface Props {
   photoId: string | null;
 }
 
+/**
+ * Share one photo: a switch, then the link.
+ *
+ * Deliberately the same shape as sharing a document (ProjectDocuments /
+ * ProjectPageEditorPage), a showcase (ShowcaseShareDialog) and a checklist or
+ * workflow (ShareRecordDialog). One pattern for "make this public and give me
+ * the URL" everywhere in the product.
+ *
+ * What this replaced was the odd one out: an expiry dropdown defaulting to
+ * 7 days, a "Create & copy link" button that minted another token every time it
+ * was pressed, and a list of every token the photo had ever been given. That is
+ * the shape of the `photo_shares` table, not of a decision anybody wants to
+ * make about a photo - and it meant a link handed to a customer went dead a
+ * week later with nothing on screen having said so.
+ *
+ * The table still stores an expiry and a download flag; this writes the same
+ * values reports do (no expiry, download allowed) and revokes to turn sharing
+ * off, so nothing about the backend changed.
+ */
 export function SharePhotoDialog({ open, onClose, photoId }: Props) {
-  const create = createPhotoShare;
-  const list = listPhotoShares;
-  const revoke = revokePhotoShare;
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
+  /*
+   * Every live row, not just the one on show. A photo shared a few times
+   * through the old dialog carries several working tokens, and "turn sharing
+   * off" has to mean all of them or the link the customer already has keeps
+   * working.
+   */
+  const [liveRows, setLiveRows] = useState<ShareRow[]>([]);
 
-  const [duration, setDuration] = useState("168");
-  const [allowDownload, setAllowDownload] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [shares, setShares] = useState<ShareRow[]>([]);
-  const [loadingList, setLoadingList] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const reload = async () => {
-    if (!photoId) return;
-    setLoadingList(true);
-    try {
-      const rows = await list({ data: { photoId } });
-      setShares(rows as ShareRow[]);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Could not load shares");
-    } finally {
-      setLoadingList(false);
-    }
-  };
+  const live = liveRows[0] ?? null;
+  const url = live ? shareUrl(live.token) : "";
 
   useEffect(() => {
-    if (open && photoId) void reload();
-    if (!open) {
-      setCopiedId(null);
+    /*
+     * Clearing on the way out, not just loading on the way in. This component
+     * outlives one opening, so a dialog closed on photo A and reopened on
+     * photo B would otherwise render A's link for the frame before the effect
+     * refetches - long enough to copy the wrong one.
+     */
+    if (!open || !photoId) {
+      setLiveRows([]);
+      setLoading(true);
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const rows = (await listPhotoShares({ data: { photoId } })) as ShareRow[];
+        if (!cancelled) setLiveRows((rows ?? []).filter(isLive));
+      } catch (e: any) {
+        if (!cancelled) toast.error(e?.message ?? "Could not load sharing");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [open, photoId]);
 
-  const handleCreate = async () => {
-    if (!photoId) return;
-    const preset = DURATIONS.find((d) => d.value === duration) ?? DURATIONS[2];
-    setCreating(true);
+  const toggle = async (enable: boolean) => {
+    if (!photoId || updating) return;
+    setUpdating(true);
     try {
-      const row = await create({
-        data: { photoId, expiresInHours: preset.hours, allowDownload },
-      });
-      const r = row as ShareRow;
-      setShares((s) => [r, ...s]);
-      // Copy link straight away - single fewer tap.
-      try {
-        await navigator.clipboard.writeText(shareUrl(r.token));
-        setCopiedId(r.id);
-        toast.success("Share link copied to clipboard");
-      } catch {
-        toast.success("Share link created");
+      if (enable) {
+        const row = (await createPhotoShare({
+          data: { photoId, expiresInHours: 0, allowDownload: true },
+        })) as ShareRow;
+        setLiveRows([row]);
+        toast.success("Link is live");
+      } else {
+        for (const r of liveRows) await revokePhotoShare({ data: { shareId: r.id } });
+        setLiveRows([]);
+        toast.success("Link sharing off");
       }
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not create share link");
+      toast.error(e?.message ?? "Could not change sharing");
     } finally {
-      setCreating(false);
+      setUpdating(false);
     }
   };
 
-  const handleCopy = async (row: ShareRow) => {
+  const copy = async () => {
+    if (!url) return;
     try {
-      await navigator.clipboard.writeText(shareUrl(row.token));
-      setCopiedId(row.id);
+      await navigator.clipboard.writeText(url);
       toast.success("Link copied");
-      setTimeout(() => setCopiedId((c) => (c === row.id ? null : c)), 1500);
     } catch {
-      toast.error("Could not copy");
-    }
-  };
-
-  const handleRevoke = async (row: ShareRow) => {
-    try {
-      await revoke({ data: { shareId: row.id } });
-      setShares((s) =>
-        s.map((x) => (x.id === row.id ? { ...x, revoked_at: new Date().toISOString() } : x)),
-      );
-      toast.success("Link revoked");
-    } catch (e: any) {
-      toast.error(e?.message ?? "Could not revoke");
+      toast.error("Couldn't copy - select the link and copy it manually");
     }
   };
 
@@ -155,126 +145,73 @@ export function SharePhotoDialog({ open, onClose, photoId }: Props) {
         <DialogHeader>
           <DialogTitle>Share photo</DialogTitle>
           <DialogDescription>
-            Anyone with the link can view this photo. You can revoke the link at any time.
+            Anyone with the link can view this photo. They see nothing else on the project.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label
-              htmlFor="share-duration"
-              className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-            >
-              Link expires
-            </Label>
-            <Select value={duration} onValueChange={setDuration}>
-              <SelectTrigger id="share-duration" className="h-10">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DURATIONS.map((d) => (
-                  <SelectItem key={d.value} value={d.value}>
-                    {d.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        {loading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-
-          <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
-            <div className="flex items-start gap-2">
-              <Download className="mt-0.5 h-4 w-4 text-muted-foreground" />
-              <div>
-                <div className="text-sm font-medium">Allow download</div>
-                <div className="text-xs text-muted-foreground">
-                  Recipient can save the original JPEG.
+        ) : (
+          <>
+            <div className="flex items-center justify-between rounded-lg border border-border p-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-foreground">
+                    {live ? "Anyone with the link" : "Link sharing off"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {live
+                      ? "Turn this off and the link stops working immediately."
+                      : "Only your team can see this photo."}
+                  </p>
                 </div>
               </div>
+              {updating ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+              ) : (
+                <Switch
+                  checked={!!live}
+                  onCheckedChange={(v) => void toggle(v)}
+                  aria-label="Public link"
+                />
+              )}
             </div>
-            <Switch checked={allowDownload} onCheckedChange={setAllowDownload} />
-          </div>
 
-          <Button onClick={handleCreate} disabled={creating || !photoId} className="w-full">
-            {creating ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Link2 className="mr-2 h-4 w-4" />
+            {live && (
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={url}
+                  className="h-9 text-xs"
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <Button size="sm" onClick={() => void copy()}>
+                  <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy
+                </Button>
+              </div>
             )}
-            Create & copy link
-          </Button>
 
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Active links
-              </h4>
-              {loadingList && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-            </div>
-            {shares.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
-                No links yet for this photo.
-              </p>
-            ) : (
-              <ul className="max-h-56 space-y-1.5 overflow-auto">
-                {shares.map((s) => {
-                  const revoked = !!s.revoked_at;
-                  const expired =
-                    !revoked && s.expires_at && new Date(s.expires_at).getTime() <= Date.now();
-                  const dead = revoked || expired;
-                  return (
-                    <li
-                      key={s.id}
-                      className={`flex items-center justify-between gap-2 rounded-lg border p-2 ${dead ? "border-border/50 bg-muted/20 opacity-60" : "border-border"}`}
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {revoked ? "Revoked" : expired ? "Expired" : formatExpiry(s.expires_at)}
-                          {s.allow_download && !dead && (
-                            <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">
-                              <Download className="h-2.5 w-2.5" /> dl
-                            </span>
-                          )}
-                        </div>
-                        <div className="truncate text-[11px] font-mono text-muted-foreground">
-                          {shareUrl(s.token)}
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        {!dead && (
-                          <>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8"
-                              onClick={() => void handleCopy(s)}
-                              aria-label="Copy link"
-                            >
-                              {copiedId === s.id ? (
-                                <Check className="h-4 w-4 text-emerald-600" />
-                              ) : (
-                                <Copy className="h-4 w-4" />
-                              )}
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => void handleRevoke(s)}
-                              aria-label="Revoke link"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </li>
-                  );
+            {/*
+             * Only ever shown for a link minted by the old dialog. New ones do
+             * not expire, so saying nothing here would let a dated link look
+             * permanent right up until the morning it stopped working.
+             */}
+            {live?.expires_at && (
+              <p className="text-xs text-amber-600">
+                This link was set to expire on{" "}
+                {new Date(live.expires_at).toLocaleDateString(undefined, {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
                 })}
-              </ul>
+                . Turn sharing off and on again to replace it with one that does not.
+              </p>
             )}
-          </div>
-        </div>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

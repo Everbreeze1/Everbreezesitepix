@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Plus, Check } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -8,7 +7,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PhotoTagPopoverBody } from "@/features/photos/components/PhotoTagPopoverBody";
 import type { BeforeAfterTag } from "@/lib/watermark";
 
 interface Props {
@@ -17,46 +16,22 @@ interface Props {
   onClose: () => void;
   /** Called with the selected before/after marker and any photo tags to apply. */
   onSelect: (tag: BeforeAfterTag, tags: string[]) => void;
-  /** Existing photo tags the user can pick from. */
-  existingTags?: string[];
-  /** Create a new photo tag inline. Should return the normalized tag name. */
+  /**
+   * Told when a tag is created here, so the caller can refresh its own list.
+   * The tag itself is written to the workspace library by the picker.
+   */
   onCreateTag?: (name: string) => Promise<string | null> | string | null;
 }
 
-export function TagPhotoDialog({
-  open,
-  count,
-  onClose,
-  onSelect,
-  existingTags = [],
-  onCreateTag,
-}: Props) {
+export function TagPhotoDialog({ open, count, onClose, onSelect, onCreateTag }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
-  const [newTag, setNewTag] = useState("");
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setSelected([]);
-      setNewTag("");
-    }
+    if (open) setSelected([]);
   }, [open]);
 
   const toggle = (t: string) =>
     setSelected((s) => (s.includes(t) ? s.filter((x) => x !== t) : [...s, t]));
-
-  const create = async () => {
-    const v = newTag.trim();
-    if (!v || creating || !onCreateTag) return;
-    setCreating(true);
-    try {
-      const norm = await onCreateTag(v);
-      if (norm && !selected.includes(norm)) setSelected((s) => [...s, norm]);
-      setNewTag("");
-    } finally {
-      setCreating(false);
-    }
-  };
 
   const submit = (tag: BeforeAfterTag) => onSelect(tag, selected);
 
@@ -76,61 +51,22 @@ export function TagPhotoDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Photo tag picker */}
-        {(existingTags.length > 0 || onCreateTag) && (
-          <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Photo tags
-            </p>
-            {existingTags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {existingTags.map((t) => {
-                  const on = selected.includes(t);
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => toggle(t)}
-                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                        on
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-background hover:border-foreground/40"
-                      }`}
-                    >
-                      {on && <Check className="h-3 w-3" />}#{t}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {onCreateTag && (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void create();
-                }}
-                className="flex items-center gap-1.5"
-              >
-                <Input
-                  value={newTag}
-                  onChange={(e) => setNewTag(e.target.value)}
-                  placeholder="Add new tag…"
-                  className="h-8 flex-1 text-xs"
-                  maxLength={32}
-                />
-                <Button
-                  type="submit"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 px-2"
-                  disabled={!newTag.trim() || creating}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-              </form>
-            )}
-          </div>
-        )}
+        {/*
+         * The picker the thumbnails, the lightbox and the selection bar all
+         * use. This flow used to draw its own: plain `#name` pills off whatever
+         * tag names were already on this project's photos, with a separate
+         * "Add new tag" box beside them. Same job, different look, and a tag
+         * made here did not show up in the workspace library.
+         */}
+        <div className="rounded-lg border border-border bg-muted/30 p-3">
+          <PhotoTagPopoverBody
+            photoTags={selected}
+            onToggle={toggle}
+            onCreate={onCreateTag ? (name) => void onCreateTag(name) : undefined}
+            heading="Photo tags"
+            keepSearchOnToggle
+          />
+        </div>
 
         <div className="grid grid-cols-3 gap-2 pt-2">
           <Button
