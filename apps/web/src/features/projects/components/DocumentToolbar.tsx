@@ -8,6 +8,7 @@ import {
   Heading2,
   Heading3,
   Pilcrow,
+  SeparatorHorizontal,
   List,
   ListOrdered,
   ListChecks,
@@ -642,6 +643,22 @@ export function DocumentToolbar({
               onClick={() => editor.chain().focus().insertContent("<h2>Notes</h2><p></p>").run()}
             >
               <Pilcrow className="mr-2 h-4 w-4" /> <span className="font-bold">Notes section</span>
+            </DropdownMenuItem>
+            {/*
+              A page break, for deciding where a printed report turns over.
+              Distinct from the horizontal rule above it, which draws a visible
+              line and does not break the page.
+            */}
+            <DropdownMenuItem
+              onClick={() => editor.chain().focus().insertContent({ type: "pageBreak" }).run()}
+            >
+              <SeparatorHorizontal className="mr-2 h-4 w-4" />
+              <span>
+                <span className="block font-bold">Page break</span>
+                <span className="block text-xs text-muted-foreground">
+                  Starts the next section on a new page in the PDF
+                </span>
+              </span>
             </DropdownMenuItem>
             {(onAddHeader || onAddFooter) && <DropdownMenuSeparator />}
             {onAddHeader && (

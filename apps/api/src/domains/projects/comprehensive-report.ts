@@ -4,6 +4,7 @@ import { chatComplete } from "../ai/service";
 import { cleanCaption, markdownToHtml } from "@sitepix/shared";
 import { photoEvidenceHtml, type GeneratedPhoto } from "./page-generate";
 import { existingPageTitles, projectDocumentTitle, uniqueDocumentTitle } from "./page-title";
+import { stripPhotoGallery } from "../walkthroughs/summaries";
 
 /**
  * The comprehensive Report: the whole job, not one walkthrough.
@@ -22,12 +23,24 @@ import { existingPageTitles, projectDocumentTitle, uniqueDocumentTitle } from ".
  * captions that say something. Sending a hundred photo records and asking for
  * per-photo prose is what makes a report take a minute; this asks for the
  * narrative only and lets the deterministic half do the organising.
+ *
+ * **It reads the walkthrough summaries too.** "The comprehensive longer Report
+ * that contains all meta data including all walkthrough summery data". Those
+ * summaries are the only place on a job where somebody said what was actually
+ * happening, so a whole-job report that ignored them would be a report written
+ * from filenames and tag counts while the real account of the work sat one
+ * table over. They are quoted into the report and fed to the drafter as
+ * context.
  */
 
 /** Photos read for the digest. A job with more than this is summarised from a sample. */
 const MAX_PHOTOS_SCANNED = 400;
 /** Captions handed to the model. Enough to characterise the job, not a transcript. */
 const MAX_CAPTIONS_IN_PROMPT = 60;
+/** Walkthrough write-ups folded in. A job with more is summarised from these. */
+const MAX_SUMMARIES_INCLUDED = 12;
+/** Per write-up, so one long one cannot crowd out the rest of the prompt. */
+const MAX_SUMMARY_CHARS = 4000;
 
 export const comprehensiveReportInputSchema = z.object({
   projectId: z.string().uuid(),
@@ -102,6 +115,51 @@ const COMPREHENSIVE_SYSTEM =
   "If the material is thin, be brief rather than embellishing. " +
   "Never write an em dash; use a comma, a colon or a plain hyphen.";
 
+/**
+ * A summary's prose, ready to be reused.
+ *
+ * The cleaning is not optional. This reads `walkthrough_summaries.markdown`
+ * straight from the table, which bypasses the repair `toSummary` performs on
+ * every other read - so a summary written before the split arrives with its
+ * original `# Title` and its `## Photos` gallery of `![](photo:id)` refs still
+ * attached. `markdownToHtml` has no image support, so those refs came out as
+ * literal "![Photo 1](photo:76edc...)" text in the middle of a document meant
+ * for a client, beneath a duplicate of the title already printed above it.
+ */
+function summaryProse(markdown: string | null): string {
+  return stripPhotoGallery(markdown ?? "").slice(0, MAX_SUMMARY_CHARS);
+}
+
+/**
+ * A summary's own headings, turned into bold lead-ins.
+ *
+ * Kept rather than flattened away: "Overview" and "Key Points" are how the
+ * write-up is organised, and dropping them left the section reading as an
+ * unbroken wall with two orphan words in it.
+ *
+ * Bold rather than a deeper heading because there is no deeper heading to use.
+ * `markdownToHtml` recognises `#{1,3}` and nothing beyond it
+ * (packages/shared/src/markdown-rich.ts), so `####` is not a heading at all -
+ * it renders as the literal text "#### Overview" - and `###` would collide with
+ * the `<h3>` this report already gives each summary.
+ */
+function demoteHeadings(markdown: string): string {
+  return markdown.replace(/^#{1,6}\s*(.+?)\s*$/gm, "**$1**");
+}
+
+/**
+ * Headings removed entirely, for prompt context only.
+ *
+ * A model handed source text containing "## Conclusion" tends to echo that
+ * structure back instead of writing the sections it was asked for.
+ */
+function flattenHeadings(markdown: string): string {
+  return markdown
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 /** `## Heading` body out of the model's Markdown. */
 function section(markdown: string, heading: string): string {
   const re = new RegExp(`^#{1,3}\\s*${heading}\\s*$([\\s\\S]*?)(?=^#{1,3}\\s|$(?![\\s\\S]))`, "im");
@@ -150,6 +208,32 @@ function figuresHtml(d: ReturnType<typeof digestPhotos>): string {
     ],
   ];
   return clientPanelHtml(rows);
+}
+
+/**
+ * The walkthrough write-ups, quoted into the report.
+ *
+ * Reproduced rather than merely referenced: this document is the one a client
+ * receives, and "see the walkthrough summary" is not something they can act on.
+ * Each keeps its own heading and its date so the report reads as a record of
+ * visits rather than one undifferentiated wall of prose.
+ */
+function walkthroughSummariesHtml(
+  summaries: Array<{ title: string; markdown: string | null; created_at: string }>,
+): string {
+  if (!summaries.length) return "";
+  return (
+    `<h2>Walkthrough Summaries</h2>` +
+    summaries
+      .map((r) => {
+        const when = longDate(r.created_at);
+        return (
+          `<h3>${escapeHtml(r.title)}${when ? ` &middot; ${escapeHtml(when)}` : ""}</h3>` +
+          markdownToHtml(demoteHeadings(summaryProse(r.markdown)))
+        );
+      })
+      .join("")
+  );
 }
 
 /**
@@ -220,6 +304,21 @@ export async function generateComprehensiveReportService(
     .filter(Boolean)
     .join(", ");
 
+  /*
+   * Every write-up already made on this job, newest last so the report reads
+   * forward through the work.
+   *
+   * Read on the caller's own client: if RLS will not show them a summary, it
+   * does not belong in a document issued in their name.
+   */
+  const { data: summaryRows } = await (ctx.supabase as any)
+    .from("walkthrough_summaries")
+    .select("id, title, markdown, created_at, walkthrough_id")
+    .eq("project_id", data.projectId)
+    .order("created_at", { ascending: true })
+    .limit(MAX_SUMMARIES_INCLUDED);
+  const summaries = ((summaryRows as any[]) ?? []).filter((r) => (r.markdown ?? "").trim());
+
   // One call, over the digest. See the note at the top about "in seconds".
   let summary = "";
   let work = "";
@@ -242,6 +341,9 @@ FIGURES (these are correct - use them, do not invent others):
 
 Notes the technicians typed on site:
 ${digest.captions.map((c) => `- ${c}`).join("\n") || "(none)"}
+
+Walkthrough write-ups on this job (${summaries.length}):
+${summaries.map((r) => `### ${r.title}\n${flattenHeadings(summaryProse(r.markdown))}`).join("\n\n") || "(none)"}
 
 Write the three Markdown sections only.`,
     );
@@ -306,6 +408,7 @@ Write the three Markdown sections only.`,
      */
     (summary ? `<h2>Executive Summary</h2>` + markdownToHtml(summary) : "") +
     (work ? `<h2>Work Documented</h2>` + markdownToHtml(work) : "") +
+    walkthroughSummariesHtml(summaries) +
     photoEvidenceHtml(evidence, perPage) +
     (conclusion ? `<h2>Conclusion</h2>` + markdownToHtml(conclusion) : "");
 
@@ -325,5 +428,5 @@ Write the three Markdown sections only.`,
     .single();
   if (error) throw new Error(error.message);
 
-  return { page, aiFailed, photoCount: digest.total };
+  return { page, aiFailed, photoCount: digest.total, summaryCount: summaries.length };
 }
