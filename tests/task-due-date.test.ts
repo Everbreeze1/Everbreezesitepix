@@ -22,7 +22,7 @@ const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
  * the raw file would fail on its own explanation.
  */
 const codeOf = (src: string) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  src.replace(/(?<![\w"'])\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 /**
  * The reported bug, in the client's words:

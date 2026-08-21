@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 
+import { isLive } from "../apps/web/src/features/photos/components/SharePhotoDialog";
+
 /**
  * The photo Share and Tag review, pinned.
  *
@@ -25,7 +27,7 @@ import { join, resolve } from "node:path";
 const ROOT = resolve(__dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 const stripComments = (src: string) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  src.replace(/(?<![\w"'])\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 const SHARE = "apps/web/src/features/photos/components/SharePhotoDialog.tsx";
 const BAR = "apps/web/src/features/photos/components/PhotoBulkActionBar.tsx";
@@ -184,5 +186,54 @@ describe("the share dialog does not show the previous photo's link", () => {
     expect(CODE).toMatch(
       /if \(!open \|\| !photoId\) \{\s*setLiveRows\(\[\]\);\s*setLoading\(true\);/,
     );
+  });
+});
+
+// ── The one piece of real logic, run rather than read ───────────────────────
+
+describe("isLive decides what 'this photo is shared' means", () => {
+  const HOUR = 3_600_000;
+  const row = (over: Partial<{ revoked_at: string | null; expires_at: string | null }> = {}) => ({
+    revoked_at: null,
+    expires_at: null,
+    ...over,
+  });
+
+  it("counts a link with no expiry, which is all a new one ever is", () => {
+    expect(isLive(row())).toBe(true);
+  });
+
+  it("does not count a revoked link, even one whose expiry is still ahead", () => {
+    expect(
+      isLive(
+        row({
+          revoked_at: new Date(Date.now() - HOUR).toISOString(),
+          expires_at: new Date(Date.now() + 100 * HOUR).toISOString(),
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("does not count a legacy link whose 7 days ran out", () => {
+    expect(isLive(row({ expires_at: new Date(Date.now() - HOUR).toISOString() }))).toBe(false);
+  });
+
+  it("still counts a legacy link inside its window, so it can be shown and revoked", () => {
+    expect(isLive(row({ expires_at: new Date(Date.now() + HOUR).toISOString() }))).toBe(true);
+  });
+
+  it("treats an expiry exactly now as gone, not as a live link", () => {
+    expect(isLive(row({ expires_at: new Date(Date.now() - 1).toISOString() }))).toBe(false);
+  });
+
+  it("filters a mixed history down to what a visitor could open", () => {
+    // The shape a photo shared a few times through the old dialog ends up in.
+    const history = [
+      row({ expires_at: new Date(Date.now() + 24 * HOUR).toISOString() }),
+      row({ revoked_at: new Date().toISOString() }),
+      row({ expires_at: new Date(Date.now() - 24 * HOUR).toISOString() }),
+      row(),
+    ];
+    expect(history.filter(isLive)).toHaveLength(2);
   });
 });

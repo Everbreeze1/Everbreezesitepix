@@ -28,8 +28,14 @@ export function shareUrl(token: string) {
   return `${window.location.origin}/share/photos/${token}`;
 }
 
-/** A row a visitor could still open right now. */
-function isLive(r: ShareRow): boolean {
+/**
+ * A row a visitor could still open right now.
+ *
+ * Exported for the tests: this is the whole of what "is this photo shared"
+ * means, and it has to agree with the two ways a link dies - revoked here, or
+ * expired because it was minted by the dialog this one replaced.
+ */
+export function isLive(r: Pick<ShareRow, "revoked_at" | "expires_at">): boolean {
   if (r.revoked_at) return false;
   return !r.expires_at || new Date(r.expires_at).getTime() > Date.now();
 }
@@ -119,6 +125,18 @@ export function SharePhotoDialog({ open, onClose, photoId }: Props) {
       }
     } catch (e: any) {
       toast.error(e?.message ?? "Could not change sharing");
+      /*
+       * Turning sharing off is several writes when a photo carries legacy
+       * tokens, so a failure halfway leaves some revoked and some not. Asking
+       * the server what survived beats keeping the optimistic guess, which
+       * would show the switch on beside a link that no longer opens.
+       */
+      try {
+        const rows = (await listPhotoShares({ data: { photoId } })) as ShareRow[];
+        setLiveRows((rows ?? []).filter(isLive));
+      } catch {
+        /* The toast above already said the action did not land. */
+      }
     } finally {
       setUpdating(false);
     }

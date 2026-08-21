@@ -445,7 +445,7 @@ describe("family: one role vocabulary, not one per screen", () => {
    */
   const strip = (src: string) =>
     src
-      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(?<![\w"'])\/\*[\s\S]*?\*\//g, "")
       .replace(/^\s*\/\/.*$/gm, "")
       .replace(/placeholder="[^"]*"/g, "");
 
