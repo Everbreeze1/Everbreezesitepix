@@ -22,7 +22,11 @@ import { compressImageFile } from "@/features/photos/components/CameraCapture";
 interface WalkthroughRecorderProps {
   open: boolean;
   onClose: () => void;
-  /** Per-walkthrough hard cap in seconds. Pro = 600, Team = 1200 (Pro-gated feature). */
+  /**
+   * Hard cap on this one take, in seconds. Starter = 600, Pro = 900, Team = 1200
+   * (see WALKTHROUGH_MAX_SECONDS in ProjectDetailPage). Per take, not per month:
+   * a longer job is several walkthroughs, not one that runs over.
+   */
   maxSeconds: number;
   canRecord: boolean;
   tierLabel: string;
@@ -861,11 +865,11 @@ export function WalkthroughRecorder({
                   <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/90">
                     <Footprints className="h-7 w-7" />
                   </div>
-                  <h3 className="text-xl font-semibold">Start your Walkthrough Note</h3>
+                  <h3 className="text-xl font-semibold">Start your walkthrough</h3>
                   <p className="max-w-md text-sm text-white/70">
-                    {tierLabel} · up to {Math.round(maxSeconds / 60)} min. Speak naturally about
-                    what you see - we record your narration, snaps the photos you take, and writes a
-                    clean report based purely on what you said.
+                    {tierLabel} · up to {Math.round(maxSeconds / 60)} min per take. Speak naturally
+                    about what you see. You get the video back with an AI Summary: narration over
+                    the footage, and every photo you take described from what was said near it.
                   </p>
                   <Button
                     onClick={start}

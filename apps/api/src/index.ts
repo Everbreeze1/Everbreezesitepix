@@ -178,7 +178,13 @@ export {
   createReportFromWalkthroughService,
   generateWalkthroughSummaryService,
   regenerateWalkthroughSummaryService,
+  generateWalkthroughNarrationService,
 } from "./domains/walkthroughs/service";
+export type {
+  WalkthroughNarration,
+  NarrationChapter,
+  NarrationPhoto,
+} from "./domains/walkthroughs/narration";
 
 export {
   listNotificationsService,

@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Loader2,
@@ -37,6 +37,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { useSubscription } from "@/hooks/use-subscription";
 import { UpgradeDialog } from "@/components/UpgradeDialog";
 import {
+  generateWalkthroughNarration,
   generateWalkthroughReport,
   regenerateWalkthroughSummary,
   setWalkthroughShare,
@@ -52,6 +53,11 @@ import {
 } from "@/components/WalkthroughReport";
 import { VideoPlayerDialog } from "@/features/photos/components/VideoPlayerDialog";
 import { VideoThumbnail } from "@/features/photos/components/VideoThumbnail";
+import {
+  AiNarratedPhotoSteps,
+  WalkthroughNarratedPlayer,
+  type WalkthroughNarration as WalkthroughNarrationPayload,
+} from "@/features/walkthroughs/components/WalkthroughNarration";
 
 interface Walkthrough {
   id: string;
@@ -95,6 +101,15 @@ export function WalkthroughDetailPage() {
   const [copied, setCopied] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoOpen, setVideoOpen] = useState(false);
+  /**
+   * The AI narration behind the premium Summary. Null until it loads, and null
+   * for good on a database that has not run the narration migration - both of
+   * which fall back to the plain video card and the old photo strip.
+   */
+  const [narration, setNarration] = useState<WalkthroughNarrationPayload | null>(null);
+  const [narrationLoading, setNarrationLoading] = useState(false);
+  /** Set by the player so the photo list below can seek it. */
+  const playerRef = useRef<{ seek: (seconds: number) => void } | null>(null);
 
   const regenerate = generateWalkthroughReport;
   const setShare = setWalkthroughShare;
@@ -249,6 +264,39 @@ export function WalkthroughDetailPage() {
   useEffect(() => {
     void load(); /* eslint-disable-next-line */
   }, [walkthroughId, user?.id]);
+
+  /*
+   * Fetch the narration behind the Summary.
+   *
+   * Only for a finished recording: a Summary row has no walk to narrate, and a
+   * walkthrough still transcribing has no transcript to narrate FROM - asking
+   * early would cache a payload written from nothing. The server returns the
+   * stored narration unless forced, so this costs one select on every open
+   * after the first.
+   */
+  useEffect(() => {
+    if (!walk || walk.source === "summary" || walk.status !== "ready") return;
+    if (narration || narrationLoading) return;
+    let cancelled = false;
+    setNarrationLoading(true);
+    void generateWalkthroughNarration({ data: { walkthroughId: walk.id } })
+      .then((res) => {
+        if (!cancelled)
+          setNarration((res?.narration ?? null) as WalkthroughNarrationPayload | null);
+      })
+      .catch((e) => {
+        // Narration is an enhancement over a page that already works. A
+        // failure must not replace the user's summary with an error.
+        console.warn("[walkthrough] narration unavailable", e);
+      })
+      .finally(() => {
+        if (!cancelled) setNarrationLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walk?.id, walk?.status, walk?.source]);
 
   // While the background pipeline is still working (transcription → report),
   // poll the row so the page flips to the finished report automatically
@@ -502,8 +550,12 @@ export function WalkthroughDetailPage() {
                 </span>
               )}
               <span>{new Date(walk.started_at).toLocaleString()}</span>
+              {/* What this row IS, not what its pipeline is doing. A finished
+                  recording's artefact is its AI Summary; "ready" described the
+                  job that produced it, which is nobody's question by the time
+                  they are looking at it. */}
               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary capitalize">
-                {isSummary ? "AI summary" : walk.status}
+                {isSummary || (walk.status === "ready" && narration) ? "AI Summary" : walk.status}
               </span>
             </div>
           </div>
@@ -584,7 +636,24 @@ export function WalkthroughDetailPage() {
         </div>
       </Card>
 
-      {!isSummary && videoUrl && (
+      {/*
+        The flagship: the recording playing with its AI narration on the same
+        timeline. Falls back to the old thumbnail card when there is no
+        narration yet - a walkthrough recorded before this feature, or a
+        database that has not run the narration migration - so the video is
+        never unreachable while the narration catches up.
+      */}
+      {!isSummary && videoUrl && narration ? (
+        <WalkthroughNarratedPlayer
+          className="mt-4"
+          videoUrl={videoUrl}
+          mimeType={walk.video_mime_type}
+          durationSeconds={walk.duration_seconds ?? 0}
+          narration={narration}
+          steps={photoSteps}
+          controllerRef={playerRef}
+        />
+      ) : !isSummary && videoUrl ? (
         <Card className="mt-4 overflow-hidden p-0">
           <VideoThumbnail
             cacheKey={`walk-detail:${walk.id}`}
@@ -598,14 +667,19 @@ export function WalkthroughDetailPage() {
             }}
           />
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3">
-            <p className="text-sm font-medium">Walkthrough video</p>
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Walkthrough video</p>
+              {narrationLoading && (
+                <p className="text-[11px] text-muted-foreground">Writing AI narration…</p>
+              )}
+            </div>
             <Button size="sm" onClick={() => setVideoOpen(true)}>
               <PlayCircle className="mr-1.5 h-3.5 w-3.5" />
               Play video
             </Button>
           </div>
         </Card>
-      )}
+      ) : null}
 
       {!isSummary && (
         <VideoPlayerDialog
@@ -629,14 +703,23 @@ export function WalkthroughDetailPage() {
             />
           ) : (
             <>
-              <WalkthroughPhotoSteps
-                steps={photoSteps}
-                variant={isSummary ? "summary" : "recorded"}
-              />
+              {!isSummary && narration ? (
+                <AiNarratedPhotoSteps
+                  steps={photoSteps}
+                  narration={narration}
+                  onSeek={videoUrl ? (sec) => playerRef.current?.seek(sec) : undefined}
+                />
+              ) : (
+                <WalkthroughPhotoSteps
+                  steps={photoSteps}
+                  variant={isSummary ? "summary" : "recorded"}
+                />
+              )}
               <WalkthroughMarkdown
                 markdown={renderedMarkdown}
                 photoUrls={photoUrls}
                 variant={isSummary ? "summary" : "recorded"}
+                heading={!isSummary && narration ? "Written notes" : undefined}
               />
             </>
           )}

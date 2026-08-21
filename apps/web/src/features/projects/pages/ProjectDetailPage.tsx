@@ -63,7 +63,8 @@ import { PageTabStrip } from "@/components/PageTabStrip";
 import { ProjectWorkflows } from "@/features/projects/components/ProjectWorkflows";
 import { ProjectTasks, type ProjectTasksHandle } from "@/features/projects/components/ProjectTasks";
 import { ProjectDocuments } from "@/features/projects/components/ProjectDocuments";
-import { ProjectReports } from "@/features/projects/components/ProjectReports";
+import { ProjectReports, isReportSummary } from "@/features/projects/components/ProjectReports";
+import { ProjectDailyLog } from "@/features/projects/components/ProjectDailyLog";
 import { listProjectDocumentTree, type DocumentTreePage } from "@/lib/project-pages.functions";
 import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
 import { ContributorsChip } from "@/features/projects/components/ProjectContributors";
@@ -150,6 +151,11 @@ import {
   type BulkPhoto,
 } from "@/features/photos/components/PhotoBulkActionBar";
 import { ProjectTrash } from "@/features/projects/components/ProjectTrash";
+import {
+  autoDailyLog,
+  listProjectDailyLogs,
+  type DailyLogSummary,
+} from "@/lib/project-pages.functions";
 
 const TIER_LABEL: Record<string, string> = {
   starter: "Starter plan",
@@ -157,7 +163,21 @@ const TIER_LABEL: Record<string, string> = {
   team: "Team plan",
 };
 const VIDEO_MAX_SECONDS: Record<string, number> = { starter: 300, pro: 600, team: 1200 };
-const WALKTHROUGH_MAX_SECONDS: Record<string, number> = { pro: 600, team: 1200 };
+/**
+ * How long one walkthrough take may run, per plan: 10 minutes on Starter, 15 on
+ * Pro, 20 on Team.
+ *
+ * This is the length of a single recording, not a monthly allowance - a
+ * technician who needs a second pass records a second walkthrough. Every tier
+ * is spelt out rather than leaning on the fallback, because a table that is
+ * missing the cheapest plan reads as though that plan has no limit when in fact
+ * it silently borrowed Pro's.
+ */
+const WALKTHROUGH_MAX_SECONDS: Record<string, number> = {
+  starter: 600,
+  pro: 900,
+  team: 1200,
+};
 
 /**
  * Ceiling on a recording sent for transcription. The blob is base64-encoded
@@ -244,6 +264,26 @@ export function ProjectDetailPage() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [videoOpen, setVideoOpen] = useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
+  /**
+   * The project's Daily Logs, newest day first.
+   *
+   * Held here rather than inside ProjectDailyLog because the capture handlers
+   * write to them: a card that fetched its own data would still be showing
+   * yesterday's log for a second after an upload finished.
+   */
+  const [dailyLogs, setDailyLogs] = useState<DailyLogSummary[]>([]);
+  /** A capture session has finished and its log section is being written. */
+  const [dailyLogBusy, setDailyLogBusy] = useState(false);
+  /**
+   * Photos taken since the camera was opened, held until it closes.
+   *
+   * The camera stays open between shots when auto-save is on, so a technician
+   * walking a unit produces one `onCapture` per photo. Logging each of those
+   * would spend a model request per shot and leave the day's log a column of
+   * one-line sections. The session is the dialog: what the client called
+   * "finishes a Capture/photo-upload session" is the moment it closes.
+   */
+  const cameraSessionIds = useRef<string[]>([]);
   const [walkthroughs, setWalkthroughs] = useState<
     Array<{
       id: string;
@@ -449,16 +489,14 @@ export function ProjectDetailPage() {
   type PanelKey = NonNullable<ProjectDetailSearch["panel"]>;
   const panel: PanelKey | null = search.panel ?? null;
   /**
-   * Walkthrough summaries the Reports tab will list, for its tab count.
+   * AI Summaries the Reports tab will list, for its tab count.
    *
-   * Same predicate as ProjectReports uses, and that duplication is the point of
-   * the comment: the count and the list must agree, so if one changes the other
-   * has to. Kept as a number here rather than lifting the whole filter out,
-   * because the tab strip needs a count long before the tab needs rows.
+   * The predicate itself lives in ProjectReports and is imported rather than
+   * restated: the count and the list have to agree, and they used to drift.
+   * They also both now exclude recorded walkthroughs, which is the fix for the
+   * raw video entry that was showing up in the tab's "Summaries" filter.
    */
-  const reportSummaryCount = walkthroughs.filter(
-    (w) => w.status === "ready" && (w.summary_markdown ?? "").trim() !== "",
-  ).length;
+  const reportSummaryCount = walkthroughs.filter((w) => isReportSummary(w as never)).length;
 
   function setPanel(next: PanelKey | null | ((cur: PanelKey | null) => PanelKey | null)) {
     const resolved = typeof next === "function" ? next(panel) : next;
@@ -758,17 +796,36 @@ export function ProjectDetailPage() {
            */
           const treePages = tree?.pages ?? [];
           const reportRows = treePages.filter((pg) => pg.bucket === "report");
+          // Daily logs are in neither tab, so they are in neither count. Left
+          // in the Documents number they would inflate a tab that cannot show
+          // them, which is how a user ends up hunting for a missing file.
+          const dailyLogRows = treePages.filter((pg) => pg.bucket === "daily_log");
           setReportPages(reportRows);
           setCounts({
             tasksTotal: tasksAll.count ?? 0,
             tasksOpen: tasksOpen.count ?? 0,
             checklists: chk.count ?? 0,
             reports: reportRows.length,
-            documents: (tree?.files.length ?? 0) + (treePages.length - reportRows.length),
+            documents:
+              (tree?.files.length ?? 0) +
+              (treePages.length - reportRows.length - dailyLogRows.length),
             workflows: wf.count ?? 0,
           });
         } catch {
           /* non-fatal */
+        }
+      })(),
+      (async () => {
+        /*
+         * The Daily Log is generated automatically and read from the Capture
+         * flow, so it loads with the photos rather than with the paperwork.
+         * Non-fatal: a project whose logs cannot be read still shows its
+         * photos, which is the thing the technician came here for.
+         */
+        try {
+          setDailyLogs(await listProjectDailyLogs({ data: { projectId } }));
+        } catch (logErr) {
+          console.warn("[daily-log] list failed", logErr, { projectId });
         }
       })(),
       (async () => {
@@ -1178,6 +1235,29 @@ export function ProjectDetailPage() {
     return row.id;
   };
 
+  /**
+   * A capture session just finished: write it into today's Daily Log.
+   *
+   * "Auto-generate Daily Log the moment a technician finishes a Capture/photo
+   * upload session." So this runs off the back of the upload rather than off a
+   * button, and it never rethrows: the photos are already saved, and a model
+   * outage must not put a red toast over a successful capture. The card says
+   * what happened either way, because the server falls back to a deterministic
+   * section rather than writing nothing.
+   */
+  const runAutoDailyLog = async (photoIds: string[], source: "camera" | "upload") => {
+    if (!photoIds.length) return;
+    setDailyLogBusy(true);
+    try {
+      await autoDailyLog({ data: { projectId, photoIds, source } });
+      setDailyLogs(await listProjectDailyLogs({ data: { projectId } }));
+    } catch (e: any) {
+      console.warn("[daily-log] auto generation failed", e, { projectId });
+    } finally {
+      setDailyLogBusy(false);
+    }
+  };
+
   const onUpload = (files: FileList | null) => {
     if (!files || !user) return;
     const incoming = Array.from(files);
@@ -1218,6 +1298,12 @@ export function ProjectDetailPage() {
       }
       await load();
       invalidatePhotoCaches();
+      // Deliberately after load(): the grid is what the user is waiting for,
+      // and the log is written while they are already looking at their photos.
+      void runAutoDailyLog(
+        ids.filter((id): id is string => !!id),
+        "upload",
+      );
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
@@ -1293,6 +1379,7 @@ export function ProjectDetailPage() {
       })();
       if (!photoId) return;
       toast.success("Photo saved");
+      cameraSessionIds.current.push(photoId);
       if (opts.analyze && isActive) {
         toast.message("Analyzing photo…", { description: "This takes 10–25 seconds." });
         try {
@@ -2605,6 +2692,7 @@ export function ProjectDetailPage() {
           open={walkthroughUpgradeOpen}
           onOpenChange={setWalkthroughUpgradeOpen}
           feature="Walkthroughs"
+          description="Record a narrated walk of the site and get its AI Summary back: the video with narration over it, and every photo you took described from what you said near it. Up to 15 minutes per take on Pro, 20 on Team."
         />
       </div>
     );
@@ -2947,7 +3035,8 @@ export function ProjectDetailPage() {
                 Walk the site from anywhere
               </h2>
               <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
-                Recorded walkthroughs and AI summaries both preserve field context beyond the photo.
+                Record a walk and you get both: the video, and an AI Summary that narrates it and
+                describes every photo you took along the way.
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -3053,8 +3142,8 @@ export function ProjectDetailPage() {
             <div className="mt-6 flex flex-col items-center rounded-3xl border border-dashed border-border bg-card/60 p-12 text-center">
               <Mic className="h-10 w-10 text-muted-foreground" />
               <p className="mt-3 max-w-sm text-sm text-muted-foreground">
-                No walkthroughs yet. Record one to capture photos + narration, or generate an AI
-                summary from photos you already have.
+                No walkthroughs yet. Record one and you get the video plus an AI Summary that
+                narrates it, or generate an AI Summary from photos you already have.
               </p>
               <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                 <Button
@@ -3131,15 +3220,38 @@ export function ProjectDetailPage() {
                           })}
                           {" · "}
                           {isSummary
-                            ? `AI summary · ${w.photo_count} ${w.photo_count === 1 ? "photo" : "photos"}`
-                            : `${mins}:${secs.toString().padStart(2, "0")}`}
+                            ? `AI Summary · ${w.photo_count} ${w.photo_count === 1 ? "photo" : "photos"}`
+                            : `${mins}:${secs.toString().padStart(2, "0")} · ${w.photo_count} ${
+                                w.photo_count === 1 ? "photo" : "photos"
+                              }`}
                         </p>
+                        {/*
+                          A recording's Summary is the thing worth opening it
+                          for, so the card says whether one is waiting. Without
+                          this every recorded card read identically whether it
+                          had been narrated or was still a bare clip.
+                        */}
+                        {!isSummary && (
+                          <p className="mt-2">
+                            {(w.summary_markdown ?? "").trim() ? (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-primary">
+                                <Sparkles className="h-3 w-3" strokeWidth={2.25} />
+                                AI Summary ready
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Summary being written
+                              </span>
+                            )}
+                          </p>
+                        )}
                         <Link
                           to="/walkthroughs/$walkthroughId"
                           params={{ walkthroughId: w.id }}
                           className="mt-3 inline-flex items-center gap-2 text-xs font-extrabold text-primary hover:underline"
                         >
-                          {isSummary ? "Open summary" : "Open walkthrough"}{" "}
+                          {isSummary ? "Open AI Summary" : "Open walkthrough"}{" "}
                           <span aria-hidden>→</span>
                         </Link>
                       </div>
@@ -3541,6 +3653,18 @@ export function ProjectDetailPage() {
             />
           )}
 
+          {/*
+            The Daily Log, on the tab the technician captures from.
+            "surfaced as a lightweight, always-available result right there in
+            the Capture flow rather than something requiring a trip to Reports
+            to manually generate." It renders nothing until the project has one,
+            so a job that has never had photos added does not carry a permanent
+            empty placeholder under its grid.
+          */}
+          {mediaType === "videos" ? null : (
+            <ProjectDailyLog projectId={projectId} logs={dailyLogs} generating={dailyLogBusy} />
+          )}
+
           {mediaType === "videos" ? null : photos.length === 0 ? (
             <Card className="mt-3 flex flex-col items-center p-10 text-center border-dashed">
               <ImageOff className="h-9 w-9 text-muted-foreground" />
@@ -3831,7 +3955,14 @@ export function ProjectDetailPage() {
 
       <CameraCapture
         open={cameraOpen}
-        onClose={() => setCameraOpen(false)}
+        onClose={() => {
+          setCameraOpen(false);
+          // The session ended, so the log is written now - once, for everything
+          // that was shot.
+          const captured = cameraSessionIds.current;
+          cameraSessionIds.current = [];
+          void runAutoDailyLog(captured, "camera");
+        }}
         onCapture={onCameraCapture}
         canAnalyze={isActive}
         watermark={watermarkCtx(project)}
@@ -3857,7 +3988,7 @@ export function ProjectDetailPage() {
         onClose={() => void onWalkthroughClose()}
         canRecord={canUseWalkthroughs}
         tierLabel={TIER_LABEL[tier] ?? TIER_LABEL.starter}
-        maxSeconds={WALKTHROUGH_MAX_SECONDS[tier] ?? WALKTHROUGH_MAX_SECONDS.pro}
+        maxSeconds={WALKTHROUGH_MAX_SECONDS[tier] ?? WALKTHROUGH_MAX_SECONDS.starter}
         watermark={watermarkCtx(project)}
         onCapturePhoto={onWalkthroughCapture}
         onFinish={onWalkthroughFinish}

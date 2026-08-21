@@ -306,11 +306,25 @@ const CATEGORIES: Category[] = [
         summary: "Capture a narrated tour of the site.",
         steps: [
           "Open a project, go to the Walkthroughs tab and click Record walkthrough.",
-          "Allow camera and microphone access, then narrate as you walk.",
-          "Stop when you are finished. The recording uploads and the narration is turned into a summary automatically.",
+          "Allow camera and microphone access, then narrate as you walk. Take photos as you go.",
+          "Stop when you are finished. The recording uploads and its AI Summary is written automatically.",
         ],
         tips: [
-          "Recording is on the Pro and Team plans. A walkthrough can run up to 10 minutes on Pro and 20 minutes on Team.",
+          "Recording is on the Pro and Team plans. One take can run up to 10 minutes on Starter, 15 on Pro and 20 on Team. A longer job is simply more than one walkthrough.",
+        ],
+      },
+      {
+        id: "walkthrough-ai-summary",
+        title: "The AI Summary of a walkthrough",
+        summary: "The video, narrated, plus every photo described.",
+        steps: [
+          "Open a finished walkthrough. The recording plays with an AI narration track written from what you said.",
+          "The narration list beside the video is chaptered. Click a chapter to jump the video to that moment.",
+          "Click Play AI narration and the narration is read aloud over the footage, with the original audio ducked underneath.",
+          "Below that, every photo you took carries its own AI narration: what was being done in that shot, and what you said on camera near that moment.",
+        ],
+        tips: [
+          "A recording nobody spoke over still gets a Summary. It is written from the photos and their captions instead, and says so rather than inventing narration.",
         ],
       },
       {
@@ -345,11 +359,12 @@ const CATEGORIES: Category[] = [
       {
         id: "generate-document",
         title: "Generate a document from photos",
-        summary: "One menu, four outputs, all AI-drafted.",
+        summary: "The two things you hand to a client, both AI-drafted.",
         steps: [
           "Select photos in a project or in the Gallery, then click Generate.",
-          "Summary writes a short shareable brief. It is saved under Walkthroughs and listed in Reports.",
-          "Daily Log writes quick internal bullets, and Report writes a client-ready document with a title page, summary, photo sections and conclusion. Both are saved under Reports.",
+          "AI Summary writes a short shareable brief. It is saved under Walkthroughs and listed in Reports.",
+          "Report writes a client-ready document with a title page, summary, photo sections and conclusion. It is saved under Reports.",
+          'Your Daily Log is not in this menu, because you never have to ask for it: it writes itself when you finish adding photos. See "Your daily log, written for you".',
           "Under the Documents heading of the same menu you can generate from one of your document templates instead, which fills the project's details in for you.",
         ],
         tips: [
@@ -568,7 +583,7 @@ const CATEGORIES: Category[] = [
         summary: "No separate chatbot to learn.",
         steps: [
           "AI runs inside the features you already use, rather than in a chat window of its own.",
-          "It analyses photos, drafts report and document text, turns a walkthrough's narration into a written summary, and pulls text out of a photo.",
+          "It analyses photos, writes your daily log for you when you finish adding photos, drafts report and document text, narrates a recorded walkthrough into an AI Summary, and pulls text out of a photo.",
           "Everything it writes is editable before you send it. If a draft fails, the item is still saved without the AI text and says so.",
         ],
       },
@@ -581,6 +596,20 @@ const CATEGORIES: Category[] = [
           "Click Run AI analysis. The result is saved with the photo.",
         ],
         tips: ["AI photo analysis needs an active paid subscription. Scans are unlimited."],
+      },
+      {
+        id: "ai-daily-log",
+        title: "Your daily log, written for you",
+        summary: "It appears when you finish adding photos.",
+        steps: [
+          "Add photos to a project, from the camera or from your device.",
+          "When the upload finishes, AI writes what was done into today's Daily Log and the card appears under the photo grid.",
+          "Come back later the same day and the next batch is added to the same log rather than starting a new one.",
+          "Open it to read or edit the whole day. Anything you type there is kept: later sessions are appended, never written over.",
+        ],
+        tips: [
+          "The Daily Log is internal only and is not shared with clients. It is deliberately not in the Reports tab, which holds the two things you do hand over: the AI Summary and the Report.",
+        ],
       },
       {
         id: "ai-walkthrough-report",

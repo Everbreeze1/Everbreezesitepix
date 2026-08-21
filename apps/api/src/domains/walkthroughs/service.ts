@@ -5,6 +5,13 @@ import type { AuthedContext } from "../../lib/user-context";
 import { summarizePhotosReportService } from "../ai/service";
 import { assertAutoReportAllowed, releaseAutoReport, reserveAutoReport } from "./auto-report-quota";
 import {
+  buildWalkthroughNarration,
+  parseStoredNarration,
+  saveWalkthroughNarration,
+  type NarrationSource,
+  type WalkthroughNarration,
+} from "./narration";
+import {
   MAX_AUTO_REPORT_PHOTO_SECTIONS,
   consolidateReportSections,
   normalizeDashes,
@@ -2037,6 +2044,31 @@ ${
       })
       .eq("id", data.walkthroughId);
 
+    /*
+     * The narration is part of the same artefact, so it is written in the same
+     * pass rather than waiting for someone to open the page. Deliberately not
+     * inside the try/catch that releases the quota slot: the report is already
+     * saved and the user already has it, so a narration failure must not hand
+     * back a slot for work that was delivered. `buildWalkthroughNarration`
+     * falls back rather than throwing anyway - this await is for ordering, so
+     * the page finds narration waiting the first time it looks.
+     */
+    try {
+      const narrationSource = await loadNarrationSource(supabaseAdmin, {
+        id: data.walkthroughId,
+        project_id: (walk as any).project_id,
+        title: (walk as any).title,
+        transcript: rawTranscript,
+        duration_seconds: durationSeconds,
+      });
+      const narration = await buildWalkthroughNarration(narrationSource);
+      await saveWalkthroughNarration(data.walkthroughId, narration);
+    } catch (narrationErr) {
+      console.warn("[walkthrough] narration pass failed after report save", narrationErr, {
+        walkthroughId: data.walkthroughId,
+      });
+    }
+
     // The reservation taken above IS the meter - nothing more to record. It
     // deliberately counts deterministic-fallback reports too (AI unavailable
     // / key missing): the user still received a generated report, and not
@@ -2056,6 +2088,123 @@ ${
     await releaseAutoReport(reservationId);
     throw err;
   }
+}
+
+export const walkthroughNarrationInputSchema = z.object({
+  walkthroughId: z.string().uuid(),
+  /** Rebuild even when a stored narration already exists. */
+  force: z.boolean().optional(),
+});
+
+/**
+ * Everything the narrator needs about one walkthrough, in one place.
+ *
+ * Read with the admin client for the same reason the rest of this module does:
+ * walkthrough-specific RLS gaps were hiding freshly saved rows, and narration
+ * that silently came back empty would be indistinguishable from a walk nobody
+ * spoke on - the one difference the whole feature turns on.
+ */
+async function loadNarrationSource(supabaseAdmin: any, walk: any): Promise<NarrationSource> {
+  const [{ data: links }, { data: projectRow }] = await Promise.all([
+    supabaseAdmin
+      .from("walkthrough_photos")
+      .select("photo_id, offset_seconds, spoken_note, position")
+      .eq("walkthrough_id", walk.id)
+      .order("position", { ascending: true }),
+    supabaseAdmin.from("projects").select("name").eq("id", walk.project_id).maybeSingle(),
+  ]);
+  const linkRows = ((links as any[]) ?? []).filter((l) => l.photo_id);
+
+  const captionById = new Map<string, string | null>();
+  const takenById = new Map<string, string | null>();
+  if (linkRows.length) {
+    const { data: phRows } = await supabaseAdmin
+      .from("photos")
+      .select("id, caption, taken_at")
+      .in(
+        "id",
+        linkRows.map((l) => l.photo_id),
+      );
+    for (const p of (phRows as any[]) ?? []) {
+      captionById.set(p.id, p.caption ?? null);
+      takenById.set(p.id, p.taken_at ?? null);
+    }
+  }
+
+  return {
+    title: walk.title ?? null,
+    projectName: ((projectRow as any)?.name as string | null) ?? null,
+    transcript: walk.transcript ?? null,
+    durationSeconds: walk.duration_seconds ?? 0,
+    photos: linkRows.map((l) => ({
+      photoId: l.photo_id as string,
+      offsetSeconds: l.offset_seconds ?? 0,
+      spokenNote: l.spoken_note ?? null,
+      caption: captionById.get(l.photo_id) ?? null,
+      takenAt: takenById.get(l.photo_id) ?? null,
+    })),
+  };
+}
+
+/**
+ * The stored narration for a walkthrough, or null.
+ *
+ * Tolerates a database that predates 20261001000000_walkthrough_ai_narration.sql:
+ * PostgREST fails the whole select on an unknown column, so an un-migrated
+ * deployment answers "no narration" rather than taking the walkthrough page
+ * down with it.
+ */
+async function readStoredNarration(
+  supabaseAdmin: any,
+  walkthroughId: string,
+): Promise<WalkthroughNarration | null> {
+  const { data, error } = await supabaseAdmin
+    .from("walkthroughs")
+    .select("narration_json")
+    .eq("id", walkthroughId)
+    .maybeSingle();
+  if (error) {
+    console.warn("[walkthrough] narration column unavailable", { message: error.message });
+    return null;
+  }
+  return parseStoredNarration((data as any)?.narration_json);
+}
+
+/**
+ * Build (or fetch) the AI narration that makes a recorded walkthrough's Summary
+ * the premium artefact: timed chapters for the player, and one narration per
+ * captured photo.
+ *
+ * Cheap to call: with a stored narration and no `force`, it costs a single
+ * select and spends nothing. That matters because the walkthrough page asks for
+ * it on every open.
+ *
+ * Spends no Auto Report quota. The quota meters the *report* a user chooses to
+ * generate; narration is part of what recording a walkthrough produces, and
+ * billing it twice for one recording is not something the user agreed to.
+ */
+export async function generateWalkthroughNarrationService(
+  ctx: AuthedContext,
+  data: z.infer<typeof walkthroughNarrationInputSchema>,
+): Promise<{ narration: WalkthroughNarration | null; stored: boolean }> {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: walk } = await supabaseAdmin
+    .from("walkthroughs" as any)
+    .select("id, project_id, title, transcript, duration_seconds, created_by, source")
+    .eq("id", data.walkthroughId)
+    .maybeSingle();
+  if (!walk) throw new Error("Walkthrough not found");
+  if ((walk as any).created_by !== ctx.userId) throw new Error("Not authorized");
+
+  if (!data.force) {
+    const existing = await readStoredNarration(supabaseAdmin, data.walkthroughId);
+    if (existing) return { narration: existing, stored: true };
+  }
+
+  const source = await loadNarrationSource(supabaseAdmin, walk);
+  const narration = await buildWalkthroughNarration(source);
+  const stored = await saveWalkthroughNarration(data.walkthroughId, narration);
+  return { narration, stored };
 }
 
 const tokenSchema = z.object({
@@ -2112,6 +2261,7 @@ export async function getPublicWalkthroughService(data: { token: string }) {
         taken_at: string | null;
         image_url: string;
       }>,
+      narration: null as WalkthroughNarration | null,
     };
   }
 
@@ -2142,6 +2292,7 @@ export async function getPublicWalkthroughService(data: { token: string }) {
         taken_at: string | null;
         image_url: string;
       }>,
+      narration: null as WalkthroughNarration | null,
     };
   }
 
@@ -2223,11 +2374,18 @@ export async function getPublicWalkthroughService(data: { token: string }) {
     };
   });
 
+  // The share page is the client-facing face of the premium Summary, so it gets
+  // the same narration the owner sees. Read tolerantly: a deployment that has
+  // not run the narration migration serves the older rendering rather than an
+  // error page.
+  const narration = await readStoredNarration(supabaseAdmin, (walk as any).id);
+
   return {
     walkthrough: publicWalk,
     project,
     photoUrls,
     photoSteps,
+    narration,
   };
 }
 

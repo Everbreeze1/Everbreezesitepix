@@ -169,11 +169,20 @@ export function WalkthroughMarkdown({
   markdown,
   photoUrls,
   variant = "recorded",
+  heading,
 }: {
   markdown: string;
   photoUrls: Record<string, string>;
   /** "summary": there was no narration to organize - see WalkthroughPhotoSteps. */
   variant?: "recorded" | "summary";
+  /**
+   * Override the section title.
+   *
+   * The walkthrough page now leads with the narrated player, which is itself
+   * headed "AI Summary". Leaving this block called "Summary" too gave one page
+   * two headings with the same name for two different things.
+   */
+  heading?: string;
 }) {
   const trimmed = (markdown ?? "").trim();
   if (!trimmed) return null;
@@ -182,7 +191,7 @@ export function WalkthroughMarkdown({
     <section className="mt-2">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight">Summary</h2>
+          <h2 className="text-xl font-semibold tracking-tight">{heading ?? "Summary"}</h2>
           <p className="text-xs text-muted-foreground">
             {isSummary
               ? "AI notes drafted from the photos you picked."

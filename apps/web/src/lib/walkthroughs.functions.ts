@@ -14,6 +14,7 @@ import type {
   createReportFromWalkthroughService,
   generateWalkthroughSummaryService,
   regenerateWalkthroughSummaryService,
+  generateWalkthroughNarrationService,
 } from "@sitepix/api";
 
 /**
@@ -136,3 +137,18 @@ export const regenerateWalkthroughSummary = rpcOp<
   { walkthroughId: string },
   Result<typeof regenerateWalkthroughSummaryService>
 >("regenerateWalkthroughSummary", { idempotent: true });
+
+/**
+ * The AI narration behind a recorded walkthrough's Summary: timed chapters the
+ * player highlights as it plays, and one narration per captured photo.
+ *
+ * Returns the stored payload unless `force` is set, so the walkthrough page can
+ * call it on every open without spending a model request. `narration` comes
+ * back null only on a database that has not yet run
+ * 20261001000000_walkthrough_ai_narration.sql, where the page falls back to the
+ * older photo-note rendering.
+ */
+export const generateWalkthroughNarration = rpcOp<
+  { walkthroughId: string; force?: boolean },
+  Result<typeof generateWalkthroughNarrationService>
+>("generateWalkthroughNarration", { idempotent: true });

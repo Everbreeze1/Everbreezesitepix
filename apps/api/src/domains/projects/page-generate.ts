@@ -9,6 +9,7 @@ import {
   photoWidthFor,
 } from "@sitepix/shared";
 import { existingPageTitles, projectDocumentTitle, uniqueDocumentTitle } from "./page-title";
+import { DAILY_LOG_INTERNAL_NOTICE } from "./page-filing";
 
 /**
  * Minimal Markdown → HTML for the constrained subset our AI prompts emit.
@@ -367,6 +368,21 @@ export async function generateProjectPageService(
         ["Location", address],
         ["Date", today],
         ["Prepared by", author],
+        /*
+         * A Daily Log is the technician's own record and is labelled as such
+         * inside the document, not only around it - the body is what gets
+         * exported to PDF and pasted into an email, which is exactly when the
+         * distinction stops being obvious. Same constant the automatic
+         * generator and the two UI surfaces use.
+         *
+         * This branch is the older, hand-generated path; nothing in the product
+         * still points at it, because the capture flow writes daily logs now
+         * (see daily-log.ts). It keeps the label anyway rather than leaving one
+         * unlabelled route into the same document.
+         */
+        ...(data.template === "daily_log"
+          ? ([["Visibility", DAILY_LOG_INTERNAL_NOTICE]] as Array<[string, string]>)
+          : []),
       ]) +
       bodyHtml +
       photoGridHtml(photos);
