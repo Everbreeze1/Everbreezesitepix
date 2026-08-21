@@ -421,9 +421,16 @@ describe("page break", () => {
     expect(pdf).toContain("layout.newPage()");
   });
 
-  it("does not emit a blank sheet for a break on an empty page", () => {
-    // A break at the very top of a document, or two in a row.
-    expect(read(PDF)).toContain("if (layout.y < layout.pageTop) layout.newPage();");
+  it("defers the break until there is something to put on the next page", () => {
+    /*
+     * Taking the break where it is found appends a sheet with nothing on it
+     * whenever the break ends the document - which is exactly where an author
+     * leaves one after splitting a section off. Proven end to end against the
+     * real renderer in tests/page-break-pdf.test.ts.
+     */
+    const pdf = read(PDF);
+    expect(pdf).toContain("layout.pendingBreak = true;");
+    expect(pdf).toMatch(/ensureSpace[\s\S]{0,400}pendingBreak/);
   });
 
   it("is visible while editing", () => {

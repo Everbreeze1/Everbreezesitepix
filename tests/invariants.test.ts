@@ -1509,12 +1509,26 @@ describe("family: summary copy and layout must not inherit recording assumptions
   });
 
   it("the delete prompt tells a summary's owner their photos are safe", () => {
-    // A summary links the user's real gallery photos; "cannot be undone" alone
-    // reads as though deleting it destroys them too.
+    /*
+     * A summary links the user's real gallery photos; "cannot be undone" alone
+     * reads as though deleting it destroys them too.
+     *
+     * The summary became its own object in 20261003000000, so this now applies
+     * to its own page. The principle did not move - only the file did.
+     */
+    const src = stripComments(
+      read("apps/web/src/features/walkthroughs/pages/SummaryDetailPage.tsx"),
+    );
+    expect(src).toMatch(/photos and the recording are not affected/);
+  });
+
+  it("deleting a recording says the summary survives it", () => {
+    // The other half of the same split: the write-up outlives the footage, and
+    // somebody freeing storage needs to know that before they confirm.
     const src = stripComments(
       read("apps/web/src/features/walkthroughs/pages/WalkthroughDetailPage.tsx"),
     );
-    expect(src).toMatch(/isSummary[\s\S]{0,120}photos are not affected/);
+    expect(src).toMatch(/summary and your photos are not affected/);
   });
 
   it("pricing does not sell 'Walkthroughs' as Pro-only", () => {
