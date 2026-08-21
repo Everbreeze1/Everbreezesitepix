@@ -4,8 +4,17 @@ import { defineConfig } from "vitest/config";
 const path = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
 
 export default defineConfig({
+  /*
+   * The automatic JSX runtime, so a test can render a component.
+   *
+   * esbuild defaults to the classic `React.createElement` transform, which
+   * needs React in scope in every file - the app never imports it, because Vite
+   * configures this for the app build. Without it here, a .test.tsx compiles and
+   * then throws "React is not defined" at render.
+   */
+  esbuild: { jsx: "automatic" },
   test: {
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
     environment: "node",
   },
   /*

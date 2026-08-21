@@ -13,6 +13,7 @@ import {
 import {
   classifyPage,
   parseFilesUnder,
+  DAILY_LOG_INTERNAL_NOTICE,
   type FilingBucket,
   type TemplateFilingBucket,
 } from "./page-filing";
@@ -624,7 +625,22 @@ function blankTemplateHtml(kind: string | undefined, projectName: string, addres
     day: "numeric",
   });
   if (kind === "daily_log") {
-    return `<p><strong>Project Name:</strong> ${projectName}</p><p><strong>Project Address:</strong> ${address}</p><p><strong>Date:</strong> ${today}</p><h2>Overview</h2><p></p>`;
+    /*
+     * The internal-only line leads, the same as it does on a log the capture
+     * flow writes (daily-log.ts) and on one the older generator writes
+     * (page-generate.ts).
+     *
+     * Nothing in the product reaches this branch any more - daily logs are not
+     * created by hand. It keeps the label anyway rather than leaving one route
+     * that can still produce an unlabelled copy of a document whose whole point
+     * is that a client never sees it.
+     */
+    return (
+      `<div data-panel="meta"><p><span class="panel-label">Daily Log</span>${escapeHtmlText(
+        DAILY_LOG_INTERNAL_NOTICE,
+      )}</p></div>` +
+      `<p><strong>Project Name:</strong> ${projectName}</p><p><strong>Project Address:</strong> ${address}</p><p><strong>Date:</strong> ${today}</p><h2>Overview</h2><p></p>`
+    );
   }
   if (kind === "summary") {
     return `<h1>${projectName} - Summary</h1><p><strong>Date:</strong> ${today}</p><p></p>`;

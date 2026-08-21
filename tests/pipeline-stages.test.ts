@@ -660,7 +660,12 @@ describe("one status, not two", () => {
       // makes one legend cover every pipeline a team invents.
       expect(MAP_PAGE).toContain("pipeline_stage_id");
       expect(MAP_PAGE).toContain("stage ? stage.name :");
-      expect(MAP_PAGE).toContain("Pipeline stages roll up into these three.");
+      // Not the full sentence: 44a8392 added the archived status and reworded
+      // the tail from "these three" (which had stopped being true) to the
+      // named buckets. The claim this test is making is that the legend
+      // explains the roll-up at all, so it pins that clause and lets the
+      // enumeration change the next time a status is added.
+      expect(MAP_PAGE).toContain("Pipeline stages roll up into");
     });
 
     it("keeps the edit form from writing a status the stage disagrees with", () => {

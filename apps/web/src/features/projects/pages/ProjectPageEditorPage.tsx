@@ -170,15 +170,30 @@ export function ProjectPageEditorPage() {
   /** The document template this page was created from, if it was created from one. */
   const [sourceTemplateId, setSourceTemplateId] = useState<string | null>(null);
   /**
-   * True when this page is an auto-generated Daily Log.
+   * The raw `source_template` this page was generated under, if any.
    *
-   * Read from the raw `source_template`, not from `sourceTemplateId`: that one
-   * decodes only `document_template:<uuid>` and answers null for every AI kind,
-   * which is exactly the case being detected here. Not inferred from the title
-   * either - the title is editable, and a log renamed by its author must not
-   * quietly lose the label that says who it is for.
+   * Deliberately not `sourceTemplateId`: that one decodes only
+   * `document_template:<uuid>` and answers null for every AI kind, which is
+   * exactly what has to be recognised here. Not inferred from the title either -
+   * the title is editable from the moment the page opens, and a log renamed by
+   * its author must not quietly lose the banner saying who it is for.
    */
-  const [isDailyLog, setIsDailyLog] = useState(false);
+  const [aiKind, setAiKind] = useState<string | null>(null);
+  const isDailyLog = aiKind === "daily_log";
+  /**
+   * The tab to go back to.
+   *
+   * Every page used to send you to Documents, which was true of none of the
+   * generated ones: a Report opened from the Reports tab put you in the file
+   * manager when you pressed back, and a Daily Log now lives in neither tab at
+   * all. Back should land where the thing you were just reading is listed.
+   */
+  const backPanel: "documents" | "reports" | undefined = isDailyLog
+    ? // The Capture flow, on the Photos tab, where the log is surfaced.
+      undefined
+    : aiKind === "report" || aiKind === "summary"
+      ? "reports"
+      : "documents";
   /**
    * The document library, read once the ··· menu is first opened.
    *
@@ -395,9 +410,7 @@ export function ProjectPageEditorPage() {
         setRevoked(!!res.page.revoked_at);
         setUpdatedAt(res.page.updated_at);
         setSourceTemplateId(res.page.sourceTemplateId ?? null);
-        setIsDailyLog(
-          (res.page as { source_template?: string | null }).source_template === "daily_log",
-        );
+        setAiKind((res.page as { source_template?: string | null }).source_template ?? null);
         versionRef.current = res.page.updated_at;
         editor?.commands.setContent(res.page.content_html || "", { emitUpdate: false });
         // `emitUpdate: false` keeps loading from counting as an edit, but it
@@ -1011,14 +1024,8 @@ export function ProjectPageEditorPage() {
                 navigate({
                   to: "/projects/$projectId",
                   params: { projectId },
-                  /*
-                   * Back to the list this page is actually in. A daily log is in
-                   * neither Documents nor Reports - it is read from the Photos
-                   * tab, beside the capture session that wrote it - so sending
-                   * one back to Documents landed the user in a file manager
-                   * that, correctly, does not contain it.
-                   */
-                  search: { panel: isDailyLog ? undefined : "documents" },
+                  // Back to the list this page is actually in - see backPanel.
+                  search: { panel: backPanel },
                 })
               }
             >

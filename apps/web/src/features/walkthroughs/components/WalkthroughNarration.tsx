@@ -68,6 +68,16 @@ export interface WalkthroughNarration {
   headline: string;
   chapters: NarrationChapter[];
   photos: NarrationPhoto[];
+  /**
+   * False when the model was unavailable and this came from the deterministic
+   * builder instead.
+   *
+   * Both produce the same shape, which is the point - the feature still works
+   * when Gemini is rate-limited. But the shapes are not the same claim, and
+   * this is what the UI checks before badging anything "AI narrated". Selling
+   * a premium AI artefact and then stamping the badge on a timestamp-and-caption
+   * stub is the one failure a user would be right to call dishonest.
+   */
   aiGenerated: boolean;
 }
 
@@ -75,6 +85,36 @@ const fmtOffset = (seconds: number) =>
   `${Math.floor(Math.max(0, seconds) / 60)}:${Math.floor(Math.max(0, seconds) % 60)
     .toString()
     .padStart(2, "0")}`;
+
+/**
+ * How far the recording's own audio drops while the narrator is speaking.
+ *
+ * Ducked rather than muted: the site noise underneath is part of what the
+ * technician recorded, and cutting it entirely makes the video look frozen.
+ */
+const DUCKED_VOLUME = 0.15;
+
+/**
+ * Which chapter is playing at `seconds`, or -1 when there are none.
+ *
+ * Walked backwards: the active chapter is the LAST one that has already
+ * started. Forwards you have to test both edges of every chapter, and the
+ * moment two of them disagree about a boundary - which is exactly what a model
+ * reply can produce - the highlight lands on nothing.
+ *
+ * Past the end of the last chapter it stays on the last chapter rather than
+ * going blank: a video can play a fraction of a second beyond the duration the
+ * database recorded, and the rail should not flicker empty as it finishes.
+ */
+export function activeChapterAt(chapters: NarrationChapter[], seconds: number): number {
+  if (!chapters.length) return -1;
+  for (let i = chapters.length - 1; i >= 0; i--) {
+    if (seconds >= chapters[i].start) return i;
+  }
+  // Before the first chapter starts, which only happens if something upstream
+  // failed to pull it back to zero. Show the opening one rather than nothing.
+  return 0;
+}
 
 /** Does this browser have a speech engine we can narrate through? */
 function speechAvailable(): boolean {
@@ -141,15 +181,30 @@ export function WalkthroughNarratedPlayer({
   const [canNarrate] = useState(speechAvailable);
   /** The chapter last spoken, so a chapter is never read out twice running. */
   const spokenChapterRef = useRef<number>(-1);
+  /**
+   * The recording's volume before the narrator ducked it, or null when it is
+   * not currently ducked.
+   *
+   * A ref rather than a captured local. Reading `el.volume` at the moment each
+   * utterance starts looks equivalent and is not: chapters can begin while the
+   * previous one is still being spoken, so the second reads the ALREADY ducked
+   * 0.15 as the value to restore, and its `onend` pins the video at a whisper
+   * for the rest of the session. Whoever ducks first owns the restore.
+   */
+  const preDuckVolumeRef = useRef<number | null>(null);
 
+  /*
+   * Did a model actually write this, or is it the deterministic fallback?
+   *
+   * Defaults to true for a payload stored before the flag was trustworthy;
+   * only an explicit `false` drops the AI claim.
+   */
+  const aiWritten = narration.aiGenerated !== false;
   const chapters = narration.chapters ?? [];
-  const activeChapter = useMemo(() => {
-    if (!chapters.length) return -1;
-    for (let i = chapters.length - 1; i >= 0; i--) {
-      if (currentTime >= chapters[i].start) return i;
-    }
-    return 0;
-  }, [chapters, currentTime]);
+  const activeChapter = useMemo(
+    () => activeChapterAt(chapters, currentTime),
+    [chapters, currentTime],
+  );
 
   const seek = useCallback((seconds: number) => {
     const el = videoRef.current;
@@ -192,30 +247,47 @@ export function WalkthroughNarratedPlayer({
     if (!chapter?.narration) return;
     spokenChapterRef.current = activeChapter;
 
+    /*
+     * Drop whatever is still being said before starting this chapter.
+     *
+     * `speak()` queues rather than interrupts, so without this the narration
+     * falls further behind the footage at every chapter boundary until it is
+     * describing a part of the walk that finished a minute ago. The line on
+     * screen is already the current chapter; the voice has to agree with it.
+     */
+    window.speechSynthesis.cancel();
+
     const utterance = new SpeechSynthesisUtterance(chapter.narration);
     utterance.rate = 1;
     utterance.pitch = 1;
     const el = videoRef.current;
-    const restore = el?.volume ?? 1;
-    if (el) el.volume = 0.15;
+    if (el && preDuckVolumeRef.current === null) preDuckVolumeRef.current = el.volume;
+    if (el) el.volume = DUCKED_VOLUME;
     utterance.onend = () => {
-      if (videoRef.current) videoRef.current.volume = restore;
+      const video = videoRef.current;
+      if (video && preDuckVolumeRef.current !== null) video.volume = preDuckVolumeRef.current;
+      preDuckVolumeRef.current = null;
     };
     utterance.onerror = utterance.onend;
     window.speechSynthesis.speak(utterance);
   }, [activeChapter, chapters, narrating, canNarrate]);
 
-  // Never leave a voice talking over a page the user has left.
+  // Never leave a voice talking over a page the user has left. `speechSynthesis`
+  // is a singleton on the window and outlives this component.
   useEffect(() => {
     return () => {
       if (speechAvailable()) window.speechSynthesis.cancel();
     };
   }, []);
 
+  // Narration switched off: stop the voice and give the recording its own
+  // audio back, at whatever level the listener had it.
   useEffect(() => {
     if (narrating) return;
     if (speechAvailable()) window.speechSynthesis.cancel();
-    if (videoRef.current) videoRef.current.volume = 1;
+    const el = videoRef.current;
+    if (el && preDuckVolumeRef.current !== null) el.volume = preDuckVolumeRef.current;
+    preDuckVolumeRef.current = null;
     spokenChapterRef.current = -1;
   }, [narrating]);
 
@@ -246,8 +318,8 @@ export function WalkthroughNarratedPlayer({
           </span>
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-sm font-bold">
-              AI Summary
-              <AiNarratedChip />
+              {aiWritten ? "AI Summary" : "Summary"}
+              {aiWritten && <AiNarratedChip />}
             </p>
             {narration.headline && (
               <p className="truncate text-[11.5px] text-muted-foreground">{narration.headline}</p>
@@ -460,6 +532,8 @@ export function AiNarratedPhotoSteps({
     () => new Map((narration.photos ?? []).map((p) => [p.photoId, p])),
     [narration.photos],
   );
+  /** See WalkthroughNarration.aiGenerated - the badge is a claim, not decoration. */
+  const aiWritten = narration.aiGenerated !== false;
   if (!steps.length) return null;
 
   const spokenCount = steps.filter((s) => byId.get(s.photo_id)?.spoken).length;
@@ -470,12 +544,14 @@ export function AiNarratedPhotoSteps({
         <div className="min-w-0">
           <h2 className="flex flex-wrap items-center gap-2 text-xl font-semibold tracking-tight">
             Photos in this walkthrough
-            <AiNarratedChip />
+            {aiWritten && <AiNarratedChip />}
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {narration.hasSpeech
-              ? "What was done in each shot, with what was said on camera near that moment."
-              : "Nobody spoke during this recording, so each photo is described from what was captured with it."}
+            {!aiWritten
+              ? "Written from the timestamps and what was recorded with each photo. Regenerate the summary to have AI narrate them."
+              : narration.hasSpeech
+                ? "What was done in each shot, with what was said on camera near that moment."
+                : "Nobody spoke during this recording, so each photo is described from what was captured with it."}
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-muted-foreground">
@@ -534,9 +610,14 @@ export function AiNarratedPhotoSteps({
 
               <div className="flex flex-1 flex-col gap-2.5 p-3.5">
                 <div>
-                  <p className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-primary">
-                    <Sparkles className="h-3 w-3" strokeWidth={2.25} />
-                    AI narration
+                  <p
+                    className={cn(
+                      "flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide",
+                      aiWritten ? "text-primary" : "text-muted-foreground",
+                    )}
+                  >
+                    {aiWritten && <Sparkles className="h-3 w-3" strokeWidth={2.25} />}
+                    {aiWritten ? "AI narration" : "From this shot"}
                   </p>
                   <p className="mt-1 text-sm leading-relaxed text-foreground">
                     {narrationText || (

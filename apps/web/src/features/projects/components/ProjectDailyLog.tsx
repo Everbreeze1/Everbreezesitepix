@@ -20,20 +20,25 @@ export const DAILY_LOG_INTERNAL_NOTICE = "Internal only - not shared with client
 /** Bullets shown before the card starts hiding them behind "Open". */
 const PREVIEW_ENTRIES = 5;
 
-/**
- * "Today" for the log the technician is currently adding to, a date for any
- * other. Compared as a local `YYYY-MM-DD` string, the same key the server cut
- * the log on, so a job worked either side of midnight UTC still agrees with the
- * clock on the phone.
- */
-function dayLabel(day: string): string {
-  const now = new Date();
+/** This browser's calendar day for an instant, as `YYYY-MM-DD`. */
+function localDay(value: Date): string {
   const pad = (n: number) => n.toString().padStart(2, "0");
-  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  if (day === today) return "Today";
-  const parsed = new Date(`${day}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return day;
-  return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
+/**
+ * "Today" for the log being added to right now, a date for any other.
+ *
+ * Resolved from the log's own instant in THIS browser's zone rather than from a
+ * day string the server computed. The server runs in UTC and cannot know whose
+ * midnight matters: it would call a 6:30pm California log "tomorrow", and the
+ * card would then print a date for a log written an hour ago.
+ */
+function dayLabel(createdAt: string): string {
+  const created = new Date(createdAt);
+  if (Number.isNaN(created.getTime())) return "";
+  if (localDay(created) === localDay(new Date())) return "Today";
+  return created.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function InternalOnlyBadge({ className }: { className?: string }) {
@@ -123,7 +128,7 @@ export function ProjectDailyLog({
           <>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                {dayLabel(latest.day)} · {relativeTime(latest.updatedAt)}
+                {dayLabel(latest.createdAt)} · {relativeTime(latest.updatedAt)}
               </p>
               <p className="text-[11px] text-muted-foreground">
                 {latest.photoCount} {latest.photoCount === 1 ? "photo" : "photos"}

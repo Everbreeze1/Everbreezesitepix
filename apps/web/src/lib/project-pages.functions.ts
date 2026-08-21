@@ -157,15 +157,21 @@ export const generateProjectPage = rpcOp<
 export interface DailyLogSummary {
   pageId: string;
   title: string;
-  /** Local calendar day the log covers, `YYYY-MM-DD`. */
-  day: string;
+  /**
+   * When the log was started, as an absolute instant.
+   *
+   * There is no `day` field, and that is the point: "which calendar day is
+   * this" has no server-side answer. The API runs in UTC, so a log started at
+   * 6:30pm in California belongs to a day the server has already left. The
+   * browser resolves this instant against its own clock instead.
+   */
   createdAt: string;
   updatedAt: string;
   entries: string[];
   photoCount: number;
 }
 
-export interface AutoDailyLogResult extends Omit<DailyLogSummary, "day" | "createdAt"> {
+export interface AutoDailyLogResult extends Omit<DailyLogSummary, "createdAt"> {
   /** True when this call started today's log rather than appending to it. */
   created: boolean;
   aiFailed: string | null;
@@ -175,10 +181,19 @@ export interface AutoDailyLogResult extends Omit<DailyLogSummary, "day" | "creat
  * Append a finished capture session to today's Daily Log, creating it on the
  * day's first session.
  *
+ * `tzOffsetMinutes` decides what "today" means and is not optional in practice:
+ * without it the server groups on its own UTC day, which merges an evening job
+ * and the next morning's into one log for anyone west of Greenwich.
+ *
  * Idempotent so a retried upload cannot log the same session twice.
  */
 export const autoDailyLog = rpcOp<
-  { projectId: string; photoIds: string[]; source?: "camera" | "upload" },
+  {
+    projectId: string;
+    photoIds: string[];
+    source?: "camera" | "upload";
+    tzOffsetMinutes?: number;
+  },
   AutoDailyLogResult
 >("autoDailyLog", { idempotent: true });
 

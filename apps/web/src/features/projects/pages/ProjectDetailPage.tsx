@@ -496,7 +496,7 @@ export function ProjectDetailPage() {
    * They also both now exclude recorded walkthroughs, which is the fix for the
    * raw video entry that was showing up in the tab's "Summaries" filter.
    */
-  const reportSummaryCount = walkthroughs.filter((w) => isReportSummary(w as never)).length;
+  const reportSummaryCount = walkthroughs.filter((w) => isReportSummary(w)).length;
 
   function setPanel(next: PanelKey | null | ((cur: PanelKey | null) => PanelKey | null)) {
     const resolved = typeof next === "function" ? next(panel) : next;
@@ -1249,7 +1249,15 @@ export function ProjectDetailPage() {
     if (!photoIds.length) return;
     setDailyLogBusy(true);
     try {
-      await autoDailyLog({ data: { projectId, photoIds, source } });
+      await autoDailyLog({
+        data: {
+          projectId,
+          photoIds,
+          source,
+          // What "today" means is the technician's question, not the server's.
+          tzOffsetMinutes: new Date().getTimezoneOffset(),
+        },
+      });
       setDailyLogs(await listProjectDailyLogs({ data: { projectId } }));
     } catch (e: any) {
       console.warn("[daily-log] auto generation failed", e, { projectId });
@@ -3230,6 +3238,12 @@ export function ProjectDetailPage() {
                           for, so the card says whether one is waiting. Without
                           this every recorded card read identically whether it
                           had been narrated or was still a bare clip.
+
+                          Three states, not two. Branching on the presence of
+                          `summary_markdown` alone left a failed walkthrough
+                          spinning "Summary being written" for ever, which is
+                          the one case where the user needs to know to go and
+                          press the button again.
                         */}
                         {!isSummary && (
                           <p className="mt-2">
@@ -3237,6 +3251,11 @@ export function ProjectDetailPage() {
                               <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-primary">
                                 <Sparkles className="h-3 w-3" strokeWidth={2.25} />
                                 AI Summary ready
+                              </span>
+                            ) : w.status === "failed" ? (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-destructive">
+                                <AlertTriangle className="h-3 w-3" strokeWidth={2.25} />
+                                Summary failed
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -3265,7 +3284,7 @@ export function ProjectDetailPage() {
           <SelectPhotosForPageDialog
             open={summaryPickerOpen}
             projectId={projectId}
-            templateLabel="Summary"
+            templateLabel="AI Summary"
             outputNoun="summary"
             generating={generatingSummary}
             onCancel={() => setSummaryPickerOpen(false)}
