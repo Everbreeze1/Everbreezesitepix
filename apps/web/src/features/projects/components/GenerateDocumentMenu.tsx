@@ -1,6 +1,14 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { FileText, ClipboardList, Sparkles, Layers, Footprints, Lock } from "lucide-react";
+import {
+  FileText,
+  ClipboardList,
+  FileBarChart,
+  Loader2,
+  Layers,
+  Footprints,
+  Lock,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
@@ -11,8 +19,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { createProjectPage, generateProjectPage } from "@/lib/project-pages.functions";
-import { generateWalkthroughSummary } from "@/lib/walkthroughs.functions";
+import {
+  createProjectPage,
+  generateComprehensiveReport,
+  generateProjectPage,
+} from "@/lib/project-pages.functions";
+import { generateSummaryFromPhotos } from "@/lib/summaries.functions";
 import { SelectPhotosForPageDialog } from "@/features/projects/components/SelectPhotosForPageDialog";
 import { ChoosePageTemplateDialog } from "@/features/projects/components/ChoosePageTemplateDialog";
 import { UseTemplateDialog } from "@/features/projects/components/UseTemplateDialog";
@@ -99,6 +111,7 @@ export function GenerateDocumentMenu({
   const [useTemplateId, setUseTemplateId] = useState<string | null>(null);
   const [summaryPickerOpen, setSummaryPickerOpen] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [generatingFull, setGeneratingFull] = useState(false);
 
   /* Which halves of the menu render. Both are true for "all". */
   const showReportKinds = scope === "all" || scope === "reports";
@@ -154,19 +167,40 @@ export function GenerateDocumentMenu({
   async function handleGenerateSummary(photoIds: string[]) {
     setGeneratingSummary(true);
     try {
-      const res = await generateWalkthroughSummary({ data: { projectId, photoIds } });
+      const res = await generateSummaryFromPhotos({ data: { projectId, photoIds } });
       if (res.aiFailed) toast.warning("Saved without AI text", { description: res.aiFailed });
       else toast.success("Summary saved under Walkthroughs");
       setSummaryPickerOpen(false);
       onCreated?.();
-      navigate({
-        to: "/walkthroughs/$walkthroughId",
-        params: { walkthroughId: res.walkthroughId },
-      });
+      // Its own route now: a summary is not a walkthrough, and no longer opens
+      // at one's URL under a tab titled "Walkthrough".
+      navigate({ to: "/summaries/$summaryId", params: { summaryId: res.summary.id } });
     } catch (e: any) {
       toast.error(e?.message ?? "Could not generate summary");
     } finally {
       setGeneratingSummary(false);
+    }
+  }
+
+  /**
+   * The whole-job Report.
+   *
+   * No photo picker, deliberately. The other report asks which photos to draft
+   * from; this one covers the job, so asking would only be a chance to leave
+   * something out. It reads every photo, its labels and its metadata, plus the
+   * client fields on the project.
+   */
+  async function handleFullReport() {
+    setGeneratingFull(true);
+    try {
+      const res = await generateComprehensiveReport({ data: { projectId } });
+      if (res.aiFailed) toast.warning("Created without AI text", { description: res.aiFailed });
+      else toast.success(`Report generated from ${res.photoCount} photos`);
+      openPage(res.page.id);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not generate report");
+    } finally {
+      setGeneratingFull(false);
     }
   }
 
@@ -188,7 +222,7 @@ export function GenerateDocumentMenu({
           {showReportKinds && (
             <>
               <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                Saved under Walkthroughs, and listed in Reports
+                Saved under Walkthroughs
               </DropdownMenuLabel>
               <DropdownMenuItem onClick={() => setSummaryPickerOpen(true)}>
                 <Footprints className="mr-2 h-4 w-4 text-primary" />
@@ -204,6 +238,30 @@ export function GenerateDocumentMenu({
               <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
                 Saved under Reports
               </DropdownMenuLabel>
+              {/*
+                Two reports, and the difference is what they read rather than
+                how they look: this one reads the whole job, the one below reads
+                the photos you pick.
+              */}
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.preventDefault();
+                  void handleFullReport();
+                }}
+                disabled={generatingFull}
+              >
+                {generatingFull ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" />
+                ) : (
+                  <FileBarChart className="mr-2 h-4 w-4 text-primary" />
+                )}
+                <span>
+                  <span className="block font-bold">Full Project Report</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Every photo on the job, organised by label, with your client details
+                  </span>
+                </span>
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
                   setPhotosPerPage(clampPhotosPerPage(profile?.report_photos_per_page));
@@ -212,7 +270,7 @@ export function GenerateDocumentMenu({
               >
                 <ClipboardList className="mr-2 h-4 w-4 text-primary" />
                 <span>
-                  <span className="block font-bold">Report</span>
+                  <span className="block font-bold">Report from selected photos</span>
                   <span className="block text-xs text-muted-foreground">
                     Client-ready: title page, summary, photo sections, conclusion
                   </span>

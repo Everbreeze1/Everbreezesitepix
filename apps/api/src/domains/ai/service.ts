@@ -522,7 +522,7 @@ async function buildPhotoContext(
  * conclusions, and the walkthrough summaries composed on top of them. See
  * `normalizeDashes` for why model prose needs it when tracked source does not.
  */
-async function chatComplete(system: string, user: string): Promise<string> {
+export async function chatComplete(system: string, user: string): Promise<string> {
   const ep = chatEndpoint(CHAT_MODEL);
   const res = await fetch(ep.url, {
     method: "POST",

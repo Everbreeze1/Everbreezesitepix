@@ -51,6 +51,7 @@ import {
   WalkthroughPhotoSteps,
   type WalkthroughPhotoStep,
 } from "@/components/WalkthroughReport";
+import { listProjectSummaries, type ProjectSummaryListItem } from "@/lib/summaries.functions";
 import { VideoPlayerDialog } from "@/features/photos/components/VideoPlayerDialog";
 import { VideoThumbnail } from "@/features/photos/components/VideoThumbnail";
 import {
@@ -110,6 +111,15 @@ export function WalkthroughDetailPage() {
   const [narrationLoading, setNarrationLoading] = useState(false);
   /** Set by the player so the photo list below can seek it. */
   const playerRef = useRef<{ seek: (seconds: number) => void } | null>(null);
+  /**
+   * The summaries written from this recording.
+   *
+   * "The videos and the WT will be related but separated so the video can be
+   * shared and the summery can be generated and shared." Related: this page
+   * links to them. Separated: it links, it does not embed - each has its own
+   * page and its own share link.
+   */
+  const [ownSummaries, setOwnSummaries] = useState<ProjectSummaryListItem[]>([]);
 
   const regenerate = generateWalkthroughReport;
   const setShare = setWalkthroughShare;
@@ -297,6 +307,30 @@ export function WalkthroughDetailPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walk?.id, walk?.status, walk?.source]);
+
+  /*
+   * The summaries written from this recording.
+   *
+   * Keyed on the project rather than fetched per walkthrough: the project list
+   * is already one call and the page needs the project's name anyway, so
+   * filtering here costs nothing over a second endpoint.
+   */
+  useEffect(() => {
+    if (!walk?.project_id) return;
+    let cancelled = false;
+    void listProjectSummaries({ data: { projectId: walk.project_id } })
+      .then((all) => {
+        if (cancelled) return;
+        setOwnSummaries(
+          (all as ProjectSummaryListItem[]).filter((s) => s.walkthroughId === walk.id),
+        );
+      })
+      .catch((e) => console.warn("[walkthrough] summary list failed", e));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walk?.id, walk?.project_id, walk?.status]);
 
   // While the background pipeline is still working (transcription → report),
   // poll the row so the page flips to the finished report automatically
@@ -635,6 +669,40 @@ export function WalkthroughDetailPage() {
           </div>
         </div>
       </Card>
+
+      {/*
+        The Summary written from this walk: linked, not embedded.
+
+        Two artefacts, related and separate. The video has its own share link
+        and this page; the summary has its own share link and its own page, so
+        a client can be sent the write-up without the footage.
+      */}
+      {ownSummaries.length > 0 && (
+        <Card className="mt-4 p-4">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+            {ownSummaries.length === 1
+              ? "Summary from this walkthrough"
+              : "Summaries from this walkthrough"}
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {ownSummaries.map((s) => (
+              <li key={s.id}>
+                <Link
+                  to="/summaries/$summaryId"
+                  params={{ summaryId: s.id }}
+                  className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted/50"
+                >
+                  <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1 truncate text-sm font-bold">{s.title}</span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {s.photoCount} {s.photoCount === 1 ? "photo" : "photos"}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/*
         The flagship: the recording playing with its AI narration on the same

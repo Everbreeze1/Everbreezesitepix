@@ -246,6 +246,28 @@ import {
   generateProjectPageService,
 } from "../projects/page-generate";
 import {
+  deleteSummaryInputSchema,
+  deleteWalkthroughSummaryService,
+  generateSummaryForWalkthroughInputSchema,
+  generateSummaryForWalkthroughService,
+  generateSummaryFromPhotosInputSchema,
+  generateSummaryFromPhotosService,
+  getPublicSummaryService,
+  getSummaryInputSchema,
+  getWalkthroughSummaryService,
+  listProjectSummariesInputSchema,
+  listProjectSummariesService,
+  publicSummaryInputSchema,
+  setSummaryShareInputSchema,
+  setSummaryShareService,
+  updateSummaryInputSchema,
+  updateWalkthroughSummaryService,
+} from "../walkthroughs/summaries";
+import {
+  comprehensiveReportInputSchema,
+  generateComprehensiveReportService,
+} from "../projects/comprehensive-report";
+import {
   autoDailyLogInputSchema,
   autoDailyLogService,
   listProjectDailyLogsInputSchema,
@@ -927,6 +949,50 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     generateWalkthroughReportService as (ctx: ServiceContext, data: never) => Promise<unknown>,
     { idempotent: true },
   ),
+  /*
+   * Walkthrough Summaries: their own object type, their own ops.
+   *
+   * A summary used to be a `walkthroughs` row with a discriminator, so every
+   * one of these had to be spelled as a walkthrough operation on something that
+   * had never been walked. See domains/walkthroughs/summaries.ts.
+   */
+  listProjectSummaries: authed(
+    (d) => listProjectSummariesInputSchema.parse(d),
+    listProjectSummariesService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  getWalkthroughSummary: authed(
+    (d) => getSummaryInputSchema.parse(d),
+    getWalkthroughSummaryService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  // Idempotent, like every other LLM-spending op, so a retry cannot bill twice.
+  generateSummaryFromPhotos: authed(
+    (d) => generateSummaryFromPhotosInputSchema.parse(d),
+    generateSummaryFromPhotosService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  // The Fast Summary Report. Returns the existing one unless `force`, so the
+  // automatic publish after a recording cannot produce a second copy.
+  generateSummaryForWalkthrough: authed(
+    (d) => generateSummaryForWalkthroughInputSchema.parse(d),
+    generateSummaryForWalkthroughService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  updateWalkthroughSummary: authed(
+    (d) => updateSummaryInputSchema.parse(d),
+    updateWalkthroughSummaryService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  setSummaryShare: authed(
+    (d) => setSummaryShareInputSchema.parse(d),
+    setSummaryShareService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  deleteWalkthroughSummary: authed(
+    (d) => deleteSummaryInputSchema.parse(d),
+    deleteWalkthroughSummaryService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  getPublicSummary: pub(
+    (d) => publicSummaryInputSchema.parse(d),
+    getPublicSummaryService as (data: never) => Promise<unknown>,
+  ),
   // The AI narration behind a recorded walkthrough's Summary: timed chapters
   // for the player and one narration per captured photo. Idempotent because it
   // returns the stored payload unless `force` is set, so a retry re-reads
@@ -1195,6 +1261,16 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   listProjectDailyLogs: authed(
     (d) => listProjectDailyLogsInputSchema.parse(d),
     listProjectDailyLogsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  /*
+   * The whole-job Report: reads every photo on the project, its labels and its
+   * metadata, and the client fields off the project itself. Not tied to a
+   * walkthrough and not given a photo selection - it reads the job.
+   */
+  generateComprehensiveReport: authed(
+    (d) => comprehensiveReportInputSchema.parse(d),
+    generateComprehensiveReportService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
   ),
   generateProjectPage: authed(
     (d) => generateProjectPageInputSchema.parse(d),

@@ -45,6 +45,7 @@ import { Route as AppProjectsIndexRouteImport } from './routes/_app.projects.ind
 import { Route as AppAdminIndexRouteImport } from './routes/_app.admin.index'
 import { Route as ShareWorkflowsTokenRouteImport } from './routes/share.workflows.$token'
 import { Route as ShareWalkthroughsTokenRouteImport } from './routes/share.walkthroughs.$token'
+import { Route as ShareSummariesTokenRouteImport } from './routes/share.summaries.$token'
 import { Route as ShareShowcasesTokenRouteImport } from './routes/share.showcases.$token'
 import { Route as ShareReportsTokenRouteImport } from './routes/share.reports.$token'
 import { Route as ShareProjectsTokenRouteImport } from './routes/share.projects.$token'
@@ -55,6 +56,7 @@ import { Route as PSlugShowcaseSlugRouteImport } from './routes/p.$slug_.$showca
 import { Route as EmbedMapKeyRouteImport } from './routes/embed.map.$key'
 import { Route as EmbedGalleryKeyRouteImport } from './routes/embed.gallery.$key'
 import { Route as AppWalkthroughsWalkthroughIdRouteImport } from './routes/_app.walkthroughs.$walkthroughId'
+import { Route as AppSummariesSummaryIdRouteImport } from './routes/_app.summaries.$summaryId'
 import { Route as AppShowcasesShowcaseIdRouteImport } from './routes/_app.showcases_.$showcaseId'
 import { Route as AppSettingsWorkflowsRouteImport } from './routes/_app.settings.workflows'
 import { Route as AppSettingsChecklistsRouteImport } from './routes/_app.settings.checklists'
@@ -252,6 +254,11 @@ const ShareWalkthroughsTokenRoute = ShareWalkthroughsTokenRouteImport.update({
   path: '/share/walkthroughs/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShareSummariesTokenRoute = ShareSummariesTokenRouteImport.update({
+  id: '/share/summaries/$token',
+  path: '/share/summaries/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ShareShowcasesTokenRoute = ShareShowcasesTokenRouteImport.update({
   id: '/share/showcases/$token',
   path: '/share/showcases/$token',
@@ -303,6 +310,11 @@ const AppWalkthroughsWalkthroughIdRoute =
     path: '/walkthroughs/$walkthroughId',
     getParentRoute: () => AppRoute,
   } as any)
+const AppSummariesSummaryIdRoute = AppSummariesSummaryIdRouteImport.update({
+  id: '/summaries/$summaryId',
+  path: '/summaries/$summaryId',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppShowcasesShowcaseIdRoute = AppShowcasesShowcaseIdRouteImport.update({
   id: '/showcases_/$showcaseId',
   path: '/showcases/$showcaseId',
@@ -430,6 +442,7 @@ export interface FileRoutesByFullPath {
   '/settings/checklists': typeof AppSettingsChecklistsRoute
   '/settings/workflows': typeof AppSettingsWorkflowsRoute
   '/showcases/$showcaseId': typeof AppShowcasesShowcaseIdRoute
+  '/summaries/$summaryId': typeof AppSummariesSummaryIdRoute
   '/walkthroughs/$walkthroughId': typeof AppWalkthroughsWalkthroughIdRoute
   '/embed/gallery/$key': typeof EmbedGalleryKeyRoute
   '/embed/map/$key': typeof EmbedMapKeyRoute
@@ -440,6 +453,7 @@ export interface FileRoutesByFullPath {
   '/share/projects/$token': typeof ShareProjectsTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
   '/share/showcases/$token': typeof ShareShowcasesTokenRoute
+  '/share/summaries/$token': typeof ShareSummariesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
   '/share/workflows/$token': typeof ShareWorkflowsTokenRoute
   '/admin/': typeof AppAdminIndexRoute
@@ -492,6 +506,7 @@ export interface FileRoutesByTo {
   '/settings/checklists': typeof AppSettingsChecklistsRoute
   '/settings/workflows': typeof AppSettingsWorkflowsRoute
   '/showcases/$showcaseId': typeof AppShowcasesShowcaseIdRoute
+  '/summaries/$summaryId': typeof AppSummariesSummaryIdRoute
   '/walkthroughs/$walkthroughId': typeof AppWalkthroughsWalkthroughIdRoute
   '/embed/gallery/$key': typeof EmbedGalleryKeyRoute
   '/embed/map/$key': typeof EmbedMapKeyRoute
@@ -502,6 +517,7 @@ export interface FileRoutesByTo {
   '/share/projects/$token': typeof ShareProjectsTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
   '/share/showcases/$token': typeof ShareShowcasesTokenRoute
+  '/share/summaries/$token': typeof ShareSummariesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
   '/share/workflows/$token': typeof ShareWorkflowsTokenRoute
   '/admin': typeof AppAdminIndexRoute
@@ -557,6 +573,7 @@ export interface FileRoutesById {
   '/_app/settings/checklists': typeof AppSettingsChecklistsRoute
   '/_app/settings/workflows': typeof AppSettingsWorkflowsRoute
   '/_app/showcases_/$showcaseId': typeof AppShowcasesShowcaseIdRoute
+  '/_app/summaries/$summaryId': typeof AppSummariesSummaryIdRoute
   '/_app/walkthroughs/$walkthroughId': typeof AppWalkthroughsWalkthroughIdRoute
   '/embed/gallery/$key': typeof EmbedGalleryKeyRoute
   '/embed/map/$key': typeof EmbedMapKeyRoute
@@ -567,6 +584,7 @@ export interface FileRoutesById {
   '/share/projects/$token': typeof ShareProjectsTokenRoute
   '/share/reports/$token': typeof ShareReportsTokenRoute
   '/share/showcases/$token': typeof ShareShowcasesTokenRoute
+  '/share/summaries/$token': typeof ShareSummariesTokenRoute
   '/share/walkthroughs/$token': typeof ShareWalkthroughsTokenRoute
   '/share/workflows/$token': typeof ShareWorkflowsTokenRoute
   '/_app/admin/': typeof AppAdminIndexRoute
@@ -622,6 +640,7 @@ export interface FileRouteTypes {
     | '/settings/checklists'
     | '/settings/workflows'
     | '/showcases/$showcaseId'
+    | '/summaries/$summaryId'
     | '/walkthroughs/$walkthroughId'
     | '/embed/gallery/$key'
     | '/embed/map/$key'
@@ -632,6 +651,7 @@ export interface FileRouteTypes {
     | '/share/projects/$token'
     | '/share/reports/$token'
     | '/share/showcases/$token'
+    | '/share/summaries/$token'
     | '/share/walkthroughs/$token'
     | '/share/workflows/$token'
     | '/admin/'
@@ -684,6 +704,7 @@ export interface FileRouteTypes {
     | '/settings/checklists'
     | '/settings/workflows'
     | '/showcases/$showcaseId'
+    | '/summaries/$summaryId'
     | '/walkthroughs/$walkthroughId'
     | '/embed/gallery/$key'
     | '/embed/map/$key'
@@ -694,6 +715,7 @@ export interface FileRouteTypes {
     | '/share/projects/$token'
     | '/share/reports/$token'
     | '/share/showcases/$token'
+    | '/share/summaries/$token'
     | '/share/walkthroughs/$token'
     | '/share/workflows/$token'
     | '/admin'
@@ -748,6 +770,7 @@ export interface FileRouteTypes {
     | '/_app/settings/checklists'
     | '/_app/settings/workflows'
     | '/_app/showcases_/$showcaseId'
+    | '/_app/summaries/$summaryId'
     | '/_app/walkthroughs/$walkthroughId'
     | '/embed/gallery/$key'
     | '/embed/map/$key'
@@ -758,6 +781,7 @@ export interface FileRouteTypes {
     | '/share/projects/$token'
     | '/share/reports/$token'
     | '/share/showcases/$token'
+    | '/share/summaries/$token'
     | '/share/walkthroughs/$token'
     | '/share/workflows/$token'
     | '/_app/admin/'
@@ -798,6 +822,7 @@ export interface RootRouteChildren {
   ShareProjectsTokenRoute: typeof ShareProjectsTokenRoute
   ShareReportsTokenRoute: typeof ShareReportsTokenRoute
   ShareShowcasesTokenRoute: typeof ShareShowcasesTokenRoute
+  ShareSummariesTokenRoute: typeof ShareSummariesTokenRoute
   ShareWalkthroughsTokenRoute: typeof ShareWalkthroughsTokenRoute
   ShareWorkflowsTokenRoute: typeof ShareWorkflowsTokenRoute
 }
@@ -1056,6 +1081,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShareWalkthroughsTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/share/summaries/$token': {
+      id: '/share/summaries/$token'
+      path: '/share/summaries/$token'
+      fullPath: '/share/summaries/$token'
+      preLoaderRoute: typeof ShareSummariesTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/share/showcases/$token': {
       id: '/share/showcases/$token'
       path: '/share/showcases/$token'
@@ -1124,6 +1156,13 @@ declare module '@tanstack/react-router' {
       path: '/walkthroughs/$walkthroughId'
       fullPath: '/walkthroughs/$walkthroughId'
       preLoaderRoute: typeof AppWalkthroughsWalkthroughIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/summaries/$summaryId': {
+      id: '/_app/summaries/$summaryId'
+      path: '/summaries/$summaryId'
+      fullPath: '/summaries/$summaryId'
+      preLoaderRoute: typeof AppSummariesSummaryIdRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/showcases_/$showcaseId': {
@@ -1294,6 +1333,7 @@ interface AppRouteChildren {
   AppSettingsChecklistsRoute: typeof AppSettingsChecklistsRoute
   AppSettingsWorkflowsRoute: typeof AppSettingsWorkflowsRoute
   AppShowcasesShowcaseIdRoute: typeof AppShowcasesShowcaseIdRoute
+  AppSummariesSummaryIdRoute: typeof AppSummariesSummaryIdRoute
   AppWalkthroughsWalkthroughIdRoute: typeof AppWalkthroughsWalkthroughIdRoute
   AppProjectsIndexRoute: typeof AppProjectsIndexRoute
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
@@ -1324,6 +1364,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsChecklistsRoute: AppSettingsChecklistsRoute,
   AppSettingsWorkflowsRoute: AppSettingsWorkflowsRoute,
   AppShowcasesShowcaseIdRoute: AppShowcasesShowcaseIdRoute,
+  AppSummariesSummaryIdRoute: AppSummariesSummaryIdRoute,
   AppWalkthroughsWalkthroughIdRoute: AppWalkthroughsWalkthroughIdRoute,
   AppProjectsIndexRoute: AppProjectsIndexRoute,
   AppSettingsIndexRoute: AppSettingsIndexRoute,
@@ -1366,6 +1407,7 @@ const rootRouteChildren: RootRouteChildren = {
   ShareProjectsTokenRoute: ShareProjectsTokenRoute,
   ShareReportsTokenRoute: ShareReportsTokenRoute,
   ShareShowcasesTokenRoute: ShareShowcasesTokenRoute,
+  ShareSummariesTokenRoute: ShareSummariesTokenRoute,
   ShareWalkthroughsTokenRoute: ShareWalkthroughsTokenRoute,
   ShareWorkflowsTokenRoute: ShareWorkflowsTokenRoute,
 }

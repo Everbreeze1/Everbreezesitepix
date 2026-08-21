@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
 import { summarizePhotosReportService } from "../ai/service";
 import { assertAutoReportAllowed, releaseAutoReport, reserveAutoReport } from "./auto-report-quota";
+import { generateSummaryForWalkthroughService } from "./summaries";
 import {
   buildWalkthroughNarration,
   parseStoredNarration,
@@ -2069,6 +2070,29 @@ ${
       });
     }
 
+    /*
+     * Auto-publish the Fast Summary Report.
+     *
+     * "Auto-publish a 'Fast Summary Report' into Walkthrough whenever a
+     * Walkthrough Summary is generated." Done here rather than from the browser
+     * so it cannot be missed: the recording flow already calls this service
+     * unattended when a walk finishes, and a summary the user has to remember
+     * to ask for is the manual step being removed.
+     *
+     * The service returns the existing summary rather than a second one unless
+     * forced, so a retried generation cannot leave two behind. Failure is
+     * logged and swallowed: the report is already saved and the user has it,
+     * and they can still generate the summary by hand from the Walkthroughs
+     * tab.
+     */
+    try {
+      await generateSummaryForWalkthroughService(ctx, { walkthroughId: data.walkthroughId });
+    } catch (summaryErr) {
+      console.warn("[walkthrough] fast summary publish failed", summaryErr, {
+        walkthroughId: data.walkthroughId,
+      });
+    }
+
     // The reservation taken above IS the meter - nothing more to record. It
     // deliberately counts deterministic-fallback reports too (AI unavailable
     // / key missing): the user still received a generated report, and not
@@ -2247,6 +2271,33 @@ export async function getPublicWalkthroughService(data: { token: string }) {
     )
     .eq("share_token", data.token)
     .maybeSingle();
+
+  /*
+   * Not a recording: this may be a link issued before summaries became their
+   * own object type. The split migration carried `share_token` across with the
+   * row, so a URL a client already holds still resolves - it just resolves to a
+   * summary now. Answered with `redirectToSummary` rather than by rendering the
+   * summary here, so the visitor lands on the page built for it.
+   */
+  if (!walk) {
+    const { data: legacy } = await supabaseAdmin
+      .from("walkthrough_summaries" as any)
+      .select("share_token")
+      .eq("share_token", data.token)
+      .maybeSingle();
+    if (legacy) {
+      return {
+        walkthrough: null,
+        project: null,
+        photoUrls: {} as Record<string, string>,
+        photoSteps: [] as never[],
+        narration: null as WalkthroughNarration | null,
+        /** The share page sends the visitor here instead of showing "unavailable". */
+        redirectToSummary: (legacy as any).share_token as string,
+      };
+    }
+  }
+
   if (!walk) {
     return {
       walkthrough: null,
