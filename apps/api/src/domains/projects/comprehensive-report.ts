@@ -126,7 +126,7 @@ const COMPREHENSIVE_SYSTEM =
  * literal "![Photo 1](photo:76edc...)" text in the middle of a document meant
  * for a client, beneath a duplicate of the title already printed above it.
  */
-function summaryProse(markdown: string | null): string {
+export function summaryProse(markdown: string | null): string {
   return stripPhotoGallery(markdown ?? "").slice(0, MAX_SUMMARY_CHARS);
 }
 
@@ -143,7 +143,7 @@ function summaryProse(markdown: string | null): string {
  * it renders as the literal text "#### Overview" - and `###` would collide with
  * the `<h3>` this report already gives each summary.
  */
-function demoteHeadings(markdown: string): string {
+export function demoteHeadings(markdown: string): string {
   return markdown.replace(/^#{1,6}\s*(.+?)\s*$/gm, "**$1**");
 }
 
@@ -153,7 +153,7 @@ function demoteHeadings(markdown: string): string {
  * A model handed source text containing "## Conclusion" tends to echo that
  * structure back instead of writing the sections it was asked for.
  */
-function flattenHeadings(markdown: string): string {
+export function flattenHeadings(markdown: string): string {
   return markdown
     .replace(/^#{1,6}\s*/gm, "")
     .replace(/\n{3,}/g, "\n\n")

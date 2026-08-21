@@ -2,7 +2,12 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parsePhotoNotes, stripPhotoGallery } from "../apps/api/src/domains/walkthroughs/summaries";
-import { digestPhotos } from "../apps/api/src/domains/projects/comprehensive-report";
+import {
+  digestPhotos,
+  summaryProse,
+  demoteHeadings,
+  flattenHeadings,
+} from "../apps/api/src/domains/projects/comprehensive-report";
 
 const ROOT = resolve(__dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
@@ -481,5 +486,92 @@ describe("summary prose reused inside the Report", () => {
     // The coupling is invisible from the call site, so it is written down next
     // to the code that depends on it.
     expect(read("packages/shared/src/markdown-rich.ts")).toContain("#{1,3}");
+  });
+});
+
+/*
+ * Reusing a summary's prose inside the Report.
+ *
+ * Four separate defects came out of this one small transformation, every one of
+ * them found by generating the report against real data and reading the HTML.
+ * They are pinned as behaviour here so the next change to it has to keep them.
+ */
+describe("summaryProse / demoteHeadings / flattenHeadings", () => {
+  const LEGACY = [
+    "# Summary - Aug 14, 2026",
+    "",
+    "## Overview",
+    "",
+    "A site visit was conducted.",
+    "",
+    "## Key Points",
+    "",
+    "- One thing",
+    "",
+    "## Photos",
+    "",
+    "### Photo 1",
+    "",
+    "![Photo 1](photo:76edc6de-0000-0000-0000-000000000000)",
+    "",
+    "*Condenser unit*",
+  ].join("\n");
+
+  it("drops the title the report already prints above it", () => {
+    // It was rendering as a paragraph directly under the <h3> repeating it.
+    expect(summaryProse(LEGACY)).not.toContain("# Summary - Aug 14, 2026");
+  });
+
+  it("drops the photo gallery, refs and all", () => {
+    /*
+     * `markdownToHtml` has no image support, so a surviving ref came out as the
+     * literal text "![Photo 1](photo:76edc...)" in a document meant for a
+     * client, under an orphan "Photos" line.
+     */
+    const out = summaryProse(LEGACY);
+    expect(out).not.toContain("photo:");
+    expect(out).not.toMatch(/##\s*Photos/);
+    expect(out).not.toContain("Photo 1");
+  });
+
+  it("keeps the prose that matters", () => {
+    const out = summaryProse(LEGACY);
+    expect(out).toContain("A site visit was conducted.");
+    expect(out).toContain("One thing");
+  });
+
+  it("survives a null or empty markdown", () => {
+    expect(summaryProse(null)).toBe("");
+    expect(summaryProse("")).toBe("");
+  });
+
+  it("caps one long write-up so it cannot crowd out the rest", () => {
+    const huge = "## Overview\n\n" + "word ".repeat(5000);
+    expect(summaryProse(huge).length).toBeLessThanOrEqual(4000);
+  });
+
+  it("turns headings into bold, never into a level the converter drops", () => {
+    /*
+     * `markdownToHtml` matches `#{1,3}` and nothing deeper, so `####` is not a
+     * heading - it renders as the literal text "#### Overview". That shipped
+     * once.
+     */
+    const out = demoteHeadings(summaryProse(LEGACY));
+    expect(out).not.toMatch(/^#/m);
+    expect(out).toContain("**Overview**");
+    expect(out).toContain("**Key Points**");
+  });
+
+  it("leaves body text alone when demoting", () => {
+    expect(demoteHeadings("## Overview\n\nPlain text.")).toContain("Plain text.");
+  });
+
+  it("removes headings entirely for prompt context", () => {
+    // A model handed source text containing "## Conclusion" echoes that
+    // structure back instead of writing the sections it was asked for.
+    const out = flattenHeadings(summaryProse(LEGACY));
+    expect(out).not.toMatch(/^#/m);
+    expect(out).not.toContain("**");
+    expect(out).toContain("Overview");
   });
 });
