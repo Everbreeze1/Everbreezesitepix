@@ -240,6 +240,19 @@ class Layout {
   }
 
   /**
+   * A page break the author asked for, not yet acted on.
+   *
+   * Deferred rather than taken immediately, because "start a new page" is only
+   * meaningful once there is something to put on it. A break that ends the
+   * document would otherwise append a sheet with nothing on it, and a reader
+   * opening the PDF would find a blank last page they cannot account for.
+   *
+   * Consumed by `ensureSpace`, which every drawing path already calls before it
+   * puts anything on the page.
+   */
+  pendingBreak = false;
+
+  /**
    * The y a fresh page starts at, below any running header.
    *
    * Named because two things need it: `newPage` sets the cursor to it, and a
@@ -251,6 +264,18 @@ class Layout {
   }
 
   ensureSpace(h: number) {
+    if (this.pendingBreak) {
+      this.pendingBreak = false;
+      /*
+       * Only break away from a page that has something on it. Two breaks in a
+       * row, or one where the page is already fresh, would otherwise each cost
+       * an empty sheet.
+       */
+      if (this.y < this.pageTop) {
+        this.newPage();
+        return;
+      }
+    }
     if (this.y - h < this.bottomBoundary) this.newPage();
   }
 
@@ -809,7 +834,11 @@ async function renderNode(
        * document, or two in a row, does not emit an empty sheet.
        */
       if (node.attrs["data-page-break"] !== undefined) {
-        if (layout.y < layout.pageTop) layout.newPage();
+        // Recorded, not taken: see Layout.pendingBreak. Acting here would
+        // append a blank sheet whenever the break is the last thing in the
+        // document, which is where an author naturally leaves one after
+        // splitting a section off.
+        layout.pendingBreak = true;
         return;
       }
       // The InfoPanel node - a shaded card. Any other div is a plain wrapper

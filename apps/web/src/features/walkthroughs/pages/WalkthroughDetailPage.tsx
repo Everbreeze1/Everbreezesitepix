@@ -458,12 +458,10 @@ export function WalkthroughDetailPage() {
     if (!walk) return;
     if (
       !(await confirm({
-        // The linked photos are the user's own gallery photos, so say plainly
-        // that deleting a summary does not touch them - otherwise "cannot be
-        // undone" reads as though the photos go too.
-        description: isSummary
-          ? "Delete this summary? Your photos are not affected. This cannot be undone."
-          : "Delete this walkthrough? This cannot be undone.",
+        // Say plainly what survives. "Cannot be undone" on its own reads as
+        // though the photos and the write-up go with the recording.
+        description:
+          "Delete this walkthrough recording? Its summary and your photos are not affected. This cannot be undone.",
         variant: "destructive",
       }))
     )
@@ -476,7 +474,7 @@ export function WalkthroughDetailPage() {
       toast.error(error.message);
       return;
     }
-    toast.success(isSummary ? "Summary deleted" : "Walkthrough deleted");
+    toast.success("Walkthrough deleted");
     navigate({
       to: "/projects/$projectId",
       params: { projectId: walk.project_id },
@@ -493,9 +491,6 @@ export function WalkthroughDetailPage() {
   }
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
-
-  /** No recording behind this row: no video, no narration, no duration. */
-  const isSummary = walk.source === "summary";
 
   const displayTitle = (() => {
     const t = (walk.title ?? "").trim();
@@ -592,24 +587,22 @@ export function WalkthroughDetailPage() {
               <h1 className="text-2xl font-bold tracking-tight">{displayTitle}</h1>
             )}
             <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              {isSummary ? (
-                <span className="inline-flex items-center gap-1">
-                  <Images className="h-3 w-3" />
-                  {photoSteps.length} {photoSteps.length === 1 ? "photo" : "photos"}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {fmt(walk.duration_seconds)}
-                </span>
-              )}
+              <span className="inline-flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {fmt(walk.duration_seconds)}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Images className="h-3 w-3" />
+                {photoSteps.length} {photoSteps.length === 1 ? "photo" : "photos"}
+              </span>
               <span>{new Date(walk.started_at).toLocaleString()}</span>
-              {/* What this row IS, not what its pipeline is doing. A finished
-                  recording's artefact is its AI Summary; "ready" described the
-                  job that produced it, which is nobody's question by the time
-                  they are looking at it. */}
+              {/*
+                Every row here is a recording now - summaries moved to their own
+                table in 20261003000000 - so this says what state the footage is
+                in rather than which of two kinds of row it is.
+              */}
               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary capitalize">
-                {isSummary || (walk.status === "ready" && narration) ? "AI Summary" : walk.status}
+                {walk.status === "ready" ? "Video" : walk.status}
               </span>
             </div>
           </div>
@@ -668,11 +661,13 @@ export function WalkthroughDetailPage() {
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => void onRegenerate()} disabled={regenerating}>
                       <Sparkles className="mr-2 h-3.5 w-3.5" />
-                      {regenerating
-                        ? "Regenerating\u2026"
-                        : isSummary
-                          ? "Regenerate summary"
-                          : "Regenerate report"}
+                      {/*
+                        Named for what it does. It re-runs the transcription and
+                        narration pass over the recording, which is what the
+                        player and the shared video page read - not the Summary,
+                        which is a separate document with a Regenerate of its own.
+                      */}
+                      {regenerating ? "Reprocessing\u2026" : "Reprocess recording"}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -757,7 +752,7 @@ export function WalkthroughDetailPage() {
         database that has not run the narration migration - so the video is
         never unreachable while the narration catches up.
       */}
-      {!isSummary && videoUrl && narration ? (
+      {videoUrl && narration ? (
         <WalkthroughNarratedPlayer
           className="mt-4"
           videoUrl={videoUrl}
@@ -767,7 +762,7 @@ export function WalkthroughDetailPage() {
           steps={photoSteps}
           controllerRef={playerRef}
         />
-      ) : !isSummary && videoUrl ? (
+      ) : videoUrl ? (
         <Card className="mt-4 overflow-hidden p-0">
           <VideoThumbnail
             cacheKey={`walk-detail:${walk.id}`}
@@ -795,7 +790,7 @@ export function WalkthroughDetailPage() {
         </Card>
       ) : null}
 
-      {!isSummary && (
+      {
         <VideoPlayerDialog
           open={videoOpen}
           onClose={() => setVideoOpen(false)}
@@ -803,7 +798,7 @@ export function WalkthroughDetailPage() {
           title={displayTitle}
           mimeType={walk.video_mime_type}
         />
-      )}
+      }
 
       {/*
         Deliberately no written summary and no photo list on this page.
@@ -847,13 +842,10 @@ export function WalkthroughDetailPage() {
           <div className="grid h-10 w-10 place-items-center rounded-full bg-destructive/10 text-destructive">
             <ImageOff className="h-5 w-5" />
           </div>
-          <h2 className="text-lg font-semibold">
-            We couldn't generate this {isSummary ? "summary" : "report"}
-          </h2>
+          <h2 className="text-lg font-semibold">We couldn&apos;t process this recording</h2>
           <p className="max-w-md text-sm text-muted-foreground">
-            {isSummary
-              ? "Something went wrong while writing your summary. Your photos are safe - try generating again."
-              : "Something went wrong while creating your report. Your photos and narration are safe - try generating again."}
+            Something went wrong while transcribing the walk. Your video, photos and narration are
+            safe - try again, or write the summary from what was captured.
           </p>
           <Button size="sm" onClick={onRegenerate} disabled={regenerating}>
             {regenerating ? (
@@ -864,33 +856,7 @@ export function WalkthroughDetailPage() {
             Try again
           </Button>
         </Card>
-      ) : (
-        <Card className="mt-4 flex items-center justify-between gap-3 p-4">
-          <div>
-            <p className="text-sm text-muted-foreground">
-              No {isSummary ? "summary" : "report"} yet.
-            </p>
-            {/* A summary spends no Auto Report quota, so quoting the meter here
-                would tell the user a cost that does not exist - and quote a
-                Pro-only allowance to a Starter user who can still do this. */}
-            {!isSummary && canUseAutoReports && (
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {autoReportsLimit === Infinity
-                  ? "Unlimited Auto Reports on Team"
-                  : `${autoReportsUsed}/${autoReportsLimit} Auto Reports used this month`}
-              </p>
-            )}
-          </div>
-          <Button size="sm" onClick={onRegenerate} disabled={regenerating}>
-            {regenerating ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            {isSummary ? "Generate summary" : "Generate report"}
-          </Button>
-        </Card>
-      )}
+      ) : null}
 
       <UpgradeDialog
         open={autoReportUpgradeOpen}
