@@ -37,6 +37,21 @@ import { buildWalkthroughNarration, transcriptWindow, type NarrationSource } fro
 /** Photos one summary may cover. Matches the picker's own cap. */
 const MAX_SUMMARY_PHOTOS = 50;
 
+/**
+ * How long a signed photo URL lasts, by who is looking.
+ *
+ * An hour is plenty for someone with the app open: they loaded the page, the
+ * URLs were minted for that load, and a refresh mints new ones.
+ *
+ * A shared link is a different thing entirely. It goes in an email and gets
+ * opened when the client gets round to it, which is not within the hour - and
+ * an expired URL is not an error page, it is a summary full of broken images,
+ * which is worse because it looks like the product is broken rather than the
+ * link being stale. A week is what the shared walkthrough already uses.
+ */
+const SIGNED_URL_TTL_OWNER = 60 * 60;
+const SIGNED_URL_TTL_SHARED = 60 * 60 * 24 * 7;
+
 export interface SummaryPhotoNote {
   photoId: string;
   /** Seconds into the recording. 0 for a summary built from photos alone. */
@@ -185,7 +200,11 @@ export async function listProjectSummariesService(
 }
 
 /** Signed URLs for a set of photo ids, keyed by id. */
-async function signPhotoUrls(supabaseAdmin: any, photoIds: string[]): Promise<Map<string, string>> {
+async function signPhotoUrls(
+  supabaseAdmin: any,
+  photoIds: string[],
+  ttlSeconds: number = SIGNED_URL_TTL_OWNER,
+): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const ids = Array.from(new Set(photoIds.filter(Boolean)));
   if (!ids.length) return out;
@@ -200,7 +219,7 @@ async function signPhotoUrls(supabaseAdmin: any, photoIds: string[]): Promise<Ma
   if (toSign.length) {
     const { data: urls } = await supabaseAdmin.storage
       .from("site-photos")
-      .createSignedUrls(toSign, 60 * 60);
+      .createSignedUrls(toSign, ttlSeconds);
     (urls ?? []).forEach((u: any, i: number) => {
       if (u?.signedUrl) signed.set(toSign[i], u.signedUrl);
     });
@@ -256,6 +275,7 @@ export interface ResolvedSummaryPhoto extends SummaryPhotoNote {
 async function resolveSummaryPhotos(
   supabaseAdmin: any,
   notes: SummaryPhotoNote[],
+  ttlSeconds: number = SIGNED_URL_TTL_OWNER,
 ): Promise<ResolvedSummaryPhoto[]> {
   if (!notes.length) return [];
   const ids = notes.map((n) => n.photoId);
@@ -264,7 +284,7 @@ async function resolveSummaryPhotos(
     .select("id, storage_path, image_url, caption, taken_at")
     .in("id", ids);
   const byId = new Map(((rows as any[]) ?? []).map((r) => [r.id, r]));
-  const urls = await signPhotoUrls(supabaseAdmin, ids);
+  const urls = await signPhotoUrls(supabaseAdmin, ids, ttlSeconds);
 
   return notes
     .filter((n) => byId.has(n.photoId))
@@ -739,21 +759,6 @@ export async function getPublicSummaryService(data: { token: string }) {
       hasSpeech: summary.photoNotes.some((n) => n.spoken),
     },
     project,
-    photos: await resolveSummaryPhotos(supabaseAdmin, summary.photoNotes),
+    photos: await resolveSummaryPhotos(supabaseAdmin, summary.photoNotes, SIGNED_URL_TTL_SHARED),
   };
 }
-
-/** Used by the walkthrough page to list the summaries written from one walk. */
-export async function summariesForWalkthrough(
-  supabaseAdmin: any,
-  walkthroughId: string,
-): Promise<WalkthroughSummaryRow[]> {
-  const { data } = await supabaseAdmin
-    .from("walkthrough_summaries")
-    .select("*")
-    .eq("walkthrough_id", walkthroughId)
-    .order("created_at", { ascending: false });
-  return ((data as any[]) ?? []).map(toSummary);
-}
-
-export { transcriptWindow };

@@ -295,12 +295,19 @@ Write the three Markdown sections only.`,
       ["Issued", new Date().toLocaleDateString(undefined, { dateStyle: "long" } as never)],
     ]) +
     figuresHtml(digest) +
-    `<h2>Executive Summary</h2>` +
-    (summary ? markdownToHtml(summary) : `<p></p>`) +
+    /*
+     * A heading with nothing under it is worse than no heading.
+     *
+     * When the model is unreachable these three sections come back empty, and
+     * printing `<h2>Executive Summary</h2><p></p>` puts a blank promise on a
+     * document somebody hands to a client. Omitted instead: the report still
+     * carries the client details, the figures and the photographic record, and
+     * the caller is told through `aiFailed` so it can say the text is missing.
+     */
+    (summary ? `<h2>Executive Summary</h2>` + markdownToHtml(summary) : "") +
     (work ? `<h2>Work Documented</h2>` + markdownToHtml(work) : "") +
     photoEvidenceHtml(evidence, perPage) +
-    `<h2>Conclusion</h2>` +
-    (conclusion ? markdownToHtml(conclusion) : `<p></p>`);
+    (conclusion ? `<h2>Conclusion</h2>` + markdownToHtml(conclusion) : "");
 
   const { data: page, error } = await (ctx.supabase as any)
     .from("project_pages")
