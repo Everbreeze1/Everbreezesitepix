@@ -14,7 +14,18 @@ import { Node, mergeAttributes } from "@tiptap/core";
  * the matching `case "div"` in apps/api/src/domains/projects/page-pdf.ts);
  * the content model is identical either way.
  */
-export type PanelVariant = "meta" | "photo";
+/**
+ * Only "meta" and "photo" select bespoke styling; "photogrid2/3/4" and
+ * "photocell" are the report's captioned photo grid (page-generate.ts). The
+ * node preserves any data-panel value - the union is just the ones we name.
+ */
+export type PanelVariant =
+  | "meta"
+  | "photo"
+  | "photocell"
+  | "photogrid2"
+  | "photogrid3"
+  | "photogrid4";
 
 export const InfoPanel = Node.create({
   name: "infoPanel",

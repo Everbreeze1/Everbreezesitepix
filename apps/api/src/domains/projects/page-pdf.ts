@@ -550,6 +550,125 @@ function drawCellImageRow(
   }
 }
 
+const GRID_GAP = 10;
+const GRID_CELL_PAD = 6;
+/** Cap so a portrait photo in a cell does not tower over the row. */
+const GRID_IMG_MAX_H = 200;
+
+/**
+ * A grid of captioned photo cards - the evidence body of a generated report.
+ *
+ * Each cell is one photo with its caption directly beneath it, laid out in
+ * `cols` columns. This is the fix for the client's complaint: the old path drew
+ * a row of images and then all of that row's captions bunched together, so no
+ * caption sat with its photo. Here the caption is measured and drawn under its
+ * own image, and all the captions in a row start at the same y so they line up.
+ *
+ * Reuses the same measure-then-draw shape as `renderTable`, minus the borders:
+ * a photo cell is taller than its caption, so the row height has to be known
+ * before the first glyph is drawn or the next row would overlap it.
+ */
+async function renderPhotoGrid(layout: Layout, node: ElementNode, cols: number) {
+  const cells = node.children.filter(
+    (c): c is ElementNode =>
+      c.type === "element" && (c as ElementNode).attrs["data-panel"] === "photocell",
+  );
+  if (!cells.length) return;
+
+  const emptyStyle: Style = {
+    bold: false,
+    italic: false,
+    underline: false,
+    color: null,
+    fontFamily: null,
+    fontSize: null,
+  };
+  const capSize = 8.5;
+  const lineH = capSize + 3;
+  const cellW = (CONTENT_W - GRID_GAP * (cols - 1)) / cols;
+  const innerW = cellW - GRID_CELL_PAD * 2;
+
+  const wrap = (words: Word[]): Word[][] => {
+    const lines: Word[][] = [];
+    let line: Word[] = [];
+    let lineW = 0;
+    for (const w of words) {
+      const ww = layout.fontFor(w.style).widthOfTextAtSize(sanitizeForWinAnsi(w.text), capSize);
+      if (lineW + ww > innerW && line.length) {
+        lines.push(line);
+        line = [w];
+        lineW = ww;
+      } else {
+        line.push(w);
+        lineW += ww + 2;
+      }
+    }
+    if (line.length) lines.push(line);
+    return lines;
+  };
+
+  for (let start = 0; start < cells.length; start += cols) {
+    const rowCells = cells.slice(start, start + cols);
+
+    const perCell = await Promise.all(
+      rowCells.map(async (cell) => {
+        const imgs = await embedImages(layout, collectImages(cell));
+        const img = imgs[0] ?? null;
+        const imgH = img ? Math.min(innerW * (img.height / img.width), GRID_IMG_MAX_H) : 0;
+        return { img, imgH, lines: wrap(collectInlineWords(cell, emptyStyle)) };
+      }),
+    );
+
+    const maxImgH = Math.max(0, ...perCell.map((c) => c.imgH));
+    const maxCapH = Math.max(0, ...perCell.map((c) => c.lines.length * lineH));
+    const rowH = maxImgH + 6 + maxCapH + GRID_CELL_PAD;
+
+    layout.ensureSpace(rowH);
+    const rowTop = layout.y;
+
+    rowCells.forEach((_, i) => {
+      const cx = MARGIN + i * (cellW + GRID_GAP);
+      const c = perCell[i];
+      if (c.img) {
+        const ratio = c.img.height / c.img.width;
+        let w = innerW;
+        let h = w * ratio;
+        if (h > GRID_IMG_MAX_H) {
+          h = GRID_IMG_MAX_H;
+          w = h / ratio;
+        }
+        layout.page.drawImage(c.img, {
+          x: cx + GRID_CELL_PAD + (innerW - w) / 2,
+          y: rowTop - h,
+          width: w,
+          height: h,
+        });
+      }
+      // Captions start below the row's tallest image, so they align across it.
+      let cy = rowTop - maxImgH - 6;
+      for (const ln of c.lines) {
+        let lx = cx + GRID_CELL_PAD;
+        for (const w of ln) {
+          const font = layout.fontFor(w.style);
+          const txt = sanitizeForWinAnsi(w.text);
+          layout.page.drawText(txt, {
+            x: lx,
+            y: cy - capSize,
+            size: capSize,
+            font,
+            color: w.style.color ?? MUTED,
+          });
+          lx += font.widthOfTextAtSize(txt, capSize) + 2;
+        }
+        cy -= lineH;
+      }
+    });
+
+    layout.y = rowTop - rowH;
+  }
+  layout.y -= 10;
+}
+
 async function renderTable(layout: Layout, table: ElementNode) {
   const rows: ElementNode[] = [];
   const walk = (n: HtmlNode) => {
@@ -839,6 +958,14 @@ async function renderNode(
         // document, which is where an author naturally leaves one after
         // splitting a section off.
         layout.pendingBreak = true;
+        return;
+      }
+      // The captioned photo grid a report's evidence is built from. The
+      // column count rides in the variant name (photogrid2/3/4).
+      const panel = node.attrs["data-panel"];
+      if (typeof panel === "string" && panel.startsWith("photogrid")) {
+        const declared = parseInt(panel.slice("photogrid".length), 10) || 2;
+        await renderPhotoGrid(layout, node, Math.min(4, Math.max(2, declared)));
         return;
       }
       // The InfoPanel node - a shaded card. Any other div is a plain wrapper
