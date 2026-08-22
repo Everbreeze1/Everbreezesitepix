@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { requirePlatformAdmin } from "../../lib/admin-context";
+import { escapeLikeValue } from "../../lib/postgrest";
 import { logAdminAction } from "./audit";
 import type { AuthedContext } from "../../lib/user-context";
 
@@ -34,7 +35,9 @@ export async function listPlatformUsersService(
     .limit(data.limit + 1);
   if (data.cursor) query = query.lt("created_at", data.cursor);
   if (data.search) {
-    const like = `%${data.search}%`;
+    // Quoted and wildcard-stripped: `.or()` is a parsed expression, so an
+    // unescaped comma in the term splits the filter. See escapeLikeValue.
+    const like = escapeLikeValue(data.search);
     query = query.or(`full_name.ilike.${like},email.ilike.${like},company.ilike.${like}`);
   }
 
@@ -101,6 +104,32 @@ export async function setPlatformAdminService(
       .upsert({ user_id: data.userId, granted_by: ctx.userId }, { onConflict: "user_id" });
     if (error) throw new Error(error.message);
   } else {
+    /*
+     * Refuse to remove the last platform admin.
+     *
+     * Nothing in the product can grant the first one - `platform_admins` has no
+     * `authenticated` grant at all, so the bootstrap row is inserted by hand in
+     * the SQL editor (see the migration header). Revoking the only remaining
+     * admin therefore does not degrade access, it ends it: the admin area
+     * becomes unreachable for everyone and the sole recovery path is a database
+     * console that most operators do not have open.
+     *
+     * Checked server-side rather than by hiding the button, because the button
+     * is not the only caller and the cost of being wrong is losing the console.
+     */
+    const { count, error: countError } = await (admin as any)
+      .from("platform_admins")
+      .select("user_id", { count: "exact", head: true })
+      .neq("user_id", data.userId);
+    if (countError) throw new Error(countError.message);
+    // Counted with the target excluded, so revoking someone who is not an admin
+    // stays the no-op it always was rather than tripping this guard.
+    if ((count ?? 0) === 0) {
+      throw new Error(
+        "This is the last platform admin. Grant admin access to someone else before revoking this one.",
+      );
+    }
+
     const { error } = await (admin as any)
       .from("platform_admins")
       .delete()
