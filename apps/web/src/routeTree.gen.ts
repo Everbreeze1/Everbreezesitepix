@@ -65,10 +65,14 @@ import { Route as AppProjectsNewRouteImport } from './routes/_app.projects.new'
 import { Route as AppProjectsProjectIdRouteImport } from './routes/_app.projects.$projectId'
 import { Route as AppGroupsGroupIdRouteImport } from './routes/_app.groups.$groupId'
 import { Route as AppAdminUsersRouteImport } from './routes/_app.admin.users'
+import { Route as AppAdminUsageRouteImport } from './routes/_app.admin.usage'
 import { Route as AppAdminTeamsRouteImport } from './routes/_app.admin.teams'
+import { Route as AppAdminSecurityRouteImport } from './routes/_app.admin.security'
 import { Route as AppAdminNotificationsRouteImport } from './routes/_app.admin.notifications'
+import { Route as AppAdminHealthRouteImport } from './routes/_app.admin.health'
 import { Route as AppAdminFeedbackRouteImport } from './routes/_app.admin.feedback'
 import { Route as AppAdminAuditLogRouteImport } from './routes/_app.admin.audit-log'
+import { Route as AppAdminUsersUserIdRouteImport } from './routes/_app.admin.users.$userId'
 import { Route as AppAdminTeamsTeamIdRouteImport } from './routes/_app.admin.teams.$teamId'
 import { Route as AppProjectsProjectIdWorkflowsWorkflowIdRouteImport } from './routes/_app.projects.$projectId_.workflows.$workflowId'
 import { Route as AppProjectsProjectIdReportsReportIdRouteImport } from './routes/_app.projects.$projectId_.reports.$reportId'
@@ -356,14 +360,29 @@ const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AppAdminRoute,
 } as any)
+const AppAdminUsageRoute = AppAdminUsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
+  getParentRoute: () => AppAdminRoute,
+} as any)
 const AppAdminTeamsRoute = AppAdminTeamsRouteImport.update({
   id: '/teams',
   path: '/teams',
   getParentRoute: () => AppAdminRoute,
 } as any)
+const AppAdminSecurityRoute = AppAdminSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => AppAdminRoute,
+} as any)
 const AppAdminNotificationsRoute = AppAdminNotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminHealthRoute = AppAdminHealthRouteImport.update({
+  id: '/health',
+  path: '/health',
   getParentRoute: () => AppAdminRoute,
 } as any)
 const AppAdminFeedbackRoute = AppAdminFeedbackRouteImport.update({
@@ -375,6 +394,11 @@ const AppAdminAuditLogRoute = AppAdminAuditLogRouteImport.update({
   id: '/audit-log',
   path: '/audit-log',
   getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminUsersUserIdRoute = AppAdminUsersUserIdRouteImport.update({
+  id: '/$userId',
+  path: '/$userId',
+  getParentRoute: () => AppAdminUsersRoute,
 } as any)
 const AppAdminTeamsTeamIdRoute = AppAdminTeamsTeamIdRouteImport.update({
   id: '/$teamId',
@@ -439,9 +463,12 @@ export interface FileRoutesByFullPath {
   '/subcontractor-invite/$token': typeof SubcontractorInviteTokenRoute
   '/admin/audit-log': typeof AppAdminAuditLogRoute
   '/admin/feedback': typeof AppAdminFeedbackRoute
+  '/admin/health': typeof AppAdminHealthRoute
   '/admin/notifications': typeof AppAdminNotificationsRoute
+  '/admin/security': typeof AppAdminSecurityRoute
   '/admin/teams': typeof AppAdminTeamsRouteWithChildren
-  '/admin/users': typeof AppAdminUsersRoute
+  '/admin/usage': typeof AppAdminUsageRoute
+  '/admin/users': typeof AppAdminUsersRouteWithChildren
   '/groups/$groupId': typeof AppGroupsGroupIdRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/projects/new': typeof AppProjectsNewRoute
@@ -467,6 +494,7 @@ export interface FileRoutesByFullPath {
   '/projects/': typeof AppProjectsIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
   '/admin/teams/$teamId': typeof AppAdminTeamsTeamIdRoute
+  '/admin/users/$userId': typeof AppAdminUsersUserIdRoute
   '/projects/$projectId/checklists/$checklistId': typeof AppProjectsProjectIdChecklistsChecklistIdRoute
   '/projects/$projectId/pages/$pageId': typeof AppProjectsProjectIdPagesPageIdRoute
   '/projects/$projectId/reports/$reportId': typeof AppProjectsProjectIdReportsReportIdRoute
@@ -504,9 +532,12 @@ export interface FileRoutesByTo {
   '/subcontractor-invite/$token': typeof SubcontractorInviteTokenRoute
   '/admin/audit-log': typeof AppAdminAuditLogRoute
   '/admin/feedback': typeof AppAdminFeedbackRoute
+  '/admin/health': typeof AppAdminHealthRoute
   '/admin/notifications': typeof AppAdminNotificationsRoute
+  '/admin/security': typeof AppAdminSecurityRoute
   '/admin/teams': typeof AppAdminTeamsRouteWithChildren
-  '/admin/users': typeof AppAdminUsersRoute
+  '/admin/usage': typeof AppAdminUsageRoute
+  '/admin/users': typeof AppAdminUsersRouteWithChildren
   '/groups/$groupId': typeof AppGroupsGroupIdRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/projects/new': typeof AppProjectsNewRoute
@@ -532,6 +563,7 @@ export interface FileRoutesByTo {
   '/projects': typeof AppProjectsIndexRoute
   '/settings': typeof AppSettingsIndexRoute
   '/admin/teams/$teamId': typeof AppAdminTeamsTeamIdRoute
+  '/admin/users/$userId': typeof AppAdminUsersUserIdRoute
   '/projects/$projectId/checklists/$checklistId': typeof AppProjectsProjectIdChecklistsChecklistIdRoute
   '/projects/$projectId/pages/$pageId': typeof AppProjectsProjectIdPagesPageIdRoute
   '/projects/$projectId/reports/$reportId': typeof AppProjectsProjectIdReportsReportIdRoute
@@ -572,9 +604,12 @@ export interface FileRoutesById {
   '/subcontractor-invite/$token': typeof SubcontractorInviteTokenRoute
   '/_app/admin/audit-log': typeof AppAdminAuditLogRoute
   '/_app/admin/feedback': typeof AppAdminFeedbackRoute
+  '/_app/admin/health': typeof AppAdminHealthRoute
   '/_app/admin/notifications': typeof AppAdminNotificationsRoute
+  '/_app/admin/security': typeof AppAdminSecurityRoute
   '/_app/admin/teams': typeof AppAdminTeamsRouteWithChildren
-  '/_app/admin/users': typeof AppAdminUsersRoute
+  '/_app/admin/usage': typeof AppAdminUsageRoute
+  '/_app/admin/users': typeof AppAdminUsersRouteWithChildren
   '/_app/groups/$groupId': typeof AppGroupsGroupIdRoute
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/_app/projects/new': typeof AppProjectsNewRoute
@@ -600,6 +635,7 @@ export interface FileRoutesById {
   '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
   '/_app/admin/teams/$teamId': typeof AppAdminTeamsTeamIdRoute
+  '/_app/admin/users/$userId': typeof AppAdminUsersUserIdRoute
   '/_app/projects/$projectId_/checklists/$checklistId': typeof AppProjectsProjectIdChecklistsChecklistIdRoute
   '/_app/projects/$projectId_/pages/$pageId': typeof AppProjectsProjectIdPagesPageIdRoute
   '/_app/projects/$projectId_/reports/$reportId': typeof AppProjectsProjectIdReportsReportIdRoute
@@ -640,8 +676,11 @@ export interface FileRouteTypes {
     | '/subcontractor-invite/$token'
     | '/admin/audit-log'
     | '/admin/feedback'
+    | '/admin/health'
     | '/admin/notifications'
+    | '/admin/security'
     | '/admin/teams'
+    | '/admin/usage'
     | '/admin/users'
     | '/groups/$groupId'
     | '/projects/$projectId'
@@ -668,6 +707,7 @@ export interface FileRouteTypes {
     | '/projects/'
     | '/settings/'
     | '/admin/teams/$teamId'
+    | '/admin/users/$userId'
     | '/projects/$projectId/checklists/$checklistId'
     | '/projects/$projectId/pages/$pageId'
     | '/projects/$projectId/reports/$reportId'
@@ -705,8 +745,11 @@ export interface FileRouteTypes {
     | '/subcontractor-invite/$token'
     | '/admin/audit-log'
     | '/admin/feedback'
+    | '/admin/health'
     | '/admin/notifications'
+    | '/admin/security'
     | '/admin/teams'
+    | '/admin/usage'
     | '/admin/users'
     | '/groups/$groupId'
     | '/projects/$projectId'
@@ -733,6 +776,7 @@ export interface FileRouteTypes {
     | '/projects'
     | '/settings'
     | '/admin/teams/$teamId'
+    | '/admin/users/$userId'
     | '/projects/$projectId/checklists/$checklistId'
     | '/projects/$projectId/pages/$pageId'
     | '/projects/$projectId/reports/$reportId'
@@ -772,8 +816,11 @@ export interface FileRouteTypes {
     | '/subcontractor-invite/$token'
     | '/_app/admin/audit-log'
     | '/_app/admin/feedback'
+    | '/_app/admin/health'
     | '/_app/admin/notifications'
+    | '/_app/admin/security'
     | '/_app/admin/teams'
+    | '/_app/admin/usage'
     | '/_app/admin/users'
     | '/_app/groups/$groupId'
     | '/_app/projects/$projectId'
@@ -800,6 +847,7 @@ export interface FileRouteTypes {
     | '/_app/projects/'
     | '/_app/settings/'
     | '/_app/admin/teams/$teamId'
+    | '/_app/admin/users/$userId'
     | '/_app/projects/$projectId_/checklists/$checklistId'
     | '/_app/projects/$projectId_/pages/$pageId'
     | '/_app/projects/$projectId_/reports/$reportId'
@@ -1233,6 +1281,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminUsersRouteImport
       parentRoute: typeof AppAdminRoute
     }
+    '/_app/admin/usage': {
+      id: '/_app/admin/usage'
+      path: '/usage'
+      fullPath: '/admin/usage'
+      preLoaderRoute: typeof AppAdminUsageRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
     '/_app/admin/teams': {
       id: '/_app/admin/teams'
       path: '/teams'
@@ -1240,11 +1295,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminTeamsRouteImport
       parentRoute: typeof AppAdminRoute
     }
+    '/_app/admin/security': {
+      id: '/_app/admin/security'
+      path: '/security'
+      fullPath: '/admin/security'
+      preLoaderRoute: typeof AppAdminSecurityRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
     '/_app/admin/notifications': {
       id: '/_app/admin/notifications'
       path: '/notifications'
       fullPath: '/admin/notifications'
       preLoaderRoute: typeof AppAdminNotificationsRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/health': {
+      id: '/_app/admin/health'
+      path: '/health'
+      fullPath: '/admin/health'
+      preLoaderRoute: typeof AppAdminHealthRouteImport
       parentRoute: typeof AppAdminRoute
     }
     '/_app/admin/feedback': {
@@ -1260,6 +1329,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/audit-log'
       preLoaderRoute: typeof AppAdminAuditLogRouteImport
       parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/users/$userId': {
+      id: '/_app/admin/users/$userId'
+      path: '/$userId'
+      fullPath: '/admin/users/$userId'
+      preLoaderRoute: typeof AppAdminUsersUserIdRouteImport
+      parentRoute: typeof AppAdminUsersRoute
     }
     '/_app/admin/teams/$teamId': {
       id: '/_app/admin/teams/$teamId'
@@ -1311,21 +1387,39 @@ const AppAdminTeamsRouteWithChildren = AppAdminTeamsRoute._addFileChildren(
   AppAdminTeamsRouteChildren,
 )
 
+interface AppAdminUsersRouteChildren {
+  AppAdminUsersUserIdRoute: typeof AppAdminUsersUserIdRoute
+}
+
+const AppAdminUsersRouteChildren: AppAdminUsersRouteChildren = {
+  AppAdminUsersUserIdRoute: AppAdminUsersUserIdRoute,
+}
+
+const AppAdminUsersRouteWithChildren = AppAdminUsersRoute._addFileChildren(
+  AppAdminUsersRouteChildren,
+)
+
 interface AppAdminRouteChildren {
   AppAdminAuditLogRoute: typeof AppAdminAuditLogRoute
   AppAdminFeedbackRoute: typeof AppAdminFeedbackRoute
+  AppAdminHealthRoute: typeof AppAdminHealthRoute
   AppAdminNotificationsRoute: typeof AppAdminNotificationsRoute
+  AppAdminSecurityRoute: typeof AppAdminSecurityRoute
   AppAdminTeamsRoute: typeof AppAdminTeamsRouteWithChildren
-  AppAdminUsersRoute: typeof AppAdminUsersRoute
+  AppAdminUsageRoute: typeof AppAdminUsageRoute
+  AppAdminUsersRoute: typeof AppAdminUsersRouteWithChildren
   AppAdminIndexRoute: typeof AppAdminIndexRoute
 }
 
 const AppAdminRouteChildren: AppAdminRouteChildren = {
   AppAdminAuditLogRoute: AppAdminAuditLogRoute,
   AppAdminFeedbackRoute: AppAdminFeedbackRoute,
+  AppAdminHealthRoute: AppAdminHealthRoute,
   AppAdminNotificationsRoute: AppAdminNotificationsRoute,
+  AppAdminSecurityRoute: AppAdminSecurityRoute,
   AppAdminTeamsRoute: AppAdminTeamsRouteWithChildren,
-  AppAdminUsersRoute: AppAdminUsersRoute,
+  AppAdminUsageRoute: AppAdminUsageRoute,
+  AppAdminUsersRoute: AppAdminUsersRouteWithChildren,
   AppAdminIndexRoute: AppAdminIndexRoute,
 }
 

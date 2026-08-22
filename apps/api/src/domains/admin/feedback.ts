@@ -185,7 +185,7 @@ export async function setFeedbackStatusService(
   ctx: AuthedContext,
   data: z.infer<typeof setFeedbackStatusInputSchema>,
 ): Promise<{ updated: number }> {
-  await requirePlatformAdmin(ctx.userId);
+  await requirePlatformAdmin(ctx.userId, "support");
   const admin = getSupabaseAdmin();
 
   const { error } = await (admin as any)
@@ -225,7 +225,7 @@ export async function replyToFeedbackService(
   ctx: AuthedContext,
   data: z.infer<typeof replyToFeedbackInputSchema>,
 ): Promise<{ ok: true }> {
-  await requirePlatformAdmin(ctx.userId);
+  await requirePlatformAdmin(ctx.userId, "support");
   const admin = getSupabaseAdmin();
 
   const { data: report, error } = await (admin as any)

@@ -83,7 +83,7 @@ export async function sendAdminNotificationService(
   ctx: AuthedContext,
   data: z.infer<typeof sendAdminNotificationInputSchema>,
 ): Promise<{ sentTo: number }> {
-  await requirePlatformAdmin(ctx.userId);
+  await requirePlatformAdmin(ctx.userId, "support");
   const admin = getSupabaseAdmin();
 
   let recipientIds: string[] = [];

@@ -9,6 +9,9 @@ import {
   Building2,
   ScrollText,
   MessageSquareText,
+  Activity,
+  ShieldCheck,
+  Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { checkIsPlatformAdmin } from "@/lib/admin.functions";
@@ -20,6 +23,9 @@ const ADMIN_NAV = [
   { label: "Teams", to: "/admin/teams", icon: Building2 },
   { label: "Feedback", to: "/admin/feedback", icon: MessageSquareText },
   { label: "Notifications", to: "/admin/notifications", icon: Bell },
+  { label: "Health", to: "/admin/health", icon: Activity },
+  { label: "Usage & cost", to: "/admin/usage", icon: Gauge },
+  { label: "Security", to: "/admin/security", icon: ShieldCheck },
   { label: "Audit log", to: "/admin/audit-log", icon: ScrollText },
 ] as const;
 

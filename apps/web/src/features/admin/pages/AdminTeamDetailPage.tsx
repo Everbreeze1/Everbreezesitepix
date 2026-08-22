@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, Loader2 } from "lucide-react";
 import { getPlatformTeamDetail, type PlatformBusinessProfile } from "@/lib/admin.functions";
 import { formatBytes } from "@/hooks/use-storage-usage";
+import { TeamBillingPanel } from "../components/TeamBillingPanel";
 import {
   COMPANY_GOALS,
   HEARD_FROM,
@@ -57,10 +58,20 @@ export function AdminTeamDetailPage() {
         )}
       </div>
 
+      {/*
+        This note used to say the whole page was read-only. That stopped being
+        true when the billing panel landed, and a safety notice that is wrong
+        about what the screen can do is worse than none - so it now says what is
+        actually still true: you are not acting AS this team, and everything you
+        can do from here is logged.
+      */}
       <p className="mt-4 rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-xs text-muted-foreground">
-        Read-only inspection view - for support debugging. You are not signed in as this team and
-        cannot take actions on its behalf here.
+        Inspection view for support. You are not signed in as this team and cannot act on its
+        behalf. The billing controls below change this team&apos;s access and are recorded in the
+        audit log.
       </p>
+
+      <TeamBillingPanel teamId={teamId} />
 
       <BusinessProfilePanel profile={data.businessProfile} />
 

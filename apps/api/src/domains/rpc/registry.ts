@@ -189,6 +189,35 @@ import {
 } from "../admin/teams";
 import { listAdminAuditLogInputSchema, listAdminAuditLogService } from "../admin/audit";
 import {
+  deletePlatformUserInputSchema,
+  deletePlatformUserService,
+  getPlatformUserDetailInputSchema,
+  getPlatformUserDetailService,
+  runUserSupportActionService,
+  userSupportActionInputSchema,
+} from "../admin/user-detail";
+import {
+  getBillingReconciliationService,
+  getTeamBillingInputSchema,
+  getTeamBillingService,
+  manageTeamSubscriptionInputSchema,
+  manageTeamSubscriptionService,
+  overrideTeamPlanInputSchema,
+  overrideTeamPlanService,
+} from "../admin/billing";
+import {
+  listShareLinksInputSchema,
+  listShareLinksService,
+  revokeShareLinksInputSchema,
+  revokeShareLinksService,
+} from "../admin/shares";
+import { getApiHealthInputSchema, getApiHealthService, listJobRunsService } from "../admin/health";
+import {
+  getContentLibraryService,
+  getPlatformUsageInputSchema,
+  getPlatformUsageService,
+} from "../admin/usage";
+import {
   getFeedbackSummaryService,
   listFeedbackInputSchema,
   listFeedbackService,
@@ -1139,6 +1168,69 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     (d) => listAdminAuditLogInputSchema.parse(d),
     listAdminAuditLogService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
+  getPlatformUserDetail: authed(
+    (d) => getPlatformUserDetailInputSchema.parse(d),
+    getPlatformUserDetailService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  runUserSupportAction: authed(
+    (d) => userSupportActionInputSchema.parse(d),
+    runUserSupportActionService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  deletePlatformUser: authed(
+    (d) => deletePlatformUserInputSchema.parse(d),
+    deletePlatformUserService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  getTeamBilling: authed(
+    (d) => getTeamBillingInputSchema.parse(d),
+    getTeamBillingService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  overrideTeamPlan: authed(
+    (d) => overrideTeamPlanInputSchema.parse(d),
+    overrideTeamPlanService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  manageTeamSubscription: authed(
+    (d) => manageTeamSubscriptionInputSchema.parse(d),
+    manageTeamSubscriptionService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  getBillingReconciliation: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return getBillingReconciliationService(ctx);
+    },
+  },
+  listShareLinks: authed(
+    (d) => listShareLinksInputSchema.parse(d),
+    listShareLinksService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  revokeShareLinks: authed(
+    (d) => revokeShareLinksInputSchema.parse(d),
+    revokeShareLinksService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  getApiHealth: authed(
+    (d) => getApiHealthInputSchema.parse(d),
+    getApiHealthService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  listJobRuns: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return listJobRunsService(ctx);
+    },
+  },
+  getPlatformUsage: authed(
+    (d) => getPlatformUsageInputSchema.parse(d),
+    getPlatformUsageService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  getContentLibrary: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return getContentLibraryService(ctx);
+    },
+  },
   listFeedback: authed(
     (d) => listFeedbackInputSchema.parse(d),
     listFeedbackService as (ctx: ServiceContext, data: never) => Promise<unknown>,

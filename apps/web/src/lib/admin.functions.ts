@@ -223,3 +223,260 @@ export const replyToFeedback = rpcOp<
   { reportId: string; message: string; status?: FeedbackStatus },
   { ok: true }
 >("replyToFeedback");
+
+// ---------------------------------------------------------------------------
+// Support console, billing ops, share links, observability, usage
+//
+// Mirrors apps/api/src/domains/admin/{user-detail,billing,shares,health,usage}.ts.
+// ---------------------------------------------------------------------------
+
+export type AdminRole = "support" | "billing" | "superadmin";
+
+export interface PlatformUserDetail {
+  id: string;
+  fullName: string | null;
+  email: string | null;
+  company: string | null;
+  jobTitle: string | null;
+  avatarUrl: string | null;
+  createdAt: string;
+  isPlatformAdmin: boolean;
+  auth: {
+    emailConfirmedAt: string | null;
+    lastSignInAt: string | null;
+    provider: string | null;
+    bannedUntil: string | null;
+    createdAt: string | null;
+  } | null;
+  teams: Array<{
+    id: string;
+    name: string;
+    plan: string;
+    subscriptionStatus: string;
+    role: string;
+    isOwner: boolean;
+  }>;
+  projects: Array<{
+    id: string;
+    name: string;
+    status: string;
+    photoCount: number;
+    storageBytes: number;
+    updatedAt: string;
+    deletedAt: string | null;
+  }>;
+  totals: { projects: number; photos: number; storageBytes: number; feedbackReports: number };
+  recentActivity: Array<{
+    id: string;
+    route: string;
+    op: string | null;
+    httpStatus: number;
+    durationMs: number | null;
+    errorCode: string | null;
+    createdAt: string;
+  }>;
+}
+
+export const getPlatformUserDetail = rpcOp<{ userId: string }, PlatformUserDetail>(
+  "getPlatformUserDetail",
+);
+
+export type UserSupportAction =
+  | "send_password_reset"
+  | "resend_confirmation"
+  | "suspend"
+  | "reinstate";
+
+export const runUserSupportAction = rpcOp<
+  { userId: string; action: UserSupportAction; reason: string; origin?: string },
+  { ok: true; message: string }
+>("runUserSupportAction");
+
+export const deletePlatformUser = rpcOp<
+  { userId: string; reason: string; confirmEmail: string },
+  { ok: true; orphanedProjects: number }
+>("deletePlatformUser");
+
+export interface TeamBillingDetail {
+  teamId: string;
+  plan: string;
+  subscriptionStatus: string;
+  isInternal: boolean;
+  memberLimit: number | null;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  stripe: {
+    status: string;
+    quantity: number | null;
+    currentPeriodEnd: string | null;
+    trialEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    priceId: string | null;
+    unavailableReason?: string;
+  } | null;
+  invoices: Array<{
+    id: string;
+    number: string | null;
+    status: string | null;
+    amountDue: number;
+    amountPaid: number;
+    currency: string;
+    created: string;
+    hostedUrl: string | null;
+  }>;
+}
+
+export const getTeamBilling = rpcOp<{ teamId: string }, TeamBillingDetail>("getTeamBilling");
+
+export const overrideTeamPlan = rpcOp<
+  { teamId: string; plan?: "starter" | "pro" | "team"; isInternal?: boolean; reason: string },
+  { ok: true; plan: string; isInternal: boolean }
+>("overrideTeamPlan");
+
+export const manageTeamSubscription = rpcOp<
+  {
+    teamId: string;
+    action: "cancel_at_period_end" | "resume" | "cancel_now" | "extend_trial";
+    trialDays?: number;
+    reason: string;
+  },
+  { ok: true; status: string; message: string }
+>("manageTeamSubscription");
+
+export interface BillingReconciliation {
+  paidWithoutSubscription: Array<{
+    id: string;
+    name: string;
+    plan: string;
+    subscriptionStatus: string;
+    isInternal: boolean;
+    createdAt: string;
+  }>;
+  statusMismatch: Array<{
+    id: string;
+    name: string;
+    localStatus: string;
+    stripeStatus: string;
+    plan: string;
+  }>;
+  checkedAgainstStripe: number;
+  stripeError: string | null;
+}
+
+export const getBillingReconciliation = rpcOp<undefined, BillingReconciliation>(
+  "getBillingReconciliation",
+);
+
+export type ShareKind = "walkthrough" | "walkthrough_summary" | "showcase" | "project";
+
+export interface ShareLink {
+  kind: ShareKind;
+  id: string;
+  title: string;
+  token: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  revokedAt: string | null;
+  publicPath: string;
+}
+
+export const listShareLinks = rpcOp<
+  { kind?: ShareKind; includeRevoked?: boolean; limit?: number },
+  { links: ShareLink[]; counts: Record<string, number>; unavailable: string[] }
+>("listShareLinks");
+
+export const revokeShareLinks = rpcOp<
+  { kind: ShareKind; ids: string[]; reason: string },
+  { revoked: number }
+>("revokeShareLinks");
+
+export interface ApiHealth {
+  windowHours: number;
+  totals: {
+    requests: number;
+    errors4xx: number;
+    errors5xx: number;
+    errorRate: number;
+    distinctUsers: number;
+    p50Ms: number | null;
+    p95Ms: number | null;
+    p99Ms: number | null;
+  };
+  ops: Array<{
+    op: string;
+    requests: number;
+    errors: number;
+    errorRate: number;
+    p50Ms: number | null;
+    p95Ms: number | null;
+    maxMs: number | null;
+  }>;
+  timeseries: Array<{ bucket: string; requests: number; errors: number }>;
+  recentFailures: Array<{
+    id: string;
+    route: string;
+    op: string | null;
+    httpStatus: number;
+    errorCode: string | null;
+    durationMs: number | null;
+    requestId: string | null;
+    createdAt: string;
+    user: { id: string; name: string | null; email: string | null } | null;
+  }>;
+  unavailable: string | null;
+}
+
+export const getApiHealth = rpcOp<{ windowHours?: number }, ApiHealth>("getApiHealth");
+
+export interface JobRunSummary {
+  job: string;
+  lastRunAt: string | null;
+  lastOk: boolean | null;
+  lastDurationMs: number | null;
+  lastRowsAffected: number | null;
+  lastError: string | null;
+  runs24h: number;
+  failures24h: number;
+}
+
+export const listJobRuns = rpcOp<undefined, { jobs: JobRunSummary[]; unavailable: string | null }>(
+  "listJobRuns",
+);
+
+export interface UsageRow {
+  teamId: string | null;
+  teamName: string;
+  photoAnalyses: number;
+  walkthroughSummaries: number;
+  autoReports: number;
+  photoCount: number;
+  storageBytes: number;
+  estimatedAiCostUsd: number;
+}
+
+export interface PlatformUsage {
+  windowDays: number;
+  rows: UsageRow[];
+  totals: {
+    photoAnalyses: number;
+    walkthroughSummaries: number;
+    autoReports: number;
+    storageBytes: number;
+    estimatedAiCostUsd: number;
+  };
+  unavailable: string[];
+}
+
+export const getPlatformUsage = rpcOp<{ windowDays?: number }, PlatformUsage>("getPlatformUsage");
+
+export interface ContentLibraryEntry {
+  kind: string;
+  table: string;
+  total: number;
+  global: number;
+  available: boolean;
+}
+
+export const getContentLibrary = rpcOp<undefined, { entries: ContentLibraryEntry[] }>(
+  "getContentLibrary",
+);

@@ -37,6 +37,37 @@ export async function logAdminAction(
   }
 }
 
+/**
+ * Record that an admin *looked at* a customer's data.
+ *
+ * The log used to hold four actions, all of them writes. But the risk this
+ * console carries is not mostly write-shaped: an admin opening one company's
+ * workspace, reading their projects and their feedback, is a privacy event, and
+ * it left no trace at all. "Who looked at this account, and when" was
+ * unanswerable, which is exactly the question that gets asked after a
+ * complaint.
+ *
+ * Same best-effort contract as `logAdminAction` - a logging failure must never
+ * block the read it is recording.
+ */
+export async function logAdminRead(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  params: {
+    actorId: string;
+    targetType: string;
+    targetId: string;
+    metadata?: Record<string, unknown> | null;
+  },
+): Promise<void> {
+  await logAdminAction(admin, {
+    actorId: params.actorId,
+    action: `view_${params.targetType}`,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    metadata: params.metadata ?? null,
+  });
+}
+
 export const listAdminAuditLogInputSchema = z.object({
   cursor: z.string().datetime().optional(),
   limit: z.number().int().min(1).max(100).default(50),

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Search, ShieldCheck, ShieldOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -79,7 +80,9 @@ export function AdminUsersPage() {
       className: "font-medium text-foreground",
       cell: (u) => (
         <span className="flex items-center gap-1.5">
-          {u.fullName ?? "-"}
+          <Link to="/admin/users/$userId" params={{ userId: u.id }} className="hover:underline">
+            {u.fullName ?? u.email ?? "(no name)"}
+          </Link>
           {u.isPlatformAdmin && (
             <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-primary">
               admin
