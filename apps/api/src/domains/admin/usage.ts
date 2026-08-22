@@ -234,39 +234,44 @@ export async function getContentLibraryService(
   await requirePlatformAdmin(ctx.userId);
   const admin = getSupabaseAdmin();
 
-  const entries: ContentLibraryEntry[] = [];
-  for (const source of LIBRARY_SOURCES) {
-    const { count, error } = await (admin as any)
-      .from(source.table)
-      .select("id", { count: "exact", head: true });
-    if (error) {
-      entries.push({
+  /*
+   * All fourteen counts at once, not one after another.
+   *
+   * This was a `for` loop doing two sequential head-counts per table, so seven
+   * tables meant fourteen round trips end to end - and the Health page measured
+   * the result at a p50 of 12.1 seconds, the slowest operation in the product.
+   * That is the kind of thing the health page was built to catch, and it caught
+   * its own author.
+   *
+   * Fourteen concurrent head-counts is a trivial load: each is an indexed
+   * COUNT with `head: true`, so no rows cross the wire.
+   */
+  const entries = await Promise.all(
+    LIBRARY_SOURCES.map(async (source): Promise<ContentLibraryEntry> => {
+      const [totalRes, globalRes] = await Promise.all([
+        (admin as any).from(source.table).select("id", { count: "exact", head: true }),
+        source.ownerColumn
+          ? (admin as any)
+              .from(source.table)
+              .select("id", { count: "exact", head: true })
+              .is(source.ownerColumn, null)
+          : Promise.resolve({ count: 0, error: null }),
+      ]);
+
+      // A table this database does not have is reported as unavailable rather
+      // than as an empty library, which would read as "we ship nothing".
+      if (totalRes.error) {
+        return { kind: source.kind, table: source.table, total: 0, global: 0, available: false };
+      }
+      return {
         kind: source.kind,
         table: source.table,
-        total: 0,
-        global: 0,
-        available: false,
-      });
-      continue;
-    }
-
-    let global = 0;
-    if (source.ownerColumn) {
-      const { count: globalCount, error: globalError } = await (admin as any)
-        .from(source.table)
-        .select("id", { count: "exact", head: true })
-        .is(source.ownerColumn, null);
-      if (!globalError) global = globalCount ?? 0;
-    }
-
-    entries.push({
-      kind: source.kind,
-      table: source.table,
-      total: count ?? 0,
-      global,
-      available: true,
-    });
-  }
+        total: totalRes.count ?? 0,
+        global: globalRes.error ? 0 : (globalRes.count ?? 0),
+        available: true,
+      };
+    }),
+  );
 
   return { entries };
 }

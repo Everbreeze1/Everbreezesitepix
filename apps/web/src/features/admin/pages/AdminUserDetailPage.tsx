@@ -29,7 +29,7 @@ function statusClass(code: number): string {
 }
 
 export function AdminUserDetailPage() {
-  const { userId } = useParams({ from: "/_app/admin/users/$userId" });
+  const { userId } = useParams({ from: "/_app/admin/users_/$userId" });
   const qc = useQueryClient();
   const prompt = usePrompt();
   const [busy, setBusy] = useState(false);
