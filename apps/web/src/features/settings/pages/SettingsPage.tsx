@@ -25,6 +25,7 @@ import {
   Crown,
   Check,
   Star,
+  Tag,
   Plus,
   Trash2,
   ArrowRight,
@@ -51,6 +52,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { getMyTeam, createBillingPortalSession } from "@/features/settings/api";
 // Same matrix the billing RPC enforces with - see domains/billing/service.ts.
 import { can } from "@sitepix/shared/team-permissions";
+import { WorkspaceLabelsSection } from "@/features/settings/components/WorkspaceLabelsSection";
 import { RoleBadge } from "@/features/teams/components/RoleBadge";
 import {
   parseNotificationPrefs,
@@ -73,7 +75,8 @@ type SectionId =
   | "company"
   | "billing"
   | "team"
-  | "reviews";
+  | "reviews"
+  | "labels";
 
 const inputClass =
   "h-[48px] rounded-[14px] border-border bg-card/[0.92] font-manrope text-sm text-foreground shadow-[0_5px_12px_-12px_rgba(16,25,41,0.35)] placeholder:text-muted-foreground focus-visible:ring-ring/30";
@@ -129,6 +132,15 @@ const SECTIONS: {
     icon: Users,
     group: "Your Company",
     hint: "Invite and manage access",
+  },
+  {
+    // Moved here out of the Templates hub at the client's request: labels are a
+    // workspace catalog, not a template. See WorkspaceLabelsSection.
+    id: "labels",
+    label: "Labels",
+    icon: Tag,
+    group: "Your Company",
+    hint: "The label catalog projects and photos use",
   },
   {
     id: "reviews",
@@ -330,6 +342,12 @@ export function SettingsPage() {
             )}
             {active === "team" && <TeamSection isTeam={isTeam} teamData={teamData} tier={tier} />}
             {active === "reviews" && <ReviewLinksSection isTeam={isTeam} />}
+            {active === "labels" && (
+              <WorkspaceLabelsSection
+                teamId={teamData?.team?.id ?? null}
+                canManage={!myTeamRole || can(myTeamRole, "manage_templates")}
+              />
+            )}
 
             {/* Mobile sign out */}
             <Button

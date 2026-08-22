@@ -31,7 +31,8 @@ describe("SHOW_WALKTHROUGH_TEMPLATES", () => {
 
   it("gates the blueprint Add-section menu", () => {
     // A blueprint must not become a second door to the parked templates.
-    expect(src()).toMatch(/SHOW_WALKTHROUGH_TEMPLATES \|\| k !== "walkthrough"/);
+    // The filter guards several parked kinds now; this is the walkthrough line.
+    expect(src()).toMatch(/!SHOW_WALKTHROUGH_TEMPLATES && k === "walkthrough"/);
   });
 
   it("redirects a deep link to the hidden tab instead of rendering a stranded panel", () => {

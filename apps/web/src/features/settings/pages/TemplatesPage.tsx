@@ -90,7 +90,6 @@ import {
   type BlueprintStarter,
 } from "@/features/settings/components/blueprint-starters";
 import { installBlueprintStarter } from "@/features/settings/components/install-blueprint-starter";
-import { LabelsManager } from "@/features/settings/components/LabelsManager";
 import { LabelSetsManager } from "@/features/settings/components/LabelSetsManager";
 import { ReportTemplatesManager } from "@/features/settings/components/ReportTemplatesManager";
 import { DocumentTemplatesManager } from "@/features/settings/components/DocumentTemplatesManager";
@@ -124,6 +123,20 @@ import { ensureLabel, useLabelCatalog } from "@/hooks/use-label-catalog";
  * parked. Flip this back to true to un-hide it, one line, no data migration.
  */
 export const SHOW_WALKTHROUGH_TEMPLATES = false;
+
+/**
+ * Whether Label Sets are offered in the Templates hub.
+ *
+ * Off for now: "hide Label Sets until we figured out a use for them." Same
+ * parking as walkthroughs - the manager, the data and the blueprint section
+ * kind all stay; this only stops the hub from offering one. Flip to true to
+ * bring it back.
+ *
+ * Labels are NOT here. They were not hidden, they were moved: their catalog now
+ * lives in Settings > Labels (WorkspaceLabelsSection). This file no longer
+ * renders them at all.
+ */
+export const SHOW_LABEL_SETS = false;
 
 export const TEMPLATE_TAB_KEYS = [
   "blueprints",
@@ -380,8 +393,17 @@ export function TemplatesPage() {
    * default instead.
    */
   const requestedTab = search.tab ?? "blueprints";
-  const walkthroughsHidden = !SHOW_WALKTHROUGH_TEMPLATES && requestedTab === "walkthroughs";
-  const tab: TemplateTabKey = walkthroughsHidden ? "blueprints" : requestedTab;
+  /*
+   * Tabs that no longer live here. Walkthroughs and Label Sets are parked
+   * behind flags; Labels moved to Settings entirely. A deep link to any of them
+   * still validates (the keys stay legal so old links do not 404) but would
+   * render a panel the strip cannot highlight, so it falls back to the default.
+   */
+  const tabRelocated =
+    (!SHOW_WALKTHROUGH_TEMPLATES && requestedTab === "walkthroughs") ||
+    (!SHOW_LABEL_SETS && requestedTab === "label-sets") ||
+    requestedTab === "labels";
+  const tab: TemplateTabKey = tabRelocated ? "blueprints" : requestedTab;
   const setTab = useCallback(
     (next: TemplateTabKey) => {
       void navigate({
@@ -402,8 +424,8 @@ export function TemplatesPage() {
    * actually shown. `replace`, so it does not add a Back-button step.
    */
   useEffect(() => {
-    if (walkthroughsHidden) setTab("blueprints");
-  }, [walkthroughsHidden, setTab]);
+    if (tabRelocated) setTab("blueprints");
+  }, [tabRelocated, setTab]);
 
   const [tplItems, setTplItems] = useState<TemplateItem[]>([]);
   const [addKind, setAddKind] = useState<TemplateItemKind | "">("");
@@ -646,39 +668,11 @@ export function TemplatesPage() {
     return m;
   }, [applications]);
 
-  // Usage counts for the Labels tab.
-  const templateUsage = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const t of templates) {
-      if (t.archived) continue;
-      for (const l of t.labels ?? []) {
-        const k = l.toLowerCase();
-        m.set(k, (m.get(k) ?? 0) + 1);
-      }
-    }
-    return m;
-  }, [templates]);
-
-  const [projectUsage, setProjectUsage] = useState<Map<string, number>>(new Map());
-  useEffect(() => {
-    if (!user || gated) return;
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase.from("projects").select("labels").limit(1000);
-      if (cancelled) return;
-      const m = new Map<string, number>();
-      for (const row of (data as any[] | null) ?? []) {
-        for (const l of (row.labels as string[] | null) ?? []) {
-          const k = String(l).toLowerCase();
-          m.set(k, (m.get(k) ?? 0) + 1);
-        }
-      }
-      setProjectUsage(m);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, gated, tab]);
+  /*
+   * The label usage counts, and the LabelsManager they fed, moved to Settings
+   * with the Labels catalog itself (WorkspaceLabelsSection). This hub no longer
+   * shows labels, so it no longer computes their usage.
+   */
 
   /*
    * The blueprint rail sorts the way every other Templates tab sorts: the
@@ -1362,13 +1356,17 @@ export function TemplatesPage() {
               : []),
             { key: "documents", label: "Documents", count: tabCounts.documents, icon: FileText },
             { key: "reports", label: "Reports", count: tabCounts.reports, icon: Newspaper },
-            {
-              key: "label-sets",
-              label: "Label sets",
-              count: tabCounts["label-sets"],
-              icon: Tags,
-            },
-            { key: "labels", label: "Labels", count: tabCounts.labels, icon: Tag },
+            // Label Sets parked (SHOW_LABEL_SETS); Labels moved to Settings.
+            ...(SHOW_LABEL_SETS
+              ? [
+                  {
+                    key: "label-sets" as const,
+                    label: "Label sets",
+                    count: tabCounts["label-sets"],
+                    icon: Tags,
+                  },
+                ]
+              : []),
           ]}
         />
 
@@ -1439,15 +1437,6 @@ export function TemplatesPage() {
           )}
           {tab === "label-sets" && (
             <LabelSetsManager teamId={teamData?.team?.id ?? null} canManage={canManage} />
-          )}
-          {tab === "labels" && user && (
-            <LabelsManager
-              teamId={teamData?.team?.id ?? null}
-              userId={user.id}
-              canManage={canManage}
-              templateUsage={templateUsage}
-              projectUsage={projectUsage}
-            />
           )}
         </div>
       </div>
@@ -2504,13 +2493,14 @@ function BlueprintsTab(props: {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-64">
-                        {KIND_ORDER.filter(
-                          // Same parking as the tab: a blueprint must not be a
-                          // second door to the walkthrough templates the hub is
-                          // hiding. Existing walkthrough sections still render;
-                          // this only stops adding new ones.
-                          (k) => SHOW_WALKTHROUGH_TEMPLATES || k !== "walkthrough",
-                        ).map((k) => {
+                        {KIND_ORDER.filter((k) => {
+                          // A blueprint must not be a second door to the kinds
+                          // the hub is parking. Existing sections of these kinds
+                          // still render; this only stops adding new ones.
+                          if (!SHOW_WALKTHROUGH_TEMPLATES && k === "walkthrough") return false;
+                          if (!SHOW_LABEL_SETS && k === "label_set") return false;
+                          return true;
+                        }).map((k) => {
                           const Icon = KIND_META[k].icon;
                           /*
                            * "zero-to-one workflow", from the spec. A workflow
@@ -2892,7 +2882,9 @@ function BlueprintsIntro({
     {
       icon: LayoutTemplate,
       title: "Build the pieces",
-      // Walkthroughs is intentionally absent from this list while it is parked;
+      // The tabs, named. Walkthroughs and label sets are parked; labels moved
+      // to Settings, so none of the three appears here.
+      body: "Checklists, workflows, documents and reports - each on its own tab above. Anything you save from a project lands there too.",
     },
     {
       icon: FolderOpen,

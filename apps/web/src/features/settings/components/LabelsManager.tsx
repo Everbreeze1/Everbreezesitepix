@@ -31,8 +31,14 @@ interface Props {
   teamId: string | null;
   userId: string;
   canManage: boolean;
-  /** Maps lower(name) -> count of project templates using the label */
-  templateUsage: Map<string, number>;
+  /**
+   * Maps lower(name) -> count of blueprint templates using the label.
+   *
+   * Optional: in the workspace-settings home the template count is not the
+   * lens that matters (and templates are being de-emphasised), so the badge is
+   * simply omitted there. It is still passed from the Templates hub.
+   */
+  templateUsage?: Map<string, number>;
   /** Maps lower(name) -> count of projects using the label */
   projectUsage: Map<string, number>;
 }
@@ -164,7 +170,7 @@ export function LabelsManager({ teamId, userId, canManage, templateUsage, projec
         <ul className="divide-y divide-border/60">
           {filtered.map((l) => {
             const key = l.name.toLowerCase();
-            const tplCount = templateUsage.get(key) ?? 0;
+            const tplCount = templateUsage?.get(key) ?? 0;
             const prjCount = projectUsage.get(key) ?? 0;
             return (
               <li
@@ -182,10 +188,12 @@ export function LabelsManager({ teamId, userId, canManage, templateUsage, projec
                   <span style={{ transform: "skewX(12deg)" }}>{l.name}</span>
                 </span>
                 <div className="flex flex-1 items-center gap-2 text-xs text-muted-foreground">
-                  <Badge variant="outline" className="gap-1 font-normal">
-                    <LayoutTemplate className="h-3 w-3" />
-                    {tplCount} template{tplCount === 1 ? "" : "s"}
-                  </Badge>
+                  {templateUsage && (
+                    <Badge variant="outline" className="gap-1 font-normal">
+                      <LayoutTemplate className="h-3 w-3" />
+                      {tplCount} template{tplCount === 1 ? "" : "s"}
+                    </Badge>
+                  )}
                   <Badge variant="outline" className="gap-1 font-normal">
                     <FolderOpen className="h-3 w-3" />
                     {prjCount} project{prjCount === 1 ? "" : "s"}
