@@ -46,9 +46,7 @@ const BODY =
   cell(4, "Fourth caption.") +
   `</div>`;
 
-const [{ created_by }] = await (
-  await api(`projects?select=created_by&id=eq.${PROJECT}`)
-).json();
+const [{ created_by }] = await (await api(`projects?select=created_by&id=eq.${PROJECT}`)).json();
 const [{ id: pageId }] = await (
   await api("project_pages", {
     method: "POST",
@@ -90,7 +88,10 @@ try {
   await page.goto(`${BASE}/projects/${PROJECT}/pages/${pageId}`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector(".tiptap", { timeout: 90000 }).catch(() => {});
   await page.waitForTimeout(6000);
-  check("renders 4 cells before editing", (await page.locator('.tiptap [data-panel="photocell"]').count()) === 4);
+  check(
+    "renders 4 cells before editing",
+    (await page.locator('.tiptap [data-panel="photocell"]').count()) === 4,
+  );
 
   // A real edit: click into the last caption and type. This dirties the doc and
   // triggers the editor's autosave, which serialises the doc back to HTML.
@@ -117,7 +118,10 @@ try {
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector(".tiptap", { timeout: 90000 }).catch(() => {});
   await page.waitForTimeout(6000);
-  check("still 4 cells after reload", (await page.locator('.tiptap [data-panel="photocell"]').count()) === 4);
+  check(
+    "still 4 cells after reload",
+    (await page.locator('.tiptap [data-panel="photocell"]').count()) === 4,
+  );
   const disp = await page
     .locator('.tiptap [data-panel^="photogrid"]')
     .first()

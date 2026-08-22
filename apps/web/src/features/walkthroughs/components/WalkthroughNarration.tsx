@@ -177,6 +177,12 @@ export function WalkthroughNarratedPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(durationSeconds || 0);
+  /**
+   * The video's true aspect ratio, once its metadata loads. A phone-shot walk
+   * is portrait; forcing it into a 16:9 box letterboxes it with hard black
+   * bars, which looks cheap. Sizing the frame to the footage removes the bars.
+   */
+  const [aspect, setAspect] = useState<number | null>(null);
   const [narrating, setNarrating] = useState(false);
   const [canNarrate] = useState(speechAvailable);
   /** The chapter last spoken, so a chapter is never read out twice running. */
@@ -344,17 +350,21 @@ export function WalkthroughNarratedPlayer({
       </div>
 
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
-        <div className="relative bg-black">
+        <div className="relative flex items-center justify-center bg-black">
           <video
             ref={videoRef}
             src={videoUrl}
             controls
             playsInline
             preload="metadata"
-            className="aspect-video h-auto w-full bg-black"
+            className="max-h-[72vh] w-auto max-w-full bg-black object-contain"
+            style={{ aspectRatio: aspect ?? 16 / 9 }}
             onLoadedMetadata={(e) => {
               const d = e.currentTarget.duration;
               if (Number.isFinite(d) && d > 0) setDuration(d);
+              const w = e.currentTarget.videoWidth;
+              const h = e.currentTarget.videoHeight;
+              if (w > 0 && h > 0) setAspect(w / h);
             }}
             onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
             onPlay={() => setPlaying(true)}

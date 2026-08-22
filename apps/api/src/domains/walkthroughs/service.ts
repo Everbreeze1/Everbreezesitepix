@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { chatEndpoint, transcriptionEndpoint } from "../../lib/ai-provider";
+import { chatEndpoint } from "../../lib/ai-provider";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
-import { summarizePhotosReportService } from "../ai/service";
+import { summarizePhotosReportService, transcribeAudio } from "../ai/service";
 import { assertAutoReportAllowed, releaseAutoReport, reserveAutoReport } from "./auto-report-quota";
 import { generateSummaryForWalkthroughService } from "./summaries";
 import {
@@ -20,7 +20,23 @@ import {
 } from "@sitepix/shared";
 
 const MODEL = "google/gemini-2.5-flash";
-const TRANSCRIPTION_MODEL = "openai/gpt-4o-mini-transcribe";
+/**
+ * The container name Gemini's `input_audio` wants, from a browser mime type.
+ *
+ * The walkthrough recorder's own audio sidecar is WAV (encodePcmWav), which is
+ * the clean path; the video-fallback is webm. Anything unexpected is sent as
+ * "wav" rather than guessed at, since the sidecar is the common case.
+ */
+function audioFormatForMime(mimeType: string): string {
+  const mime = (mimeType.split(";")[0] ?? "").toLowerCase();
+  if (mime.includes("wav")) return "wav";
+  if (mime.includes("mp4") || mime.includes("m4a") || mime.includes("aac")) return "mp4";
+  if (mime.includes("mpeg") || mime.includes("mp3")) return "mp3";
+  if (mime.includes("ogg")) return "ogg";
+  if (mime.includes("webm")) return "webm";
+  if (mime.includes("flac")) return "flac";
+  return "wav";
+}
 
 const generateSchema = z.object({
   walkthroughId: z.string().uuid(),
@@ -1639,18 +1655,9 @@ const transcribeSchema = z.object({
   mimeType: z.string().min(1).max(100),
 });
 
-function extensionForAudioMime(mimeType: string) {
-  const mime = mimeType.split(";")[0]?.toLowerCase() ?? "";
-  if (mime.includes("mp4") || mime.includes("m4a")) return "mp4";
-  if (mime.includes("mpeg") || mime.includes("mp3")) return "mp3";
-  if (mime.includes("wav")) return "wav";
-  if (mime.includes("ogg")) return "ogg";
-  if (mime.includes("webm")) return "webm";
-  return "webm";
-}
-
 /**
- * Transcribe the completed walkthrough recording through Gemini STT,
+ * Transcribe the completed walkthrough recording through Gemini audio
+ * understanding on the chat endpoint (see transcribeAudio),
  * then persist both the full transcript and estimated narration context
  * beside each captured photo.
  */
@@ -1659,8 +1666,6 @@ export async function transcribeWalkthroughService(
   data: { walkthroughId: string; audioBase64: string; mimeType: string },
 ) {
   const { userId } = ctx;
-  const stt = transcriptionEndpoint(TRANSCRIPTION_MODEL);
-
   const supabaseAdmin = getSupabaseAdmin();
   const { data: walk, error: wErr } = await supabaseAdmin
     .from("walkthroughs" as any)
@@ -1680,23 +1685,16 @@ export async function transcribeWalkthroughService(
   const bytes = Buffer.from(data.audioBase64, "base64");
   if (bytes.byteLength < 2048) throw new Error("Recording was empty");
 
-  const form = new FormData();
-  const fileName = `walkthrough-${data.walkthroughId}.${extensionForAudioMime(data.mimeType)}`;
-  form.append("model", stt.model);
-  form.append("file", new Blob([bytes], { type: data.mimeType }), fileName);
-
-  const res = await fetch(stt.url, {
-    method: "POST",
-    headers: stt.headers,
-    body: form,
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`Transcription failed: ${res.status} ${txt.slice(0, 200)}`);
-  }
-
-  const json = (await res.json()) as { text?: string };
-  const transcript = (json.text ?? "").replace(/\s+/g, " ").trim();
+  /*
+   * Audio understanding on the chat endpoint - NOT a Whisper-style transcribe
+   * endpoint, which Gemini does not have. The old code POSTed to
+   * /openai/audio/transcriptions, an endpoint that answers nothing (HTTP 000),
+   * so this call had never once returned a transcript in production. See
+   * transcribeAudio for the whole story.
+   */
+  const transcript = (await transcribeAudio(data.audioBase64, audioFormatForMime(data.mimeType)))
+    .replace(/\s+/g, " ")
+    .trim();
   const finalTranscript = transcript || ((walk as any).transcript ?? "").trim();
 
   if (finalTranscript) {

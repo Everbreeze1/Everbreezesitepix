@@ -4,7 +4,6 @@
 // silently falling back to any third-party gateway.
 
 const GEMINI_CHAT = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
-const GEMINI_STT = "https://generativelanguage.googleapis.com/v1beta/openai/audio/transcriptions";
 
 // Latest Gemini Flash. Using the "-latest" alias keeps us on a currently
 // available model as Google rotates versions.
@@ -34,15 +33,9 @@ export function chatEndpoint(_preferredModel?: string) {
   };
 }
 
-/** Returns URL/headers/model for audio transcription (multipart form). */
-export function transcriptionEndpoint(_fallbackModel: string) {
-  const key = requireGeminiKey();
-  return {
-    url: GEMINI_STT,
-    headers: { Authorization: `Bearer ${key}` } as Record<string, string>,
-    model: GEMINI_FLASH_MODEL,
-  };
-}
+// Audio is transcribed through the ordinary chat endpoint as an `input_audio`
+// part (see transcribeAudio in domains/ai/service.ts). Gemini has no separate
+// transcription endpoint, so there is none to export here.
 
 export function isUsingCustomGemini() {
   return !!process.env.GEMINI_API_KEY;
