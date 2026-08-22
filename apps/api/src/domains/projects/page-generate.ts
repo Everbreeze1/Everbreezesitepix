@@ -1,13 +1,7 @@
 import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 import { summarizePhotosReportService, draftReportNarrativeService } from "../ai/service";
-import {
-  PHOTO_ROW_HEIGHT,
-  cleanCaption,
-  markdownToHtml,
-  photoPageGroups,
-  photoWidthFor,
-} from "@sitepix/shared";
+import { cleanCaption, markdownToHtml } from "@sitepix/shared";
 import { existingPageTitles, projectDocumentTitle, uniqueDocumentTitle } from "./page-title";
 import { DAILY_LOG_INTERNAL_NOTICE } from "./page-filing";
 
@@ -30,6 +24,9 @@ export { markdownToHtml };
  */
 const SINGLE_PHOTO_WIDTH = "62%";
 const SINGLE_PHOTO_HEIGHT = 300;
+
+/** Fallback height hint for a photo in a grid cell; real size is per surface. */
+const GRID_PHOTO_HEIGHT = 190;
 
 /** A selected photo plus the metadata already captured in the field. */
 export interface GeneratedPhoto {
@@ -125,19 +122,11 @@ function photoGridHtml(photos: GeneratedPhoto[]): string {
  * asked for one-up actually wants, where each observation is separately
  * referenceable.
  *
- * At any other density the photos are grouped a page at a time under a single
- * "Photographic record" heading, each group a card holding its rows of images
- * with one caption line per photo. That is the change behind the complaint: a
- * heading and a full-width card per photo meant the PDF renderer only ever had
- * one image to lay out at a time, so a report came back at one picture per
- * sheet no matter how many photos went into it.
- *
- * The row arithmetic is @sitepix/shared's, in "photos" mode: every step of the
- * setting has to fit more on a sheet than the step below it. Measured on a
- * rendered PDF, the editor's 2x2-at-four-up rule broke that - four-up came out
- * at 248pt wide, four to a sheet, which is two-up's layout and less dense than
- * three-up's six. Slots keep the grid because an empty box is a tap target
- * first; finished evidence does not need to be tappable.
+ * At any other density it is a grid of cards, each photo carrying its own
+ * caption directly beneath it (see the body of this function). That is the fix
+ * for the complaint the client raised: the old layout drew a row of images and
+ * then all of that row's captions bunched together, so no caption sat with its
+ * photo and you could not tell which was which.
  */
 export function photoEvidenceHtml(photos: GeneratedPhoto[], perPage: 1 | 2 | 3 | 4): string {
   // No heading over nothing. The picker requires a photo, so this is a guard
@@ -150,27 +139,35 @@ export function photoEvidenceHtml(photos: GeneratedPhoto[], perPage: 1 | 2 | 3 |
       .join("");
   }
 
-  const width = photoWidthFor(perPage, "photos");
-  let n = 0;
-  const cards = photoPageGroups(photos, perPage, "photos").map((rows) => {
-    const imgRows = rows
-      .map(
-        (row) =>
-          `<p>${row
-            .map(
-              (p) =>
-                `<img data-photo-id="${p.id}" src="" width="${width}" height="${PHOTO_ROW_HEIGHT}">`,
-            )
-            .join("")}</p>`,
-      )
-      .join("");
-    const captions = rows
-      .flat()
-      .map((p) => captionLineHtml(p, ++n))
-      .join("");
-    return panelHtml("photo", imgRows + captions);
-  });
-  return `<h2>Photographic record</h2>` + cards.join("") + `<p></p>`;
+  /*
+   * A grid of cards, each photo with its own caption directly beneath it.
+   *
+   * The old layout drew a whole row of images and then all of that row's
+   * captions bunched together underneath, so you could not tell which caption
+   * belonged to which photo and there was no room for a caption beside its
+   * picture. The client asked the report to match the walkthrough Summary,
+   * where the note sits on the photo's own card, and this is that shape.
+   *
+   * Nested InfoPanels (data-panel) rather than a bare grid, because Tiptap
+   * drops any element it does not recognise: the photo cards would render once
+   * and then vanish the first time the report was edited. The layout itself is
+   * CSS on screen (.tiptap [data-panel^="photogrid"]) and renderPhotoGrid in
+   * the PDF; the cols count rides in the variant name so it survives the
+   * editor without a custom attribute.
+   */
+  const cols = perPage; // 2 | 3 | 4
+  const cells = photos
+    .map(
+      (p, i) =>
+        `<div data-panel="photocell">` +
+        `<p><img data-photo-id="${p.id}" src="" width="100%" height="${GRID_PHOTO_HEIGHT}"></p>` +
+        captionLineHtml(p, i + 1) +
+        `</div>`,
+    )
+    .join("");
+  return (
+    `<h2>Photographic record</h2>` + `<div data-panel="photogrid${cols}">${cells}</div>` + `<p></p>`
+  );
 }
 
 /**
