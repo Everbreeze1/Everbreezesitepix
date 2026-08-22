@@ -213,6 +213,22 @@ import {
 } from "../admin/shares";
 import { getApiHealthInputSchema, getApiHealthService, listJobRunsService } from "../admin/health";
 import {
+  addUserNoteInputSchema,
+  addUserNoteService,
+  bulkUserActionInputSchema,
+  exportUsersInputSchema,
+  exportUsersService,
+  listUserDirectoryInputSchema,
+  listUserDirectoryService,
+  listUserNotesInputSchema,
+  listUserNotesService,
+  runBulkUserActionService,
+  setAdminRoleInputSchema,
+  setAdminRoleService,
+  setUserTeamRoleInputSchema,
+  setUserTeamRoleService,
+} from "../admin/user-directory";
+import {
   getContentLibraryService,
   getPlatformUsageInputSchema,
   getPlatformUsageService,
@@ -1167,6 +1183,38 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   listAdminAuditLog: authed(
     (d) => listAdminAuditLogInputSchema.parse(d),
     listAdminAuditLogService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  listUserDirectory: authed(
+    (d) => listUserDirectoryInputSchema.parse(d),
+    listUserDirectoryService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  setAdminRole: authed(
+    (d) => setAdminRoleInputSchema.parse(d),
+    setAdminRoleService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  listUserNotes: authed(
+    (d) => listUserNotesInputSchema.parse(d),
+    listUserNotesService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  addUserNote: authed(
+    (d) => addUserNoteInputSchema.parse(d),
+    addUserNoteService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  setUserTeamRole: authed(
+    (d) => setUserTeamRoleInputSchema.parse(d),
+    setUserTeamRoleService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  runBulkUserAction: authed(
+    (d) => bulkUserActionInputSchema.parse(d),
+    runBulkUserActionService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  exportUsers: authed(
+    (d) => exportUsersInputSchema.parse(d),
+    exportUsersService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   getPlatformUserDetail: authed(
     (d) => getPlatformUserDetailInputSchema.parse(d),

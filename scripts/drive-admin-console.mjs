@@ -56,6 +56,10 @@ const MUTATING_OPS = new Set([
   "overrideTeamPlan",
   "manageTeamSubscription",
   "revokeShareLinks",
+  "setAdminRole",
+  "addUserNote",
+  "setUserTeamRole",
+  "runBulkUserAction",
 ]);
 
 /** Wait for a selector to exist. Returns false rather than throwing. */
@@ -166,7 +170,7 @@ const run = async () => {
   // --- every admin section -------------------------------------------------
   const sections = [
     { path: "/admin", name: "Overview", expect: /Total users|Total teams/i },
-    { path: "/admin/users", name: "Users", expect: /Email|No users match/i },
+    { path: "/admin/users", name: "Users", expect: /Showing \d|No accounts match/i },
     {
       path: "/admin/teams",
       name: "Teams",
@@ -195,15 +199,26 @@ const run = async () => {
     });
   }
 
-  // --- pagination actually wired (milestone 1.2) ---------------------------
+  // --- the user directory ---------------------------------------------------
   await page.goto(`${BASE}/admin/users`, { waitUntil: "domcontentloaded", timeout: 60000 });
-  await page.waitForTimeout(5000);
+  await waitFor(page, "text=Showing");
   const usersBody = await page.locator("body").innerText();
   expect(
-    /\d+ rows?( loaded)?/.test(usersBody) || /all loaded/.test(usersBody),
-    "users table shows a row count and load state",
-    "AdminTable footer",
+    /Showing \d+-\d+ of \d+/.test(usersBody),
+    "users list shows a real total",
+    "counted in SQL, not inferred from the loaded page",
   );
+  expect(
+    /Unconfirmed/.test(usersBody) && /Dormant/.test(usersBody) && /No team/.test(usersBody),
+    "status filters are offered",
+  );
+  expect(/Last seen/i.test(usersBody), "last-seen column is present");
+  expect(/Export CSV/i.test(usersBody), "export is offered");
+  expect(
+    (await page.locator('input[type="checkbox"]').count()) > 1,
+    "rows are selectable for bulk actions",
+  );
+  await page.screenshot({ path: `${SHOTS}/09-users-directory.png`, fullPage: true });
 
   // --- the user detail route (milestone 3) ---------------------------------
   const sawUserLink = await waitFor(page, 'a[href^="/admin/users/"]');
@@ -219,6 +234,16 @@ const run = async () => {
       "proves auth.admin.getUserById works through the new op",
     );
     expect(/Recent API activity/i.test(detail), "user detail reads api_audit_logs");
+    // The roles were enforced from the day they landed but nothing could SET
+    // them, so every admin was a superadmin and the capability system was
+    // decorative. This asserts the control exists.
+    expect(/Platform access/i.test(detail), "user detail offers an admin role, not a boolean");
+    expect(
+      /support/i.test(detail) && /billing/i.test(detail) && /superadmin/i.test(detail),
+      "all three admin roles are offered",
+    );
+    expect(/Support notes/i.test(detail), "user detail has support notes");
+    expect(/Team membership/i.test(detail), "user detail can change a team role");
     await page.screenshot({ path: `${SHOTS}/10-user-detail.png`, fullPage: true });
   } else {
     bad("user detail page renders", "no /admin/users/<id> link appeared within 30s");
@@ -271,7 +296,7 @@ const run = async () => {
   );
 
   const adminOps = [...new Set(rpcCalls)].filter((o) =>
-    /^(get|list|check)(Admin|Platform|Feedback|Api|Job|Share|Team|Content|Billing)/.test(o),
+    /^(get|list|check)(Admin|Platform|Feedback|Api|Job|Share|Team|Content|Billing|User)/.test(o),
   );
   ok("admin ops exercised", adminOps.sort().join(", "));
 

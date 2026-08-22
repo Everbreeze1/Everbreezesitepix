@@ -241,6 +241,7 @@ export interface PlatformUserDetail {
   avatarUrl: string | null;
   createdAt: string;
   isPlatformAdmin: boolean;
+  adminRole: AdminRole | null;
   auth: {
     emailConfirmedAt: string | null;
     lastSignInAt: string | null;
@@ -266,6 +267,13 @@ export interface PlatformUserDetail {
     deletedAt: string | null;
   }>;
   totals: { projects: number; photos: number; storageBytes: number; feedbackReports: number };
+  feedback: Array<{
+    id: string;
+    kind: string;
+    status: string;
+    description: string | null;
+    createdAt: string;
+  }>;
   recentActivity: Array<{
     id: string;
     route: string;
@@ -481,3 +489,94 @@ export interface ContentLibraryEntry {
 export const getContentLibrary = rpcOp<undefined, { entries: ContentLibraryEntry[] }>(
   "getContentLibrary",
 );
+
+// ---------------------------------------------------------------------------
+// User directory
+//
+// Mirrors apps/api/src/domains/admin/user-directory.ts. The list is filtered,
+// sorted, counted and paginated in SQL, so these inputs are passed through
+// rather than applied client-side.
+// ---------------------------------------------------------------------------
+
+export const USER_STATUSES = [
+  "active",
+  "unconfirmed",
+  "suspended",
+  "no_team",
+  "dormant",
+  "admin",
+] as const;
+export type UserStatusFilter = (typeof USER_STATUSES)[number];
+
+export type UserSort = "joined" | "last_seen" | "name" | "storage" | "projects" | "activity";
+
+export interface DirectoryUser {
+  id: string;
+  fullName: string | null;
+  email: string | null;
+  company: string | null;
+  createdAt: string;
+  team: { id: string; name: string; plan: string; role: string } | null;
+  teamCount: number;
+  isPlatformAdmin: boolean;
+  adminRole: AdminRole | null;
+  emailConfirmed: boolean;
+  suspended: boolean;
+  lastSignInAt: string | null;
+  lastSeenAt: string | null;
+  requests30d: number;
+  projectCount: number;
+  storageBytes: number;
+  feedbackCount: number;
+}
+
+export interface UserDirectoryFilters {
+  search?: string;
+  plan?: "starter" | "pro" | "team";
+  status?: UserStatusFilter;
+  sort?: UserSort;
+  desc?: boolean;
+}
+
+export const listUserDirectory = rpcOp<
+  UserDirectoryFilters & { limit?: number; offset?: number },
+  { users: DirectoryUser[]; total: number; offset: number; limit: number; degraded: boolean }
+>("listUserDirectory");
+
+export const setAdminRole = rpcOp<
+  { userId: string; role: AdminRole | null; reason: string },
+  { ok: true; role: AdminRole | null }
+>("setAdminRole");
+
+export interface UserNote {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: { id: string | null; name: string | null; email: string | null };
+}
+
+export const listUserNotes = rpcOp<
+  { userId: string },
+  { notes: UserNote[]; unavailable: string | null }
+>("listUserNotes");
+
+export const addUserNote = rpcOp<{ userId: string; body: string }, { ok: true }>("addUserNote");
+
+export const setUserTeamRole = rpcOp<
+  { userId: string; teamId: string; role: string; reason: string },
+  { ok: true }
+>("setUserTeamRole");
+
+export const runBulkUserAction = rpcOp<
+  {
+    userIds: string[];
+    action: "suspend" | "reinstate" | "resend_confirmation";
+    reason: string;
+  },
+  { succeeded: number; failed: Array<{ userId: string; reason: string }> }
+>("runBulkUserAction");
+
+export const exportUsers = rpcOp<
+  UserDirectoryFilters & { max?: number },
+  { csv: string; rows: number; truncated: boolean }
+>("exportUsers");

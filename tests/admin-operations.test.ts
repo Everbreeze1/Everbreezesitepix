@@ -392,3 +392,133 @@ describe("a nested route's parent must render an Outlet", () => {
     expect(offenders, offenders.join("\n")).toEqual([]);
   });
 });
+
+describe("user directory", () => {
+  it("filters, sorts, counts and pages in SQL rather than in Node", () => {
+    // Filtering a fetched page filters only what was fetched, which produces
+    // confidently wrong counts. The whole screen is one query.
+    const sql = read("supabase/migrations/20260823100000_admin_user_directory.sql");
+    expect(sql).toContain("CREATE OR REPLACE FUNCTION public.admin_user_directory");
+    expect(sql).toContain("count(*) OVER () AS total_count");
+    expect(sql).toContain("LIMIT greatest(p_limit, 1) OFFSET greatest(p_offset, 0)");
+  });
+
+  it("returns one row per user even when they are in two teams", () => {
+    // A plain LEFT JOIN to team_members emits a row per membership, which
+    // double-counts the user and corrupts both the total and the paging.
+    const sql = read("supabase/migrations/20260823100000_admin_user_directory.sql");
+    expect(sql).toContain("LEFT JOIN LATERAL");
+    expect(sql).toContain("team_count");
+  });
+
+  it("orders deterministically so paging cannot repeat or skip a row", () => {
+    const sql = read("supabase/migrations/20260823100000_admin_user_directory.sql");
+    expect(sql).toContain("f.created_at DESC, f.id");
+  });
+
+  it("locks the directory and notes down to the service role", () => {
+    const sql = read("supabase/migrations/20260823100000_admin_user_directory.sql");
+    expect(sql).toContain("REVOKE ALL ON FUNCTION public.admin_user_directory");
+    // user_notes are internal notes ABOUT a customer and must never be readable
+    // by them; Supabase grants new public tables to anon by default.
+    expect(sql).toContain("REVOKE ALL ON public.user_notes FROM anon, authenticated");
+    expect(sql).toContain("ALTER TABLE public.user_notes ENABLE ROW LEVEL SECURITY");
+  });
+
+  it("says so rather than faking filters before the migration runs", () => {
+    const src = read("apps/api/src/domains/admin/user-directory.ts");
+    expect(src).toContain("degraded: true");
+    expect(read("apps/web/src/features/admin/pages/AdminUsersPage.tsx")).toContain(
+      "Filters and sorting are unavailable",
+    );
+  });
+
+  it("exposes every status an operator asks about", () => {
+    const api = read("apps/api/src/domains/admin/user-directory.ts");
+    const sql = read("supabase/migrations/20260823100000_admin_user_directory.sql");
+    for (const s of ["unconfirmed", "suspended", "no_team", "dormant", "admin"]) {
+      expect(api, `API missing ${s}`).toContain(`"${s}"`);
+      expect(sql, `SQL missing ${s}`).toContain(`'${s}'`);
+    }
+  });
+});
+
+describe("admin roles are settable, not just enforceable", () => {
+  it("the UI can set a role, not only a boolean", () => {
+    // The roles were enforced on every mutating service from the day they
+    // landed, but nothing could set them - so every admin was a superadmin and
+    // the capability system was decorative.
+    const panel = read("apps/web/src/features/admin/components/UserAdminPanels.tsx");
+    expect(panel).toContain("setAdminRole");
+    for (const r of ["support", "billing", "superadmin"]) {
+      expect(panel, `role ${r} not offered`).toContain(r);
+    }
+  });
+
+  it("refuses to leave the platform with no superadmin", () => {
+    // Narrowing the only superadmin to `support` locks out grant, revoke and
+    // delete for everyone without removing a single row, so a guard that only
+    // counted admins would wave it through.
+    const src = read("apps/api/src/domains/admin/user-directory.ts");
+    expect(src).toContain("This is the last superadmin");
+    expect(src).toMatch(/\.eq\("role", "superadmin"\)[\s\S]{0,80}\.neq\("user_id", data\.userId\)/);
+  });
+
+  it("requires a reason for every role change", () => {
+    const src = read("apps/api/src/domains/admin/user-directory.ts");
+    expect(src).toMatch(/setAdminRoleInputSchema[\s\S]{0,300}reason: z\.string\(\)/);
+  });
+});
+
+describe("bulk user actions", () => {
+  it("reports partial success instead of rounding it up", () => {
+    const src = read("apps/api/src/domains/admin/user-directory.ts");
+    expect(src).toContain("failed: Array<{ userId: string; reason: string }>");
+    expect(read("apps/web/src/features/admin/pages/AdminUsersPage.tsx")).toContain(
+      "res.failed.length",
+    );
+  });
+
+  it("excludes delete", () => {
+    // The one irreversible action stays one at a time, behind its typed
+    // confirmation. Bulk-deleting accounts is not a support gesture.
+    const src = read("apps/api/src/domains/admin/user-directory.ts");
+    expect(src).toContain('z.enum(["suspend", "reinstate", "resend_confirmation"])');
+  });
+
+  it("runs sequentially and is bounded", () => {
+    // Each is a GoTrue round trip; a parallel burst of a hundred is how a
+    // support action becomes an auth outage.
+    const src = read("apps/api/src/domains/admin/user-directory.ts");
+    expect(src).toMatch(/userIds: z\.array\(z\.string\(\)\.uuid\(\)\)\.min\(1\)\.max\(100\)/);
+    expect(src).toContain("for (const userId of data.userIds)");
+  });
+
+  it("clears the selection when filters change", () => {
+    // Keeping a selection across a filter change means a bulk action hits
+    // accounts the operator can no longer see.
+    const src = read("apps/web/src/features/admin/pages/AdminUsersPage.tsx");
+    expect(src).toMatch(/const applyFilter[\s\S]{0,260}setSelected\(new Set\(\)\)/);
+  });
+});
+
+describe("CSV export", () => {
+  it("neutralises spreadsheet formula injection with a prefix, not with quoting", () => {
+    /*
+     * A display name of `=HYPERLINK(...)` is executed by Excel, Sheets and
+     * LibreOffice on the machine of whoever opens the export. CSV quoting does
+     * not stop it - quoting is how the value survives transport, and the
+     * spreadsheet evaluates what it finds inside the quotes. The leading
+     * apostrophe is the actual mitigation.
+     */
+    const src = read("apps/api/src/domains/admin/user-directory.ts");
+    expect(src).toContain("s = `'${s}`");
+    expect(src).toContain("Formula injection");
+  });
+
+  it("is bounded and says when it truncated", () => {
+    const src = read("apps/api/src/domains/admin/user-directory.ts");
+    expect(src).toContain("truncated");
+    expect(src).toMatch(/max: z\.number\(\)\.int\(\)\.min\(1\)\.max\(5000\)/);
+  });
+});

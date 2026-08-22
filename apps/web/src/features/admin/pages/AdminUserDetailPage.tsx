@@ -12,6 +12,12 @@ import {
 } from "@/lib/admin.functions";
 import { formatBytes } from "@/hooks/use-storage-usage";
 import { usePrompt } from "@/hooks/use-prompt";
+import {
+  AdminRolePanel,
+  TeamMembershipPanel,
+  UserFeedbackPanel,
+  UserNotesPanel,
+} from "../components/UserAdminPanels";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -264,30 +270,14 @@ export function AdminUserDetailPage() {
         </div>
       </div>
 
-      {user.teams.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card p-6">
-          <p className="text-sm font-extrabold text-foreground">Teams</p>
-          <div className="mt-3 space-y-2">
-            {user.teams.map((t) => (
-              <div
-                key={t.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3"
-              >
-                <Link
-                  to="/admin/teams/$teamId"
-                  params={{ teamId: t.id }}
-                  className="text-sm font-bold text-foreground hover:underline"
-                >
-                  {t.name}
-                </Link>
-                <span className="text-xs text-muted-foreground">
-                  {t.isOwner ? "owner" : t.role} · {t.plan} · {t.subscriptionStatus}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <AdminRolePanel user={user} onChanged={refresh} />
+        <UserNotesPanel userId={userId} />
+      </div>
+
+      <TeamMembershipPanel user={user} onChanged={refresh} />
+
+      <UserFeedbackPanel user={user} />
 
       <div className="rounded-2xl border border-border bg-card p-6">
         <p className="text-sm font-extrabold text-foreground">

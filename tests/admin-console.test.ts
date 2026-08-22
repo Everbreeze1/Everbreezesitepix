@@ -73,17 +73,38 @@ describe("admin services use the escaping helpers", () => {
 });
 
 describe("admin lists are paginated", () => {
-  const PAGES = [
-    "apps/web/src/features/admin/pages/AdminUsersPage.tsx",
+  /*
+   * Two mechanisms, deliberately.
+   *
+   * Cursor pagination is right for an append-only feed: it cannot skip or
+   * repeat a row when new ones arrive mid-scroll. But it cannot sort on an
+   * arbitrary column, because the cursor IS the sort key. The users directory
+   * sorts by six of them, so it pages by offset and gets a real total in
+   * exchange - which is what lets it say "51-100 of 1,204" instead of "50 rows
+   * loaded, more available".
+   *
+   * The invariant under test is that every list can reach page two, not that
+   * they all do it the same way.
+   */
+  const CURSOR_PAGES = [
     "apps/web/src/features/admin/pages/AdminTeamsPage.tsx",
     "apps/web/src/features/admin/pages/AdminAuditLogPage.tsx",
     "apps/web/src/features/admin/pages/AdminNotificationsPage.tsx",
   ];
 
-  it.each(PAGES)("%s consumes the server cursor", (page) => {
+  it.each(CURSOR_PAGES)("%s consumes the server cursor", (page) => {
     const src = read(page);
     expect(src).toContain("useAdminList");
     expect(src).toContain("onLoadMore");
+  });
+
+  it("the users directory pages by offset and shows a real total", () => {
+    const src = read("apps/web/src/features/admin/pages/AdminUsersPage.tsx");
+    expect(src).toContain("offset");
+    expect(src).toContain("Previous");
+    expect(src).toContain("Next");
+    // The total comes from SQL, so it describes the table rather than the page.
+    expect(src).toContain("total.toLocaleString()");
   });
 
   it("the shared hook ends pagination on undefined, not null", () => {

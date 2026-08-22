@@ -6,6 +6,7 @@
  *   20260822140000_admin_observability.sql
  *   20260822150000_admin_roles.sql
  *   20260822160000_email_confirmed_lookup.sql
+ *   20260823100000_admin_user_directory.sql
  *
  * They are applied by hand in the Supabase SQL editor, so "did it run" and "did
  * every part of it run" are different questions - a statement that errored
@@ -387,12 +388,132 @@ async function checkEmailConfirmedLookup() {
 }
 
 // ---------------------------------------------------------------------------
+// 20260823100000_admin_user_directory.sql
+// ---------------------------------------------------------------------------
+
+async function checkUserDirectory() {
+  const call = (args = {}) =>
+    db.rpc("admin_user_directory", {
+      p_search: null,
+      p_plan: null,
+      p_status: null,
+      p_sort: "joined",
+      p_desc: true,
+      p_limit: 50,
+      p_offset: 0,
+      ...args,
+    });
+
+  const { data, error } = await call();
+  if (error) {
+    bad(
+      "admin_user_directory exists",
+      isMissingFunction(error)
+        ? "NOT FOUND - migration 20260823100000 has not run"
+        : `${error.code ?? ""} ${error.message}`.trim(),
+    );
+    return;
+  }
+  const rows = data ?? [];
+  ok("admin_user_directory exists", `${rows.length} rows`);
+
+  const total = rows.length ? Number(rows[0].total_count) : 0;
+  const { count: profileCount } = await db
+    .from("profiles")
+    .select("id", { count: "exact", head: true });
+  if (total === (profileCount ?? -1)) ok("total_count matches the profiles table", `${total}`);
+  else
+    bad("total_count matches the profiles table", `directory ${total}, profiles ${profileCount}`);
+
+  // One row per user, not one per membership. A user in two teams would
+  // otherwise appear twice and corrupt both the total and the paging.
+  const ids = rows.map((r) => r.id);
+  if (new Set(ids).size === ids.length) ok("one row per user");
+  else bad("one row per user", `${ids.length} rows, ${new Set(ids).size} distinct`);
+
+  const expected = [
+    "id",
+    "full_name",
+    "email",
+    "team_name",
+    "team_count",
+    "admin_role",
+    "email_confirmed",
+    "banned_until",
+    "last_sign_in_at",
+    "last_seen_at",
+    "requests_30d",
+    "project_count",
+    "storage_bytes",
+    "feedback_count",
+    "total_count",
+  ];
+  const missing = rows[0] ? expected.filter((k) => !(k in rows[0])) : expected;
+  if (missing.length) bad("directory columns", `missing: ${missing.join(", ")}`);
+  else ok("directory columns", `${expected.length} present`);
+
+  // Every status filter must be understood by the function. A typo'd branch
+  // silently returns everything, which reads as "nobody is suspended".
+  for (const status of ["active", "unconfirmed", "suspended", "no_team", "dormant", "admin"]) {
+    const { data: f, error: fErr } = await call({ p_status: status });
+    if (fErr) {
+      bad(`status filter: ${status}`, fErr.message);
+      continue;
+    }
+    const n = f?.length ? Number(f[0].total_count) : 0;
+    if (n > total) bad(`status filter: ${status}`, `returned ${n}, more than the ${total} total`);
+    else ok(`status filter: ${status}`, `${n} of ${total}`);
+  }
+
+  // Sorting must actually change the order, or the headers are decoration.
+  const { data: asc } = await call({ p_sort: "joined", p_desc: false });
+  if (asc?.length && rows.length && asc[0].id !== rows[0].id) ok("sort direction is honoured");
+  else if ((asc?.length ?? 0) <= 1) ok("sort direction is honoured", "too few rows to distinguish");
+  else bad("sort direction is honoured", "ascending returned the same first row as descending");
+
+  // Paging must not repeat a row.
+  const { data: p1 } = await call({ p_limit: 2, p_offset: 0 });
+  const { data: p2 } = await call({ p_limit: 2, p_offset: 2 });
+  const overlap = (p1 ?? []).some((a) => (p2 ?? []).some((b) => b.id === a.id));
+  if (!overlap) ok("paging does not repeat rows");
+  else bad("paging does not repeat rows", "page 1 and page 2 share a row");
+
+  const { data: anonData, error: anonErr } = await anon.rpc("admin_user_directory", {
+    p_search: null,
+    p_plan: null,
+    p_status: null,
+    p_sort: "joined",
+    p_desc: true,
+    p_limit: 5,
+    p_offset: 0,
+  });
+  if (anonErr)
+    ok("anon cannot execute the directory", `${anonErr.code ?? ""} ${anonErr.message}`.trim());
+  else bad("anon cannot execute the directory", `LEAK - returned ${anonData?.length ?? 0} rows`);
+
+  const { error: notesErr } = await db
+    .from("user_notes")
+    .select("id", { count: "exact", head: true });
+  if (notesErr) bad("user_notes table exists", `${notesErr.code ?? ""} ${notesErr.message}`.trim());
+  else ok("user_notes table exists");
+
+  const { data: anonNotes, error: anonNotesErr } = await anon
+    .from("user_notes")
+    .select("id")
+    .limit(1);
+  if (anonNotesErr)
+    ok("anon cannot read user_notes", `${anonNotesErr.code ?? ""} ${anonNotesErr.message}`.trim());
+  else bad("anon cannot read user_notes", `LEAK - returned ${anonNotes?.length ?? 0} rows`);
+}
+
+// ---------------------------------------------------------------------------
 
 await checkRollups();
 await checkFeedbackTriage();
 await checkObservability();
 await checkAdminRoles();
 await checkEmailConfirmedLookup();
+await checkUserDirectory();
 
 console.log("");
 for (const r of results) {

@@ -27,6 +27,7 @@ export interface PlatformUserDetail {
   avatarUrl: string | null;
   createdAt: string;
   isPlatformAdmin: boolean;
+  adminRole: "support" | "billing" | "superadmin" | null;
   /**
    * From `auth.users`, which is the half of an account the product's own tables
    * cannot see. Null when the profile row has outlived its auth user - rare,
@@ -58,6 +59,14 @@ export interface PlatformUserDetail {
     deletedAt: string | null;
   }>;
   totals: { projects: number; photos: number; storageBytes: number; feedbackReports: number };
+  /** What this person has actually told us, not just how many times. */
+  feedback: Array<{
+    id: string;
+    kind: string;
+    status: string;
+    description: string | null;
+    createdAt: string;
+  }>;
   /** The tail of this user's API calls, newest first. See api_audit_logs. */
   recentActivity: Array<{
     id: string;
@@ -113,7 +122,7 @@ export async function getPlatformUserDetailService(
       .eq("user_id", data.userId),
     (admin as any)
       .from("platform_admins")
-      .select("user_id")
+      .select("user_id, role")
       .eq("user_id", data.userId)
       .maybeSingle(),
     (admin as any)
@@ -161,6 +170,16 @@ export async function getPlatformUserDetailService(
     }
   }
 
+  // Their actual reports, not just a count. "What has this customer told us"
+  // is the first question in a support conversation, and it lived one table
+  // away with nothing joining it up.
+  const { data: feedbackRows } = await (admin as any)
+    .from("issue_reports")
+    .select("id, kind, status, description, created_at")
+    .eq("user_id", data.userId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
   const { data: activityRows } = await (admin as any)
     .from("api_audit_logs")
     .select("id, route, op, http_status, duration_ms, error_code, created_at")
@@ -194,6 +213,7 @@ export async function getPlatformUserDetailService(
     avatarUrl: profile.avatar_url ?? null,
     createdAt: profile.created_at,
     isPlatformAdmin: !!adminRow,
+    adminRole: adminRow ? (((adminRow as any).role as any) ?? "superadmin") : null,
     auth: authInfo,
     teams: ((memberships as any[]) ?? [])
       .filter((m) => m.team)
@@ -212,6 +232,13 @@ export async function getPlatformUserDetailService(
       storageBytes: projectList.reduce((s, p) => s + p.storageBytes, 0),
       feedbackReports: feedbackCount ?? 0,
     },
+    feedback: ((feedbackRows as any[]) ?? []).map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      status: r.status,
+      description: r.description,
+      createdAt: r.created_at,
+    })),
     recentActivity: ((activityRows as any[]) ?? []).map((r) => ({
       id: r.id,
       route: r.route,
