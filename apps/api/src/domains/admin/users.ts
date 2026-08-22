@@ -95,7 +95,7 @@ export async function setPlatformAdminService(
   ctx: AuthedContext,
   data: z.infer<typeof setPlatformAdminInputSchema>,
 ): Promise<{ ok: true }> {
-  await requirePlatformAdmin(ctx.userId);
+  await requirePlatformAdmin(ctx.userId, "owner");
   const admin = getSupabaseAdmin();
 
   if (data.isAdmin) {

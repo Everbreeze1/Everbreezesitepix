@@ -11,6 +11,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { TEAM_SIZES, choiceLabel, industryLabel } from "@sitepix/shared";
 import { AdminTable, type AdminColumn } from "../components/AdminTable";
 import { useAdminList } from "../hooks/use-admin-list";
+import { BillingReconciliationPanel } from "../components/BillingReconciliationPanel";
 
 function statusBadgeClass(status: string): string {
   if (status === "active" || status === "trialing") return "bg-emerald-500/10 text-emerald-600";
@@ -206,6 +207,8 @@ export function AdminTeamsPage() {
           </div>
         </div>
       )}
+
+      <BillingReconciliationPanel />
 
       <div className="relative mt-6 max-w-sm">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />

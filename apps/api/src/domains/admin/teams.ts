@@ -395,7 +395,7 @@ export async function syncTeamBillingService(
   ctx: AuthedContext,
   data: z.infer<typeof syncTeamBillingInputSchema>,
 ): Promise<{ subscriptionStatus: string; plan: string }> {
-  await requirePlatformAdmin(ctx.userId);
+  await requirePlatformAdmin(ctx.userId, "billing");
   const admin = getSupabaseAdmin();
 
   const { data: team, error: teamError } = await (admin as any)
