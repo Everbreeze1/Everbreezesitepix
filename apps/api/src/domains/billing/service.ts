@@ -141,14 +141,41 @@ export async function createBillingPortalSessionService(
 ) {
   const team = await requireOwnedTeam(ctx);
   if (!team.stripe_customer_id) {
-    throw new Error("No billing account yet - subscribe to a plan first.");
+    // 409, not a bare Error. `jsonFromUnknownError` only forwards a message for
+    // 4xx; without a status this reached the customer as a generic 500
+    // "internal_error" and reached the audit log as one too, which is how a
+    // precondition someone can act on became indistinguishable from a crash.
+    throw Object.assign(new Error("No billing account yet - subscribe to a plan first."), {
+      status: 409,
+    });
   }
 
   const stripe = getStripe();
-  const session = await stripe.billingPortal.sessions.create({
-    customer: team.stripe_customer_id,
-    return_url: `${data.origin}/settings`,
-  });
-
-  return { url: session.url };
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: team.stripe_customer_id,
+      return_url: `${data.origin}/settings`,
+    });
+    return { url: session.url };
+  } catch (e: any) {
+    /*
+     * `resource_missing` here means the STRIPE_SECRET_KEY this process is
+     * holding cannot see this customer - the customer was deleted, or the key
+     * belongs to a different Stripe account than the one that created them.
+     *
+     * That second case is not hypothetical and it is invisible from the
+     * outside: every stored `stripe_customer_id` stays syntactically valid, so
+     * the failure looks like a random 500 on one button rather than like a
+     * misconfigured key. Naming it costs one branch and saves the next person
+     * the investigation.
+     */
+    if (e?.code === "resource_missing" || e?.raw?.code === "resource_missing") {
+      throw new Error(
+        `Stripe does not recognise this team's customer id (${team.stripe_customer_id}). ` +
+          "The STRIPE_SECRET_KEY in use may belong to a different Stripe account than the one " +
+          "holding this customer. Check the key before changing any data.",
+      );
+    }
+    throw e;
+  }
 }

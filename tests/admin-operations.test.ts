@@ -242,3 +242,43 @@ describe("every new admin surface is registered, routed and navigable", () => {
     }
   });
 });
+
+describe("server errors are diagnosable", () => {
+  it("records the thrown message for 5xx, not just the code", () => {
+    // errorCode is "internal_error" for a missing Stripe customer, a null
+    // dereference and a timeout alike, so the log said something failed and
+    // nothing about what.
+    const src = read("apps/api/src/domains/rpc/handle.ts");
+    expect(src).toContain("err.message.slice(0, 500)");
+    expect(src).toContain("res.status >= 500");
+  });
+
+  it("shows that message on the health page", () => {
+    expect(read("apps/api/src/domains/admin/health.ts")).toContain('f.meta?.error === "string"');
+    expect(read("apps/web/src/features/admin/pages/AdminHealthPage.tsx")).toContain("f.message");
+  });
+
+  it("does not log 4xx messages", () => {
+    // Routine rejections would bury the real failures.
+    const src = read("apps/api/src/domains/rpc/handle.ts");
+    expect(src).not.toContain("res.status >= 400 && err instanceof Error");
+  });
+});
+
+describe("billing portal reports why it failed", () => {
+  it("returns a 4xx for a precondition rather than a bare 500", () => {
+    // jsonFromUnknownError only forwards a message for 4xx, so a status-less
+    // Error reached the customer AND the log as a generic internal_error.
+    const src = read("apps/api/src/domains/billing/service.ts");
+    expect(src).toContain("No billing account yet");
+    expect(src).toMatch(/status:\s*409/);
+  });
+
+  it("names a customer id the current Stripe key cannot see", () => {
+    // Stored ids stay syntactically valid when the key points at another
+    // Stripe account, so the failure looks like a random 500 on one button.
+    const src = read("apps/api/src/domains/billing/service.ts");
+    expect(src).toContain("resource_missing");
+    expect(src).toContain("different Stripe account");
+  });
+});

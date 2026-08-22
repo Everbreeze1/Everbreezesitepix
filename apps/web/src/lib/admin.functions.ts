@@ -422,6 +422,7 @@ export interface ApiHealth {
     requestId: string | null;
     createdAt: string;
     user: { id: string; name: string | null; email: string | null } | null;
+    message: string | null;
   }>;
   unavailable: string | null;
 }

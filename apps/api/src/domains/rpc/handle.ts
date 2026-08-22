@@ -196,6 +196,24 @@ export async function handleRpc(request: Request): Promise<Response> {
       requestId,
       idempotencyKey: idemKey,
       errorCode,
+      /*
+       * The message, for 5xx only.
+       *
+       * `errorCode` alone is "internal_error", which is the same string for a
+       * missing Stripe customer, a null dereference and a timeout - so the
+       * audit log recorded that something failed and nothing about what. The
+       * message already reaches the customer's toast; not keeping a copy meant
+       * the person who could act on it was the only one who never saw it.
+       *
+       * 5xx only, because 4xx messages are routine rejections and would bury
+       * the real failures. Truncated, because a stack-laden message from a
+       * dependency can run to kilobytes and this table is already the largest
+       * in the database.
+       */
+      meta:
+        res.status >= 500 && err instanceof Error
+          ? { error: err.message.slice(0, 500) }
+          : undefined,
     });
     const headers = mergeHeaders(res.headers, rlHeaders);
     headers.set("X-Request-Id", requestId);
