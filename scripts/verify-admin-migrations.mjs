@@ -5,6 +5,7 @@
  *   20260822130000_feedback_triage.sql
  *   20260822140000_admin_observability.sql
  *   20260822150000_admin_roles.sql
+ *   20260822160000_email_confirmed_lookup.sql
  *
  * They are applied by hand in the Supabase SQL editor, so "did it run" and "did
  * every part of it run" are different questions - a statement that errored
@@ -339,11 +340,59 @@ async function checkAdminRoles() {
 }
 
 // ---------------------------------------------------------------------------
+// 20260822160000_email_confirmed_lookup.sql
+// ---------------------------------------------------------------------------
+
+async function checkEmailConfirmedLookup() {
+  const { data: members } = await db.from("team_members").select("user_id").limit(5);
+  const ids = (members ?? []).map((m) => m.user_id);
+  if (!ids.length) {
+    bad("email_confirmed_for_users", "no team members to check against");
+    return;
+  }
+
+  const { data, error } = await db.rpc("email_confirmed_for_users", { user_ids: ids });
+  if (error) {
+    bad(
+      "email_confirmed_for_users exists",
+      isMissingFunction(error)
+        ? "NOT FOUND - migration 20260822160000 has not run"
+        : `${error.code ?? ""} ${error.message}`.trim(),
+    );
+    return;
+  }
+  ok("email_confirmed_for_users exists", `${data?.length ?? 0} rows`);
+
+  if ((data?.length ?? 0) === ids.length) ok("returns one row per id");
+  else bad("returns one row per id", `asked ${ids.length}, got ${data?.length ?? 0}`);
+
+  // Agreement with GoTrue, which is the source it replaces. A faster answer
+  // that disagrees would silently block assigning work to valid accounts.
+  let agreed = 0;
+  let disagreed = [];
+  for (const row of data ?? []) {
+    const { data: authUser } = await db.auth.admin.getUserById(row.user_id);
+    const viaAuth = !!(authUser?.user ?? {}).email_confirmed_at;
+    if (viaAuth === row.email_confirmed) agreed += 1;
+    else disagreed.push(`${row.user_id}: sql=${row.email_confirmed} auth=${viaAuth}`);
+  }
+  if (disagreed.length === 0) ok("agrees with auth.admin.getUserById", `${agreed}/${data.length}`);
+  else bad("agrees with auth.admin.getUserById", disagreed.join("; "));
+
+  const { data: anonData, error: anonErr } = await anon.rpc("email_confirmed_for_users", {
+    user_ids: ids,
+  });
+  if (anonErr) ok("anon cannot execute it", `${anonErr.code ?? ""} ${anonErr.message}`.trim());
+  else bad("anon cannot execute it", `LEAK - returned ${anonData?.length ?? 0} rows`);
+}
+
+// ---------------------------------------------------------------------------
 
 await checkRollups();
 await checkFeedbackTriage();
 await checkObservability();
 await checkAdminRoles();
+await checkEmailConfirmedLookup();
 
 console.log("");
 for (const r of results) {

@@ -282,3 +282,55 @@ describe("billing portal reports why it failed", () => {
     expect(src).toContain("different Stripe account");
   });
 });
+
+describe("getMyTeam is not N+1 on the auth API", () => {
+  it("resolves email confirmation in one query", () => {
+    // getMyTeam is 39% of all API traffic (AppSidebar calls it on every mount),
+    // and it used to make one HTTPS round trip to GoTrue per team member. The
+    // comment justifying that said "this is a page that loads once"; it is not.
+    const src = read("apps/api/src/domains/teams/service.ts");
+    expect(src).toContain("email_confirmed_for_users");
+    expect(src).not.toContain("this is a page that loads once");
+  });
+
+  it("keeps the per-member path only as a pre-migration fallback", () => {
+    const src = read("apps/api/src/domains/teams/service.ts");
+    const fn = src.slice(
+      src.indexOf("async function loadEmailConfirmed"),
+      src.indexOf("export async function getMyTeamService"),
+    );
+    expect(fn).toContain("isMissingFunction");
+    expect(fn).toContain("auth.admin.getUserById");
+  });
+
+  it("treats an unresolved member as unknown, not unconfirmed", () => {
+    // ProjectTasks refuses to assign work to an unconfirmed member, so
+    // defaulting to false would block someone who can sign in perfectly well.
+    const src = read("apps/api/src/domains/teams/service.ts");
+    expect(src).toContain('typeof row.email_confirmed === "boolean"');
+  });
+
+  it("fetches profiles and confirmation in parallel", () => {
+    const src = read("apps/api/src/domains/teams/service.ts");
+    expect(src).toContain("loadEmailConfirmed(supabaseAdmin, userIds)");
+    expect(src).toMatch(/const \[profilesResult, confirmed\] = await Promise\.all\(/);
+  });
+
+  it("locks the SECURITY DEFINER function to the service role", () => {
+    // It reads auth.users. Postgres grants EXECUTE to PUBLIC by default, so
+    // without the REVOKE any signed-in user could enumerate confirmation state.
+    const sql = read("supabase/migrations/20260822160000_email_confirmed_lookup.sql");
+    expect(sql).toContain(
+      "REVOKE ALL ON FUNCTION public.email_confirmed_for_users(uuid[]) FROM PUBLIC, anon, authenticated",
+    );
+    expect(sql).toContain("SECURITY DEFINER");
+  });
+
+  it("returns a row for an id with no auth user", () => {
+    // Driven off unnest(), so a missing auth row is NULL rather than absent -
+    // the caller distinguishes unknown from unconfirmed.
+    const sql = read("supabase/migrations/20260822160000_email_confirmed_lookup.sql");
+    expect(sql).toContain("FROM unnest(user_ids)");
+    expect(sql).toContain("LEFT JOIN auth.users");
+  });
+});
