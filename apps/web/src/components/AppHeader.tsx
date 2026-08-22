@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Search, Bell, ChevronDown, Plus, CheckCheck } from "lucide-react";
+import { Search, Bell, ChevronDown, Plus, CheckCheck, Moon, Sun } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { useNotifications } from "@/hooks/use-notifications";
+import { useTheme } from "@/hooks/use-theme";
 import { formatRelativeTime } from "@/lib/format-time";
 import { notificationLinkTarget } from "@/lib/notification-link";
 
@@ -38,9 +39,16 @@ export function AppHeader() {
   const { profile } = useProfile();
   const { guard } = useSubscriptionGate();
   const { unreadCount, recent, markRead, markAllRead } = useNotifications();
+  const { theme, toggle: toggleTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [notifOpen, setNotifOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  /* The theme is only known once localStorage has been read on the client, so the
+     icon stays out of the server-rendered markup and appears on mount. Without
+     this the server always renders the light-mode icon and a dark-mode visitor
+     gets a hydration mismatch. Same guard as SiteHeader. */
+  const [themeReady, setThemeReady] = useState(false);
+  useEffect(() => setThemeReady(true), []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -87,6 +95,23 @@ export function AppHeader() {
       </form>
 
       <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label={
+            themeReady
+              ? theme === "dark"
+                ? "Switch to day mode"
+                : "Switch to night mode"
+              : "Toggle day and night mode"
+          }
+          title={themeReady && theme === "dark" ? "Day mode" : "Night mode"}
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card/70 text-muted-foreground shadow-sm transition-colors hover:text-foreground"
+        >
+          {themeReady &&
+            (theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />)}
+        </button>
+
         <Popover open={notifOpen} onOpenChange={setNotifOpen}>
           <PopoverTrigger asChild>
             <button
