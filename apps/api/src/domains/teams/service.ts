@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
+import { isMissingFunction } from "../../lib/postgrest";
 import { rateLimit } from "../../lib/rate-limit";
 import { ACTIVE_SUBSCRIPTION_STATUSES, PLAN_MEMBER_CAP } from "../../lib/team-plan";
 import { insertNotification } from "../notifications/service";
@@ -289,6 +290,67 @@ export interface ProjectContributor {
   lastAt: string | null;
 }
 
+/**
+ * Whether each member has actually confirmed their email.
+ *
+ * An invitee who accepts through `acceptInviteSignup` gets an account that is
+ * deliberately created unconfirmed (see the SECURITY note there), joins the
+ * team immediately, and then cannot sign in until they click the confirmation
+ * mail. The team list shows that, and ProjectTasks refuses to assign work to
+ * them - so an owner whose new hire never got the mail can see why.
+ *
+ * This used to be one `auth.admin.getUserById` per member, justified in a
+ * comment as "a page that loads once". It is not: AppSidebar calls getMyTeam on
+ * every mount, making it 39% of all API traffic, and each call paid N HTTPS
+ * round trips to GoTrue. `email_confirmed_for_users` answers the same question
+ * for a whole team in one query.
+ *
+ * The per-member path is kept as a fallback because SQL here is applied by
+ * hand, so this code ships before the function exists.
+ *
+ * A member missing from the map is "unknown", NOT "unconfirmed". Accusing a
+ * working account of being stuck would block assigning work to someone who can
+ * sign in perfectly well, so an id we could not resolve is left out and the
+ * caller renders it as null.
+ */
+async function loadEmailConfirmed(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  userIds: string[],
+): Promise<Map<string, boolean>> {
+  const confirmed = new Map<string, boolean>();
+  if (!userIds.length) return confirmed;
+
+  const { data, error } = await (supabaseAdmin as any).rpc("email_confirmed_for_users", {
+    user_ids: userIds,
+  });
+  if (!error) {
+    for (const row of ((data as any[]) ?? []) as Array<{
+      user_id: string;
+      email_confirmed: boolean | null;
+    }>) {
+      if (typeof row.email_confirmed === "boolean") confirmed.set(row.user_id, row.email_confirmed);
+    }
+    return confirmed;
+  }
+  if (!isMissingFunction(error)) {
+    // Not fatal: the team list is still worth rendering without this column.
+    console.error("[teams] email_confirmed_for_users failed", error.message);
+    return confirmed;
+  }
+
+  await Promise.all(
+    userIds.map(async (id: string) => {
+      try {
+        const { data: user } = await supabaseAdmin.auth.admin.getUserById(id);
+        confirmed.set(id, !!(user?.user as any)?.email_confirmed_at);
+      } catch {
+        // See the "unknown is not unconfirmed" note above.
+      }
+    }),
+  );
+  return confirmed;
+}
+
 export async function getMyTeamService(ctx: AuthedContext) {
   const { supabase, userId } = ctx;
 
@@ -325,43 +387,27 @@ export async function getMyTeamService(ctx: AuthedContext) {
 
   const supabaseAdmin = getSupabaseAdmin();
   const userIds = (membersRes.data ?? []).map((m: any) => m.user_id);
-  let profiles: Record<
-    string,
-    { email: string | null; full_name: string | null; avatar_url: string | null }
-  > = {};
-  if (userIds.length) {
-    const { data: profs } = await supabaseAdmin
-      .from("profiles" as any)
-      .select("id, email, full_name, avatar_url")
-      .in("id", userIds);
-    profiles = Object.fromEntries((profs ?? []).map((p: any) => [p.id, p]));
-  }
 
   /*
-   * Whether each member has actually confirmed their email.
+   * Profiles and confirmation state together, not one after the other.
    *
-   * An invitee who accepts through `acceptInviteSignup` gets an account that is
-   * deliberately created unconfirmed (see the SECURITY note there), joins the
-   * team immediately, and then cannot sign in until they click the confirmation
-   * mail. Until now the team list showed them exactly like everyone else, so an
-   * owner whose new hire never got that mail had no way to see why - the person
-   * is "on the team" and simply cannot get in.
-   *
-   * One admin lookup per member. Teams are capped in the low tens by
-   * `effectiveMemberLimit`, and this is a page that loads once.
+   * Both depend only on `userIds`, so running them in sequence added a whole
+   * round trip to the most-called operation in the product for no reason.
    */
-  const confirmed = new Map<string, boolean>();
-  await Promise.all(
-    userIds.map(async (id: string) => {
-      try {
-        const { data } = await supabaseAdmin.auth.admin.getUserById(id);
-        confirmed.set(id, !!(data?.user as any)?.email_confirmed_at);
-      } catch {
-        // Unknown is not the same as unconfirmed: leave it out rather than
-        // accuse a working account of being stuck.
-      }
-    }),
-  );
+  const [profilesResult, confirmed] = await Promise.all([
+    userIds.length
+      ? supabaseAdmin
+          .from("profiles" as any)
+          .select("id, email, full_name, avatar_url")
+          .in("id", userIds)
+      : Promise.resolve({ data: [] as any[] }),
+    loadEmailConfirmed(supabaseAdmin, userIds),
+  ]);
+
+  const profiles: Record<
+    string,
+    { email: string | null; full_name: string | null; avatar_url: string | null }
+  > = Object.fromEntries(((profilesResult.data as any[]) ?? []).map((p: any) => [p.id, p]));
 
   const members = (membersRes.data ?? []).map((m: any) => ({
     ...m,
