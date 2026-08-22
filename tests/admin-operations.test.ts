@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const ROOT = resolve(__dirname, "..");
@@ -213,7 +213,7 @@ describe("every new admin surface is registered, routed and navigable", () => {
   });
 
   it("the user detail route exists", () => {
-    expect(read("apps/web/src/routeTree.gen.ts")).toContain("/_app/admin/users/$userId");
+    expect(read("apps/web/src/routeTree.gen.ts")).toContain("/_app/admin/users_/$userId");
   });
 
   it("every new admin op is registered and has a client binding", () => {
@@ -332,5 +332,63 @@ describe("getMyTeam is not N+1 on the auth API", () => {
     const sql = read("supabase/migrations/20260822160000_email_confirmed_lookup.sql");
     expect(sql).toContain("FROM unnest(user_ids)");
     expect(sql).toContain("LEFT JOIN auth.users");
+  });
+});
+
+describe("a nested route's parent must render an Outlet", () => {
+  /*
+   * The defect family this guards.
+   *
+   * TanStack's flat-file convention nests `_app.admin.users.$userId` UNDER
+   * `_app.admin.users`. If the parent's component does not render an <Outlet/>,
+   * the child never mounts: visiting /admin/users/<id> silently renders the
+   * users LIST, at the detail URL, with no error, no console warning and no
+   * failed request. Every static check passes - the file exists, the route id is
+   * in routeTree.gen.ts, the component compiles - and the page is simply wrong.
+   *
+   * The admin team detail page shipped in this state and nobody noticed. It was
+   * found by driving the app in a browser, which is the only thing that can find
+   * it, and this test is the cheap substitute for doing that every time.
+   *
+   * The fix is the trailing-underscore sibling convention the repo already uses
+   * elsewhere (`_app.showcases_.$showcaseId.tsx`): it keeps the same URL but
+   * stops the route nesting.
+   */
+  const ROUTES = join(ROOT, "apps/web/src/routes");
+
+  it("no $param route sits under a parent that cannot render it", () => {
+    const files = readdirSync(ROUTES).filter((f) => f.endsWith(".tsx"));
+    const offenders: string[] = [];
+
+    for (const file of files) {
+      const m = file.match(/^(.*)\.\$[^.]+\.tsx$/);
+      if (!m) continue;
+      const parent = `${m[1]}.tsx`;
+      if (!files.includes(parent)) continue; // no parent route: nothing to nest under
+
+      const parentSrc = readFileSync(join(ROUTES, parent), "utf8");
+      const comp = (parentSrc.match(/component:\s*(\w+)/) ?? [])[1];
+      const imp = comp
+        ? parentSrc.match(new RegExp(`import \{[^}]*\b${comp}\b[^}]*\} from "([^"]+)"`))
+        : null;
+
+      let componentSrc = "";
+      if (imp) {
+        const rel = imp[1].replace("@/", "apps/web/src/");
+        for (const ext of [".tsx", ".ts"]) {
+          const candidate = join(ROOT, rel + ext);
+          if (existsSync(candidate)) componentSrc = readFileSync(candidate, "utf8");
+        }
+      }
+
+      if (!/<Outlet/.test(componentSrc)) {
+        offenders.push(
+          `${file} nests under ${parent} (${comp ?? "?"}), which renders no <Outlet/>. ` +
+            `Rename it to ${m[1]}_.$… to make it a sibling.`,
+        );
+      }
+    }
+
+    expect(offenders, offenders.join("\n")).toEqual([]);
   });
 });

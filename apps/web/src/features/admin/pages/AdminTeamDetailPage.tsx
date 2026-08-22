@@ -14,7 +14,7 @@ import {
 } from "@sitepix/shared";
 
 export function AdminTeamDetailPage() {
-  const { teamId } = useParams({ from: "/_app/admin/teams/$teamId" });
+  const { teamId } = useParams({ from: "/_app/admin/teams_/$teamId" });
 
   const { data, isPending } = useQuery({
     queryKey: ["admin", "teams", "detail", teamId],
