@@ -285,6 +285,12 @@ export function AdminHealthPage() {
                     {new Date(f.createdAt).toLocaleString()}
                   </span>
                 </div>
+                {/* The thrown message. Without it every row reads
+                    "internal_error", which is the same string for a missing
+                    Stripe customer and a null dereference. */}
+                {f.message && (
+                  <p className="mt-1 break-words font-mono text-[11px] text-red-600">{f.message}</p>
+                )}
                 <p className="mt-1 text-muted-foreground">
                   {f.user ? (
                     <Link

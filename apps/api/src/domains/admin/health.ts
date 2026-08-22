@@ -49,6 +49,8 @@ export interface ApiHealth {
     requestId: string | null;
     createdAt: string;
     user: { id: string; name: string | null; email: string | null } | null;
+    /** The thrown message, recorded for 5xx by rpc/handle.ts. */
+    message: string | null;
   }>;
   /** Set when the observability migration has not been applied yet. */
   unavailable: string | null;
@@ -115,7 +117,9 @@ export async function getApiHealthService(
   // is the panel an operator opens first when someone reports a broken action.
   const { data: failureRows } = await (admin as any)
     .from("api_audit_logs")
-    .select("id, route, op, http_status, error_code, duration_ms, request_id, created_at, user_id")
+    .select(
+      "id, route, op, http_status, error_code, duration_ms, request_id, created_at, user_id, meta",
+    )
     .gte("created_at", since)
     .gte("http_status", 500)
     .order("created_at", { ascending: false })
@@ -163,6 +167,7 @@ export async function getApiHealthService(
       durationMs: f.duration_ms,
       requestId: f.request_id,
       createdAt: f.created_at,
+      message: typeof f.meta?.error === "string" ? f.meta.error : null,
       user: profileById.has(f.user_id)
         ? {
             id: f.user_id,
