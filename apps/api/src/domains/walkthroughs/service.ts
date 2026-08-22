@@ -947,7 +947,8 @@ export async function regenerateWalkthroughSummaryService(
     .eq("id", data.walkthroughId)
     .maybeSingle();
   if (walkErr || !walk) throw new Error("Walkthrough not found");
-  if ((walk as any).created_by !== userId) throw new Error("Not authorized");
+  if ((walk as any).created_by !== userId)
+    throw Object.assign(new Error("Not authorized"), { status: 403 });
   if ((walk as any).source !== "summary") {
     throw new Error("This walkthrough was recorded - use Regenerate report instead.");
   }
@@ -1672,7 +1673,7 @@ export async function transcribeWalkthroughService(
     .select("id, created_by, title, transcript, duration_seconds, summary_markdown")
     .eq("id", data.walkthroughId)
     .single();
-  if (wErr || !walk) throw new Error("Walkthrough not found");
+  if (wErr || !walk) throw Object.assign(new Error("Walkthrough not found"), { status: 404 });
   if ((walk as any).created_by !== userId) throw new Error("Not authorized");
 
   console.log("[walkthrough] server transcription requested", {
@@ -1683,7 +1684,8 @@ export async function transcribeWalkthroughService(
   });
 
   const bytes = Buffer.from(data.audioBase64, "base64");
-  if (bytes.byteLength < 2048) throw new Error("Recording was empty");
+  if (bytes.byteLength < 2048)
+    throw Object.assign(new Error("That recording had no audio in it."), { status: 400 });
 
   /*
    * Audio understanding on the chat endpoint - NOT a Whisper-style transcribe

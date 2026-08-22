@@ -104,6 +104,22 @@ export function jsonFromUnknownError(err: unknown, fallbackStatus = 500): Respon
     const message = err instanceof Error ? err.message : "Request failed";
     return jsonError(status, codeForStatus(status), message);
   }
+  /*
+   * An explicitly constructed 5xx may forward its message, if it opts in.
+   *
+   * The rule above deliberately distrusts 5xx, because a message that reached
+   * the client by accident is how internals leak. But "the AI provider is
+   * rate-limiting us" and "Stripe is down" are 5xx by the correct reading -
+   * upstream failed, not the caller - and collapsing them to a bare
+   * "Internal error" tells a customer their own action was broken when the
+   * honest answer is "try again in a moment". `expose` is opt-in and set only
+   * where the message was written for a person to read.
+   */
+  const exposed = (err as { expose?: unknown })?.expose === true;
+  if (exposed && typeof status === "number" && status >= 500 && status < 600) {
+    const message = err instanceof Error ? err.message : "Upstream request failed";
+    return jsonError(status, status === 503 ? "service_unavailable" : "upstream_error", message);
+  }
   const message = err instanceof Error ? err.message : "Internal error";
   return jsonError(fallbackStatus, "internal_error", message);
 }

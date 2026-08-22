@@ -11,6 +11,85 @@ function aiKeyConfigured() {
   return !!process.env.GEMINI_API_KEY;
 }
 
+/**
+ * Turn a failed provider response into an error carrying the right status.
+ *
+ * WHY THIS EXISTS
+ *
+ * Every call site used to `throw new Error("Rate limited. Try again shortly.")`
+ * with no status. `jsonFromUnknownError` maps a status-less throw to HTTP 500
+ * `internal_error`, so the provider throttling us was reported to the customer,
+ * and recorded in `api_audit_logs`, as OUR server crashing. Thirty of the
+ * hundred 5xx on record are these - transcribeWalkthrough, analyzePhoto,
+ * extractPhotoText, chatWithAssistant and the summarisers - which both
+ * overstated the real error rate and buried the failures that are genuinely
+ * ours.
+ *
+ * The distinction the statuses now draw:
+ *
+ *   429 / 402  the caller can act - wait, or add credits. 4xx, so the message
+ *              reaches their toast unchanged.
+ *   503        upstream is down or refused us. Not the caller's fault and not a
+ *              bug in this codebase; `expose` lets the human-readable half
+ *              through while the raw provider body stays server-side.
+ */
+async function aiProviderError(res: Response, label: string): Promise<Error> {
+  const body = await res.text().catch(() => "");
+
+  if (res.status === 429) {
+    return Object.assign(new Error("The AI service is busy right now. Try again in a moment."), {
+      status: 429,
+    });
+  }
+  if (res.status === 402) {
+    return Object.assign(
+      new Error("AI credits are exhausted. Add credits in workspace settings."),
+      {
+        status: 402,
+      },
+    );
+  }
+  if (res.status === 401 || res.status === 403) {
+    // Our credentials, not the caller's problem - but an operator needs the
+    // detail, so it goes to the log rather than the toast.
+    console.error(`[ai] ${label} rejected: ${res.status} ${body.slice(0, 300)}`);
+    return Object.assign(new Error("The AI service is not accepting our credentials."), {
+      status: 503,
+      expose: true,
+    });
+  }
+
+  console.error(`[ai] ${label} failed: ${res.status} ${body.slice(0, 300)}`);
+  return Object.assign(
+    new Error("The AI service is temporarily unavailable. Try again in a moment."),
+    { status: 503, expose: true },
+  );
+}
+
+/**
+ * Every provider call gets a deadline.
+ *
+ * These are plain `fetch`es to a third party with no timeout, so a provider
+ * that accepts a connection and then stalls holds one of ours open until the
+ * platform gives up on it. Observed successful calls top out around ten
+ * seconds, so this only ever catches a genuine hang.
+ */
+const AI_TIMEOUT_MS = 120_000;
+
+async function aiFetch(url: string, init: RequestInit, label: string): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(AI_TIMEOUT_MS) });
+  } catch (e: any) {
+    // A timeout or a dropped connection is upstream being unavailable, not a
+    // fault in the request we made.
+    console.error(`[ai] ${label} network failure: ${e?.name ?? ""} ${e?.message ?? e}`);
+    throw Object.assign(new Error("The AI service did not respond. Try again in a moment."), {
+      status: 503,
+      expose: true,
+    });
+  }
+}
+
 const analysisTool = {
   type: "function" as const,
   function: {
@@ -78,18 +157,27 @@ const analysisTool = {
 
 export async function analyzePhotoService(ctx: AuthedContext, data: { photoId: string }) {
   const { supabase, userId } = ctx;
-  if (!aiKeyConfigured()) throw new Error("AI is not configured (set GEMINI_API_KEY)");
+  if (!aiKeyConfigured())
+    throw Object.assign(new Error("AI features are not configured on this deployment."), {
+      status: 503,
+      expose: true,
+    });
 
   const { data: photo, error: photoErr } = await supabase
     .from("photos")
     .select("id, storage_path, project_id")
     .eq("id", data.photoId)
     .single();
-  if (photoErr || !photo) throw new Error("Photo not found");
+  if (photoErr || !photo) throw Object.assign(new Error("Photo not found"), { status: 404 });
 
   const { isActive } = await getCallerTeamPlan(supabase, userId);
   if (!isActive) {
-    throw new Error("AI photo analysis requires an active plan. Subscribe to unlock it.");
+    // A plan gate is the caller's answer to act on, not a server fault. Thrown
+    // without a status it reached them as HTTP 500 "internal_error".
+    throw Object.assign(
+      new Error("AI photo analysis requires an active plan. Subscribe to unlock it."),
+      { status: 403 },
+    );
   }
 
   const { data: signed, error: signErr } = await supabase.storage
@@ -111,40 +199,41 @@ export async function analyzePhotoService(ctx: AuthedContext, data: { photoId: s
 
   try {
     const ep = chatEndpoint(VISION_MODEL);
-    const res = await fetch(ep.url, {
-      method: "POST",
-      headers: ep.headers,
-      body: JSON.stringify({
-        model: ep.model,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an expert construction/trades field inspector (electrical, HVAC, plumbing, roofing, structural). For the attached job-site photo: (1) extract the equipment BRAND, MODEL NUMBER and SERIAL NUMBER exactly as printed (leave empty if not visible - never guess); (2) capture any other readable text/labels/warnings into ocr_text; (3) identify visible defects (cracks, leaks, corrosion, wear, misalignment, missing parts, physical damage) with severity; (4) write a clear, safety-first field report; and (5) recommend practical next actions. Always call the report_site_analysis tool - never reply with free-form text.",
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Analyze this job site photo. Extract brand/model/serial, list defects, and recommend next steps.",
-              },
-              {
-                type: "image_url",
-                image_url: { url: await inlineImageAsDataUrl(signed.signedUrl) },
-              },
-            ],
-          },
-        ],
-        tools: [analysisTool],
-        tool_choice: { type: "function", function: { name: "report_site_analysis" } },
-      }),
-    });
+    const res = await aiFetch(
+      ep.url,
+      {
+        method: "POST",
+        headers: ep.headers,
+        body: JSON.stringify({
+          model: ep.model,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are an expert construction/trades field inspector (electrical, HVAC, plumbing, roofing, structural). For the attached job-site photo: (1) extract the equipment BRAND, MODEL NUMBER and SERIAL NUMBER exactly as printed (leave empty if not visible - never guess); (2) capture any other readable text/labels/warnings into ocr_text; (3) identify visible defects (cracks, leaks, corrosion, wear, misalignment, missing parts, physical damage) with severity; (4) write a clear, safety-first field report; and (5) recommend practical next actions. Always call the report_site_analysis tool - never reply with free-form text.",
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Analyze this job site photo. Extract brand/model/serial, list defects, and recommend next steps.",
+                },
+                {
+                  type: "image_url",
+                  image_url: { url: await inlineImageAsDataUrl(signed.signedUrl) },
+                },
+              ],
+            },
+          ],
+          tools: [analysisTool],
+          tool_choice: { type: "function", function: { name: "report_site_analysis" } },
+        }),
+      },
+      "analyzePhoto",
+    );
 
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error(`AI gateway error ${res.status}: ${t.slice(0, 200)}`);
-    }
+    if (!res.ok) throw await aiProviderError(res, "analyzePhoto");
     const json = await res.json();
     const call = json.choices?.[0]?.message?.tool_calls?.[0];
     if (!call?.function?.arguments) throw new Error("AI did not return structured analysis");
@@ -286,18 +375,16 @@ export async function chatWithAssistantService(
   ];
 
   const ep = chatEndpoint(CHAT_MODEL);
-  const res = await fetch(ep.url, {
-    method: "POST",
-    headers: ep.headers,
-    body: JSON.stringify({ model: ep.model, messages }),
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    if (res.status === 429) throw new Error("Rate limited. Try again in a moment.");
-    if (res.status === 402)
-      throw new Error("AI credits exhausted. Add credits in workspace settings.");
-    throw new Error(`AI error ${res.status}: ${t.slice(0, 200)}`);
-  }
+  const res = await aiFetch(
+    ep.url,
+    {
+      method: "POST",
+      headers: ep.headers,
+      body: JSON.stringify({ model: ep.model, messages }),
+    },
+    "chatWithAssistant",
+  );
+  if (!res.ok) throw await aiProviderError(res, "chatWithAssistant");
   const json = await res.json();
   const reply = normalizeDashes(json.choices?.[0]?.message?.content ?? "");
 
@@ -540,33 +627,34 @@ async function buildPhotoContext(
  */
 export async function transcribeAudio(base64: string, format: string): Promise<string> {
   const ep = chatEndpoint(CHAT_MODEL);
-  const res = await fetch(ep.url, {
-    method: "POST",
-    headers: ep.headers,
-    body: JSON.stringify({
-      model: ep.model,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text:
-                "Transcribe the spoken words in this audio verbatim. Output only the " +
-                "transcript as plain text - no preamble, no speaker labels, no timestamps, " +
-                "no commentary, no quotation marks. If nobody speaks, output nothing at all.",
-            },
-            { type: "input_audio", input_audio: { data: base64, format } },
-          ],
-        },
-      ],
-    }),
-  });
+  const res = await aiFetch(
+    ep.url,
+    {
+      method: "POST",
+      headers: ep.headers,
+      body: JSON.stringify({
+        model: ep.model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text:
+                  "Transcribe the spoken words in this audio verbatim. Output only the " +
+                  "transcript as plain text - no preamble, no speaker labels, no timestamps, " +
+                  "no commentary, no quotation marks. If nobody speaks, output nothing at all.",
+              },
+              { type: "input_audio", input_audio: { data: base64, format } },
+            ],
+          },
+        ],
+      }),
+    },
+    "transcribeAudio",
+  );
   if (!res.ok) {
-    const t = await res.text();
-    if (res.status === 429) throw new Error("Rate limited. Try again shortly.");
-    if (res.status === 402) throw new Error("AI credits exhausted.");
-    throw new Error(`Transcription error ${res.status}: ${t.slice(0, 200)}`);
+    throw await aiProviderError(res, "transcribeAudio");
   }
   const json = await res.json();
   return normalizeDashes(json.choices?.[0]?.message?.content ?? "").trim();
@@ -574,22 +662,23 @@ export async function transcribeAudio(base64: string, format: string): Promise<s
 
 export async function chatComplete(system: string, user: string): Promise<string> {
   const ep = chatEndpoint(CHAT_MODEL);
-  const res = await fetch(ep.url, {
-    method: "POST",
-    headers: ep.headers,
-    body: JSON.stringify({
-      model: ep.model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
-  });
+  const res = await aiFetch(
+    ep.url,
+    {
+      method: "POST",
+      headers: ep.headers,
+      body: JSON.stringify({
+        model: ep.model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+    },
+    "chatComplete",
+  );
   if (!res.ok) {
-    const t = await res.text();
-    if (res.status === 429) throw new Error("Rate limited. Try again shortly.");
-    if (res.status === 402) throw new Error("AI credits exhausted.");
-    throw new Error(`AI error ${res.status}: ${t.slice(0, 200)}`);
+    throw await aiProviderError(res, "chatComplete");
   }
   const json = await res.json();
   return normalizeDashes(json.choices?.[0]?.message?.content ?? "");
@@ -740,30 +829,34 @@ export async function describeSiteLogPhotosService(
         const contextBits: string[] = [];
         if (item.caption) contextBits.push(`caption: ${item.caption}`);
         if (item.tags.length) contextBits.push(`tags: ${item.tags.join(", ")}`);
-        const res = await fetch(ep.url, {
-          method: "POST",
-          headers: ep.headers,
-          body: JSON.stringify({
-            model: ep.model,
-            messages: [
-              {
-                role: "system",
-                content:
-                  "You write a concise site-log note for a construction/trades photo, grounded ONLY in the user-provided context (caption, tags, voice notes). Reply with 2-3 short factual sentences that restate/expand the provided context and describe what is plainly visible. Neutral tone. Do NOT invent defects, risks, code issues, or recommendations the user did not mention. No headings, no bullets, no markdown, no disclaimers.",
-              },
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: `Photo ${i + 1} - user context: ${contextBits.join(" | ")}. Write the site-log note.`,
-                  },
-                  { type: "image_url", image_url: { url: await inlineImageAsDataUrl(item.url) } },
-                ],
-              },
-            ],
-          }),
-        });
+        const res = await aiFetch(
+          ep.url,
+          {
+            method: "POST",
+            headers: ep.headers,
+            body: JSON.stringify({
+              model: ep.model,
+              messages: [
+                {
+                  role: "system",
+                  content:
+                    "You write a concise site-log note for a construction/trades photo, grounded ONLY in the user-provided context (caption, tags, voice notes). Reply with 2-3 short factual sentences that restate/expand the provided context and describe what is plainly visible. Neutral tone. Do NOT invent defects, risks, code issues, or recommendations the user did not mention. No headings, no bullets, no markdown, no disclaimers.",
+                },
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "text",
+                      text: `Photo ${i + 1} - user context: ${contextBits.join(" | ")}. Write the site-log note.`,
+                    },
+                    { type: "image_url", image_url: { url: await inlineImageAsDataUrl(item.url) } },
+                  ],
+                },
+              ],
+            }),
+          },
+          "visionChat",
+        );
         if (!res.ok) return [item.id, NEUTRAL] as const;
         const json = await res.json();
         const text = normalizeDashes(json.choices?.[0]?.message?.content ?? "").trim();
@@ -823,29 +916,30 @@ export async function summarizeWalkthroughsReportService(
     .join("\n\n===\n\n");
 
   const ep = chatEndpoint(CHAT_MODEL);
-  const res = await fetch(ep.url, {
-    method: "POST",
-    headers: ep.headers,
-    body: JSON.stringify({
-      model: ep.model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are SitePix AI, summarizing one or more site walkthroughs into a clean recap - like a site log, not an engineering diagnosis. Structure the Markdown as: # Title, ## Summary (2-3 sentences describing what was walked), ## Highlights (bulleted list summarizing what the technician described, grouped by area/topic when natural), ## Follow-ups (only if the source material explicitly mentions them). STYLE RULES: Neutral, factual, summary-focused. Do NOT use language like 'critical', 'code violation', 'safety hazard', 'severity: high', or strong diagnostic opinions unless the speaker explicitly used those words. Do NOT invent findings, risks, or recommendations. Base every bullet on what is actually in the transcripts and prior summaries. Prefer short bullets and clean spacing over long paragraphs.",
-        },
-        {
-          role: "user",
-          content: `${data.title ? `Report title: ${data.title}\n\n` : ""}Walkthroughs:\n\n${blocks}`,
-        },
-      ],
-    }),
-  });
+  const res = await aiFetch(
+    ep.url,
+    {
+      method: "POST",
+      headers: ep.headers,
+      body: JSON.stringify({
+        model: ep.model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are SitePix AI, summarizing one or more site walkthroughs into a clean recap - like a site log, not an engineering diagnosis. Structure the Markdown as: # Title, ## Summary (2-3 sentences describing what was walked), ## Highlights (bulleted list summarizing what the technician described, grouped by area/topic when natural), ## Follow-ups (only if the source material explicitly mentions them). STYLE RULES: Neutral, factual, summary-focused. Do NOT use language like 'critical', 'code violation', 'safety hazard', 'severity: high', or strong diagnostic opinions unless the speaker explicitly used those words. Do NOT invent findings, risks, or recommendations. Base every bullet on what is actually in the transcripts and prior summaries. Prefer short bullets and clean spacing over long paragraphs.",
+          },
+          {
+            role: "user",
+            content: `${data.title ? `Report title: ${data.title}\n\n` : ""}Walkthroughs:\n\n${blocks}`,
+          },
+        ],
+      }),
+    },
+    "visionChat",
+  );
   if (!res.ok) {
-    const t = await res.text();
-    if (res.status === 429) throw new Error("Rate limited. Try again shortly.");
-    if (res.status === 402) throw new Error("AI credits exhausted.");
-    throw new Error(`AI error ${res.status}: ${t.slice(0, 200)}`);
+    throw await aiProviderError(res, "visionChat");
   }
   const json = await res.json();
   const markdown = normalizeDashes(json.choices?.[0]?.message?.content ?? "");
@@ -870,32 +964,36 @@ export async function extractPhotoTextService(ctx: AuthedContext, data: { photoI
   if (signErr || !signed) throw new Error("Could not access photo");
 
   const ep = chatEndpoint(VISION_MODEL);
-  const res = await fetch(ep.url, {
-    method: "POST",
-    headers: ep.headers,
-    body: JSON.stringify({
-      model: ep.model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an OCR engine. Extract ALL readable text from the image exactly as printed - labels, warnings, model numbers, handwriting, signage. Preserve line breaks. Do NOT add commentary, headings, translations, or explanations. If there is no readable text, reply with exactly: (no text found).",
-        },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Extract every readable piece of text from this photo." },
-            { type: "image_url", image_url: { url: await inlineImageAsDataUrl(signed.signedUrl) } },
-          ],
-        },
-      ],
-    }),
-  });
+  const res = await aiFetch(
+    ep.url,
+    {
+      method: "POST",
+      headers: ep.headers,
+      body: JSON.stringify({
+        model: ep.model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an OCR engine. Extract ALL readable text from the image exactly as printed - labels, warnings, model numbers, handwriting, signage. Preserve line breaks. Do NOT add commentary, headings, translations, or explanations. If there is no readable text, reply with exactly: (no text found).",
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Extract every readable piece of text from this photo." },
+              {
+                type: "image_url",
+                image_url: { url: await inlineImageAsDataUrl(signed.signedUrl) },
+              },
+            ],
+          },
+        ],
+      }),
+    },
+    "visionChat",
+  );
   if (!res.ok) {
-    const t = await res.text();
-    if (res.status === 429) throw new Error("Rate limited. Try again shortly.");
-    if (res.status === 402) throw new Error("AI credits exhausted.");
-    throw new Error(`AI error ${res.status}: ${t.slice(0, 200)}`);
+    throw await aiProviderError(res, "visionChat");
   }
   const json = await res.json();
   /*
