@@ -14,7 +14,19 @@ import { PageLoader } from "@/components/PageLoader";
 import { qk } from "@/lib/query-keys";
 import { listProjectBoards } from "@/lib/project-boards.functions";
 
-type StatusFilter = "active" | "all" | "on_hold" | "completed";
+/*
+ * The one status vocabulary this page speaks, in the order it says it.
+ *
+ * The filter row at the top and the legend over the map are two views of the
+ * same four statuses, and they used to be two hand-written lists: the legend
+ * learned about Archived, the filter row did not, and the page ended up
+ * offering a colour it gave you no way to filter by. Both now read this, so
+ * neither can drift from the other again. Adding a status here adds a chip, a
+ * legend row and a pin colour together or not at all.
+ */
+const STATUSES = ["active", "on_hold", "completed", "archived"] as const;
+type ProjectStatus = (typeof STATUSES)[number];
+type StatusFilter = ProjectStatus | "all";
 
 interface ProjectPin {
   id: string;
@@ -74,9 +86,13 @@ const statusBadgeStyle: Record<string, { bg: string; text: string }> = {
   archived: { bg: "#E2E8F0", text: "#334155" },
 };
 
-// Legend order, and the only place the set of documented colours is written
-// down. Archived is last because it is the only one the map hides by default.
-const LEGEND_STATUSES = ["active", "on_hold", "completed", "archived"] as const;
+/*
+ * That every status above has a colour, a word and a badge is enforced by
+ * tests/map-status-vocabulary.test.ts, not by a check here. A guard at module
+ * scope would only ever fire on a developer's own edit, and it would fire by
+ * taking down the whole bundle rather than by mislabelling one pin - a worse
+ * failure than the one it guards against, and one CI catches earlier anyway.
+ */
 
 const formatAddress = (p: ProjectPin) =>
   [p.street, [p.city, p.state].filter(Boolean).join(", "), p.zip].filter(Boolean).join(" ");
@@ -768,17 +784,15 @@ export function MapPage() {
   if (loading) return <PageLoader />;
 
   const pendingGeocodes = visible.filter((p) => p.latitude == null || p.longitude == null);
-  const counts = {
-    active: projects.filter((p) => p.status === "active").length,
-    on_hold: projects.filter((p) => p.status === "on_hold").length,
-    completed: projects.filter((p) => p.status === "completed").length,
-    all: projects.length,
-  };
-  // Drives the Archived legend row. Read off every project the map knows about,
-  // not just the visible ones, so switching to Active does not retract the
-  // explanation for pins the All filter will show again a click later.
-  const hasArchived = projects.some((p) => p.status === "archived");
-
+  // One count per chip, off the same list the chips are built from. All means
+  // all: a job that is filed away is still one of the projects on this map.
+  const counts = STATUSES.reduce(
+    (acc, s) => {
+      acc[s] = projects.filter((p) => p.status === s).length;
+      return acc;
+    },
+    { all: projects.length } as Record<StatusFilter, number>,
+  );
   /*
    * A list row is a preview too: it flies to the pin and opens the same card,
    * rather than navigating away. Going past CLUSTER_MAX_ZOOM guarantees the pin
@@ -818,15 +832,13 @@ export function MapPage() {
           </>
         }
         actions={
-          <div className="flex items-center gap-1 rounded-xl border-[0.8px] border-border bg-card/65 p-1 shadow-sm">
-            {(
-              [
-                ["active", "Active", counts.active],
-                ["on_hold", "On hold", counts.on_hold],
-                ["completed", "Completed", counts.completed],
-                ["all", "All", counts.all],
-              ] as const
-            ).map(([key, label, count]) => (
+          <div className="flex flex-wrap items-center gap-1 rounded-xl border-[0.8px] border-border bg-card/65 p-1 shadow-sm">
+            {/*
+              One chip per status the legend documents, then All. The dot is the
+              pin colour, so the row that filters the map and the panel that
+              explains it are saying the same thing in the same colours.
+            */}
+            {[...STATUSES, "all" as const].map((key) => (
               <button
                 key={key}
                 type="button"
@@ -837,7 +849,15 @@ export function MapPage() {
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {label} <span className="text-xs">{count}</span>
+                {key !== "all" && (
+                  <span
+                    aria-hidden
+                    className="h-2 w-2 rounded-full ring-1 ring-card"
+                    style={{ background: statusColor[key] }}
+                  />
+                )}
+                {key === "all" ? "All" : statusLabel[key]}{" "}
+                <span className="text-xs">{counts[key]}</span>
               </button>
             ))}
           </div>
@@ -873,12 +893,13 @@ export function MapPage() {
                     <Layers className="h-3 w-3" /> Legend
                   </div>
                   {/*
-                    Archived earns its row only where there is an archived job
-                    to explain. Every colour the map can paint is listed here,
-                    which is the point of a legend: no pin should be a colour
-                    the panel has no word for.
+                    The same four, in the same order, as the chips above: every
+                    colour the map can paint has a word here and a way to filter
+                    by it up there. Archived kept its row conditionally for a
+                    while, which put the legend back out of step with a filter
+                    row that always shows its chip.
                   */}
-                  {LEGEND_STATUSES.filter((s) => s !== "archived" || hasArchived).map((s) => (
+                  {STATUSES.map((s) => (
                     <div key={s} className="flex items-center gap-2">
                       <span
                         className="h-2.5 w-2.5 rounded-full ring-2 ring-card"
@@ -887,19 +908,18 @@ export function MapPage() {
                       <span className="text-foreground/80">{statusLabel[s]}</span>
                     </div>
                   ))}
-                  {(hasArchived || Object.keys(stageLookup).length > 0) && (
-                    <div className="mt-1 max-w-[190px] space-y-1 border-t border-border pt-1.5 text-[10px] leading-snug text-muted-foreground">
-                      {/*
-                        Said out loud, because a pin labelled "Invoiced" sitting
-                        on a Completed colour is only confusing while you think
-                        they are two competing statuses. They are one: the stage
-                        is the detail, the bucket is what it counts as.
-                      */}
-                      {Object.keys(stageLookup).length > 0 && (
-                        <p>Pipeline stages roll up into Active, On hold and Completed.</p>
-                      )}
-                      {hasArchived && <p>Archived jobs are only plotted under the All filter.</p>}
-                    </div>
+                  {/*
+                    Said out loud, because a pin labelled "Invoiced" sitting on
+                    a Completed colour is only confusing while you think they
+                    are two competing statuses. They are one: the stage is the
+                    detail, the bucket is what it counts as. Archived is outside
+                    that sentence on purpose - a filed job keeps its own status
+                    whatever stage it was filed from.
+                  */}
+                  {Object.keys(stageLookup).length > 0 && (
+                    <p className="mt-1 max-w-[190px] border-t border-border pt-1.5 text-[10px] leading-snug text-muted-foreground">
+                      Pipeline stages roll up into Active, On hold and Completed.
+                    </p>
                   )}
                 </div>
                 {/* Count chip */}

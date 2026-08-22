@@ -37,12 +37,16 @@ const bad = (name, detail = "") => checks.push({ pass: false, name, detail });
 // live pipeline stage on purpose: that is the case where the map used to show a
 // blue "Scheduled" chip on a job that is filed away.
 const SCHEDULED_STAGE = "377c2664-26cf-4a82-82be-ae0cb2452805";
+let houseNo = 0;
+// Short, realistic addresses on purpose: a 36-character uuid in the street
+// line blows out the sidebar column and makes the page scroll sideways at phone
+// width, which reads as a layout bug the app does not actually have.
 const fake = (id, name, status, lat, lng, stage = null) => ({
   id,
   name,
   status,
   pipeline_stage_id: stage,
-  street: `${id} Test Street`,
+  street: `${++houseNo} Test Street`,
   city: "Crewe",
   state: "England",
   zip: "CW2 6UH",
@@ -189,7 +193,7 @@ const run = async () => {
   await waitForMarkers(page, "first paint");
 
   // Archived pins are only plotted under All, which is what the legend says.
-  await page.getByRole("button", { name: /^All/ }).click();
+  await page.getByRole("button", { name: /^All \d+$/ }).click();
   await waitForMarkers(page, "after All");
   await page.screenshot({ path: `${SHOTS}/01-all-with-archived.png` });
   console.log("console errors:", JSON.stringify(consoleErrors.slice(0, 8), null, 2));
@@ -217,10 +221,52 @@ const run = async () => {
   } else {
     bad("legend documents Archived", `rows: ${legend?.swatches.map((s) => s.label).join(", ")}`);
   }
-  if (/only plotted under the All filter/i.test(legend?.text ?? "")) {
-    ok("legend says where archived pins appear");
+  /* ------------------------- the two places that show status say one thing */
+  // The filter row at the top right and the legend over the map are the page's
+  // two status vocabularies. They have to be the same words in the same order
+  // and the same colours, or the page offers a colour you cannot filter by.
+  const chips = await page.evaluate(() => {
+    const row = [...document.querySelectorAll("div")].find(
+      (d) =>
+        /rounded-xl/.test(d.className) &&
+        [...d.children].length >= 4 &&
+        [...d.children].every((c) => c.tagName === "BUTTON"),
+    );
+    if (!row) return null;
+    return [...row.children].map((b) => ({
+      label: b.textContent.replace(/\d+$/, "").trim(),
+      dot: b.querySelector("span[style]")
+        ? getComputedStyle(b.querySelector("span[style]")).backgroundColor
+        : null,
+      count: /(\d+)$/.exec(b.textContent.trim())?.[1] ?? null,
+    }));
+  });
+  console.log("filter chips:", JSON.stringify(chips));
+
+  const chipStatuses = (chips ?? []).filter((c) => c.label !== "All");
+  const legendWords = (legend?.swatches ?? []).map((s) => s.label.trim());
+  const chipWords = chipStatuses.map((c) => c.label);
+  if (chipWords.length && JSON.stringify(chipWords) === JSON.stringify(legendWords)) {
+    ok("the filter row and the legend list the same statuses", chipWords.join(" / "));
   } else {
-    bad("legend says where archived pins appear", JSON.stringify(legend?.text));
+    bad(
+      "the filter row and the legend list the same statuses",
+      `chips: ${JSON.stringify(chipWords)} vs legend: ${JSON.stringify(legendWords)}`,
+    );
+  }
+  const colourMismatch = chipStatuses.filter(
+    (c, i) => c.dot !== (legend?.swatches[i]?.color ?? null),
+  );
+  if (chipStatuses.length && colourMismatch.length === 0) {
+    ok("each chip carries its own pin colour");
+  } else {
+    bad("each chip carries its own pin colour", JSON.stringify(colourMismatch));
+  }
+  const archivedChip = chipStatuses.find((c) => /archived/i.test(c.label));
+  if (archivedChip) {
+    ok("the filter row offers Archived", `count ${archivedChip.count}`);
+  } else {
+    bad("the filter row offers Archived", `saw ${JSON.stringify(chipWords)}`);
   }
 
   /* --------------------------------------------------- pins match the legend */
@@ -287,6 +333,26 @@ const run = async () => {
     bad("the knot of six shows as one cluster", `saw ${seen.clusters.length} bubbles`);
   }
 
+  /* ------------------------------------- the Archived chip actually filters */
+  // "Archived" on its own also matches two pins and two sidebar rows; only the
+  // chip is the word followed by its count and nothing else.
+  await page.getByRole("button", { name: /^Archived \d+$/ }).click();
+  await page.waitForTimeout(3500);
+  const onlyArchived = await markers(page);
+  const fillsArchived = onlyArchived.pins.map((p) => p.fill);
+  console.log("under Archived:", JSON.stringify(fillsArchived));
+  if (
+    fillsArchived.length === SPREAD.filter((p) => p.status === "archived").length &&
+    fillsArchived.every((f) => f === "#64748b")
+  ) {
+    ok("the Archived chip plots archived jobs only", `${fillsArchived.length} pins`);
+  } else {
+    bad("the Archived chip plots archived jobs only", JSON.stringify(fillsArchived));
+  }
+  await page.screenshot({ path: `${SHOTS}/01c-archived-filter.png` });
+  await page.getByRole("button", { name: /^All \d+$/ }).click();
+  await waitForMarkers(page, "back to All");
+
   /* ------------------------------- an archived job does not wear a live stage */
   const stageRow = await page.evaluate(() => {
     const btn = [...document.querySelectorAll("button")].find((b) =>
@@ -320,27 +386,6 @@ const run = async () => {
   }
   await page.screenshot({ path: `${SHOTS}/02-archived-preview.png` });
 
-  /* ------------------------- and the row disappears when nothing is archived */
-  // Same interception, minus the archived rows: the legend row should go too.
-  injected = INJECTED.filter((p) => p.status !== "archived");
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForSelector("text=/on map/", { timeout: 90000 });
-  await waitForMarkers(page, "after reload");
-  const legendNoArchived = await page.evaluate(() => {
-    const rows = [...document.querySelectorAll("div")].filter(
-      (d) => d.textContent?.trim().startsWith("Legend") && d.querySelector("span[style]"),
-    );
-    return rows[rows.length - 1]?.innerText ?? "";
-  });
-  console.log("legend without archived:", JSON.stringify(legendNoArchived));
-  if (!/Archived/i.test(legendNoArchived)) {
-    ok("Archived row stays away when nothing is archived");
-  } else {
-    bad("Archived row stays away when nothing is archived", legendNoArchived);
-  }
-  await page.screenshot({ path: `${SHOTS}/03-legend-no-archived.png` });
-
-  /* ------------------------------------------- the legend in the dark theme */
   /*
    * The legend panel is theme-aware but the swatches are fixed hex, so each one
    * has to survive a near-white card and a near-black one. A dot documenting a
@@ -411,7 +456,7 @@ const run = async () => {
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("text=/on map/", { timeout: 90000 });
   await waitForMarkers(page, "light theme");
-  await page.getByRole("button", { name: /^All/ }).click();
+  await page.getByRole("button", { name: /^All \d+$/ }).click();
   await page.waitForTimeout(2500);
   const lightLegend = await measureLegend();
   console.log("light legend:", JSON.stringify(lightLegend, null, 2));
@@ -421,11 +466,125 @@ const run = async () => {
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("text=/on map/", { timeout: 90000 });
   await waitForMarkers(page, "dark theme");
-  await page.getByRole("button", { name: /^All/ }).click();
+  await page.getByRole("button", { name: /^All \d+$/ }).click();
   await page.waitForTimeout(2500);
   const darkLegend = await measureLegend();
   console.log("dark legend:", JSON.stringify(darkLegend, null, 2));
   await page.screenshot({ path: `${SHOTS}/05-legend-dark.png` });
+
+  // The chips carry the same dots on a different surface: the header, not the
+  // translucent panel over the map. Measuring the legend says nothing about
+  // whether the Archived dot survives up there.
+  const chipDots = await page.evaluate(() => {
+    const row = [...document.querySelectorAll("div")].find(
+      (d) =>
+        /rounded-xl/.test(d.className) &&
+        [...d.children].length >= 4 &&
+        [...d.children].every((c) => c.tagName === "BUTTON"),
+    );
+    if (!row) return null;
+    const probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    const parse = (c) => {
+      probe.clearRect(0, 0, 1, 1);
+      probe.fillStyle = "#000";
+      probe.fillStyle = c;
+      probe.fillRect(0, 0, 1, 1);
+      const d = probe.getImageData(0, 0, 1, 1).data;
+      return [d[0], d[1], d[2], d[3] / 255];
+    };
+    const flatten = (el) => {
+      // Walk up until something actually paints, compositing as we go.
+      let [r, g, b, a] = [0, 0, 0, 0];
+      for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
+        const [nr, ng, nb, na] = parse(getComputedStyle(n).backgroundColor);
+        if (na === 0) continue;
+        [r, g, b] = [nr, ng, nb].map((c, i) => Math.round(c * na + [r, g, b][i] * (1 - na)));
+        a = 1;
+        if (na === 1) break;
+      }
+      return a ? [r, g, b] : [255, 255, 255];
+    };
+    const lum = ([r, g, b]) => {
+      const f = (c) => {
+        const s = c / 255;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const ratio = (x, y) => {
+      const [hi, lo] = [lum(x), lum(y)].sort((m, n) => n - m);
+      return Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100;
+    };
+    return [...row.children]
+      .filter((b) => b.querySelector("span[style]"))
+      .map((b) => {
+        const dot = b.querySelector("span[style]");
+        const [r, g, b2] = parse(getComputedStyle(dot).backgroundColor);
+        return {
+          label: b.textContent.replace(/\d+$/, "").trim(),
+          contrast: ratio([r, g, b2], flatten(b)),
+        };
+      });
+  });
+  console.log("dark chip dots:", JSON.stringify(chipDots));
+  // No seed: a {contrast: 0} starting value is smaller than every real reading,
+  // so the reduce would return the seed and fail a passing check.
+  const worstDot = chipDots?.length
+    ? chipDots.reduce((a, b) => (a.contrast < b.contrast ? a : b))
+    : { label: "none", contrast: 0 };
+  if (chipDots?.length === 4 && worstDot.contrast >= 3) {
+    ok("every chip dot is legible in the dark", `worst: ${worstDot.label} ${worstDot.contrast}:1`);
+  } else {
+    bad(
+      "every chip dot is legible in the dark",
+      `${chipDots?.length ?? 0} dots, worst ${worstDot.label} ${worstDot.contrast}:1`,
+    );
+  }
+
+  /* ------------------------------- five chips have to fit a narrow viewport */
+  // A fifth chip plus dots made this row wider than it has ever been. A filter
+  // the phone cuts off is the same complaint as a filter that is not there.
+  for (const width of [1280, 900, 430]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.waitForTimeout(1200);
+    const fit = await page.evaluate(() => {
+      const row = [...document.querySelectorAll("div")].find(
+        (d) =>
+          /rounded-xl/.test(d.className) &&
+          [...d.children].length >= 4 &&
+          [...d.children].every((c) => c.tagName === "BUTTON"),
+      );
+      const chips = row ? [...row.children] : [];
+      return {
+        chips: chips.length,
+        offscreen: chips
+          .map((c) => c.getBoundingClientRect())
+          .filter((r) => r.width === 0 || r.right > window.innerWidth + 1 || r.left < -1).length,
+        pageScrollsSideways:
+          document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+        // Naming the culprit matters: this page can scroll sideways for reasons
+        // that have nothing to do with a chip row, and "my change did it" is not
+        // something to assume.
+        overflowing: [...document.querySelectorAll("body *")]
+          .filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1)
+          .slice(0, 4)
+          .map((el) => ({
+            tag: el.tagName,
+            cls: String(el.className ?? "").slice(0, 48),
+            right: Math.round(el.getBoundingClientRect().right),
+            inChipRow: !!el.closest("button") && /rounded-lg/.test(String(el.className ?? "")),
+          })),
+      };
+    });
+    console.log(`at ${width}px:`, JSON.stringify(fit));
+    if (fit.chips === 5 && fit.offscreen === 0 && !fit.pageScrollsSideways) {
+      ok(`all five chips fit at ${width}px`);
+    } else {
+      bad(`all five chips fit at ${width}px`, JSON.stringify(fit));
+    }
+    await page.screenshot({ path: `${SHOTS}/06-chips-${width}.png` });
+  }
+  await page.setViewportSize({ width: 1500, height: 1000 });
 
   const worstOf = (m) => m?.swatches.reduce((a, b) => (a.contrast < b.contrast ? a : b));
   if (!darkLegend?.isDark) {
