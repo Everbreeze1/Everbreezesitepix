@@ -14,6 +14,7 @@ import {
   Layers,
   Lock,
   Trash2,
+  ShieldCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -36,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { getMyTeam } from "@/lib/teams.functions";
 import { getTrashCounts } from "@/lib/trash.functions";
+import { checkIsPlatformAdmin } from "@/lib/admin.functions";
 
 const baseItems = [
   { title: "Overview", url: "/dashboard", icon: LayoutDashboard },
@@ -67,6 +69,19 @@ const trashItem = { title: "Trash", url: "/projects/trash", icon: Trash2 } as co
 const helpItem = { title: "Knowledge Base", url: "/help", icon: HelpCircle } as const;
 // Covers bugs *and* feature suggestions now, so "Report issue" undersold it.
 const reportIssueItem = { title: "Feedback", url: "/report-issue", icon: LifeBuoy } as const;
+/*
+ * The admin dashboard had no link anywhere in the product. Five pages, a route
+ * tree and a server-side gate all shipped, reachable only by typing /admin from
+ * memory - so the console built to run the platform was, in practice, hidden
+ * from the people who run it.
+ *
+ * Unlike the plan-gated rows above, this one is genuinely absent for
+ * non-admins rather than badged. The badge convention exists so a customer can
+ * see what their plan is missing and upgrade; platform admin is not a tier
+ * anyone can buy, and advertising the console to every customer only invites
+ * them to knock on a door that will not open.
+ */
+const adminItem = { title: "Admin", url: "/admin", icon: ShieldCheck } as const;
 
 function getInitials(name?: string | null, email?: string | null) {
   const trimmed = name?.trim();
@@ -126,7 +141,26 @@ export function AppSidebar() {
     { ...showcasesItem, locked: portfolioLocked },
     ...(showOwnerNav ? [teamItem] : [collabItem]),
   ];
-  const toolItems = [...(showOwnerNav ? [pricingItem] : []), trashItem, helpItem, reportIssueItem];
+  /*
+   * Gated on the same server check the admin layout uses, so the row and the
+   * page can never disagree. A non-admin who reaches /admin by hand still gets
+   * the layout's "Admin access required" screen; hiding the row is a
+   * convenience, never the security boundary - that lives in
+   * requirePlatformAdmin() on every service.
+   */
+  const { data: adminCheck } = useQuery({
+    queryKey: ["admin", "check"],
+    queryFn: () => checkIsPlatformAdmin(),
+    enabled: !!user,
+    staleTime: 5 * 60_000,
+  });
+  const toolItems = [
+    ...(showOwnerNav ? [pricingItem] : []),
+    trashItem,
+    helpItem,
+    reportIssueItem,
+    ...(adminCheck?.isAdmin ? [adminItem] : []),
+  ];
 
   /*
    * The badge is the only signal that anything is recoverable at all. Without a

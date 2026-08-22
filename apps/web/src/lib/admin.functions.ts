@@ -165,3 +165,61 @@ export const listAdminAuditLog = rpcOp<
   { cursor?: string; limit?: number },
   { entries: AdminAuditLogRow[]; nextCursor: string | null }
 >("listAdminAuditLog");
+
+// ---------------------------------------------------------------------------
+// Feedback triage
+//
+// Mirrors apps/api/src/domains/admin/feedback.ts. `issue_reports` has been
+// collecting in-product feedback since 20260803020000 with nothing on the read
+// side, so these are the first callers that table has ever had.
+// ---------------------------------------------------------------------------
+
+export const FEEDBACK_STATUSES = ["new", "triaged", "resolved", "dismissed"] as const;
+export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
+
+export interface FeedbackReport {
+  id: string;
+  status: string;
+  kind: string;
+  sentiment: string | null;
+  source: string;
+  feature: string | null;
+  description: string | null;
+  url: string | null;
+  userAgent: string | null;
+  attachments: string[];
+  createdAt: string;
+  projectId: string | null;
+  reporter: { id: string | null; name: string | null; email: string | null };
+}
+
+export interface FeedbackSummary {
+  byStatus: Record<string, number>;
+  byKind: Record<string, number>;
+  topFeatures: Array<{ feature: string; count: number }>;
+}
+
+export const listFeedback = rpcOp<
+  {
+    status?: FeedbackStatus;
+    kind?: "bug" | "idea" | "praise";
+    source?: "page" | "prompt";
+    feature?: string;
+    search?: string;
+    cursor?: string;
+    limit?: number;
+  },
+  { reports: FeedbackReport[]; nextCursor: string | null }
+>("listFeedback");
+
+export const getFeedbackSummary = rpcOp<undefined, FeedbackSummary>("getFeedbackSummary");
+
+export const setFeedbackStatus = rpcOp<
+  { reportIds: string[]; status: FeedbackStatus },
+  { updated: number }
+>("setFeedbackStatus");
+
+export const replyToFeedback = rpcOp<
+  { reportId: string; message: string; status?: FeedbackStatus },
+  { ok: true }
+>("replyToFeedback");

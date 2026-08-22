@@ -2,8 +2,164 @@ import { z } from "zod";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { requirePlatformAdmin } from "../../lib/admin-context";
 import { getStripe, priceIdToPlan } from "../../lib/stripe";
+import { isMissingFunction, stripLikeWildcards } from "../../lib/postgrest";
+import { selectIn } from "../../lib/chunked-in";
 import { logAdminAction } from "./audit";
 import type { AuthedContext } from "../../lib/user-context";
+
+export interface TeamRollup {
+  memberCount: number;
+  projectCount: number;
+  photoCount: number;
+  storageBytes: number;
+}
+
+const EMPTY_ROLLUP: TeamRollup = {
+  memberCount: 0,
+  projectCount: 0,
+  photoCount: 0,
+  storageBytes: 0,
+};
+
+/**
+ * Member/project/photo/storage counts for a page of teams.
+ *
+ * Prefers `admin_team_rollups`, which does the whole thing as one set-based
+ * query (see 20260822120000_admin_team_rollups.sql for why that matters: the
+ * previous in-process version transferred the photo table on every page view
+ * and misattributed projects for anyone in two teams).
+ *
+ * The fallback exists because SQL here is applied by hand in the Supabase SQL
+ * editor, so this code ships before the function does. It is deliberately the
+ * *corrected* algorithm rather than the old one - a project is counted for
+ * every team whose member created it - and it chunks its `IN (...)` filters,
+ * which the original did not, so it no longer fails outright above ~398 ids.
+ * It is still the slow path, and it is meant to stop being reachable the moment
+ * the migration runs.
+ */
+async function loadTeamRollups(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  teamIds: string[],
+): Promise<Map<string, TeamRollup>> {
+  const out = new Map<string, TeamRollup>();
+  if (!teamIds.length) return out;
+
+  const { data: rpcRows, error: rpcError } = await (admin as any).rpc("admin_team_rollups", {
+    team_ids: teamIds,
+  });
+
+  if (!rpcError) {
+    for (const r of ((rpcRows as any[]) ?? []) as any[]) {
+      out.set(r.team_id, {
+        memberCount: Number(r.member_count ?? 0),
+        projectCount: Number(r.project_count ?? 0),
+        photoCount: Number(r.photo_count ?? 0),
+        storageBytes: Number(r.storage_bytes ?? 0),
+      });
+    }
+    for (const id of teamIds) if (!out.has(id)) out.set(id, { ...EMPTY_ROLLUP });
+    return out;
+  }
+
+  if (!isMissingFunction(rpcError)) throw new Error(rpcError.message);
+
+  // ---- Fallback: pre-migration path. ----
+  const { data: memberRows, error: memberError } = await (admin as any)
+    .from("team_members")
+    .select("team_id, user_id")
+    .in("team_id", teamIds);
+  if (memberError) throw new Error(memberError.message);
+  const members = (memberRows as any[]) ?? [];
+
+  // team -> its members, and member -> ALL of their teams. The second one is
+  // the bug this replaces: a Map<user_id, team_id> silently kept one team.
+  const membersByTeam = new Map<string, Set<string>>();
+  const teamsByMember = new Map<string, string[]>();
+  for (const m of members) {
+    if (!membersByTeam.has(m.team_id)) membersByTeam.set(m.team_id, new Set());
+    membersByTeam.get(m.team_id)!.add(m.user_id);
+    teamsByMember.set(m.user_id, [...(teamsByMember.get(m.user_id) ?? []), m.team_id]);
+  }
+
+  const memberIds = [...teamsByMember.keys()];
+  const projects = await selectIn<{ id: string; created_by: string }>(
+    memberIds,
+    (ids) =>
+      (admin as any)
+        .from("projects")
+        .select("id, created_by")
+        .in("created_by", ids)
+        .is("deleted_at", null),
+    "admin team rollup projects",
+  );
+
+  const teamsByProject = new Map<string, string[]>();
+  for (const p of projects) teamsByProject.set(p.id, teamsByMember.get(p.created_by) ?? []);
+
+  const photos = await selectIn<{ project_id: string; size_bytes: number | null }>(
+    projects.map((p) => p.id),
+    (ids) => (admin as any).from("photos").select("project_id, size_bytes").in("project_id", ids),
+    "admin team rollup photos",
+  );
+
+  for (const id of teamIds) {
+    out.set(id, { ...EMPTY_ROLLUP, memberCount: membersByTeam.get(id)?.size ?? 0 });
+  }
+  for (const p of projects) {
+    for (const teamId of teamsByProject.get(p.id) ?? []) {
+      const roll = out.get(teamId);
+      if (roll) roll.projectCount += 1;
+    }
+  }
+  for (const ph of photos) {
+    for (const teamId of teamsByProject.get(ph.project_id) ?? []) {
+      const roll = out.get(teamId);
+      if (!roll) continue;
+      roll.photoCount += 1;
+      roll.storageBytes += ph.size_bytes ?? 0;
+    }
+  }
+  return out;
+}
+
+/** Per-project photo counts, same RPC-with-fallback shape as `loadTeamRollups`. */
+async function loadProjectRollups(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  projectIds: string[],
+): Promise<Map<string, { photoCount: number; storageBytes: number }>> {
+  const out = new Map<string, { photoCount: number; storageBytes: number }>();
+  if (!projectIds.length) return out;
+
+  const { data: rpcRows, error: rpcError } = await (admin as any).rpc("admin_project_rollups", {
+    project_ids: projectIds,
+  });
+
+  if (!rpcError) {
+    for (const r of ((rpcRows as any[]) ?? []) as any[]) {
+      out.set(r.project_id, {
+        photoCount: Number(r.photo_count ?? 0),
+        storageBytes: Number(r.storage_bytes ?? 0),
+      });
+    }
+  } else if (isMissingFunction(rpcError)) {
+    const photos = await selectIn<{ project_id: string; size_bytes: number | null }>(
+      projectIds,
+      (ids) => (admin as any).from("photos").select("project_id, size_bytes").in("project_id", ids),
+      "admin project rollup photos",
+    );
+    for (const ph of photos) {
+      const cur = out.get(ph.project_id) ?? { photoCount: 0, storageBytes: 0 };
+      cur.photoCount += 1;
+      cur.storageBytes += ph.size_bytes ?? 0;
+      out.set(ph.project_id, cur);
+    }
+  } else {
+    throw new Error(rpcError.message);
+  }
+
+  for (const id of projectIds) if (!out.has(id)) out.set(id, { photoCount: 0, storageBytes: 0 });
+  return out;
+}
 
 export interface PlatformTeam {
   id: string;
@@ -59,7 +215,10 @@ export async function listPlatformTeamsService(
     .order("created_at", { ascending: false })
     .limit(data.limit + 1);
   if (data.cursor) query = query.lt("created_at", data.cursor);
-  if (data.search) query = query.ilike("name", `%${data.search}%`);
+  // `.ilike()` is a single filter, not a parsed expression, so the client
+  // encodes it and a comma is harmless. The wildcards are not: a search for
+  // "100%" would otherwise match every team starting "100".
+  if (data.search) query = query.ilike("name", `%${stripLikeWildcards(data.search)}%`);
 
   const { data: rows, error } = await query;
   if (error) throw new Error(error.message);
@@ -68,47 +227,7 @@ export async function listPlatformTeamsService(
   const page = hasMore ? list.slice(0, data.limit) : list;
   const teamIds = page.map((t) => t.id as string);
 
-  const { data: memberRows } = teamIds.length
-    ? await (admin as any).from("team_members").select("team_id, user_id").in("team_id", teamIds)
-    : { data: [] };
-  const members = (memberRows as any[]) ?? [];
-  const memberCountByTeam = new Map<string, number>();
-  const teamByMemberId = new Map<string, string>();
-  for (const m of members) {
-    memberCountByTeam.set(m.team_id, (memberCountByTeam.get(m.team_id) ?? 0) + 1);
-    teamByMemberId.set(m.user_id, m.team_id);
-  }
-  const memberIds = members.map((m) => m.user_id as string);
-
-  const { data: projectRows } = memberIds.length
-    ? await (admin as any).from("projects").select("id, created_by").in("created_by", memberIds)
-    : { data: [] };
-  const projects = (projectRows as any[]) ?? [];
-  const projectCountByTeam = new Map<string, number>();
-  const teamByProjectId = new Map<string, string>();
-  for (const p of projects) {
-    const teamId = teamByMemberId.get(p.created_by);
-    if (!teamId) continue;
-    projectCountByTeam.set(teamId, (projectCountByTeam.get(teamId) ?? 0) + 1);
-    teamByProjectId.set(p.id, teamId);
-  }
-  const projectIds = projects.map((p) => p.id as string);
-
-  const { data: photoRows } = projectIds.length
-    ? await (admin as any)
-        .from("photos")
-        .select("project_id, size_bytes")
-        .in("project_id", projectIds)
-    : { data: [] };
-  const photos = (photoRows as any[]) ?? [];
-  const photoCountByTeam = new Map<string, number>();
-  const storageBytesByTeam = new Map<string, number>();
-  for (const ph of photos) {
-    const teamId = teamByProjectId.get(ph.project_id);
-    if (!teamId) continue;
-    photoCountByTeam.set(teamId, (photoCountByTeam.get(teamId) ?? 0) + 1);
-    storageBytesByTeam.set(teamId, (storageBytesByTeam.get(teamId) ?? 0) + (ph.size_bytes ?? 0));
-  }
+  const rollups = await loadTeamRollups(admin, teamIds);
 
   return {
     teams: page.map((t) => ({
@@ -118,10 +237,10 @@ export async function listPlatformTeamsService(
       subscriptionStatus: t.subscription_status,
       stripeCustomerId: t.stripe_customer_id,
       isInternal: t.is_internal,
-      memberCount: memberCountByTeam.get(t.id) ?? 0,
-      projectCount: projectCountByTeam.get(t.id) ?? 0,
-      photoCount: photoCountByTeam.get(t.id) ?? 0,
-      storageBytes: storageBytesByTeam.get(t.id) ?? 0,
+      memberCount: (rollups.get(t.id) ?? EMPTY_ROLLUP).memberCount,
+      projectCount: (rollups.get(t.id) ?? EMPTY_ROLLUP).projectCount,
+      photoCount: (rollups.get(t.id) ?? EMPTY_ROLLUP).photoCount,
+      storageBytes: (rollups.get(t.id) ?? EMPTY_ROLLUP).storageBytes,
       createdAt: t.created_at,
       industry: t.industry ?? null,
       trades: Array.isArray(t.trades) ? t.trades : [],
@@ -213,32 +332,25 @@ export async function getPlatformTeamDetailService(
     : { data: [] };
   const profileById = new Map(((profileRows as any[]) ?? []).map((p) => [p.id, p]));
 
-  const { data: projectRows } = memberIds.length
-    ? await (admin as any)
+  const projects = await selectIn<{
+    id: string;
+    name: string;
+    status: string;
+    created_by: string;
+    updated_at: string;
+  }>(
+    memberIds,
+    (ids) =>
+      (admin as any)
         .from("projects")
         .select("id, name, status, created_by, updated_at")
-        .in("created_by", memberIds)
-        .order("updated_at", { ascending: false })
-    : { data: [] };
-  const projects = (projectRows as any[]) ?? [];
-  const projectIds = projects.map((p) => p.id as string);
+        .in("created_by", ids)
+        .order("updated_at", { ascending: false }),
+    "admin team detail projects",
+  );
+  const projectIds = projects.map((p) => p.id);
 
-  const { data: photoRows } = projectIds.length
-    ? await (admin as any)
-        .from("photos")
-        .select("project_id, size_bytes")
-        .in("project_id", projectIds)
-    : { data: [] };
-  const photos = (photoRows as any[]) ?? [];
-  const photoCountByProject = new Map<string, number>();
-  const storageBytesByProject = new Map<string, number>();
-  for (const ph of photos) {
-    photoCountByProject.set(ph.project_id, (photoCountByProject.get(ph.project_id) ?? 0) + 1);
-    storageBytesByProject.set(
-      ph.project_id,
-      (storageBytesByProject.get(ph.project_id) ?? 0) + (ph.size_bytes ?? 0),
-    );
-  }
+  const projectRollups = await loadProjectRollups(admin, projectIds);
 
   return {
     id: team.id,
@@ -269,8 +381,8 @@ export async function getPlatformTeamDetailService(
       id: p.id,
       name: p.name,
       status: p.status,
-      photoCount: photoCountByProject.get(p.id) ?? 0,
-      storageBytes: storageBytesByProject.get(p.id) ?? 0,
+      photoCount: projectRollups.get(p.id)?.photoCount ?? 0,
+      storageBytes: projectRollups.get(p.id)?.storageBytes ?? 0,
       updatedAt: p.updated_at,
     })),
   };

@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
-import { listAdminAuditLog } from "@/lib/admin.functions";
+import { listAdminAuditLog, type AdminAuditLogRow } from "@/lib/admin.functions";
+import { AdminList } from "../components/AdminTable";
+import { useAdminList } from "../hooks/use-admin-list";
 
 const ACTION_LABELS: Record<string, string> = {
   grant_platform_admin: "Granted admin access",
@@ -10,9 +10,19 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export function AdminAuditLogPage() {
-  const { data, isPending } = useQuery({
+  /*
+   * Paginated, because an audit log that stops at the fiftieth entry is not one.
+   * This screen exists to answer "what happened, and who did it" - a question
+   * that is almost always about something older than the last few actions, and
+   * the answer was previously unreachable from the product entirely.
+   */
+  const list = useAdminList<
+    { entries: AdminAuditLogRow[]; nextCursor: string | null },
+    AdminAuditLogRow
+  >({
     queryKey: ["admin", "audit-log"],
-    queryFn: () => listAdminAuditLog({ data: {} }),
+    fetchPage: (cursor) => listAdminAuditLog({ data: { cursor } }),
+    rowsOf: (page) => page.entries,
   });
 
   return (
@@ -22,17 +32,17 @@ export function AdminAuditLogPage() {
         Every grant/revoke, broadcast, and billing sync performed from this admin dashboard.
       </p>
 
-      {isPending || !data ? (
-        <div className="flex justify-center py-10">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : data.entries.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          No admin actions logged yet.
-        </p>
-      ) : (
-        <div className="mt-4 max-h-[600px] space-y-2 overflow-y-auto">
-          {data.entries.map((e) => (
+      <AdminList
+        count={list.rows.length}
+        isPending={list.isPending}
+        isFetchingMore={list.isFetchingMore}
+        hasMore={list.hasMore}
+        onLoadMore={list.loadMore}
+        error={list.error}
+        emptyMessage="No admin actions logged yet."
+      >
+        <div className="mt-4 space-y-2">
+          {list.rows.map((e) => (
             <div key={e.id} className="rounded-lg border border-border p-3 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-bold text-foreground">{ACTION_LABELS[e.action] ?? e.action}</p>
@@ -52,7 +62,7 @@ export function AdminAuditLogPage() {
             </div>
           ))}
         </div>
-      )}
+      </AdminList>
     </div>
   );
 }

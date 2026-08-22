@@ -67,6 +67,7 @@ import { Route as AppGroupsGroupIdRouteImport } from './routes/_app.groups.$grou
 import { Route as AppAdminUsersRouteImport } from './routes/_app.admin.users'
 import { Route as AppAdminTeamsRouteImport } from './routes/_app.admin.teams'
 import { Route as AppAdminNotificationsRouteImport } from './routes/_app.admin.notifications'
+import { Route as AppAdminFeedbackRouteImport } from './routes/_app.admin.feedback'
 import { Route as AppAdminAuditLogRouteImport } from './routes/_app.admin.audit-log'
 import { Route as AppAdminTeamsTeamIdRouteImport } from './routes/_app.admin.teams.$teamId'
 import { Route as AppProjectsProjectIdWorkflowsWorkflowIdRouteImport } from './routes/_app.projects.$projectId_.workflows.$workflowId'
@@ -365,6 +366,11 @@ const AppAdminNotificationsRoute = AppAdminNotificationsRouteImport.update({
   path: '/notifications',
   getParentRoute: () => AppAdminRoute,
 } as any)
+const AppAdminFeedbackRoute = AppAdminFeedbackRouteImport.update({
+  id: '/feedback',
+  path: '/feedback',
+  getParentRoute: () => AppAdminRoute,
+} as any)
 const AppAdminAuditLogRoute = AppAdminAuditLogRouteImport.update({
   id: '/audit-log',
   path: '/audit-log',
@@ -432,6 +438,7 @@ export interface FileRoutesByFullPath {
   '/p/$slug': typeof PSlugRoute
   '/subcontractor-invite/$token': typeof SubcontractorInviteTokenRoute
   '/admin/audit-log': typeof AppAdminAuditLogRoute
+  '/admin/feedback': typeof AppAdminFeedbackRoute
   '/admin/notifications': typeof AppAdminNotificationsRoute
   '/admin/teams': typeof AppAdminTeamsRouteWithChildren
   '/admin/users': typeof AppAdminUsersRoute
@@ -496,6 +503,7 @@ export interface FileRoutesByTo {
   '/p/$slug': typeof PSlugRoute
   '/subcontractor-invite/$token': typeof SubcontractorInviteTokenRoute
   '/admin/audit-log': typeof AppAdminAuditLogRoute
+  '/admin/feedback': typeof AppAdminFeedbackRoute
   '/admin/notifications': typeof AppAdminNotificationsRoute
   '/admin/teams': typeof AppAdminTeamsRouteWithChildren
   '/admin/users': typeof AppAdminUsersRoute
@@ -563,6 +571,7 @@ export interface FileRoutesById {
   '/p/$slug': typeof PSlugRoute
   '/subcontractor-invite/$token': typeof SubcontractorInviteTokenRoute
   '/_app/admin/audit-log': typeof AppAdminAuditLogRoute
+  '/_app/admin/feedback': typeof AppAdminFeedbackRoute
   '/_app/admin/notifications': typeof AppAdminNotificationsRoute
   '/_app/admin/teams': typeof AppAdminTeamsRouteWithChildren
   '/_app/admin/users': typeof AppAdminUsersRoute
@@ -630,6 +639,7 @@ export interface FileRouteTypes {
     | '/p/$slug'
     | '/subcontractor-invite/$token'
     | '/admin/audit-log'
+    | '/admin/feedback'
     | '/admin/notifications'
     | '/admin/teams'
     | '/admin/users'
@@ -694,6 +704,7 @@ export interface FileRouteTypes {
     | '/p/$slug'
     | '/subcontractor-invite/$token'
     | '/admin/audit-log'
+    | '/admin/feedback'
     | '/admin/notifications'
     | '/admin/teams'
     | '/admin/users'
@@ -760,6 +771,7 @@ export interface FileRouteTypes {
     | '/p/$slug'
     | '/subcontractor-invite/$token'
     | '/_app/admin/audit-log'
+    | '/_app/admin/feedback'
     | '/_app/admin/notifications'
     | '/_app/admin/teams'
     | '/_app/admin/users'
@@ -1235,6 +1247,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminNotificationsRouteImport
       parentRoute: typeof AppAdminRoute
     }
+    '/_app/admin/feedback': {
+      id: '/_app/admin/feedback'
+      path: '/feedback'
+      fullPath: '/admin/feedback'
+      preLoaderRoute: typeof AppAdminFeedbackRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
     '/_app/admin/audit-log': {
       id: '/_app/admin/audit-log'
       path: '/audit-log'
@@ -1294,6 +1313,7 @@ const AppAdminTeamsRouteWithChildren = AppAdminTeamsRoute._addFileChildren(
 
 interface AppAdminRouteChildren {
   AppAdminAuditLogRoute: typeof AppAdminAuditLogRoute
+  AppAdminFeedbackRoute: typeof AppAdminFeedbackRoute
   AppAdminNotificationsRoute: typeof AppAdminNotificationsRoute
   AppAdminTeamsRoute: typeof AppAdminTeamsRouteWithChildren
   AppAdminUsersRoute: typeof AppAdminUsersRoute
@@ -1302,6 +1322,7 @@ interface AppAdminRouteChildren {
 
 const AppAdminRouteChildren: AppAdminRouteChildren = {
   AppAdminAuditLogRoute: AppAdminAuditLogRoute,
+  AppAdminFeedbackRoute: AppAdminFeedbackRoute,
   AppAdminNotificationsRoute: AppAdminNotificationsRoute,
   AppAdminTeamsRoute: AppAdminTeamsRouteWithChildren,
   AppAdminUsersRoute: AppAdminUsersRoute,

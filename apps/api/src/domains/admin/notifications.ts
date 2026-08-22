@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { requirePlatformAdmin } from "../../lib/admin-context";
-import { insertNotification } from "../notifications/service";
+import { chunk } from "../../lib/chunked-in";
 import { logAdminAction } from "./audit";
 import type { AuthedContext } from "../../lib/user-context";
 
@@ -102,18 +102,45 @@ export async function sendAdminNotificationService(
     recipientIds = [data.target.userId];
   }
 
-  await Promise.all(
-    recipientIds.map((recipientId) =>
-      insertNotification(admin, {
-        recipientId,
-        actorId: null,
-        type: "admin_announcement",
-        title: data.title,
-        body: data.body ?? null,
-        linkPath: data.linkPath ?? null,
-      }),
-    ),
-  );
+  /*
+   * One batched INSERT per chunk, not one request per recipient.
+   *
+   * This used to be `Promise.all(recipientIds.map(insertNotification))`, which
+   * opens a socket per user and fires them all at once: a broadcast to the whole
+   * user base was a self-inflicted denial of service against our own database,
+   * from a single HTTP request, and it got worse with every signup.
+   *
+   * Chunks are issued sequentially for the reason selectIn gives - a stampede of
+   * parallel writes turns one admin action into everyone else's outage - and the
+   * chunk size is the same 200 that `chunked-in` uses, well inside PostgREST's
+   * request limits with 9 columns per row.
+   *
+   * Not atomic across chunks. A failure partway leaves earlier chunks delivered,
+   * so the count returned below is what actually landed rather than what was
+   * intended, and the error names the shortfall instead of hiding it.
+   */
+  const rows = recipientIds.map((recipientId) => ({
+    recipient_id: recipientId,
+    actor_id: null,
+    type: "admin_announcement" as const,
+    title: data.title,
+    body: data.body ?? null,
+    link_path: data.linkPath ?? null,
+    project_id: null,
+    entity_type: null,
+    entity_id: null,
+  }));
+
+  let sent = 0;
+  for (const batch of chunk(rows)) {
+    const { error } = await (admin as any).from("notifications").insert(batch);
+    if (error) {
+      throw new Error(
+        `Announcement partially sent: ${sent} of ${rows.length} delivered before the send failed (${error.message}).`,
+      );
+    }
+    sent += batch.length;
+  }
 
   await logAdminAction(admin, {
     actorId: ctx.userId,
@@ -125,8 +152,8 @@ export async function sendAdminNotificationService(
         : data.target.type === "team"
           ? data.target.teamId
           : null,
-    metadata: { target: data.target, title: data.title, sentTo: recipientIds.length },
+    metadata: { target: data.target, title: data.title, sentTo: sent },
   });
 
-  return { sentTo: recipientIds.length };
+  return { sentTo: sent };
 }

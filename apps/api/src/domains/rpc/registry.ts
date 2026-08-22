@@ -189,6 +189,15 @@ import {
 } from "../admin/teams";
 import { listAdminAuditLogInputSchema, listAdminAuditLogService } from "../admin/audit";
 import {
+  getFeedbackSummaryService,
+  listFeedbackInputSchema,
+  listFeedbackService,
+  replyToFeedbackInputSchema,
+  replyToFeedbackService,
+  setFeedbackStatusInputSchema,
+  setFeedbackStatusService,
+} from "../admin/feedback";
+import {
   listReviewLinksService,
   setReviewLinksInputSchema,
   setReviewLinksService,
@@ -1129,6 +1138,25 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   listAdminAuditLog: authed(
     (d) => listAdminAuditLogInputSchema.parse(d),
     listAdminAuditLogService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  listFeedback: authed(
+    (d) => listFeedbackInputSchema.parse(d),
+    listFeedbackService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  getFeedbackSummary: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return getFeedbackSummaryService(ctx);
+    },
+  },
+  setFeedbackStatus: authed(
+    (d) => setFeedbackStatusInputSchema.parse(d),
+    setFeedbackStatusService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  replyToFeedback: authed(
+    (d) => replyToFeedbackInputSchema.parse(d),
+    replyToFeedbackService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
   ),
   listReviewLinks: {
     handle: async (ctx) => {
