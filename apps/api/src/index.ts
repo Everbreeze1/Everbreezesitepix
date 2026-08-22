@@ -93,12 +93,7 @@ export type { GenerateSiteLogPdfInput } from "./domains/reports/site-log-pdf";
 
 export { rpcRegistry, PUBLIC_RPC_OPS, rpcBodySchema } from "./domains/rpc/registry";
 
-export {
-  chatEndpoint,
-  transcriptionEndpoint,
-  GEMINI_FLASH_MODEL,
-  isUsingCustomGemini,
-} from "./lib/ai-provider";
+export { chatEndpoint, GEMINI_FLASH_MODEL, isUsingCustomGemini } from "./lib/ai-provider";
 
 export {
   analyzePhotoService,

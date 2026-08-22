@@ -522,6 +522,56 @@ async function buildPhotoContext(
  * conclusions, and the walkthrough summaries composed on top of them. See
  * `normalizeDashes` for why model prose needs it when tracked source does not.
  */
+/**
+ * Transcribe recorded audio to text.
+ *
+ * Gemini has no Whisper-style `/audio/transcriptions` endpoint - the URL the
+ * walkthrough recorder used to POST to returns nothing at all (HTTP 000), which
+ * is why every walkthrough ever recorded came back with an empty transcript and
+ * a summary that called a narrated walk "silent". The supported path is audio
+ * as an `input_audio` part on the ordinary chat endpoint, which is the same
+ * endpoint every other AI feature here already uses and which works in
+ * production (it is only geo-blocked from this dev machine).
+ *
+ * `format` is the bare container name Gemini expects ("wav", "mp3", "webm"),
+ * not a mime type. The transcript is returned verbatim and unlabelled; an empty
+ * string means the model heard no speech, which the caller must be able to tell
+ * apart from a failure (a failure throws).
+ */
+export async function transcribeAudio(base64: string, format: string): Promise<string> {
+  const ep = chatEndpoint(CHAT_MODEL);
+  const res = await fetch(ep.url, {
+    method: "POST",
+    headers: ep.headers,
+    body: JSON.stringify({
+      model: ep.model,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                "Transcribe the spoken words in this audio verbatim. Output only the " +
+                "transcript as plain text - no preamble, no speaker labels, no timestamps, " +
+                "no commentary, no quotation marks. If nobody speaks, output nothing at all.",
+            },
+            { type: "input_audio", input_audio: { data: base64, format } },
+          ],
+        },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    if (res.status === 429) throw new Error("Rate limited. Try again shortly.");
+    if (res.status === 402) throw new Error("AI credits exhausted.");
+    throw new Error(`Transcription error ${res.status}: ${t.slice(0, 200)}`);
+  }
+  const json = await res.json();
+  return normalizeDashes(json.choices?.[0]?.message?.content ?? "").trim();
+}
+
 export async function chatComplete(system: string, user: string): Promise<string> {
   const ep = chatEndpoint(CHAT_MODEL);
   const res = await fetch(ep.url, {
