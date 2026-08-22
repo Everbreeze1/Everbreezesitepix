@@ -220,6 +220,51 @@ const run = async () => {
   );
   await page.screenshot({ path: `${SHOTS}/09-users-directory.png`, fullPage: true });
 
+  /*
+   * Everything above passes against the pre-migration fallback too, which is
+   * the point of the fallback but useless as proof. These exercise the SQL
+   * path: a filter that does not narrow the total, or a sort that does not
+   * reorder, is a control that lies about what it did.
+   */
+  const totalOf = (text) => {
+    const m = text.match(/Showing \d+-\d+ of (\d+)/);
+    return m ? Number(m[1]) : null;
+  };
+  const allTotal = totalOf(usersBody);
+  const degraded = /Filters and sorting are unavailable/.test(usersBody);
+
+  if (degraded) {
+    bad(
+      "directory runs the SQL path",
+      "still on the fallback - run 20260823100000_admin_user_directory.sql",
+    );
+  } else {
+    ok("directory runs the SQL path", `${allTotal} accounts`);
+
+    await page.getByRole("button", { name: "Unconfirmed", exact: true }).click();
+    await page.waitForTimeout(3500);
+    const unconfirmedTotal = totalOf(await page.locator("body").innerText());
+    expect(
+      unconfirmedTotal !== null && allTotal !== null && unconfirmedTotal < allTotal,
+      "a status filter narrows the total",
+      `all ${allTotal} -> unconfirmed ${unconfirmedTotal}`,
+    );
+
+    await page.getByRole("button", { name: "All", exact: true }).click();
+    await page.waitForTimeout(3500);
+
+    // First row before and after flipping a sort. If they match, the header is
+    // decoration.
+    const firstName = async () =>
+      (await page.locator("tbody tr").first().innerText()).split("\n")[0];
+    const beforeSort = await firstName();
+    await page.getByRole("button", { name: /Last seen/i }).click();
+    await page.waitForTimeout(3500);
+    const afterSort = await firstName();
+    expect(beforeSort !== afterSort, "sorting reorders the table", `${beforeSort} -> ${afterSort}`);
+    await page.screenshot({ path: `${SHOTS}/09b-users-sorted.png`, fullPage: true });
+  }
+
   // --- the user detail route (milestone 3) ---------------------------------
   const sawUserLink = await waitFor(page, 'a[href^="/admin/users/"]');
   if (sawUserLink) {

@@ -522,3 +522,86 @@ describe("CSV export", () => {
     expect(src).toMatch(/max: z\.number\(\)\.int\(\)\.min\(1\)\.max\(5000\)/);
   });
 });
+
+describe("projects carry their team", () => {
+  const SQL = "supabase/migrations/20260823110000_projects_team_id.sql";
+
+  it("derives the team server-side rather than trusting the browser", () => {
+    // There is one INSERT site and it runs in the browser under the user's own
+    // session. Setting the column there means trusting the client with it, and
+    // the paywall hole in LAUNCH.md 1.0a is what that already cost once.
+    const sql = read(SQL);
+    expect(sql).toContain("CREATE TRIGGER projects_set_team_id_trg");
+    expect(sql).toContain("BEFORE INSERT OR UPDATE ON public.projects");
+    expect(sql).toContain("NEW.team_id := public.primary_team_for_user(NEW.created_by)");
+  });
+
+  it("refuses to let a signed-in caller move a project between teams", () => {
+    const sql = read(SQL);
+    expect(sql).toContain("auth.role(), '') <> 'service_role'");
+    expect(sql).toContain("NEW.team_id := OLD.team_id");
+  });
+
+  it("uses the same primary-team rule as the user directory", () => {
+    // If the two disagreed, a user's projects and that user's row would name
+    // different teams on adjacent screens.
+    const sql = read(SQL);
+    const dir = read("supabase/migrations/20260823100000_admin_user_directory.sql");
+    const rule = "ORDER BY (t.owner_id = p";
+    expect(sql).toContain("ORDER BY (t.owner_id = p_user_id) DESC, tm.created_at ASC");
+    expect(dir).toContain(rule);
+  });
+
+  it("keeps the old inference for rows that are still unattributed", () => {
+    // A project created by someone in no team would otherwise vanish from a
+    // team it was already being counted for.
+    const sql = read(SQL);
+    expect(sql).toContain("AND p.team_id IS NULL");
+    expect(sql).toContain("UNION");
+  });
+
+  it("does not touch RLS or visibility in the same migration", () => {
+    // Attribution and access are different concerns; changing both at once
+    // would make a reporting fix indistinguishable from an access change.
+    const sql = read(SQL);
+    expect(sql).not.toContain("CREATE POLICY");
+    expect(sql).not.toContain("DROP POLICY");
+  });
+
+  it("reports unattributed projects as unknown before the migration runs", () => {
+    // countRows discards the error and returns 0, which would be a confident
+    // claim about data we cannot see.
+    const src = read("apps/api/src/domains/admin/service.ts");
+    expect(src).toContain("countRowsOrNull");
+    expect(src).toContain("unattributedProjects: number | null");
+    expect(read("apps/web/src/features/admin/pages/AdminOverviewPage.tsx")).toContain(
+      "belong to no team",
+    );
+  });
+});
+
+describe("stripe account checker", () => {
+  it("tells the operator to fix the key, not the data", () => {
+    // Repointing stripe_customer_id at another account's customers would
+    // detach every live subscription from the team that pays for it.
+    const src = read("scripts/check-stripe-account.mjs");
+    expect(src).toContain("Fix the KEY, not the data");
+  });
+
+  it("is read-only", () => {
+    // It runs against a LIVE Stripe account with a key pasted in by hand, so
+    // every call in it must be a retrieve or a list.
+    const src = read("scripts/check-stripe-account.mjs");
+    for (const forbidden of [
+      "stripe.customers.create",
+      "stripe.customers.update",
+      "stripe.subscriptions.create",
+      "stripe.subscriptions.update",
+      "stripe.subscriptions.cancel",
+      "billingPortal.sessions.create",
+      ".del(",
+    ]) {
+      expect(src, `must not call ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+});

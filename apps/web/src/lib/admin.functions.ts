@@ -6,6 +6,8 @@ export interface AdminMetrics {
   teamsByPlan: { starter: number; pro: number; team: number };
   subscriptions: { active: number; inactive: number };
   totalProjects: number;
+  /** Live projects with no team. Null when the team_id migration has not run. */
+  unattributedProjects: number | null;
   totalPhotos: number;
   signupsLast30Days: Array<{ date: string; count: number }>;
   recentTeams: Array<{

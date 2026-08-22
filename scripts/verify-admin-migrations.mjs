@@ -7,6 +7,7 @@
  *   20260822150000_admin_roles.sql
  *   20260822160000_email_confirmed_lookup.sql
  *   20260823100000_admin_user_directory.sql
+ *   20260823110000_projects_team_id.sql
  *
  * They are applied by hand in the Supabase SQL editor, so "did it run" and "did
  * every part of it run" are different questions - a statement that errored
@@ -507,6 +508,92 @@ async function checkUserDirectory() {
 }
 
 // ---------------------------------------------------------------------------
+// 20260823110000_projects_team_id.sql
+// ---------------------------------------------------------------------------
+
+async function checkProjectsTeamId() {
+  const { data: probe, error } = await db.from("projects").select("id, team_id").limit(1);
+  if (error) {
+    bad(
+      "projects.team_id exists",
+      /team_id/.test(error.message)
+        ? "NOT FOUND - migration 20260823110000 has not run"
+        : `${error.code ?? ""} ${error.message}`.trim(),
+    );
+    return;
+  }
+  ok("projects.team_id exists");
+
+  const { count: live } = await db
+    .from("projects")
+    .select("id", { count: "exact", head: true })
+    .is("deleted_at", null);
+  const { count: orphan } = await db
+    .from("projects")
+    .select("id", { count: "exact", head: true })
+    .is("deleted_at", null)
+    .is("team_id", null);
+  ok("backfill", `${(live ?? 0) - (orphan ?? 0)} of ${live} live projects have a team`);
+
+  // Every unattributed project must be explainable: its creator is in no team.
+  // Any other NULL means the backfill missed a row it should have matched.
+  const { data: orphans } = await db
+    .from("projects")
+    .select("id, created_by")
+    .is("deleted_at", null)
+    .is("team_id", null);
+  const { data: members } = await db.from("team_members").select("user_id");
+  const memberSet = new Set((members ?? []).map((m) => m.user_id));
+  const wrong = (orphans ?? []).filter((p) => memberSet.has(p.created_by));
+  if (wrong.length === 0) {
+    ok("every unattributed project has a creator in no team", `${orphans?.length ?? 0} such rows`);
+  } else {
+    bad(
+      "every unattributed project has a creator in no team",
+      `${wrong.length} row(s) whose creator IS in a team were not backfilled`,
+    );
+  }
+
+  // The rollups must now agree with a direct count, per team.
+  const { data: teams } = await db.from("teams").select("id, name");
+  const ids = (teams ?? []).map((t) => t.id);
+  const { data: rollups, error: rErr } = await db.rpc("admin_team_rollups", { team_ids: ids });
+  if (rErr) {
+    bad("rollups agree with projects.team_id", rErr.message);
+  } else {
+    const mismatches = [];
+    for (const r of rollups ?? []) {
+      const { count: direct } = await db
+        .from("projects")
+        .select("id", { count: "exact", head: true })
+        .is("deleted_at", null)
+        .eq("team_id", r.team_id);
+      if (Number(r.project_count) !== (direct ?? 0)) {
+        const name = (teams ?? []).find((t) => t.id === r.team_id)?.name ?? r.team_id;
+        mismatches.push(`${name}: rollup ${r.project_count}, direct ${direct}`);
+      }
+    }
+    if (mismatches.length === 0) ok("rollups agree with projects.team_id");
+    else bad("rollups agree with projects.team_id", mismatches.join("; "));
+  }
+
+  // The sum across teams plus the orphans must be the platform total. This is
+  // the discrepancy the Overview page now explains rather than hides.
+  const sum = (rollups ?? []).reduce((s, r) => s + Number(r.project_count), 0);
+  if (sum + (orphan ?? 0) === (live ?? 0)) {
+    ok("team totals + unattributed = platform total", `${sum} + ${orphan} = ${live}`);
+  } else {
+    bad("team totals + unattributed = platform total", `${sum} + ${orphan} != ${live}`);
+  }
+
+  const { data: fn, error: fnErr } = await db.rpc("primary_team_for_user", {
+    p_user_id: (members ?? [])[0]?.user_id ?? "00000000-0000-0000-0000-000000000000",
+  });
+  if (fnErr) bad("primary_team_for_user exists", fnErr.message);
+  else ok("primary_team_for_user exists", String(fn ?? "null"));
+}
+
+// ---------------------------------------------------------------------------
 
 await checkRollups();
 await checkFeedbackTriage();
@@ -514,6 +601,7 @@ await checkObservability();
 await checkAdminRoles();
 await checkEmailConfirmedLookup();
 await checkUserDirectory();
+await checkProjectsTeamId();
 
 console.log("");
 for (const r of results) {

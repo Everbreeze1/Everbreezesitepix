@@ -7,10 +7,13 @@ function StatTile({
   label,
   value,
   icon: Icon,
+  note,
 }: {
   label: string;
   value: string | number;
   icon: any;
+  /** One line under the number, for when the number needs a caveat. */
+  note?: string;
 }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-5">
@@ -19,6 +22,7 @@ function StatTile({
         <Icon className="h-4 w-4 text-muted-foreground" />
       </div>
       <p className="mt-3 text-3xl font-bold text-foreground">{value}</p>
+      {note && <p className="mt-1 text-[11px] text-muted-foreground">{note}</p>}
     </div>
   );
 }
@@ -42,7 +46,24 @@ export function AdminOverviewPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label="Total users" value={metrics.totalUsers} icon={Users} />
         <StatTile label="Total teams" value={metrics.totalTeams} icon={Building2} />
-        <StatTile label="Total projects" value={metrics.totalProjects} icon={FolderKanban} />
+        <StatTile
+          label="Total projects"
+          value={metrics.totalProjects}
+          icon={FolderKanban}
+          /*
+           * The Teams page sums per-team counts; this counts every project. The
+           * difference is exactly the projects belonging to no team, and saying
+           * so here is what stops the two screens looking like one of them is
+           * broken.
+           */
+          note={
+            metrics.unattributedProjects === null
+              ? undefined
+              : metrics.unattributedProjects > 0
+                ? `${metrics.unattributedProjects} belong to no team`
+                : "all attributed to a team"
+          }
+        />
         <StatTile label="Total photos" value={metrics.totalPhotos} icon={ImageIcon} />
       </div>
 
