@@ -243,6 +243,122 @@ describe("the Report, generated against four generations of one summary", () => 
   });
 });
 
+/*
+ * 194 Daniels Drive, as the production rows actually are.
+ *
+ * Not a reconstruction from the complaint: this is the history read off the
+ * live table with scripts/sql/check-summary-photo-sets.sql. Five summary rows,
+ * every one of them `walkthrough_id` NULL - no recording behind any of them -
+ * and all five covering the SAME nine photos, confirmed by one shared hash of
+ * their sorted photo ids.
+ *
+ * Two things follow, and they are why this case is pinned separately.
+ *
+ * A fix that grouped by `walkthrough_id` alone would not have touched this job:
+ * five null keys are five groups, and the report would still print five blocks.
+ * The photo set is the only thing that identifies these rows as one write-up
+ * drafted five times.
+ *
+ * Neither would a prose fingerprint have saved it. The five bodies are 623, 579,
+ * 1241, 1251 and 1228 characters and genuinely differ - the model wrote
+ * something new each time - so nothing about the text collapses them.
+ *
+ * The counts matched too: the reports filed on 2026-08-22 and 2026-08-23 each
+ * carried exactly four blocks, which is exactly how many summary rows existed
+ * when each was generated.
+ */
+describe("194 Daniels Drive, from the live rows", () => {
+  /** The nine photos every one of the five summaries covers. */
+  const NINE = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9"];
+  /** Same set, different order - the notes are ordered by capture, not by id. */
+  const shuffled = [...NINE].reverse();
+  const notes = (ids: string[]) => ids.map((photoId) => ({ photoId }));
+
+  beforeEach(() => {
+    DB.summaries = [
+      summaryRow({
+        id: "7f3edf35",
+        created_at: "2026-08-23T14:46:22.475298Z",
+        photo_notes: notes(NINE),
+        title: "Summary - Aug 23, 2026",
+        markdown: "## Overview\n\nA site visit was conducted at 194 Daniels Drive. Fifth draft.",
+      }),
+      summaryRow({
+        id: "c77015e0",
+        created_at: "2026-08-22T04:24:32.157157Z",
+        photo_notes: notes(shuffled),
+        title: "Summary - Aug 22, 2026",
+        markdown: "## Overview\n\nA site visit was conducted at 194 Daniels Drive. Fourth draft.",
+      }),
+      // The two oldest carry the pre-split format: their own `# Title` heading,
+      // which the report prints an <h3> for already.
+      summaryRow({
+        id: "7c9b1680",
+        created_at: "2026-08-21T14:43:54.109025Z",
+        photo_notes: notes(NINE),
+        title: "Summary - Aug 21, 2026",
+        markdown:
+          "# Summary - Aug 21, 2026\n\n## Overview\n\nA site visit was conducted. Third draft.",
+      }),
+      summaryRow({
+        id: "411a7a7c",
+        created_at: "2026-08-21T14:00:15.060162Z",
+        photo_notes: notes(shuffled),
+        title: "Summary - Aug 21, 2026",
+        markdown:
+          "# Summary - Aug 21, 2026\n\n## Overview\n\nA site visit was conducted. Second draft.",
+      }),
+      summaryRow({
+        id: "0ac2c023",
+        created_at: "2026-08-20T23:51:41.431079Z",
+        photo_notes: notes(NINE),
+        title: "Summary - Aug 20, 2026",
+        markdown:
+          "# Summary - Aug 20, 2026\n\n## Overview\n\nThis photo set documents. First draft.",
+      }),
+    ];
+  });
+
+  it("prints one block where the filed reports carried four", async () => {
+    const res = await generate();
+    expect(res.summaryCount).toBe(1);
+    expect(summaryBlocks(DB.inserted.content_html)).toHaveLength(1);
+  });
+
+  it("keeps the newest draft and none of the four superseded ones", async () => {
+    await generate();
+    const html: string = DB.inserted.content_html;
+    expect(html).toContain("Fifth draft.");
+    for (const gone of ["Fourth draft", "Third draft", "Second draft", "First draft"]) {
+      expect(html).not.toContain(gone);
+    }
+  });
+
+  it("groups them despite the notes being in different orders", async () => {
+    // Two of the five list the same nine photos in reverse. Sorting the ids
+    // inside the key is what makes those the same selection rather than two.
+    await generate();
+    expect(summaryBlocks(DB.inserted.content_html)).toHaveLength(1);
+  });
+
+  it("does not print a legacy row's own title on top of the heading it gets", async () => {
+    // Three of the five open with `# Summary - Aug NN, 2026`, and the block
+    // already carries that as its <h3>.
+    DB.summaries = DB.summaries.filter((r) => r.id === "0ac2c023");
+    await generate();
+    const html: string = DB.inserted.content_html;
+    expect(html).toContain("<h3>Summary - Aug 20, 2026");
+    expect(html).not.toContain("<h1>");
+    expect(html).not.toContain("# Summary - Aug 20, 2026");
+  });
+
+  it("tells the drafter about one write-up, not five", async () => {
+    await generate();
+    expect(DB.prompt).toContain("Walkthrough write-ups on this job (1):");
+    expect(DB.prompt).not.toContain("First draft");
+  });
+});
+
 describe("the Report, generated against the other shapes of summary history", () => {
   it("keeps one entry per walkthrough when the job has several walks", async () => {
     DB.summaries = [
