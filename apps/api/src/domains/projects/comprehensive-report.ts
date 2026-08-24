@@ -31,13 +31,31 @@ import { stripPhotoGallery } from "../walkthroughs/summaries";
  * from filenames and tag counts while the real account of the work sat one
  * table over. They are quoted into the report and fed to the drafter as
  * context.
+ *
+ * **The current one, per walkthrough. Not the whole table.** A Summary is its
+ * own document, with its own page and its own share link, and it stays that
+ * way: a Report draws on Summaries, it does not absorb them.
+ * `walkthrough_summaries` gains a row per generation, so reading it by project
+ * hands back every write-up ever made on the job - which is how "the 194
+ * Daniels Drive report shows four near-identical Summary blocks in its body
+ * instead of one" happened. `currentSummaries` reduces those rows to the
+ * current summary of each thing summarised, before either the prompt or the
+ * document sees them.
  */
 
 /** Photos read for the digest. A job with more than this is summarised from a sample. */
 const MAX_PHOTOS_SCANNED = 400;
 /** Captions handed to the model. Enough to characterise the job, not a transcript. */
 const MAX_CAPTIONS_IN_PROMPT = 60;
-/** Walkthrough write-ups folded in. A job with more is summarised from these. */
+/**
+ * Summary rows read before they are reduced to the current one of each.
+ *
+ * Higher than the number that can survive: superseded rows are read only to be
+ * dropped, and a walkthrough whose summary has been regenerated a dozen times
+ * would otherwise spend the whole allowance on copies of one write-up.
+ */
+const MAX_SUMMARY_ROWS_SCANNED = 200;
+/** Walkthrough write-ups folded in, once the superseded ones are dropped. */
 const MAX_SUMMARIES_INCLUDED = 12;
 /** Per write-up, so one long one cannot crowd out the rest of the prompt. */
 const MAX_SUMMARY_CHARS = 4000;
@@ -131,6 +149,134 @@ export function summaryProse(markdown: string | null): string {
 }
 
 /**
+ * The minimum of a summary row this file needs to choose between two of them.
+ *
+ * Structural, not the full row: the service reads more columns than this and
+ * the tests build rows with fewer, and neither should have to match a shape
+ * that only exists to be compared.
+ */
+export interface SummaryRowForSelection {
+  id: string;
+  walkthrough_id?: string | null;
+  photo_notes?: unknown;
+  markdown?: string | null;
+  created_at?: string | null;
+}
+
+/** Prose reduced to comparable words, so two spellings of one body match. */
+function proseFingerprint(markdown: string | null | undefined): string {
+  return summaryProse(markdown ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * What a summary row is a summary OF.
+ *
+ * Rows sharing a key are the same write-up written more than once, so only the
+ * latest of them is current:
+ *
+ * - a recorded walk, by `walkthrough_id`. Regenerating a walkthrough's summary
+ *   inserts a row rather than replacing one, and the Summary page itself shows
+ *   the newest, so a Report quoting an older one would quote text the author
+ *   cannot find anywhere in the product.
+ * - a set of photos, by the photo ids in `photo_notes`. A summary written from
+ *   photos has no walkthrough to key on; run twice over the same selection it
+ *   is one summary drafted twice, not two accounts of the job.
+ * - anything left, by its prose, which at worst keeps a row that deserved
+ *   keeping and at best drops a duplicate of one already in hand.
+ */
+function summaryGroupKey(row: SummaryRowForSelection): string {
+  if (row.walkthrough_id) return `walkthrough:${row.walkthrough_id}`;
+  const photoIds = Array.isArray(row.photo_notes)
+    ? [
+        ...new Set(
+          (row.photo_notes as any[])
+            .map((n) => n?.photoId)
+            .filter((id): id is string => typeof id === "string" && !!id),
+        ),
+      ].sort()
+    : [];
+  if (photoIds.length) return `photos:${photoIds.join(",")}`;
+  const prose = proseFingerprint(row.markdown);
+  return prose ? `prose:${prose}` : `summary:${row.id}`;
+}
+
+/**
+ * When a summary was written, as a number.
+ *
+ * Parsed rather than compared as text. `timestamptz` reaches this as whatever
+ * PostgREST renders, which is not one fixed spelling: an offset can arrive as
+ * `Z` or as `+00:00`, and fractional seconds are present only when they are
+ * non-zero. Lexicographically `...:00Z` sorts after `...:00.5+00:00`, so
+ * comparing the strings puts the earlier row last exactly when two rows land in
+ * the same second - which is what a regenerate-twice does.
+ *
+ * An unparseable or absent date sorts oldest. It cannot be treated as newest:
+ * that would let a row with no date supersede the summary the author is looking
+ * at.
+ */
+function summaryTime(row: SummaryRowForSelection): number {
+  const t = Date.parse(row.created_at ?? "");
+  return Number.isNaN(t) ? 0 : t;
+}
+
+/** Newest first, with the id breaking a tie so the result never depends on input order. */
+function newestFirst(a: SummaryRowForSelection, b: SummaryRowForSelection): number {
+  return summaryTime(b) - summaryTime(a) || b.id.localeCompare(a.id);
+}
+
+/**
+ * The current summary of each thing summarised, oldest first.
+ *
+ * The Report is a project-level document and it is right for it to draw on the
+ * write-ups; it is not right for it to reprint the table. Given four rows that
+ * are four generations of one walkthrough's summary, this returns the fourth,
+ * and the Report carries one block where it used to carry four.
+ *
+ * Exported and pure so the rule is testable without a database: the filtering
+ * is the whole fix, and a fix living inside a query is a fix nothing can pin.
+ */
+export function currentSummaries<T extends SummaryRowForSelection>(rows: T[]): T[] {
+  const currentByGroup = new Map<string, T>();
+  for (const row of rows) {
+    const key = summaryGroupKey(row);
+    const held = currentByGroup.get(key);
+    if (!held || newestFirst(row, held) < 0) currentByGroup.set(key, row);
+  }
+
+  /*
+   * One more pass over the prose. Two groups can still hold the same body: a
+   * walkthrough summarised, then the same photos summarised again on their own,
+   * gives one row keyed by the walk and one keyed by the photos. Newest first
+   * here so the copy that survives is the current one, then back to oldest
+   * first for the caller.
+   */
+  const claimedBy = new Map<string, string | null>();
+  const kept: T[] = [];
+  for (const row of [...currentByGroup.values()].sort(newestFirst)) {
+    const prose = proseFingerprint(row.markdown);
+    if (prose) {
+      const holder = claimedBy.get(prose);
+      /*
+       * Two different walks that happen to read the same are still two visits,
+       * and each carries its own title and date in the report. That is not a
+       * curiosity: a summary the drafter could not write falls back to fixed
+       * text, so two walks documented on a day the model was unreachable have
+       * identical bodies, and dropping one of them would silently take a walk
+       * off a report that lists the rest.
+       */
+      const bothWalkthroughs = !!row.walkthrough_id && !!holder;
+      if (holder !== undefined && !bothWalkthroughs) continue;
+      if (holder === undefined) claimedBy.set(prose, row.walkthrough_id ?? null);
+    }
+    kept.push(row);
+  }
+  return kept.reverse();
+}
+
+/**
  * A summary's own headings, turned into bold lead-ins.
  *
  * Kept rather than flattened away: "Overview" and "Key Points" are how the
@@ -217,16 +363,29 @@ function figuresHtml(d: ReturnType<typeof digestPhotos>): string {
  * receives, and "see the walkthrough summary" is not something they can act on.
  * Each keeps its own heading and its date so the report reads as a record of
  * visits rather than one undifferentiated wall of prose.
+ *
+ * One entry per walkthrough, and `currentSummaries` is what guarantees it. The
+ * lead line says so on the page, because a reader who knows four walks were
+ * documented needs to be able to tell one entry per walk from one entry per
+ * time somebody pressed Generate.
+ *
+ * `documentedAt` is when the walk happened, which is not when its current
+ * summary row was written. Taking the newest row per walkthrough is what fixed
+ * the duplicate blocks, and a row rewritten three weeks later carries that
+ * later `created_at` - so dating the block by the row would print a visit as
+ * having happened on the day somebody last pressed Regenerate, in the document
+ * that is meant to be the record of when the work was done.
  */
 function walkthroughSummariesHtml(
-  summaries: Array<{ title: string; markdown: string | null; created_at: string }>,
+  summaries: Array<{ title: string; markdown: string | null; documentedAt: string | null }>,
 ): string {
   if (!summaries.length) return "";
   return (
     `<h2>Walkthrough Summaries</h2>` +
+    `<p>The current summary for each walkthrough documented on this job. Each one remains its own report, viewable and shareable on its own.</p>` +
     summaries
       .map((r) => {
-        const when = longDate(r.created_at);
+        const when = longDate(r.documentedAt);
         return (
           `<h3>${escapeHtml(r.title)}${when ? ` &middot; ${escapeHtml(when)}` : ""}</h3>` +
           markdownToHtml(demoteHeadings(summaryProse(r.markdown)))
@@ -234,6 +393,33 @@ function walkthroughSummariesHtml(
       })
       .join("")
   );
+}
+
+/**
+ * When each walk actually happened, by walkthrough id.
+ *
+ * `started_at` first, falling back to the row's own `created_at`; a summary
+ * whose walkthrough has since been deleted, or one written from photos with no
+ * walk at all, is not in the map and keeps its own date. Read on the caller's
+ * client like everything else here: a walk RLS will not show them cannot date a
+ * document issued in their name.
+ */
+async function walkthroughVisitDates(
+  ctx: AuthedContext,
+  walkthroughIds: string[],
+): Promise<Map<string, string>> {
+  const ids = [...new Set(walkthroughIds)];
+  const dates = new Map<string, string>();
+  if (!ids.length) return dates;
+  const { data } = await (ctx.supabase as any)
+    .from("walkthroughs")
+    .select("id, started_at, created_at")
+    .in("id", ids);
+  for (const row of ((data as any[]) ?? []) as any[]) {
+    const when = row.started_at ?? row.created_at;
+    if (when) dates.set(row.id, when);
+  }
+  return dates;
 }
 
 /**
@@ -305,19 +491,51 @@ export async function generateComprehensiveReportService(
     .join(", ");
 
   /*
-   * Every write-up already made on this job, newest last so the report reads
-   * forward through the work.
+   * The current write-up for each walkthrough on this job, oldest first so the
+   * report reads forward through the work.
+   *
+   * Newest rows first out of the table and `currentSummaries` after it, because
+   * what has to be dropped is the superseded copies, not the recent ones: this
+   * table gains a row every time somebody regenerates a summary, and quoting
+   * all of them is what put four near-identical blocks in one report.
+   * `photo_notes` is selected for the same reason - it is how a summary written
+   * from photos alone, which has no `walkthrough_id` to key on, is recognised
+   * as another run over the same selection.
    *
    * Read on the caller's own client: if RLS will not show them a summary, it
    * does not belong in a document issued in their name.
    */
   const { data: summaryRows } = await (ctx.supabase as any)
     .from("walkthrough_summaries")
-    .select("id, title, markdown, created_at, walkthrough_id")
+    .select("id, title, markdown, created_at, walkthrough_id, photo_notes")
     .eq("project_id", data.projectId)
-    .order("created_at", { ascending: true })
-    .limit(MAX_SUMMARIES_INCLUDED);
-  const summaries = ((summaryRows as any[]) ?? []).filter((r) => (r.markdown ?? "").trim());
+    .order("created_at", { ascending: false })
+    .limit(MAX_SUMMARY_ROWS_SCANNED);
+  const current = currentSummaries(
+    ((summaryRows as any[]) ?? []).filter((r) => (r.markdown ?? "").trim()),
+  );
+  // `currentSummaries` returns oldest first, so the tail is the recent work: a
+  // job with more walkthroughs than the cap keeps those rather than whatever
+  // happened to be documented first.
+  const summaries = current.slice(-MAX_SUMMARIES_INCLUDED);
+
+  /*
+   * Dated by the visit and ordered by it, so the section reads as a record of
+   * when the work was done rather than of when the write-ups were last redone.
+   * The cap above is by row age, which is a different question from reading
+   * order: it decides which walks make it in, this decides what order they sit
+   * in once they have.
+   */
+  const visitDates = await walkthroughVisitDates(
+    ctx,
+    summaries.map((r) => r.walkthrough_id).filter((id): id is string => !!id),
+  );
+  const dated = summaries
+    .map((r) => ({
+      ...r,
+      documentedAt: (r.walkthrough_id ? visitDates.get(r.walkthrough_id) : null) ?? r.created_at,
+    }))
+    .sort((a, b) => String(a.documentedAt ?? "").localeCompare(String(b.documentedAt ?? "")));
 
   // One call, over the digest. See the note at the top about "in seconds".
   let summary = "";
@@ -408,7 +626,7 @@ Write the three Markdown sections only.`,
      */
     (summary ? `<h2>Executive Summary</h2>` + markdownToHtml(summary) : "") +
     (work ? `<h2>Work Documented</h2>` + markdownToHtml(work) : "") +
-    walkthroughSummariesHtml(summaries) +
+    walkthroughSummariesHtml(dated) +
     photoEvidenceHtml(evidence, perPage) +
     (conclusion ? `<h2>Conclusion</h2>` + markdownToHtml(conclusion) : "");
 

@@ -7,6 +7,7 @@ import {
   summaryProse,
   demoteHeadings,
   flattenHeadings,
+  currentSummaries,
 } from "../apps/api/src/domains/projects/comprehensive-report";
 
 const ROOT = resolve(__dirname, "..");
@@ -373,7 +374,9 @@ describe("the comprehensive Report includes walkthrough summary data", () => {
     // "see the walkthrough summary" is not something a client receiving a PDF
     // can act on.
     const src = read(REPORT);
-    expect(src).toContain("walkthroughSummariesHtml(summaries)");
+    // Fed the filtered, visit-dated set; proven end to end in
+    // tests/report-summary-selection.test.ts.
+    expect(src).toContain("walkthroughSummariesHtml(dated)");
     expect(src).toContain("<h2>Walkthrough Summaries</h2>");
   });
 
@@ -573,5 +576,202 @@ describe("summaryProse / demoteHeadings / flattenHeadings", () => {
     expect(out).not.toMatch(/^#/m);
     expect(out).not.toContain("**");
     expect(out).toContain("Overview");
+  });
+});
+
+/*
+ * A Report draws on Summaries. It does not swallow them.
+ *
+ * "when a Report is generated, it's pulling in and printing the full body text
+ * of every Summary ever generated for the project (...) that's why the 194
+ * Daniels Drive report shows four near-identical 'Summary' blocks in its body
+ * instead of one."
+ *
+ * `walkthrough_summaries` gains a row per generation: regenerating a
+ * walkthrough's summary inserts a second one, and a summary written from photos
+ * inserts one every time somebody asks. Reading the table by project therefore
+ * returns the job's whole history of write-ups, and the Report printed all of
+ * it. The Summary stays its own document either way; this is only about which
+ * of them a Report may take as input.
+ */
+describe("currentSummaries", () => {
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: "r1",
+    walkthrough_id: null as string | null,
+    photo_notes: [] as unknown,
+    markdown: "## Overview\n\nWalked the roof." as string | null,
+    created_at: "2026-08-01T10:00:00Z" as string | null,
+    ...over,
+  });
+
+  it("keeps the current summary of a walkthrough, not every generation of it", () => {
+    const kept = currentSummaries([
+      row({ id: "d", walkthrough_id: "w1", created_at: "2026-08-04T10:00:00Z", markdown: "4th" }),
+      row({ id: "c", walkthrough_id: "w1", created_at: "2026-08-03T10:00:00Z", markdown: "3rd" }),
+      row({ id: "b", walkthrough_id: "w1", created_at: "2026-08-02T10:00:00Z", markdown: "2nd" }),
+      row({ id: "a", walkthrough_id: "w1", created_at: "2026-08-01T10:00:00Z", markdown: "1st" }),
+    ]);
+    expect(kept.map((r) => r.id)).toEqual(["d"]);
+  });
+
+  it("keeps one per walkthrough when the job has several", () => {
+    // The Report covers the whole job, so every walk on it contributes - once.
+    const kept = currentSummaries([
+      row({
+        id: "a1",
+        walkthrough_id: "w1",
+        created_at: "2026-08-01T10:00:00Z",
+        markdown: "w1 v1",
+      }),
+      row({
+        id: "a2",
+        walkthrough_id: "w1",
+        created_at: "2026-08-05T10:00:00Z",
+        markdown: "w1 v2",
+      }),
+      row({
+        id: "b1",
+        walkthrough_id: "w2",
+        created_at: "2026-08-06T10:00:00Z",
+        markdown: "w2 v1",
+      }),
+    ]);
+    expect(kept.map((r) => r.id)).toEqual(["a2", "b1"]);
+  });
+
+  it("reads oldest first, so the report walks forward through the job", () => {
+    const kept = currentSummaries([
+      row({ id: "late", walkthrough_id: "w2", created_at: "2026-08-09T10:00:00Z", markdown: "b" }),
+      row({ id: "early", walkthrough_id: "w1", created_at: "2026-08-02T10:00:00Z", markdown: "a" }),
+    ]);
+    expect(kept.map((r) => r.id)).toEqual(["early", "late"]);
+  });
+
+  it("collapses repeat runs over the same photo selection", () => {
+    /*
+     * A summary written from photos has no walkthrough to key on, so the photo
+     * set is the key. Two runs over the same selection are one write-up drafted
+     * twice, which is the other way four blocks land in a report and the way a
+     * walkthrough_id-only fix would have missed.
+     */
+    const kept = currentSummaries([
+      row({
+        id: "new",
+        photo_notes: [{ photoId: "p2" }, { photoId: "p1" }],
+        created_at: "2026-08-07T10:00:00Z",
+        markdown: "take 2",
+      }),
+      row({
+        id: "old",
+        photo_notes: [{ photoId: "p1" }, { photoId: "p2" }],
+        created_at: "2026-08-06T10:00:00Z",
+        markdown: "take 1",
+      }),
+    ]);
+    expect(kept.map((r) => r.id)).toEqual(["new"]);
+  });
+
+  it("keeps summaries of genuinely different photo selections", () => {
+    const kept = currentSummaries([
+      row({ id: "roof", photo_notes: [{ photoId: "p1" }], markdown: "roof" }),
+      row({
+        id: "basement",
+        photo_notes: [{ photoId: "p9" }],
+        created_at: "2026-08-02T10:00:00Z",
+        markdown: "basement",
+      }),
+    ]);
+    expect(kept.map((r) => r.id).sort()).toEqual(["basement", "roof"]);
+  });
+
+  it("drops a duplicate body however it was keyed", () => {
+    // The walk summarised, then its photos summarised again on their own: two
+    // keys, one piece of prose. The client counted blocks, not rows.
+    const kept = currentSummaries([
+      row({
+        id: "viaPhotos",
+        photo_notes: [{ photoId: "p1" }],
+        created_at: "2026-08-08T10:00:00Z",
+        markdown: "## Overview\n\nWalked the roof.",
+      }),
+      row({
+        id: "viaWalk",
+        walkthrough_id: "w1",
+        created_at: "2026-08-07T10:00:00Z",
+        markdown: "## Overview\n\nWalked   the roof!",
+      }),
+    ]);
+    expect(kept.map((r) => r.id)).toEqual(["viaPhotos"]);
+  });
+
+  it("keeps a row that has nothing to key on rather than guessing", () => {
+    const kept = currentSummaries([
+      row({ id: "x", markdown: "## Overview\n\nOne job." }),
+      row({
+        id: "y",
+        markdown: "## Overview\n\nAnother job.",
+        created_at: "2026-08-03T10:00:00Z",
+      }),
+    ]);
+    expect(kept.map((r) => r.id).sort()).toEqual(["x", "y"]);
+  });
+
+  it("survives rows with no date on them", () => {
+    const kept = currentSummaries([
+      row({ id: "a", walkthrough_id: "w1", created_at: null, markdown: "a" }),
+      row({ id: "b", walkthrough_id: "w1", created_at: null, markdown: "b" }),
+    ]);
+    expect(kept).toHaveLength(1);
+  });
+});
+
+describe("the Report takes only the current summary per walkthrough", () => {
+  const REPORT = "apps/api/src/domains/projects/comprehensive-report.ts";
+
+  it("filters the rows before the prompt or the document sees them", () => {
+    const src = read(REPORT);
+    expect(src).toContain("currentSummaries(");
+    // Nothing between the query and the render may use the raw rows.
+    expect(src).not.toMatch(/const summaries = \(\(summaryRows/);
+  });
+
+  it("reads the newest rows, then drops the superseded ones", () => {
+    /*
+     * Order matters both ways round. Newest first out of the table, because
+     * what has to be dropped is the superseded copies; oldest first out of
+     * `currentSummaries`, because the report reads forward through the work.
+     */
+    const src = read(REPORT);
+    expect(src).toContain('.order("created_at", { ascending: false })');
+    expect(src).toContain("MAX_SUMMARY_ROWS_SCANNED");
+    expect(src).toContain("current.slice(-MAX_SUMMARIES_INCLUDED)");
+  });
+
+  it("selects the column the photo-only case is keyed on", () => {
+    // Without `photo_notes`, a summary with no walkthrough_id has nothing to
+    // group on and four runs over one selection stay four blocks.
+    expect(read(REPORT)).toContain(
+      '.select("id, title, markdown, created_at, walkthrough_id, photo_notes")',
+    );
+  });
+
+  it("says on the page that it is one per walkthrough", () => {
+    const src = read(REPORT);
+    expect(src).toContain("The current summary for each walkthrough documented on this job");
+    expect(src).toContain("its own report");
+  });
+
+  it("leaves the Summary a document of its own", () => {
+    /*
+     * "Summary should also remain independently viewable and generatable as its
+     * own report, separate from being embedded in a Report's body." Quoting one
+     * into a Report must not become the only way to reach it: it keeps its own
+     * route and its own generate calls.
+     */
+    expect(read("apps/web/src/routeTree.gen.ts")).toContain("/summaries/$summaryId");
+    const wt = read("apps/web/src/features/walkthroughs/pages/WalkthroughDetailPage.tsx");
+    expect(wt).toContain("generateSummaryForWalkthrough");
+    const menu = read("apps/web/src/features/projects/components/GenerateDocumentMenu.tsx");
+    expect(menu).toContain("generateSummaryFromPhotos");
   });
 });
