@@ -697,17 +697,60 @@ const SITE_LOG_SYSTEM =
   "recommendations, or risks not present in the source material.";
 
 /**
+ * Write about the work. Not about the photographs of it.
+ *
+ * "The Report that is being generated keeps saying This was photo documentation
+ * for a Contactor Replacement. Instead it should say, a Contactor was replaced.
+ * The report keeps emphasizing this was documented that was documented. It
+ * should say more huminized output like Contactor replaced, Control Board
+ * replaced on this date."
+ *
+ * The cause was in the prompts rather than the model: three of them asked for
+ * "what was documented" and one named its own section "Work Documented", so the
+ * subject of every sentence came back as the documentation and the work itself
+ * became its object. A job where a contactor was replaced read as a job where
+ * photographs were taken.
+ *
+ * The voice being asked for already existed in this file - SITE_LOG_SYSTEM has
+ * always wanted "Replaced condensate pump, unit 4B" - it just was not what the
+ * client-facing documents were asking for. This is that rule, extracted so the
+ * four prompts cannot drift apart again.
+ *
+ * The last two sentences are what keeps this honest. Rephrasing a technician's
+ * note is required; going beyond it is still forbidden, and a job whose notes
+ * say nothing about the work has to say so rather than retreating to
+ * "photo documentation of a site visit".
+ */
+export const WORK_VOICE_RULES =
+  "VOICE - this rule outranks the others. Write about the work, not about the photographs of it. " +
+  "Name the component and what was done to it, and lead with that: 'Contactor replaced', " +
+  "'Control board replaced on 12 August', 'Condenser coil cleaned'. " +
+  "NEVER write 'photo documentation', 'photographic documentation', 'this documents', 'documentation of', " +
+  "'the record shows', 'the photo record', 'was documented', 'photos were taken', 'images were captured', " +
+  "or any other phrasing whose subject is the documentation instead of the work. " +
+  "A note naming a task IS that task, completed: a note reading 'Contactor Replacement' becomes " +
+  "'the contactor was replaced'. Rephrasing a note that way is required of you, and is not an inference. " +
+  "Going further than the notes is still forbidden: invent no parts, no measurements, no model numbers, " +
+  "no causes, no outcomes, and no work that no note mentions. Where a task has a date, say when it was done. " +
+  "Where the material names no work at all, say plainly that the notes on file do not describe the work " +
+  "performed, and stop there rather than falling back on describing the photographs.";
+
+/**
  * REPORT voice: a formal, client-facing document. Produces the two narrative
  * bookends - an opening summary and a closing conclusion - which the page
  * generator places around the photo sections.
  */
 const REPORT_SYSTEM =
   "You are SitePix AI drafting a formal, client-facing site REPORT. Produce EXACTLY two Markdown sections and nothing else:\n" +
-  "## Executive Summary\n<2-4 full sentences describing the scope of the visit and what was documented>\n\n" +
-  "## Conclusion\n<2-3 full sentences closing out the report: what the documentation shows overall and any stated next steps>\n\n" +
+  "## Executive Summary\n<2-4 full sentences: what work was carried out on this visit, on what, and when>\n\n" +
+  "## Conclusion\n<4-6 full sentences closing out the report: restate the work that was completed, name the components involved, " +
+  "and give any next steps the material states. This is the section a customer reads to see what they paid for, " +
+  "so it must say what was done. If the material genuinely supports less, write less rather than padding - " +
+  "but never close on a sentence about documentation>\n\n" +
   "Write in complete, professional prose - no bullets. Do NOT include a title, photo-by-photo notes, or any other section. " +
-  "STYLE RULES: neutral and factual. Do NOT call things 'critical', 'code violations', or 'safety hazards'. Do NOT invent defects, " +
-  "recommendations, findings, or risks that the source material does not state. If the source material is thin, keep it brief rather than embellishing.";
+  WORK_VOICE_RULES +
+  " STYLE RULES: neutral and factual. Do NOT call things 'critical', 'code violations', or 'safety hazards'. Do NOT invent defects, " +
+  "recommendations, findings, or risks that the source material does not state.";
 
 /**
  * SUMMARY voice: a short shareable brief. Prose, not bullets - the "what
@@ -715,11 +758,13 @@ const REPORT_SYSTEM =
  * bullets) and from Report (a full formal document with a cover page).
  */
 const SUMMARY_SYSTEM =
-  "You are SitePix AI writing a brief SUMMARY of a set of site photos - a short, shareable recap someone can read in under a minute. " +
-  "Output Markdown with ONLY these sections: '## Overview' (2-4 sentences of flowing prose describing what was documented and when), " +
-  "and '## Key Points' (3-5 short bullets covering the most notable items). " +
+  "You are SitePix AI writing a brief SUMMARY of work on a site - a short, shareable recap someone can read in under a minute. " +
+  "Output Markdown with ONLY these sections: '## Overview' (2-4 sentences of flowing prose saying what work was carried out and when), " +
+  "and '## Key Points' (3-5 short bullets, each leading with the component and what was done to it, " +
+  "e.g. '- Contactor replaced' or '- Control board replaced, 12 August'). " +
   "Do NOT include a title, a conclusion, or photo-by-photo commentary. " +
-  "STYLE RULES: neutral and factual. Do NOT call things 'critical', 'code violations', or 'safety hazards'. Do NOT invent defects, " +
+  WORK_VOICE_RULES +
+  " STYLE RULES: neutral and factual. Do NOT call things 'critical', 'code violations', or 'safety hazards'. Do NOT invent defects, " +
   "recommendations, or risks not present in the source material. If the source material is thin, say so plainly rather than padding.";
 
 export async function summarizePhotosReportService(

@@ -775,3 +775,53 @@ describe("the Report takes only the current summary per walkthrough", () => {
     expect(menu).toContain("generateSummaryFromPhotos");
   });
 });
+
+/*
+ * Every client-facing draft asks for the work, not for the documenting of it.
+ *
+ * "The report keeps emphasizing this was documented that was documented. It
+ * should say more huminized output like Contactor replaced, Control Board
+ * replaced on this date."
+ *
+ * Four prompts fed that complaint, and only one of them was the Report's own.
+ * The live rows on 194 Daniels Drive open with "This photo set documents", which
+ * is the SUMMARY prompt's phrasing arriving inside the Report's body by way of
+ * the block the Report quotes. Fixing the Report alone would have left the
+ * client reading the same sentence in the same document.
+ */
+describe("the voice the client-facing drafts are asked for", () => {
+  const SERVICE = "apps/api/src/domains/ai/service.ts";
+  const SUMMARIES = "apps/api/src/domains/walkthroughs/summaries.ts";
+  const REPORT = "apps/api/src/domains/projects/comprehensive-report.ts";
+
+  it("is one shared rule, not a copy per prompt", () => {
+    // Three uses in the service (the declaration, REPORT_SYSTEM, SUMMARY_SYSTEM)
+    // and the Report importing it. A prompt carrying its own paraphrase is how
+    // three of these drifted apart in the first place.
+    const src = read(SERVICE);
+    expect(src).toContain("export const WORK_VOICE_RULES");
+    expect((src.match(/WORK_VOICE_RULES/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect(read(REPORT)).toContain("WORK_VOICE_RULES");
+  });
+
+  it("fixes the Summary as well, because a Report quotes it verbatim", () => {
+    const src = read(SERVICE);
+    expect(src).not.toContain("describing what was documented and when");
+    expect(src).toContain("saying what work was carried out and when");
+  });
+
+  it("leaves the internal Site Log alone, which already had the voice", () => {
+    // "- Replaced condensate pump, unit 4B" is what the client is asking the
+    // client-facing documents to sound like. It was here all along.
+    expect(read(SERVICE)).toContain("Replaced condensate pump, unit 4B");
+  });
+
+  it("keeps the walkthrough findings tied to what was actually said", () => {
+    // A recording constrains harder than captions do: the technician's words are
+    // the only source, so the voice change must not become licence to assert
+    // work nobody mentioned.
+    const src = read(SUMMARIES);
+    expect(src).toContain("Use ONLY what the transcript and the per-photo notes state");
+    expect(src).toContain("never 'this documents'");
+  });
+});

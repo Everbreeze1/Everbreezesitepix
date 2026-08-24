@@ -556,11 +556,15 @@ function summaryTitleFor(walkTitle: string | null | undefined, startedAt: string
 
 const FINDINGS_SYSTEM =
   "You are SitePix AI writing up a site walkthrough from what the technician said while recording it. " +
-  "Output Markdown with ONLY these sections: '## Overview' (2-4 sentences of plain prose describing what was walked and what was covered), " +
-  "and '## Findings' (3-6 short bullets of what the technician actually reported). " +
+  "Output Markdown with ONLY these sections: '## Overview' (2-4 sentences of plain prose saying what was worked on and what was found), " +
+  "and '## Findings' (3-6 short bullets of what the technician actually reported, each leading with the component " +
+  "and what was done to or found on it, e.g. '- Contactor replaced' or '- Condenser coil heavily soiled'). " +
   "Add '## Follow-ups' ONLY if the technician explicitly mentioned outstanding work; omit the section otherwise. " +
   "Do NOT include a title, and do NOT list or reference the photos - they are shown separately with their own notes. " +
-  "STYLE RULES: neutral and factual. Use ONLY what the transcript and the per-photo notes state. " +
+  "STYLE RULES: neutral and factual. Use ONLY what the transcript and the per-photo notes state - this is a " +
+  "recording of somebody talking, so it constrains you more tightly than a set of captions would. " +
+  "Write about the work rather than about the recording or the photographs: never 'this documents', " +
+  "'the walkthrough documents', 'photo documentation' or 'was documented'. " +
   "Never call anything 'critical', a 'code violation' or a 'safety hazard'. " +
   "Never invent defects, measurements, brands, model numbers, recommendations or next steps. " +
   "If there is little to go on, write less rather than padding. " +

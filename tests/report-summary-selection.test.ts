@@ -26,6 +26,8 @@ const DB = {
   inserted: null as any,
   /** The prompt the drafter was handed, to check what the model was told. */
   prompt: "",
+  /** The system prompt, which is where the voice rules live. */
+  system: "",
 };
 
 const project = {
@@ -131,10 +133,18 @@ function fakeSupabase() {
 
 let supabase = fakeSupabase();
 
-vi.mock("../apps/api/src/domains/ai/service", () => ({
-  chatComplete: async (_system: string, prompt: string) => {
+/*
+ * Only `chatComplete` is replaced. The rest of the module comes through real,
+ * because `WORK_VOICE_RULES` lives there and the Report's system prompt is
+ * built from it - a hand-copied stand-in would let the two drift and the voice
+ * assertions below would then be testing the copy.
+ */
+vi.mock("../apps/api/src/domains/ai/service", async (importOriginal) => ({
+  ...((await importOriginal()) as object),
+  chatComplete: async (system: string, prompt: string) => {
+    DB.system = system;
     DB.prompt = prompt;
-    return "## Executive Summary\n\nWork was documented over nine days.\n\n## Work Documented\n\n- Attic unit\n\n## Conclusion\n\nThe record is complete.";
+    return "## Executive Summary\n\nThe contactor was replaced.\n\n## Work Performed\n\n- Contactor replaced\n\n## Conclusion\n\nThe contactor was replaced and the unit was returned to service.";
   },
 }));
 
@@ -169,6 +179,7 @@ beforeEach(() => {
   DB.pages = [];
   DB.inserted = null;
   DB.prompt = "";
+  DB.system = "";
 });
 
 describe("the Report, generated against four generations of one summary", () => {
@@ -566,6 +577,86 @@ describe("the date a summary block carries", () => {
     ];
     await generate();
     expect(supabase.calls.some((c: any) => c.table === "walkthroughs")).toBe(false);
+  });
+});
+
+/*
+ * What the Report is asked to write about.
+ *
+ * "The Report that is being generated keeps saying This was photo documentation
+ * for a Contactor Replacement. Instead it should say, a Contactor was replaced.
+ * The report keeps emphasizing this was documented that was documented (...) The
+ * conclusion is too short and it should also convey what has been done."
+ *
+ * The model was doing as it was told. The brief asked for "the scope of the work
+ * documented" and "what the photo record covers" under a section named "Work
+ * Documented", and gave the Conclusion two or three sentences with no
+ * instruction to say what the job achieved. These pin the corrected brief,
+ * because a prompt has no type checker and nothing else here would notice it
+ * being reworded back.
+ */
+describe("the Report's brief asks for the work, not the photographs of it", () => {
+  beforeEach(async () => {
+    DB.summaries = [];
+    await generate();
+  });
+
+  it("bans the documentation framing outright", () => {
+    for (const banned of [
+      "photo documentation",
+      "this documents",
+      "was documented",
+      "photos were taken",
+      "the record shows",
+    ]) {
+      expect(DB.system).toContain(`'${banned}'`);
+    }
+    expect(DB.system).toMatch(/NEVER write/);
+  });
+
+  it("asks for the component and the action, with an example of each", () => {
+    expect(DB.system).toContain("Contactor replaced");
+    expect(DB.system).toContain("Control board replaced");
+  });
+
+  it("tells it that rephrasing a note is required, and inventing still is not", () => {
+    // The line between the two is the whole risk of this change: "Contactor
+    // Replacement" may become "the contactor was replaced", and nothing beyond
+    // what a note says may be added.
+    expect(DB.system).toContain("is not an inference");
+    expect(DB.system).toMatch(/invent no parts, no measurements/);
+  });
+
+  it("gives it something honest to say when the notes describe no work", () => {
+    // Otherwise the fallback is exactly the sentence being complained about.
+    expect(DB.system).toContain("do not describe the work");
+  });
+
+  it("asks the Conclusion to say what was done, at length", () => {
+    expect(DB.system).toContain("## Conclusion");
+    expect(DB.system).toMatch(/4-6 full sentences restating what was completed/);
+    expect(DB.system).not.toMatch(/## Conclusion\\n<2-3/);
+  });
+
+  it("names the middle section for the work rather than the documenting", () => {
+    expect(DB.system).toContain("## Work Performed");
+    expect(DB.system).not.toContain("Work Documented");
+  });
+
+  it("frames the captions as the record of what was done", () => {
+    // The user prompt's own labels steer this as much as the system prompt:
+    // "Notes the technicians typed on site" invites a description of notes.
+    expect(DB.prompt).toContain("What the technicians recorded doing on site");
+  });
+
+  it("prints the renamed section, and can still find it in the reply", () => {
+    // The heading is matched by name to pull the body out of the model's
+    // Markdown, so the prompt, the extraction and the emitted HTML have to
+    // agree. Renaming two of the three silently drops the section.
+    const html: string = DB.inserted.content_html;
+    expect(html).toContain("<h2>Work Performed</h2>");
+    expect(html).toContain("Contactor replaced");
+    expect(html).not.toContain("Work Documented");
   });
 });
 

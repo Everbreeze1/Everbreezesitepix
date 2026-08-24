@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
-import { chatComplete } from "../ai/service";
+import { chatComplete, WORK_VOICE_RULES } from "../ai/service";
 import { cleanCaption, markdownToHtml } from "@sitepix/shared";
 import { photoEvidenceHtml, type GeneratedPhoto } from "./page-generate";
 import { existingPageTitles, projectDocumentTitle, uniqueDocumentTitle } from "./page-title";
@@ -120,17 +120,44 @@ export function digestPhotos(photos: PhotoRecord[]) {
   };
 }
 
+/**
+ * The whole-job Report's voice.
+ *
+ * Three of these sections used to ask for the wrong thing, and the client named
+ * every symptom: "keeps saying This was photo documentation for a Contactor
+ * Replacement. Instead it should say, a Contactor was replaced (...) The
+ * conclusion is too short and it should also convey what has been done."
+ *
+ * The Executive Summary asked for "the scope of the work documented (...) what
+ * the record shows", the middle section was NAMED "Work Documented" and asked
+ * for "what the photo record covers", and the Conclusion asked for two or three
+ * sentences of closing with no instruction to say what the job had achieved. A
+ * model given those briefs writes about documentation, at length, and then stops
+ * short exactly where the customer wants the summary of work. It was doing as it
+ * was told.
+ *
+ * So: the section is Work Performed, the bullets lead with the component and the
+ * action, the Conclusion is four to six sentences and has to restate the work,
+ * and `WORK_VOICE_RULES` bans the documentation framing outright.
+ */
 const COMPREHENSIVE_SYSTEM =
   "You are SitePix AI writing a formal, client-facing project REPORT covering an entire job. " +
   "Produce EXACTLY these Markdown sections and nothing else:\n" +
-  "## Executive Summary\n<3-5 full sentences: the scope of the work documented, over what period, and what the record shows overall>\n\n" +
-  "## Work Documented\n<3-6 bullets organising what the photo record covers, grouped by the labels and phases given>\n\n" +
-  "## Conclusion\n<2-3 full sentences closing the report out>\n\n" +
+  "## Executive Summary\n<3-5 full sentences: what work was carried out on this job, on which equipment, " +
+  "over what period. Lead with the work itself>\n\n" +
+  "## Work Performed\n<3-6 bullets. Each names a component and what was done to it, and where the material " +
+  "gives a date, when: '- Contactor replaced, 12 August', '- Control board replaced', " +
+  "'- Condenser coil cleaned'. Group related work together. These bullets are the heart of the report>\n\n" +
+  "## Conclusion\n<4-6 full sentences restating what was completed on this job, naming the components " +
+  "involved, plus any next steps the material states. This is what a customer reads to see what they paid " +
+  "for, so it must say what was done. If the material genuinely supports less, write less rather than " +
+  "padding - but never close on a sentence about documentation>\n\n" +
   "Write in complete, professional prose. Do NOT invent a photo count, a date, or a label that is not in the figures given - " +
-  "those are supplied and are correct. Do NOT include a title or photo-by-photo notes. " +
-  "STYLE RULES: neutral and factual. Never call anything 'critical', a 'code violation' or a 'safety hazard'. " +
+  "those are supplied and are correct. The figures are context for you, not the story of the job: do not recite them back. " +
+  "Do NOT include a title or photo-by-photo notes. " +
+  WORK_VOICE_RULES +
+  " STYLE RULES: neutral and factual. Never call anything 'critical', a 'code violation' or a 'safety hazard'. " +
   "Never invent defects, findings, recommendations or risks the source material does not state. " +
-  "If the material is thin, be brief rather than embellishing. " +
   "Never write an em dash; use a comma, a colon or a plain hyphen.";
 
 /**
@@ -557,7 +584,7 @@ FIGURES (these are correct - use them, do not invent others):
 - Labels used: ${digest.tags.map(([t, n]) => `${t}: ${n}`).join(", ") || "none"}
 - Photos carrying a written note: ${digest.captioned} of ${digest.total}
 
-Notes the technicians typed on site:
+What the technicians recorded doing on site (these are your source for the work performed):
 ${digest.captions.map((c) => `- ${c}`).join("\n") || "(none)"}
 
 Walkthrough write-ups on this job (${summaries.length}):
@@ -566,7 +593,7 @@ ${summaries.map((r) => `### ${r.title}\n${flattenHeadings(summaryProse(r.markdow
 Write the three Markdown sections only.`,
     );
     summary = section(markdown, "Executive Summary");
-    work = section(markdown, "Work Documented");
+    work = section(markdown, "Work Performed");
     conclusion = section(markdown, "Conclusion");
   } catch (e: any) {
     if (e?.status === 403) throw e;
@@ -625,7 +652,7 @@ Write the three Markdown sections only.`,
      * the caller is told through `aiFailed` so it can say the text is missing.
      */
     (summary ? `<h2>Executive Summary</h2>` + markdownToHtml(summary) : "") +
-    (work ? `<h2>Work Documented</h2>` + markdownToHtml(work) : "") +
+    (work ? `<h2>Work Performed</h2>` + markdownToHtml(work) : "") +
     walkthroughSummariesHtml(dated) +
     photoEvidenceHtml(evidence, perPage) +
     (conclusion ? `<h2>Conclusion</h2>` + markdownToHtml(conclusion) : "");
