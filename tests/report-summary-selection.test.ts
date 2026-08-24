@@ -643,6 +643,41 @@ describe("the Report's brief asks for the work, not the photographs of it", () =
     expect(DB.system).not.toContain("Work Documented");
   });
 
+  it("holds the line on padding now that the Conclusion is longer", () => {
+    /*
+     * The original brief carried "If the material is thin, be brief rather than
+     * embellishing" as a rule over the whole document. Growing the Conclusion
+     * from 2-3 sentences to 4-6 dropped it, which leaves a length demand with
+     * nothing holding it back - on a document that must not invent work.
+     */
+    expect(DB.system).toMatch(/Say less rather than padding/);
+    expect(DB.system).toMatch(/never from restating the same work in more words/);
+  });
+
+  it("will not let a 'before' shot be written up as work completed", () => {
+    /*
+     * The phases are in the figures, so the model can see that a shot is a
+     * 'before'. This is the one way the new voice could make a client-facing
+     * document say something untrue: "Attic unit before service" read as the
+     * service having happened.
+     */
+    expect(DB.system).toContain("records the state found, not work completed");
+  });
+
+  it("labels the date range as work, not as documenting", () => {
+    // The instructions were only half of it: a figure labelled "Documented
+    // between" invites a sentence about documenting whatever the rules say.
+    expect(DB.prompt).toContain("Work carried out between");
+    expect(DB.prompt).not.toContain("Documented between");
+  });
+
+  it("does not print the word on the figures panel either", async () => {
+    // The client reads this panel. It said "Documented".
+    const html: string = DB.inserted.content_html;
+    expect(html).toContain("Work period");
+    expect(html).not.toMatch(/panel-label">Documented/);
+  });
+
   it("frames the captions as the record of what was done", () => {
     // The user prompt's own labels steer this as much as the system prompt:
     // "Notes the technicians typed on site" invites a description of notes.

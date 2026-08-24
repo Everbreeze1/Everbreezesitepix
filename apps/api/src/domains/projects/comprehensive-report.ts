@@ -158,6 +158,16 @@ const COMPREHENSIVE_SYSTEM =
   WORK_VOICE_RULES +
   " STYLE RULES: neutral and factual. Never call anything 'critical', a 'code violation' or a 'safety hazard'. " +
   "Never invent defects, findings, recommendations or risks the source material does not state. " +
+  "Say less rather than padding: a longer Conclusion must come from more work having been done, never from " +
+  "restating the same work in more words. " +
+  /*
+   * The phases are in the prompt as figures, so the model can see that a shot
+   * is a 'before'. Without this it can read "Attic unit before service" as the
+   * service having happened, which is the one way the new voice could make a
+   * client-facing document say something untrue.
+   */
+  "A note labelled as a 'before' shot records the state found, not work completed: do not present work as " +
+  "done on the strength of a 'before' note alone. " +
   "Never write an em dash; use a comma, a colon or a plain hyphen.";
 
 /**
@@ -363,7 +373,7 @@ function figuresHtml(d: ReturnType<typeof digestPhotos>): string {
       : longDate(d.firstAt);
   const rows: Array<[string, string]> = [
     ["Photos on file", String(d.total)],
-    ["Documented", span],
+    ["Work period", span],
     ["Days on site", d.days ? String(d.days) : ""],
     [
       "Labels",
@@ -578,7 +588,7 @@ ${address ? `Address: ${address}\n` : ""}${project.client_name ? `Client: ${proj
       }
 FIGURES (these are correct - use them, do not invent others):
 - Photos on file: ${digest.total}
-- Documented between: ${longDate(digest.firstAt) || "unknown"} and ${longDate(digest.lastAt) || "unknown"}
+- Work carried out between: ${longDate(digest.firstAt) || "unknown"} and ${longDate(digest.lastAt) || "unknown"}
 - Distinct days on site: ${digest.days}
 - Phase breakdown: ${digest.phases.map(([p, n]) => `${p}: ${n}`).join(", ") || "none recorded"}
 - Labels used: ${digest.tags.map(([t, n]) => `${t}: ${n}`).join(", ") || "none"}

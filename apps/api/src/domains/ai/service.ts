@@ -750,7 +750,8 @@ const REPORT_SYSTEM =
   "Write in complete, professional prose - no bullets. Do NOT include a title, photo-by-photo notes, or any other section. " +
   WORK_VOICE_RULES +
   " STYLE RULES: neutral and factual. Do NOT call things 'critical', 'code violations', or 'safety hazards'. Do NOT invent defects, " +
-  "recommendations, findings, or risks that the source material does not state.";
+  "recommendations, findings, or risks that the source material does not state. " +
+  "Say less rather than padding. Never write an em dash; use a comma, a colon or a plain hyphen.";
 
 /**
  * SUMMARY voice: a short shareable brief. Prose, not bullets - the "what
@@ -765,7 +766,8 @@ const SUMMARY_SYSTEM =
   "Do NOT include a title, a conclusion, or photo-by-photo commentary. " +
   WORK_VOICE_RULES +
   " STYLE RULES: neutral and factual. Do NOT call things 'critical', 'code violations', or 'safety hazards'. Do NOT invent defects, " +
-  "recommendations, or risks not present in the source material. If the source material is thin, say so plainly rather than padding.";
+  "recommendations, or risks not present in the source material. If the source material is thin, say so plainly rather than padding. " +
+  "Never write an em dash; use a comma, a colon or a plain hyphen.";
 
 export async function summarizePhotosReportService(
   ctx: AuthedContext,
