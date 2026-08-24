@@ -103,7 +103,18 @@ export function digestPhotos(photos: PhotoRecord[]) {
     for (const t of p.tags) byTag.set(t, (byTag.get(t) ?? 0) + 1);
   }
   const captions = photos
-    .map((p) => cleanCaption(p.caption))
+    .map((p) => {
+      const caption = cleanCaption(p.caption);
+      if (!caption) return null;
+      /*
+       * The phase rides with the note rather than being tallied separately.
+       * "Attic unit before service" and "Condenser after replacement" are the
+       * same sentence shape and only the phase says which one is evidence that
+       * the work was finished.
+       */
+      const phase = (p.phase ?? "").trim().toLowerCase();
+      return phase && phase !== "untagged" ? `[${phase}] ${caption}` : caption;
+    })
     .filter((c): c is string => !!c)
     .slice(0, MAX_CAPTIONS_IN_PROMPT);
 
@@ -160,14 +171,6 @@ const COMPREHENSIVE_SYSTEM =
   "Never invent defects, findings, recommendations or risks the source material does not state. " +
   "Say less rather than padding: a longer Conclusion must come from more work having been done, never from " +
   "restating the same work in more words. " +
-  /*
-   * The phases are in the prompt as figures, so the model can see that a shot
-   * is a 'before'. Without this it can read "Attic unit before service" as the
-   * service having happened, which is the one way the new voice could make a
-   * client-facing document say something untrue.
-   */
-  "A note labelled as a 'before' shot records the state found, not work completed: do not present work as " +
-  "done on the strength of a 'before' note alone. " +
   "Never write an em dash; use a comma, a colon or a plain hyphen.";
 
 /**

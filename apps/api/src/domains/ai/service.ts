@@ -730,6 +730,9 @@ export const WORK_VOICE_RULES =
   "or any other phrasing whose subject is the documentation instead of the work. " +
   "A note naming a task IS that task, completed: a note reading 'Contactor Replacement' becomes " +
   "'the contactor was replaced'. Rephrasing a note that way is required of you, and is not an inference. " +
+  "The exception is a note marked [before]: that records the state found on arrival, not work completed, " +
+  "so never write up work as done on the strength of a [before] note alone. A note marked [after] is " +
+  "evidence the work it names was carried out. " +
   "Going further than the notes is still forbidden: invent no parts, no measurements, no model numbers, " +
   "no causes, no outcomes, and no work that no note mentions. Where a task has a date, say when it was done. " +
   "Where the material names no work at all, say plainly that the notes on file do not describe the work " +

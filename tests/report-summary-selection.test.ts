@@ -656,12 +656,25 @@ describe("the Report's brief asks for the work, not the photographs of it", () =
 
   it("will not let a 'before' shot be written up as work completed", () => {
     /*
-     * The phases are in the figures, so the model can see that a shot is a
-     * 'before'. This is the one way the new voice could make a client-facing
-     * document say something untrue: "Attic unit before service" read as the
-     * service having happened.
+     * The one way the humanised voice could make a client-facing document say
+     * something untrue: "Attic unit before service" read as the service having
+     * happened. The caveat sits immediately after the rule it qualifies rather
+     * than in a distant section, because separated like that the two read as a
+     * contradiction to be resolved instead of a rule with an exception.
      */
-    expect(DB.system).toContain("records the state found, not work completed");
+    expect(DB.system).toContain("records the state found on arrival, not work completed");
+    expect(DB.system).toMatch(/IS that task, completed[\s\S]{0,320}The exception is a note marked/);
+  });
+
+  it("marks each note with its own phase, so that caveat has something to bind to", () => {
+    /*
+     * The rule above was unactionable when it was written. Phases reached the
+     * prompt only as totals - "before: 1, after: 1" - while the notes were
+     * listed separately and unmarked, so nothing told the model WHICH note was
+     * the before shot. Found by reading the assembled prompt, not by a test.
+     */
+    expect(DB.prompt).toContain("[before] Attic unit before service");
+    expect(DB.prompt).toContain("[after] Condenser after replacement");
   });
 
   it("labels the date range as work, not as documenting", () => {
