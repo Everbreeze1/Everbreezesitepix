@@ -30,7 +30,7 @@
 -- which ran as service_role with RLS off, could cross a team boundary. Step 4
 -- in 20260917000000 has been corrected in place for anyone applying it fresh.
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent: safe to re-run, and a no-op once it has run.
 
 -- A project's team is its owner's team. `projects` carries no team_id, so

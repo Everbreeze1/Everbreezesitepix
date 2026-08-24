@@ -88,7 +88,7 @@ function escapeRe(s: string): string {
 
 /**
  * Both spellings a value can have in the document body. A company called
- * "Everbreeze Heating & Air" was merged in as `Heating &amp; Air`, so matching
+ * "Northwind Heating & Air" was merged in as `Heating &amp; Air`, so matching
  * only the raw string would leave that one name behind in every template.
  */
 function textVariants(value: string): string[] {

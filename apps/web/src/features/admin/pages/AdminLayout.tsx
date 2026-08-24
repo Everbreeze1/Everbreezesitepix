@@ -51,7 +51,7 @@ export function AdminLayout() {
         <ShieldAlert className="h-10 w-10 text-muted-foreground" />
         <h1 className="text-lg font-extrabold text-foreground">Admin access required</h1>
         <p className="max-w-sm text-sm text-muted-foreground">
-          This page is restricted to platform admins. Contact whoever manages the SitePix Supabase
+          This page is restricted to platform admins. Contact whoever manages the Everlumen Supabase
           project if you believe you should have access.
         </p>
       </div>

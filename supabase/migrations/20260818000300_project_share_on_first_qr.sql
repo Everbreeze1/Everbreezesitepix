@@ -29,7 +29,7 @@
 -- once cannot publish twice, and a link its owner switched off can never be
 -- resurrected by someone merely looking at it.
 --
--- Idempotent. Apply via the SitePix Supabase SQL editor.
+-- Idempotent. Apply via the Everlumen Supabase SQL editor.
 
 ALTER TABLE public.projects
   ADD COLUMN IF NOT EXISTS share_decided_at timestamptz;

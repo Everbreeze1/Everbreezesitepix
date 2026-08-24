@@ -7,7 +7,7 @@ import {
   type PDFImage,
   type PDFPage,
 } from "pdf-lib";
-import { sanitizeCaption } from "@sitepix/shared";
+import { sanitizeCaption } from "@everlumen/shared";
 import type { ServiceContext } from "../../lib/user-context";
 
 const todoSchema = z.object({ text: z.string().max(500), done: z.boolean() });
@@ -71,8 +71,8 @@ export async function generateSiteLogPdfService(
   // -------- PDF setup --------
   const pdf = await PDFDocument.create();
   pdf.setTitle(data.title.slice(0, 200));
-  pdf.setProducer("SitePix");
-  pdf.setCreator("SitePix");
+  pdf.setProducer("Everlumen");
+  pdf.setCreator("Everlumen");
   pdf.setCreationDate(new Date());
 
   const fonts = {
@@ -91,7 +91,7 @@ export async function generateSiteLogPdfService(
   const ACCENT = rgb(0.11, 0.4, 0.78);
   const BORDER = rgb(0.82, 0.85, 0.88);
   const FAINT = rgb(0.96, 0.97, 0.98);
-  const companyName = (profile as any)?.company || "SitePix";
+  const companyName = (profile as any)?.company || "Everlumen";
 
   // -------- Cover page --------
   {
@@ -556,7 +556,7 @@ async function drawCompanyHeader(
   text: ReturnType<typeof rgb>,
   muted: ReturnType<typeof rgb>,
 ): Promise<number> {
-  const name = profile?.company || "SitePix";
+  const name = profile?.company || "Everlumen";
   const logoUrl = profile?.company_logo_url as string | null;
   let textX = margin;
   let topY = y;
@@ -608,7 +608,7 @@ function drawFooter(
   margin: number,
   color: ReturnType<typeof rgb>,
 ) {
-  page.drawText(sanitizeForWinAnsi(`Generated with SitePix · ${company}`), {
+  page.drawText(sanitizeForWinAnsi(`Generated with Everlumen · ${company}`), {
     x: margin,
     y: 24,
     size: 8,

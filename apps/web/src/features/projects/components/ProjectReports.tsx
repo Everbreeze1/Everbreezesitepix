@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
 import { SURFACE_CARD } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
-import { relativeTime } from "@sitepix/shared";
+import { relativeTime } from "@everlumen/shared";
 import { BlueprintItemBadge } from "./BlueprintItemBadge";
 import type { ItemOrigin } from "@/hooks/use-project-blueprint-origin";
 import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";

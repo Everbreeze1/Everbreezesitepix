@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { formatChecklistAnswer, photoObjectPaths } from "@sitepix/shared";
+import { formatChecklistAnswer, photoObjectPaths } from "@everlumen/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { sanitizePageHtml } from "./sanitize-page-html";
 

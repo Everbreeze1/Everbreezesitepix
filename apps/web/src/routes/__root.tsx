@@ -17,7 +17,7 @@ import { PromptDialogProvider } from "@/hooks/use-prompt";
 import { Toaster } from "@/components/ui/sonner";
 import { InstallPrompt } from "@/components/InstallPrompt";
 
-const themeBootstrapScript = `(() => { try { const s = localStorage.getItem('sitepix-theme'); const t = s === 'dark' || s === 'light' ? s : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); if (t === 'dark') document.documentElement.classList.add('dark'); document.documentElement.style.colorScheme = t; } catch (_) {} })();`;
+const themeBootstrapScript = `(() => { try { const s = localStorage.getItem('everlumen-theme') || localStorage.getItem('sitepix-theme'); const t = s === 'dark' || s === 'light' ? s : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); if (t === 'dark') document.documentElement.classList.add('dark'); document.documentElement.style.colorScheme = t; } catch (_) {} })();`;
 
 function NotFoundComponent() {
   return (
@@ -87,16 +87,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
-      { name: "apple-mobile-web-app-title", content: "SitePix" },
-      { name: "application-name", content: "SitePix" },
+      { name: "apple-mobile-web-app-title", content: "Everlumen" },
+      { name: "application-name", content: "Everlumen" },
       { name: "format-detection", content: "telephone=no" },
-      { title: "Everbreeze SitePix - Job Site Photos, Organized" },
+      { title: "Everlumen - Job Site Photos, Organized" },
       {
         name: "description",
         content:
           "Capture, organize, and share construction job site photos in seconds. Built for contractors and field teams.",
       },
-      { property: "og:title", content: "Everbreeze SitePix - Job Site Photos, Organized" },
+      { property: "og:title", content: "Everlumen - Job Site Photos, Organized" },
       {
         property: "og:description",
         content:
@@ -104,7 +104,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "Everbreeze SitePix - Job Site Photos, Organized" },
+      { name: "twitter:title", content: "Everlumen - Job Site Photos, Organized" },
       {
         name: "twitter:description",
         content:

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import type { BlueprintItemKind } from "@/features/settings/components/blueprint-outcomes";
 
 const TABLE_FOR_KIND: Record<BlueprintItemKind, string> = {

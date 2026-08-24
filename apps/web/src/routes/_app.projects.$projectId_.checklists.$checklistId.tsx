@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ChecklistDocumentPage } from "@/features/projects/pages/ChecklistDocumentPage";
 
 export const Route = createFileRoute("/_app/projects/$projectId_/checklists/$checklistId")({
-  head: () => ({ meta: [{ title: "Checklist - SitePix" }] }),
+  head: () => ({ meta: [{ title: "Checklist - Everlumen" }] }),
   /**
    * `new=1` means "this checklist was created a moment ago and still has its
    * placeholder name" - the page selects the title box so naming it is the first

@@ -6,17 +6,17 @@ import { POLICY_LAST_UPDATED, PRIVACY_EMAIL, mailtoHref } from "@/lib/contact";
 export const Route = createFileRoute("/privacy-policy")({
   head: () => ({
     meta: [
-      { title: "Privacy Policy - Everbreeze SitePix" },
+      { title: "Privacy Policy - Everlumen" },
       {
         name: "description",
         content:
-          "Privacy Policy for Everbreeze SitePix. Learn how we collect, use, store, and protect your personal information, job site photos, and AI analysis data.",
+          "Privacy Policy for Everlumen. Learn how we collect, use, store, and protect your personal information, job site photos, and AI analysis data.",
       },
-      { property: "og:title", content: "Privacy Policy - Everbreeze SitePix" },
+      { property: "og:title", content: "Privacy Policy - Everlumen" },
       {
         property: "og:description",
         content:
-          "Privacy Policy for Everbreeze SitePix. Learn how we collect, use, store, and protect your personal information, job site photos, and AI analysis data.",
+          "Privacy Policy for Everlumen. Learn how we collect, use, store, and protect your personal information, job site photos, and AI analysis data.",
       },
       { property: "og:url", content: "https://www.everbreezesitepix.com/privacy-policy" },
     ],
@@ -38,7 +38,7 @@ function PrivacyPolicyPage() {
         <Link to="/" className="flex items-center gap-2">
           <BrandLogo size={28} />
           <span className="text-sm font-bold tracking-tight">
-            Everbreeze <span className="text-primary">SitePix</span>
+            Ever<span className="text-primary">lumen</span>
           </span>
         </Link>
       </header>
@@ -55,11 +55,11 @@ function PrivacyPolicyPage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">1. Introduction</h2>
             <p className="text-muted-foreground">
-              Everbreeze SitePix (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) is committed
-              to protecting your privacy. This Privacy Policy explains how we collect, use,
-              disclose, and safeguard your information when you use our mobile and web application,
-              website, and related services (collectively, the &quot;Services&quot;). By using
-              Everbreeze SitePix, you consent to the practices described in this policy.
+              Everlumen (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) is committed to
+              protecting your privacy. This Privacy Policy explains how we collect, use, disclose,
+              and safeguard your information when you use our mobile and web application, website,
+              and related services (collectively, the &quot;Services&quot;). By using Everlumen, you
+              consent to the practices described in this policy.
             </p>
           </section>
 
@@ -347,7 +347,7 @@ function PrivacyPolicyPage() {
               or write to us at:
             </p>
             <div className="mt-3 rounded-lg border border-border bg-muted/40 p-4">
-              <p className="font-medium text-foreground">Everbreeze SitePix</p>
+              <p className="font-medium text-foreground">Everlumen</p>
               <p className="text-muted-foreground">
                 Email:{" "}
                 {/* Was privacy@everbreeze.io - a domain that is not the product

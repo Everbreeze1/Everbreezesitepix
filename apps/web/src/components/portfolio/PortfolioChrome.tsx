@@ -355,7 +355,7 @@ function SiteFooter({
               All work
             </a>
             <Link to="/" className="underline-offset-2 hover:underline">
-              Built with SitePix
+              Built with Everlumen
             </Link>
           </div>
         </div>

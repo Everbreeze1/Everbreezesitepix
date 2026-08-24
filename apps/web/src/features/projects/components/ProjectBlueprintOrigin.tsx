@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { LayoutTemplate } from "lucide-react";
-import { relativeTime } from "@sitepix/shared";
+import { relativeTime } from "@everlumen/shared";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { BlueprintOriginApplication, BlueprintOriginItem } from "@/lib/blueprint.functions";
 import type { BlueprintOriginState } from "@/hooks/use-project-blueprint-origin";

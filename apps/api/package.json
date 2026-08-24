@@ -1,5 +1,5 @@
 {
-  "name": "@sitepix/api",
+  "name": "@everlumen/api",
   "version": "0.0.0",
   "private": true,
   "sideEffects": false,
@@ -22,9 +22,9 @@
   "dependencies": {
     "@hono/node-server": "^1.13.7",
     "@react-email/render": "^2.0.6",
-    "@sitepix/db": "*",
-    "@sitepix/email-templates": "*",
-    "@sitepix/shared": "*",
+    "@everlumen/db": "*",
+    "@everlumen/email-templates": "*",
+    "@everlumen/shared": "*",
     "@supabase/supabase-js": "^2.108.1",
     "dotenv": "^16.4.7",
     "hono": "^4.6.14",

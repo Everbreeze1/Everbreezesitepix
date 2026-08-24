@@ -2,7 +2,7 @@
 // Used in preview + share view to render the SAME block structure that the
 // PDF generator parses, keeping browser & PDF visually aligned.
 import { createElement, type ReactElement } from "react";
-import { parseRich, type RichBlock, type InlineRun } from "@sitepix/shared";
+import { parseRich, type RichBlock, type InlineRun } from "@everlumen/shared";
 import { cn } from "@/lib/utils";
 
 interface Props {

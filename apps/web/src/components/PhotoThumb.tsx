@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { THUMBNAIL_MAX_DIM } from "@/lib/photo-thumbnails";
 import { cn } from "@/lib/utils";
 

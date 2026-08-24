@@ -13,9 +13,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { getMemberProjects, setMemberProjects } from "@/features/teams/api";
-import { projectDisplayName } from "@sitepix/shared";
+import { projectDisplayName } from "@everlumen/shared";
 
 /**
  * Which jobs a Restricted member can reach.

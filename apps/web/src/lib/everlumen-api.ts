@@ -1,13 +1,13 @@
-import { createApiClient } from "@sitepix/api-client";
-import { supabase } from "@/integrations/sitepix/client";
+import { createApiClient } from "@everlumen/api-client";
+import { supabase } from "@/integrations/everlumen/client";
 
 /**
- * Browser client for SitePix `/v1`.
+ * Browser client for Everlumen `/v1`.
  * Privileged UI work should go through this - not createServerFn.
- * Points at the standalone @sitepix/api deployment; falls back to same-origin
+ * Points at the standalone @everlumen/api deployment; falls back to same-origin
  * (the old colocated-Worker setup) when VITE_API_BASE_URL is unset.
  */
-export const sitepixApi = createApiClient({
+export const everlumenApi = createApiClient({
   baseUrl: import.meta.env.VITE_API_BASE_URL ?? "",
   getAccessToken: async () => {
     const { data } = await supabase.auth.getSession();
@@ -31,7 +31,7 @@ export function rpcOp<TData = undefined, TResult = unknown>(op: string, options?
       arg && typeof arg === "object" && arg !== null && "data" in arg
         ? (arg as { data: TData }).data
         : undefined;
-    return sitepixApi.rpc<TResult>(
+    return everlumenApi.rpc<TResult>(
       op,
       data as unknown,
       options?.idempotent ? { idempotencyKey: crypto.randomUUID() } : undefined,

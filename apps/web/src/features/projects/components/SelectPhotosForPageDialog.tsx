@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 

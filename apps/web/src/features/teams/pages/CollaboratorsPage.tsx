@@ -20,8 +20,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getMyTeam, getTeamActivity, type TeamActivityItem } from "@/lib/teams.functions";
-import { supabase } from "@/integrations/sitepix/client";
-import { relativeTime } from "@sitepix/shared";
+import { supabase } from "@/integrations/everlumen/client";
+import { relativeTime } from "@everlumen/shared";
 import { useSubscription } from "@/hooks/use-subscription";
 import { RoleBadge } from "@/features/teams/components/RoleBadge";
 

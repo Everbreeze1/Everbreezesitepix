@@ -1,5 +1,5 @@
-import { thumbPathFor } from "@sitepix/shared";
-import { supabase } from "@/integrations/sitepix/client";
+import { thumbPathFor } from "@everlumen/shared";
+import { supabase } from "@/integrations/everlumen/client";
 
 /**
  * Longest edge of a stored thumbnail.

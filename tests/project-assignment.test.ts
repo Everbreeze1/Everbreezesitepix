@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { roleAllowedOnTier, tierHasJobScoping } from "@sitepix/shared/team-permissions";
+import { roleAllowedOnTier, tierHasJobScoping } from "@everlumen/shared/team-permissions";
 
 const read = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
 

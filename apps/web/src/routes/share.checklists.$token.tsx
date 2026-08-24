@@ -4,8 +4,8 @@ import { PublicRecordView } from "@/features/projects/components/PublicRecordVie
 export const Route = createFileRoute("/share/checklists/$token")({
   head: () => ({
     meta: [
-      { title: "Shared checklist - SitePix" },
-      { name: "description", content: "A checklist record shared from SitePix." },
+      { title: "Shared checklist - Everlumen" },
+      { name: "description", content: "A checklist record shared from Everlumen." },
       { name: "robots", content: "noindex,nofollow" },
     ],
   }),

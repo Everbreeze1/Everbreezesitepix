@@ -1,4 +1,4 @@
--- Site Log persistence - run against the SitePix Supabase project.
+-- Site Log persistence - run against the Everlumen Supabase project.
 -- Stores per-project Site Logs (title + selected photos + per-photo notes/action items).
 
 CREATE TABLE IF NOT EXISTS public.project_site_logs (

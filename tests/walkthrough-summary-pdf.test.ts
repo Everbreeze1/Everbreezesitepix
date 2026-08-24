@@ -196,7 +196,7 @@ function input(over: Partial<Parameters<typeof renderWalkthroughPdf>[0]> = {}) {
       state: "CA",
       zip: "95602",
     },
-    profile: { full_name: "Mike", company: "Everbreeze" },
+    profile: { full_name: "Mike", company: "Northwind" },
     photos: Array.from({ length: photoCount }, (_, i) => ({
       photo_id: `p${i}`,
       offset_seconds: 0,

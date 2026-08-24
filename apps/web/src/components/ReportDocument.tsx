@@ -5,7 +5,7 @@
 // photos-per-page grid, captions beside / below depending on density).
 import { FileText, ImageOff, MapPin, Calendar } from "lucide-react";
 import { RichText } from "@/components/RichText";
-import { richIsEmpty, planSectionPages, type RichBlock } from "@sitepix/shared";
+import { richIsEmpty, planSectionPages, type RichBlock } from "@everlumen/shared";
 import { cn } from "@/lib/utils";
 
 export interface ReportDocCompany {
@@ -224,7 +224,7 @@ function CompanyHeader({
   company: ReportDocCompany | null;
   small?: boolean;
 }) {
-  const name = company?.name || "SitePix";
+  const name = company?.name || "Everlumen";
   return (
     <div className="flex items-start gap-3">
       {company?.logo_url ? (
@@ -262,7 +262,7 @@ function CompanyHeader({
 function PageFooter({ company }: { company: string | null }) {
   return (
     <div className="mt-12 border-t border-neutral-200 pt-3 text-[10px] text-neutral-600">
-      Generated with SitePix{company ? ` · ${company}` : ""}
+      Generated with Everlumen{company ? ` · ${company}` : ""}
     </div>
   );
 }

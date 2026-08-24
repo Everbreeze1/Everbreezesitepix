@@ -1,5 +1,5 @@
-import { rpcOp } from "./sitepix-api";
-import type { TaskComment, TaskWatcher } from "@sitepix/api";
+import { rpcOp } from "./everlumen-api";
+import type { TaskComment, TaskWatcher } from "@everlumen/api";
 
 export type { TaskComment, TaskWatcher };
 

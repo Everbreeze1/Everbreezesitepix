@@ -1,5 +1,5 @@
 {
-  "name": "@sitepix/db",
+  "name": "@everlumen/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",

@@ -1,6 +1,6 @@
 import { chatEndpoint } from "../../lib/ai-provider";
 import { getSupabaseAdmin } from "../../lib/supabase";
-import { cleanCaption, normalizeDashesTrimmed } from "@sitepix/shared";
+import { cleanCaption, normalizeDashesTrimmed } from "@everlumen/shared";
 
 /**
  * The AI narration behind a walkthrough's Summary.
@@ -287,7 +287,7 @@ export function buildFallbackNarration(source: NarrationSource): WalkthroughNarr
 }
 
 const NARRATION_SYSTEM =
-  "You are SitePix AI writing the narration track for a site walkthrough video. " +
+  "You are Everlumen AI writing the narration track for a site walkthrough video. " +
   "You are a narrator and typesetter, not an inspector. " +
   "You cannot see the video or the photos - you only have what the technician said and what they typed. " +
   "Respond with a single JSON object and nothing else: no prose, no code fence, no commentary. " +

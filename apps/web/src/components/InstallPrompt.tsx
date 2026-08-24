@@ -7,7 +7,7 @@ type BIPEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
-const DISMISS_KEY = "sitepix-install-dismissed-at";
+const DISMISS_KEY = "everlumen-install-dismissed-at";
 const DISMISS_DAYS = 14;
 
 /*
@@ -134,14 +134,14 @@ export function InstallPrompt() {
     <div
       className="fixed inset-x-3 bottom-24 z-50 mx-auto max-w-md rounded-xl border border-border bg-background/95 p-3 shadow-lg backdrop-blur md:bottom-6 md:right-6 md:left-auto md:mx-0"
       role="dialog"
-      aria-label="Install SitePix"
+      aria-label="Install Everlumen"
     >
       <div className="flex items-start gap-3">
         <div className="rounded-lg bg-primary/10 p-2">
           <Download className="h-5 w-5 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold">Install SitePix</p>
+          <p className="text-sm font-semibold">Install Everlumen</p>
           {deferred ? (
             <p className="mt-0.5 text-xs text-muted-foreground">
               Add to your home screen for one-tap access in the field.

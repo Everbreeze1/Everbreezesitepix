@@ -2,7 +2,7 @@ import { jsonError, jsonOk } from "../../lib/errors";
 import { verifyCronSecret } from "../../lib/cron-auth";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { chunk, mutateIn, selectIn } from "../../lib/chunked-in";
-import { allPhotoObjectPaths } from "@sitepix/shared";
+import { allPhotoObjectPaths } from "@everlumen/shared";
 import { recordJobRun } from "../../lib/job-run";
 
 export async function handlePurgeTrash(request: Request): Promise<Response> {

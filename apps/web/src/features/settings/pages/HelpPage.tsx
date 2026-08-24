@@ -803,7 +803,7 @@ export function HelpPage() {
         Knowledge base
       </h1>
       <p className="font-manrope mt-3 max-w-[576px] text-sm leading-6 text-muted-foreground">
-        Guides, tips, and answers for every SitePix workflow.
+        Guides, tips, and answers for every Everlumen workflow.
       </p>
 
       {/*

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 
 // Deterministic fallback palette (hex) used until a global tag color is known.
 const FALLBACK_PALETTE = [

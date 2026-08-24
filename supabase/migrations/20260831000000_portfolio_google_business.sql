@@ -30,7 +30,7 @@
 -- google_synced_at is what lets the UI show "as of <date>" and prompt a refresh
 -- rather than presenting a stale number as live.
 --
--- Apply via the SitePix Supabase SQL editor. Safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Safe to re-run.
 
 SET lock_timeout = '5s';
 
@@ -42,7 +42,7 @@ ALTER TABLE public.portfolios
   -- back to them so "is this the right listing?" is answerable at a glance.
   ADD COLUMN IF NOT EXISTS google_maps_url       text,
   -- The listing's name on Google, which is regularly not the name they typed
-  -- into the site ("Everbreeze Heating & Air" vs "Everbreeze Heating And Air").
+  -- into the site ("Northwind Heating & Air" vs "Northwind Heating And Air").
   -- Kept for the confirmation card only; business_name stays theirs to edit.
   ADD COLUMN IF NOT EXISTS google_name           text,
   ADD COLUMN IF NOT EXISTS google_rating         numeric(2,1),

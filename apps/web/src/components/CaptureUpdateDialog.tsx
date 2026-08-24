@@ -57,7 +57,7 @@ export function CaptureUpdateDialog({ open, onOpenChange, projects }: CaptureUpd
           <div className="flex items-start justify-between">
             <div>
               <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
-                SitePix workflow
+                Everlumen workflow
               </p>
               <DialogPrimitive.Title className="pt-1 text-xl font-extrabold text-foreground">
                 Capture an update

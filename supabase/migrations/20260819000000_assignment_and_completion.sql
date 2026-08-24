@@ -35,7 +35,7 @@
 -- apps/api/src/domains/projects/field-records.ts, and any future admin tooling
 -- must not be caught by a rule about which teammate did the tapping.
 --
--- Idempotent, safe to re-run. Apply via the SitePix Supabase SQL editor
+-- Idempotent, safe to re-run. Apply via the Everlumen Supabase SQL editor
 -- (project ulmgvtuqjlzzadlwtiog).
 
 -- =========================================================================

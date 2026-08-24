@@ -24,7 +24,7 @@
 -- This records the fact instead of guessing at it. One nullable column per
 -- table pointing at the ledger row, written at apply time.
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent: safe to re-run, and a no-op once it has run.
 
 -- ---------------------------------------------------------------------------

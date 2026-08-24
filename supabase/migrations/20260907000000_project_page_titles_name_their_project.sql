@@ -54,7 +54,7 @@
 -- typing. The project name is what gets shortened to fit, never the document's
 -- own name, and a row with no room for a meaningful prefix is skipped instead.
 --
--- Apply via the SitePix Supabase SQL editor (or `supabase db push`).
+-- Apply via the Everlumen Supabase SQL editor (or `supabase db push`).
 
 SET lock_timeout = '5s';
 

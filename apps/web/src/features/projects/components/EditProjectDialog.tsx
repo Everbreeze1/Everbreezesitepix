@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useConfirm } from "@/hooks/use-confirm";
 import { softDeleteProject } from "@/lib/trash.functions";
 import { toast } from "sonner";
@@ -31,7 +31,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { qk } from "@/lib/query-keys";
 import { listProjectBoards, setProjectPipelineStage } from "@/lib/project-boards.functions";
-import { PROJECT_STATUSES, PROJECT_STATUS_LABELS } from "@sitepix/shared";
+import { PROJECT_STATUSES, PROJECT_STATUS_LABELS } from "@everlumen/shared";
 
 /** The Select's stand-in for NULL: Radix reserves the empty string. */
 const NO_STAGE = "__none__";

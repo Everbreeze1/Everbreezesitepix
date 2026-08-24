@@ -88,7 +88,7 @@
 --
 -- Idempotent throughout: DROP POLICY IF EXISTS before every CREATE. Safe to
 -- re-run. Creates no tables, so there is no new grant to revoke from anon.
--- Apply in the SitePix Supabase SQL editor (or `supabase db push`).
+-- Apply in the Everlumen Supabase SQL editor (or `supabase db push`).
 
 SET lock_timeout = '5s';
 

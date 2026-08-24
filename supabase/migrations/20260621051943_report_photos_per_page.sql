@@ -1,4 +1,4 @@
--- Report Builder refinements - run against the SitePix Supabase project.
+-- Report Builder refinements - run against the Everlumen Supabase project.
 -- Adds photos_per_page (1..4) so users can control the PDF layout density.
 
 ALTER TABLE public.project_reports

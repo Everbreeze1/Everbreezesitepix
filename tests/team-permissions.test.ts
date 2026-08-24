@@ -13,7 +13,7 @@ import {
   roleLabelForTier,
   tierHasJobScoping,
   type TeamRole,
-} from "@sitepix/shared/team-permissions";
+} from "@everlumen/shared/team-permissions";
 
 const ALL: TeamRole[] = ["owner", "admin", "manager", "standard", "restricted"];
 

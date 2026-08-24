@@ -40,7 +40,7 @@
 -- tests/document-template-library.test.ts checks against these rows.
 --
 -- Idempotent - ON CONFLICT (slug) DO UPDATE. Safe to re-run.
--- Apply via the SitePix Supabase SQL editor (or `supabase db push`).
+-- Apply via the Everlumen Supabase SQL editor (or `supabase db push`).
 
 INSERT INTO public.document_templates (slug, team_id, created_by, name, body, fields)
 VALUES (

@@ -22,7 +22,7 @@
 -- teams and quietly corrupt both the total and the pagination. `team_count`
 -- carries the truth so the UI can say "+1 more" rather than lie by omission.
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent. Safe to re-run.
 
 CREATE OR REPLACE FUNCTION public.admin_user_directory(

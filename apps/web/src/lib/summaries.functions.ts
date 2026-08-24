@@ -1,4 +1,4 @@
-import { rpcOp } from "./sitepix-api";
+import { rpcOp } from "./everlumen-api";
 import type {
   listProjectSummariesService,
   getWalkthroughSummaryService,
@@ -8,7 +8,7 @@ import type {
   setSummaryShareService,
   deleteWalkthroughSummaryService,
   getPublicSummaryService,
-} from "@sitepix/api";
+} from "@everlumen/api";
 
 /**
  * Walkthrough Summaries: their own object, their own operations.

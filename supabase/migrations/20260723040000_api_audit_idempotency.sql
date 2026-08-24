@@ -1,5 +1,5 @@
 -- Phase E: privileged API audit trail + idempotency keys (service-role only).
--- Apply to SitePix project before relying on Idempotency-Key in production.
+-- Apply to Everlumen project before relying on Idempotency-Key in production.
 
 create table if not exists public.api_audit_logs (
   id uuid primary key default gen_random_uuid(),
@@ -49,6 +49,6 @@ alter table public.api_idempotency_keys enable row level security;
 -- No policies: service role only.
 
 comment on table public.api_audit_logs is
-  'SitePix /v1 privileged call audit (service-role writes).';
+  'Everlumen /v1 privileged call audit (service-role writes).';
 comment on table public.api_idempotency_keys is
   'Idempotency-Key cache for expensive /v1 ops (service-role).';

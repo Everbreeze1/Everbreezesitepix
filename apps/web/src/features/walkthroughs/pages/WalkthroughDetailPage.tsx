@@ -29,8 +29,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { supabase } from "@/integrations/sitepix/client";
-import { sitepixApi } from "@/lib/sitepix-api";
+import { supabase } from "@/integrations/everlumen/client";
+import { everlumenApi } from "@/lib/everlumen-api";
 import { devLog } from "@/lib/dev-log";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -554,7 +554,7 @@ export function WalkthroughDetailPage() {
       }
     }
     if (typeof window !== "undefined") {
-      window.open(sitepixApi.urls.walkthroughPdf(token!), "_blank", "noopener,noreferrer");
+      window.open(everlumenApi.urls.walkthroughPdf(token!), "_blank", "noopener,noreferrer");
     }
   };
 

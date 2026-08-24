@@ -43,7 +43,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { usePrompt } from "@/hooks/use-prompt";
@@ -51,7 +51,7 @@ import { toast } from "sonner";
 import { formatBytes } from "@/hooks/use-storage-usage";
 import { MAX_UPLOAD_BYTES, isOverUploadLimit } from "@/lib/upload-limits";
 import { uploadWithResume } from "@/lib/resumable-upload";
-import { relativeTime } from "@sitepix/shared";
+import { relativeTime } from "@everlumen/shared";
 import { BlueprintItemBadge } from "./BlueprintItemBadge";
 import type { ItemOrigin } from "@/hooks/use-project-blueprint-origin";
 import { downloadBase64File } from "@/lib/download-file";

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { BrandLogo } from "./BrandLogo";
 
-const DISMISS_KEY = "sitepix-app-download-dismissed-at";
+const DISMISS_KEY = "everlumen-app-download-dismissed-at";
 const DISMISS_DAYS = 7;
 
 function isMobileDevice() {
@@ -71,11 +71,11 @@ export function MobileAppBanner() {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold leading-snug text-foreground">
-            Get the full experience. Download the Everbreeze SitePix app.
+            Get the full experience. Download the Everlumen app.
           </p>
           <div className="mt-2.5 flex flex-wrap gap-2">
             <a
-              href="https://apps.apple.com/us/app/everbreeze-sitepix/id1234567890"
+              href="https://apps.apple.com/us/app/everlumen/id1234567890"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-md bg-card px-2.5 py-1.5 text-xs font-medium text-foreground ring-1 ring-border transition-colors hover:bg-muted active:scale-[0.97]"
@@ -84,7 +84,7 @@ export function MobileAppBanner() {
               App Store
             </a>
             <a
-              href="https://play.google.com/store/apps/details?id=com.everbreeze.sitepix"
+              href="https://play.google.com/store/apps/details?id=com.everlumen.app"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-md bg-card px-2.5 py-1.5 text-xs font-medium text-foreground ring-1 ring-border transition-colors hover:bg-muted active:scale-[0.97]"

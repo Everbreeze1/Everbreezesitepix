@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, MapPin, X } from "lucide-react";
-import { mergeServiceArea, serviceAreaKey } from "@sitepix/shared";
+import { mergeServiceArea, serviceAreaKey } from "@everlumen/shared";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";

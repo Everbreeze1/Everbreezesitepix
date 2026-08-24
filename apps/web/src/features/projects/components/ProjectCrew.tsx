@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 import { useTeamMembers } from "@/hooks/use-team-members";
 import { useSubscription } from "@/hooks/use-subscription";
-import { normaliseRole, roleLabelForTier } from "@sitepix/shared/team-permissions";
+import { normaliseRole, roleLabelForTier } from "@everlumen/shared/team-permissions";
 
 /**
  * The crew on a job: who was put on it, as opposed to who has happened to

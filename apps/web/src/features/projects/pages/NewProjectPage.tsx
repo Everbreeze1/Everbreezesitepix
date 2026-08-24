@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
@@ -28,7 +28,7 @@ import { BlueprintOutcomePreview } from "@/features/settings/components/Blueprin
 import { useBlueprintContents } from "@/hooks/use-blueprint-contents";
 import { GENERAL_CATEGORY, makeCategoryRank } from "@/lib/template-categories";
 import { cn } from "@/lib/utils";
-import { newProjectName } from "@sitepix/shared";
+import { newProjectName } from "@everlumen/shared";
 import { toast } from "sonner";
 import { qk } from "@/lib/query-keys";
 import { writeWithNewColumns, PROJECT_CLIENT_KEYS } from "@/lib/merge-field-columns";

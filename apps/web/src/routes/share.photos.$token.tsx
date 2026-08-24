@@ -5,13 +5,13 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getPublicPhotoShare, type PublicPhotoShare } from "@/lib/photo-shares.functions";
-import { cleanCaption } from "@sitepix/shared";
+import { cleanCaption } from "@everlumen/shared";
 
 export const Route = createFileRoute("/share/photos/$token")({
   head: () => ({
     meta: [
-      { title: "Shared photo - SitePix" },
-      { name: "description", content: "A photo shared from a SitePix project." },
+      { title: "Shared photo - Everlumen" },
+      { name: "description", content: "A photo shared from a Everlumen project." },
       { name: "robots", content: "noindex,nofollow" },
     ],
   }),
@@ -78,7 +78,7 @@ function PublicPhotoPage() {
           <h1 className="mt-3 text-lg font-semibold">Photo unavailable</h1>
           <p className="mt-1 text-sm text-muted-foreground">{msg}</p>
           <Button asChild variant="outline" size="sm" className="mt-4">
-            <Link to="/">Go to SitePix</Link>
+            <Link to="/">Go to Everlumen</Link>
           </Button>
         </Card>
       </div>
@@ -97,7 +97,7 @@ function PublicPhotoPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `sitepix-${photo.id}.jpg`;
+      a.download = `everlumen-${photo.id}.jpg`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -112,7 +112,7 @@ function PublicPhotoPage() {
       <header className="border-b border-border bg-card">
         <div className="container mx-auto flex items-center justify-between px-4 py-3">
           <Link to="/" className="text-sm font-semibold tracking-tight">
-            SitePix
+            Everlumen
           </Link>
           {company?.name && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -198,7 +198,7 @@ function PublicPhotoPage() {
         <p className="mt-8 text-center text-[11px] text-muted-foreground">
           Shared via{" "}
           <Link to="/" className="underline-offset-2 hover:underline">
-            SitePix
+            Everlumen
           </Link>
         </p>
       </main>

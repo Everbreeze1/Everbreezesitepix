@@ -2,7 +2,7 @@ import { createStart, createMiddleware } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 
 import { renderErrorPage } from "./lib/error-page";
-import { attachSupabaseAuth } from "@/integrations/sitepix/auth-attacher";
+import { attachSupabaseAuth } from "@/integrations/everlumen/auth-attacher";
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {

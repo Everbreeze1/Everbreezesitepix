@@ -57,7 +57,7 @@
 -- carry updated_at triggers, so affected rows get a fresh timestamp; that is
 -- correct (the text did change) and moves sitemap lastmod with it.
 --
--- Apply via the SitePix Supabase SQL editor. Safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Safe to re-run.
 
 SET lock_timeout = '5s';
 

@@ -44,7 +44,7 @@ import {
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import {
   listShowcases,
   createShowcase,

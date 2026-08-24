@@ -51,7 +51,7 @@ import {
   resendInvite,
   resendMemberConfirmation,
 } from "@/features/teams/api";
-import { relativeTime } from "@sitepix/shared";
+import { relativeTime } from "@everlumen/shared";
 import {
   ROLE_LABEL,
   assignableRoles,
@@ -63,7 +63,7 @@ import {
   tierHasJobScoping,
   type AssignableRole,
   type TeamRole,
-} from "@sitepix/shared/team-permissions";
+} from "@everlumen/shared/team-permissions";
 import { SubcontractorsPanel } from "../components/SubcontractorsPanel";
 import { AssignJobsDialog } from "../components/AssignJobsDialog";
 import { RoleBadge } from "../components/RoleBadge";
@@ -568,7 +568,7 @@ function InviteDialog({
             <div>
               <DialogTitle asChild>
                 <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
-                  SitePix workflow
+                  Everlumen workflow
                 </p>
               </DialogTitle>
               <p className="mt-1 font-manrope text-xl font-extrabold text-foreground">

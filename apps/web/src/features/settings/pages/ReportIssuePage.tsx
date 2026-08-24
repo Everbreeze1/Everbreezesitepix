@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
 import { formatBytes } from "@/hooks/use-storage-usage";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { cn } from "@/lib/utils";
 import {
   ATTACHMENT_ACCEPT,
@@ -34,7 +34,7 @@ import {
   type FeedbackKind,
 } from "@/lib/feedback";
 import { clientContextRows, readClientContext, type ClientContext } from "@/lib/feedback-context";
-import { projectDisplayName } from "@sitepix/shared";
+import { projectDisplayName } from "@everlumen/shared";
 
 /** The two things people actually come here to do. */
 const MODES: Array<{
@@ -68,7 +68,7 @@ const MODES: Array<{
     kind: "idea",
     tab: "Suggest a feature",
     icon: Lightbulb,
-    banner: "Tell us what would make SitePix better.",
+    banner: "Tell us what would make Everlumen better.",
     bannerHint: "What are you doing by hand today that we could do for you?",
     label: "What would you like to see?",
     labelHint: "Describe the feature and what it would let you do.",

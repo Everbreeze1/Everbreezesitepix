@@ -18,7 +18,7 @@
 -- console mid-shift - and narrowing an individual is a follow-up decision made
 -- per person, in the Users screen.
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent. Safe to re-run.
 
 ALTER TABLE public.platform_admins

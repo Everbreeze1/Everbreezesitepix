@@ -5,7 +5,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { BrandLogo } from "@/components/BrandLogo";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { authErrorMessage } from "@/lib/auth-errors";
 
 /*
@@ -52,7 +52,7 @@ export const Route = createFileRoute("/auth/confirm")({
   }),
   head: () => ({
     meta: [
-      { title: "Confirming your email - Everbreeze SitePix" },
+      { title: "Confirming your email - Everlumen" },
       // Nothing here is worth indexing and the URL carries a token.
       { name: "robots", content: "noindex, nofollow" },
     ],
@@ -109,7 +109,7 @@ function ConfirmPage() {
         <Link to="/" className="mb-8 flex items-center justify-center gap-2">
           <BrandLogo size={40} />
           <span className="text-lg font-bold">
-            Everbreeze <span className="text-primary">SitePix</span>
+            Ever<span className="text-primary">lumen</span>
           </span>
         </Link>
         <Card className="p-8 shadow-elegant">

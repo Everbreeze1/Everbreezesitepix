@@ -1,9 +1,9 @@
 import * as React from "react";
 import { render } from "@react-email/render";
-import { InviteEmail } from "@sitepix/email-templates";
+import { InviteEmail } from "@everlumen/email-templates";
 import { sendEmail } from "../../lib/send-email";
 
-const SITE_NAME = "Everbreeze SitePix";
+const SITE_NAME = "Everlumen";
 const ROOT_DOMAIN = "everbreezesitepix.com";
 
 /**
@@ -80,7 +80,7 @@ export async function sendTeamInviteEmail(opts: {
     subject,
     html,
     text,
-    // "Mark Lagura (via Everbreeze SitePix)" - the pattern shared-document mail
+    // "Mark Lagura (via Everlumen)" - the pattern shared-document mail
     // has used for years. The address stays our verified sender, so DKIM/DMARC
     // are untouched; only the name a human reads changes.
     //

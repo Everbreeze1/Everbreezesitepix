@@ -66,7 +66,7 @@ export default function CaptureScreen() {
     <View style={styles.root}>
       <Text style={styles.title}>Add a field photo</Text>
       <Text style={styles.sub}>
-        Uploads to SitePix storage under this project (same path as web).
+        Uploads to Everlumen storage under this project (same path as web).
       </Text>
 
       {busy ? (

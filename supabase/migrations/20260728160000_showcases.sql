@@ -1,6 +1,6 @@
 -- Job Showcases (Team tier): a curated, publicly shareable portfolio page -
 -- pick any photos across projects, caption them, pick a layout, publish.
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog). Idempotent.
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog). Idempotent.
 
 CREATE TABLE IF NOT EXISTS public.showcases (
   id             uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,

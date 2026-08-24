@@ -35,7 +35,7 @@
 --   * acceptInviteSignupService    - teams/service.ts:553           getSupabaseAdmin()
 -- The browser never queries these tables without a session.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Idempotent - safe to re-run.
 
 -- ===========================================================================
 -- RUN THIS ONE QUERY ON ITS OWN FIRST, AND KEEP THE OUTPUT.

@@ -25,12 +25,12 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PhotoThumb } from "@/components/PhotoThumb";
 import { SURFACE_CARD } from "@/components/ui/surface";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { qk } from "@/lib/query-keys";
 import { listTimelineActivity, type TimelineDay } from "@/lib/timeline.functions";
 import { cn } from "@/lib/utils";
-import { cleanCaption } from "@sitepix/shared";
+import { cleanCaption } from "@everlumen/shared";
 
 export interface CalendarPhoto {
   id: string;

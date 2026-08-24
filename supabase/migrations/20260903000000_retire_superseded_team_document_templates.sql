@@ -74,7 +74,7 @@
 -- prints the fingerprint of each team row that is still on the page, so a run
 -- that does nothing says why rather than just saying zero.
 --
--- Apply via the SitePix Supabase SQL editor (or `supabase db push`).
+-- Apply via the Everlumen Supabase SQL editor (or `supabase db push`).
 
 SET lock_timeout = '5s';
 

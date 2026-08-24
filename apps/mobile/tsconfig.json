@@ -4,9 +4,9 @@
     "strict": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@sitepix/api-client": ["../../packages/api-client/src/index.ts"],
-      "@sitepix/db": ["../../packages/db/src/index.ts"],
-      "@sitepix/shared": ["../../packages/shared/src/index.ts"]
+      "@everlumen/api-client": ["../../packages/api-client/src/index.ts"],
+      "@everlumen/db": ["../../packages/db/src/index.ts"],
+      "@everlumen/shared": ["../../packages/shared/src/index.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]

@@ -73,7 +73,7 @@ export const InviteEmail = ({
               images are blocked by default in most clients, so a logo would
               leave a broken box at the top of the very first email someone
               gets from us. */}
-          <Text style={wordmark}>Everbreeze SitePix</Text>
+          <Text style={wordmark}>Everlumen</Text>
 
           <Heading style={h1}>{teamName ? `Join ${teamName}` : "You've been invited"}</Heading>
 

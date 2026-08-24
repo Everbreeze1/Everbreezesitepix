@@ -1,5 +1,5 @@
-import { rpcOp } from "./sitepix-api";
-import type { ProjectShareState, PublicProjectShare } from "@sitepix/api";
+import { rpcOp } from "./everlumen-api";
+import type { ProjectShareState, PublicProjectShare } from "@everlumen/api";
 
 export type { ProjectShareState, PublicProjectShare };
 

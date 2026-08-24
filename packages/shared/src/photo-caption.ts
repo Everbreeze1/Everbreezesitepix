@@ -1,6 +1,6 @@
 // Heuristics to hide auto-generated/ugly filenames from the UI.
 // Examples we want to treat as "no real caption":
-//   sitepix-1781560897511.jpg
+//   everlumen-1781560897511.jpg, sitepix-1781560897511.jpg (pre-rename)
 //   walkthrough-1781449720790.jpg
 //   IMG_1234.HEIC, image (3).png, photo-2025-01-02.jpeg, Photo 1781560897511
 const FILENAME_RE = /\.(jpe?g|png|webp|heic|heif|gif|bmp|tiff?)$/i;
@@ -18,7 +18,7 @@ const FILENAME_RE = /\.(jpe?g|png|webp|heic|heif|gif|bmp|tiff?)$/i;
  * number keeps the caption.
  */
 const GENERATED_PREFIX_RE =
-  /^(sitepix|walkthrough|img|image|photo|dsc|pxl|screenshot|capture)[\s_-]?\d[\d\s_-]*$/i;
+  /^(everlumen|sitepix|walkthrough|img|image|photo|dsc|pxl|screenshot|capture)[\s_-]?\d[\d\s_-]*$/i;
 
 export function isFilenameLikeCaption(caption?: string | null): boolean {
   if (!caption) return true;

@@ -14,7 +14,7 @@ import {
   Minimize,
   Share2,
 } from "lucide-react";
-import { cleanCaption, formatPhotoDate } from "@sitepix/shared";
+import { cleanCaption, formatPhotoDate } from "@everlumen/shared";
 
 export interface LightboxPhoto {
   id: string;

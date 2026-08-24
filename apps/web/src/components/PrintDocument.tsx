@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
-const ROOT_ID = "sitepix-print-root";
+const ROOT_ID = "everlumen-print-root";
 const BODY_CLASS = "has-print-document";
 
 /**

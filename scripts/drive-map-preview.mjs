@@ -53,7 +53,7 @@ const IGNORE = [
 const viewOf = (page) =>
   page.evaluate(() => {
     try {
-      return JSON.parse(window.sessionStorage.getItem("sitepix:map-view") ?? "null");
+      return JSON.parse(window.sessionStorage.getItem("everlumen:map-view") ?? "null");
     } catch {
       return null;
     }
@@ -121,7 +121,7 @@ const run = async () => {
   /* -------------------------------------------------------------- the map */
   current = "map";
   // A stale saved view would make the "restored on back" check meaningless.
-  await page.evaluate(() => window.sessionStorage.removeItem("sitepix:map-view"));
+  await page.evaluate(() => window.sessionStorage.removeItem("everlumen:map-view"));
   await page.goto(`${BASE}/map`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector("text=/on map/", { timeout: 90000 });
   // The Maps script loads after the page paints, and the pins land after that.

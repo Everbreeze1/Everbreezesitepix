@@ -18,7 +18,7 @@
 -- already in breach would make that worse to save storage that is at 0.016 of
 -- 100 GB. It stays unscheduled until that flag is deliberately turned on.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent - cron.schedule upserts
+-- Apply via the Everlumen Supabase SQL editor. Idempotent - cron.schedule upserts
 -- by job name, so re-running re-points the same job rather than adding another.
 
 SET lock_timeout = '5s';

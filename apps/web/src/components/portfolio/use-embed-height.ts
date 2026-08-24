@@ -1,7 +1,17 @@
 import { useEffect } from "react";
 
 /** Namespaced so a host page running other widgets can ignore our messages. */
-export const EMBED_MESSAGE_TYPE = "sitepix:embed:height";
+export const EMBED_MESSAGE_TYPE = "everlumen:embed:height";
+
+/**
+ * The pre-rename name, still posted alongside the current one.
+ *
+ * `embed.js` is hotlinked by third-party sites and cached for up to a day
+ * (stale-while-revalidate), so for that window a host page is still running
+ * the build that only listens for this string. Dropping it would freeze those
+ * galleries at their 600px starting height until the cache turned over.
+ */
+export const LEGACY_EMBED_MESSAGE_TYPE = "sitepix:embed:height";
 
 /**
  * Reports this document's height to the parent window so the host page's iframe
@@ -28,6 +38,7 @@ export function useEmbedHeight(): void {
       // "*" because the embed is deliberately host-agnostic - it has to work on
       // whatever domain the contractor pastes it into. Only a height is sent.
       window.parent.postMessage({ type: EMBED_MESSAGE_TYPE, height }, "*");
+      window.parent.postMessage({ type: LEGACY_EMBED_MESSAGE_TYPE, height }, "*");
     };
 
     post();

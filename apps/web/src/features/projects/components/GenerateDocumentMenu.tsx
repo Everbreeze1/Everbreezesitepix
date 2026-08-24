@@ -125,7 +125,7 @@ export function GenerateDocumentMenu({
   async function handleCreateBlank() {
     try {
       const res = await createProjectPage({ data: { projectId, folderId, template: "blank" } });
-      sessionStorage.setItem(`sitepix:freshPage:${res.page.id}`, "1");
+      sessionStorage.setItem(`everlumen:freshPage:${res.page.id}`, "1");
       openPage(res.page.id);
     } catch (e: any) {
       toast.error(e?.message ?? "Could not create page");
@@ -340,7 +340,7 @@ export function GenerateDocumentMenu({
                 Same wording, same arithmetic and same 2x2-at-four-up layout as
                 the editor's Insert > "Section with photos" menu, which has said
                 "N photos per page" since long before this control existed. The
-                two produce byte-similar markup now (@sitepix/shared's
+                two produce byte-similar markup now (@everlumen/shared's
                 photo-row-layout), so a generated document and a hand-built one
                 cannot look like different products.
               */}

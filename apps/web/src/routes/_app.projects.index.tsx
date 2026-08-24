@@ -26,7 +26,7 @@ const TABS = ["projects", "groups", "boards", "schedule"] as const;
 const RENAMED: Record<string, (typeof TABS)[number]> = { calendar: "schedule" };
 
 export const Route = createFileRoute("/_app/projects/")({
-  head: () => ({ meta: [{ title: "My Projects - Everbreeze SitePix" }] }),
+  head: () => ({ meta: [{ title: "My Projects - Everlumen" }] }),
   validateSearch: (search: Record<string, unknown>): ProjectsIndexSearch => {
     const raw = typeof search.tab === "string" ? search.tab : "";
     const tab = RENAMED[raw] ?? (TABS.includes(raw as never) ? (raw as never) : undefined);

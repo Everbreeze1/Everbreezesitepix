@@ -16,7 +16,7 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { Card } from "@/components/ui/card";

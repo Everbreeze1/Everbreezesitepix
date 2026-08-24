@@ -36,7 +36,7 @@ const STATE = {
   },
   profile: {
     full_name: "Mike",
-    company: "Everbreeze Heating & Air",
+    company: "Northwind Heating & Air",
     company_address: "800 Harbor Blvd",
     company_phone: "(555) 123-4567",
     job_title: null as string | null,
@@ -137,10 +137,10 @@ describe("creating a document from a template", () => {
   });
 
   it("escapes merged values instead of splicing them into the markup", async () => {
-    // PROFILE.company is `Everbreeze Heating & Air`. Interpolated raw, a company
+    // PROFILE.company is `Northwind Heating & Air`. Interpolated raw, a company
     // called `A <b>B</b>` would rewrite the document around it.
     const created = await asCreated("<p>{{company_name}}</p>");
-    expect(created).toContain("Everbreeze Heating &amp; Air");
+    expect(created).toContain("Northwind Heating &amp; Air");
   });
 
   it("keeps a blank empty so the ghost label never becomes document text", async () => {
@@ -242,7 +242,7 @@ describe("saving a finished document as a template", () => {
   const SOURCE = {
     project_name: "Meghan",
     project_address: "2229 Zittel Drive, Folsom, CA",
-    company_name: "Everbreeze Heating & Air",
+    company_name: "Northwind Heating & Air",
     prepared_by: "Mike",
   };
 
@@ -253,7 +253,7 @@ describe("saving a finished document as a template", () => {
      * previous customer's name and site address on every future project.
      */
     const page =
-      "<h1>Meghan</h1><p>2229 Zittel Drive, Folsom, CA</p><p>Prepared by Mike, Everbreeze Heating &amp; Air</p>";
+      "<h1>Meghan</h1><p>2229 Zittel Drive, Folsom, CA</p><p>Prepared by Mike, Northwind Heating &amp; Air</p>";
     const template = valuesToTokens(page, SOURCE);
     expect(template).not.toContain("Meghan");
     expect(template).not.toContain("Zittel");

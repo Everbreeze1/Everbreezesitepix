@@ -13,7 +13,7 @@
  *
  * === WHAT THIS RUN WRITES =================================================
  *   - two `team_invites` rows on the signed-in owner's team, addressed to
- *     invite-probe+<stamp>@sitepix.test, one Standard and one Restricted
+ *     invite-probe+<stamp>@everlumen.test, one Standard and one Restricted
  *
  * Both are deleted in a finally block. The rows are INSERTED DIRECTLY rather
  * than through `inviteMember`, which is what keeps this from sending anybody an
@@ -42,7 +42,7 @@ function env(path) {
 }
 
 const cfg = env("apps/api/.env");
-const db = createClient(cfg.SITEPIX_SUPABASE_URL, cfg.SITEPIX_SUPABASE_SERVICE_ROLE_KEY, {
+const db = createClient(cfg.EVERLUMEN_SUPABASE_URL, cfg.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
@@ -74,7 +74,7 @@ const main = async () => {
         .from("team_invites")
         .insert({
           team_id: teamId,
-          email: `invite-probe+${role}-${stamp}@sitepix.test`,
+          email: `invite-probe+${role}-${stamp}@everlumen.test`,
           role,
           token,
           invited_by: prof.id,
@@ -173,7 +173,7 @@ const main = async () => {
     if (browser) await browser.close();
     for (const inv of made) await db.from("team_invites").delete().eq("id", inv.id);
     // Belt and braces: anything this run addressed.
-    await db.from("team_invites").delete().like("email", "invite-probe+%@sitepix.test");
+    await db.from("team_invites").delete().like("email", "invite-probe+%@everlumen.test");
   }
 
   console.log("");

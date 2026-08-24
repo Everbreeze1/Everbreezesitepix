@@ -47,11 +47,11 @@ import {
   PRO_AUTO_REPORTS_PER_MONTH,
   type BillingTier,
 } from "@/hooks/use-subscription";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { getMyTeam, createBillingPortalSession } from "@/features/settings/api";
 // Same matrix the billing RPC enforces with - see domains/billing/service.ts.
-import { can } from "@sitepix/shared/team-permissions";
+import { can } from "@everlumen/shared/team-permissions";
 import { WorkspaceLabelsSection } from "@/features/settings/components/WorkspaceLabelsSection";
 import { RoleBadge } from "@/features/teams/components/RoleBadge";
 import {
@@ -59,7 +59,7 @@ import {
   prefEnabled,
   type NotificationPrefs,
   type NotificationPrefKey,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 import { listReviewLinks, setReviewLinks, type ReviewLink } from "@/lib/review-links.functions";
 import { useStorageUsage, formatBytes } from "@/hooks/use-storage-usage";
 import { SUPPORT_EMAIL, mailtoHref } from "@/lib/contact";
@@ -164,9 +164,9 @@ const SECTIONS: {
  * things nothing sends; the ones that survive are in
  * packages/shared/src/notification-prefs.ts, which the sender imports too.
  */
-const NOTIF_KEY = (uid: string) => `sitepix:notif-prefs:${uid}`;
-const EXTRAS_KEY = (uid: string) => `sitepix:profile-extras:${uid}`;
-const COMPANY_EXTRAS_KEY = (uid: string) => `sitepix:company-extras:${uid}`;
+const NOTIF_KEY = (uid: string) => `everlumen:notif-prefs:${uid}`;
+const EXTRAS_KEY = (uid: string) => `everlumen:profile-extras:${uid}`;
+const COMPANY_EXTRAS_KEY = (uid: string) => `everlumen:company-extras:${uid}`;
 
 interface ProfileExtras {
   firstName: string;
@@ -1799,7 +1799,7 @@ function HelpSection() {
         <SupportTile
           icon={HelpCircle}
           title="Browse help articles"
-          desc="Step-by-step guides for every part of SitePix."
+          desc="Step-by-step guides for every part of Everlumen."
           href="https://www.everbreezesitepix.com/help"
           cta="Open Help Center"
         />
@@ -1840,14 +1840,14 @@ function ChatSection() {
           // The support mailbox is a placeholder until the owner confirms it
           // (see lib/contact.ts); until then these fall back to /contact rather
           // than opening a mail client addressed to a domain that isn't ours.
-          href={mailtoHref(SUPPORT_EMAIL, "SitePix support") ?? "/contact"}
+          href={mailtoHref(SUPPORT_EMAIL, "Everlumen support") ?? "/contact"}
           cta="Start a conversation"
         />
         <SupportTile
           icon={LifeBuoy}
           title="Report an issue"
           desc="Something broken? Tell us what happened."
-          href={mailtoHref(SUPPORT_EMAIL, "SitePix issue") ?? "/contact"}
+          href={mailtoHref(SUPPORT_EMAIL, "Everlumen issue") ?? "/contact"}
           cta="Report issue"
         />
       </div>
@@ -1863,7 +1863,7 @@ function ChatSection() {
           </p>
         </div>
         <Button asChild variant="outline">
-          <a href={mailtoHref(SUPPORT_EMAIL, "SitePix feature idea") ?? "/contact"}>Send idea</a>
+          <a href={mailtoHref(SUPPORT_EMAIL, "Everlumen feature idea") ?? "/contact"}>Send idea</a>
         </Button>
       </Card>
     </SectionShell>

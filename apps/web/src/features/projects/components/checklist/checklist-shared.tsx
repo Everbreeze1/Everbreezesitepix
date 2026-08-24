@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera, CheckCircle2, Loader2, Star, Upload } from "lucide-react";
-import { photoObjectPaths } from "@sitepix/shared";
+import { photoObjectPaths } from "@everlumen/shared";
 import { toast } from "sonner";
 import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import { compressImageFile } from "@/features/photos/components/CameraCapture";
@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import type { ItemType } from "@/lib/checklist-items";
 

@@ -11,7 +11,7 @@ import {
   TEAM_SIZES,
   choiceLabel,
   industryLabel,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 
 export function AdminTeamDetailPage() {
   const { teamId } = useParams({ from: "/_app/admin/teams_/$teamId" });

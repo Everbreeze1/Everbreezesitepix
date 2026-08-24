@@ -18,7 +18,7 @@ import {
   pipelineNameIssue,
   pipelineNameMessage,
   samePipelineName,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 import {
   updateProjectBoard,
   deleteProjectBoard,

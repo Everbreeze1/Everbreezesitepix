@@ -26,7 +26,7 @@
 -- new column inherits it. Grants are restated below only so this file is
 -- self-sufficient against a database that somehow missed 20260811000000.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Idempotent - safe to re-run.
 
 SET lock_timeout = '5s';
 

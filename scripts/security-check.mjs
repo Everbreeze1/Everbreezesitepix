@@ -34,7 +34,7 @@ for (const line of readFileSync("apps/api/.env", "utf8").split(/\r?\n/)) {
   const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
   if (m) apiEnv[m[1]] = m[2].replace(/^["']|["']$/g, "");
 }
-const SERVICE_KEY = apiEnv.SITEPIX_SUPABASE_SERVICE_ROLE_KEY;
+const SERVICE_KEY = apiEnv.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY;
 if (!SERVICE_KEY) throw new Error("service role key missing from apps/api/.env");
 
 async function adminCreateUser(email, password) {

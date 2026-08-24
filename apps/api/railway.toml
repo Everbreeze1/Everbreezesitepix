@@ -11,7 +11,7 @@ buildCommand = "true"
 watchPatterns = ["/apps/api/**", "/packages/**", "/package.json", "/package-lock.json"]
 
 [deploy]
-startCommand = "npm run start -w @sitepix/api"
+startCommand = "npm run start -w @everlumen/api"
 healthcheckPath = "/v1/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"

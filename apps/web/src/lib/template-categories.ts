@@ -15,7 +15,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { recommendedCategories } from "@sitepix/shared";
+import { recommendedCategories } from "@everlumen/shared";
 
 /**
  * The trade a document template belongs to.

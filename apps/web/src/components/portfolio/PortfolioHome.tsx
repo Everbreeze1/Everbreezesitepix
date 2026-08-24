@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ArrowRight, Mail, MapPin, Phone, Quote, Star } from "lucide-react";
-import { richIsEmpty } from "@sitepix/shared";
+import { richIsEmpty } from "@everlumen/shared";
 import { RichText } from "@/components/RichText";
 import { cn } from "@/lib/utils";
 import { readableTextOn, withAlpha } from "@/lib/contrast";

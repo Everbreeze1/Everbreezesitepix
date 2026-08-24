@@ -38,10 +38,10 @@ export const Route = createFileRoute("/pricing")({
   component: PricingPage,
   head: () => ({
     meta: [
-      { title: "Pricing - Everbreeze SitePix" },
+      { title: "Pricing - Everlumen" },
       {
         name: "description",
-        content: "Choose the SitePix plan that fits your crew - Starter, Pro, or Team.",
+        content: "Choose the Everlumen plan that fits your crew - Starter, Pro, or Team.",
       },
     ],
   }),
@@ -473,8 +473,8 @@ function CreateTeamPrompt({ onCreated }: { onCreated: () => void }) {
         Name your team to continue
       </h2>
       <p className="mt-1 font-manrope text-sm text-sidebar-foreground/60">
-        SitePix subscriptions are billed per team - you'll be the owner and can invite others after
-        subscribing.
+        Everlumen subscriptions are billed per team - you'll be the owner and can invite others
+        after subscribing.
       </p>
       <div className="mt-5 flex flex-col gap-3 sm:flex-row">
         <Input

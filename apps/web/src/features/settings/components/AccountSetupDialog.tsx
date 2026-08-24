@@ -11,7 +11,7 @@ import {
   recommendedCategories,
   type BusinessProfile,
   type Choice,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 import {
   Dialog,
   DialogContent,
@@ -201,7 +201,7 @@ export function AccountSetupDialog({
                   id="setup-company"
                   value={draft.companyName}
                   onChange={(e) => set("companyName", e.target.value)}
-                  placeholder="Everbreeze Mechanical"
+                  placeholder="Northwind Mechanical"
                   className="h-11"
                 />
                 {!hasTeam && (

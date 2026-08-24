@@ -1,6 +1,6 @@
--- PROJECT REPORTS - run this in the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- PROJECT REPORTS - run this in the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- The Lovable Cloud migration tool targets a different Postgres project,
--- so this file is here for you to paste into the SitePix project's SQL editor.
+-- so this file is here for you to paste into the Everlumen project's SQL editor.
 
 CREATE TABLE IF NOT EXISTS public.project_reports (
   id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,

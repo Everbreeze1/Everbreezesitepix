@@ -22,7 +22,7 @@ import { myTeamId } from "../showcases/service";
  *
  *   2. Nothing is written by the lookup itself. Resolving a link and applying
  *      it are separate calls, because the first listing Google returns for
- *      "Everbreeze Heating" may well be a different company in a different
+ *      "Northwind Heating" may well be a different company in a different
  *      state, and overwriting a live marketing site on a fuzzy text match is
  *      not a mistake worth being efficient about.
  *
@@ -228,7 +228,7 @@ async function expandShortLink(url: URL): Promise<URL> {
       signal: AbortSignal.timeout(TIMEOUT_MS),
       // Google serves a consent interstitial to unrecognised agents, which
       // strips the place out of the URL we are trying to read.
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; SitePix/1.0)" },
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; Everlumen/1.0)" },
     });
     return new URL(res.url || url.href);
   } catch {

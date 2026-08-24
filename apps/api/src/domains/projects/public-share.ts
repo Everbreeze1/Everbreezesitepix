@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { thumbPathFor } from "@sitepix/shared";
+import { thumbPathFor } from "@everlumen/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
 

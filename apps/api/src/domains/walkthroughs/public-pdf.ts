@@ -6,7 +6,7 @@ import {
   type PDFImage,
   type PDFPage,
 } from "pdf-lib";
-import { walkthroughSummaryBlocks, type RichBlock } from "@sitepix/shared";
+import { walkthroughSummaryBlocks, type RichBlock } from "@everlumen/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import {
   drawRichBlocks,
@@ -165,8 +165,8 @@ export async function renderWalkthroughPdf(input: WalkthroughPdfInput): Promise<
   const pdf = await PDFDocument.create();
   const safeTitle = input.title.slice(0, 200) || "Walkthrough report";
   pdf.setTitle(safeTitle);
-  pdf.setProducer("SitePix");
-  pdf.setCreator("SitePix");
+  pdf.setProducer("Everlumen");
+  pdf.setCreator("Everlumen");
   pdf.setCreationDate(new Date());
 
   const fonts: FontSet = {
@@ -183,7 +183,7 @@ export async function renderWalkthroughPdf(input: WalkthroughPdfInput): Promise<
   const FAINT = rgb(0.95, 0.96, 0.97);
 
   const { profile, project, photos: links, isSummary } = input;
-  const companyName = profile?.company || "SitePix";
+  const companyName = profile?.company || "Everlumen";
 
   const imgCache = new Map<string, PDFImage | null>();
   async function getImg(id: string, url: string): Promise<PDFImage | null> {
@@ -644,7 +644,7 @@ async function drawCompanyHeader(
   text: ReturnType<typeof rgb>,
   muted: ReturnType<typeof rgb>,
 ): Promise<number> {
-  const name = profile?.company || "SitePix";
+  const name = profile?.company || "Everlumen";
   const logoUrl = profile?.company_logo_url as string | null | undefined;
   let textX = margin;
   let topY = y;
@@ -696,7 +696,7 @@ function drawFooter(
   margin: number,
   color: ReturnType<typeof rgb>,
 ) {
-  page.drawText(sanitizeForWinAnsi(`Generated with SitePix · ${company}`), {
+  page.drawText(sanitizeForWinAnsi(`Generated with Everlumen · ${company}`), {
     x: margin,
     y: 24,
     size: 8,

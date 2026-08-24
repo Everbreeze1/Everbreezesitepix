@@ -48,7 +48,7 @@
 -- RLS is untouched: this is a column on `projects`, so every existing policy
 -- on the table already governs who can read and write it.
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent: safe to re-run.
 
 ALTER TABLE public.projects

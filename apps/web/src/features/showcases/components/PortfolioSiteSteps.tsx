@@ -19,7 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { normalizeExternalUrl, richIsEmpty } from "@sitepix/shared";
+import { normalizeExternalUrl, richIsEmpty } from "@everlumen/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -791,7 +791,7 @@ function AddressFields({ ctx }: { ctx: StepCtx }) {
       <Field label="Site address" hint="Anyone with this link can visit your site.">
         <div className="flex items-center gap-0 rounded-lg border border-input bg-background focus-within:ring-1 focus-within:ring-ring">
           <span className="shrink-0 py-2.5 pl-3 text-sm text-muted-foreground">
-            {typeof window !== "undefined" ? window.location.host : "sitepix"}/p/
+            {typeof window !== "undefined" ? window.location.host : "everlumen"}/p/
           </span>
           <Input
             value={draft.slug}

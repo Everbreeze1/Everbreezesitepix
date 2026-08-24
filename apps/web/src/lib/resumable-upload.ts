@@ -1,5 +1,5 @@
 import * as tus from "tus-js-client";
-import { supabase, SITEPIX_SUPABASE_URL } from "@/integrations/sitepix/client";
+import { supabase, EVERLUMEN_SUPABASE_URL } from "@/integrations/everlumen/client";
 
 /**
  * Supabase's resumable endpoint speaks TUS and requires chunks of exactly this
@@ -69,7 +69,7 @@ export async function uploadWithResume(opts: ResumableUploadOptions): Promise<vo
     return;
   }
 
-  if (!SITEPIX_SUPABASE_URL)
+  if (!EVERLUMEN_SUPABASE_URL)
     throw new Error("Storage is not configured (VITE_SUPABASE_URL unset).");
   const {
     data: { session },
@@ -81,7 +81,7 @@ export async function uploadWithResume(opts: ResumableUploadOptions): Promise<vo
 
   await new Promise<void>((resolve, reject) => {
     const upload = new tus.Upload(blob, {
-      endpoint: `${SITEPIX_SUPABASE_URL}/storage/v1/upload/resumable`,
+      endpoint: `${EVERLUMEN_SUPABASE_URL}/storage/v1/upload/resumable`,
       retryDelays: RETRY_DELAYS,
       headers: {
         authorization: `Bearer ${accessToken}`,

@@ -12,7 +12,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cleanCaption } from "@sitepix/shared";
+import { cleanCaption } from "@everlumen/shared";
 import { cn } from "@/lib/utils";
 import type { WalkthroughPhotoStep } from "@/components/WalkthroughReport";
 

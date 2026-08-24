@@ -41,7 +41,7 @@
 -- constraint against live data the moment it is validated.
 --
 -- Idempotent: DROP CONSTRAINT IF EXISTS before ADD. Safe to re-run.
--- Apply in the SitePix Supabase SQL editor (or `supabase db push`).
+-- Apply in the Everlumen Supabase SQL editor (or `supabase db push`).
 
 SET lock_timeout = '5s';
 

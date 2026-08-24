@@ -30,7 +30,7 @@
 -- No message content is stored here - only who, which surface, and what they
 -- did with the prompt.
 --
--- Apply via the SitePix Supabase SQL editor. Safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Safe to re-run.
 
 CREATE TABLE IF NOT EXISTS public.feedback_prompt_events (
   id         uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,

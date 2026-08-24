@@ -22,7 +22,7 @@
 -- app writes, whatever state it starts in: create it if absent, add every
 -- column if missing, and only alter what actually exists.
 --
--- Apply via the SitePix Supabase SQL editor. Safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Safe to re-run.
 
 -- 1. Table, if this is a fresh environment.
 CREATE TABLE IF NOT EXISTS public.issue_reports (

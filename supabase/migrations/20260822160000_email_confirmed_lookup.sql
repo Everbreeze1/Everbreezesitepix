@@ -19,7 +19,7 @@
 -- makes it readable at all - and is exactly why EXECUTE is revoked from
 -- everyone except the service role below.
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent. Safe to re-run.
 
 CREATE OR REPLACE FUNCTION public.email_confirmed_for_users(user_ids uuid[])

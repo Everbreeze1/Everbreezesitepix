@@ -33,11 +33,11 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useConfirm } from "@/hooks/use-confirm";
 import { summarizePhotosReport, describeSiteLogPhotos } from "@/lib/ai.functions";
 import { generateSiteLogPdf } from "@/lib/site-log-pdf.functions";
-import { cleanCaption } from "@sitepix/shared";
+import { cleanCaption } from "@everlumen/shared";
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
 

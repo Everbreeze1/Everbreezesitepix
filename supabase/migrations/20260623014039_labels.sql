@@ -1,6 +1,6 @@
 -- =============================================================================
 -- Labels feature - safe, idempotent migration
--- Target: SitePix Supabase project (ulmgvtuqjlzzadlwtiog)
+-- Target: Everlumen Supabase project (ulmgvtuqjlzzadlwtiog)
 -- Run in: Supabase Dashboard → SQL Editor (safe to re-run)
 -- =============================================================================
 -- Notes

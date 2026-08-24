@@ -32,13 +32,13 @@ export default defineConfig({
   resolve: {
     /*
      * Anchored patterns, not bare strings. A string `find` matches as a prefix,
-     * so `"@sitepix/shared"` swallows `@sitepix/shared/team-permissions` too and
+     * so `"@everlumen/shared"` swallows `@everlumen/shared/team-permissions` too and
      * rewrites it to `.../src/index.ts/team-permissions`. The subpath exports in
      * packages/shared/package.json already resolve on their own, so the alias
      * has to stop at the bare specifier.
      */
     alias: [
-      { find: /^@sitepix\/shared$/, replacement: path("./packages/shared/src/index.ts") },
+      { find: /^@everlumen\/shared$/, replacement: path("./packages/shared/src/index.ts") },
       { find: /^@\//, replacement: `${path("./apps/web/src")}/` },
     ],
   },

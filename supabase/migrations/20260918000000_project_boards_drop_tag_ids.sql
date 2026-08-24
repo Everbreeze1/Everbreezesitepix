@@ -12,7 +12,7 @@
 -- search everywhere else in the app.
 --
 -- APPLY ONLY AFTER the build carrying the pipeline_stages front end is live.
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent: safe to re-run.
 
 -- Refuse to run early. If a board still has no stages then step 3 of the

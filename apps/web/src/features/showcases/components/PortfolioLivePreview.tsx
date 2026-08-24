@@ -56,7 +56,7 @@ export function PortfolioLivePreview({
   const name = draft.businessName.trim() || "Your business";
   const headline = draft.heroHeadline.trim() || name;
   const about = plainText(draft.aboutHtml);
-  const host = typeof window !== "undefined" ? window.location.host : "sitepix";
+  const host = typeof window !== "undefined" ? window.location.host : "everlumen";
   const hasContact = !!(draft.phone.trim() || draft.email.trim() || draft.address.trim());
   const cards = Math.min(Math.max(projectCount ?? 0, 3), 6);
 

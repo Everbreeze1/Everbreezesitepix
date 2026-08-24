@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import {
-  SITEPIX_SUPABASE_URL,
-  SITEPIX_SUPABASE_PUBLISHABLE_KEY,
-} from "@/integrations/sitepix/client";
+  EVERLUMEN_SUPABASE_URL,
+  EVERLUMEN_SUPABASE_PUBLISHABLE_KEY,
+} from "@/integrations/everlumen/client";
 
 /**
  * Which social sign-in providers this Supabase project actually has enabled.
@@ -27,7 +27,7 @@ import {
  */
 export type SocialProvider = "google" | "apple";
 
-const CACHE_KEY = "sitepix:authProviders";
+const CACHE_KEY = "everlumen:authProviders";
 
 type Settings = { external?: Record<string, boolean> };
 
@@ -46,14 +46,14 @@ export function useAuthProviders() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!SITEPIX_SUPABASE_URL || !SITEPIX_SUPABASE_PUBLISHABLE_KEY) {
+    if (!EVERLUMEN_SUPABASE_URL || !EVERLUMEN_SUPABASE_PUBLISHABLE_KEY) {
       setEnabled([]);
       return;
     }
     (async () => {
       try {
-        const res = await fetch(`${SITEPIX_SUPABASE_URL}/auth/v1/settings`, {
-          headers: { apikey: SITEPIX_SUPABASE_PUBLISHABLE_KEY },
+        const res = await fetch(`${EVERLUMEN_SUPABASE_URL}/auth/v1/settings`, {
+          headers: { apikey: EVERLUMEN_SUPABASE_PUBLISHABLE_KEY },
         });
         if (!res.ok) throw new Error(`settings ${res.status}`);
         const json = (await res.json()) as Settings;

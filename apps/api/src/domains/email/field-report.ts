@@ -1,6 +1,6 @@
 import * as React from "react";
 import { render } from "@react-email/render";
-import { FieldReportEmail } from "@sitepix/email-templates";
+import { FieldReportEmail } from "@everlumen/email-templates";
 import { idempotencyKeyFrom, requestIdFrom, writeAuditLog } from "../../lib/audit";
 import { jsonError } from "../../lib/errors";
 import { beginIdempotency, completeIdempotency, releaseIdempotency } from "../../lib/idempotency";
@@ -9,7 +9,7 @@ import { sendEmail } from "../../lib/send-email";
 import { getSupabaseAdmin, requireUser } from "../../lib/supabase";
 import { fieldReportBodySchema } from "./schemas";
 
-const SITE_NAME = "Everbreeze SitePix";
+const SITE_NAME = "Everlumen";
 const BUCKET = "field-reports";
 const EXPIRES_IN_DAYS = 7;
 const EXPIRES_IN_SECONDS = EXPIRES_IN_DAYS * 24 * 60 * 60;

@@ -1,9 +1,9 @@
 import * as React from "react";
 import { render } from "@react-email/render";
-import { TaskNotificationEmail } from "@sitepix/email-templates";
+import { TaskNotificationEmail } from "@everlumen/email-templates";
 import { sendEmail } from "../../lib/send-email";
 
-const SITE_NAME = "Everbreeze SitePix";
+const SITE_NAME = "Everlumen";
 const ROOT_DOMAIN = "everbreezesitepix.com";
 
 /**
@@ -79,7 +79,7 @@ export async function sendTaskNotificationEmail(opts: TaskNotificationEmailInput
     html,
     text,
     /*
-     * "Mark Lagura (via Everbreeze SitePix)", the pattern team invites already
+     * "Mark Lagura (via Everlumen)", the pattern team invites already
      * use. Person-to-person mail with a human in the From line is what keeps
      * this out of Promotions, and an assignment IS person to person: somebody
      * handed somebody else a job.

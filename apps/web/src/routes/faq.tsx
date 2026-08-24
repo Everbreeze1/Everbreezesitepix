@@ -9,16 +9,16 @@ export const Route = createFileRoute("/faq")({
   component: FAQPage,
   head: () => ({
     meta: [
-      { title: "FAQ - Everbreeze SitePix" },
+      { title: "FAQ - Everlumen" },
       {
         name: "description",
         content:
-          "Answers to common questions about SitePix - the job site photo, checklist, workflow, and reporting app built for contractors and field teams.",
+          "Answers to common questions about Everlumen - the job site photo, checklist, workflow, and reporting app built for contractors and field teams.",
       },
-      { property: "og:title", content: "FAQ - Everbreeze SitePix" },
+      { property: "og:title", content: "FAQ - Everlumen" },
       {
         property: "og:description",
-        content: "Everything you need to know about SitePix, from features to pricing.",
+        content: "Everything you need to know about Everlumen, from features to pricing.",
       },
       { property: "og:url", content: "https://www.everbreezesitepix.com/faq" },
       { property: "og:type", content: "website" },
@@ -44,8 +44,8 @@ export const Route = createFileRoute("/faq")({
 
 const FAQS: { q: string; a: string }[] = [
   {
-    q: "How is SitePix different from just using my phone?",
-    a: "Camera rolls and group chats lose photos. SitePix files every photo on the right project automatically - timestamped, GPS-tagged and searchable - so you can find any moment from any job in seconds, even years later.",
+    q: "How is Everlumen different from just using my phone?",
+    a: "Camera rolls and group chats lose photos. Everlumen files every photo on the right project automatically - timestamped, GPS-tagged and searchable - so you can find any moment from any job in seconds, even years later.",
   },
   {
     q: "What can the built-in AI do?",
@@ -53,7 +53,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "Do I need a credit card to start?",
-    a: "Yes - every SitePix plan, including Starter, is a paid subscription starting at $24/mo, so you'll add payment details when you sign up. You can cancel anytime from Settings.",
+    a: "Yes - every Everlumen plan, including Starter, is a paid subscription starting at $24/mo, so you'll add payment details when you sign up. You can cancel anytime from Settings.",
   },
   {
     q: "Can I share photos with clients securely?",
@@ -84,7 +84,7 @@ function FAQPage() {
             The details, <span className="italic text-primary">up front.</span>
           </h1>
           <p className="font-manrope mx-auto mt-6 max-w-xl text-lg leading-[29px] text-muted-foreground">
-            Everything you might want to know before you bring SitePix to your crew.
+            Everything you might want to know before you bring Everlumen to your crew.
           </p>
         </div>
       </section>

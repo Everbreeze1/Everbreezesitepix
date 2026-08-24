@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { toast } from "sonner";
 import {
   TASK_PHOTO_ITEMS_TABLE,
@@ -25,7 +25,7 @@ import {
   type TaskForReport,
   type TaskPhotoStateForReport,
   type TaskReportSection,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 
 /**
  * Put the field record of a task into the report the customer reads.

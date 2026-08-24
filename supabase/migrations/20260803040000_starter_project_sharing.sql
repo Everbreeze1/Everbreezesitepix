@@ -20,7 +20,7 @@
 --     photo-in-chat stay Pro+     - getCallerTeamPlan().isPro (apps/api/src/lib/team-plan.ts)
 -- Those are separate predicates and are deliberately left untouched here.
 --
--- Apply via the SitePix Supabase SQL editor (or `supabase db push`). Safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor (or `supabase db push`). Safe to re-run.
 
 CREATE OR REPLACE FUNCTION public.are_teammates(_a UUID, _b UUID)
 RETURNS BOOLEAN

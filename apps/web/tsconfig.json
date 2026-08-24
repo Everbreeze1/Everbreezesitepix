@@ -18,12 +18,12 @@
     "noUncheckedSideEffectImports": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@sitepix/db": ["../../packages/db/src/index.ts"],
-      "@sitepix/shared": ["../../packages/shared/src/index.ts"],
-      "@sitepix/api-client": ["../../packages/api-client/src/index.ts"],
-      "@sitepix/email-templates": ["../../packages/email-templates/src/index.ts"],
-      "@sitepix/api": ["../api/src/index.ts"],
-      "@sitepix/api/http": ["../api/src/http.ts"]
+      "@everlumen/db": ["../../packages/db/src/index.ts"],
+      "@everlumen/shared": ["../../packages/shared/src/index.ts"],
+      "@everlumen/api-client": ["../../packages/api-client/src/index.ts"],
+      "@everlumen/email-templates": ["../../packages/email-templates/src/index.ts"],
+      "@everlumen/api": ["../api/src/index.ts"],
+      "@everlumen/api/http": ["../api/src/http.ts"]
     }
   }
 }

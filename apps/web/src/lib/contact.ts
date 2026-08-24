@@ -47,7 +47,7 @@ export const LEGAL_EMAIL = "info@everbreezesitepix.com";
  *
  *   business_type    "individual"          -> there is no company
  *   individual       "Ajmal Hashimi"       -> so the entity IS the person
- *   business_name    "Everbreeze SitePix"  -> the name he trades under
+ *   business_name    "Everlumen"  -> the name he trades under
  *   support_address  Sacramento, CA, US    -> see the note below
  *   country / state  US / CA               -> the governing-law jurisdiction
  *
@@ -55,7 +55,7 @@ export const LEGAL_EMAIL = "info@everbreezesitepix.com";
  * There was no "registered company information" to supply because none exists:
  * Stripe holds this account as an individual rather than a company, so the
  * entity is a sole proprietor trading under a product name. "Ajmal Hashimi,
- * doing business as Everbreeze SitePix" is the accurate way to write that, and
+ * doing business as Everlumen" is the accurate way to write that, and
  * it is what the Terms page needs in order to name a real party.
  *
  * WHY PUBLISHING THIS ADDRESS IS SAFE.
@@ -70,7 +70,7 @@ export const LEGAL_EMAIL = "info@everbreezesitepix.com";
  * address does read as residential; swapping it later is one line here and
  * needs no other file touched.
  */
-export const LEGAL_ENTITY = "Ajmal Hashimi, doing business as Everbreeze SitePix";
+export const LEGAL_ENTITY = "Ajmal Hashimi, doing business as Everlumen";
 export const REGISTERED_ADDRESS = "8103 Polo Crosse Avenue, Sacramento, CA 95829, United States";
 /*
  * Reads into both sentences on the Terms page without rewording either:

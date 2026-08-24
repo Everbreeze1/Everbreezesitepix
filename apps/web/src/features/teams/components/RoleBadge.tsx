@@ -7,7 +7,7 @@ import {
   roleLabelForTier,
   type BillingTier,
   type TeamRole,
-} from "@sitepix/shared/team-permissions";
+} from "@everlumen/shared/team-permissions";
 
 /**
  * What role somebody holds, on their row, without opening anything.

@@ -48,10 +48,10 @@ import {
   isCalendarDateOverdue,
   isPlausibleCalendarDate,
   todayCalendarDate,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 import { notifyTaskChanged } from "@/lib/tasks.functions";
 import { TaskCollaboration } from "./TaskCollaboration";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { completionRights, isManagerRole, overrideConfirm } from "@/lib/assignment";
@@ -217,7 +217,7 @@ function initials(name: string | null, email: string | null) {
  * Exactly that. `due_date` is a Postgres `date` and arrives as "2026-08-20",
  * which ECMAScript parses as UTC midnight; west of Greenwich every render moved
  * it back a day, and a task due today read as overdue from the moment it was
- * saved. The parsing now lives in `@sitepix/shared/calendar-date`, which rebuilds
+ * saved. The parsing now lives in `@everlumen/shared/calendar-date`, which rebuilds
  * a calendar date at LOCAL midnight, so the same string means the same day on
  * every screen that shows it.
  */

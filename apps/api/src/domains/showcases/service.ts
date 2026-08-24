@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { humanizeServiceType, sanitizeCaption } from "@sitepix/shared";
+import { humanizeServiceType, sanitizeCaption } from "@everlumen/shared";
 import type { AuthedContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { signPhotoUrls } from "../../lib/photo-urls";

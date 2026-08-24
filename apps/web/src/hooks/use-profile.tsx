@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 
 export interface CompanyProfile {
@@ -76,7 +76,7 @@ interface ProfileState {
   loading: boolean;
 }
 
-const SNAPSHOT_KEY = (userId: string) => `sitepix-profile:${userId}`;
+const SNAPSHOT_KEY = (userId: string) => `everlumen-profile:${userId}`;
 
 /** How long a fetched row is reused before a newly mounted consumer refetches. */
 const STALE_MS = 30_000;

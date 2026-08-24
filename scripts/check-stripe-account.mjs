@@ -59,7 +59,7 @@ if (!key) {
 const fromEnv = !!process.env.STRIPE_SECRET_KEY;
 
 const stripe = new Stripe(key);
-const db = createClient(cfg.SITEPIX_SUPABASE_URL, cfg.SITEPIX_SUPABASE_SERVICE_ROLE_KEY, {
+const db = createClient(cfg.EVERLUMEN_SUPABASE_URL, cfg.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
@@ -168,7 +168,7 @@ else
 
 try {
   const hooks = await stripe.webhookEndpoints.list({ limit: 20 });
-  const ours = hooks.data.filter((h) => /everbreezesitepix|railway/i.test(h.url ?? ""));
+  const ours = hooks.data.filter((h) => /everlumeneverlumen|railway/i.test(h.url ?? ""));
   if (ours.length) {
     ok(
       "a webhook endpoint points at our API",

@@ -41,11 +41,12 @@ function env(rel) {
 }
 
 const cfg = env("apps/api/.env");
-const URL = process.env.SITEPIX_SUPABASE_URL ?? cfg.SITEPIX_SUPABASE_URL;
-const KEY = process.env.SITEPIX_SUPABASE_SERVICE_ROLE_KEY ?? cfg.SITEPIX_SUPABASE_SERVICE_ROLE_KEY;
+const URL = process.env.EVERLUMEN_SUPABASE_URL ?? cfg.EVERLUMEN_SUPABASE_URL;
+const KEY =
+  process.env.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY ?? cfg.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY;
 
 if (!URL || !KEY) {
-  console.error("Missing SITEPIX_SUPABASE_URL / SITEPIX_SUPABASE_SERVICE_ROLE_KEY.");
+  console.error("Missing EVERLUMEN_SUPABASE_URL / EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY.");
   process.exit(1);
 }
 

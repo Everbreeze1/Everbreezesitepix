@@ -187,7 +187,7 @@ const run = async () => {
     if (m.type() === "error") consoleErrors.push(m.text().slice(0, 200));
   });
   page.on("pageerror", (e) => consoleErrors.push("pageerror: " + String(e).slice(0, 200)));
-  await page.evaluate(() => window.sessionStorage.removeItem("sitepix:map-view"));
+  await page.evaluate(() => window.sessionStorage.removeItem("everlumen:map-view"));
   await page.goto(`${BASE}/map`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector("text=/on map/", { timeout: 90000 });
   await waitForMarkers(page, "first paint");
@@ -462,7 +462,7 @@ const run = async () => {
   console.log("light legend:", JSON.stringify(lightLegend, null, 2));
   await page.screenshot({ path: `${SHOTS}/04-legend-light.png` });
 
-  await page.evaluate(() => localStorage.setItem("sitepix-theme", "dark"));
+  await page.evaluate(() => localStorage.setItem("everlumen-theme", "dark"));
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("text=/on map/", { timeout: 90000 });
   await waitForMarkers(page, "dark theme");

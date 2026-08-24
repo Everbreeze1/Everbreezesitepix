@@ -15,7 +15,7 @@
 -- to `message` in between is folded across before that column is dropped, so
 -- no feedback is lost either way.
 --
--- Apply via the SitePix Supabase SQL editor. Safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Safe to re-run.
 --
 -- RENAMED 20260803040000 -> 20260803040001 (content unchanged). It shared the
 -- 040000 stamp with starter_project_sharing.sql, and a version is the key of the

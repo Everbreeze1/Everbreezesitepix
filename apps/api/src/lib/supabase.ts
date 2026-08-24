@@ -1,16 +1,16 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@sitepix/db";
+import type { Database } from "@everlumen/db";
 
 /** Set via env - Railway project vars in production, apps/api/.env locally. */
-export function requireSitepixSupabaseUrl(): string {
-  const url = process.env.SITEPIX_SUPABASE_URL;
-  if (!url) throw new Error("Missing SITEPIX_SUPABASE_URL");
+export function requireEverlumenSupabaseUrl(): string {
+  const url = process.env.EVERLUMEN_SUPABASE_URL;
+  if (!url) throw new Error("Missing EVERLUMEN_SUPABASE_URL");
   return url;
 }
 
-export function requireSitepixSupabasePublishableKey(): string {
-  const key = process.env.SITEPIX_SUPABASE_PUBLISHABLE_KEY;
-  if (!key) throw new Error("Missing SITEPIX_SUPABASE_PUBLISHABLE_KEY");
+export function requireEverlumenSupabasePublishableKey(): string {
+  const key = process.env.EVERLUMEN_SUPABASE_PUBLISHABLE_KEY;
+  if (!key) throw new Error("Missing EVERLUMEN_SUPABASE_PUBLISHABLE_KEY");
   return key;
 }
 
@@ -19,11 +19,11 @@ let _admin: SupabaseClient<Database> | undefined;
 /** Service-role client. Server-only - never ship to browsers. */
 export function getSupabaseAdmin(): SupabaseClient<Database> {
   if (_admin) return _admin;
-  const key = process.env.SITEPIX_SUPABASE_SERVICE_ROLE_KEY;
+  const key = process.env.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY;
   if (!key) {
-    throw new Error("Missing SITEPIX_SUPABASE_SERVICE_ROLE_KEY");
+    throw new Error("Missing EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY");
   }
-  _admin = createClient<Database>(requireSitepixSupabaseUrl(), key, {
+  _admin = createClient<Database>(requireEverlumenSupabaseUrl(), key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return _admin;

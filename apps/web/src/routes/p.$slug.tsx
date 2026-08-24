@@ -89,7 +89,7 @@ function PortfolioHomePage() {
             : "This address doesn't match a portfolio."}
         </p>
         <Button asChild className="mt-6">
-          <Link to="/">Back to SitePix</Link>
+          <Link to="/">Back to Everlumen</Link>
         </Button>
       </div>
     );

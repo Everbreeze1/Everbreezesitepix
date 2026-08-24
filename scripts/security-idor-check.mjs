@@ -33,7 +33,7 @@ for (const line of readFileSync("apps/api/.env", "utf8").split(/\r?\n/)) {
 }
 const URL = web.VITE_SUPABASE_URL;
 const PUB = web.VITE_SUPABASE_PUBLISHABLE_KEY;
-const SVC = api.SITEPIX_SUPABASE_SERVICE_ROLE_KEY;
+const SVC = api.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY;
 const API = web.VITE_API_BASE_URL ?? "http://localhost:8787";
 const svcH = { apikey: SVC, Authorization: `Bearer ${SVC}`, "Content-Type": "application/json" };
 

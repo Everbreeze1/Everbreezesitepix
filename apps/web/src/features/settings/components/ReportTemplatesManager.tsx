@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { Card } from "@/components/ui/card";
@@ -58,13 +58,13 @@ import {
   type ReportSectionLayout,
   type ReportTemplateSection,
   type ReportTemplateStructure,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 import { GENERAL_CATEGORY, makeCategoryRank } from "@/lib/template-categories";
 import { TradeSelect } from "@/components/builder/TradeSelect";
 import { useCompanySetup } from "@/hooks/use-company-setup";
 
 /*
- * The shape of `report_templates.sections` now lives in @sitepix/shared, because
+ * The shape of `report_templates.sections` now lives in @everlumen/shared, because
  * the API needs the identical reading: `applyProjectBlueprintService` had its own
  * array-only reading of this column and threw "sections.map is not a function" on
  * every template this editor saves. Local aliases keep the rest of this file

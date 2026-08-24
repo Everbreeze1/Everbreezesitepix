@@ -42,10 +42,10 @@ describe("parseGoogleBusinessLink", () => {
 
   it("falls back to the business name in a plain maps URL", () => {
     const parsed = parseGoogleBusinessLink(
-      "https://www.google.com/maps/place/Everbreeze+Heating+And+Air/@38.58,-121.49,17z",
+      "https://www.google.com/maps/place/Northwind+Heating+And+Air/@38.58,-121.49,17z",
     );
     expect(parsed.placeId).toBeNull();
-    expect(parsed.query).toBe("Everbreeze Heating And Air");
+    expect(parsed.query).toBe("Northwind Heating And Air");
   });
 
   it("decodes an escaped name rather than searching for percent signs", () => {
@@ -74,9 +74,9 @@ describe("parseGoogleBusinessLink", () => {
   });
 
   it("passes typed text through as a search query", () => {
-    const parsed = parseGoogleBusinessLink("  Everbreeze Heating and Air, Sacramento  ");
+    const parsed = parseGoogleBusinessLink("  Northwind Heating and Air, Sacramento  ");
     expect(parsed.placeId).toBeNull();
-    expect(parsed.query).toBe("Everbreeze Heating and Air, Sacramento");
+    expect(parsed.query).toBe("Northwind Heating and Air, Sacramento");
     expect(parsed.needsExpanding).toBe(false);
   });
 

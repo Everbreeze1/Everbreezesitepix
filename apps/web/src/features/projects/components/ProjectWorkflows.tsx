@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { photoObjectPaths } from "@sitepix/shared";
+import { photoObjectPaths } from "@everlumen/shared";
 import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import {
   Workflow as WorkflowIcon,
@@ -40,7 +40,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useProfile } from "@/hooks/use-profile";

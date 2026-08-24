@@ -10,17 +10,17 @@ export const Route = createFileRoute("/how-it-works")({
   component: HowItWorksPage,
   head: () => ({
     meta: [
-      { title: "How It Works - Everbreeze SitePix" },
+      { title: "How It Works - Everlumen" },
       {
         name: "description",
         content:
-          "SitePix fits the way crews already work. Snap a photo on site, let it organize itself, then share a clean gallery or report - no new process to learn.",
+          "Everlumen fits the way crews already work. Snap a photo on site, let it organize itself, then share a clean gallery or report - no new process to learn.",
       },
-      { property: "og:title", content: "How It Works - Everbreeze SitePix" },
+      { property: "og:title", content: "How It Works - Everlumen" },
       {
         property: "og:description",
         content:
-          "SitePix fits the way crews already work. Snap a photo on site, let it organize itself, then share a clean gallery or report - no new process to learn.",
+          "Everlumen fits the way crews already work. Snap a photo on site, let it organize itself, then share a clean gallery or report - no new process to learn.",
       },
       { property: "og:url", content: "https://www.everbreezesitepix.com/how-it-works" },
     ],
@@ -32,7 +32,7 @@ const steps = [
   {
     step: "01",
     title: "Snap it on site",
-    desc: "Open SitePix, take the photo or record a walkthrough. It is stamped with time, date and location the moment you capture it.",
+    desc: "Open Everlumen, take the photo or record a walkthrough. It is stamped with time, date and location the moment you capture it.",
   },
   {
     step: "02",
@@ -79,8 +79,8 @@ function HowItWorksPage() {
             Snap it. Sort it. <span className="text-primary">Send it.</span>
           </h1>
           <p className="font-manrope mx-auto mt-6 max-w-xl text-lg leading-[29px] text-muted-foreground">
-            SitePix fits the way crews already work. No new process to learn - just open the app and
-            capture.
+            Everlumen fits the way crews already work. No new process to learn - just open the app
+            and capture.
           </p>
         </div>
       </section>

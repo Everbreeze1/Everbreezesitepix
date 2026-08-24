@@ -1,6 +1,6 @@
 -- =============================================================================
 -- Project Labels: history events + completed_at derivation.
--- Safe to re-run. Apply in the SitePix Supabase SQL editor.
+-- Safe to re-run. Apply in the Everlumen Supabase SQL editor.
 -- =============================================================================
 
 -- 1. projects.completed_at - first moment a project got the "Complete" label.

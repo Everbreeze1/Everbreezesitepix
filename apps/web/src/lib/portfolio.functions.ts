@@ -1,4 +1,4 @@
-import { rpcOp } from "./sitepix-api";
+import { rpcOp } from "./everlumen-api";
 
 /**
  * The portfolio mini-site: the layer above showcases.

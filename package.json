@@ -1,5 +1,5 @@
 {
-  "name": "everbreeze-sitepix",
+  "name": "everlumen",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -8,18 +8,18 @@
     "apps/web"
   ],
   "scripts": {
-    "dev": "npm run dev -w @sitepix/web --host",
-    "build": "npm run build -w @sitepix/web",
-    "build:dev": "npm run build:dev -w @sitepix/web",
-    "preview": "npm run preview -w @sitepix/web",
-    "deploy": "npm run deploy -w @sitepix/web",
+    "dev": "npm run dev -w @everlumen/web --host",
+    "build": "npm run build -w @everlumen/web",
+    "build:dev": "npm run build:dev -w @everlumen/web",
+    "preview": "npm run preview -w @everlumen/web",
+    "deploy": "npm run deploy -w @everlumen/web",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write .",
     "test:ssr:share": "node scripts/ssr-share-test.mjs",
     "test:ssr": "npm run build && node scripts/ssr-share-test.mjs",
-    "typecheck:api": "npm run typecheck -w @sitepix/api",
+    "typecheck:api": "npm run typecheck -w @everlumen/api",
     "mobile": "npm --prefix apps/mobile start"
   },
   "devDependencies": {

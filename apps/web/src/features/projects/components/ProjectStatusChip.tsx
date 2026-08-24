@@ -7,7 +7,7 @@ import {
   PROJECT_STATUS_LABELS,
   isProjectStatus,
   type ProjectStatus,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { qk } from "@/lib/query-keys";
 import { listProjectBoards, setProjectPipelineStage } from "@/lib/project-boards.functions";

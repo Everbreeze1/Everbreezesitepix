@@ -67,7 +67,7 @@ describe("isFilenameLikeCaption", () => {
   });
 
   it("detects generated names and bare timestamps", () => {
-    expect(isFilenameLikeCaption("sitepix-1781560897511.jpg")).toBe(true);
+    expect(isFilenameLikeCaption("everlumen-1781560897511.jpg")).toBe(true);
     expect(isFilenameLikeCaption("IMG_1234.HEIC")).toBe(true);
     expect(isFilenameLikeCaption("photo-2025-01-02.jpeg")).toBe(true);
     expect(isFilenameLikeCaption("1781560897511")).toBe(true);
@@ -95,7 +95,7 @@ describe("isFilenameLikeCaption", () => {
     expect(isFilenameLikeCaption("Photo 1781560897511")).toBe(true);
     expect(isFilenameLikeCaption("IMG_1234")).toBe(true);
     expect(isFilenameLikeCaption("photo-2025-01-02")).toBe(true);
-    expect(isFilenameLikeCaption("sitepix-1781560897511")).toBe(true);
+    expect(isFilenameLikeCaption("everlumen-1781560897511")).toBe(true);
   });
 
   it("a real caption survives sanitizeCaption end to end", () => {

@@ -8,13 +8,13 @@ import { PasswordInput } from "@/components/PasswordInput";
 import { BrandLogo } from "@/components/BrandLogo";
 import { MobileAppBanner } from "@/components/MobileAppBanner";
 import { useAuth } from "@/hooks/use-auth";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { lookupInvite, acceptInvite, acceptInviteSignup } from "@/lib/teams.functions";
 import heroImg from "@/assets/hero-construction.png";
-import { can, roleLabelForTier, type BillingTier } from "@sitepix/shared/team-permissions";
+import { can, roleLabelForTier, type BillingTier } from "@everlumen/shared/team-permissions";
 
 export const Route = createFileRoute("/invite/$token")({
-  head: () => ({ meta: [{ title: "Accept your invitation - Everbreeze SitePix" }] }),
+  head: () => ({ meta: [{ title: "Accept your invitation - Everlumen" }] }),
   component: AcceptInvitePage,
 });
 
@@ -146,7 +146,7 @@ function AcceptInvitePage() {
           <Link to="/" className="inline-flex w-fit items-center gap-2.5">
             <BrandLogo size={40} />
             <span className="font-manrope text-lg font-extrabold tracking-tight text-sidebar-foreground">
-              Everbreeze <span className="text-sidebar-ring">SitePix</span>
+              Ever<span className="text-sidebar-ring">lumen</span>
             </span>
           </Link>
 
@@ -159,7 +159,7 @@ function AcceptInvitePage() {
             </h1>
             <p className="font-manrope mt-6 text-base leading-7 text-sidebar-foreground/70">
               {state === "ready" && team
-                ? `${team.name} uses SitePix to keep every job site documented - photos, walkthroughs and reports in one place.`
+                ? `${team.name} uses Everlumen to keep every job site documented - photos, walkthroughs and reports in one place.`
                 : "Photos, walkthroughs, reports, and your project history - all in the same place."}
             </p>
 
@@ -171,7 +171,7 @@ function AcceptInvitePage() {
           </div>
 
           <p className="font-manrope text-xs text-sidebar-foreground/45">
-            © {new Date().getFullYear()} Everbreeze SitePix
+            © {new Date().getFullYear()} Everlumen
           </p>
         </div>
       </aside>
@@ -187,7 +187,7 @@ function AcceptInvitePage() {
             <Link to="/" className="inline-flex items-center gap-2">
               <BrandLogo size={40} />
               <span className="font-manrope text-lg font-extrabold tracking-tight text-foreground">
-                Everbreeze <span className="text-primary">SitePix</span>
+                Ever<span className="text-primary">lumen</span>
               </span>
             </Link>
           </div>

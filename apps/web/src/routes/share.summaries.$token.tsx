@@ -9,7 +9,7 @@ import { SummaryPhotoNotes } from "@/features/walkthroughs/components/SummaryPho
 export const Route = createFileRoute("/share/summaries/$token")({
   head: () => ({
     meta: [
-      { title: "Summary - SitePix" },
+      { title: "Summary - Everlumen" },
       { name: "description", content: "Shared site summary." },
       { name: "robots", content: "noindex,nofollow" },
     ],

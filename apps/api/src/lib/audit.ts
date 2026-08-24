@@ -1,4 +1,4 @@
-import type { Json } from "@sitepix/db";
+import type { Json } from "@everlumen/db";
 import { getSupabaseAdmin } from "./supabase";
 
 export type AuditLogInput = {

@@ -40,7 +40,7 @@ import {
   parseCalendarDate,
   todayCalendarDate,
   type ProjectStatus,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 
 /** The columns of a project this view needs. A superset of these is fine. */
 export interface SchedulableProject {

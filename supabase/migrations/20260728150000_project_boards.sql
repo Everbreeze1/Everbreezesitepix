@@ -2,7 +2,7 @@
 -- tags intersect the board's tag_ids appears automatically). Distinct from the
 -- existing project_groups (manual, per-user, static membership) - see
 -- docs/new-features-plan.md §5 for why this is a separate table.
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog). Idempotent.
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog). Idempotent.
 
 CREATE TABLE IF NOT EXISTS public.project_boards (
   id         uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,

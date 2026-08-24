@@ -22,7 +22,7 @@ import {
   CircleSlash,
   Layers,
 } from "lucide-react";
-import { formatCalendarDate, isPlausibleCalendarDate, todayCalendarDate } from "@sitepix/shared";
+import { formatCalendarDate, isPlausibleCalendarDate, todayCalendarDate } from "@everlumen/shared";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SURFACE_CARD } from "@/components/ui/surface";

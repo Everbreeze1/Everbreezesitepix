@@ -27,8 +27,8 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.root}>
-      <Text style={styles.brand}>SitePix</Text>
-      <Text style={styles.sub}>Sign in with your SitePix account</Text>
+      <Text style={styles.brand}>Everlumen</Text>
+      <Text style={styles.sub}>Sign in with your Everlumen account</Text>
 
       <TextInput
         autoCapitalize="none"

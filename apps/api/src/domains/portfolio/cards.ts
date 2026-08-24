@@ -1,4 +1,4 @@
-import { humanizeServiceType } from "@sitepix/shared";
+import { humanizeServiceType } from "@everlumen/shared";
 import { CARD_THUMB_WIDTH, resolvePhotoUrls } from "../showcases/service";
 
 /**

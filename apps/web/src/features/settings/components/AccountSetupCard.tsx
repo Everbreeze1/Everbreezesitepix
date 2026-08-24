@@ -32,7 +32,7 @@ import { AccountSetupDialog } from "./AccountSetupDialog";
  * "has this browser already shown you the wizard" is a fact about this browser,
  * and a first visit on a new device is a reasonable second chance to ask.
  */
-const AUTO_OPENED_KEY = (uid: string) => `sitepix:setup-wizard-shown:${uid}`;
+const AUTO_OPENED_KEY = (uid: string) => `everlumen:setup-wizard-shown:${uid}`;
 
 export function AccountSetupCard({ className }: { className?: string }) {
   const { user } = useAuth();

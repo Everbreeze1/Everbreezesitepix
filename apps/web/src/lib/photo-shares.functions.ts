@@ -1,5 +1,5 @@
-import { rpcOp } from "./sitepix-api";
-import type { PublicPhotoShare } from "@sitepix/api";
+import { rpcOp } from "./everlumen-api";
+import type { PublicPhotoShare } from "@everlumen/api";
 
 export type { PublicPhotoShare };
 

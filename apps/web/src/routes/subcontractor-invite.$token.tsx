@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/PasswordInput";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useAuth } from "@/hooks/use-auth";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import {
   acceptSubcontractorInvite,
   acceptSubcontractorInviteSignup,
@@ -15,7 +15,7 @@ import {
 } from "@/lib/subcontractors.functions";
 
 export const Route = createFileRoute("/subcontractor-invite/$token")({
-  head: () => ({ meta: [{ title: "Job site access - Everbreeze SitePix" }] }),
+  head: () => ({ meta: [{ title: "Job site access - Everlumen" }] }),
   component: AcceptSubcontractorInvitePage,
 });
 
@@ -130,7 +130,7 @@ function AcceptSubcontractorInvitePage() {
         <Link to="/" className="mb-8 inline-flex items-center gap-2">
           <BrandLogo size={40} />
           <span className="font-manrope text-lg font-extrabold tracking-tight text-foreground">
-            Everbreeze <span className="text-primary">SitePix</span>
+            Ever<span className="text-primary">lumen</span>
           </span>
         </Link>
 

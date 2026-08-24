@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { getMyTeam } from "@/lib/teams.functions";
 import { CaptureUpdateDialog } from "@/components/CaptureUpdateDialog";
 import { AccountSetupCard } from "@/features/settings/components/AccountSetupCard";

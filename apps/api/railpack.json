@@ -10,6 +10,6 @@
     }
   },
   "deploy": {
-    "startCommand": "npm run start -w @sitepix/api"
+    "startCommand": "npm run start -w @everlumen/api"
   }
 }

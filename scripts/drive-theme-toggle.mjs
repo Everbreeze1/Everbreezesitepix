@@ -40,7 +40,7 @@ const readTheme = (page) =>
   page.evaluate(() => ({
     hasDarkClass: document.documentElement.classList.contains("dark"),
     colorScheme: document.documentElement.style.colorScheme,
-    stored: localStorage.getItem("sitepix-theme"),
+    stored: localStorage.getItem("everlumen-theme"),
     bodyBg: getComputedStyle(document.body).backgroundColor,
   }));
 
@@ -86,7 +86,7 @@ const run = async () => {
   page.on("pageerror", (e) => consoleErrors.push("pageerror: " + String(e).slice(0, 200)));
 
   // Start from a known side of the switch so the run is repeatable.
-  await page.evaluate(() => localStorage.setItem("sitepix-theme", "light"));
+  await page.evaluate(() => localStorage.setItem("everlumen-theme", "light"));
   await page.goto(`${BASE}/projects`, { waitUntil: "domcontentloaded", timeout: 90000 });
   await page.waitForSelector("header", { timeout: 90000 });
   await page.waitForTimeout(3000);

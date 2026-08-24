@@ -19,7 +19,7 @@ import { useTeamMembers } from "@/hooks/use-team-members";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useProjectAssignees, useApplyProjectAssignees } from "@/hooks/use-project-assignees";
 import { setProjectAssignees } from "@/lib/teams.functions";
-import { normaliseRole } from "@sitepix/shared/team-permissions";
+import { normaliseRole } from "@everlumen/shared/team-permissions";
 import { RoleBadge } from "@/features/teams/components/RoleBadge";
 
 /**

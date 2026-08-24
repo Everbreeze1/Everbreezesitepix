@@ -1,4 +1,4 @@
-import { rpcOp } from "./sitepix-api";
+import { rpcOp } from "./everlumen-api";
 
 export const synthesizeBreezeSpeech = rpcOp<{ text: string; voiceName?: string }, unknown>(
   "synthesizeBreezeSpeech",

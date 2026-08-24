@@ -10,24 +10,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/PasswordInput";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import heroImg from "@/assets/hero-construction.png";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
     meta: [
-      { title: "Create account - Everbreeze SitePix" },
+      { title: "Create account - Everlumen" },
       {
         name: "description",
         content:
-          "Create your Everbreeze SitePix account. Capture, organize, and share construction job site photos with AI photo analysis. Plans start at $24/mo.",
+          "Create your Everlumen account. Capture, organize, and share construction job site photos with AI photo analysis. Plans start at $24/mo.",
       },
-      { property: "og:title", content: "Create account - Everbreeze SitePix" },
+      { property: "og:title", content: "Create account - Everlumen" },
       {
         property: "og:description",
         content:
-          "Create your Everbreeze SitePix account. Capture, organize, and share construction job site photos with AI photo analysis. Plans start at $24/mo.",
+          "Create your Everlumen account. Capture, organize, and share construction job site photos with AI photo analysis. Plans start at $24/mo.",
       },
       { property: "og:url", content: "https://www.everbreezesitepix.com/signup" },
     ],
@@ -184,7 +184,7 @@ function SignupPage() {
           <Link to="/" className="inline-flex w-fit items-center gap-2.5">
             <BrandLogo size={40} />
             <span className="font-manrope text-lg font-extrabold tracking-tight text-sidebar-foreground">
-              Everbreeze <span className="text-sidebar-ring">SitePix</span>
+              Ever<span className="text-sidebar-ring">lumen</span>
             </span>
           </Link>
 
@@ -207,7 +207,7 @@ function SignupPage() {
           </div>
 
           <p className="font-manrope text-xs text-sidebar-foreground/45">
-            © {new Date().getFullYear()} Everbreeze SitePix
+            © {new Date().getFullYear()} Everlumen
           </p>
         </div>
       </aside>
@@ -223,7 +223,7 @@ function SignupPage() {
             <Link to="/" className="inline-flex items-center gap-2">
               <BrandLogo size={40} />
               <span className="font-manrope text-lg font-extrabold tracking-tight text-foreground">
-                Everbreeze <span className="text-primary">SitePix</span>
+                Ever<span className="text-primary">lumen</span>
               </span>
             </Link>
           </div>

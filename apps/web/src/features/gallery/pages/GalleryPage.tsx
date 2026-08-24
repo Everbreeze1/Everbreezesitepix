@@ -60,8 +60,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { supabase } from "@/integrations/sitepix/client";
-import { sitepixApi } from "@/lib/sitepix-api";
+import { supabase } from "@/integrations/everlumen/client";
+import { everlumenApi } from "@/lib/everlumen-api";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
@@ -70,7 +70,7 @@ import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
 import { PhotoThumb } from "@/components/PhotoThumb";
-import { photoObjectPaths } from "@sitepix/shared";
+import { photoObjectPaths } from "@everlumen/shared";
 import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import { CameraCapture, compressImageFile } from "@/features/photos/components/CameraCapture";
 import { applyWatermarkToFile, type BeforeAfterTag, type WatermarkContext } from "@/lib/watermark";
@@ -86,7 +86,7 @@ import { PhotoTagPopoverBody } from "@/features/photos/components/PhotoTagPopove
 import { TagPill } from "@/features/photos/components/TagPill";
 import { ensureGlobalTag } from "@/hooks/use-tag-colors";
 import { onEscapeOutsideModals } from "@/lib/modal-layers";
-import { cleanCaption } from "@sitepix/shared";
+import { cleanCaption } from "@everlumen/shared";
 
 interface Photo {
   id: string;
@@ -702,13 +702,13 @@ export function GalleryPage() {
   useEffect(() => {
     const handler = async (ev: MessageEvent) => {
       const msg = ev.data;
-      if (!msg || typeof msg !== "object" || msg.type !== "sitepix:email-report") return;
+      if (!msg || typeof msg !== "object" || msg.type !== "everlumen:email-report") return;
       if (ev.origin !== window.location.origin) return;
       const source = ev.source as Window | null;
       const reply = (payload: Record<string, unknown>) => {
         try {
           source?.postMessage(
-            { type: "sitepix:email-report:result", requestId: msg.requestId, ...payload },
+            { type: "everlumen:email-report:result", requestId: msg.requestId, ...payload },
             window.location.origin,
           );
         } catch {
@@ -721,7 +721,7 @@ export function GalleryPage() {
           reply({ ok: false, error: "Session expired - please sign in again." });
           return;
         }
-        const result = await sitepixApi.email.sendFieldReport({
+        const result = await everlumenApi.email.sendFieldReport({
           subject: msg.subject,
           pdfBase64: msg.pdfBase64,
           pdfName: msg.pdfName,
@@ -903,7 +903,7 @@ export function GalleryPage() {
 
   const buildReportText = (a: Analysis, photo: Photo | null) => {
     const lines: string[] = [];
-    lines.push(`SitePix AI Analysis`);
+    lines.push(`Everlumen AI Analysis`);
     if (photo?.caption) lines.push(`Photo: ${photo.caption}`);
     lines.push(`Date: ${new Date(a.created_at).toLocaleString()}`);
     lines.push("");
@@ -979,7 +979,7 @@ export function GalleryPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `sitepix-report-${analysis.id.slice(0, 8)}.txt`;
+    a.download = `everlumen-report-${analysis.id.slice(0, 8)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -1018,12 +1018,12 @@ export function GalleryPage() {
           `<span style="display:inline-block;margin:0 6px 6px 0;padding:2px 8px;border:1px solid #e5e7eb;border-radius:999px;font-size:12px;color:#374151;">${escapeHtml(l)}</span>`,
       )
       .join("");
-    const fileSlug = `sitepix-report-${a.id.slice(0, 8)}.pdf`;
-    const subject = `SitePix report - ${photo.caption ?? "Site photo"}`;
+    const fileSlug = `everlumen-report-${a.id.slice(0, 8)}.pdf`;
+    const subject = `Everlumen report - ${photo.caption ?? "Site photo"}`;
     const opener_origin = window.location.origin;
 
     return `<!doctype html>
-<html><head><meta charset="utf-8"><title>SitePix Report - ${escapeHtml(photo.caption ?? "Photo")}</title>
+<html><head><meta charset="utf-8"><title>Everlumen Report - ${escapeHtml(photo.caption ?? "Photo")}</title>
 <style>
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#111827;margin:0;background:#f3f4f6;}
   .toolbar{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #e5e7eb;padding:10px 16px;display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;}
@@ -1059,7 +1059,7 @@ export function GalleryPage() {
     <span id="email-status" class="status"></span>
   </div>
   <div id="report" class="page">
-    <h1>SitePix Field Report</h1>
+    <h1>Everlumen Field Report</h1>
     <div class="meta">
       ${photo.caption ? `<strong>${escapeHtml(photo.caption)}</strong> · ` : ""}
       ${escapeHtml(new Date(a.created_at).toLocaleString())}
@@ -1137,14 +1137,14 @@ export function GalleryPage() {
             function onMsg(ev){
               if (ev.origin !== OPENER_ORIGIN) return;
               var d = ev.data;
-              if (!d || d.type !== 'sitepix:email-report:result' || d.requestId !== requestId) return;
+              if (!d || d.type !== 'everlumen:email-report:result' || d.requestId !== requestId) return;
               clearTimeout(timeoutId);
               window.removeEventListener('message', onMsg);
               resolve(d);
             }
             window.addEventListener('message', onMsg);
             window.opener.postMessage({
-              type: 'sitepix:email-report',
+              type: 'everlumen:email-report',
               requestId: requestId,
               subject: SUBJECT,
               pdfBase64: pdfBase64,

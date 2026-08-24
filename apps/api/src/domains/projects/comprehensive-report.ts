@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 import { chatComplete, WORK_VOICE_RULES } from "../ai/service";
-import { cleanCaption, markdownToHtml } from "@sitepix/shared";
+import { cleanCaption, markdownToHtml } from "@everlumen/shared";
 import { photoEvidenceHtml, type GeneratedPhoto } from "./page-generate";
 import { existingPageTitles, projectDocumentTitle, uniqueDocumentTitle } from "./page-title";
 import { stripPhotoGallery } from "../walkthroughs/summaries";
@@ -152,7 +152,7 @@ export function digestPhotos(photos: PhotoRecord[]) {
  * and `WORK_VOICE_RULES` bans the documentation framing outright.
  */
 const COMPREHENSIVE_SYSTEM =
-  "You are SitePix AI writing a formal, client-facing project REPORT covering an entire job. " +
+  "You are Everlumen AI writing a formal, client-facing project REPORT covering an entire job. " +
   "Produce EXACTLY these Markdown sections and nothing else:\n" +
   "## Executive Summary\n<3-5 full sentences: what work was carried out on this job, on which equipment, " +
   "over what period. Lead with the work itself>\n\n" +

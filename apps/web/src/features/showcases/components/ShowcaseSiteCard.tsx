@@ -1,7 +1,11 @@
 import { useMemo, useRef, useState } from "react";
 import { Check, ExternalLink, Loader2, Save, ShieldAlert, Star } from "lucide-react";
 import { toast } from "sonner";
-import { humanizeServiceType, looksLikeStreetAddress, withoutStreetAddress } from "@sitepix/shared";
+import {
+  humanizeServiceType,
+  looksLikeStreetAddress,
+  withoutStreetAddress,
+} from "@everlumen/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

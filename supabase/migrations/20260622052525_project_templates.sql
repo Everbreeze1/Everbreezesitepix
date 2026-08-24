@@ -1,4 +1,4 @@
--- Project Templates MVP - run against the SitePix Supabase project.
+-- Project Templates MVP - run against the Everlumen Supabase project.
 -- A "project template" is a reusable project blueprint owned by a team.
 -- For the MVP it can attach checklist templates; reports/documents come later.
 

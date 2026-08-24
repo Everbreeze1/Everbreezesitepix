@@ -1,4 +1,4 @@
-import { rpcOp } from "./sitepix-api";
+import { rpcOp } from "./everlumen-api";
 import type {
   inviteSubcontractorService,
   listSubcontractorsService,
@@ -7,7 +7,7 @@ import type {
   lookupSubcontractorInviteService,
   acceptSubcontractorInviteService,
   acceptSubcontractorInviteSignupService,
-} from "@sitepix/api";
+} from "@everlumen/api";
 
 /**
  * Subcontractor access (Team tier) via `/v1/rpc`.

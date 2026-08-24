@@ -1,5 +1,5 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { can } from "@sitepix/shared/team-permissions";
+import { can } from "@everlumen/shared/team-permissions";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   LayoutTemplate,
@@ -62,7 +62,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useQuery } from "@tanstack/react-query";

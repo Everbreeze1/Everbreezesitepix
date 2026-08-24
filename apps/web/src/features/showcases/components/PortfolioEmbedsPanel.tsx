@@ -45,7 +45,7 @@ export function PortfolioEmbedsPanel({
     () =>
       [
         `<script async src="${origin}/embed.js"`,
-        `  data-sitepix="gallery"`,
+        `  data-everlumen="gallery"`,
         `  data-key="${portfolio.embed_key}"`,
         `  data-columns="${columns}"`,
         `  data-limit="${limit}"`,
@@ -59,7 +59,7 @@ export function PortfolioEmbedsPanel({
     () =>
       [
         `<script async src="${origin}/embed.js"`,
-        `  data-sitepix="map"`,
+        `  data-everlumen="map"`,
         `  data-key="${portfolio.embed_key}"`,
         `  data-height="${mapHeight}"`,
         ...(usePinColor && portfolio.accent_color

@@ -13,7 +13,7 @@
  * See `Surface` below for the page-boundary half of the story.
  */
 import { rgb, type PDFFont, type PDFPage } from "pdf-lib";
-import type { InlineRun, RichBlock } from "@sitepix/shared";
+import type { InlineRun, RichBlock } from "@everlumen/shared";
 
 export interface FontSet {
   regular: PDFFont;

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MapPin, Layers, Maximize2 } from "lucide-react";
 import { MarkerClusterer, SuperClusterAlgorithm } from "@googlemaps/markerclusterer";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import { geocodeAddress } from "@/lib/geocode.functions";
@@ -223,7 +223,7 @@ interface MapView {
   filter: StatusFilter;
 }
 
-const VIEW_STORAGE_KEY = "sitepix:map-view";
+const VIEW_STORAGE_KEY = "everlumen:map-view";
 let lastMapView: MapView | null = null;
 
 const readMapView = (): MapView | null => {

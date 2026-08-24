@@ -13,8 +13,8 @@ import { downloadBase64File } from "@/lib/download-file";
 export const Route = createFileRoute("/share/pages/$token")({
   head: () => ({
     meta: [
-      { title: "Shared document - SitePix" },
-      { name: "description", content: "A document shared from SitePix." },
+      { title: "Shared document - Everlumen" },
+      { name: "description", content: "A document shared from Everlumen." },
       { name: "robots", content: "noindex,nofollow" },
     ],
   }),

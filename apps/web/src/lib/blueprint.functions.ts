@@ -1,4 +1,4 @@
-import { rpcOp } from "./sitepix-api";
+import { rpcOp } from "./everlumen-api";
 
 export const applyProjectBlueprint = rpcOp<
   {

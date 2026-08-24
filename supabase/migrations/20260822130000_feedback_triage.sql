@@ -10,7 +10,7 @@
 -- so a typo in a status cannot quietly create a bucket nothing lists, and an
 -- index for the query the inbox actually runs (one status, newest first).
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent. Safe to re-run.
 
 -- 1. Normalise anything already outside the vocabulary before constraining it,

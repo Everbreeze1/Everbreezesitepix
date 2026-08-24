@@ -17,7 +17,7 @@ interface VideoThumbnailProps {
   onClick?: () => void;
 }
 
-const CACHE_PREFIX = "sitepix:videothumb:v1:";
+const CACHE_PREFIX = "everlumen:videothumb:v1:";
 const SEEK_TO_SECONDS = 0.25;
 
 function readCache(key: string): string | null {

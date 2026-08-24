@@ -24,8 +24,8 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { supabase } from "@/integrations/sitepix/client";
-import { sitepixApi } from "@/lib/sitepix-api";
+import { supabase } from "@/integrations/everlumen/client";
+import { everlumenApi } from "@/lib/everlumen-api";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
@@ -360,7 +360,7 @@ export function ReportsIndexPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild disabled={disabled}>
                             <a
-                              href={sitepixApi.urls.reportPdf(r.share_token)}
+                              href={everlumenApi.urls.reportPdf(r.share_token)}
                               target="_blank"
                               rel="noreferrer"
                             >

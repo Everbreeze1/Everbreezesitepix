@@ -27,7 +27,7 @@
 -- Same trigger, same signature; only the recipient expression changes, so the
 -- AFTER trigger installed by 20260819000000 picks this up with no re-attach.
 --
--- Idempotent. Apply via the SitePix Supabase SQL editor.
+-- Idempotent. Apply via the Everlumen Supabase SQL editor.
 
 CREATE OR REPLACE FUNCTION public.notify_workflow_completed() RETURNS trigger
 LANGUAGE plpgsql

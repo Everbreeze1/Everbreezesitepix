@@ -29,7 +29,7 @@ function env(path) {
 }
 
 const cfg = env("apps/api/.env");
-const db = createClient(cfg.SITEPIX_SUPABASE_URL, cfg.SITEPIX_SUPABASE_SERVICE_ROLE_KEY, {
+const db = createClient(cfg.EVERLUMEN_SUPABASE_URL, cfg.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
@@ -276,7 +276,7 @@ async function main() {
   // The tables must NOT be readable with the publishable key, which ships in
   // the browser bundle. This is the leak 20260811000000 had to clean up once.
   {
-    const anon = createClient(cfg.SITEPIX_SUPABASE_URL, cfg.SITEPIX_SUPABASE_PUBLISHABLE_KEY, {
+    const anon = createClient(cfg.EVERLUMEN_SUPABASE_URL, cfg.EVERLUMEN_SUPABASE_PUBLISHABLE_KEY, {
       auth: { persistSession: false },
     });
     for (const table of ["walkthrough_templates", "walkthrough_template_shots"]) {
@@ -410,7 +410,7 @@ async function main() {
    */
   {
     const creds = env(".env");
-    const user = createClient(cfg.SITEPIX_SUPABASE_URL, cfg.SITEPIX_SUPABASE_PUBLISHABLE_KEY, {
+    const user = createClient(cfg.EVERLUMEN_SUPABASE_URL, cfg.EVERLUMEN_SUPABASE_PUBLISHABLE_KEY, {
       auth: { persistSession: false },
     });
     const { data: session, error: authErr } = await user.auth.signInWithPassword({

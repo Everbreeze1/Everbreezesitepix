@@ -59,7 +59,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { toast } from "sonner";
@@ -88,7 +88,7 @@ import { KIND_META, KIND_ORDER, type ItemKind } from "@/lib/workflow-items";
 import { GENERAL_CATEGORY, categoryIcon, makeCategoryRank } from "@/lib/template-categories";
 import { TradeSelect } from "@/components/builder/TradeSelect";
 import { useCompanySetup } from "@/hooks/use-company-setup";
-import { tradeCategoryFor } from "@sitepix/shared";
+import { tradeCategoryFor } from "@everlumen/shared";
 
 interface Template {
   id: string;

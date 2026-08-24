@@ -6,17 +6,17 @@ import { PRIVACY_EMAIL, SUPPORT_EMAIL, isPlaceholder, mailtoHref } from "@/lib/c
 export const Route = createFileRoute("/contact")({
   head: () => ({
     meta: [
-      { title: "Contact & Support - Everbreeze SitePix" },
+      { title: "Contact & Support - Everlumen" },
       {
         name: "description",
         content:
-          "Get in touch with the Everbreeze SitePix team - support for job site photo capture, reports, billing questions, and privacy requests.",
+          "Get in touch with the Everlumen team - support for job site photo capture, reports, billing questions, and privacy requests.",
       },
-      { property: "og:title", content: "Contact & Support - Everbreeze SitePix" },
+      { property: "og:title", content: "Contact & Support - Everlumen" },
       {
         property: "og:description",
         content:
-          "Get in touch with the Everbreeze SitePix team - support for job site photo capture, reports, billing questions, and privacy requests.",
+          "Get in touch with the Everlumen team - support for job site photo capture, reports, billing questions, and privacy requests.",
       },
       { property: "og:url", content: "https://www.everbreezesitepix.com/contact" },
     ],
@@ -53,7 +53,7 @@ function ContactPage() {
         <Link to="/" className="flex items-center gap-2">
           <BrandLogo size={28} />
           <span className="text-sm font-bold tracking-tight">
-            Everbreeze <span className="text-primary">SitePix</span>
+            Ever<span className="text-primary">lumen</span>
           </span>
         </Link>
       </header>
@@ -90,8 +90,8 @@ function ContactPage() {
               answer far faster.
             </p>
             <div className="mt-3 rounded-lg border border-border bg-muted/40 p-4">
-              <p className="font-medium text-foreground">Everbreeze SitePix Support</p>
-              <EmailLine label="Email" email={SUPPORT_EMAIL} subject="SitePix support" />
+              <p className="font-medium text-foreground">Everlumen Support</p>
+              <EmailLine label="Email" email={SUPPORT_EMAIL} subject="Everlumen support" />
             </div>
           </section>
 

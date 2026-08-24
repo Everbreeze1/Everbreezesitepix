@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { INDUSTRIES, REPORT_STARTERS, tradeCategoryFor } from "@sitepix/shared";
+import { INDUSTRIES, REPORT_STARTERS, tradeCategoryFor } from "@everlumen/shared";
 
 /*
  * Every Templates tab has to answer the same question the same way.

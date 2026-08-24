@@ -24,13 +24,13 @@ const env = (f) =>
   );
 const cfg = { ...env("apps/api/.env"), ...env(".env") };
 const SVC = {
-  apikey: cfg.SITEPIX_SUPABASE_SERVICE_ROLE_KEY,
-  Authorization: `Bearer ${cfg.SITEPIX_SUPABASE_SERVICE_ROLE_KEY}`,
+  apikey: cfg.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY,
+  Authorization: `Bearer ${cfg.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY}`,
   "Content-Type": "application/json",
 };
 const PROJECT = "ea044896-a2c8-4204-8356-f0ca4e7f67ca";
 const api = (path, init) =>
-  fetch(`${cfg.SITEPIX_SUPABASE_URL}/rest/v1/${path}`, { headers: SVC, ...init });
+  fetch(`${cfg.EVERLUMEN_SUPABASE_URL}/rest/v1/${path}`, { headers: SVC, ...init });
 
 const [{ id: pid }] = await (
   await api(`photos?select=id&project_id=eq.${PROJECT}&deleted_at=is.null&limit=1`)

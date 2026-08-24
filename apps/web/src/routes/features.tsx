@@ -8,13 +8,13 @@ export const Route = createFileRoute("/features")({
   component: FeaturesPage,
   head: () => ({
     meta: [
-      { title: "Features - Everbreeze SitePix" },
+      { title: "Features - Everlumen" },
       {
         name: "description",
         content:
           "Capture, organize, share, and report on job site photos - everything a field crew needs to document a build, and nothing it doesn't.",
       },
-      { property: "og:title", content: "Features - Everbreeze SitePix" },
+      { property: "og:title", content: "Features - Everlumen" },
       {
         property: "og:description",
         content:
@@ -75,8 +75,8 @@ function FeaturesPage() {
             <span className="italic text-primary">nothing it doesn't.</span>
           </h1>
           <p className="font-manrope mx-auto mt-6 max-w-xl text-lg leading-[29px] text-muted-foreground">
-            From the first photo to the final report, SitePix handles the documentation so your crew
-            can stay focused on the build.
+            From the first photo to the final report, Everlumen handles the documentation so your
+            crew can stay focused on the build.
           </p>
         </div>
       </section>

@@ -25,7 +25,7 @@
 -- projects.team_id FK with a backfill - see docs/admin-plan.md 1.5 - and when
 -- that lands these function bodies are the only thing that changes.
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent. Safe to re-run.
 
 CREATE OR REPLACE FUNCTION public.admin_team_rollups(team_ids uuid[])

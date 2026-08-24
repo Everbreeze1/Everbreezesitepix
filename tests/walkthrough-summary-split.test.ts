@@ -162,8 +162,8 @@ describe("the split, as wiring", () => {
     // tab titled "Walkthrough".
     const route = read(SUMMARY_ROUTE);
     expect(route).toContain("/_app/summaries/$summaryId");
-    expect(route).toContain("Summary - SitePix");
-    expect(route).not.toContain("Walkthrough - SitePix");
+    expect(route).toContain("Summary - Everlumen");
+    expect(route).not.toContain("Walkthrough - Everlumen");
   });
 
   it("renders the text before the photos", () => {

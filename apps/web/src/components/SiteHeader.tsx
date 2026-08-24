@@ -71,7 +71,7 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
               scrolled ? "text-foreground" : "text-white",
             )}
           >
-            Everbreeze <span className="text-primary">SitePix</span>
+            Ever<span className="text-primary">lumen</span>
           </span>
         </Link>
 

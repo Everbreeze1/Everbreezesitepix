@@ -234,7 +234,7 @@ export function VideoRecorder({
   };
 
   const recordingFilename = () =>
-    `sitepix-video-${Date.now()}.${recorded?.blob.type.includes("mp4") ? "mp4" : "webm"}`;
+    `everlumen-video-${Date.now()}.${recorded?.blob.type.includes("mp4") ? "mp4" : "webm"}`;
 
   const downloadRecording = () => {
     if (!recorded) return;

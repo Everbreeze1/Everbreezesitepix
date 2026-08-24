@@ -20,7 +20,7 @@
 --      table in the database and it grows with every request; a health page
 --      that makes it useful without also bounding it is a slow outage.
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent. Safe to re-run.
 
 -- ---------------------------------------------------------------------------

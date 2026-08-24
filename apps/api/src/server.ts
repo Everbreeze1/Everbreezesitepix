@@ -1,5 +1,5 @@
 /**
- * Standalone Node HTTP server for @sitepix/api.
+ * Standalone Node HTTP server for @everlumen/api.
  * Deployable independently of apps/web - run with `npm run dev` / `npm start`
  * as a plain Node process (no Docker).
  */
@@ -28,9 +28,9 @@ import {
  * the previous instance keeps serving.
  */
 const REQUIRED_ENV = [
-  "SITEPIX_SUPABASE_URL",
-  "SITEPIX_SUPABASE_PUBLISHABLE_KEY",
-  "SITEPIX_SUPABASE_SERVICE_ROLE_KEY",
+  "EVERLUMEN_SUPABASE_URL",
+  "EVERLUMEN_SUPABASE_PUBLISHABLE_KEY",
+  "EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY",
   "AUTH_EMAIL_HOOK_SECRET",
   "RESEND_API_KEY",
   "EMAIL_FROM",
@@ -56,7 +56,7 @@ const OPTIONAL_ENV = [
 function checkEnv(): void {
   const missing = REQUIRED_ENV.filter((name) => !process.env[name]?.trim());
   if (missing.length) {
-    console.error(`sitepix-api: refusing to start - missing required env: ${missing.join(", ")}`);
+    console.error(`everlumen-api: refusing to start - missing required env: ${missing.join(", ")}`);
     console.error(
       "Set them in the Railway service's Variables tab (docs/ops.md), or apps/api/.env locally.",
     );
@@ -66,7 +66,7 @@ function checkEnv(): void {
   const degraded = OPTIONAL_ENV.filter((name) => !process.env[name]?.trim());
   if (degraded.length) {
     console.warn(
-      `sitepix-api: starting without ${degraded.join(", ")} - the features they back will fail closed.`,
+      `everlumen-api: starting without ${degraded.join(", ")} - the features they back will fail closed.`,
     );
   }
 
@@ -78,7 +78,7 @@ function checkEnv(): void {
   );
   if (missingPrices.length) {
     console.warn(
-      `sitepix-api: no monthly Stripe price id for ${missingPrices.join(", ")} - checkout for those plans will fail.`,
+      `everlumen-api: no monthly Stripe price id for ${missingPrices.join(", ")} - checkout for those plans will fail.`,
     );
   }
 }
@@ -111,7 +111,7 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
  */
 if (isProduction && !allowedOrigins.length) {
   console.error(
-    "sitepix-api: refusing to start - ALLOWED_ORIGINS is unset in production. Set it in Railway to the apex + www origins (docs/ops.md).",
+    "everlumen-api: refusing to start - ALLOWED_ORIGINS is unset in production. Set it in Railway to the apex + www origins (docs/ops.md).",
   );
   process.exit(1);
 }
@@ -200,7 +200,7 @@ app.onError((err, c) => {
 const port = Number(process.env.PORT ?? 8787);
 
 const server = serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`sitepix-api listening on http://localhost:${info.port}`);
+  console.log(`everlumen-api listening on http://localhost:${info.port}`);
 });
 
 /** Upper bound on the drain - a walkthrough PDF render is the slowest request. */
@@ -216,10 +216,10 @@ let shuttingDown = false;
 function shutdown(signal: NodeJS.Signals): void {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(`sitepix-api: ${signal} received - draining in-flight requests`);
+  console.log(`everlumen-api: ${signal} received - draining in-flight requests`);
 
   const force = setTimeout(() => {
-    console.error(`sitepix-api: drain exceeded ${SHUTDOWN_TIMEOUT_MS}ms - exiting anyway`);
+    console.error(`everlumen-api: drain exceeded ${SHUTDOWN_TIMEOUT_MS}ms - exiting anyway`);
     process.exit(1);
   }, SHUTDOWN_TIMEOUT_MS);
   // Don't let the timer itself hold the loop open once the drain is done.
@@ -232,10 +232,10 @@ function shutdown(signal: NodeJS.Signals): void {
   server.close((err) => {
     clearTimeout(force);
     if (err) {
-      console.error("sitepix-api: error while closing server", err);
+      console.error("everlumen-api: error while closing server", err);
       process.exit(1);
     }
-    console.log("sitepix-api: shutdown complete");
+    console.log("everlumen-api: shutdown complete");
     process.exit(0);
   });
 }

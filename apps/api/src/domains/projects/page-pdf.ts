@@ -1101,8 +1101,8 @@ export async function renderPagePdf(
 
   const pdf = await PDFDocument.create();
   pdf.setTitle(title.slice(0, 200));
-  pdf.setProducer("SitePix");
-  pdf.setCreator("SitePix");
+  pdf.setProducer("Everlumen");
+  pdf.setCreator("Everlumen");
 
   const fontFamilies: Record<FontFamilyKey, FontSet> = {
     helvetica: {

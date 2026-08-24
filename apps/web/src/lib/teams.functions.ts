@@ -1,4 +1,4 @@
-import { rpcOp } from "./sitepix-api";
+import { rpcOp } from "./everlumen-api";
 import type {
   ProjectContributor,
   TeamActivityItem,
@@ -23,7 +23,7 @@ import type {
   getProjectContributorsService,
   saveCompanyProfileService,
   dismissSetupPromptService,
-} from "@sitepix/api";
+} from "@everlumen/api";
 
 export type { ProjectContributor, TeamActivityItem, TeamMemberContribution };
 

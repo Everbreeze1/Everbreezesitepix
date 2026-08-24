@@ -19,7 +19,7 @@ import {
 export const Route = createFileRoute("/share/walkthroughs/$token")({
   head: () => ({
     meta: [
-      { title: "Walkthrough Note - SitePix" },
+      { title: "Walkthrough Note - Everlumen" },
       { name: "description", content: "Shared site walkthrough report." },
       { name: "robots", content: "noindex,nofollow" },
     ],
@@ -141,7 +141,7 @@ function PublicWalkthroughPage() {
           This share link is invalid, expired, or the report has been unpublished.
         </p>
         <Button asChild className="mt-6">
-          <Link to="/">Back to SitePix</Link>
+          <Link to="/">Back to Everlumen</Link>
         </Button>
       </div>
     );
@@ -232,7 +232,7 @@ function PublicWalkthroughPage() {
       <p className="mt-6 text-center text-xs text-muted-foreground">
         Created with{" "}
         <Link to="/" className="underline-offset-2 hover:underline">
-          SitePix
+          Everlumen
         </Link>
       </p>
     </div>

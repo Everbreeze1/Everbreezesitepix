@@ -46,7 +46,7 @@ function env(path) {
 
 const cfg = env("apps/api/.env");
 const creds = env(".env");
-const db = createClient(cfg.SITEPIX_SUPABASE_URL, cfg.SITEPIX_SUPABASE_SERVICE_ROLE_KEY, {
+const db = createClient(cfg.EVERLUMEN_SUPABASE_URL, cfg.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
@@ -70,10 +70,12 @@ const main = async () => {
   try {
     /* --------------------------------------------------------------- token */
     const anon =
-      cfg.SITEPIX_SUPABASE_PUBLISHABLE_KEY ??
-      cfg.SITEPIX_SUPABASE_ANON_KEY ??
+      cfg.EVERLUMEN_SUPABASE_PUBLISHABLE_KEY ??
+      cfg.EVERLUMEN_SUPABASE_ANON_KEY ??
       cfg.SUPABASE_ANON_KEY;
-    const user = createClient(cfg.SITEPIX_SUPABASE_URL, anon, { auth: { persistSession: false } });
+    const user = createClient(cfg.EVERLUMEN_SUPABASE_URL, anon, {
+      auth: { persistSession: false },
+    });
     const { data: session, error: signErr } = await user.auth.signInWithPassword({
       email: creds.email,
       password: creds.password,

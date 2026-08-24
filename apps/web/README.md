@@ -1,4 +1,4 @@
-# @sitepix/web
+# @everlumen/web
 
 TanStack Start frontend (marketing + authenticated app).
 
@@ -11,4 +11,4 @@ npm run deploy
 
 Env: monorepo-root `.env` / `.dev.vars` (see `.env.example`).
 
-Backend: `@sitepix/api` via `/v1` - see [`docs/plan.md`](../../docs/plan.md).
+Backend: `@everlumen/api` via `/v1` - see [`docs/plan.md`](../../docs/plan.md).

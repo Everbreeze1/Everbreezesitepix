@@ -14,7 +14,7 @@
  *
  * === WHAT THIS RUN WRITES, AND DELETES AGAIN =============================
  *   - two auth users, pro-probe-owner+<stamp>@ and pro-probe-crew+<stamp>@
- *     sitepix.test
+ *     everlumen.test
  *   - one `teams` row, plan 'pro', and two `team_members` rows
  *
  * All of it torn down in a finally block, including on failure. Nothing touches
@@ -51,7 +51,7 @@ function env(path) {
 }
 
 const cfg = env("apps/api/.env");
-const db = createClient(cfg.SITEPIX_SUPABASE_URL, cfg.SITEPIX_SUPABASE_SERVICE_ROLE_KEY, {
+const db = createClient(cfg.EVERLUMEN_SUPABASE_URL, cfg.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
@@ -70,7 +70,7 @@ const main = async () => {
     /* ------------------------------------------- a disposable Pro workspace */
     for (const who of ["owner", "crew"]) {
       const { data, error } = await db.auth.admin.createUser({
-        email: `pro-probe-${who}+${stamp}@sitepix.test`,
+        email: `pro-probe-${who}+${stamp}@everlumen.test`,
         password: PASSWORD,
         email_confirm: true,
         user_metadata: { full_name: who === "owner" ? "Pro Probe Owner" : "Pro Probe Crew" },
@@ -116,7 +116,7 @@ const main = async () => {
       .newContext({ viewport: { width: 1500, height: 1000 } })
       .then((c) => c.newPage());
 
-    const ownerEmail = `pro-probe-owner+${stamp}@sitepix.test`;
+    const ownerEmail = `pro-probe-owner+${stamp}@everlumen.test`;
     await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
     await page.waitForSelector('button[type="submit"]', { state: "visible" });
     for (let i = 0; i < 6; i++) {

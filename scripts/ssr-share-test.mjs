@@ -66,7 +66,7 @@ const ROUTES = [
     // Pure server handler, no React - asserts the snippet contractors paste is
     // actually served rather than falling through to the SPA shell.
     path: "/embed.js",
-    expect: ["sitepix:embed:height", "data-sitepix"],
+    expect: ["everlumen:embed:height", "data-everlumen"],
   },
   {
     // Enumerates published portfolios; must survive the API being unreachable.

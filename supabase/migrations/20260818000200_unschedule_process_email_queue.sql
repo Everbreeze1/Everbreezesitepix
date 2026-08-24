@@ -31,7 +31,7 @@
 -- it, so the definition survives in this run's output. To restore it, re-run
 -- cron.schedule('process-email-queue', '* * * * *', <that command>).
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent - re-running after the
+-- Apply via the Everlumen Supabase SQL editor. Idempotent - re-running after the
 -- job is gone is a no-op.
 
 SET lock_timeout = '5s';

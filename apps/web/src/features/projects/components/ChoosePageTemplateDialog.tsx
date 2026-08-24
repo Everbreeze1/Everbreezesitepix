@@ -25,7 +25,7 @@ import {
 import { fillTemplatePreview } from "@/lib/template-preview";
 import { categoryIcon, makeCategoryRank, TEAM_SECTION } from "@/lib/template-categories";
 import { useCompanySetup } from "@/hooks/use-company-setup";
-import { tradeCategoryFor } from "@sitepix/shared";
+import { tradeCategoryFor } from "@everlumen/shared";
 
 type Filter = "all" | "team" | "example";
 

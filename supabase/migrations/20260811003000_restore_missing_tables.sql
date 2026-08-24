@@ -36,7 +36,7 @@
 -- below does it in the same statement block, and
 -- `node scripts/verify-anon-exposure.mjs` should be re-run after applying this.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Idempotent - safe to re-run.
 
 SET lock_timeout = '5s';
 

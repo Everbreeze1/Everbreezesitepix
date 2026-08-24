@@ -20,7 +20,7 @@
 -- Creates no table, so the anon-revoke rule for migrations >= 20260811 does not
 -- apply here - if a future edit adds one, it must REVOKE anon.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Idempotent - safe to re-run.
 
 SET lock_timeout = '5s';
 

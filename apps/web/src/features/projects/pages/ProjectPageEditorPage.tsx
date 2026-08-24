@@ -79,7 +79,7 @@ import {
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePrompt } from "@/hooks/use-prompt";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -396,7 +396,7 @@ export function ProjectPageEditorPage() {
       try {
         const res = await getProjectPage({ data: { pageId } });
         if (cancelled) return;
-        const freshKey = `sitepix:freshPage:${pageId}`;
+        const freshKey = `everlumen:freshPage:${pageId}`;
         if (sessionStorage.getItem(freshKey)) {
           freshRef.current = true;
           sessionStorage.removeItem(freshKey);

@@ -1,14 +1,14 @@
 import "react-native-url-polyfill/auto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@sitepix/db";
+import type { Database } from "@everlumen/db";
 
-const url = process.env.EXPO_PUBLIC_SITEPIX_SUPABASE_URL ?? "";
-const key = process.env.EXPO_PUBLIC_SITEPIX_SUPABASE_PUBLISHABLE_KEY ?? "";
+const url = process.env.EXPO_PUBLIC_EVERLUMEN_SUPABASE_URL ?? "";
+const key = process.env.EXPO_PUBLIC_EVERLUMEN_SUPABASE_PUBLISHABLE_KEY ?? "";
 
 if (!url || !key) {
   console.warn(
-    "[sitepix] Set EXPO_PUBLIC_SITEPIX_SUPABASE_URL and EXPO_PUBLIC_SITEPIX_SUPABASE_PUBLISHABLE_KEY",
+    "[everlumen] Set EXPO_PUBLIC_EVERLUMEN_SUPABASE_URL and EXPO_PUBLIC_EVERLUMEN_SUPABASE_PUBLISHABLE_KEY",
   );
 }
 

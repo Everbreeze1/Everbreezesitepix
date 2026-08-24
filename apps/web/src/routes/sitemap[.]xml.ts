@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
-import { sitepixApi } from "@/lib/sitepix-api";
+import { everlumenApi } from "@/lib/everlumen-api";
 
 const BASE_URL = "https://www.everbreezesitepix.com";
 
@@ -29,7 +29,7 @@ interface PortfolioUrls {
  */
 async function portfolioEntries(): Promise<SitemapEntry[]> {
   try {
-    const data = await sitepixApi.rpc<PortfolioUrls>("listPublicPortfolioUrls", undefined);
+    const data = await everlumenApi.rpc<PortfolioUrls>("listPublicPortfolioUrls", undefined);
     return data.entries.flatMap((p) => [
       {
         path: `/p/${p.slug}`,

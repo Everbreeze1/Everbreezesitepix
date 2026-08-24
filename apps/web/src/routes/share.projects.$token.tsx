@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getPublicProjectShare, type PublicProjectShare } from "@/lib/project-shares.functions";
-import { cleanCaption } from "@sitepix/shared";
+import { cleanCaption } from "@everlumen/shared";
 
 /**
  * What a scanned QR code opens.
@@ -19,8 +19,8 @@ import { cleanCaption } from "@sitepix/shared";
 export const Route = createFileRoute("/share/projects/$token")({
   head: () => ({
     meta: [
-      { title: "Shared project - SitePix" },
-      { name: "description", content: "A job site shared from SitePix." },
+      { title: "Shared project - Everlumen" },
+      { name: "description", content: "A job site shared from Everlumen." },
       // A printed QR code is handed to specific people, not published. Keeping
       // it out of search results is the whole difference between "shared" and
       // "public".
@@ -107,7 +107,7 @@ function PublicProjectPage() {
           <h1 className="mt-3 text-lg font-semibold">Project unavailable</h1>
           <p className="mt-1 text-sm text-muted-foreground">{msg}</p>
           <Button asChild variant="outline" size="sm" className="mt-4">
-            <Link to="/">Go to SitePix</Link>
+            <Link to="/">Go to Everlumen</Link>
           </Button>
         </Card>
       </div>
@@ -123,7 +123,7 @@ function PublicProjectPage() {
       <header className="border-b border-border bg-card">
         <div className="container mx-auto flex items-center justify-between gap-3 px-4 py-3">
           <Link to="/" className="text-sm font-semibold tracking-tight">
-            SitePix
+            Everlumen
           </Link>
           {company?.name && (
             <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
@@ -235,7 +235,7 @@ function PublicProjectPage() {
           <p>
             Shared via{" "}
             <Link to="/" className="underline-offset-2 hover:underline">
-              SitePix
+              Everlumen
             </Link>
           </p>
         </footer>

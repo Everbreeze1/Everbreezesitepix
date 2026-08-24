@@ -36,7 +36,7 @@
 -- client are both SELECTs - getMyTeamService (teams/service.ts:263) and
 -- getCallerTeamPlan (lib/team-plan.ts:68) - so SELECT stays granted.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Idempotent - safe to re-run.
 
 SET lock_timeout = '5s';
 

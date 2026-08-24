@@ -1,6 +1,6 @@
 /**
  * Domain services + schemas for web createServerFn adapters and mobile RPC.
- * Does not export HTTP handlers (see `@sitepix/api/http`).
+ * Does not export HTTP handlers (see `@everlumen/api/http`).
  */
 
 export { AuthError, requireAuthedContext } from "./lib/user-context";

@@ -11,7 +11,7 @@
 -- "leave us a review" makes no sense. Defaults on, since generating from a
 -- project (the per-job case) is the common path.
 --
--- Apply via the SitePix Supabase SQL editor. Safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Safe to re-run.
 
 ALTER TABLE public.showcases
   ADD COLUMN IF NOT EXISTS show_reviews boolean NOT NULL DEFAULT true;

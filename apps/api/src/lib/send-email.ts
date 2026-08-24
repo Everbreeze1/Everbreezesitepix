@@ -10,7 +10,7 @@ export type SendEmailInput = {
    * changes - only a verified domain can send, and this must not become a way
    * to forge one.
    *
-   * Used for the "Someone (via Everbreeze SitePix)" pattern on person-to-person
+   * Used for the "Someone (via Everlumen)" pattern on person-to-person
    * mail like team invites: a human name in the From line is what separates a
    * message from a broadcast, both to the reader and to Gmail's tab classifier.
    */
@@ -19,7 +19,7 @@ export type SendEmailInput = {
 };
 
 /** The name recipients should see in their inbox, not the mailbox it came from. */
-const SENDER_NAME = "Everbreeze SitePix";
+const SENDER_NAME = "Everlumen";
 
 /**
  * Make a caller-supplied display name safe to put in a header.

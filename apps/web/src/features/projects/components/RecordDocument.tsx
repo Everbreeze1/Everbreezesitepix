@@ -4,7 +4,7 @@ import {
   formatProjectAddress,
   type ChecklistItemType,
   type WorkflowItemKind,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 import { cn } from "@/lib/utils";
 import type {
   FieldRecordBody,
@@ -214,13 +214,13 @@ export function RecordDocument({
 
       <footer className="record-doc__footer">
         {/*
-          No "SitePix" fallback.
+          No "Everlumen" fallback.
           This sheet goes to the contractor's customer under the contractor's
           letterhead, so when neither a company name nor an author is on file the
           honest footer is empty - printing OUR brand on THEIR compliance record
           is worse than printing nothing. Caught by opening a real shared link:
           the account has a logo but no company name, so the fallback fired and
-          the customer's copy was signed "SitePix".
+          the customer's copy was signed "Everlumen".
         */}
         <span>{[company?.name, author?.name].filter(Boolean).join(" · ")}</span>
         <span>

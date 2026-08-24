@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { isPendingMigrationError } from "@/lib/supabase-errors";
 import { summarizeClient, type ClientContext } from "@/lib/feedback-context";
 
@@ -229,8 +229,8 @@ const EMPTY: FeedbackState = {
   answered: {},
 };
 
-const storeKey = (userId: string) => `sitepix:feedback:v1:${userId}`;
-const SESSION_FLAG = "sitepix:feedback:session-counted";
+const storeKey = (userId: string) => `everlumen:feedback:v1:${userId}`;
+const SESSION_FLAG = "everlumen:feedback:session-counted";
 
 function read(userId: string): FeedbackState {
   if (typeof window === "undefined") return EMPTY;

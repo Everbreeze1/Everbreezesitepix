@@ -1,4 +1,4 @@
--- NOTIFICATIONS - run this in the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- NOTIFICATIONS - run this in the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent, safe to re-run.
 
 -- =========================

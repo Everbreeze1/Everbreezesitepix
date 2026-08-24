@@ -13,7 +13,7 @@
  * slot's dimensions across).
  */
 
-import { PHOTO_ROW_HEIGHT, photoRows, photoWidthFor } from "@sitepix/shared";
+import { PHOTO_ROW_HEIGHT, photoRows, photoWidthFor } from "@everlumen/shared";
 
 /** Matches the slot art in the seeded templates: dashed rounded rect, caption, hint. */
 function slotSvg(label: string): string {
@@ -33,7 +33,7 @@ function slotSvg(label: string): string {
 
 /*
  * The widths, the height and the four-up-is-a-2x2-grid rule now live in
- * @sitepix/shared so the Report generator can share the arithmetic. Slots stay
+ * @everlumen/shared so the Report generator can share the arithmetic. Slots stay
  * in "slots" mode: an empty box is a tap target first, so four-up stacks 2x2
  * rather than shrinking to a quarter width. See photo-row-layout.ts.
  */

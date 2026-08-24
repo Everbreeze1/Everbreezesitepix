@@ -17,8 +17,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useConfirm } from "@/hooks/use-confirm";
-import { supabase } from "@/integrations/sitepix/client";
-import { projectDisplayName } from "@sitepix/shared";
+import { supabase } from "@/integrations/everlumen/client";
+import { projectDisplayName } from "@everlumen/shared";
 import {
   inviteSubcontractor,
   listSubcontractors,

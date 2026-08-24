@@ -7,6 +7,6 @@ import { ShowcaseBuilderPage } from "@/features/showcases/pages/ShowcaseBuilderP
 // navigating here only changed the URL while the list stayed on screen, which
 // read as "Create did nothing" and "Edit doesn't work".
 export const Route = createFileRoute("/_app/showcases_/$showcaseId")({
-  head: () => ({ meta: [{ title: "Edit project - SitePix" }] }),
+  head: () => ({ meta: [{ title: "Edit project - Everlumen" }] }),
   component: ShowcaseBuilderPage,
 });

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { allPhotoObjectPaths } from "@sitepix/shared";
+import { allPhotoObjectPaths } from "@everlumen/shared";
 import type { ServiceContext } from "../../lib/user-context";
 import { chunk, mutateIn, selectIn } from "../../lib/chunked-in";
 

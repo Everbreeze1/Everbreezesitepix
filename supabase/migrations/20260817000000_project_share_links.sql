@@ -7,7 +7,7 @@
 -- never have a seat. A code printed on a job site that demands a password is a
 -- code that does nothing, which is exactly what client feedback said.
 --
--- Same three-column shape as every other shareable thing in SitePix
+-- Same three-column shape as every other shareable thing in Everlumen
 -- (project_pages, project_reports, walkthroughs, project_checklists,
 -- project_workflows), so there is one share model in this product and not two:
 --

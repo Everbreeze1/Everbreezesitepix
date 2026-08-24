@@ -16,7 +16,7 @@
 -- still decided by the role at the other end of it (a fence for Restricted, a
 -- crew list for everyone else), and that is deliberately not encoded here.
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent: safe to re-run.
 
 SET lock_timeout = '5s';

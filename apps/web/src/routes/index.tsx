@@ -25,14 +25,14 @@ import collaborationImg from "@/assets/collaboration-image.png";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Everbreeze SitePix - Capture & Share Job Site Photos" },
+      { title: "Everlumen - Capture & Share Job Site Photos" },
       {
         name: "description",
         content:
           "Capture, organize, map, and share construction site photos with AI-powered walkthroughs, reports, checklists, and site logs.",
       },
       { property: "og:url", content: "https://www.everbreezesitepix.com/" },
-      { property: "og:title", content: "Everbreeze SitePix - Capture & Share Job Site Photos" },
+      { property: "og:title", content: "Everlumen - Capture & Share Job Site Photos" },
       {
         property: "og:description",
         content:
@@ -46,7 +46,7 @@ export const Route = createFileRoute("/")({
         children: JSON.stringify({
           "@context": "https://schema.org",
           "@type": "Organization",
-          name: "Everbreeze SitePix",
+          name: "Everlumen",
           url: "https://www.everbreezesitepix.com/",
           logo: "https://www.everbreezesitepix.com/icon-512.png",
           description:
@@ -58,7 +58,7 @@ export const Route = createFileRoute("/")({
         children: JSON.stringify({
           "@context": "https://schema.org",
           "@type": "WebSite",
-          name: "Everbreeze SitePix",
+          name: "Everlumen",
           url: "https://www.everbreezesitepix.com/",
         }),
       },
@@ -71,7 +71,7 @@ const howItWorks = [
   {
     step: "01",
     title: "Snap it on site",
-    desc: "Open SitePix, take the photo or record a walkthrough. It is stamped with time, date and location the moment you capture it.",
+    desc: "Open Everlumen, take the photo or record a walkthrough. It is stamped with time, date and location the moment you capture it.",
   },
   {
     step: "02",
@@ -168,13 +168,13 @@ const stats = [
 const testimonials = [
   {
     quote:
-      "We settled a change-order dispute in five minutes with a timestamped photo. SitePix paid for itself on day one.",
+      "We settled a change-order dispute in five minutes with a timestamped photo. Everlumen paid for itself on day one.",
     name: "Marcus Reyes",
     role: "Superintendent, Ironline GC",
   },
   {
     quote:
-      "SitePix writes our weekly client reports now. What used to eat my Friday nights takes about thirty seconds.",
+      "Everlumen writes our weekly client reports now. What used to eat my Friday nights takes about thirty seconds.",
     name: "Dana Whitfield",
     role: "Project Manager, Harbor & Stone",
   },
@@ -216,7 +216,7 @@ function Landing() {
           </h1>
 
           <p className="font-manrope mt-7 max-w-2xl text-base text-sidebar-foreground/80 md:text-lg">
-            Stop losing photos in camera rolls and group chats. SitePix documents every project,
+            Stop losing photos in camera rolls and group chats. Everlumen documents every project,
             maps every site, records walkthroughs, and auto-drafts reports and site logs from your
             photos.
           </p>
@@ -514,7 +514,7 @@ function Landing() {
       <section className="bg-muted py-20 md:py-32">
         <div className="mx-auto max-w-[1280px] px-4">
           <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
-            Why teams trust SitePix
+            Why teams trust Everlumen
           </p>
           <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
             Proof, not promises.

@@ -1,4 +1,4 @@
-import type { Json } from "@sitepix/db";
+import type { Json } from "@everlumen/db";
 import { getSupabaseAdmin } from "./supabase";
 
 const PENDING_STALE_MS = 2 * 60_000;

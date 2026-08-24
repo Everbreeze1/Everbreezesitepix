@@ -29,8 +29,8 @@ function env(file) {
 }
 const cfg = { ...env("apps/api/.env"), ...env(".env") };
 const SVC = {
-  apikey: cfg.SITEPIX_SUPABASE_SERVICE_ROLE_KEY,
-  Authorization: `Bearer ${cfg.SITEPIX_SUPABASE_SERVICE_ROLE_KEY}`,
+  apikey: cfg.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY,
+  Authorization: `Bearer ${cfg.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY}`,
   "Content-Type": "application/json",
 };
 
@@ -49,12 +49,12 @@ const run = async () => {
   // Seed a page directly, so this exercises the editor rather than creation.
   const owner = await (
     await fetch(
-      `${cfg.SITEPIX_SUPABASE_URL}/rest/v1/projects?select=created_by&id=eq.${PROJECT_ID}`,
+      `${cfg.EVERLUMEN_SUPABASE_URL}/rest/v1/projects?select=created_by&id=eq.${PROJECT_ID}`,
       { headers: SVC },
     )
   ).json();
   const created = await (
-    await fetch(`${cfg.SITEPIX_SUPABASE_URL}/rest/v1/project_pages`, {
+    await fetch(`${cfg.EVERLUMEN_SUPABASE_URL}/rest/v1/project_pages`, {
       method: "POST",
       headers: { ...SVC, Prefer: "return=representation" },
       body: JSON.stringify({
@@ -170,7 +170,7 @@ const run = async () => {
     if (failed || errors.length) process.exitCode = 1;
   } finally {
     await browser.close();
-    await fetch(`${cfg.SITEPIX_SUPABASE_URL}/rest/v1/project_pages?id=eq.${pageId}`, {
+    await fetch(`${cfg.EVERLUMEN_SUPABASE_URL}/rest/v1/project_pages?id=eq.${pageId}`, {
       method: "DELETE",
       headers: SVC,
     });

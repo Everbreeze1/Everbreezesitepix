@@ -31,10 +31,10 @@
 -- Same cause and same fix as the brochure migration: ALTER TABLE needs an
 -- AccessExclusiveLock, the SQL editor runs the whole script as ONE transaction,
 -- and the live app reads these tables in the opposite order. Close any open
--- SitePix tabs, then run the PARTS BELOW ONE AT A TIME. Everything is
+-- Everlumen tabs, then run the PARTS BELOW ONE AT A TIME. Everything is
 -- idempotent, so re-running any part - or the whole file - is safe.
 --
--- Apply via the SitePix Supabase SQL editor (or `supabase db push`).
+-- Apply via the Everlumen Supabase SQL editor (or `supabase db push`).
 -- ---------------------------------------------------------------------------
 
 SET lock_timeout = '5s';

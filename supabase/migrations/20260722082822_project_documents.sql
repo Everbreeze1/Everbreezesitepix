@@ -1,4 +1,4 @@
--- Run this in the SitePix Supabase SQL editor.
+-- Run this in the Everlumen Supabase SQL editor.
 -- The Lovable Cloud migration tool targets a different Postgres project.
 
 -- =========================

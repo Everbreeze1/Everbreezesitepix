@@ -6,8 +6,8 @@ import {
   type PDFImage,
   type PDFPage,
 } from "pdf-lib";
-import { parseRich, planSectionPages, richIsEmpty } from "@sitepix/shared";
-import { sanitizeCaption } from "@sitepix/shared";
+import { parseRich, planSectionPages, richIsEmpty } from "@everlumen/shared";
+import { sanitizeCaption } from "@everlumen/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { selectIn } from "../../lib/chunked-in";
 /*
@@ -108,8 +108,8 @@ export async function handleReportPdf(token: string): Promise<Response> {
   const pdf = await PDFDocument.create();
   const safeTitle = String(report.title ?? "Project report").slice(0, 200);
   pdf.setTitle(safeTitle);
-  pdf.setProducer("SitePix");
-  pdf.setCreator("SitePix");
+  pdf.setProducer("Everlumen");
+  pdf.setCreator("Everlumen");
   pdf.setCreationDate(new Date());
 
   const fonts: FontSet = {
@@ -130,7 +130,7 @@ export async function handleReportPdf(token: string): Promise<Response> {
   const BORDER = rgb(0.82, 0.85, 0.88);
   const FAINT = rgb(0.96, 0.97, 0.98);
 
-  const companyName = (profile as any)?.company || "SitePix";
+  const companyName = (profile as any)?.company || "Everlumen";
   const photosPerPage = Math.min(4, Math.max(1, Number(report.photos_per_page ?? 2))) as
     | 1
     | 2
@@ -732,7 +732,7 @@ async function drawCompanyHeader(
   text: ReturnType<typeof rgb>,
   muted: ReturnType<typeof rgb>,
 ): Promise<number> {
-  const name = profile?.company || "SitePix";
+  const name = profile?.company || "Everlumen";
   const logoUrl = profile?.company_logo_url as string | null;
   let textX = margin;
   let topY = y;
@@ -784,7 +784,7 @@ function drawFooter(
   margin: number,
   color: ReturnType<typeof rgb>,
 ) {
-  page.drawText(sanitizeForWinAnsi(`Generated with SitePix · ${company}`), {
+  page.drawText(sanitizeForWinAnsi(`Generated with Everlumen · ${company}`), {
     x: margin,
     y: 24,
     size: 8,

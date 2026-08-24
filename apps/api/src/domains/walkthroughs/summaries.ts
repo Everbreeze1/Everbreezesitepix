@@ -2,7 +2,7 @@ import { z } from "zod";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
 import { chatComplete, summarizePhotosReportService } from "../ai/service";
-import { cleanCaption, normalizeDashesTrimmed } from "@sitepix/shared";
+import { cleanCaption, normalizeDashesTrimmed } from "@everlumen/shared";
 import { buildWalkthroughNarration, transcriptWindow, type NarrationSource } from "./narration";
 
 /**
@@ -555,7 +555,7 @@ function summaryTitleFor(walkTitle: string | null | undefined, startedAt: string
 }
 
 const FINDINGS_SYSTEM =
-  "You are SitePix AI writing up a site walkthrough from what the technician said while recording it. " +
+  "You are Everlumen AI writing up a site walkthrough from what the technician said while recording it. " +
   "Output Markdown with ONLY these sections: '## Overview' (2-4 sentences of plain prose saying what was worked on and what was found), " +
   "and '## Findings' (3-6 short bullets of what the technician actually reported, each leading with the component " +
   "and what was done to or found on it, e.g. '- Contactor replaced' or '- Condenser coil heavily soiled'). " +

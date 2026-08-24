@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 import { summarizePhotosReportService } from "../ai/service";
-import { cleanCaption, markdownToHtml } from "@sitepix/shared";
+import { cleanCaption, markdownToHtml } from "@everlumen/shared";
 import { DAILY_LOG_INTERNAL_NOTICE } from "./page-filing";
 import { existingPageTitles, projectDocumentTitle, uniqueDocumentTitle } from "./page-title";
 

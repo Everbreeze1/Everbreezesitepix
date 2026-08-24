@@ -49,8 +49,8 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/sitepix/client";
-import { sitepixApi } from "@/lib/sitepix-api";
+import { supabase } from "@/integrations/everlumen/client";
+import { everlumenApi } from "@/lib/everlumen-api";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -59,7 +59,7 @@ import { RichTextEditor } from "@/components/RichTextEditor";
 import { ReportDocument, type ReportDocModel } from "@/components/ReportDocument";
 import { PhotosPerPagePicker } from "@/features/projects/components/PhotosPerPagePicker";
 import { ReviewAskStatus } from "@/features/projects/components/ReviewAskStatus";
-import { sanitizeCaption, type TaskReportSection } from "@sitepix/shared";
+import { sanitizeCaption, type TaskReportSection } from "@everlumen/shared";
 import { AddTasksToReportDialog } from "@/features/projects/components/AddTasksToReportDialog";
 
 // ---------- types ----------
@@ -601,7 +601,7 @@ export function ReportBuilderPage() {
           </Button>
           <Button asChild size="sm" variant="outline" disabled={!!report.revoked_at}>
             <a
-              href={sitepixApi.urls.reportPdf(report.share_token)}
+              href={everlumenApi.urls.reportPdf(report.share_token)}
               target="_blank"
               rel="noreferrer"
             >

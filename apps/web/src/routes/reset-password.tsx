@@ -7,11 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { BrandLogo } from "@/components/BrandLogo";
 import { PasswordInput } from "@/components/PasswordInput";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { authErrorMessage } from "@/lib/auth-errors";
 
 export const Route = createFileRoute("/reset-password")({
-  head: () => ({ meta: [{ title: "Reset password - Everbreeze SitePix" }] }),
+  head: () => ({ meta: [{ title: "Reset password - Everlumen" }] }),
   component: ResetPasswordPage,
 });
 
@@ -81,7 +81,7 @@ function ResetPasswordPage() {
         <Link to="/" className="mb-8 flex items-center justify-center gap-2">
           <BrandLogo size={40} />
           <span className="text-lg font-bold">
-            Everbreeze <span className="text-primary">SitePix</span>
+            Ever<span className="text-primary">lumen</span>
           </span>
         </Link>
         <Card className="p-8 shadow-elegant">

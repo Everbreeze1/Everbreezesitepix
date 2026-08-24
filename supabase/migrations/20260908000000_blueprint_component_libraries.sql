@@ -77,7 +77,7 @@
 -- ---------------------------------------------------------------------------
 -- Idempotent throughout: IF NOT EXISTS, DROP POLICY IF EXISTS, and constraint
 -- swaps guarded by a catalog lookup. Safe to re-run.
--- Apply in the SitePix Supabase SQL editor (or `supabase db push`).
+-- Apply in the Everlumen Supabase SQL editor (or `supabase db push`).
 
 SET lock_timeout = '5s';
 

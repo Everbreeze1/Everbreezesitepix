@@ -7,7 +7,7 @@ import {
   RecoveryEmail,
   EmailChangeEmail,
   ReauthenticationEmail,
-} from "@sitepix/email-templates";
+} from "@everlumen/email-templates";
 import { verifyBearerSecret } from "../../lib/cron-auth";
 import { verifyStandardWebhook } from "../../lib/webhook-signature";
 import { jsonError, jsonOk } from "../../lib/errors";
@@ -51,7 +51,7 @@ const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
   reauthentication: ReauthenticationEmail,
 };
 
-const SITE_NAME = "Everbreeze SitePix";
+const SITE_NAME = "Everlumen";
 const ROOT_DOMAIN = "everbreezesitepix.com";
 /*
  * Canonical origin for links we build ourselves. The apex only ever 308s to
@@ -120,7 +120,7 @@ function resolveNext(redirectTo?: string): string | undefined {
  *     https://<ref>.supabase.co/auth/v1/verify?token=...&redirect_to=...
  *
  * which works, but has two problems. The visible one is trust: a customer
- * clicks a button in mail branded Everbreeze SitePix and their address bar
+ * clicks a button in mail branded Everlumen and their address bar
  * fills with a random alphanumeric supabase.co subdomain, which is exactly what
  * they have been trained to read as phishing. The one that actually breaks
  * signups is that /verify is a single-use GET, so any link prescanner - Outlook
@@ -173,7 +173,7 @@ export function buildConfirmationUrl(emailData: {
 }
 
 /**
- * SitePix Auth "Send Email" hook handler.
+ * Everlumen Auth "Send Email" hook handler.
  * Configure hook URL: https://<host>/v1/auth/send-email
  * Secret env: AUTH_EMAIL_HOOK_SECRET
  */

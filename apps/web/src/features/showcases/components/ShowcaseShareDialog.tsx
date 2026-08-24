@@ -72,7 +72,7 @@ export function ShowcaseShareDialog({
         <DialogHeader>
           <DialogTitle className="truncate">Share “{title}”</DialogTitle>
           <DialogDescription>
-            Anyone with the link can view this project - no SitePix account needed.
+            Anyone with the link can view this project - no Everlumen account needed.
           </DialogDescription>
         </DialogHeader>
 

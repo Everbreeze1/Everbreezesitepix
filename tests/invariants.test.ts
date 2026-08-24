@@ -2074,7 +2074,7 @@ describe("family: a link we email must land on our own domain", () => {
    * Confirmation links pointed at `https://<ref>.supabase.co/auth/v1/verify`.
    * Two costs, one visible and one silent:
    *
-   * 1. A customer clicks a button in mail branded Everbreeze SitePix and their
+   * 1. A customer clicks a button in mail branded Everlumen and their
    *    address bar fills with a random alphanumeric supabase.co subdomain -
    *    which is precisely the shape people are taught to read as phishing.
    * 2. /verify spends its token on a plain GET, so any prescanner that fetches
@@ -2571,7 +2571,7 @@ describe("family: identity rendered from a stale fallback", () => {
   it("the profile store keeps a per-user snapshot so a known name paints first", () => {
     const src = stripComments(read("apps/web/src/hooks/use-profile.tsx"));
     expect(src).toMatch(/useSyncExternalStore/);
-    expect(src).toMatch(/sitepix-profile:\$\{userId\}/);
+    expect(src).toMatch(/everlumen-profile:\$\{userId\}/);
     // Signing out has to drop it, or the next person inherits the last one's.
     expect(src).toMatch(/if \(state\.userId\) writeSnapshot\(state\.userId, null\)/);
   });

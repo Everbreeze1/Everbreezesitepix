@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { isBusinessProfileComplete, type BusinessProfile } from "@sitepix/shared";
+import { isBusinessProfileComplete, type BusinessProfile } from "@everlumen/shared";
 import { getMyTeam, dismissSetupPrompt } from "@/lib/teams.functions";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";

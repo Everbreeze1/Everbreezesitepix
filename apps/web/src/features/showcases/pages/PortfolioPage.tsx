@@ -270,7 +270,7 @@ export function PortfolioPage() {
  * per-person preference about a workflow, not a fact about the site: an admin
  * who skips the wizard should not decide that for their co-owner.
  */
-const setupKey = (portfolioId: string) => `sitepix.portfolio-setup-dismissed.${portfolioId}`;
+const setupKey = (portfolioId: string) => `everlumen.portfolio-setup-dismissed.${portfolioId}`;
 
 function isSetupDismissed(portfolioId: string): boolean {
   try {

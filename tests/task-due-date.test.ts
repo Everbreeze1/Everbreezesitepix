@@ -153,7 +153,7 @@ describe("a calendar date means the same day everywhere", () => {
 
     it.each(SURFACES)("%s parses due dates through the shared helper", (rel) => {
       const src = read(rel);
-      expect(src).toContain("@sitepix/shared");
+      expect(src).toContain("@everlumen/shared");
       expect(src).toMatch(/formatCalendarDate|calendarDueLabel|isCalendarDateOverdue/);
     });
 

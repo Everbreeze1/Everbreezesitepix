@@ -66,7 +66,7 @@
 -- slow and as failure-prone as the mail provider. The trigger's job is to
 -- decide WHO is owed a message and write that down; delivery is the API's.
 --
--- Idempotent, safe to re-run. Apply via the SitePix Supabase SQL editor
+-- Idempotent, safe to re-run. Apply via the Everlumen Supabase SQL editor
 -- (project ulmgvtuqjlzzadlwtiog) or `supabase db push`.
 
 SET lock_timeout = '5s';

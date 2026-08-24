@@ -34,7 +34,7 @@
 -- them in the same migration that introduces the column would make a reporting
 -- fix indistinguishable from an access change. That is a separate step.
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent. Safe to re-run.
 
 ALTER TABLE public.projects

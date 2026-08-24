@@ -4,7 +4,7 @@ import {
   formatCalendarDate,
   parseNotificationPrefs,
   type NotificationPrefs,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ServiceContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";

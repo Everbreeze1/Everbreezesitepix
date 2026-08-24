@@ -1,4 +1,4 @@
-import { rpcOp } from "./sitepix-api";
+import { rpcOp } from "./everlumen-api";
 
 export type BillingPlan = "starter" | "pro" | "team";
 

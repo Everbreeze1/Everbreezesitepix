@@ -10,7 +10,7 @@ export function BrandLogo({ size = 36, className }: BrandLogoProps) {
     <span
       className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[22%] bg-primary ${className ?? ""}`}
       style={{ width: size, height: size }}
-      aria-label="Everbreeze SitePix logo"
+      aria-label="Everlumen logo"
     >
       <img
         src={logoUrl}

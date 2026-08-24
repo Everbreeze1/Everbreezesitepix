@@ -11,7 +11,11 @@ const Ctx = createContext<ThemeCtx | null>(null);
 function readInitialTheme(): Theme {
   if (typeof window === "undefined") return "light";
   try {
-    const saved = localStorage.getItem("sitepix-theme") as Theme | null;
+    const saved = (localStorage.getItem("everlumen-theme") ??
+      // Pre-rename key. Read once so an existing visitor keeps the theme they
+      // chose instead of silently falling back to their OS preference; the
+      // effect below rewrites it under the current key.
+      localStorage.getItem("sitepix-theme")) as Theme | null;
     if (saved === "light" || saved === "dark") return saved;
   } catch {}
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -25,7 +29,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.classList.toggle("dark", theme === "dark");
     root.style.colorScheme = theme;
     try {
-      localStorage.setItem("sitepix-theme", theme);
+      localStorage.setItem("everlumen-theme", theme);
     } catch {}
   }, [theme]);
 

@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 
-const KEY = "sitepix:lastProjectId";
+const KEY = "everlumen:lastProjectId";
 
 export function setLastProjectId(id: string | null) {
   if (typeof window === "undefined") return;
   try {
     if (id) localStorage.setItem(KEY, id);
     else localStorage.removeItem(KEY);
-    window.dispatchEvent(new Event("sitepix:lastProjectChanged"));
+    window.dispatchEvent(new Event("everlumen:lastProjectChanged"));
   } catch {
     /* ignore */
   }
@@ -25,10 +25,10 @@ export function useLastProjectId(): string | null {
     };
     read();
     const onChange = () => read();
-    window.addEventListener("sitepix:lastProjectChanged", onChange);
+    window.addEventListener("everlumen:lastProjectChanged", onChange);
     window.addEventListener("storage", onChange);
     return () => {
-      window.removeEventListener("sitepix:lastProjectChanged", onChange);
+      window.removeEventListener("everlumen:lastProjectChanged", onChange);
       window.removeEventListener("storage", onChange);
     };
   }, []);

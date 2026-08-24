@@ -103,7 +103,7 @@ function PortfolioProjectPage() {
             : "This project has been removed or is no longer listed."}
         </p>
         <Button asChild className="mt-6">
-          {/* Sends them to the portfolio rather than SitePix - if the site
+          {/* Sends them to the portfolio rather than Everlumen - if the site
               exists, the visitor almost certainly wants the rest of its work. */}
           <Link to="/p/$slug" params={{ slug }}>
             See all work

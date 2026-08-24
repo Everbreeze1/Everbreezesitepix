@@ -3,7 +3,7 @@ import type Stripe from "stripe";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { getStripe, planToPriceId, type BillingPlan, type BillingInterval } from "../../lib/stripe";
 import { PLAN_MEMBER_CAP } from "../../lib/team-plan";
-import { can } from "@sitepix/shared/team-permissions";
+import { can } from "@everlumen/shared/team-permissions";
 import type { ServiceContext } from "../../lib/user-context";
 
 const PLAN_VALUES = ["starter", "pro", "team"] as const;

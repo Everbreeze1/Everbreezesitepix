@@ -48,7 +48,7 @@
 -- - it predates the tracked migrations and no file in this directory creates
 -- it, so a freshly provisioned database can legitimately not have it yet.
 --
--- Apply via the SitePix Supabase SQL editor. Safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Safe to re-run.
 
 SET lock_timeout = '5s';
 

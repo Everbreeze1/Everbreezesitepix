@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { listPlatformTeams, syncTeamBilling, type PlatformTeam } from "@/lib/admin.functions";
 import { formatBytes } from "@/hooks/use-storage-usage";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { TEAM_SIZES, choiceLabel, industryLabel } from "@sitepix/shared";
+import { TEAM_SIZES, choiceLabel, industryLabel } from "@everlumen/shared";
 import { AdminTable, type AdminColumn } from "../components/AdminTable";
 import { useAdminList } from "../hooks/use-admin-list";
 import { BillingReconciliationPanel } from "../components/BillingReconciliationPanel";

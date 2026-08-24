@@ -8,7 +8,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { getProjectContributors, type ProjectContributor } from "@/lib/teams.functions";
-import { relativeTime } from "@sitepix/shared";
+import { relativeTime } from "@everlumen/shared";
 
 function initials(name?: string | null, email?: string | null) {
   const src = (name || email || "?").trim();

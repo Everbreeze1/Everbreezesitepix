@@ -8,7 +8,7 @@
  * are body-level or position:fixed layers that print alongside it.
  *
  * So `PrintDocument` (components/PrintDocument.tsx) portals a purpose-built
- * document into `#sitepix-print-root` and marks the body while it is mounted.
+ * document into `#everlumen-print-root` and marks the body while it is mounted.
  * These rules then invert the problem: on paper, everything except that one
  * subtree is hidden. New chrome is hidden by default rather than having to
  * remember to opt out.
@@ -19,15 +19,15 @@
  * needs physical units and break control that utilities do not express.
  * ======================================================================== */
 
-#sitepix-print-root {
+#everlumen-print-root {
   display: none;
 }
 
 @media print {
-  body.has-print-document > *:not(#sitepix-print-root) {
+  body.has-print-document > *:not(#everlumen-print-root) {
     display: none !important;
   }
-  body.has-print-document #sitepix-print-root {
+  body.has-print-document #everlumen-print-root {
     display: block !important;
   }
 

@@ -1,9 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@sitepix/db";
+import type { Database } from "@everlumen/db";
 import {
   bearerToken,
-  requireSitepixSupabasePublishableKey,
-  requireSitepixSupabaseUrl,
+  requireEverlumenSupabasePublishableKey,
+  requireEverlumenSupabaseUrl,
 } from "./supabase";
 
 export type AuthedContext = {
@@ -23,8 +23,8 @@ export class AuthError extends Error {
 
 export function createAuthedSupabaseClient(token: string): SupabaseClient<Database> {
   return createClient<Database>(
-    requireSitepixSupabaseUrl(),
-    requireSitepixSupabasePublishableKey(),
+    requireEverlumenSupabaseUrl(),
+    requireEverlumenSupabasePublishableKey(),
     {
       global: {
         headers: {

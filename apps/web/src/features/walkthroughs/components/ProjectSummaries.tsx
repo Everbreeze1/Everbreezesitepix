@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Clapperboard, ImageOff, Loader2, Share2, Sparkles } from "lucide-react";
-import { relativeTime } from "@sitepix/shared";
+import { relativeTime } from "@everlumen/shared";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ProjectSummaryListItem } from "@/lib/summaries.functions";

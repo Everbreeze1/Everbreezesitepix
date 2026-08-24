@@ -201,7 +201,7 @@ export function AppSidebar() {
           <BrandLogo size={40} />
           {!collapsed && (
             <span className="text-lg font-extrabold leading-tight tracking-tight text-sidebar-foreground">
-              Everbreeze SitePix
+              Everlumen
             </span>
           )}
         </Link>

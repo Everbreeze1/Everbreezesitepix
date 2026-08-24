@@ -92,16 +92,16 @@ export default tseslint.config(
         {
           paths: [
             {
-              name: "@sitepix/api/http",
+              name: "@everlumen/api/http",
               message:
-                "HTTP handlers are server-only. Use `@sitepix/api-client` or `@/features/<domain>/api`.",
+                "HTTP handlers are server-only. Use `@everlumen/api-client` or `@/features/<domain>/api`.",
             },
           ],
           patterns: [
             {
               group: ["**/apps/api/src/**"],
               message:
-                "Do not import API internals from UI. Use `@/features/<domain>/api` or `@sitepix/api-client`.",
+                "Do not import API internals from UI. Use `@/features/<domain>/api` or `@everlumen/api-client`.",
             },
           ],
         },

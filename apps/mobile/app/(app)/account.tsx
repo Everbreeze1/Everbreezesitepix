@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { ApiClientError } from "@sitepix/api-client";
+import { ApiClientError } from "@everlumen/api-client";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { colors } from "@/theme";
@@ -39,7 +39,7 @@ export default function AccountScreen() {
 
   return (
     <View style={styles.root}>
-      <Text style={styles.brand}>SitePix</Text>
+      <Text style={styles.brand}>Everlumen</Text>
       <Text style={styles.line}>{user?.email ?? "Signed in"}</Text>
       <Text style={styles.meta}>{health}</Text>
       <Pressable style={styles.button} onPress={() => void onSignOut()}>

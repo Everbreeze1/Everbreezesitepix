@@ -1,6 +1,6 @@
 import { jsonError, jsonOk } from "../../lib/errors";
 import { verifyCronSecret } from "../../lib/cron-auth";
-import { getSupabaseAdmin, requireSitepixSupabaseUrl } from "../../lib/supabase";
+import { getSupabaseAdmin, requireEverlumenSupabaseUrl } from "../../lib/supabase";
 import { recordJobRun } from "../../lib/job-run";
 
 /**
@@ -70,10 +70,10 @@ export async function handleArchiveOldPhotos(request: Request): Promise<Response
 
       for (const p of photos ?? []) {
         try {
-          const renderUrl = `${requireSitepixSupabaseUrl()}/storage/v1/render/image/authenticated/site-photos/${p.storage_path}?width=1280&quality=70&resize=contain`;
+          const renderUrl = `${requireEverlumenSupabaseUrl()}/storage/v1/render/image/authenticated/site-photos/${p.storage_path}?width=1280&quality=70&resize=contain`;
           const resp = await fetch(renderUrl, {
             headers: {
-              Authorization: `Bearer ${process.env.SITEPIX_SUPABASE_SERVICE_ROLE_KEY}`,
+              Authorization: `Bearer ${process.env.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY}`,
             },
           });
           if (!resp.ok) {

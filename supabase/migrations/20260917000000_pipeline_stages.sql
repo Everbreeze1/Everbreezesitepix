@@ -57,7 +57,7 @@
 --     the column they lived in, so afterwards there is no path from a tag to a
 --     column in the UI or in SQL. Tags are unchanged for filtering and search.
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent: safe to re-run.
 
 -- ===========================================================================

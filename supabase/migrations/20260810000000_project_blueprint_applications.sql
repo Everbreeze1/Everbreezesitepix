@@ -14,7 +14,7 @@
 -- it from rows that may since have been edited or deleted.
 --
 -- Idempotent: safe to re-run.
--- Run against the SitePix Supabase project.
+-- Run against the Everlumen Supabase project.
 
 CREATE TABLE IF NOT EXISTS public.project_blueprint_applications (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),

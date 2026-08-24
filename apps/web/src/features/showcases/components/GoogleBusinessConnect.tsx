@@ -37,7 +37,7 @@ import type { Draft } from "@/features/showcases/site-draft";
  * has a Google presence should be four fields ahead of one who doesn't before
  * they type a single character.
  *
- * The confirm step is not ceremony. A text search for "Everbreeze Heating" will
+ * The confirm step is not ceremony. A text search for "Northwind Heating" will
  * happily return a company in another state, and this writes to the business's
  * live public site, so the match is shown with its address and rating and
  * nothing moves until someone says that's the one.

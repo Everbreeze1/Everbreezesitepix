@@ -6,13 +6,13 @@ import { Button } from "@/components/ui/button";
 import { getPublicProjectReport, type PublicProjectReport } from "@/lib/project-reports.functions";
 import { ReportDocument, type ReportDocModel } from "@/components/ReportDocument";
 import { ReviewAsk } from "@/components/ReviewAsk";
-import { sitepixApi } from "@/lib/sitepix-api";
+import { everlumenApi } from "@/lib/everlumen-api";
 
 export const Route = createFileRoute("/share/reports/$token")({
   head: () => ({
     meta: [
-      { title: "Shared report - SitePix" },
-      { name: "description", content: "A project report shared from SitePix." },
+      { title: "Shared report - Everlumen" },
+      { name: "description", content: "A project report shared from Everlumen." },
       { name: "robots", content: "noindex,nofollow" },
     ],
   }),
@@ -124,7 +124,7 @@ function PublicReportPage() {
       <div className="container mx-auto max-w-[920px] px-4 py-8 print:py-0">
         <div className="mb-4 flex justify-end gap-2 print:hidden">
           <Button asChild size="sm">
-            <a href={sitepixApi.urls.reportPdf(token)} target="_blank" rel="noreferrer">
+            <a href={everlumenApi.urls.reportPdf(token)} target="_blank" rel="noreferrer">
               <Download className="mr-1.5 h-4 w-4" /> Download PDF
             </a>
           </Button>

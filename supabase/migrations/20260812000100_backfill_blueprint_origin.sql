@@ -34,7 +34,7 @@
 --      judgement call, so PART 1 shows `matched_items` and you can add
 --      `WHERE matched_items > 1` if your library makes that the safer trade.
 --
--- Apply via the SitePix Supabase SQL editor. Requires 20260812000000 first.
+-- Apply via the Everlumen Supabase SQL editor. Requires 20260812000000 first.
 
 -- === PART 1 - PREVIEW. Run this alone, read it, then decide. ===============
 

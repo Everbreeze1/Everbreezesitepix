@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { humanizeServiceType, normalizeExternalUrl } from "@sitepix/shared";
+import { humanizeServiceType, normalizeExternalUrl } from "@everlumen/shared";
 import type { AuthedContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { requireTeamPlan } from "../../lib/team-plan";

@@ -85,7 +85,7 @@ describe("the app header carries a day / night toggle", () => {
 describe("both headers and the Settings picker share one choice", () => {
   it("everything reads and writes the same storage key", () => {
     for (const file of [THEME, ROOT_ROUTE]) {
-      expect(read(file)).toContain("sitepix-theme");
+      expect(read(file)).toContain("everlumen-theme");
     }
   });
 

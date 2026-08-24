@@ -1,5 +1,5 @@
 -- Project-level trash: soft-delete entire projects, restore, and purge >60d.
--- Run this against the SitePix backend.
+-- Run this against the Everlumen backend.
 
 -- The original projects table uses `created_by` as the owner column. Newer
 -- trash/permission code expects `owner_id`, so we add it and backfill it.

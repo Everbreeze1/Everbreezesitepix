@@ -1,4 +1,4 @@
--- Add labels/tags to project_templates - run against the SitePix Supabase project.
+-- Add labels/tags to project_templates - run against the Everlumen Supabase project.
 -- Labels are free-form text tags used to organize templates (e.g. "HVAC Install").
 
 ALTER TABLE public.project_templates

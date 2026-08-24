@@ -29,7 +29,7 @@
 -- schedule anything; see the VERIFY block at the end for whether the jobs that
 -- call these endpoints exist.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run, and
+-- Apply via the Everlumen Supabase SQL editor. Idempotent - safe to re-run, and
 -- re-running never rotates a secret that is already in use.
 
 SET lock_timeout = '5s';
@@ -53,7 +53,7 @@ BEGIN
     PERFORM vault.create_secret(
       encode(gen_random_bytes(32), 'hex'),
       'cron_shared_secret',
-      'Shared secret for pg_cron -> SitePix API hook calls (x-cron-secret header)'
+      'Shared secret for pg_cron -> Everlumen API hook calls (x-cron-secret header)'
     );
   END IF;
 END $$;

@@ -71,12 +71,12 @@ import {
   updateProjectGroup,
   deleteProjectGroup,
 } from "@/lib/project-groups.functions";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useTeamMembers } from "@/hooks/use-team-members";
 import { completionRights, overrideConfirm } from "@/lib/assignment";
-import { formatCalendarDate, isCalendarDateOverdue } from "@sitepix/shared";
+import { formatCalendarDate, isCalendarDateOverdue } from "@everlumen/shared";
 import {
   TASK_PHOTO_ITEMS_TABLE,
   TASK_PHOTO_ITEM_COLUMNS,

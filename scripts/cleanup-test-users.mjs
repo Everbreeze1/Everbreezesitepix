@@ -12,7 +12,7 @@ for (const line of readFileSync(".env", "utf8").split(/\r?\n/)) {
   if (m) web[m[1]] = m[2].replace(/^["']|["']$/g, "");
 }
 const URL = web.VITE_SUPABASE_URL;
-const KEY = env.SITEPIX_SUPABASE_SERVICE_ROLE_KEY;
+const KEY = env.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY;
 const H = { apikey: KEY, Authorization: `Bearer ${KEY}` };
 
 let page = 1;

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { todayCalendarDate } from "@sitepix/shared";
-import { supabase } from "@/integrations/sitepix/client";
+import { todayCalendarDate } from "@everlumen/shared";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { qk } from "@/lib/query-keys";
 import {

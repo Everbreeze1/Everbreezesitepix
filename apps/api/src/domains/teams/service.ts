@@ -12,7 +12,7 @@ import {
   canManageMember,
   normaliseRole,
   roleAllowedOnTier,
-} from "@sitepix/shared/team-permissions";
+} from "@everlumen/shared/team-permissions";
 
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>;
 

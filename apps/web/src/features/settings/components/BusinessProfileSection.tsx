@@ -9,7 +9,7 @@ import {
   findIndustry,
   industryLabel,
   recommendedCategories,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 import { Button } from "@/components/ui/button";
 import { categoryIcon } from "@/lib/template-categories";
 import { useCompanySetup } from "@/hooks/use-company-setup";

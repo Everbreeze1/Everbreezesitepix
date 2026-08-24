@@ -18,7 +18,7 @@ export class ApiClientError extends Error {
 
 export type HealthResponse = {
   ok: true;
-  service: "sitepix-api";
+  service: "everlumen-api";
   version: "v1";
 };
 
@@ -44,7 +44,7 @@ export type RequestOptions = {
 export type CreateApiClientOptions = {
   /** Base URL including origin, e.g. https://api.example.com or "" for same-origin. */
   baseUrl: string;
-  /** Returns a SitePix JWT, or null when unauthenticated. */
+  /** Returns a Everlumen JWT, or null when unauthenticated. */
   getAccessToken?: () => Promise<string | null> | string | null;
   fetch?: typeof fetch;
 };
@@ -69,7 +69,7 @@ async function parseError(res: Response): Promise<ApiClientError> {
 }
 
 /**
- * Typed HTTP client for SitePix `/v1/...` API.
+ * Typed HTTP client for Everlumen `/v1/...` API.
  */
 export function createApiClient(options: CreateApiClientOptions) {
   const baseUrl = options.baseUrl.replace(/\/$/, "");

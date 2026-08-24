@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { clampPhotosPerPage, useProfile } from "@/hooks/use-profile";
 import { useSubscription } from "@/hooks/use-subscription";
@@ -27,7 +27,7 @@ import {
   sanitizeCaption,
   tradeCategoryFor,
   type ReportStarter,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 import { makeCategoryRank } from "@/lib/template-categories";
 import { useCompanySetup } from "@/hooks/use-company-setup";
 import { PhotosPerPagePicker } from "@/features/projects/components/PhotosPerPagePicker";
@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 /**
  * What the report is being built from.
  *
- * `starter` is the built-in library in @sitepix/shared; `saved` is a template
+ * `starter` is the built-in library in @everlumen/shared; `saved` is a template
  * this team wrote in Settings, which until now could only be reached through a
  * blueprint and so was invisible to anyone actually filing a report.
  */

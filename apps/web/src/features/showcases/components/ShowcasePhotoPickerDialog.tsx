@@ -11,9 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, Search, Check } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { PhotoThumb } from "@/components/PhotoThumb";
-import { UNTITLED_PROJECT } from "@sitepix/shared";
+import { UNTITLED_PROJECT } from "@everlumen/shared";
 
 interface PhotoRow {
   id: string;

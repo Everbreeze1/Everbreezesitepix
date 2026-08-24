@@ -49,7 +49,7 @@
 -- Self-sufficient: re-declares the table, so this file also repairs an
 -- environment that never received 20260810000000.
 --
--- Apply via the SitePix Supabase SQL editor. Idempotent - safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Idempotent - safe to re-run.
 
 SET lock_timeout = '5s';
 

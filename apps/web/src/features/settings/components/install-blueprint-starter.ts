@@ -1,5 +1,5 @@
-import { supabase } from "@/integrations/sitepix/client";
-import { REPORT_STARTERS } from "@sitepix/shared";
+import { supabase } from "@/integrations/everlumen/client";
+import { REPORT_STARTERS } from "@everlumen/shared";
 import { STARTER_TEMPLATES } from "./checklist-starters";
 import { STARTER_WORKFLOWS } from "./workflow-starters";
 import { WALKTHROUGH_STARTERS } from "./walkthrough-starters";

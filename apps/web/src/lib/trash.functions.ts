@@ -1,4 +1,4 @@
-import { rpcOp } from "./sitepix-api";
+import { rpcOp } from "./everlumen-api";
 import type {
   listTrashedPhotosService,
   restorePhotosService,
@@ -8,7 +8,7 @@ import type {
   restoreProjectService,
   purgeProjectService,
   getTrashCountsService,
-} from "@sitepix/api";
+} from "@everlumen/api";
 
 /** Must match apps/api trash service. */
 export const TRASH_RETENTION_DAYS = 60;

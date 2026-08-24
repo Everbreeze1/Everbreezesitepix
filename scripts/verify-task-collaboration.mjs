@@ -41,14 +41,16 @@ function env(path) {
 }
 
 const cfg = env("apps/api/.env");
-const db = createClient(cfg.SITEPIX_SUPABASE_URL, cfg.SITEPIX_SUPABASE_SERVICE_ROLE_KEY, {
+const db = createClient(cfg.EVERLUMEN_SUPABASE_URL, cfg.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 /** The key that ships in the browser bundle. Used only to prove it cannot read. */
 const anonKey =
-  cfg.SITEPIX_SUPABASE_PUBLISHABLE_KEY ?? cfg.SITEPIX_SUPABASE_ANON_KEY ?? cfg.SUPABASE_ANON_KEY;
+  cfg.EVERLUMEN_SUPABASE_PUBLISHABLE_KEY ??
+  cfg.EVERLUMEN_SUPABASE_ANON_KEY ??
+  cfg.SUPABASE_ANON_KEY;
 const anon = anonKey
-  ? createClient(cfg.SITEPIX_SUPABASE_URL, anonKey, { auth: { persistSession: false } })
+  ? createClient(cfg.EVERLUMEN_SUPABASE_URL, anonKey, { auth: { persistSession: false } })
   : null;
 
 const results = [];

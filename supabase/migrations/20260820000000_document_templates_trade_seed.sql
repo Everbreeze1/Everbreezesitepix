@@ -1,4 +1,4 @@
--- SitePix example templates - the trades that were missing: Electrical, HVAC,
+-- Everlumen example templates - the trades that were missing: Electrical, HVAC,
 -- Plumbing.
 --
 -- The built-in library seeded by 20260803000001 covered reporting shapes (site
@@ -29,7 +29,7 @@
 -- order table in that component exactly.
 --
 -- Idempotent - ON CONFLICT (slug) DO UPDATE. Safe to re-run.
--- Apply via the SitePix Supabase SQL editor.
+-- Apply via the Everlumen Supabase SQL editor.
 
 INSERT INTO public.document_templates (slug, team_id, created_by, name, body, fields)
 VALUES (

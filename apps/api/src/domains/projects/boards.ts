@@ -7,7 +7,7 @@ import {
   isProjectStatus,
   normalizePipelineName,
   type ProjectStatus,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 import type { AuthedContext } from "../../lib/user-context";
 
 /**

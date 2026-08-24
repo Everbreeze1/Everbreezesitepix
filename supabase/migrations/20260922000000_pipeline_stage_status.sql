@@ -43,7 +43,7 @@
 -- takes the project off the active list and has its own menu item), and a job
 -- being dragged between columns is not a reason to bring it back.
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent: safe to re-run. The seeding and the backfill run ONLY on the
 -- first application, so a second run never overwrites a mapping a team has
 -- since edited.

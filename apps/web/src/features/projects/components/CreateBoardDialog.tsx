@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Info, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { pipelineNameBlocks, pipelineNameIssue, pipelineNameMessage } from "@sitepix/shared";
+import { pipelineNameBlocks, pipelineNameIssue, pipelineNameMessage } from "@everlumen/shared";
 import { createProjectBoard, type ProjectBoard } from "@/lib/project-boards.functions";
 import {
   PipelineStageEditor,

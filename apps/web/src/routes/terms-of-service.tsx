@@ -14,17 +14,17 @@ import {
 export const Route = createFileRoute("/terms-of-service")({
   head: () => ({
     meta: [
-      { title: "Terms of Service - Everbreeze SitePix" },
+      { title: "Terms of Service - Everlumen" },
       {
         name: "description",
         content:
-          "Terms of Service for Everbreeze SitePix. The agreement covering your subscription, your job site photos and reports, acceptable use, AI-generated output, and public share links.",
+          "Terms of Service for Everlumen. The agreement covering your subscription, your job site photos and reports, acceptable use, AI-generated output, and public share links.",
       },
-      { property: "og:title", content: "Terms of Service - Everbreeze SitePix" },
+      { property: "og:title", content: "Terms of Service - Everlumen" },
       {
         property: "og:description",
         content:
-          "Terms of Service for Everbreeze SitePix. The agreement covering your subscription, your job site photos and reports, acceptable use, AI-generated output, and public share links.",
+          "Terms of Service for Everlumen. The agreement covering your subscription, your job site photos and reports, acceptable use, AI-generated output, and public share links.",
       },
       { property: "og:url", content: "https://www.everbreezesitepix.com/terms-of-service" },
     ],
@@ -51,7 +51,7 @@ function TermsOfServicePage() {
         <Link to="/" className="flex items-center gap-2">
           <BrandLogo size={28} />
           <span className="text-sm font-bold tracking-tight">
-            Everbreeze <span className="text-primary">SitePix</span>
+            Ever<span className="text-primary">lumen</span>
           </span>
         </Link>
       </header>
@@ -70,9 +70,9 @@ function TermsOfServicePage() {
             <p className="text-muted-foreground">
               These Terms of Service (the &quot;Terms&quot;) are a binding agreement between{" "}
               {LEGAL_ENTITY} (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;), operator of
-              Everbreeze SitePix, and the business or individual that creates an account
-              (&quot;you&quot;). By creating an account, subscribing, or otherwise using the
-              Services you accept these Terms and our{" "}
+              Everlumen, and the business or individual that creates an account (&quot;you&quot;).
+              By creating an account, subscribing, or otherwise using the Services you accept these
+              Terms and our{" "}
               <Link to="/privacy-policy" className="text-primary hover:underline">
                 Privacy Policy
               </Link>
@@ -89,12 +89,12 @@ function TermsOfServicePage() {
               2. Description of the Service
             </h2>
             <p className="text-muted-foreground">
-              Everbreeze SitePix is a subscription software service for construction and field
-              trades. It lets you capture and organise job site photos, videos and walkthrough
-              recordings; run checklists and workflows; generate site logs and reports (including
-              AI-assisted ones); publish public share links and portfolio pages; and collaborate
-              with team members you invite. The Services are provided as a web and mobile
-              application together with the everbreezesitepix.com website.
+              Everlumen is a subscription software service for construction and field trades. It
+              lets you capture and organise job site photos, videos and walkthrough recordings; run
+              checklists and workflows; generate site logs and reports (including AI-assisted ones);
+              publish public share links and portfolio pages; and collaborate with team members you
+              invite. The Services are provided as a web and mobile application together with the
+              everbreezesitepix.com website.
             </p>
             <p className="text-muted-foreground mt-2">
               We may add, change or remove features. Where a change materially reduces functionality

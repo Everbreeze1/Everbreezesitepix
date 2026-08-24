@@ -8,7 +8,7 @@
  *
  * WHAT THIS RUN WRITES, and it is all torn down in a finally block:
  *
- *   - one throwaway auth user (email restricted-probe+<ts>@sitepix.test)
+ *   - one throwaway auth user (email restricted-probe+<ts>@everlumen.test)
  *   - one `team_members` row for them, role = 'restricted'
  *   - one `project_assignments` row putting them on ONE existing project
  *
@@ -33,7 +33,7 @@ function env(path) {
 }
 
 const cfg = env("apps/api/.env");
-const admin = createClient(cfg.SITEPIX_SUPABASE_URL, cfg.SITEPIX_SUPABASE_SERVICE_ROLE_KEY, {
+const admin = createClient(cfg.EVERLUMEN_SUPABASE_URL, cfg.EVERLUMEN_SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
@@ -93,7 +93,7 @@ async function main() {
 
   /* ------------------------------------------------- create the probe user */
   const stamp = Date.now();
-  const email = `restricted-probe+${stamp}@sitepix.test`;
+  const email = `restricted-probe+${stamp}@everlumen.test`;
   const password = `Probe!${stamp}aA`;
   let probeId = null;
   let assignmentId = null;
@@ -132,9 +132,13 @@ async function main() {
     ok("assign them to one project");
 
     /* ------------------------------------------------ act as the probe user */
-    const asUser = createClient(cfg.SITEPIX_SUPABASE_URL, cfg.SITEPIX_SUPABASE_PUBLISHABLE_KEY, {
-      auth: { persistSession: false },
-    });
+    const asUser = createClient(
+      cfg.EVERLUMEN_SUPABASE_URL,
+      cfg.EVERLUMEN_SUPABASE_PUBLISHABLE_KEY,
+      {
+        auth: { persistSession: false },
+      },
+    );
     const { error: signInErr } = await asUser.auth.signInWithPassword({ email, password });
     if (signInErr) return (bad("sign in as the Restricted user", signInErr.message), report());
     ok("sign in as the Restricted user");

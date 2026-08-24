@@ -6,7 +6,7 @@ import {
 } from "@/features/settings/pages/TemplatesPage";
 
 export const Route = createFileRoute("/_app/templates")({
-  head: () => ({ meta: [{ title: "Templates - SitePix" }] }),
+  head: () => ({ meta: [{ title: "Templates - Everlumen" }] }),
   // Deep-linkable, because half the point of the hub is that other screens can
   // send you to it: "Save as template" toasts land on the tab the thing was
   // saved to, and a blueprint can be opened by id from a project.

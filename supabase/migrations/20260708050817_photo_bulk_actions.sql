@@ -1,5 +1,5 @@
 -- Photo bulk actions: hide-from-timeline + soft-delete (Trash).
--- Run this against the SitePix Supabase project.
+-- Run this against the Everlumen Supabase project.
 
 ALTER TABLE public.photos
   ADD COLUMN IF NOT EXISTS hidden     boolean     NOT NULL DEFAULT false,

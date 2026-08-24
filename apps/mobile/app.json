@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "Everbreeze SitePix",
-    "slug": "everbreeze-sitepix",
+    "name": "Everlumen",
+    "slug": "everlumen",
     "version": "0.1.0",
     "orientation": "portrait",
-    "scheme": "sitepix",
+    "scheme": "everlumen",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "plugins": [
@@ -13,8 +13,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow SitePix to access your photos for field uploads.",
-          "cameraPermission": "Allow SitePix to take job-site photos."
+          "photosPermission": "Allow Everlumen to access your photos for field uploads.",
+          "cameraPermission": "Allow Everlumen to take job-site photos."
         }
       ]
     ],
@@ -30,10 +30,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.everbreeze.sitepix"
+      "bundleIdentifier": "com.everlumen.app"
     },
     "android": {
-      "package": "com.everbreeze.sitepix"
+      "package": "com.everlumen.app"
     }
   }
 }

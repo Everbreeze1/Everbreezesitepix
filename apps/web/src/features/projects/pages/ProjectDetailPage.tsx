@@ -42,12 +42,12 @@ import {
   Download,
 } from "lucide-react";
 import { formatBytes } from "@/hooks/use-storage-usage";
-import { photoObjectPaths } from "@sitepix/shared";
+import { photoObjectPaths } from "@everlumen/shared";
 import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import { downloadBlobFile } from "@/lib/download-file";
 import { isOverUploadLimit, overUploadLimitMessage } from "@/lib/upload-limits";
 import { uploadWithResume } from "@/lib/resumable-upload";
-import { relativeTime, cleanCaption } from "@sitepix/shared";
+import { relativeTime, cleanCaption } from "@everlumen/shared";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EditProjectDialog } from "@/features/projects/components/EditProjectDialog";
 import { NewReportDialog } from "@/features/projects/components/NewReportDialog";
@@ -122,7 +122,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";

@@ -3,7 +3,7 @@
 -- Settings has had a Notifications screen since the first build: an "Email
 -- notifications" master switch, a "Push notifications" switch, and four topic
 -- rows. Every one of them was written to `localStorage`
--- (`sitepix:notif-prefs:<uid>`), which lives in one browser on one device and
+-- (`everlumen:notif-prefs:<uid>`), which lives in one browser on one device and
 -- which no server has ever been able to read.
 --
 -- That was harmless for as long as the product sent no email about work. The
@@ -40,7 +40,7 @@
 -- would reject a preference written by a newer build during a rolling deploy,
 -- and `parseNotificationPrefs` already drops anything it does not recognise.
 --
--- Idempotent, safe to re-run. Apply via the SitePix Supabase SQL editor
+-- Idempotent, safe to re-run. Apply via the Everlumen Supabase SQL editor
 -- (project ulmgvtuqjlzzadlwtiog) or `supabase db push`.
 
 SET lock_timeout = '5s';

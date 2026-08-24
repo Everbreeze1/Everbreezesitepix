@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { sanitizeCaption } from "@sitepix/shared";
+import { sanitizeCaption } from "@everlumen/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { selectIn } from "../../lib/chunked-in";
 

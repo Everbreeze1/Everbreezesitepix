@@ -1,7 +1,7 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { PROJECT_STATUS_LABELS, formatCalendarDate, type ProjectStatus } from "@sitepix/shared";
+import { PROJECT_STATUS_LABELS, formatCalendarDate, type ProjectStatus } from "@everlumen/shared";
 import { qk } from "@/lib/query-keys";
 import { PhotoThumb } from "@/components/PhotoThumb";
 import {
@@ -60,7 +60,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { getMyTeam } from "@/lib/teams.functions";
 import { MobileAppBanner } from "@/components/MobileAppBanner";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";

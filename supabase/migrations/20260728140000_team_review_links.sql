@@ -1,6 +1,6 @@
 -- Customer Review Requests (Team tier): owner/admin configures where a
 -- customer viewing a shared report should be sent to leave a review.
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog). Idempotent.
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog). Idempotent.
 
 CREATE TABLE IF NOT EXISTS public.team_review_links (
   id         uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,

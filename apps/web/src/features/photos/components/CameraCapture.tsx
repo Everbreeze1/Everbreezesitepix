@@ -369,7 +369,7 @@ export function CameraCapture({
     }
     setSubmitting(true);
     try {
-      const file = new File([preview.blob], `sitepix-${Date.now()}.jpg`, { type: "image/jpeg" });
+      const file = new File([preview.blob], `everlumen-${Date.now()}.jpg`, { type: "image/jpeg" });
       const thumb = preview.dataUrl;
       const desc = description.trim();
       await onCapture(file, {
@@ -410,7 +410,7 @@ export function CameraCapture({
     if (mode === "measure" && canMeasure) {
       setSubmitting(true);
       try {
-        const file = new File([annotatedBlob], `sitepix-measure-${Date.now()}.jpg`, {
+        const file = new File([annotatedBlob], `everlumen-measure-${Date.now()}.jpg`, {
           type: "image/jpeg",
         });
         const desc = description.trim();

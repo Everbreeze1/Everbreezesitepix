@@ -5,7 +5,7 @@ import {
   INDUSTRY_IDS,
   PROJECT_VOLUME_IDS,
   TEAM_SIZE_IDS,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 import { AuthError, type ServiceContext } from "../../lib/user-context";
 import { geocodeAddressInputSchema, geocodeAddressService } from "../maps/geocode";
 import { synthesizeBreezeSpeechService, synthesizeSpeechInputSchema } from "../tts/synthesize";

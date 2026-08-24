@@ -11,7 +11,7 @@
 -- name with total confidence. The database is the one place every write has to
 -- pass through.
 --
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog).
 -- Idempotent: safe to re-run, and a no-op once it has run.
 
 -- ---------------------------------------------------------------------------

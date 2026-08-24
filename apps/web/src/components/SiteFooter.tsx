@@ -39,11 +39,11 @@ export function SiteFooter() {
             <Link to="/" className="flex items-center gap-2.5">
               <BrandLogo size={40} />
               <span className="font-manrope text-lg font-extrabold tracking-[-0.45px] text-sidebar-foreground">
-                Everbreeze <span className="text-sidebar-ring">SitePix</span>
+                Ever<span className="text-sidebar-ring">lumen</span>
               </span>
             </Link>
             <p className="font-manrope mt-5 max-w-[358px] text-sm leading-6 text-sidebar-foreground/60">
-              SitePix helps construction teams capture the truth of every job - then puts it where
+              Everlumen helps construction teams capture the truth of every job - then puts it where
               the whole team can use it.
             </p>
             {/* Was mailto:hello@sitepix.com - a domain that isn't ours. Until a
@@ -86,7 +86,7 @@ export function SiteFooter() {
 
         <div className="mt-16 border-t border-sidebar-border pt-7">
           <p className="font-manrope text-xs text-sidebar-foreground/45">
-            © {new Date().getFullYear()} Everbreeze SitePix. Built for the field.
+            © {new Date().getFullYear()} Everlumen. Built for the field.
           </p>
         </div>
       </div>

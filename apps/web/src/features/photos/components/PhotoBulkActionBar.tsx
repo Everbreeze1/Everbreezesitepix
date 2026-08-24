@@ -41,12 +41,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { chunkIds, mutateByIds } from "@/lib/chunked-ids";
 import { ensureGlobalTag } from "@/hooks/use-tag-colors";
 import { useConfirm } from "@/hooks/use-confirm";
 import { clampPhotosPerPage, useProfile } from "@/hooks/use-profile";
-import { cleanCaption, sanitizeCaption, describeProjects } from "@sitepix/shared";
+import { cleanCaption, sanitizeCaption, describeProjects } from "@everlumen/shared";
 import { SharePhotoDialog, shareUrl } from "@/features/photos/components/SharePhotoDialog";
 import { PhotoTagPopoverBody } from "@/features/photos/components/PhotoTagPopoverBody";
 import { createPhotoShare } from "@/lib/photo-shares.functions";

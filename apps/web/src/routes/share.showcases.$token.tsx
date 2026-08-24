@@ -8,8 +8,8 @@ import { ShowcaseView } from "@/components/ShowcaseView";
 export const Route = createFileRoute("/share/showcases/$token")({
   head: () => ({
     meta: [
-      { title: "Project - SitePix" },
-      { name: "description", content: "A completed job shared from SitePix." },
+      { title: "Project - Everlumen" },
+      { name: "description", content: "A completed job shared from Everlumen." },
       { name: "robots", content: "noindex,nofollow" },
     ],
   }),
@@ -58,7 +58,7 @@ function PublicShowcasePage() {
             : "This link is invalid or no longer available."}
         </p>
         <Button asChild className="mt-6">
-          <Link to="/">Back to SitePix</Link>
+          <Link to="/">Back to Everlumen</Link>
         </Button>
       </div>
     );

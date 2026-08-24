@@ -27,11 +27,11 @@
 -- Everything is IF NOT EXISTS / guarded, so re-running is a no-op - which is the
 -- point, since it is genuinely unknown how much of each original file landed.
 --
--- Apply via the SitePix Supabase SQL editor. Safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Safe to re-run.
 
 -- Fail fast rather than queueing behind app traffic. If a PART errors with
 -- "canceling statement due to lock timeout" nothing in it was applied - close
--- any open SitePix tabs and run that PART again.
+-- any open Everlumen tabs and run that PART again.
 SET lock_timeout = '5s';
 
 

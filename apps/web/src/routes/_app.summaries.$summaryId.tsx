@@ -4,6 +4,6 @@ import { SummaryDetailPage } from "@/features/walkthroughs/pages/SummaryDetailPa
 export const Route = createFileRoute("/_app/summaries/$summaryId")({
   // "the tab title 'Walkthrough,' even when there's no video" - this is the
   // other half of that fix. A summary is a Summary in the browser tab too.
-  head: () => ({ meta: [{ title: "Summary - SitePix" }] }),
+  head: () => ({ meta: [{ title: "Summary - Everlumen" }] }),
   component: SummaryDetailPage,
 });

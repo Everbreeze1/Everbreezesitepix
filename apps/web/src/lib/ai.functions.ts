@@ -1,4 +1,4 @@
-import { rpcOp } from "./sitepix-api";
+import { rpcOp } from "./everlumen-api";
 import type {
   analyzePhotoService,
   chatWithAssistantService,
@@ -6,7 +6,7 @@ import type {
   describeSiteLogPhotosService,
   summarizeWalkthroughsReportService,
   extractPhotoTextService,
-} from "@sitepix/api";
+} from "@everlumen/api";
 
 /** See walkthroughs.functions.ts - result types are derived, not hand-written. */
 type Result<T extends (...args: never[]) => unknown> = Awaited<ReturnType<T>>;

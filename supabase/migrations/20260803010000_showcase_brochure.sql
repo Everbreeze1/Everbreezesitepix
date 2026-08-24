@@ -25,13 +25,13 @@
 -- reading `showcases` and `showcase_items` in the opposite order. The two block
 -- each other and Postgres kills one.
 --
--- Fix: close any open SitePix browser tabs (that stops the app polling), then
+-- Fix: close any open Everlumen browser tabs (that stops the app polling), then
 -- run the PARTS BELOW ONE AT A TIME rather than the whole file at once. Each
 -- part is small, takes its locks briefly, and commits before the next begins.
 -- Everything is idempotent, so re-running any part - or the whole file - is
 -- safe whether or not it partially applied.
 --
--- Apply via the SitePix Supabase SQL editor (or `supabase db push`).
+-- Apply via the Everlumen Supabase SQL editor (or `supabase db push`).
 -- ---------------------------------------------------------------------------
 
 -- Fail fast rather than queueing behind app traffic and deadlocking. If a part

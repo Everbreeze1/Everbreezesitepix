@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseReportTemplateStructure } from "@sitepix/shared";
+import { parseReportTemplateStructure } from "@everlumen/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { isMissingColumn, isMissingTable } from "../../lib/postgrest";
 import type { ServiceContext } from "../../lib/user-context";

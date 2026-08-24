@@ -1,10 +1,10 @@
-import { createApiClient } from "@sitepix/api-client";
+import { createApiClient } from "@everlumen/api-client";
 import { supabase } from "./supabase";
 
 const baseUrl = (process.env.EXPO_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
 
 /**
- * SitePix `/v1` client for mobile.
+ * Everlumen `/v1` client for mobile.
  * @see docs/api.md
  */
 export const api = createApiClient({

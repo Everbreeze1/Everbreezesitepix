@@ -1,4 +1,4 @@
--- SitePix example-template library rebuild - part 2 of 2: seed data.
+-- Everlumen example-template library rebuild - part 2 of 2: seed data.
 --
 -- Run 20260803000000_document_templates_rebuild_schema.sql first. This file
 -- never runs ALTER TABLE, so it only takes row-level locks on

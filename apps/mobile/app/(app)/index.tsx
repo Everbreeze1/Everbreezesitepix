@@ -41,7 +41,7 @@ export default function ProjectsScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.toolbar}>
-        <Text style={styles.hint}>Your SitePix projects</Text>
+        <Text style={styles.hint}>Your Everlumen projects</Text>
         <Pressable onPress={() => router.push("/account")} hitSlop={8}>
           <Text style={styles.link}>Account</Text>
         </Pressable>

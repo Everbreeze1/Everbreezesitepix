@@ -1,5 +1,5 @@
 -- Free-form Word-style documents ("Pages"), folders, and reusable text
--- snippets - see docs/documents-feature-plan.md. Apply via the SitePix
+-- snippets - see docs/documents-feature-plan.md. Apply via the Everlumen
 -- Supabase SQL editor (or `supabase db push`). Idempotent.
 
 -- =========================

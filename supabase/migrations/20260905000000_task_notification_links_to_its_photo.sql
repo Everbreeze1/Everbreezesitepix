@@ -59,7 +59,7 @@
 -- migration this replaces, so there is no database where this one is reachable
 -- and they are not there.
 --
--- Apply via the SitePix Supabase SQL editor (or `supabase db push`).
+-- Apply via the Everlumen Supabase SQL editor (or `supabase db push`).
 
 SET lock_timeout = '5s';
 

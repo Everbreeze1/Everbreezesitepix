@@ -12,7 +12,7 @@ import {
   isBusinessProfileComplete,
   recommendedCategories,
   tradeCategoryFor,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 
 /*
  * The industry taxonomy is a join between three things that live in three
@@ -239,7 +239,7 @@ describe("the screens that read the business profile", () => {
     expect(registry).toMatch(/saveCompanyProfile:/);
     expect(registry).toMatch(/INDUSTRY_IDS/);
     expect(registry).toMatch(/TEAM_SIZE_IDS/);
-    expect(registry).toMatch(/from "@sitepix\/shared"/);
+    expect(registry).toMatch(/from "@everlumen\/shared"/);
   });
 
   it("never claims a company is unset while it is still loading", () => {

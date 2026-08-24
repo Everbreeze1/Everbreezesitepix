@@ -67,7 +67,7 @@
 -- archived they no longer match `archived = false`, so a second run reports
 -- zero. Names every row it archives, and what it kept in its place.
 --
--- Apply via the SitePix Supabase SQL editor (or `supabase db push`).
+-- Apply via the Everlumen Supabase SQL editor (or `supabase db push`).
 
 SET lock_timeout = '5s';
 

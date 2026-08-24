@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -93,7 +93,7 @@ import {
 } from "@/lib/template-categories";
 import { useCompanySetup } from "@/hooks/use-company-setup";
 import { nextCopyName } from "@/lib/duplicate-name";
-import { tradeCategoryFor } from "@sitepix/shared";
+import { tradeCategoryFor } from "@everlumen/shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -541,8 +541,8 @@ const SAMPLE: Record<string, string> = {
   job_title: "Project Manager",
   prepared_by_title: "Project Manager",
   weather: "Sunny, 72°F",
-  company: "Everbreeze Construction",
-  company_name: "Everbreeze Construction",
+  company: "Northwind Construction",
+  company_name: "Northwind Construction",
   company_address: "800 Harbor Blvd, Suite 210",
   company_phone: "(555) 123-4567",
 };

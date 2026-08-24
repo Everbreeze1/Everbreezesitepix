@@ -1,5 +1,5 @@
 -- Templates redesign - new template kinds.
--- Run against the SitePix Supabase project.
+-- Run against the Everlumen Supabase project.
 --
 -- Adds three new template kinds so users can build reusable blueprints beyond
 -- checklists/workflows:

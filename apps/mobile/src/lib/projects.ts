@@ -30,7 +30,7 @@ function formatAddress(p: Pick<ProjectListItem, "street" | "city" | "state" | "z
 
 export { formatAddress };
 
-/** Active projects visible under SitePix RLS. */
+/** Active projects visible under Everlumen RLS. */
 export async function listProjects(): Promise<ProjectListItem[]> {
   // deleted_at exists in product DB but is not yet in generated Database types
   const { data, error } = await (supabase as any)

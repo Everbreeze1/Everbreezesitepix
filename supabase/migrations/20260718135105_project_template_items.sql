@@ -1,7 +1,7 @@
 -- Project Blueprints: attach any template kind (document / report / label set /
 -- workflow / checklist) to a project template. Existing project_template_checklists
 -- rows stay valid; new kinds go through this generic table.
--- Run against the SitePix Supabase project.
+-- Run against the Everlumen Supabase project.
 
 CREATE TABLE IF NOT EXISTS public.project_template_items (
   id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),

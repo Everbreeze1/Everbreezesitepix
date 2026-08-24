@@ -3,7 +3,7 @@
 -- easier to audit who has access and to revoke it.
 -- Bootstrap: the first row must be inserted manually in the SQL editor -
 -- see docs/ops.md. No UI can grant the first admin (chicken-and-egg).
--- Apply via the SitePix Supabase SQL editor (project ulmgvtuqjlzzadlwtiog). Idempotent.
+-- Apply via the Everlumen Supabase SQL editor (project ulmgvtuqjlzzadlwtiog). Idempotent.
 
 CREATE TABLE IF NOT EXISTS public.platform_admins (
   user_id    uuid NOT NULL PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,

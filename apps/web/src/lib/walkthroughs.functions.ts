@@ -1,4 +1,4 @@
-import { rpcOp } from "./sitepix-api";
+import { rpcOp } from "./everlumen-api";
 import type {
   createWalkthroughSessionService,
   saveWalkthroughPhotoService,
@@ -15,7 +15,7 @@ import type {
   generateWalkthroughSummaryService,
   regenerateWalkthroughSummaryService,
   generateWalkthroughNarrationService,
-} from "@sitepix/api";
+} from "@everlumen/api";
 
 /**
  * Result types are derived from the service functions rather than written out

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { normalizeExternalUrl } from "@sitepix/shared";
+import { normalizeExternalUrl } from "@everlumen/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import {
   loadSections,

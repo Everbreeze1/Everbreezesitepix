@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 
 // ---------------------------------------------------------------------------
 // Global label catalog - labels are company/team-wide with a custom color.

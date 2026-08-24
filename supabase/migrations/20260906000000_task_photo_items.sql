@@ -55,7 +55,7 @@
 -- `tasks_enforce_completer` would then refuse, and can never raise inside an
 -- unrelated edit.
 --
--- Apply via the SitePix Supabase SQL editor (or `supabase db push`).
+-- Apply via the Everlumen Supabase SQL editor (or `supabase db push`).
 
 SET lock_timeout = '5s';
 

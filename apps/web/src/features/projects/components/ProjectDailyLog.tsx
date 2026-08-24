@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, ChevronRight, Loader2, Lock, NotebookPen } from "lucide-react";
-import { relativeTime } from "@sitepix/shared";
+import { relativeTime } from "@everlumen/shared";
 import { SURFACE_CARD } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import type { DailyLogSummary } from "@/lib/project-pages.functions";

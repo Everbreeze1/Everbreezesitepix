@@ -3,7 +3,7 @@
 -- Both already carried the whole record - items, answers, photos, sign-offs -
 -- and had nowhere to send it. A checklist could only be read inside the app, in
 -- a modal, by its owner. This adds the three columns every other document-shaped
--- thing in SitePix already has (project_pages, project_reports, walkthroughs):
+-- thing in Everlumen already has (project_pages, project_reports, walkthroughs):
 --
 --   share_token  - the public link, issued up front like project_pages does
 --   revoked_at   - the owner's switch for that link, defaulting to OFF

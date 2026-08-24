@@ -1,5 +1,5 @@
-import { rpcOp } from "./sitepix-api";
-import type { Notification } from "@sitepix/api";
+import { rpcOp } from "./everlumen-api";
+import type { Notification } from "@everlumen/api";
 
 export type { Notification };
 

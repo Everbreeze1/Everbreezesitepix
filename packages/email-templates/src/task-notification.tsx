@@ -81,7 +81,7 @@ export const TaskNotificationEmail = ({
       <Preview>{`${headline}: ${taskTitle}`}</Preview>
       <Body style={main}>
         <Container style={outer}>
-          <Text style={wordmark}>Everbreeze SitePix</Text>
+          <Text style={wordmark}>Everlumen</Text>
 
           <Heading style={h1}>{headline}</Heading>
 

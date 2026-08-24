@@ -1,6 +1,6 @@
 /**
  * HTTP handlers for TanStack `/v1/*` and legacy `/api/*` routes.
- * Import from `@sitepix/api/http` in route files - keep out of client graphs.
+ * Import from `@everlumen/api/http` in route files - keep out of client graphs.
  */
 
 export type { HealthResponse } from "./domains/health/handler";

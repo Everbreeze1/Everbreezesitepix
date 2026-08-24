@@ -1,13 +1,13 @@
 import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 import { summarizePhotosReportService, draftReportNarrativeService } from "../ai/service";
-import { cleanCaption, markdownToHtml } from "@sitepix/shared";
+import { cleanCaption, markdownToHtml } from "@everlumen/shared";
 import { existingPageTitles, projectDocumentTitle, uniqueDocumentTitle } from "./page-title";
 import { DAILY_LOG_INTERNAL_NOTICE } from "./page-filing";
 
 /**
  * Minimal Markdown → HTML for the constrained subset our AI prompts emit.
- * It lives in @sitepix/shared now, because the walkthrough PDF needs the same
+ * It lives in @everlumen/shared now, because the walkthrough PDF needs the same
  * conversion to draw a summary's headings and bullets. Re-exported so this
  * module's existing importers do not have to care where it moved to.
  */
@@ -49,7 +49,7 @@ function formatPhotoDate(iso: string | null): string {
  * ("PHOTO 3 · 3 AUGUST 2026") above the description.
  *
  * Captions are run through `cleanCaption` first: uploads default the caption to
- * the source filename (`IMG_1234.JPG`, `sitepix-178155…jpg`), which is not
+ * the source filename (`IMG_1234.JPG`, `everlumen-178155…jpg`), which is not
  * information - printing it made documents read as though every photo were
  * annotated when none were. A photo with nothing real recorded says so plainly
  * instead of showing its filename.

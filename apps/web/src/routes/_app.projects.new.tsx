@@ -7,7 +7,7 @@ export type NewProjectSearch = {
 };
 
 export const Route = createFileRoute("/_app/projects/new")({
-  head: () => ({ meta: [{ title: "New Project - SitePix" }] }),
+  head: () => ({ meta: [{ title: "New Project - Everlumen" }] }),
   validateSearch: (search: Record<string, unknown>): NewProjectSearch => ({
     blueprint: typeof search.blueprint === "string" ? search.blueprint : undefined,
   }),

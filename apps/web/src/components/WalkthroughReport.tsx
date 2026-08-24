@@ -1,7 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import { Check, ImageOff, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cleanCaption, cleanWalkthroughMarkdown } from "@sitepix/shared";
+import { cleanCaption, cleanWalkthroughMarkdown } from "@everlumen/shared";
 import { cn } from "@/lib/utils";
 
 export interface WalkthroughPhotoStep {
@@ -20,7 +20,7 @@ const formatOffset = (seconds: number) =>
     .padStart(2, "0")}`;
 
 /**
- * Re-exported from @sitepix/shared, where it moved so the walkthrough PDF can
+ * Re-exported from @everlumen/shared, where it moved so the walkthrough PDF can
  * apply the identical reduction. It could not before: it ran its own extractor,
  * and the printed summary differed from the one approved on screen.
  */

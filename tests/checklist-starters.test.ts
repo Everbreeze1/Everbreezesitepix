@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { INDUSTRIES, tradeCategoryFor } from "@sitepix/shared";
+import { INDUSTRIES, tradeCategoryFor } from "@everlumen/shared";
 
 /*
  * The checklist starter library, checked the same way the document library is.

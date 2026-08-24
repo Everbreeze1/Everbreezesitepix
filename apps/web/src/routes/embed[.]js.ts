@@ -21,7 +21,10 @@ import type {} from "@tanstack/react-start";
  */
 const SCRIPT = String.raw`(function () {
   "use strict";
-  var MESSAGE_TYPE = "sitepix:embed:height";
+  var MESSAGE_TYPE = "everlumen:embed:height";
+  // Snippets pasted before the Everlumen rename say data-everlumen, and their
+  // pages are not going to be edited. Both spellings stay readable forever.
+  var LEGACY_MESSAGE_TYPE = "sitepix:embed:height";
 
   // document.currentScript is null inside async/deferred execution on some page
   // builders, so fall back to the last script tag that looks like ours.
@@ -38,14 +41,15 @@ const SCRIPT = String.raw`(function () {
   if (!self) return;
   // Guard against the snippet being pasted twice (common in page builders that
   // duplicate blocks) - without it the visitor sees two galleries.
-  if (self.getAttribute("data-sitepix-done") === "1") return;
-  self.setAttribute("data-sitepix-done", "1");
+  if (self.getAttribute("data-everlumen-done") === "1") return;
+  self.setAttribute("data-everlumen-done", "1");
 
   var origin = new URL(self.src, window.location.href).origin;
-  var kind = self.getAttribute("data-sitepix") || "gallery";
+  var kind =
+    self.getAttribute("data-everlumen") || self.getAttribute("data-sitepix") || "gallery";
   var key = self.getAttribute("data-key");
   if (!key) {
-    console.warn("[sitepix] embed is missing data-key");
+    console.warn("[everlumen] embed is missing data-key");
     return;
   }
 
@@ -92,7 +96,8 @@ const SCRIPT = String.raw`(function () {
     // The height is the only field trusted, and only from our own iframe -
     // any other frame on the host page posting this shape is ignored.
     if (event.origin !== origin) return;
-    if (!event.data || event.data.type !== MESSAGE_TYPE) return;
+    if (!event.data) return;
+    if (event.data.type !== MESSAGE_TYPE && event.data.type !== LEGACY_MESSAGE_TYPE) return;
     if (frame.contentWindow !== event.source) return;
     var height = parseInt(event.data.height, 10);
     if (!isFinite(height) || height < 80 || height > 20000) return;

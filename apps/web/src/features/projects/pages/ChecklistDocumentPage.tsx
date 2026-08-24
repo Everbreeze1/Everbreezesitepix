@@ -21,7 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { formatChecklistAnswer, formatProjectAddress } from "@sitepix/shared";
+import { formatChecklistAnswer, formatProjectAddress } from "@everlumen/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -41,7 +41,7 @@ import { RichTextEditor } from "@/components/RichTextEditor";
 import { PrintDocument } from "@/components/PrintDocument";
 import { SaveStatus } from "@/components/builder/builder-ui";
 import { useAutosave } from "@/components/builder/use-autosave";
-import { supabase } from "@/integrations/sitepix/client";
+import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { usePrompt } from "@/hooks/use-prompt";

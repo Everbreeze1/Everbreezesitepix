@@ -10,7 +10,7 @@
 -- the in-app prompt (source = 'prompt') sets none of them, and the project
 -- picker is optional even on the page.
 --
--- Apply via the SitePix Supabase SQL editor. Safe to re-run.
+-- Apply via the Everlumen Supabase SQL editor. Safe to re-run.
 --
 -- Until it is applied, submitFeedback (apps/web/src/lib/feedback.ts) detects
 -- the missing columns, retries with the long-standing ones, and folds this

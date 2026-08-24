@@ -1,5 +1,5 @@
-import type { ProjectStatus } from "@sitepix/shared";
-import { rpcOp } from "./sitepix-api";
+import type { ProjectStatus } from "@everlumen/shared";
+import { rpcOp } from "./everlumen-api";
 
 /** One column of a pipeline. Owned by the board, never borrowed from a tag. */
 export interface PipelineStage {

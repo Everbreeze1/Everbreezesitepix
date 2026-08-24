@@ -1,4 +1,4 @@
--- SitePix example-template library rebuild - part 1 of 2: schema.
+-- Everlumen example-template library rebuild - part 1 of 2: schema.
 --
 -- Split from a single migration into two after a deadlock ran hitting it as
 -- one transaction: this file only ALTERs document_templates (needs a brief

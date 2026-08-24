@@ -17,7 +17,7 @@ import {
   consolidateReportSections,
   normalizeDashes,
   normalizeDashesTrimmed,
-} from "@sitepix/shared";
+} from "@everlumen/shared";
 
 const MODEL = "google/gemini-2.5-flash";
 /**
@@ -712,7 +712,7 @@ If the transcript is empty, still produce valid JSON: an introduction stating pl
 
 /** The system message that pairs with `buildAutoReportPrompt`. */
 export const AUTO_REPORT_SYSTEM_PROMPT =
-  "You are SitePix AI drafting a formal, client-facing site report. You output only valid JSON that matches the requested schema, never commentary outside the JSON. You write in neutral, factual, professional prose, you base every sentence on the provided transcript and spoken notes, and you never invent facts, findings, risks or recommendations. You group photos into a small number of themed sections rather than giving each photo its own heading.";
+  "You are Everlumen AI drafting a formal, client-facing site report. You output only valid JSON that matches the requested schema, never commentary outside the JSON. You write in neutral, factual, professional prose, you base every sentence on the provided transcript and spoken notes, and you never invent facts, findings, risks or recommendations. You group photos into a small number of themed sections rather than giving each photo its own heading.";
 
 /**
  * Page density for a generated report: what the caller asked for, else the

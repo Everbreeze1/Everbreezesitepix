@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Mail, MapPin, Phone, Star } from "lucide-react";
-import { richIsEmpty } from "@sitepix/shared";
+import { richIsEmpty } from "@everlumen/shared";
 import { RichText } from "@/components/RichText";
 import { cn } from "@/lib/utils";
 
@@ -275,7 +275,7 @@ export function ShowcaseView({
         <p className="py-10 text-center text-xs text-neutral-400">
           Built with{" "}
           <Link to="/" className="underline-offset-2 hover:underline">
-            SitePix
+            Everlumen
           </Link>
         </p>
       )}
