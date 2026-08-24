@@ -53,3 +53,6 @@ apps/api/.env.local
 /CLAUDE.md
 .claude/
 /LAUNCH.md
+
+# Supabase CLI scratch state (the linked project ref, cached CLI version).
+supabase/.temp/
