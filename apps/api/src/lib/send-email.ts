@@ -47,7 +47,7 @@ function addressOf(from: string): string {
 /**
  * Guarantee the From header carries a display name.
  *
- * `EMAIL_FROM` was a bare `info@everbreezesitepix.com`, and a bare address makes
+ * `EMAIL_FROM` was a bare `info@everlumen.co`, and a bare address makes
  * every mail client fall back to the local part - so invites, password resets
  * and field reports all arrived from a sender called **"info"**. Wrapping it
  * once here fixes every email at the same time, and keeps working if the env is

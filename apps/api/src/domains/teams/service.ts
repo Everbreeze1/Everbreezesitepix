@@ -668,7 +668,7 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
 
   if (dup) {
     const inviter = await loadInviter(supabaseAdmin, userId);
-    const origin = data.origin?.replace(/\/+$/, "") || "https://everbreezesitepix.com";
+    const origin = data.origin?.replace(/\/+$/, "") || "https://everlumen.co";
     const emailRes = await sendInviteEmail({
       to: email,
       teamName: (team as any).name,
@@ -749,7 +749,7 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
 
   // Send the email (best effort)
   const inviter = await loadInviter(supabaseAdmin, userId);
-  const origin = data.origin?.replace(/\/+$/, "") || "https://everbreezesitepix.com";
+  const origin = data.origin?.replace(/\/+$/, "") || "https://everlumen.co";
   const acceptUrl = `${origin}/invite/${token}`;
 
   const emailRes = await sendInviteEmail({
@@ -1611,7 +1611,7 @@ export async function acceptInviteSignupService(data: any) {
     .update({ accepted_by: userId })
     .eq("id", (claimed as any).id);
 
-  const origin = data.origin?.replace(/\/+$/, "") || "https://everbreezesitepix.com";
+  const origin = data.origin?.replace(/\/+$/, "") || "https://everlumen.co";
   const confirmRes = await sendSignupConfirmationEmail(inviteEmail, origin);
 
   await insertNotification(supabaseAdmin, {
@@ -1665,7 +1665,7 @@ export async function resendInviteService(ctx: AuthedContext, data: any) {
 
   const inviter = await loadInviter(supabaseAdmin, userId);
 
-  const origin = data.origin?.replace(/\/+$/, "") || "https://everbreezesitepix.com";
+  const origin = data.origin?.replace(/\/+$/, "") || "https://everlumen.co";
   const emailRes = await sendInviteEmail({
     to: (invite as any).email,
     teamName: (team as any).name,
@@ -1729,7 +1729,7 @@ export async function resendMemberConfirmationService(
     return { ok: true, alreadyConfirmed: true, emailSent: false };
   }
 
-  const origin = data.origin?.replace(/\/+$/, "") || "https://everbreezesitepix.com";
+  const origin = data.origin?.replace(/\/+$/, "") || "https://everlumen.co";
   const res = await sendSignupConfirmationEmail(email, origin);
   return { ok: true, alreadyConfirmed: false, emailSent: res.sent };
 }

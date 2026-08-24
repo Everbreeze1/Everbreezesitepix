@@ -14,16 +14,16 @@ project_id = "ulmgvtuqjlzzadlwtiog"
 # The site actually serves from www - Vercel 308s the apex there - so links
 # built by Auth (confirm, recover, invite) must point at www or the user lands
 # on a redirect that drops the URL fragment carrying the token.
-site_url = "https://www.everbreezesitepix.com"
+site_url = "https://www.everlumen.co"
 
 # Post-auth redirect allow-list. Globs are needed because two of the landing
 # paths are dynamic: `/invite/<token>` (apps/api teams service builds
 # `${origin}/invite/${token}`) and the portfolio pages under `/p/<slug>`.
 additional_redirect_urls = [
-  "https://www.everbreezesitepix.com/**",
+  "https://www.everlumen.co/**",
   # The apex only ever 308s to www, but keep it allow-listed so an old link that
   # somehow reaches Auth directly still validates instead of erroring.
-  "https://everbreezesitepix.com/**",
+  "https://everlumen.co/**",
   # Local dev - Vite serves on 8080 (apps/web/vite.config.ts `server.port`).
   "http://localhost:8080/**",
   "http://127.0.0.1:8080/**",

@@ -115,8 +115,8 @@ WHERE name = 'cron_shared_secret';
 --    An empty result means the endpoints now *can* authenticate but nothing is
 --    calling them - auth was only half the problem. Schedule them with
 --    cron.schedule + net.http_post against:
---      POST https://api.everbreezesitepix.com/v1/hooks/purge-trash
---      POST https://api.everbreezesitepix.com/v1/hooks/archive-old-photos
+--      POST https://api.everlumen.co/v1/hooks/purge-trash
+--      POST https://api.everlumen.co/v1/hooks/archive-old-photos
 --    passing header  x-cron-secret: <the value from query 2>
 SELECT jobid, schedule, jobname, active
 FROM cron.job

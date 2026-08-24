@@ -20,11 +20,11 @@ export const Route = createFileRoute("/faq")({
         property: "og:description",
         content: "Everything you need to know about Everlumen, from features to pricing.",
       },
-      { property: "og:url", content: "https://www.everbreezesitepix.com/faq" },
+      { property: "og:url", content: "https://www.everlumen.co/faq" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "https://www.everbreezesitepix.com/faq" }],
+    links: [{ rel: "canonical", href: "https://www.everlumen.co/faq" }],
     scripts: [
       {
         type: "application/ld+json",

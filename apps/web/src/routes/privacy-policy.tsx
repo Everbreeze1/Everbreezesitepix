@@ -18,9 +18,9 @@ export const Route = createFileRoute("/privacy-policy")({
         content:
           "Privacy Policy for Everlumen. Learn how we collect, use, store, and protect your personal information, job site photos, and AI analysis data.",
       },
-      { property: "og:url", content: "https://www.everbreezesitepix.com/privacy-policy" },
+      { property: "og:url", content: "https://www.everlumen.co/privacy-policy" },
     ],
-    links: [{ rel: "canonical", href: "https://www.everbreezesitepix.com/privacy-policy" }],
+    links: [{ rel: "canonical", href: "https://www.everlumen.co/privacy-policy" }],
   }),
   component: PrivacyPolicyPage,
 });
@@ -363,11 +363,8 @@ function PrivacyPolicyPage() {
               </p>
               <p className="text-muted-foreground">
                 Website:{" "}
-                <a
-                  href="https://www.everbreezesitepix.com"
-                  className="text-primary hover:underline"
-                >
-                  everbreezesitepix.com
+                <a href="https://www.everlumen.co" className="text-primary hover:underline">
+                  everlumen.co
                 </a>
               </p>
             </div>

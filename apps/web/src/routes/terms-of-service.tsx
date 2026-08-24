@@ -26,9 +26,9 @@ export const Route = createFileRoute("/terms-of-service")({
         content:
           "Terms of Service for Everlumen. The agreement covering your subscription, your job site photos and reports, acceptable use, AI-generated output, and public share links.",
       },
-      { property: "og:url", content: "https://www.everbreezesitepix.com/terms-of-service" },
+      { property: "og:url", content: "https://www.everlumen.co/terms-of-service" },
     ],
-    links: [{ rel: "canonical", href: "https://www.everbreezesitepix.com/terms-of-service" }],
+    links: [{ rel: "canonical", href: "https://www.everlumen.co/terms-of-service" }],
   }),
   component: TermsOfServicePage,
 });
@@ -94,7 +94,7 @@ function TermsOfServicePage() {
               checklists and workflows; generate site logs and reports (including AI-assisted ones);
               publish public share links and portfolio pages; and collaborate with team members you
               invite. The Services are provided as a web and mobile application together with the
-              everbreezesitepix.com website.
+              everlumen.co website.
             </p>
             <p className="text-muted-foreground mt-2">
               We may add, change or remove features. Where a change materially reduces functionality
@@ -503,11 +503,8 @@ function TermsOfServicePage() {
               </p>
               <p className="text-muted-foreground">
                 Website:{" "}
-                <a
-                  href="https://www.everbreezesitepix.com"
-                  className="text-primary hover:underline"
-                >
-                  everbreezesitepix.com
+                <a href="https://www.everlumen.co" className="text-primary hover:underline">
+                  everlumen.co
                 </a>
               </p>
             </div>

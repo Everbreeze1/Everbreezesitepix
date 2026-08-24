@@ -37,9 +37,9 @@ export const Route = createFileRoute("/login")({
         content:
           "Sign in to Everlumen to access your construction job site photos, projects, AI analyses, and Breeze assistant.",
       },
-      { property: "og:url", content: "https://www.everbreezesitepix.com/login" },
+      { property: "og:url", content: "https://www.everlumen.co/login" },
     ],
-    links: [{ rel: "canonical", href: "https://www.everbreezesitepix.com/login" }],
+    links: [{ rel: "canonical", href: "https://www.everlumen.co/login" }],
   }),
   component: LoginPage,
 });

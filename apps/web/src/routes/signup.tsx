@@ -29,9 +29,9 @@ export const Route = createFileRoute("/signup")({
         content:
           "Create your Everlumen account. Capture, organize, and share construction job site photos with AI photo analysis. Plans start at $24/mo.",
       },
-      { property: "og:url", content: "https://www.everbreezesitepix.com/signup" },
+      { property: "og:url", content: "https://www.everlumen.co/signup" },
     ],
-    links: [{ rel: "canonical", href: "https://www.everbreezesitepix.com/signup" }],
+    links: [{ rel: "canonical", href: "https://www.everlumen.co/signup" }],
   }),
   component: SignupPage,
 });

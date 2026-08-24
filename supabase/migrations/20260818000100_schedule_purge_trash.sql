@@ -43,7 +43,7 @@ SELECT cron.schedule(
   '17 3 * * *',
   $job$
   SELECT net.http_post(
-    url     := 'https://api.everbreezesitepix.com/v1/hooks/purge-trash',
+    url     := 'https://api.everlumen.co/v1/hooks/purge-trash',
     headers := jsonb_build_object(
       'Content-Type',   'application/json',
       'x-cron-secret',  (SELECT decrypted_secret

@@ -4,7 +4,7 @@ import { TaskNotificationEmail } from "@everlumen/email-templates";
 import { sendEmail } from "../../lib/send-email";
 
 const SITE_NAME = "Everlumen";
-const ROOT_DOMAIN = "everbreezesitepix.com";
+const ROOT_DOMAIN = "everlumen.co";
 
 /**
  * Trim to `max` characters on a word boundary where there is one.

@@ -16,7 +16,7 @@ describe("buildConfirmationUrl", () => {
   const base = {
     token_hash: "abc123",
     email_action_type: "signup",
-    redirect_to: "https://www.everbreezesitepix.com/dashboard",
+    redirect_to: "https://www.everlumen.co/dashboard",
   };
 
   it("points at our own domain, never at supabase.co", () => {
@@ -26,7 +26,7 @@ describe("buildConfirmationUrl", () => {
     });
     expect(url).not.toContain("supabase.co");
     expect(url).not.toContain("/auth/v1/verify");
-    expect(url.startsWith("https://www.everbreezesitepix.com/auth/confirm?")).toBe(true);
+    expect(url.startsWith("https://www.everlumen.co/auth/confirm?")).toBe(true);
   });
 
   it("carries token_hash, type and next through", () => {
@@ -44,7 +44,7 @@ describe("buildConfirmationUrl", () => {
     const url = new URL(
       buildConfirmationUrl({ ...base, redirect_to: "https://evil.example.com/steal" }),
     );
-    expect(url.origin).toBe("https://www.everbreezesitepix.com");
+    expect(url.origin).toBe("https://www.everlumen.co");
     const next = url.searchParams.get("next");
     expect(next).toBe("/steal");
     expect(next?.startsWith("//")).toBe(false);
@@ -61,7 +61,7 @@ describe("buildConfirmationUrl", () => {
       buildConfirmationUrl({
         token_hash: "t",
         email_action_type: "recovery",
-        redirect_to: "https://www.everbreezesitepix.com/reset-password",
+        redirect_to: "https://www.everlumen.co/reset-password",
       }),
     );
     expect(url.searchParams.get("next")).toBe("/reset-password");
@@ -76,9 +76,7 @@ describe("buildConfirmationUrl", () => {
       "https://x.supabase.co/auth/v1/",
     ]) {
       const url = buildConfirmationUrl({ ...base, site_url });
-      expect(url.startsWith("https://www.everbreezesitepix.com/auth/confirm?"), site_url).toBe(
-        true,
-      );
+      expect(url.startsWith("https://www.everlumen.co/auth/confirm?"), site_url).toBe(true);
     }
   });
 });
@@ -94,8 +92,8 @@ describe("buildConfirmationUrl - which origin the link is minted on", () => {
 
   it("follows redirect_to onto our own hosts", () => {
     for (const [redirect_to, origin] of [
-      ["https://www.everbreezesitepix.com/dashboard", "https://www.everbreezesitepix.com"],
-      ["https://everbreezesitepix.com/dashboard", "https://everbreezesitepix.com"],
+      ["https://www.everlumen.co/dashboard", "https://www.everlumen.co"],
+      ["https://everlumen.co/dashboard", "https://everlumen.co"],
       ["http://localhost:5173/dashboard", "http://localhost:5173"],
       ["http://127.0.0.1:5173/dashboard", "http://127.0.0.1:5173"],
     ]) {
@@ -108,11 +106,11 @@ describe("buildConfirmationUrl - which origin the link is minted on", () => {
   it("falls back to production for anything else", () => {
     for (const redirect_to of [
       "https://evil.example.com/x",
-      "https://everbreezesitepix.com.evil.example.com/x",
+      "https://everlumen.co.evil.example.com/x",
       "not a url at all",
     ]) {
       expect(new URL(buildConfirmationUrl({ ...base, redirect_to })).origin, redirect_to).toBe(
-        "https://www.everbreezesitepix.com",
+        "https://www.everlumen.co",
       );
     }
   });
@@ -127,7 +125,7 @@ describe("buildConfirmationUrl - email change action types", () => {
    */
   const base = {
     token_hash: "tok",
-    redirect_to: "https://www.everbreezesitepix.com/settings",
+    redirect_to: "https://www.everlumen.co/settings",
   };
 
   for (const action of ["email_change_current", "email_change_new", "email_change"]) {

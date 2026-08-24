@@ -18,9 +18,9 @@ export const Route = createFileRoute("/contact")({
         content:
           "Get in touch with the Everlumen team - support for job site photo capture, reports, billing questions, and privacy requests.",
       },
-      { property: "og:url", content: "https://www.everbreezesitepix.com/contact" },
+      { property: "og:url", content: "https://www.everlumen.co/contact" },
     ],
-    links: [{ rel: "canonical", href: "https://www.everbreezesitepix.com/contact" }],
+    links: [{ rel: "canonical", href: "https://www.everlumen.co/contact" }],
   }),
   component: ContactPage,
 });

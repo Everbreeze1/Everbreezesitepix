@@ -22,9 +22,9 @@ export const Route = createFileRoute("/how-it-works")({
         content:
           "Everlumen fits the way crews already work. Snap a photo on site, let it organize itself, then share a clean gallery or report - no new process to learn.",
       },
-      { property: "og:url", content: "https://www.everbreezesitepix.com/how-it-works" },
+      { property: "og:url", content: "https://www.everlumen.co/how-it-works" },
     ],
-    links: [{ rel: "canonical", href: "https://www.everbreezesitepix.com/how-it-works" }],
+    links: [{ rel: "canonical", href: "https://www.everlumen.co/how-it-works" }],
   }),
 });
 

@@ -1,7 +1,7 @@
 # Runs exactly the checks that already pass locally - lint, both typechecks,
 # the vitest suite, and a real production build. Nothing new is introduced here;
 # the point is that a regression in any of them stops a PR instead of reaching
-# www.everbreezesitepix.com.
+# www.everlumen.co.
 name: CI
 
 on:
@@ -32,7 +32,7 @@ jobs:
       # deterministic when they are always defined - hence the placeholders.
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://placeholder.supabase.co' }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'placeholder-publishable-key' }}
-      VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://api.everbreezesitepix.com' }}
+      VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://api.everlumen.co' }}
       VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY || '' }}
 
     steps:

@@ -3,7 +3,7 @@
  *
  * The footer used to advertise `hello@sitepix.com` and the policy pages
  * `privacy@everbreeze.io` - neither domain is the product domain
- * (everbreezesitepix.com), and the API only ever sends from `EMAIL_FROM` on
+ * (everlumen.co), and the API only ever sends from `EMAIL_FROM` on
  * that product domain. Rather than guess a mailbox that may bounce, these stayed
  * as `[[...]]` placeholders until the owner confirmed the real ones.
  *
@@ -24,7 +24,7 @@
  * this size: three aliases that all land in one inbox is a routing detail, but
  * three addresses where two bounce is a broken promise on a legal page.
  *
- * `info@everbreezesitepix.com` is not a guess. It is `EMAIL_FROM` in
+ * `info@everlumen.co` is not a guess. It is `EMAIL_FROM` in
  * apps/api/.env - the address every transactional email in the product is
  * already sent from, on the product's own domain, verified in Resend. Customers
  * hitting reply are already writing to it.
@@ -33,9 +33,9 @@
  * RECEIVE. LAUNCH.md section 8 asks for the mailboxes to be created for exactly
  * this reason. Send a test message to it before relying on these pages.
  */
-export const SUPPORT_EMAIL = "info@everbreezesitepix.com";
-export const PRIVACY_EMAIL = "info@everbreezesitepix.com";
-export const LEGAL_EMAIL = "info@everbreezesitepix.com";
+export const SUPPORT_EMAIL = "info@everlumen.co";
+export const PRIVACY_EMAIL = "info@everlumen.co";
+export const LEGAL_EMAIL = "info@everlumen.co";
 
 /*
  * Legal entity behind the Services - used by the Terms and Privacy pages.

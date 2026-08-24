@@ -218,7 +218,7 @@ export async function inviteSubcontractorService(ctx: AuthedContext, data: any) 
     return { subcontractorId: row.id, emailSent: false, alreadyActive: true };
   }
 
-  const origin = String(data.origin ?? "").replace(/\/+$/, "") || "https://everbreezesitepix.com";
+  const origin = String(data.origin ?? "").replace(/\/+$/, "") || "https://everlumen.co";
   let emailSent = true;
   try {
     await sendTeamInviteEmail({

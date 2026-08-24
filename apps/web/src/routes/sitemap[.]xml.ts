@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
 import { everlumenApi } from "@/lib/everlumen-api";
 
-const BASE_URL = "https://www.everbreezesitepix.com";
+const BASE_URL = "https://www.everlumen.co";
 
 interface SitemapEntry {
   path: string;

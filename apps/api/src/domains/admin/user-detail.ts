@@ -285,7 +285,7 @@ export async function runUserSupportActionService(
   const email = (authUser?.user as any)?.email as string | undefined;
   if (!email) throw new Error("That account has no email address on file.");
 
-  const origin = (data.origin ?? "https://everbreezesitepix.com").replace(/\/+$/, "");
+  const origin = (data.origin ?? "https://everlumen.co").replace(/\/+$/, "");
   let message: string;
 
   switch (data.action) {

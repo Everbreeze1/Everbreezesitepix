@@ -52,7 +52,7 @@ const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
 };
 
 const SITE_NAME = "Everlumen";
-const ROOT_DOMAIN = "everbreezesitepix.com";
+const ROOT_DOMAIN = "everlumen.co";
 /*
  * Canonical origin for links we build ourselves. The apex only ever 308s to
  * www, and a redirect hop on a one-shot verification link is one more thing

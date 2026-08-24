@@ -31,7 +31,7 @@ export const Route = createFileRoute("/")({
         content:
           "Capture, organize, map, and share construction site photos with AI-powered walkthroughs, reports, checklists, and site logs.",
       },
-      { property: "og:url", content: "https://www.everbreezesitepix.com/" },
+      { property: "og:url", content: "https://www.everlumen.co/" },
       { property: "og:title", content: "Everlumen - Capture & Share Job Site Photos" },
       {
         property: "og:description",
@@ -39,7 +39,7 @@ export const Route = createFileRoute("/")({
           "Capture, organize, map, and share construction site photos with AI-powered walkthroughs, reports, checklists, and site logs.",
       },
     ],
-    links: [{ rel: "canonical", href: "https://www.everbreezesitepix.com/" }],
+    links: [{ rel: "canonical", href: "https://www.everlumen.co/" }],
     scripts: [
       {
         type: "application/ld+json",
@@ -47,8 +47,8 @@ export const Route = createFileRoute("/")({
           "@context": "https://schema.org",
           "@type": "Organization",
           name: "Everlumen",
-          url: "https://www.everbreezesitepix.com/",
-          logo: "https://www.everbreezesitepix.com/icon-512.png",
+          url: "https://www.everlumen.co/",
+          logo: "https://www.everlumen.co/icon-512.png",
           description:
             "Construction job site photo management with AI-powered analysis for contractors and field teams.",
         }),
@@ -59,7 +59,7 @@ export const Route = createFileRoute("/")({
           "@context": "https://schema.org",
           "@type": "WebSite",
           name: "Everlumen",
-          url: "https://www.everbreezesitepix.com/",
+          url: "https://www.everlumen.co/",
         }),
       },
     ],

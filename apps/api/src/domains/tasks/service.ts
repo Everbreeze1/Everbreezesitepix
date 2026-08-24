@@ -29,7 +29,7 @@ import { sendTaskNotificationEmail } from "../email/task-notification";
  * bell and the inbox from disagreeing about who was told.
  */
 
-const DEFAULT_ORIGIN = "https://everbreezesitepix.com";
+const DEFAULT_ORIGIN = "https://everlumen.co";
 
 /**
  * How far back the sender will look for undelivered notifications.

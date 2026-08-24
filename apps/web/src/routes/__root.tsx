@@ -110,8 +110,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "Capture, organize, and share construction job site photos in seconds. Built for contractors and field teams.",
       },
-      { property: "og:image", content: "https://www.everbreezesitepix.com/icon-512.png" },
-      { name: "twitter:image", content: "https://www.everbreezesitepix.com/icon-512.png" },
+      { property: "og:image", content: "https://www.everlumen.co/icon-512.png" },
+      { name: "twitter:image", content: "https://www.everlumen.co/icon-512.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },

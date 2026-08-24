@@ -1800,14 +1800,14 @@ function HelpSection() {
           icon={HelpCircle}
           title="Browse help articles"
           desc="Step-by-step guides for every part of Everlumen."
-          href="https://www.everbreezesitepix.com/help"
+          href="https://www.everlumen.co/help"
           cta="Open Help Center"
         />
         <SupportTile
           icon={Sparkles}
           title="What's new"
           desc="Recent features, improvements, and fixes."
-          href="https://www.everbreezesitepix.com/help"
+          href="https://www.everlumen.co/help"
           cta="See updates"
         />
         <SupportTile
