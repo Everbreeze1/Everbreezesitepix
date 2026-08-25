@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { requirePlatformAdmin } from "../../lib/admin-context";
+import { stripLikeWildcards } from "../../lib/postgrest";
 import type { AuthedContext } from "../../lib/user-context";
 
 export interface AdminAuditLogRow {
@@ -71,6 +72,19 @@ export async function logAdminRead(
 export const listAdminAuditLogInputSchema = z.object({
   cursor: z.string().datetime().optional(),
   limit: z.number().int().min(1).max(100).default(50),
+  /**
+   * Hide the `view_*` rows. Default true, hence the inverted flag name.
+   *
+   * Read logging was added so that opening a customer's account leaves a trace,
+   * and it works - but it also means routine browsing now outnumbers real
+   * actions by a wide margin. Left unfiltered, the one screen whose job is
+   * answering "who changed this" fills up with "who looked at this". Views are
+   * kept, and one click away; they are just not the default reading.
+   */
+  includeViews: z.boolean().default(false),
+  /** Substring match on the action name, e.g. "billing" or "delete". */
+  action: z.string().trim().max(80).optional(),
+  actorId: z.string().uuid().optional(),
 });
 
 export async function listAdminAuditLogService(
@@ -86,6 +100,18 @@ export async function listAdminAuditLogService(
     .order("created_at", { ascending: false })
     .limit(data.limit + 1);
   if (data.cursor) query = query.lt("created_at", data.cursor);
+  /*
+   * Matched on the `view_` prefix rather than a list of known read actions.
+   *
+   * Every read logger goes through `logAdminRead`, which builds its action name
+   * as `view_<targetType>`, so a prefix filter keeps working as new detail
+   * views are added instead of needing to be taught about each one. The
+   * backslash escapes the underscore, which is a single-character wildcard in
+   * SQL LIKE and would otherwise also match `viewX...`.
+   */
+  if (!data.includeViews) query = query.not("action", "like", "view\\_%");
+  if (data.action) query = query.ilike("action", "%" + stripLikeWildcards(data.action) + "%");
+  if (data.actorId) query = query.eq("actor_id", data.actorId);
 
   const { data: rows, error } = await query;
   if (error) throw new Error(error.message);

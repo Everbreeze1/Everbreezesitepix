@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { getTeamBilling, manageTeamSubscription, overrideTeamPlan } from "@/lib/admin.functions";
 import { usePrompt } from "@/hooks/use-prompt";
 import { useConfirm } from "@/hooks/use-confirm";
+import { useAdminRole } from "../hooks/use-admin-role";
+import { CapabilityNotice } from "./AdminTable";
 
 function money(cents: number, currency: string): string {
   return new Intl.NumberFormat(undefined, {
@@ -27,6 +29,8 @@ export function TeamBillingPanel({ teamId }: { teamId: string }) {
   const qc = useQueryClient();
   const prompt = usePrompt();
   const confirm = useConfirm();
+  const { denyReason } = useAdminRole();
+  const denied = denyReason("billing");
   const [busy, setBusy] = useState(false);
 
   const { data, isPending } = useQuery({
@@ -199,7 +203,7 @@ export function TeamBillingPanel({ teamId }: { teamId: string }) {
               key={p}
               size="sm"
               variant="outline"
-              disabled={busy || data.plan === p}
+              disabled={busy || !!denied || data.plan === p}
               onClick={() => setPlan(p)}
               className="capitalize"
             >
@@ -209,7 +213,7 @@ export function TeamBillingPanel({ teamId }: { teamId: string }) {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy}
+            disabled={busy || !!denied}
             onClick={() => setComplimentary(!data.isInternal)}
           >
             {data.isInternal ? "Remove complimentary" : "Make complimentary"}
@@ -231,7 +235,7 @@ export function TeamBillingPanel({ teamId }: { teamId: string }) {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={busy}
+                disabled={busy || !!denied}
                 onClick={() =>
                   subscriptionAction(
                     "resume",
@@ -246,7 +250,7 @@ export function TeamBillingPanel({ teamId }: { teamId: string }) {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={busy}
+                disabled={busy || !!denied}
                 onClick={() =>
                   subscriptionAction(
                     "cancel_at_period_end",
@@ -261,7 +265,7 @@ export function TeamBillingPanel({ teamId }: { teamId: string }) {
             <Button
               size="sm"
               variant="outline"
-              disabled={busy}
+              disabled={busy || !!denied}
               onClick={() =>
                 subscriptionAction(
                   "extend_trial",
@@ -277,7 +281,7 @@ export function TeamBillingPanel({ teamId }: { teamId: string }) {
               size="sm"
               variant="ghost"
               className="text-destructive"
-              disabled={busy}
+              disabled={busy || !!denied}
               onClick={() =>
                 subscriptionAction(
                   "cancel_now",
@@ -291,6 +295,8 @@ export function TeamBillingPanel({ teamId }: { teamId: string }) {
           </div>
         )}
       </div>
+
+      <CapabilityNotice reason={denied} />
 
       {data.invoices.length > 0 && (
         <div className="mt-4 border-t border-border pt-4">

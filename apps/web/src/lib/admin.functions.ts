@@ -40,7 +40,9 @@ export interface AdminNotificationRow {
   recipient: { id: string; name: string | null; email: string | null } | null;
 }
 
-export const checkIsPlatformAdmin = rpcOp<undefined, { isAdmin: boolean }>("checkIsPlatformAdmin");
+export const checkIsPlatformAdmin = rpcOp<undefined, { isAdmin: boolean; role: AdminRole | null }>(
+  "checkIsPlatformAdmin",
+);
 
 export const getAdminMetrics = rpcOp<undefined, AdminMetrics>("getAdminMetrics");
 
@@ -164,7 +166,7 @@ export interface AdminAuditLogRow {
 }
 
 export const listAdminAuditLog = rpcOp<
-  { cursor?: string; limit?: number },
+  { cursor?: string; limit?: number; includeViews?: boolean; action?: string; actorId?: string },
   { entries: AdminAuditLogRow[]; nextCursor: string | null }
 >("listAdminAuditLog");
 

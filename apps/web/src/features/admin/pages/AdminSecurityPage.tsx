@@ -10,6 +10,8 @@ import {
   type ShareLink,
 } from "@/lib/admin.functions";
 import { usePrompt } from "@/hooks/use-prompt";
+import { useAdminRole } from "../hooks/use-admin-role";
+import { CapabilityNotice } from "../components/AdminTable";
 
 const KIND_LABELS: Record<ShareKind, string> = {
   walkthrough: "Walkthroughs",
@@ -21,6 +23,10 @@ const KIND_LABELS: Record<ShareKind, string> = {
 export function AdminSecurityPage() {
   const qc = useQueryClient();
   const prompt = usePrompt();
+  // Revoking a share link is irreversible - the token is not kept - so the
+  // server gates it on superadmin.
+  const { denyReason } = useAdminRole();
+  const denied = denyReason("owner");
   const [kind, setKind] = useState<ShareKind | "all">("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -119,7 +125,7 @@ export function AdminSecurityPage() {
               size="sm"
               variant="destructive"
               className="ml-auto"
-              disabled={busy}
+              disabled={busy || !!denied}
               onClick={revokeSelected}
             >
               {busy ? (
@@ -131,6 +137,8 @@ export function AdminSecurityPage() {
             </Button>
           )}
         </div>
+
+        <CapabilityNotice reason={denied} />
 
         {data?.unavailable.length ? (
           <p className="mt-3 text-[11px] text-muted-foreground">

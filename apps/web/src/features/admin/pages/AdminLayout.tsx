@@ -60,7 +60,21 @@ export function AdminLayout() {
 
   return (
     <div className="min-h-full bg-background px-6 pb-24 pt-6 sm:px-10 sm:pt-10">
-      <h1 className="text-xl font-extrabold text-foreground">Admin dashboard</h1>
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="text-xl font-extrabold text-foreground">Admin dashboard</h1>
+        {/*
+          Your own role, stated.
+
+          Without it, a support admin has no way to know why half the controls
+          on the next page are disabled, and a superadmin has no reminder that
+          they are holding the destructive one.
+        */}
+        {adminCheck?.role && (
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-primary">
+            {adminCheck.role}
+          </span>
+        )}
+      </div>
       <p className="mt-1 text-sm text-muted-foreground">
         Platform-wide tools, restricted to admins.
       </p>

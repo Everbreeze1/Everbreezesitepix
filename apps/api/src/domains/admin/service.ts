@@ -1,5 +1,9 @@
 import { getSupabaseAdmin } from "../../lib/supabase";
-import { requirePlatformAdmin } from "../../lib/admin-context";
+import {
+  getPlatformAdminRole,
+  requirePlatformAdmin,
+  type AdminRole,
+} from "../../lib/admin-context";
 import type { AuthedContext } from "../../lib/user-context";
 
 export interface AdminMetrics {
@@ -134,13 +138,22 @@ export async function getAdminMetricsService(ctx: AuthedContext): Promise<AdminM
   };
 }
 
+/**
+ * Is the caller an admin, and with which role.
+ *
+ * The role is returned, not just the boolean, because the console needs it to
+ * decide what to *offer*. Capabilities were enforced server-side from the day
+ * they landed and shown nowhere, so a `support` admin saw every billing control
+ * on the page and learned it was not for them by clicking it and reading a 403
+ * in a toast. A button that cannot work should not look like one that can.
+ *
+ * This is a convenience, never the boundary: `requirePlatformAdmin` on each
+ * service is what actually decides, and it re-reads the role from the database
+ * on every call.
+ */
 export async function checkIsPlatformAdminService(
   ctx: AuthedContext,
-): Promise<{ isAdmin: boolean }> {
-  try {
-    await requirePlatformAdmin(ctx.userId);
-    return { isAdmin: true };
-  } catch {
-    return { isAdmin: false };
-  }
+): Promise<{ isAdmin: boolean; role: AdminRole | null }> {
+  const role = await getPlatformAdminRole(ctx.userId);
+  return { isAdmin: role !== null, role };
 }

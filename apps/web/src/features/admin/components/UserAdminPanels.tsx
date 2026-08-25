@@ -15,6 +15,8 @@ import {
   type PlatformUserDetail,
 } from "@/lib/admin.functions";
 import { usePrompt } from "@/hooks/use-prompt";
+import { useAdminRole } from "../hooks/use-admin-role";
+import { CapabilityNotice } from "./AdminTable";
 
 const ROLE_COPY: Record<AdminRole, string> = {
   support: "Read accounts, resend email, suspend, triage feedback",
@@ -38,6 +40,10 @@ export function AdminRolePanel({
   onChanged: () => void;
 }) {
   const prompt = usePrompt();
+  const { denyReason } = useAdminRole();
+  // Granting admin is the one action that can escalate the grantor, so it is
+  // superadmin-only on the server. Reflect that here rather than 403ing.
+  const denied = denyReason("owner");
   const [busy, setBusy] = useState(false);
 
   const apply = async (role: AdminRole | null) => {
@@ -86,7 +92,7 @@ export function AdminRolePanel({
           <button
             key={role}
             type="button"
-            disabled={busy || user.adminRole === role}
+            disabled={busy || !!denied || user.adminRole === role}
             onClick={() => apply(role)}
             className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors disabled:cursor-default ${
               user.adminRole === role
@@ -112,12 +118,14 @@ export function AdminRolePanel({
           size="sm"
           variant="outline"
           className="mt-3"
-          disabled={busy}
+          disabled={busy || !!denied}
           onClick={() => apply(null)}
         >
           Revoke platform admin
         </Button>
       )}
+
+      <CapabilityNotice reason={denied} />
     </div>
   );
 }
@@ -132,6 +140,8 @@ export function AdminRolePanel({
  */
 export function UserNotesPanel({ userId }: { userId: string }) {
   const qc = useQueryClient();
+  const { denyReason } = useAdminRole();
+  const denied = denyReason("support");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -177,10 +187,11 @@ export function UserNotesPanel({ userId }: { userId: string }) {
               rows={2}
               placeholder="What happened, what was agreed, what to watch for."
             />
-            <Button size="sm" disabled={busy || !body.trim()} onClick={save}>
+            <Button size="sm" disabled={busy || !!denied || !body.trim()} onClick={save}>
               {busy && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Add note
             </Button>
+            <CapabilityNotice reason={denied} />
           </div>
 
           {isPending ? (
@@ -226,6 +237,8 @@ export function TeamMembershipPanel({
   onChanged: () => void;
 }) {
   const prompt = usePrompt();
+  const { denyReason } = useAdminRole();
+  const denied = denyReason("support");
   const [busy, setBusy] = useState<string | null>(null);
 
   if (!user.teams.length) return null;
@@ -273,7 +286,7 @@ export function TeamMembershipPanel({
                   size="sm"
                   variant={t.role === r ? "secondary" : "ghost"}
                   className="capitalize"
-                  disabled={busy === t.id || t.role === r}
+                  disabled={busy === t.id || !!denied || t.role === r}
                   onClick={() => change(t.id, t.name, r)}
                 >
                   {r}
@@ -289,6 +302,7 @@ export function TeamMembershipPanel({
         rather than one update - doing it as a dropdown would quietly detach a
         person from their own work.
       */}
+      <CapabilityNotice reason={denied} />
       <p className="mt-3 text-[11px] text-muted-foreground">
         Moving an account to a different team is not available here: their projects are attributed
         by membership, so a move would detach them from their work.
@@ -354,6 +368,9 @@ export function UserPlanPanel({
   onChanged: () => void;
 }) {
   const prompt = usePrompt();
+  const { denyReason } = useAdminRole();
+  // Plans are billing, and the server gates overrideTeamPlan on it.
+  const denied = denyReason("billing");
   const [busy, setBusy] = useState<string | null>(null);
 
   if (!user.teams.length) {
@@ -452,7 +469,7 @@ export function UserPlanPanel({
                   size="sm"
                   variant={team.plan === p ? "secondary" : "outline"}
                   className="capitalize"
-                  disabled={busy === team.id || team.plan === p}
+                  disabled={busy === team.id || !!denied || team.plan === p}
                   onClick={() => change(team, { plan: p })}
                 >
                   {p}
@@ -461,7 +478,7 @@ export function UserPlanPanel({
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={busy === team.id}
+                disabled={busy === team.id || !!denied}
                 onClick={() => change(team, { isInternal: !team.isInternal })}
               >
                 {team.isInternal ? "Remove complimentary" : "Make complimentary"}
@@ -479,6 +496,8 @@ export function UserPlanPanel({
               Subscription, invoices and cancellation
               <ChevronRight className="h-3 w-3" />
             </Link>
+
+            <CapabilityNotice reason={denied} />
           </div>
         ))}
       </div>

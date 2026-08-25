@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Loader2, AlertTriangle } from "lucide-react";
+import { Loader2, AlertTriangle, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -172,5 +172,24 @@ export function AdminList({
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * Why a control on this page is disabled.
+ *
+ * Rendered next to controls the signed-in admin's role cannot use. The point is
+ * that the reason appears where the confusion is: before roles were surfaced, a
+ * `support` admin discovered which buttons were theirs by pressing one and
+ * reading a 403 in a toast that had already vanished by the time they wondered
+ * what happened.
+ */
+export function CapabilityNotice({ reason }: { reason: string | null }) {
+  if (!reason) return null;
+  return (
+    <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+      <Lock className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+      <span>{reason}</span>
+    </p>
   );
 }

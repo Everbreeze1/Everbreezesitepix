@@ -142,11 +142,13 @@ describe("observability", () => {
   });
 
   it("records both cron jobs, including their failures", () => {
-    expect(read("apps/api/src/domains/hooks/purge-trash.ts")).toContain(
-      'recordJobRun("purge-trash"',
+    // Matched across a newline: prettier wraps the call once the callback grows,
+    // and the job name moving to its own line is not a regression.
+    expect(read("apps/api/src/domains/hooks/purge-trash.ts")).toMatch(
+      /recordJobRun\(\s*"purge-trash"/,
     );
-    expect(read("apps/api/src/domains/hooks/archive-old-photos.ts")).toContain(
-      'recordJobRun("archive-old-photos"',
+    expect(read("apps/api/src/domains/hooks/archive-old-photos.ts")).toMatch(
+      /recordJobRun\(\s*"archive-old-photos"/,
     );
     // The failure row is written before the rethrow, or a job that dies leaves
     // no record of having died - the case the table exists for.

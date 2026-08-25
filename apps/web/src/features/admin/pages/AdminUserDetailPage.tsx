@@ -12,6 +12,8 @@ import {
 } from "@/lib/admin.functions";
 import { formatBytes } from "@/hooks/use-storage-usage";
 import { usePrompt } from "@/hooks/use-prompt";
+import { useAdminRole } from "../hooks/use-admin-role";
+import { CapabilityNotice } from "../components/AdminTable";
 import {
   AdminRolePanel,
   TeamMembershipPanel,
@@ -39,6 +41,10 @@ export function AdminUserDetailPage() {
   const { userId } = useParams({ from: "/_app/admin/users_/$userId" });
   const qc = useQueryClient();
   const prompt = usePrompt();
+  const { denyReason } = useAdminRole();
+  const deniedSupport = denyReason("support");
+  // Deleting an account is the one irreversible action in the console.
+  const deniedDelete = denyReason("owner");
   const [busy, setBusy] = useState(false);
 
   const { data: user, isPending } = useQuery({
@@ -209,7 +215,7 @@ export function AdminUserDetailPage() {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy}
+            disabled={busy || !!deniedSupport}
             onClick={() =>
               runAction(
                 "send_password_reset",
@@ -223,7 +229,7 @@ export function AdminUserDetailPage() {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy || !!user.auth?.emailConfirmedAt}
+            disabled={busy || !!deniedSupport || !!user.auth?.emailConfirmedAt}
             onClick={() =>
               runAction(
                 "resend_confirmation",
@@ -265,10 +271,16 @@ export function AdminUserDetailPage() {
               <Ban className="mr-1.5 h-3.5 w-3.5" /> Suspend
             </Button>
           )}
-          <Button size="sm" variant="destructive" disabled={busy} onClick={handleDelete}>
+          <Button
+            size="sm"
+            variant="destructive"
+            disabled={busy || !!deniedDelete}
+            onClick={handleDelete}
+          >
             <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete account
           </Button>
         </div>
+        <CapabilityNotice reason={deniedSupport ?? deniedDelete} />
       </div>
 
       <UserPlanPanel user={user} onChanged={refresh} />

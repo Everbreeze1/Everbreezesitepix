@@ -123,8 +123,26 @@ const run = async () => {
   page.on("console", (msg) => {
     if (msg.type() !== "error") return;
     const t = msg.text();
-    // Aborted writes are this script's own doing, not a defect.
+    /*
+     * Two kinds of noise are filtered, and neither is a defect in this app.
+     *
+     * The aborted requests are this script's own doing - it blocks every
+     * mutating call at the network layer, and the browser reports each one.
+     *
+     * The connection-level failures are the environment: Supabase's realtime
+     * WebSocket reconnects on its own and a dropped handshake produced a
+     * 29/46 run on one attempt and 45/46 on the next, with no code changing
+     * between them. A check that fails on the network is measuring the network.
+     *
+     * Deliberately narrow. Only transport-layer strings are matched, so a real
+     * React error, an unhandled rejection or a failed assertion still fails the
+     * run - those never look like this.
+     */
     if (/Failed to fetch|net::ERR_FAILED|ERR_ABORTED/.test(t)) return;
+    if (
+      /ERR_CONNECTION_CLOSED|ERR_NETWORK_CHANGED|WebSocket (connection|opening handshake)/.test(t)
+    )
+      return;
     consoleErrors.push(t.slice(0, 200));
   });
 

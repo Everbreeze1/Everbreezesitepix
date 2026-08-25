@@ -28,6 +28,8 @@ import {
 import { formatBytes } from "@/hooks/use-storage-usage";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePrompt } from "@/hooks/use-prompt";
+import { useAdminRole } from "../hooks/use-admin-role";
+import { CapabilityNotice } from "../components/AdminTable";
 import { cn } from "@/lib/utils";
 
 /*
@@ -70,6 +72,8 @@ function relative(iso: string | null): string {
 export function AdminUsersPage() {
   const qc = useQueryClient();
   const prompt = usePrompt();
+  const { denyReason } = useAdminRole();
+  const deniedBulk = denyReason("support");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<UserStatusFilter | "all">("all");
   const [plan, setPlan] = useState<"starter" | "pro" | "team" | "all">("all");
@@ -272,7 +276,7 @@ export function AdminUsersPage() {
             <Button
               size="sm"
               variant="outline"
-              disabled={busy}
+              disabled={busy || !!deniedBulk}
               onClick={() => bulk("suspend", "Suspend")}
             >
               <Ban className="mr-1.5 h-3.5 w-3.5" /> Suspend
@@ -280,7 +284,7 @@ export function AdminUsersPage() {
             <Button
               size="sm"
               variant="outline"
-              disabled={busy}
+              disabled={busy || !!deniedBulk}
               onClick={() => bulk("reinstate", "Reinstate")}
             >
               <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Reinstate
@@ -288,7 +292,7 @@ export function AdminUsersPage() {
             <Button
               size="sm"
               variant="outline"
-              disabled={busy}
+              disabled={busy || !!deniedBulk}
               onClick={() => bulk("resend_confirmation", "Resend confirmation to")}
             >
               <MailCheck className="mr-1.5 h-3.5 w-3.5" /> Resend confirmation
@@ -296,6 +300,9 @@ export function AdminUsersPage() {
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
               Clear
             </Button>
+            <div className="w-full">
+              <CapabilityNotice reason={deniedBulk} />
+            </div>
           </div>
         )}
       </div>

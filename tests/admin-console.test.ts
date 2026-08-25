@@ -123,13 +123,22 @@ describe("admin console is reachable and guarded", () => {
     expect(src).toContain("checkIsPlatformAdmin");
   });
 
-  it("every admin service re-checks platform admin server-side", () => {
-    // The client gate decides what to render; this is what decides what is
-    // allowed. A service that forgets it is a full customer-data leak.
+  it("every admin service resolves the caller's admin status server-side", () => {
+    /*
+     * The client gate decides what to render; this is what decides what is
+     * allowed. A service that forgets it is a full customer-data leak.
+     *
+     * Two ways to satisfy it, and only two. `requirePlatformAdmin` throws for a
+     * non-admin and is what almost everything uses. `getPlatformAdminRole`
+     * returns the role instead of throwing, which is what
+     * `checkIsPlatformAdmin` needs - it must answer "no" to a non-admin rather
+     * than erroring at them. Both read the caller's role from the database on
+     * every call; neither trusts anything the client sent.
+     */
     for (const file of ["service", "users", "teams", "notifications", "audit"]) {
       const src = read(`apps/api/src/domains/admin/${file}.ts`);
       const exported = src.match(/export async function \w+Service/g) ?? [];
-      const guards = src.match(/requirePlatformAdmin\(/g) ?? [];
+      const guards = src.match(/requirePlatformAdmin\(|getPlatformAdminRole\(/g) ?? [];
       expect(guards.length, `${file}.ts guards`).toBeGreaterThanOrEqual(exported.length);
     }
   });
