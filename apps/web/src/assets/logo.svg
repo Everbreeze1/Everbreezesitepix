@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Everlumen">
+  <defs>
+    <linearGradient id="b0" gradientUnits="userSpaceOnUse" x1="377.686" y1="404.515" x2="256" y2="256">
+      <stop offset="0" stop-color="#1E5AA6"/>
+      <stop offset="1" stop-color="#3E8ADF"/>
+    </linearGradient>
+    <linearGradient id="b1" gradientUnits="userSpaceOnUse" x1="445.46" y1="224.875" x2="256" y2="256">
+      <stop offset="0" stop-color="#1E5AA6"/>
+      <stop offset="1" stop-color="#3E8ADF"/>
+    </linearGradient>
+    <linearGradient id="b2" gradientUnits="userSpaceOnUse" x1="323.775" y1="76.36" x2="256" y2="256">
+      <stop offset="0" stop-color="#1E5AA6"/>
+      <stop offset="1" stop-color="#3E8ADF"/>
+    </linearGradient>
+    <linearGradient id="b3" gradientUnits="userSpaceOnUse" x1="134.314" y1="107.485" x2="256" y2="256">
+      <stop offset="0" stop-color="#1E5AA6"/>
+      <stop offset="1" stop-color="#3E8ADF"/>
+    </linearGradient>
+    <linearGradient id="b4" gradientUnits="userSpaceOnUse" x1="66.54" y1="287.125" x2="256" y2="256">
+      <stop offset="0" stop-color="#1E5AA6"/>
+      <stop offset="1" stop-color="#3E8ADF"/>
+    </linearGradient>
+    <linearGradient id="b5" gradientUnits="userSpaceOnUse" x1="188.225" y1="435.64" x2="256" y2="256">
+      <stop offset="0" stop-color="#1E5AA6"/>
+      <stop offset="1" stop-color="#3E8ADF"/>
+    </linearGradient>
+    <radialGradient id="well" gradientUnits="userSpaceOnUse" cx="256" cy="256" r="88.32">
+      <stop offset="0" stop-color="#FFF8EC"/>
+      <stop offset="0.45" stop-color="#CFE7FF"/>
+      <stop offset="1" stop-color="#7DB6EE"/>
+    </radialGradient>
+    <radialGradient id="halo" gradientUnits="userSpaceOnUse" cx="256" cy="256" r="76.8">
+      <stop offset="0" stop-color="#FFF8EC" stop-opacity="0.45"/>
+      <stop offset="0.4" stop-color="#FFF8EC" stop-opacity="0.2"/>
+      <stop offset="0.75" stop-color="#A8D4FF" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#A8D4FF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="#171B24"/>
+  <circle cx="256" cy="256" r="88.32" fill="url(#well)"/>
+  <g>
+    <path fill="url(#b0)" d="M 287.125 445.46 L 332.693 231.081 L 435.64 323.775 A 192 192 0 0 1 287.125 445.46 Z"/>
+    <path fill="url(#b1)" d="M 435.64 323.775 L 272.766 177.122 L 404.515 134.314 A 192 192 0 0 1 435.64 323.775 Z"/>
+    <path fill="url(#b2)" d="M 404.515 134.314 L 196.073 202.041 L 224.875 66.54 A 192 192 0 0 1 404.515 134.314 Z"/>
+    <path fill="url(#b3)" d="M 224.875 66.54 L 179.307 280.919 L 76.36 188.225 A 192 192 0 0 1 224.875 66.54 Z"/>
+    <path fill="url(#b4)" d="M 76.36 188.225 L 239.234 334.878 L 107.485 377.686 A 192 192 0 0 1 76.36 188.225 Z"/>
+    <path fill="url(#b5)" d="M 107.485 377.686 L 315.927 309.959 L 287.125 445.46 A 192 192 0 0 1 107.485 377.686 Z"/>
+  </g>
+  <g stroke="#171B24" stroke-width="14" stroke-linecap="butt" fill="none">
+    <path d="M 315.927 309.959 L 287.125 445.46"/>
+    <path d="M 332.693 231.081 L 435.64 323.775"/>
+    <path d="M 272.766 177.122 L 404.515 134.314"/>
+    <path d="M 196.073 202.041 L 224.875 66.54"/>
+    <path d="M 179.307 280.919 L 76.36 188.225"/>
+    <path d="M 239.234 334.878 L 107.485 377.686"/>
+  </g>
+  <circle cx="256" cy="256" r="76.8" fill="url(#halo)"/>
+  <circle cx="256" cy="256" r="32.64" fill="#FFF8EC"/>
+</svg>

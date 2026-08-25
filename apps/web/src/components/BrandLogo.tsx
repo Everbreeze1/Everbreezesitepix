@@ -8,7 +8,7 @@ interface BrandLogoProps {
 export function BrandLogo({ size = 36, className }: BrandLogoProps) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[22%] bg-primary ${className ?? ""}`}
+      className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[22%] bg-[#171B24] ${className ?? ""}`}
       style={{ width: size, height: size }}
       aria-label="Everlumen logo"
     >
@@ -18,7 +18,7 @@ export function BrandLogo({ size = 36, className }: BrandLogoProps) {
         width={size}
         height={size}
         loading="lazy"
-        className="h-full w-full scale-[1.18] object-cover"
+        className="h-full w-full object-cover"
         style={{ width: size, height: size }}
       />
     </span>
