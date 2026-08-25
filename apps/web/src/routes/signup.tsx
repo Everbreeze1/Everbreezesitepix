@@ -13,22 +13,24 @@ import { PasswordInput } from "@/components/PasswordInput";
 import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import heroImg from "@/assets/hero-construction.png";
+import { HIDE_PUBLIC_PRICING } from "@/lib/pricing";
+
+/**
+ * One string behind both the meta and og descriptions, so the price can only
+ * ever be dropped from both at once. A search result or a link preview is a
+ * public pricing surface like any other.
+ */
+const SIGNUP_DESCRIPTION = HIDE_PUBLIC_PRICING
+  ? "Create your Everlumen account. Capture, organize, and share construction job site photos with AI photo analysis."
+  : "Create your Everlumen account. Capture, organize, and share construction job site photos with AI photo analysis. Plans start at $24/mo.";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
     meta: [
       { title: "Create account - Everlumen" },
-      {
-        name: "description",
-        content:
-          "Create your Everlumen account. Capture, organize, and share construction job site photos with AI photo analysis. Plans start at $24/mo.",
-      },
+      { name: "description", content: SIGNUP_DESCRIPTION },
       { property: "og:title", content: "Create account - Everlumen" },
-      {
-        property: "og:description",
-        content:
-          "Create your Everlumen account. Capture, organize, and share construction job site photos with AI photo analysis. Plans start at $24/mo.",
-      },
+      { property: "og:description", content: SIGNUP_DESCRIPTION },
       { property: "og:url", content: "https://www.everlumen.co/signup" },
     ],
     links: [{ rel: "canonical", href: "https://www.everlumen.co/signup" }],

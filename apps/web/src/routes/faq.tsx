@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MarketingCta } from "@/components/MarketingCta";
+import { HIDE_PUBLIC_PRICING } from "@/lib/pricing";
 
 export const Route = createFileRoute("/faq")({
   component: FAQPage,
@@ -53,7 +54,12 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "Do I need a credit card to start?",
-    a: "Yes - every Everlumen plan, including Starter, is a paid subscription starting at $24/mo, so you'll add payment details when you sign up. You can cancel anytime from Settings.",
+    // The fact being answered is "yes, a card is required", which holds either
+    // way. Only the figure is withheld, so the answer stays truthful rather
+    // than going vague about whether the product is paid at all.
+    a: HIDE_PUBLIC_PRICING
+      ? "Yes - every Everlumen plan, including Starter, is a paid subscription, so you'll add payment details when you sign up. You can cancel anytime from Settings."
+      : "Yes - every Everlumen plan, including Starter, is a paid subscription starting at $24/mo, so you'll add payment details when you sign up. You can cancel anytime from Settings.",
   },
   {
     q: "Can I share photos with clients securely?",

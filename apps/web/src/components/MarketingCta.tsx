@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Check } from "lucide-react";
 import ctaImg from "@/assets/cta-construction.png";
+import { HIDE_PUBLIC_PRICING, TRIAL_DAYS } from "@/lib/pricing";
 
 export function MarketingCta() {
   return (
@@ -24,8 +25,9 @@ export function MarketingCta() {
                 Bring every job into focus.
               </h2>
               <p className="font-manrope mt-5 max-w-[576px] text-base font-medium leading-7 text-white/85">
-                Start capturing a better record today. Plans start at $24/mo - pick the one that
-                fits your crew and cancel anytime.
+                {HIDE_PUBLIC_PRICING
+                  ? "Start capturing a better record today. Pick the plan that fits your crew and cancel anytime."
+                  : "Start capturing a better record today. Plans start at $24/mo - pick the one that fits your crew and cancel anytime."}
               </p>
             </div>
             <div className="flex w-[179px] shrink-0 flex-col items-start">
@@ -40,7 +42,10 @@ export function MarketingCta() {
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 shrink-0 text-white/90" strokeWidth={1.33} />
                   <span className="font-manrope text-xs font-bold leading-4 text-white/90">
-                    Plans from $24/mo
+                    {/* The trial is the other half of the same promise, so it
+                        keeps the pair of ticks intact rather than leaving one
+                        lonely bullet where the price used to be. */}
+                    {HIDE_PUBLIC_PRICING ? `${TRIAL_DAYS}-day free trial` : "Plans from $24/mo"}
                   </span>
                 </li>
                 <li className="mt-2 flex items-center gap-2">

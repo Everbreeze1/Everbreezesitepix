@@ -46,8 +46,17 @@ export interface PlatformUserDetail {
     name: string;
     plan: string;
     subscriptionStatus: string;
+    isInternal: boolean;
     role: string;
     isOwner: boolean;
+    /*
+     * How many people a plan change here would affect.
+     *
+     * A plan belongs to the TEAM, so changing it from a person's page changes
+     * it for everyone in that team. Without the number on screen the control
+     * reads as if it applied to the one account being looked at.
+     */
+    memberCount: number;
   }>;
   projects: Array<{
     id: string;
@@ -118,7 +127,7 @@ export async function getPlatformUserDetailService(
   const [{ data: memberships }, { data: adminRow }, { count: feedbackCount }] = await Promise.all([
     (admin as any)
       .from("team_members")
-      .select("role, team:teams(id, name, plan, subscription_status, owner_id)")
+      .select("role, team:teams(id, name, plan, subscription_status, is_internal, owner_id)")
       .eq("user_id", data.userId),
     (admin as any)
       .from("platform_admins")
@@ -168,6 +177,24 @@ export async function getPlatformUserDetailService(
         photoRollups.set(ph.project_id, cur);
       }
     }
+  }
+
+  /*
+   * Member counts for the teams above.
+   *
+   * One query for every membership row of those teams, counted here. The plan
+   * control on this page acts on a whole team, and the count is what makes
+   * that visible at the moment of clicking rather than afterwards.
+   */
+  const teamIdsForUser = ((memberships as any[]) ?? [])
+    .filter((m) => m.team)
+    .map((m) => m.team.id as string);
+  const { data: teamMemberRows } = teamIdsForUser.length
+    ? await (admin as any).from("team_members").select("team_id").in("team_id", teamIdsForUser)
+    : { data: [] };
+  const memberCountByTeam = new Map<string, number>();
+  for (const row of ((teamMemberRows as any[]) ?? []) as Array<{ team_id: string }>) {
+    memberCountByTeam.set(row.team_id, (memberCountByTeam.get(row.team_id) ?? 0) + 1);
   }
 
   // Their actual reports, not just a count. "What has this customer told us"
@@ -222,8 +249,10 @@ export async function getPlatformUserDetailService(
         name: m.team.name,
         plan: m.team.plan,
         subscriptionStatus: m.team.subscription_status,
+        isInternal: !!m.team.is_internal,
         role: m.role,
         isOwner: m.team.owner_id === data.userId,
+        memberCount: memberCountByTeam.get(m.team.id) ?? 0,
       })),
     projects: projectList,
     totals: {

@@ -20,20 +20,27 @@
  */
 
 /*
- * All three resolve to the same mailbox, which is the honest shape for a team
- * this size: three aliases that all land in one inbox is a routing detail, but
- * three addresses where two bounce is a broken promise on a legal page.
+ * Neither address is a guess. Both are confirmed mailboxes on the product
+ * domain, verified in Resend:
  *
- * `info@everlumen.co` is not a guess. It is `EMAIL_FROM` in
- * apps/api/.env - the address every transactional email in the product is
- * already sent from, on the product's own domain, verified in Resend. Customers
- * hitting reply are already writing to it.
+ *   `info@everlumen.co`     `EMAIL_FROM` in apps/api/.env, so it is the sender
+ *                           behind every transactional email in the product.
+ *   `support@everlumen.co`  `EMAIL_REPLY_TO`, so it is already where a customer
+ *                           lands when they hit reply on one of those emails.
  *
- * ONE THING TO CONFIRM: that is proof the address can SEND, not proof it can
- * RECEIVE. LAUNCH.md section 8 asks for the mailboxes to be created for exactly
- * this reason. Send a test message to it before relying on these pages.
+ * Support points at the reply-to rather than the from-address on purpose: it is
+ * the mailbox that is already receiving customer mail, so the contact page and
+ * the reply button agree instead of splitting the conversation in two.
+ *
+ * Privacy and legal stay on `info@` deliberately. Two aliases into one inbox is
+ * a routing detail; an address on a legal page that bounces is a broken promise.
+ *
+ * ONE THING TO CONFIRM: Resend verifies a domain, not a mailbox, so the above
+ * proves these addresses can SEND, not that they can RECEIVE. LAUNCH.md section
+ * 8 asks for the mailboxes to be created for exactly this reason. Send a test
+ * message to each before relying on these pages.
  */
-export const SUPPORT_EMAIL = "info@everlumen.co";
+export const SUPPORT_EMAIL = "support@everlumen.co";
 export const PRIVACY_EMAIL = "info@everlumen.co";
 export const LEGAL_EMAIL = "info@everlumen.co";
 

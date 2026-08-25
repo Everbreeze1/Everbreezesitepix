@@ -186,10 +186,22 @@ const run = async () => {
 
   for (const s of sections) {
     await page.goto(`${BASE}${s.path}`, { waitUntil: "domcontentloaded", timeout: 60000 });
-    // Several of these fan out to Stripe or aggregate over 36k rows, so wait
-    // for the section's own marker rather than guessing a duration.
-    await page.waitForSelector('nav a[href="/admin/users"]', { timeout: 30000 }).catch(() => {});
-    await page.waitForTimeout(4000);
+    /*
+     * Wait for the section's OWN content, not for a duration.
+     *
+     * A flat sleep here reported Overview and Health as broken on one run and
+     * fine on the next, purely because they fan out to Stripe or aggregate
+     * over 36k rows. A test that fails on a slow page and passes on a fast one
+     * is measuring the machine, not the code - and the obvious response to it
+     * is to go and "fix" something that was never wrong.
+     */
+    await page
+      .waitForFunction(
+        (pattern) => new RegExp(pattern, "i").test(document.body.innerText),
+        s.expect.source,
+        { timeout: 45000 },
+      )
+      .catch(() => {});
     const body = await page.locator("body").innerText();
     expect(s.expect.test(body), `${s.name} renders`, s.path);
     expect(!/Admin access required/i.test(body), `${s.name} passes the admin gate`, s.path);
@@ -214,6 +226,13 @@ const run = async () => {
   );
   expect(/Last seen/i.test(usersBody), "last-seen column is present");
   expect(/Export CSV/i.test(usersBody), "export is offered");
+  // The list must signpost where roles are changed. Its predecessor had a
+  // visible "Make admin" button; a role badge with no affordance replaced it,
+  // and an operator could not find role management at all.
+  expect(
+    (await page.locator('a[href^="/admin/users/"]:has-text("Manage")').count()) > 0,
+    "each row signposts the detail page",
+  );
   expect(
     (await page.locator('input[type="checkbox"]').count()) > 1,
     "rows are selectable for bulk actions",
@@ -289,6 +308,15 @@ const run = async () => {
     );
     expect(/Support notes/i.test(detail), "user detail has support notes");
     expect(/Team membership/i.test(detail), "user detail can change a team role");
+    // A plan belongs to the team, so the control must say so where it is used.
+    expect(/Plans belong to the team/i.test(detail), "user detail can change the plan");
+    expect(
+      // The count as the panel renders it ("2 members · active"). The blunter
+      // "changes it for everyone" wording lives in the confirmation dialog,
+      // which is not open here.
+      /\d+ members? ·/.test(detail),
+      "the plan panel shows how many people a change affects",
+    );
     await page.screenshot({ path: `${SHOTS}/10-user-detail.png`, fullPage: true });
   } else {
     bad("user detail page renders", "no /admin/users/<id> link appeared within 30s");

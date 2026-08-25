@@ -7,6 +7,7 @@ import {
   ArrowUp,
   Ban,
   CheckCircle2,
+  ChevronRight,
   Download,
   Loader2,
   MailCheck,
@@ -343,6 +344,18 @@ export function AdminUsersPage() {
                     <SortHeader id="joined" sort={sort} desc={desc} onSort={toggleSort}>
                       Joined
                     </SortHeader>
+                    {/*
+                      An explicit action column.
+
+                      The list this replaced had a "Make admin" button in every
+                      row, so the one thing you could do was obvious. This one
+                      shows a role badge and nothing else, and the only route to
+                      changing it was knowing that the name is a link - which is
+                      not knowledge a screen should require. Roles, notes and
+                      support actions all live on the detail page; this is the
+                      signpost saying so.
+                    */}
+                    <th className="pb-2" />
                   </tr>
                 </thead>
                 <tbody>
@@ -514,6 +527,18 @@ function UserRow({
       </td>
       <td className="py-2 pr-4 text-muted-foreground">
         {new Date(u.createdAt).toLocaleDateString()}
+      </td>
+      <td className="py-2">
+        <Link
+          to="/admin/users/$userId"
+          params={{ userId: u.id }}
+          className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-border px-2.5 py-1 text-xs font-bold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          {/* Named for what it opens, not "View": roles, notes and support
+              actions are all behind it, and "View" reads as read-only. */}
+          Manage
+          <ChevronRight className="h-3 w-3" />
+        </Link>
       </td>
     </tr>
   );

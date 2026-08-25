@@ -256,8 +256,11 @@ export interface PlatformUserDetail {
     name: string;
     plan: string;
     subscriptionStatus: string;
+    isInternal: boolean;
     role: string;
     isOwner: boolean;
+    /** How many people a plan change on this team would affect. */
+    memberCount: number;
   }>;
   projects: Array<{
     id: string;

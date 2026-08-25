@@ -2,6 +2,25 @@ import type { BillingPlan } from "@/features/teams/api";
 
 export type BillingInterval = "monthly" | "annual";
 
+/**
+ * Whether to withhold every figure from the PUBLIC marketing surfaces.
+ *
+ * Set `VITE_HIDE_PRICING=1` during a testing period when the numbers are not
+ * final and should not be seen by anyone outside the team. Unset (the default)
+ * shows prices normally, so a plain build is never accidentally priceless.
+ *
+ * Scope is deliberately limited to what an anonymous visitor sees: the plan
+ * shelf on /pricing and the "plans from" lines on the marketing pages. The
+ * signed-in upgrade flow keeps its prices, because its CTA opens Stripe
+ * checkout - hiding the number there would make the payment page the first
+ * place a customer learns the cost.
+ *
+ * Read through Vite's inlining, so flipping it needs a rebuild, not just a
+ * restart. That is the intended shape: the flag belongs to a deployment, not
+ * to a session.
+ */
+export const HIDE_PUBLIC_PRICING = import.meta.env.VITE_HIDE_PRICING === "1";
+
 /** Annual billing is 20% off the monthly rate. */
 export const ANNUAL_DISCOUNT = 0.2;
 

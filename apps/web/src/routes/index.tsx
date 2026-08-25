@@ -17,6 +17,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MarketingCta } from "@/components/MarketingCta";
 import { MobileAppBanner } from "@/components/MobileAppBanner";
+import { HIDE_PUBLIC_PRICING, TRIAL_DAYS } from "@/lib/pricing";
 import heroImg from "@/assets/hero-construction.png";
 import problemImg from "@/assets/problem-image.png";
 import valueImg from "@/assets/value-construction.png";
@@ -244,7 +245,7 @@ function Landing() {
           <div className="font-manrope mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-bold text-sidebar-foreground/80">
             <div className="flex items-center gap-2">
               <Check className="h-4 w-4 text-sidebar-ring" />
-              Plans from $24/mo
+              {HIDE_PUBLIC_PRICING ? `${TRIAL_DAYS}-day free trial` : "Plans from $24/mo"}
             </div>
             <div className="flex items-center gap-2">
               <Check className="h-4 w-4 text-sidebar-ring" />

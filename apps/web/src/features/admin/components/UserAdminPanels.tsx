@@ -1,12 +1,14 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, ShieldCheck, StickyNote } from "lucide-react";
+import { ChevronRight, CreditCard, Loader2, ShieldCheck, StickyNote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   addUserNote,
   listUserNotes,
+  overrideTeamPlan,
   setAdminRole,
   setUserTeamRole,
   type AdminRole,
@@ -319,6 +321,164 @@ export function UserFeedbackPanel({ user }: { user: PlatformUserDetail }) {
             <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
               {f.description ?? <span className="italic text-muted-foreground">No message</span>}
             </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const PLANS = ["starter", "pro", "team"] as const;
+
+/**
+ * Plan and billing, reached from a person.
+ *
+ * A PLAN BELONGS TO A TEAM, NOT A PERSON. `teams.plan` is the column the
+ * paywall reads, and there is no per-user equivalent - so "change this user's
+ * plan" is always really "change their team's plan", for everyone in it.
+ *
+ * That could argue for keeping this control only on the team page, which is
+ * where it started. But an operator looking at a customer is on the person's
+ * page, and making them go and find the team is how a two-click job becomes a
+ * hunt. So the control lives here too, and every affordance states whose plan
+ * is actually moving and how many people it moves: the heading names the team,
+ * the confirmation names the member count, and the panel links to the team for
+ * the things that genuinely belong there - the Stripe subscription, its
+ * invoices, and cancellation.
+ */
+export function UserPlanPanel({
+  user,
+  onChanged,
+}: {
+  user: PlatformUserDetail;
+  onChanged: () => void;
+}) {
+  const prompt = usePrompt();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  if (!user.teams.length) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-card p-6">
+        <p className="flex items-center gap-2 text-sm font-extrabold text-foreground">
+          <CreditCard className="h-4 w-4" /> Plan
+        </p>
+        {/* Not an error state: plans hang off teams, so an account in no team
+            genuinely has no plan to change. Saying why beats an empty panel. */}
+        <p className="mt-1 text-sm text-muted-foreground">
+          This account belongs to no team, and plans belong to teams - so there is nothing to change
+          here. Add them to a team first.
+        </p>
+      </div>
+    );
+  }
+
+  const change = async (
+    team: PlatformUserDetail["teams"][number],
+    next: { plan?: (typeof PLANS)[number]; isInternal?: boolean },
+  ) => {
+    const others = team.memberCount - 1;
+    const affects =
+      others > 0
+        ? `This changes the plan for the whole ${team.name} team - ${team.memberCount} members, not just this one person.`
+        : `${team.name} has one member, so this affects only this account.`;
+
+    const reason = await prompt({
+      title:
+        next.plan !== undefined
+          ? `Move ${team.name} to the ${next.plan} plan?`
+          : next.isInternal
+            ? `Give ${team.name} complimentary access?`
+            : `Remove complimentary access from ${team.name}?`,
+      description: `${affects} This writes our own database and does not touch Stripe - their card is unaffected.`,
+      label: "Reason (recorded in the audit log)",
+      confirmText: "Change plan",
+    });
+    if (!reason || reason.trim().length < 3) return;
+
+    setBusy(team.id);
+    try {
+      await overrideTeamPlan({ data: { teamId: team.id, ...next, reason: reason.trim() } });
+      toast.success(
+        next.plan !== undefined
+          ? `${team.name} is now on the ${next.plan} plan`
+          : next.isInternal
+            ? `${team.name} now has complimentary access`
+            : `Complimentary access removed from ${team.name}`,
+      );
+      onChanged();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not change the plan");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-6">
+      <p className="flex items-center gap-2 text-sm font-extrabold text-foreground">
+        <CreditCard className="h-4 w-4" /> Plan
+      </p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Plans belong to the team. Changing one here changes it for every member.
+      </p>
+
+      <div className="mt-4 space-y-3">
+        {user.teams.map((team) => (
+          <div key={team.id} className="rounded-xl border border-border p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <Link
+                  to="/admin/teams/$teamId"
+                  params={{ teamId: team.id }}
+                  className="text-sm font-bold text-foreground hover:underline"
+                >
+                  {team.name}
+                </Link>
+                <p className="text-xs text-muted-foreground">
+                  {team.memberCount} {team.memberCount === 1 ? "member" : "members"} ·{" "}
+                  {team.subscriptionStatus}
+                  {team.isInternal && " · complimentary"}
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold uppercase text-muted-foreground">
+                {team.plan}
+              </span>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {PLANS.map((p) => (
+                <Button
+                  key={p}
+                  size="sm"
+                  variant={team.plan === p ? "secondary" : "outline"}
+                  className="capitalize"
+                  disabled={busy === team.id || team.plan === p}
+                  onClick={() => change(team, { plan: p })}
+                >
+                  {p}
+                </Button>
+              ))}
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy === team.id}
+                onClick={() => change(team, { isInternal: !team.isInternal })}
+              >
+                {team.isInternal ? "Remove complimentary" : "Make complimentary"}
+              </Button>
+            </div>
+
+            {/* Subscription, invoices and cancellation are Stripe-side and stay
+                on the team page - duplicating them here would mean two places
+                to cancel the same subscription. */}
+            <Link
+              to="/admin/teams/$teamId"
+              params={{ teamId: team.id }}
+              className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-muted-foreground hover:text-foreground hover:underline"
+            >
+              Subscription, invoices and cancellation
+              <ChevronRight className="h-3 w-3" />
+            </Link>
           </div>
         ))}
       </div>

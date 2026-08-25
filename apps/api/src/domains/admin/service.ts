@@ -59,40 +59,52 @@ export async function getAdminMetricsService(ctx: AuthedContext): Promise<AdminM
   await requirePlatformAdmin(ctx.userId);
   const admin = getSupabaseAdmin();
 
-  const [
-    totalUsers,
-    totalTeams,
-    starterCount,
-    proCount,
-    teamCount,
-    activeSubs,
-    totalProjects,
-    unattributedProjects,
-    totalPhotos,
-    signupRows,
-    recentTeamsRows,
-  ] = await Promise.all([
-    countRows("profiles"),
-    countRows("teams"),
-    countRows("teams", (q) => q.eq("plan", "starter")),
-    countRows("teams", (q) => q.eq("plan", "pro")),
-    countRows("teams", (q) => q.eq("plan", "team")),
-    countRows("teams", (q) => q.eq("subscription_status", "active")),
-    countRows("projects", (q) => q.is("deleted_at", null)),
-    countRowsOrNull("projects", (q) => q.is("deleted_at", null).is("team_id", null)),
-    countRows("photos"),
-    (admin as any)
-      .from("profiles")
-      .select("created_at")
-      .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
-    (admin as any)
-      .from("teams")
-      .select("id, name, plan, subscription_status, created_at")
-      .order("created_at", { ascending: false })
-      .limit(20),
-  ]);
+  /*
+   * One read of `teams`, not six.
+   *
+   * This used to fire a separate head-count per plan, another for active
+   * subscriptions, another for the total, and then select the recent rows -
+   * six round trips to a table that is smaller than the query list. Combined
+   * with the rest this page made eleven, and measured at a median of 6.3
+   * seconds to render the admin landing screen.
+   *
+   * `teams` is the smallest table here and every figure on this page derived
+   * from it is a tally over the same rows, so it is read once and counted in
+   * memory. The head counts below stay as counts: `profiles`, `projects` and
+   * `photos` are the tables that actually grow, and pulling them to count them
+   * is the mistake admin_team_rollups exists to undo.
+   *
+   * If `teams` ever reaches the tens of thousands this should become a SQL
+   * function like the other rollups. It is three rows today.
+   */
+  const [totalUsers, totalProjects, unattributedProjects, totalPhotos, signupRows, teamRows] =
+    await Promise.all([
+      countRows("profiles"),
+      countRows("projects", (q) => q.is("deleted_at", null)),
+      countRowsOrNull("projects", (q) => q.is("deleted_at", null).is("team_id", null)),
+      countRows("photos"),
+      (admin as any)
+        .from("profiles")
+        .select("created_at")
+        .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+      (admin as any).from("teams").select("id, name, plan, subscription_status, created_at"),
+    ]);
 
-  const totalActiveSubs = activeSubs;
+  const teams = ((teamRows.data as any[]) ?? []) as Array<{
+    id: string;
+    name: string;
+    plan: string;
+    subscription_status: string;
+    created_at: string;
+  }>;
+  const totalTeams = teams.length;
+  const starterCount = teams.filter((t) => t.plan === "starter").length;
+  const proCount = teams.filter((t) => t.plan === "pro").length;
+  const teamCount = teams.filter((t) => t.plan === "team").length;
+  const totalActiveSubs = teams.filter((t) => t.subscription_status === "active").length;
+  const recentTeamsRows = {
+    data: [...teams].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 20),
+  };
   const buckets = new Map<string, number>();
   for (let i = 29; i >= 0; i--) {
     const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);

@@ -168,7 +168,7 @@ else
 
 try {
   const hooks = await stripe.webhookEndpoints.list({ limit: 20 });
-  const ours = hooks.data.filter((h) => /everlumeneverlumen|railway/i.test(h.url ?? ""));
+  const ours = hooks.data.filter((h) => /everlumen|railway/i.test(h.url ?? ""));
   if (ours.length) {
     ok(
       "a webhook endpoint points at our API",

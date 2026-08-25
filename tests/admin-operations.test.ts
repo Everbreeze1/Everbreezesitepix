@@ -605,3 +605,48 @@ describe("stripe account checker", () => {
     }
   });
 });
+
+describe("plan management from a user page", () => {
+  const PANEL = "apps/web/src/features/admin/components/UserAdminPanels.tsx";
+
+  it("says whose plan is actually moving", () => {
+    /*
+     * `teams.plan` is the column; there is no per-user plan. So a plan control
+     * on a person's page always acts on their whole team, and an operator who
+     * does not realise that changes four people's access thinking they changed
+     * one.
+     */
+    const src = read(PANEL);
+    expect(src).toContain("A PLAN BELONGS TO A TEAM, NOT A PERSON");
+    expect(src).toContain("Plans belong to the team");
+    // The confirmation must carry the blast radius, not just the plan name.
+    expect(src).toContain("members, not just this one person");
+  });
+
+  it("shows the member count that a change would affect", () => {
+    const api = read("apps/api/src/domains/admin/user-detail.ts");
+    expect(api).toContain("memberCount");
+    expect(read(PANEL)).toContain("team.memberCount");
+  });
+
+  it("explains rather than errors when the account has no team", () => {
+    // Plans hang off teams, so an account in no team genuinely has no plan.
+    const src = read(PANEL);
+    expect(src).toContain("belongs to no team");
+  });
+
+  it("reuses the audited override rather than writing teams directly", () => {
+    // overrideTeamPlan requires the billing capability and a reason, and logs
+    // the before and after. A direct write here would bypass all three.
+    const src = read(PANEL);
+    expect(src).toContain("overrideTeamPlan");
+    expect(src).toContain("reason: reason.trim()");
+  });
+
+  it("keeps Stripe-side actions on the team page only", () => {
+    // Two places to cancel the same subscription is one too many.
+    const src = read(PANEL);
+    expect(src).not.toContain("manageTeamSubscription");
+    expect(src).toContain("Subscription, invoices and cancellation");
+  });
+});

@@ -18,6 +18,7 @@ import type { BillingPlan } from "@/features/teams/api";
 import {
   ANNUAL_DISCOUNT,
   ENTERPRISE,
+  HIDE_PUBLIC_PRICING,
   MAX_SEATS,
   PLANS,
   TRIAL_DAYS,
@@ -231,6 +232,38 @@ function PricingPage() {
   return <AuthedPricingPage />;
 }
 
+/**
+ * Stands in for `PriceBlock` while `HIDE_PUBLIC_PRICING` is set.
+ *
+ * Withholds the figures and nothing else. Seat counts are plan structure
+ * rather than price, and they are what makes the three cards comparable at
+ * all, so they stay: a shelf of three tiers distinguished only by their
+ * feature lists asks a visitor to guess which one their crew even fits in.
+ *
+ * Mirrors PriceBlock's type scale so the cards keep a shared baseline instead
+ * of the row going ragged where the tall price used to be.
+ */
+function ContactForPricing({ plan }: { plan: PlanPricing }) {
+  return (
+    <div>
+      <p className="font-display text-4xl font-bold tracking-tight text-foreground">Contact us</p>
+      <p className="mt-2 font-manrope text-xs font-bold text-foreground">
+        {plan.includedSeats} User{plan.includedSeats === 1 ? "" : "s"} Included
+      </p>
+      {sellsExtraSeats(plan) ? (
+        <p className="font-manrope text-xs text-muted-foreground">
+          Additional users available
+          {plan.advertiseSeatCap ? `, up to ${plan.maxSeats}` : ""}
+        </p>
+      ) : (
+        <p className="font-manrope text-xs text-muted-foreground">
+          Fixed at {plan.includedSeats} user{plan.includedSeats === 1 ? "" : "s"}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** Reached by anonymous visitors from the homepage/nav/footer - must render
  * without any authenticated-app assumptions (no AppSidebar/AppHeader, no
  * authed RPC calls). CTAs route to signup; checkout only happens once the
@@ -255,10 +288,14 @@ function PublicPricingPage() {
           </p>
         </div>
 
-        <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row sm:gap-8">
-          <CrewSizePicker seats={seats} onChange={setSeats} />
-          <IntervalToggle interval={interval} onChange={setInterval} />
-        </div>
+        {/* Both controls exist only to recompute a price, so with the figures
+            withheld they would be two pickers that visibly change nothing. */}
+        {!HIDE_PUBLIC_PRICING && (
+          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row sm:gap-8">
+            <CrewSizePicker seats={seats} onChange={setSeats} />
+            <IntervalToggle interval={interval} onChange={setInterval} />
+          </div>
+        )}
 
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           {PLANS.map((plan) => {
@@ -284,7 +321,11 @@ function PublicPricingPage() {
                 </span>
 
                 <div className="mt-5">
-                  <PriceBlock plan={plan} seats={seats} interval={interval} />
+                  {HIDE_PUBLIC_PRICING ? (
+                    <ContactForPricing plan={plan} />
+                  ) : (
+                    <PriceBlock plan={plan} seats={seats} interval={interval} />
+                  )}
                 </div>
 
                 <Button

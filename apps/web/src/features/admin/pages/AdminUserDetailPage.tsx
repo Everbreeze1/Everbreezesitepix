@@ -17,6 +17,7 @@ import {
   TeamMembershipPanel,
   UserFeedbackPanel,
   UserNotesPanel,
+  UserPlanPanel,
 } from "../components/UserAdminPanels";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -269,6 +270,8 @@ export function AdminUserDetailPage() {
           </Button>
         </div>
       </div>
+
+      <UserPlanPanel user={user} onChanged={refresh} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <AdminRolePanel user={user} onChanged={refresh} />
