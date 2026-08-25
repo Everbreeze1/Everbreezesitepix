@@ -74,3 +74,25 @@ export function formatPhotoDate(iso?: string | null): string {
     return "";
   }
 }
+
+/**
+ * Heading for a group of photos taken on the same day.
+ *
+ * "Today", "Yesterday", the weekday name inside the last week, then a date.
+ * Shared because the web gallery and the mobile grid group the same rows: if
+ * one called a photo "Yesterday" and the other "Tue", the same job would read
+ * differently depending on which screen someone opened.
+ */
+export function formatPhotoDateGroup(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const now = new Date();
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return d.toLocaleDateString(undefined, { weekday: "long" });
+  if (d.getFullYear() === now.getFullYear())
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}

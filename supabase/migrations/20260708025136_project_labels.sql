@@ -37,6 +37,21 @@ CREATE INDEX IF NOT EXISTS project_label_events_label_idx
 CREATE INDEX IF NOT EXISTS project_label_events_occurred_idx
   ON public.project_label_events(occurred_at);
 
+-- Added 2026-08-26, before this migration has ever run anywhere.
+--
+-- This file predates 20260811000000_lock_down_anon_reads.sql by a month, and so
+-- predates its lesson: Supabase's default privileges grant `anon` access to
+-- every new table in `public` the moment it exists. Without the REVOKE below,
+-- creating `project_label_events` would publish which labels were applied to
+-- which project, to anyone holding the publishable key from the browser bundle.
+--
+-- That matters now in a way it did not in July. This migration was never
+-- applied - it is the one genuine gap the migration-history audit found - so it
+-- is the single thing `supabase db push` would run against production. Fixing
+-- it here is what makes push safe rather than a re-run of an old exposure.
+--
+-- `scripts/verify-anon-exposure.mjs` is the regression test; run it after this.
+REVOKE ALL ON public.project_label_events FROM anon;
 GRANT SELECT, INSERT ON public.project_label_events TO authenticated;
 GRANT ALL ON public.project_label_events TO service_role;
 

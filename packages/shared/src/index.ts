@@ -18,6 +18,7 @@ export {
   sanitizeCaption,
   displayCaption,
   formatPhotoDate,
+  formatPhotoDateGroup,
 } from "./photo-caption";
 export {
   parseRich,

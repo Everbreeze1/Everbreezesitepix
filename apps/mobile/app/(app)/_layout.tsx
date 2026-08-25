@@ -1,10 +1,11 @@
 import { Redirect, Stack } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "@/lib/auth";
-import { colors } from "@/theme";
+import { useTheme } from "@/theme";
 
 export default function AppLayout() {
   const { user, loading } = useAuth();
+  const theme = useTheme();
 
   if (loading) {
     return (
@@ -13,10 +14,10 @@ export default function AppLayout() {
           flex: 1,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: colors.bg,
+          backgroundColor: theme.colors.background,
         }}
       >
-        <ActivityIndicator color={colors.ink} />
+        <ActivityIndicator color={theme.colors.primary} />
       </View>
     );
   }
@@ -26,17 +27,19 @@ export default function AppLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: colors.bg },
-        headerTintColor: colors.ink,
+        headerStyle: { backgroundColor: theme.colors.background },
+        headerTintColor: theme.colors.foreground,
         headerTitleStyle: { fontWeight: "600" },
-        contentStyle: { backgroundColor: colors.bg },
+        contentStyle: { backgroundColor: theme.colors.background },
       }}
     >
       <Stack.Screen name="index" options={{ title: "Projects" }} />
       <Stack.Screen name="project/[id]/index" options={{ title: "Project" }} />
       <Stack.Screen
         name="project/[id]/capture"
-        options={{ title: "Capture", presentation: "modal" }}
+        // Full-screen so the viewfinder is not boxed inside a card, and the
+        // camera screen manages its own header.
+        options={{ presentation: "fullScreenModal", headerShown: false }}
       />
       <Stack.Screen name="account" options={{ title: "Account" }} />
     </Stack>

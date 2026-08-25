@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -6,79 +6,134 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
-import { Link, router, useFocusEffect } from "expo-router";
-import { formatAddress, listProjects, type ProjectListItem } from "@/lib/projects";
-import { colors } from "@/theme";
+import { Link, router } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
+import { projectDisplayName } from "@everlumen/shared";
+import { formatAddress, listProjects } from "@/api/projects";
+import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 
 export default function ProjectsScreen() {
-  const [projects, setProjects] = useState<ProjectListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const theme = useTheme();
+  const [search, setSearch] = useState("");
 
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
-    try {
-      setProjects(await listProjects());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load projects");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  const { data, isLoading, isRefetching, error, refetch } = useQuery({
+    queryKey: ["projects"],
+    queryFn: listProjects,
+  });
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load]),
-  );
+  const projects = useMemo(() => {
+    const all = data ?? [];
+    const needle = search.trim().toLowerCase();
+    if (!needle) return all;
+    return all.filter((project) => {
+      const address = formatAddress(project) ?? "";
+      return (
+        projectDisplayName(project).toLowerCase().includes(needle) ||
+        address.toLowerCase().includes(needle)
+      );
+    });
+  }, [data, search]);
 
   return (
-    <View style={styles.root}>
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <View style={styles.toolbar}>
-        <Text style={styles.hint}>Your Everlumen projects</Text>
-        <Pressable onPress={() => router.push("/account")} hitSlop={8}>
-          <Text style={styles.link}>Account</Text>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search projects"
+          placeholderTextColor={theme.colors.mutedForeground}
+          autoCapitalize="none"
+          style={[
+            styles.search,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: theme.colors.border,
+              color: theme.colors.foreground,
+            },
+          ]}
+        />
+        <Pressable onPress={() => router.push("/account")} hitSlop={8} style={styles.accountLink}>
+          <Text style={[typography.bodyStrong, { color: theme.colors.primary }]}>Account</Text>
         </Pressable>
       </View>
 
-      {loading && !refreshing ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={colors.ink} />
+      {isLoading ? (
+        <ActivityIndicator style={{ marginTop: spacing.xxxl }} color={theme.colors.primary} />
       ) : error ? (
-        <View style={styles.center}>
-          <Text style={styles.error}>{error}</Text>
-          <Pressable style={styles.button} onPress={() => void load()}>
-            <Text style={styles.buttonText}>Retry</Text>
+        <View style={styles.centered}>
+          <Text style={[typography.body, { color: theme.colors.destructive, textAlign: "center" }]}>
+            {error instanceof Error ? error.message : "Failed to load projects"}
+          </Text>
+          <Pressable
+            style={[styles.primaryButton, { backgroundColor: theme.colors.primary }]}
+            onPress={() => void refetch()}
+          >
+            <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
+              Retry
+            </Text>
           </Pressable>
         </View>
       ) : (
         <FlatList
           data={projects}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={projects.length ? styles.list : styles.emptyList}
+          contentContainerStyle={
+            projects.length ? styles.list : [styles.list, { flexGrow: 1, justifyContent: "center" }]
+          }
           refreshControl={
             <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void load(true)}
-              tintColor={colors.ink}
+              refreshing={isRefetching}
+              onRefresh={() => void refetch()}
+              tintColor={theme.colors.primary}
             />
           }
           ListEmptyComponent={
-            <Text style={styles.empty}>No projects yet. Create one on the web app.</Text>
+            <Text
+              style={[
+                typography.body,
+                { color: theme.colors.mutedForeground, textAlign: "center" },
+              ]}
+            >
+              {search.trim()
+                ? "No projects match that search."
+                : "No projects yet. Create one on the web app."}
+            </Text>
           }
           renderItem={({ item }) => {
             const address = formatAddress(item);
             return (
               <Link href={`/project/${item.id}`} asChild>
-                <Pressable style={styles.row}>
-                  <Text style={styles.name}>{item.name}</Text>
-                  {address ? <Text style={styles.meta}>{address}</Text> : null}
-                  <Text style={styles.status}>{item.status}</Text>
+                <Pressable
+                  style={[
+                    styles.row,
+                    { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                  ]}
+                >
+                  <Text style={[typography.heading, { color: theme.colors.foreground }]}>
+                    {projectDisplayName(item)}
+                  </Text>
+                  {address ? (
+                    <Text
+                      style={[
+                        typography.caption,
+                        { color: theme.colors.mutedForeground, marginTop: 4 },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {address}
+                    </Text>
+                  ) : null}
+                  <Text
+                    style={[
+                      typography.overline,
+                      { color: theme.colors.mutedForeground, marginTop: spacing.sm },
+                    ]}
+                  >
+                    {item.status?.toUpperCase()}
+                  </Text>
                 </Pressable>
               </Link>
             );
@@ -90,37 +145,31 @@ export default function ProjectsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
   toolbar: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  hint: { color: colors.muted, fontSize: 14 },
-  link: { color: colors.ink, fontWeight: "600", fontSize: 14 },
-  list: { paddingHorizontal: 16, paddingBottom: 32 },
-  emptyList: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  center: { padding: 24, alignItems: "center", gap: 12 },
-  row: {
-    backgroundColor: colors.surface,
+  search: {
+    flex: 1,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 10,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    fontSize: 16,
+    minHeight: HIT_TARGET,
   },
-  name: { fontSize: 17, fontWeight: "600", color: colors.ink },
-  meta: { marginTop: 4, fontSize: 13, color: colors.muted },
-  status: { marginTop: 8, fontSize: 12, color: colors.muted, textTransform: "capitalize" },
-  empty: { textAlign: "center", color: colors.muted, fontSize: 15 },
-  error: { color: colors.danger, textAlign: "center" },
-  button: {
-    backgroundColor: colors.accent,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  accountLink: { minHeight: HIT_TARGET, justifyContent: "center" },
+  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
+  row: { borderWidth: 1, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  primaryButton: {
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    minHeight: HIT_TARGET,
+    justifyContent: "center",
   },
-  buttonText: { color: "#fff", fontWeight: "600" },
 });

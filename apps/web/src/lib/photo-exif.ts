@@ -39,16 +39,9 @@ export function mergePhotoMeta(
   };
 }
 
-/** "Today", "Yesterday", or "Tue, Jun 3" / "Jun 3, 2025" for older. */
-export function formatPhotoDateGroup(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return d.toLocaleDateString(undefined, { weekday: "long" });
-  if (d.getFullYear() === now.getFullYear())
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
+/*
+ * `formatPhotoDateGroup` now lives in `@everlumen/shared` so the mobile photo
+ * grid groups rows exactly as this gallery does. Re-exported here to keep the
+ * existing import path working.
+ */
+export { formatPhotoDateGroup } from "@everlumen/shared";

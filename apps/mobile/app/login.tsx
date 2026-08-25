@@ -1,11 +1,21 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { Redirect, router } from "expo-router";
 import { useAuth } from "@/lib/auth";
-import { colors } from "@/theme";
+import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 
 export default function LoginScreen() {
   const { user, loading, signIn } = useAuth();
+  const theme = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -25,80 +35,91 @@ export default function LoginScreen() {
     router.replace("/(app)");
   }
 
+  const inputStyle = [
+    styles.input,
+    {
+      backgroundColor: theme.colors.card,
+      borderColor: theme.colors.border,
+      color: theme.colors.foreground,
+    },
+  ];
+
   return (
-    <View style={styles.root}>
-      <Text style={styles.brand}>Everlumen</Text>
-      <Text style={styles.sub}>Sign in with your Everlumen account</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={[styles.root, { backgroundColor: theme.colors.background }]}
+    >
+      <Text style={[typography.display, { color: theme.colors.foreground }]}>Everlumen</Text>
+      <Text
+        style={[
+          typography.body,
+          { color: theme.colors.mutedForeground, marginBottom: spacing.xxl, marginTop: spacing.xs },
+        ]}
+      >
+        Sign in with your Everlumen account
+      </Text>
 
       <TextInput
         autoCapitalize="none"
         autoComplete="email"
         keyboardType="email-address"
         placeholder="Email"
-        placeholderTextColor={colors.muted}
-        style={styles.input}
+        placeholderTextColor={theme.colors.mutedForeground}
+        style={inputStyle}
         value={email}
         onChangeText={setEmail}
       />
       <TextInput
         placeholder="Password"
-        placeholderTextColor={colors.muted}
+        placeholderTextColor={theme.colors.mutedForeground}
         secureTextEntry
-        style={styles.input}
+        autoComplete="current-password"
+        style={inputStyle}
         value={password}
         onChangeText={setPassword}
+        onSubmitEditing={() => void onSubmit()}
       />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? (
+        <Text style={[typography.caption, { color: theme.colors.destructive, marginBottom: 8 }]}>
+          {error}
+        </Text>
+      ) : null}
 
       <Pressable
-        style={[styles.button, busy && styles.buttonDisabled]}
+        style={[styles.button, { backgroundColor: theme.colors.primary, opacity: busy ? 0.7 : 1 }]}
         disabled={busy}
         onPress={() => void onSubmit()}
       >
-        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign in</Text>}
+        {busy ? (
+          <ActivityIndicator color={theme.colors.primaryForeground} />
+        ) : (
+          <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
+            Sign in
+          </Text>
+        )}
       </Pressable>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    backgroundColor: colors.bg,
-  },
-  brand: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: colors.ink,
-    marginBottom: 4,
-  },
-  sub: {
-    fontSize: 15,
-    color: colors.muted,
-    marginBottom: 28,
-  },
+  root: { flex: 1, justifyContent: "center", paddingHorizontal: spacing.xl },
   input: {
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 12,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.md,
     fontSize: 16,
-    color: colors.ink,
+    minHeight: HIT_TARGET,
   },
   button: {
-    backgroundColor: colors.accent,
-    borderRadius: 8,
-    paddingVertical: 14,
+    borderRadius: radius.md,
+    paddingVertical: spacing.lg,
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
+    marginTop: spacing.sm,
+    minHeight: HIT_TARGET,
   },
-  buttonDisabled: { opacity: 0.7 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  error: { color: colors.danger, marginBottom: 8 },
 });

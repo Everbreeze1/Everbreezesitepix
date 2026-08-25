@@ -58,8 +58,9 @@ describe("family: soft-delete leakage (photos.deleted_at)", () => {
     "apps/web/src/features/projects/components/SelectPhotosForPageDialog.tsx",
     // The mobile project photo list. It filtered neither the trash nor
     // anything else, so a photo the user deleted on the web kept showing on
-    // their phone until the 60-day purge.
-    "apps/mobile/src/lib/projects.ts",
+    // their phone until the 60-day purge. It moved out of `src/lib/projects.ts`
+    // when the mobile app grew a per-domain `src/api/` layer.
+    "apps/mobile/src/api/photos.ts",
   ];
 
   it.each(MUST_FILTER)("%s excludes trashed photos", (rel) => {
@@ -1073,7 +1074,7 @@ describe("family: a photo the user took is a photo the user can find", () => {
     "apps/api/src/domains/timeline/service.ts",
     "apps/api/src/domains/projects/groups.ts",
     "apps/api/src/domains/showcases/service.ts",
-    "apps/mobile/src/lib/projects.ts",
+    "apps/mobile/src/api/photos.ts",
   ];
 
   for (const file of READS) {

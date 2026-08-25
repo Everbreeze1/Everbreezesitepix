@@ -81,3 +81,29 @@ jobs:
       # Last because it is the slowest and the least likely to fail alone.
       - name: Build
         run: npm run build
+
+  # `apps/mobile` sits outside the root `workspaces` array, so the `npm ci`
+  # above never installs it and the `verify` job cannot see its types. A second
+  # job is cheaper than folding it into the first: it runs in parallel, so the
+  # extra install costs no wall clock, and a broken mobile build reports as its
+  # own failure instead of hiding inside the web one.
+  mobile:
+    name: mobile · typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          # The root lockfile is a different dependency tree entirely.
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: apps/mobile
+
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: apps/mobile

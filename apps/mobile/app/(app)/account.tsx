@@ -4,10 +4,11 @@ import { router } from "expo-router";
 import { ApiClientError } from "@everlumen/api-client";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { colors } from "@/theme";
+import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 
 export default function AccountScreen() {
   const { user, signOut } = useAuth();
+  const theme = useTheme();
   const [health, setHealth] = useState("Checking API…");
 
   useEffect(() => {
@@ -38,28 +39,39 @@ export default function AccountScreen() {
   }
 
   return (
-    <View style={styles.root}>
-      <Text style={styles.brand}>Everlumen</Text>
-      <Text style={styles.line}>{user?.email ?? "Signed in"}</Text>
-      <Text style={styles.meta}>{health}</Text>
-      <Pressable style={styles.button} onPress={() => void onSignOut()}>
-        <Text style={styles.buttonText}>Sign out</Text>
+    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
+      <Text style={[typography.title, { color: theme.colors.foreground }]}>Everlumen</Text>
+      <Text style={[typography.body, { color: theme.colors.foreground, marginTop: spacing.md }]}>
+        {user?.email ?? "Signed in"}
+      </Text>
+      <Text
+        style={[
+          typography.caption,
+          { color: theme.colors.mutedForeground, marginTop: spacing.xs, marginBottom: spacing.xxl },
+        ]}
+      >
+        {health}
+      </Text>
+      <Pressable
+        style={[styles.button, { backgroundColor: theme.colors.primary }]}
+        onPress={() => void onSignOut()}
+      >
+        <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
+          Sign out
+        </Text>
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, padding: 24 },
-  brand: { fontSize: 28, fontWeight: "700", color: colors.ink, marginBottom: 12 },
-  line: { fontSize: 16, color: colors.ink, marginBottom: 8 },
-  meta: { fontSize: 14, color: colors.muted, marginBottom: 28 },
+  root: { flex: 1, padding: spacing.xl },
   button: {
     alignSelf: "flex-start",
-    backgroundColor: colors.accent,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    minHeight: HIT_TARGET,
+    justifyContent: "center",
   },
-  buttonText: { color: "#fff", fontWeight: "600" },
 });
