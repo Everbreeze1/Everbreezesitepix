@@ -587,3 +587,71 @@ export const exportUsers = rpcOp<
   UserDirectoryFilters & { max?: number },
   { csv: string; rows: number; truncated: boolean }
 >("exportUsers");
+
+// ---------------------------------------------------------------------------
+// Team directory
+//
+// Mirrors apps/api/src/domains/admin/team-directory.ts. Same shape as the user
+// directory: filtered, sorted, counted and paged in SQL.
+// ---------------------------------------------------------------------------
+
+export const TEAM_STATUSES = [
+  "active",
+  "past_due",
+  "canceled",
+  "internal",
+  "unpaid_plan",
+  "no_profile",
+  "dormant",
+] as const;
+export type TeamStatusFilter = (typeof TEAM_STATUSES)[number];
+
+export type TeamSort = "created" | "name" | "members" | "projects" | "storage" | "activity";
+
+export interface DirectoryTeam {
+  id: string;
+  name: string;
+  plan: string;
+  subscriptionStatus: string;
+  isInternal: boolean;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  createdAt: string;
+  owner: { name: string | null; email: string | null };
+  memberCount: number;
+  projectCount: number;
+  photoCount: number;
+  storageBytes: number;
+  lastActivityAt: string | null;
+  industry: string | null;
+  teamSize: string | null;
+  profileCompletedAt: string | null;
+}
+
+export interface TeamDirectoryFilters {
+  search?: string;
+  plan?: "starter" | "pro" | "team";
+  status?: TeamStatusFilter;
+  sort?: TeamSort;
+  desc?: boolean;
+}
+
+export const listTeamDirectory = rpcOp<
+  TeamDirectoryFilters & { limit?: number; offset?: number },
+  { teams: DirectoryTeam[]; total: number; offset: number; limit: number; degraded: boolean }
+>("listTeamDirectory");
+
+export const getTeamIndustryMix = rpcOp<
+  undefined,
+  {
+    mix: Array<{ industry: string; count: number }>;
+    totalTeams: number;
+    answered: number;
+    unavailable: boolean;
+  }
+>("getTeamIndustryMix");
+
+export const exportTeams = rpcOp<
+  TeamDirectoryFilters & { max?: number },
+  { csv: string; rows: number; truncated: boolean }
+>("exportTeams");

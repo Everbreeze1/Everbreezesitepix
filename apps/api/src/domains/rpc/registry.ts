@@ -213,6 +213,13 @@ import {
 } from "../admin/shares";
 import { getApiHealthInputSchema, getApiHealthService, listJobRunsService } from "../admin/health";
 import {
+  exportTeamsInputSchema,
+  exportTeamsService,
+  getTeamIndustryMixService,
+  listTeamDirectoryInputSchema,
+  listTeamDirectoryService,
+} from "../admin/team-directory";
+import {
   addUserNoteInputSchema,
   addUserNoteService,
   bulkUserActionInputSchema,
@@ -1183,6 +1190,20 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   listAdminAuditLog: authed(
     (d) => listAdminAuditLogInputSchema.parse(d),
     listAdminAuditLogService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  listTeamDirectory: authed(
+    (d) => listTeamDirectoryInputSchema.parse(d),
+    listTeamDirectoryService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  getTeamIndustryMix: {
+    handle: async (ctx) => {
+      if (!ctx) throw new AuthError("Unauthorized");
+      return getTeamIndustryMixService(ctx);
+    },
+  },
+  exportTeams: authed(
+    (d) => exportTeamsInputSchema.parse(d),
+    exportTeamsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   listUserDirectory: authed(
     (d) => listUserDirectoryInputSchema.parse(d),

@@ -192,7 +192,15 @@ const run = async () => {
     {
       path: "/admin/teams",
       name: "Teams",
-      expect: /Industry mix|No teams match|Billing reconciliation/i,
+      /*
+       * Matched on the LIST, not on the page furniture.
+       *
+       * This used to accept "Billing reconciliation", which is a static panel
+       * that renders before any data arrives - so the check passed while the
+       * table was still a spinner, and a screenshot taken at that moment showed
+       * an empty page. Waiting for the row count is waiting for the feature.
+       */
+      expect: /Showing \d|No teams match/i,
     },
     { path: "/admin/feedback", name: "Feedback", expect: /Customer feedback/i },
     { path: "/admin/notifications", name: "Notifications", expect: /Send announcement/i },

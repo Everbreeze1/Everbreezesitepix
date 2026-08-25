@@ -8,6 +8,7 @@
  *   20260822160000_email_confirmed_lookup.sql
  *   20260823100000_admin_user_directory.sql
  *   20260823110000_projects_team_id.sql
+ *   20260823120000_admin_team_directory.sql
  *
  * They are applied by hand in the Supabase SQL editor, so "did it run" and "did
  * every part of it run" are different questions - a statement that errored
@@ -594,6 +595,114 @@ async function checkProjectsTeamId() {
 }
 
 // ---------------------------------------------------------------------------
+// 20260823120000_admin_team_directory.sql
+// ---------------------------------------------------------------------------
+
+async function checkTeamDirectory() {
+  const call = (args = {}) =>
+    db.rpc("admin_team_directory", {
+      p_search: null,
+      p_plan: null,
+      p_status: null,
+      p_sort: "created",
+      p_desc: true,
+      p_limit: 50,
+      p_offset: 0,
+      ...args,
+    });
+
+  const { data, error } = await call();
+  if (error) {
+    bad(
+      "admin_team_directory exists",
+      isMissingFunction(error)
+        ? "NOT FOUND - migration 20260823120000 has not run"
+        : `${error.code ?? ""} ${error.message}`.trim(),
+    );
+    return;
+  }
+  const rows = data ?? [];
+  ok("admin_team_directory exists", `${rows.length} rows`);
+
+  const total = rows.length ? Number(rows[0].total_count) : 0;
+  const { count: teamCount } = await db.from("teams").select("id", { count: "exact", head: true });
+  if (total === (teamCount ?? -1)) ok("total_count matches the teams table", `${total}`);
+  else bad("total_count matches the teams table", `directory ${total}, teams ${teamCount}`);
+
+  const ids = rows.map((r) => r.id);
+  if (new Set(ids).size === ids.length) ok("one row per team");
+  else bad("one row per team", `${ids.length} rows, ${new Set(ids).size} distinct`);
+
+  // The directory and the rollups must agree, or the list and the detail page
+  // show different project counts for the same team.
+  const { data: rollups, error: rErr } = await db.rpc("admin_team_rollups", { team_ids: ids });
+  if (rErr) {
+    bad("directory agrees with admin_team_rollups", rErr.message);
+  } else {
+    const mismatches = [];
+    for (const r of rollups ?? []) {
+      const d = rows.find((x) => x.id === r.team_id);
+      if (!d) continue;
+      if (Number(d.project_count) !== Number(r.project_count))
+        mismatches.push(`${d.name}: directory ${d.project_count}, rollup ${r.project_count}`);
+      if (Number(d.storage_bytes) !== Number(r.storage_bytes))
+        mismatches.push(`${d.name}: storage ${d.storage_bytes} vs ${r.storage_bytes}`);
+    }
+    if (mismatches.length === 0) ok("directory agrees with admin_team_rollups");
+    else bad("directory agrees with admin_team_rollups", mismatches.join("; "));
+  }
+
+  for (const status of [
+    "active",
+    "past_due",
+    "canceled",
+    "internal",
+    "unpaid_plan",
+    "no_profile",
+    "dormant",
+  ]) {
+    const { data: f, error: fErr } = await call({ p_status: status });
+    if (fErr) {
+      bad(`team status filter: ${status}`, fErr.message);
+      continue;
+    }
+    const n = f?.length ? Number(f[0].total_count) : 0;
+    if (n > total) bad(`team status filter: ${status}`, `returned ${n} of ${total}`);
+    else ok(`team status filter: ${status}`, `${n} of ${total}`);
+  }
+
+  const { data: bySize } = await call({ p_sort: "storage", p_desc: true });
+  const sorted = (bySize ?? []).map((r) => Number(r.storage_bytes));
+  const isDesc = sorted.every((v, i) => i === 0 || sorted[i - 1] >= v);
+  if (isDesc) ok("sorting by storage works", sorted.join(" >= "));
+  else bad("sorting by storage works", sorted.join(", "));
+
+  const { data: anonData, error: anonErr } = await anon.rpc("admin_team_directory", {
+    p_search: null,
+    p_plan: null,
+    p_status: null,
+    p_sort: "created",
+    p_desc: true,
+    p_limit: 5,
+    p_offset: 0,
+  });
+  if (anonErr)
+    ok("anon cannot execute the team directory", `${anonErr.code ?? ""} ${anonErr.message}`.trim());
+  else bad("anon cannot execute the team directory", `LEAK - ${anonData?.length ?? 0} rows`);
+
+  const { data: mix, error: mixErr } = await db.rpc("admin_team_industry_mix");
+  if (mixErr) {
+    bad("admin_team_industry_mix exists", mixErr.message);
+  } else {
+    const sum = (mix ?? []).reduce((s, r) => s + Number(r.n), 0);
+    // The mix must cover EVERY team, which is the whole reason it is a separate
+    // query rather than a tally of the loaded page.
+    if (sum === (teamCount ?? -1)) ok("industry mix covers every team", `${sum} teams`);
+    else bad("industry mix covers every team", `mix sums to ${sum}, teams table has ${teamCount}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 
 await checkRollups();
 await checkFeedbackTriage();
@@ -602,6 +711,7 @@ await checkAdminRoles();
 await checkEmailConfirmedLookup();
 await checkUserDirectory();
 await checkProjectsTeamId();
+await checkTeamDirectory();
 
 console.log("");
 for (const r of results) {

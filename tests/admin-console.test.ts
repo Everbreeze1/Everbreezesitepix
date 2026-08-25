@@ -87,24 +87,32 @@ describe("admin lists are paginated", () => {
    * they all do it the same way.
    */
   const CURSOR_PAGES = [
-    "apps/web/src/features/admin/pages/AdminTeamsPage.tsx",
     "apps/web/src/features/admin/pages/AdminAuditLogPage.tsx",
     "apps/web/src/features/admin/pages/AdminNotificationsPage.tsx",
   ];
+
+  /*
+   * Teams moved to offset paging when it gained sortable columns, for the same
+   * reason Users did: a cursor IS the sort key, so it cannot sort on anything
+   * else. Both directories now behave identically, which was the point.
+   */
+  const OFFSET_PAGES = [
+    "apps/web/src/features/admin/pages/AdminUsersPage.tsx",
+    "apps/web/src/features/admin/pages/AdminTeamsPage.tsx",
+  ];
+
+  it.each(OFFSET_PAGES)("%s pages by offset and shows a real total", (page) => {
+    const src = read(page);
+    expect(src).toContain("offset");
+    expect(src).toContain("Previous");
+    expect(src).toContain("Next");
+    expect(src).toContain("total.toLocaleString()");
+  });
 
   it.each(CURSOR_PAGES)("%s consumes the server cursor", (page) => {
     const src = read(page);
     expect(src).toContain("useAdminList");
     expect(src).toContain("onLoadMore");
-  });
-
-  it("the users directory pages by offset and shows a real total", () => {
-    const src = read("apps/web/src/features/admin/pages/AdminUsersPage.tsx");
-    expect(src).toContain("offset");
-    expect(src).toContain("Previous");
-    expect(src).toContain("Next");
-    // The total comes from SQL, so it describes the table rather than the page.
-    expect(src).toContain("total.toLocaleString()");
   });
 
   it("the shared hook ends pagination on undefined, not null", () => {

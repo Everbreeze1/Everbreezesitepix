@@ -19,13 +19,31 @@ const { ProjectDailyLog, DAILY_LOG_INTERNAL_NOTICE } =
 
 /** An ISO instant N hours ago, so "Today" means today wherever this runs. */
 const hoursAgo = (n: number) => new Date(Date.now() - n * 3600_000).toISOString();
+
+/**
+ * N hours ago, but never earlier than this morning.
+ *
+ * `hoursAgo` is timezone-robust and was not clock-robust: the factory below
+ * stamps a log two hours old, so between local midnight and 02:00 that instant
+ * falls on *yesterday* and the component correctly renders "Aug 25" where the
+ * test demands "Today". It failed twice in one week for exactly that reason,
+ * both times with nothing wrong in the code under test.
+ *
+ * Clamping to the start of the local day keeps the log inside today no matter
+ * what hour the suite runs at, while still being a real past instant.
+ */
+const hoursAgoToday = (n: number) => {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  return new Date(Math.max(Date.now() - n * 3600_000, startOfDay.getTime())).toISOString();
+};
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString();
 
 const log = (over: Record<string, unknown> = {}) => ({
   pageId: "page-1",
   title: "Willow Street - Daily Log",
-  createdAt: hoursAgo(2),
-  updatedAt: hoursAgo(1),
+  createdAt: hoursAgoToday(2),
+  updatedAt: hoursAgoToday(1),
   entries: ["Replaced condensate pump, unit 4B", "Cleared drain line"],
   photoCount: 6,
   ...over,
