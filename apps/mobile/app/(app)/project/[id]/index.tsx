@@ -141,6 +141,19 @@ export default function ProjectDetailScreen() {
               <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
                 {photos.length} photo{photos.length === 1 ? "" : "s"} · {project?.status}
               </Text>
+
+              <Pressable
+                onPress={() => router.push(`/project/${id}/checklists`)}
+                style={[
+                  styles.navRow,
+                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                ]}
+              >
+                <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
+                  Checklists
+                </Text>
+                <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>›</Text>
+              </Pressable>
             </View>
 
             <ScrollView
@@ -273,6 +286,17 @@ const styles = StyleSheet.create({
   centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: GRID_GAP },
   tile: { width: "100%", height: "100%", borderRadius: radius.sm },
+  navRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm,
+    minHeight: HIT_TARGET,
+  },
   filterChip: {
     borderWidth: 1,
     borderRadius: radius.pill,

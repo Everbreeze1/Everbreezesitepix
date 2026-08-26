@@ -13,7 +13,7 @@ import { discardCapture, sweepOrphans } from "./media";
 
 export { MAX_ATTEMPTS };
 
-export type OutboxKind = "photo_upload";
+export type OutboxKind = "photo_upload" | "checklist_item_patch";
 
 export type OutboxState = "pending" | "sending" | "failed" | "done";
 
@@ -124,11 +124,23 @@ export async function claimNext(
   return { ...candidate, state: "sending" };
 }
 
-/** Mark a row delivered and release the file it was holding. */
+/**
+ * Mark a row delivered and release the file it was holding.
+ *
+ * The delete is conditional on the row still being `sending`, which matters for
+ * the kinds that reuse a deterministic id. A checklist item edited again while
+ * its previous edit is in flight replaces the row and puts it back to
+ * `pending`; an unconditional delete here would then throw away that newer
+ * answer the moment the older one landed, and the tick would silently revert.
+ */
 export async function markDone(row: OutboxRow): Promise<void> {
   const db = await getDb();
-  await db.runAsync(`DELETE FROM outbox WHERE id = ?`, [row.id]);
-  discardCapture(row.local_uri);
+  const result = await db.runAsync(`DELETE FROM outbox WHERE id = ? AND state = 'sending'`, [
+    row.id,
+  ]);
+  // Only release the file if this row really is gone. A superseded row still
+  // needs whatever it is holding.
+  if (result.changes > 0) discardCapture(row.local_uri);
 }
 
 /**

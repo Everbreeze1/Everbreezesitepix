@@ -1,3 +1,4 @@
+import { applyItemPatch } from "@/api/checklists";
 import { uploadProjectPhoto, type PhotoPhase } from "@/api/photos";
 import type { Coords } from "@/api/photo-meta";
 import type { OutboxKind, OutboxRow } from "./outbox";
@@ -48,6 +49,23 @@ export function isPermanent(error: unknown): boolean {
   return error instanceof Error ? classify(error.message) : false;
 }
 
+export type ChecklistItemPatchPayload = {
+  itemId: string;
+  patch: Record<string, unknown>;
+};
+
+/**
+ * Row id for a checklist edit.
+ *
+ * Deterministic per item, so a second answer while the first is still queued
+ * replaces it rather than queueing behind it. Someone correcting a tap should
+ * produce one write carrying the final answer, not a queue of every value the
+ * item passed through on the way there.
+ */
+export function checklistItemRowId(itemId: string): string {
+  return `checklist_item_patch:${itemId}`;
+}
+
 type Handler = (row: OutboxRow) => Promise<void>;
 
 const handlers: Record<OutboxKind, Handler> = {
@@ -76,6 +94,16 @@ const handlers: Record<OutboxKind, Handler> = {
       // duplicate check, so a repeat of a half-finished send converges.
       uploadId: row.id,
     });
+  },
+
+  checklist_item_patch: async (row) => {
+    const payload = JSON.parse(row.payload) as ChecklistItemPatchPayload;
+    /*
+     * Naturally idempotent: the patch carries the whole answer, so applying it
+     * twice lands on the same value. That is why this kind needs no equivalent
+     * of the photo path's duplicate check.
+     */
+    await applyItemPatch(payload.itemId, payload.patch);
   },
 };
 

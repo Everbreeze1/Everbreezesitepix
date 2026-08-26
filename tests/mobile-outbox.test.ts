@@ -285,6 +285,53 @@ describe("user actions", () => {
   });
 });
 
+describe("rows that reuse a deterministic id", () => {
+  /*
+   * Checklist edits key their row on the item, so a correction replaces the
+   * queued write rather than stacking another one behind it.
+   */
+  it("an edit made while the previous one is in flight is not lost", async () => {
+    await outbox.enqueue({
+      id: "checklist_item_patch:item-1",
+      kind: "checklist_item_patch",
+      projectId: "project-a",
+      payload: { itemId: "item-1", patch: { response_value: "Pass" } },
+    });
+
+    const inFlight = await outbox.claimNext();
+    expect(inFlight?.state).toBe("sending");
+
+    // The user changes their mind while the first write is still going out.
+    await outbox.enqueue({
+      id: "checklist_item_patch:item-1",
+      kind: "checklist_item_patch",
+      projectId: "project-a",
+      payload: { itemId: "item-1", patch: { response_value: "Fail" } },
+    });
+
+    // The original send now completes. Deleting unconditionally here would
+    // throw away the newer answer and the tick would silently revert.
+    await outbox.markDone(inFlight!);
+
+    const remaining = await outbox.listRows();
+    expect(remaining).toHaveLength(1);
+    expect(JSON.parse(remaining[0].payload).patch.response_value).toBe("Fail");
+    expect(remaining[0].state).toBe("pending");
+  });
+
+  it("still clears the row when nothing superseded it", async () => {
+    await outbox.enqueue({
+      id: "checklist_item_patch:item-2",
+      kind: "checklist_item_patch",
+      projectId: "project-a",
+      payload: { itemId: "item-2", patch: {} },
+    });
+    const row = await outbox.claimNext();
+    await outbox.markDone(row!);
+    expect((await outbox.counts()).outstanding).toBe(0);
+  });
+});
+
 describe("a full offline session", () => {
   it("delivers every capture exactly once after a reconnect", async () => {
     /*
