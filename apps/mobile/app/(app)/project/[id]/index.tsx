@@ -381,6 +381,28 @@ export default function ProjectDetailScreen() {
                 style={styles.lightboxImage}
                 contentFit="contain"
               />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Annotate this photo"
+                onPress={() => {
+                  const photo = lightboxPhoto;
+                  setLightboxId(null);
+                  router.push({
+                    pathname: "/photo/[id]/annotate",
+                    params: {
+                      id: photo.id,
+                      uri: urls[photo.id] ?? "",
+                      projectId: String(id),
+                      caption: photo.caption ?? "",
+                      phase: photo.phase ?? "untagged",
+                    },
+                  });
+                }}
+                style={styles.annotateButton}
+              >
+                <Text style={[typography.bodyStrong, { color: "#fff" }]}>Annotate</Text>
+              </Pressable>
+
               <View style={styles.lightboxMeta}>
                 <Text style={[typography.bodyStrong, { color: "#fff" }]} numberOfLines={2}>
                   {displayCaption(lightboxPhoto.caption, "Photo")}
@@ -443,5 +465,16 @@ const styles = StyleSheet.create({
   },
   lightbox: { flex: 1, backgroundColor: "rgba(0,0,0,0.94)", justifyContent: "center" },
   lightboxImage: { width: "100%", height: "78%" },
+  annotateButton: {
+    position: "absolute",
+    top: 56,
+    right: spacing.xl,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    minHeight: HIT_TARGET,
+    justifyContent: "center",
+  },
   lightboxMeta: { position: "absolute", bottom: 56, left: spacing.xl, right: spacing.xl, gap: 4 },
 });
