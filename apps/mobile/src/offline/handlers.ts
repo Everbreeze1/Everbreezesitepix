@@ -80,15 +80,19 @@ export type ChecklistItemPatchPayload = {
 };
 
 /**
- * Row id for a checklist edit.
+ * Row id for a checklist edit, keyed by item *and* by which field is written.
  *
- * Deterministic per item, so a second answer while the first is still queued
- * replaces it rather than queueing behind it. Someone correcting a tap should
+ * Deterministic per field, so a second answer while the first is still queued
+ * replaces it rather than queueing behind it: someone correcting a tap should
  * produce one write carrying the final answer, not a queue of every value the
- * item passed through on the way there.
+ * item passed through.
+ *
+ * The field is part of the key because an answer and a note are two different
+ * writes to the same row. Sharing one id would mean typing a note discards a
+ * queued answer, or the reverse, with no sign that anything was lost.
  */
-export function checklistItemRowId(itemId: string): string {
-  return `checklist_item_patch:${itemId}`;
+export function checklistItemRowId(itemId: string, field: "answer" | "notes"): string {
+  return `checklist_item_patch:${itemId}:${field}`;
 }
 
 export type TaskPatchPayload = {
@@ -116,8 +120,18 @@ export function workflowItemRowId(itemId: string): string {
   return `workflow_item_patch:${itemId}`;
 }
 
-export function workflowPhaseRowId(phaseId: string): string {
-  return `workflow_phase_patch:${phaseId}`;
+/**
+ * Row id for a phase write, keyed by phase *and* by which field is being
+ * written.
+ *
+ * A single id per phase looked tidy and was wrong: sign-off and the phase note
+ * are two different writes to the same row, so sharing an id means saving a
+ * note replaces a queued signature, or the other way round, and one of them is
+ * silently lost. Separate lanes keep the supersede behaviour within a field,
+ * where it is wanted, and out of it, where it is not.
+ */
+export function workflowPhaseRowId(phaseId: string, field: "signoff" | "notes"): string {
+  return `workflow_phase_patch:${phaseId}:${field}`;
 }
 
 type Handler = (row: OutboxRow) => Promise<void>;

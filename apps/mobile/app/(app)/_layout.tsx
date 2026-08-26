@@ -53,6 +53,7 @@ export default function AppLayout() {
       />
       <Stack.Screen name="workflow/[id]" options={{ title: "Workflow" }} />
       <Stack.Screen name="checklist/[id]" options={{ title: "Checklist" }} />
+      <Stack.Screen name="activity" options={{ title: "Activity" }} />
       <Stack.Screen name="queue" options={{ title: "Upload queue" }} />
       <Stack.Screen name="account" options={{ title: "Account" }} />
     </Stack>

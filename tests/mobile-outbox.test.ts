@@ -332,6 +332,54 @@ describe("rows that reuse a deterministic id", () => {
   });
 });
 
+describe("row ids keyed by field", () => {
+  /*
+   * An answer and a note are two writes to the same database row. They queue
+   * under different ids on purpose: sharing one would mean typing a note
+   * discards a queued answer, or the reverse, with nothing on screen to say
+   * anything was lost.
+   *
+   * The ids are built by `checklistItemRowId`/`workflowPhaseRowId`, which are
+   * not importable here (they pull in the Supabase client), so this asserts the
+   * queue behaviour that makes the distinction matter.
+   */
+  it("keeps two writes to one row when their ids differ", async () => {
+    await outbox.enqueue({
+      id: "checklist_item_patch:item-1:answer",
+      kind: "checklist_item_patch",
+      projectId: "project-a",
+      payload: { itemId: "item-1", patch: { response_value: "Pass" } },
+    });
+    await outbox.enqueue({
+      id: "checklist_item_patch:item-1:notes",
+      kind: "checklist_item_patch",
+      projectId: "project-a",
+      payload: { itemId: "item-1", patch: { notes: "sealed on the second pass" } },
+    });
+
+    expect((await outbox.counts()).pending).toBe(2);
+  });
+
+  it("collapses two writes to one field", async () => {
+    await outbox.enqueue({
+      id: "checklist_item_patch:item-1:answer",
+      kind: "checklist_item_patch",
+      projectId: "project-a",
+      payload: { itemId: "item-1", patch: { response_value: "Pass" } },
+    });
+    await outbox.enqueue({
+      id: "checklist_item_patch:item-1:answer",
+      kind: "checklist_item_patch",
+      projectId: "project-a",
+      payload: { itemId: "item-1", patch: { response_value: "Fail" } },
+    });
+
+    const rows = await outbox.listRows();
+    expect(rows).toHaveLength(1);
+    expect(JSON.parse(rows[0].payload).patch.response_value).toBe("Fail");
+  });
+});
+
 describe("a full offline session", () => {
   it("delivers every capture exactly once after a reconnect", async () => {
     /*

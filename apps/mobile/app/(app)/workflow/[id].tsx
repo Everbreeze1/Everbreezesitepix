@@ -121,6 +121,39 @@ export default function WorkflowRunnerScreen() {
     [data?.project_id, patchLocalItem, queryKey, user?.id],
   );
 
+  /** A free-text note against a phase, saved on blur. */
+  const savePhaseNote = useCallback(
+    async (phase: WorkflowPhase, text: string) => {
+      const trimmed = text.trim();
+      if ((phase.notes ?? "") === trimmed) return;
+      const patch = { notes: trimmed || null };
+
+      queryClient.setQueryData<WorkflowDetail | null>(queryKey, (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          phases: current.phases.map((row) => (row.id === phase.id ? { ...row, ...patch } : row)),
+        };
+      });
+
+      const payload: WorkflowPhasePatchPayload & { invalidate: unknown[][] } = {
+        phaseId: phase.id,
+        patch,
+        invalidate: [queryKey],
+      };
+
+      await enqueue({
+        id: workflowPhaseRowId(phase.id, "notes"),
+        kind: "workflow_phase_patch",
+        projectId: data?.project_id ?? null,
+        payload,
+      });
+      await refreshQueue();
+      requestSync();
+    },
+    [data?.project_id, queryClient, queryKey],
+  );
+
   const signOff = useCallback(
     async (phase: WorkflowPhase, name: string) => {
       const patch = signoffPatch(name, user?.id ?? null);
@@ -143,7 +176,7 @@ export default function WorkflowRunnerScreen() {
       };
 
       await enqueue({
-        id: workflowPhaseRowId(phase.id),
+        id: workflowPhaseRowId(phase.id, "signoff"),
         kind: "workflow_phase_patch",
         projectId: data?.project_id ?? null,
         payload,
@@ -206,6 +239,7 @@ export default function WorkflowRunnerScreen() {
                 onToggleCheck={toggleCheck}
                 onSaveNote={saveNote}
                 onSignOff={signOff}
+                onSavePhaseNote={savePhaseNote}
               />
             ))}
           </ScrollView>
@@ -222,6 +256,7 @@ function PhaseCard({
   onToggleCheck,
   onSaveNote,
   onSignOff,
+  onSavePhaseNote,
 }: {
   phase: WorkflowPhase;
   projectId: string;
@@ -229,9 +264,11 @@ function PhaseCard({
   onToggleCheck: (item: WorkflowItem) => void;
   onSaveNote: (item: WorkflowItem, text: string) => void;
   onSignOff: (phase: WorkflowPhase, name: string) => void;
+  onSavePhaseNote: (phase: WorkflowPhase, text: string) => void;
 }) {
   const theme = useTheme();
   const [signName, setSignName] = useState("");
+  const [phaseNote, setPhaseNote] = useState(phase.notes ?? "");
   const state = phaseState(phase, phase.items);
   const signable = canSignOff(phase, phase.items);
 
@@ -279,6 +316,23 @@ function PhaseCard({
           onSaveNote={onSaveNote}
         />
       ))}
+
+      <TextInput
+        value={phaseNote}
+        onChangeText={setPhaseNote}
+        onBlur={() => onSavePhaseNote(phase, phaseNote)}
+        multiline
+        placeholder="Phase note (optional)"
+        placeholderTextColor={theme.colors.mutedForeground}
+        style={[
+          styles.input,
+          {
+            backgroundColor: theme.colors.background,
+            borderColor: theme.colors.border,
+            color: theme.colors.foreground,
+          },
+        ]}
+      />
 
       {phase.requires_signoff ? (
         phase.signed_off_at ? (

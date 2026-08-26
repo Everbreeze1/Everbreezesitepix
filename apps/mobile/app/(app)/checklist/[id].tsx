@@ -52,7 +52,11 @@ export default function ChecklistRunnerScreen() {
    * respond exactly as it does on the office wifi.
    */
   const patchItem = useCallback(
-    async (item: ChecklistItem, patch: Record<string, unknown>) => {
+    async (
+      item: ChecklistItem,
+      patch: Record<string, unknown>,
+      field: "answer" | "notes" = "answer",
+    ) => {
       queryClient.setQueryData<ChecklistDetail | null>(queryKey, (current) => {
         if (!current) return current;
         return {
@@ -71,7 +75,7 @@ export default function ChecklistRunnerScreen() {
       await enqueue({
         // Deterministic per item, so correcting an answer replaces the queued
         // write instead of stacking another one behind it.
-        id: checklistItemRowId(item.id),
+        id: checklistItemRowId(item.id, field),
         kind: "checklist_item_patch",
         projectId: data?.project_id ?? null,
         payload,
@@ -87,6 +91,22 @@ export default function ChecklistRunnerScreen() {
     (item: ChecklistItem, value: unknown) =>
       void patchItem(item, responsePatch(value, user?.id ?? null)),
     [patchItem, user?.id],
+  );
+
+  /**
+   * A free-text note against an item, saved on blur.
+   *
+   * Separate from the answer. A pass/fail item still needs somewhere to record
+   * why it failed, and overwriting `response_value` to hold that would lose the
+   * answer the report prints.
+   */
+  const setNote = useCallback(
+    (item: ChecklistItem, text: string) => {
+      const trimmed = text.trim();
+      if ((item.notes ?? "") === trimmed) return;
+      return void patchItem(item, { notes: trimmed || null }, "notes");
+    },
+    [patchItem],
   );
 
   const toggleDone = useCallback(
@@ -152,6 +172,7 @@ export default function ChecklistRunnerScreen() {
                 projectId={data.project_id}
                 onSetResponse={setResponse}
                 onToggleDone={toggleDone}
+                onSetNote={setNote}
               />
             ))}
           </ScrollView>
@@ -166,11 +187,13 @@ function ChecklistRow({
   projectId,
   onSetResponse,
   onToggleDone,
+  onSetNote,
 }: {
   item: ChecklistItem;
   projectId: string | undefined;
   onSetResponse: (item: ChecklistItem, value: unknown) => void;
   onToggleDone: (item: ChecklistItem) => void;
+  onSetNote: (item: ChecklistItem, text: string) => void;
 }) {
   const theme = useTheme();
   const answered = Boolean(item.completed_at);
@@ -267,6 +290,8 @@ function ChecklistRow({
         <FreeTextAnswer item={item} onSetResponse={onSetResponse} />
       ) : null}
 
+      <ItemNote item={item} onSetNote={onSetNote} />
+
       {projectId ? (
         <Pressable
           onPress={() => router.push(`/project/${projectId}/capture?checklistItemId=${item.id}`)}
@@ -322,6 +347,43 @@ function Rating({
         );
       })}
     </View>
+  );
+}
+
+/**
+ * The note field carried by every item, whatever its answer type.
+ *
+ * Held locally and committed on blur, and skipped entirely when nothing
+ * changed, so opening a checklist and scrolling past an item does not queue a
+ * write that says the same thing it already said.
+ */
+function ItemNote({
+  item,
+  onSetNote,
+}: {
+  item: ChecklistItem;
+  onSetNote: (item: ChecklistItem, text: string) => void;
+}) {
+  const theme = useTheme();
+  const [draft, setDraft] = useState(item.notes ?? "");
+
+  return (
+    <TextInput
+      value={draft}
+      onChangeText={setDraft}
+      onBlur={() => onSetNote(item, draft)}
+      multiline
+      placeholder="Note (optional)"
+      placeholderTextColor={theme.colors.mutedForeground}
+      style={[
+        styles.note,
+        {
+          backgroundColor: theme.colors.background,
+          borderColor: theme.colors.border,
+          color: theme.colors.foreground,
+        },
+      ]}
+    />
   );
 }
 
@@ -419,6 +481,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     minHeight: HIT_TARGET,
+  },
+  note: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: 15,
+    minHeight: 40,
   },
   attach: {
     borderWidth: 1,

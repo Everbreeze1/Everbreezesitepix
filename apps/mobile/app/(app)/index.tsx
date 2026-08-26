@@ -57,6 +57,9 @@ export default function ProjectsScreen() {
             },
           ]}
         />
+        <Pressable onPress={() => router.push("/activity")} hitSlop={8} style={styles.accountLink}>
+          <Text style={[typography.bodyStrong, { color: theme.colors.primary }]}>Activity</Text>
+        </Pressable>
         <Pressable onPress={() => router.push("/account")} hitSlop={8} style={styles.accountLink}>
           <Text style={[typography.bodyStrong, { color: theme.colors.primary }]}>Account</Text>
         </Pressable>
