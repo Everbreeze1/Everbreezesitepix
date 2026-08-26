@@ -176,13 +176,20 @@ export function photoEvidenceHtml(photos: GeneratedPhoto[], perPage: 1 | 2 | 3 |
  * address/date, and a Spacer paragraph sized to push the body onto page two.
  * (See apps/web/src/lib/tiptap-spacer.ts - an empty `<p style="height:…">` is
  * deliberate blank space that the PDF renderer honours.)
+ *
+ * Exported because the whole-job Report builds its own body in
+ * comprehensive-report.ts and has to open on the same page. Two documents both
+ * called a Report, one of them arriving without a title page, is the single
+ * thing a client notices first.
  */
-function coverPageHtml(args: {
+export function coverPageHtml(args: {
   title: string;
   projectName: string;
   address: string;
   today: string;
   author: string;
+  /** Optional line under the title, naming which report this is. */
+  subtitle?: string;
 }): string {
   const line = (text: string, color: string, size?: string) =>
     text
@@ -191,6 +198,7 @@ function coverPageHtml(args: {
   return (
     `<hr>` +
     `<h1 style="text-align:center"><span style="font-size: 34px">${escapeHtml(args.projectName || args.title)}</span></h1>` +
+    line(args.subtitle ?? "", "rgb(75,85,99)", "16px") +
     line(args.address, "rgb(107,114,128)") +
     line(args.today, "rgb(156,163,175)") +
     `<p style="height: 420px"></p>` +

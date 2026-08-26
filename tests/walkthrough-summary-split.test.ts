@@ -684,6 +684,98 @@ describe("currentSummaries", () => {
     expect(kept.map((r) => r.id).sort()).toEqual(["basement", "roof"]);
   });
 
+  it("collapses a redraft over a selection that has since grown", () => {
+    /*
+     * The client's case. "It's generating the old version of summery. The
+     * updated summery currently generating is good." Tick two more photos and
+     * press Generate again and the new row keys on a different photo set, so
+     * the exact-set rule above cannot see that it replaces the first one - and
+     * the report printed both, superseded copy first, because the section reads
+     * forward through the job.
+     */
+    const kept = currentSummaries([
+      row({
+        id: "updated",
+        photo_notes: [{ photoId: "p1" }, { photoId: "p2" }, { photoId: "p3" }],
+        created_at: "2026-08-07T10:00:00Z",
+        markdown: "the good one",
+      }),
+      row({
+        id: "old",
+        photo_notes: [{ photoId: "p1" }, { photoId: "p2" }],
+        created_at: "2026-08-06T10:00:00Z",
+        markdown: "the old one",
+      }),
+    ]);
+    expect(kept.map((r) => r.id)).toEqual(["updated"]);
+  });
+
+  it("keeps a later brief narrowed out of a wider write-up", () => {
+    // Nine photos summarised, then three of them summarised on their own. The
+    // newer row does not cover the older, so the older is not superseded: that
+    // is a focused brief beside the full account, not a redraft of it.
+    const kept = currentSummaries([
+      row({
+        id: "focused",
+        photo_notes: [{ photoId: "p1" }, { photoId: "p2" }],
+        created_at: "2026-08-09T10:00:00Z",
+        markdown: "just the condenser",
+      }),
+      row({
+        id: "whole",
+        photo_notes: [{ photoId: "p1" }, { photoId: "p2" }, { photoId: "p3" }],
+        created_at: "2026-08-08T10:00:00Z",
+        markdown: "the whole visit",
+      }),
+    ]);
+    expect(kept.map((r) => r.id)).toEqual(["whole", "focused"]);
+  });
+
+  it("keeps selections that overlap without one containing the other", () => {
+    // Containment is the test, not overlap. Two accounts that happen to share a
+    // photo are still two accounts.
+    const kept = currentSummaries([
+      row({
+        id: "later",
+        photo_notes: [{ photoId: "p2" }, { photoId: "p3" }],
+        created_at: "2026-08-05T10:00:00Z",
+        markdown: "condenser pad",
+      }),
+      row({
+        id: "earlier",
+        photo_notes: [{ photoId: "p1" }, { photoId: "p2" }],
+        created_at: "2026-08-04T10:00:00Z",
+        markdown: "attic unit",
+      }),
+    ]);
+    expect(kept.map((r) => r.id)).toEqual(["earlier", "later"]);
+  });
+
+  it("never lets a summary written from photos supersede a walkthrough's", () => {
+    /*
+     * A recorded walk is a visit, with its own date and its own place in the
+     * record. Photographing the same equipment afterwards and summarising that
+     * does not take the walk off the report - only identical prose does, one
+     * rule further down.
+     */
+    const kept = currentSummaries([
+      row({
+        id: "photos",
+        photo_notes: [{ photoId: "p1" }, { photoId: "p2" }],
+        created_at: "2026-08-06T10:00:00Z",
+        markdown: "photographed the replacement",
+      }),
+      row({
+        id: "walk",
+        walkthrough_id: "w1",
+        photo_notes: [{ photoId: "p1" }],
+        created_at: "2026-08-05T10:00:00Z",
+        markdown: "walked the job",
+      }),
+    ]);
+    expect(kept.map((r) => r.id)).toEqual(["walk", "photos"]);
+  });
+
   it("drops a duplicate body however it was keyed", () => {
     // The walk summarised, then its photos summarised again on their own: two
     // keys, one piece of prose. The client counted blocks, not rows.

@@ -370,6 +370,65 @@ describe("194 Daniels Drive, from the live rows", () => {
   });
 });
 
+describe("the Report, generated after a summary was redrafted over more photos", () => {
+  /*
+   * "The project full report (...) is generating the old version of summery.
+   * The updated summery currently generating is good."
+   *
+   * Same habit as the five drafts above, one photo different: the author ticked
+   * two more photos before pressing Generate again, so the new row keys on a
+   * selection the old one is only part of. Grouping by the exact photo set
+   * cannot collapse those, and the report printed the superseded write-up
+   * first, because the section reads forward through the job - which puts the
+   * old version at the top of the document being handed to a customer.
+   */
+  beforeEach(() => {
+    DB.summaries = [
+      summaryRow({
+        id: "updated",
+        created_at: "2026-08-23T14:46:22Z",
+        title: "Summary - Aug 23, 2026",
+        photo_notes: [{ photoId: "p1" }, { photoId: "p2" }, { photoId: "p3" }],
+        markdown: "## Overview\n\nThe contactor was replaced. Updated draft.",
+      }),
+      summaryRow({
+        id: "old",
+        created_at: "2026-08-22T04:24:32Z",
+        title: "Summary - Aug 22, 2026",
+        photo_notes: [{ photoId: "p1" }, { photoId: "p2" }],
+        markdown: "## Overview\n\nThis photo set documents a site visit. Old draft.",
+      }),
+    ];
+  });
+
+  it("prints the updated write-up and not the one it replaced", async () => {
+    const res = await generate();
+    const html: string = DB.inserted.content_html;
+    expect(res.summaryCount).toBe(1);
+    expect(summaryBlocks(html)).toHaveLength(1);
+    expect(html).toContain("Updated draft.");
+    expect(html).not.toContain("Old draft.");
+  });
+
+  it("does not feed the superseded draft to the drafter either", async () => {
+    // The prompt is the other half of it: the old write-up in the context is
+    // what makes the narrative describe two visits over one set of photos.
+    await generate();
+    expect(DB.prompt).toContain("Walkthrough write-ups on this job (1):");
+    expect(DB.prompt).toContain("Updated draft.");
+    expect(DB.prompt).not.toContain("Old draft.");
+  });
+
+  it("still carries both when neither selection contains the other", async () => {
+    // A brief over the condenser and a brief over the attic share a photo and
+    // are still two write-ups. Only containment supersedes.
+    DB.summaries[0].photo_notes = [{ photoId: "p2" }, { photoId: "p3" }];
+    const res = await generate();
+    expect(res.summaryCount).toBe(2);
+    expect(summaryBlocks(DB.inserted.content_html)).toHaveLength(2);
+  });
+});
+
 describe("the Report, generated against the other shapes of summary history", () => {
   it("keeps one entry per walkthrough when the job has several walks", async () => {
     DB.summaries = [

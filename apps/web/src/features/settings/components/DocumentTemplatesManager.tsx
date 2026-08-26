@@ -468,6 +468,16 @@ function parseBody(raw: any): DocBody {
   return { style: "report", html: "", description: "", filesUnder: "report" };
 }
 
+/**
+ * The trade dropdown's "no filter" value.
+ *
+ * A sentinel rather than "", because a Radix SelectItem cannot carry an empty
+ * value: it uses one to mean "nothing selected" and clears the field instead.
+ * Same spelling as the blueprint rail's filter on the Templates page, so the
+ * two controls read the same in the DOM.
+ */
+const ALL_TRADES = "__all";
+
 /** The section heading a template files under. Same key the picker groups by. */
 function templateCategory(t: DocumentTemplate): string {
   return parseBody(t.body).category ?? GENERAL_CATEGORY;
@@ -1417,12 +1427,19 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
           cut it to the one that is theirs. Hidden when everything on the page
           is one trade already, where it would only ever be a no-op.
 
-          The chips follow `sections`, which the business profile reorders, so
-          the company's own trade is the first one after "All trades" rather
-          than wherever the fixed order happens to put it. */}
+          A dropdown, not a row of chips. "These different trades should be a
+          drop down. It's super messy here." Eleven chips wrapped onto three
+          lines above the library and read as eleven buttons competing with the
+          cards under them; one control that names the trade you are on says
+          the same thing in one line, and the count rides in each option rather
+          than in a badge on every chip.
+
+          Options follow `sections`, which the business profile reorders, so the
+          company's own trade is the first one after "All trades" rather than
+          wherever the fixed order happens to put it. */}
       {sections.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[1.4px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[1.4px] text-muted-foreground">
             Trade
             <HelpTip label="the trade filter" side="bottom" align="start" className="w-72">
               Cuts the page down to the templates filed under one trade. It only changes what you
@@ -1430,40 +1447,52 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
               from your business profile.
             </HelpTip>
           </span>
-          <button
-            type="button"
-            onClick={() => setTrade(null)}
-            className={cn(
-              "rounded-full px-3 py-1.5 text-xs font-bold transition",
-              trade === null
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-accent",
-            )}
+          <Select
+            value={trade ?? ALL_TRADES}
+            onValueChange={(v) => setTrade(v === ALL_TRADES ? null : v)}
           >
-            All trades
-            <span className="ml-1.5 opacity-70">{visible.length}</span>
-          </button>
-          {sections.map(([heading, list]) => {
-            const Icon = categoryIcon(heading);
-            return (
-              <button
-                key={heading}
-                type="button"
-                onClick={() => setTrade(heading === trade ? null : heading)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition",
-                  trade === heading
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-accent",
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {heading}
-                <span className="opacity-70">{list.length}</span>
-                {heading === ownTrade && <span aria-label="Your trade">★</span>}
-              </button>
-            );
-          })}
+            <SelectTrigger
+              className="h-9 w-[248px] rounded-xl text-xs font-bold"
+              title="Which trade's templates to show"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_TRADES}>
+                <span className="inline-flex items-center gap-2">
+                  All trades
+                  <span className="text-muted-foreground">{visible.length}</span>
+                </span>
+              </SelectItem>
+              {sections.map(([heading, list]) => {
+                const Icon = categoryIcon(heading);
+                return (
+                  <SelectItem key={heading} value={heading}>
+                    <span className="inline-flex items-center gap-2">
+                      <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+                      {heading}
+                      <span className="text-muted-foreground">{list.length}</span>
+                      {heading === ownTrade && <span aria-label="Your trade">★</span>}
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+          {/* The way back, once a trade is on. A dropdown has no "click the
+              active chip again to clear it", and hunting "All trades" back out
+              of a list of twelve is a worse way to undo a filter than a button
+              that says so. */}
+          {trade && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 rounded-xl text-xs font-bold"
+              onClick={() => setTrade(null)}
+            >
+              Show all {visible.length}
+            </Button>
+          )}
         </div>
       )}
 

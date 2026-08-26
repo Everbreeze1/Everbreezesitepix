@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { AuthedContext } from "../../lib/user-context";
 import { chatComplete, WORK_VOICE_RULES } from "../ai/service";
 import { cleanCaption, markdownToHtml } from "@everlumen/shared";
-import { photoEvidenceHtml, type GeneratedPhoto } from "./page-generate";
+import { coverPageHtml, photoEvidenceHtml, type GeneratedPhoto } from "./page-generate";
 import { existingPageTitles, projectDocumentTitle, uniqueDocumentTitle } from "./page-title";
 import { stripPhotoGallery } from "../walkthroughs/summaries";
 
@@ -229,18 +229,53 @@ function proseFingerprint(markdown: string | null | undefined): string {
  */
 function summaryGroupKey(row: SummaryRowForSelection): string {
   if (row.walkthrough_id) return `walkthrough:${row.walkthrough_id}`;
-  const photoIds = Array.isArray(row.photo_notes)
-    ? [
-        ...new Set(
-          (row.photo_notes as any[])
-            .map((n) => n?.photoId)
-            .filter((id): id is string => typeof id === "string" && !!id),
-        ),
-      ].sort()
-    : [];
-  if (photoIds.length) return `photos:${photoIds.join(",")}`;
+  const photoIds = summaryPhotoIds(row);
+  if (photoIds.size) return `photos:${[...photoIds].sort().join(",")}`;
   const prose = proseFingerprint(row.markdown);
   return prose ? `prose:${prose}` : `summary:${row.id}`;
+}
+
+/** The distinct photos a summary was drafted from. Empty when it names none. */
+function summaryPhotoIds(row: SummaryRowForSelection): Set<string> {
+  if (!Array.isArray(row.photo_notes)) return new Set();
+  return new Set(
+    (row.photo_notes as any[])
+      .map((n) => n?.photoId)
+      .filter((id): id is string => typeof id === "string" && !!id),
+  );
+}
+
+/**
+ * A write-up drafted again after the selection grew.
+ *
+ * The exact-set key above catches Generate pressed twice over the same photos.
+ * It does not catch the other half of the same habit, which is the one the
+ * client hit: "It's generating the old version of summery. The updated summery
+ * currently generating is good." Tick two more photos, press Generate again,
+ * and the new row keys on a different set - so the report printed the
+ * superseded write-up and the good one, with the superseded one leading
+ * because the section reads forward through the job.
+ *
+ * Containment is the test, not overlap. `older` goes only when every photo it
+ * was drafted from is also in `newer`, which is what redrafting after adding
+ * photos looks like and is not what two accounts of one job look like: photos
+ * of the roof and photos of the basement are disjoint sets and both survive,
+ * and a later focused brief over three of nine photos does not swallow the
+ * nine-photo write-up it was narrowed out of.
+ *
+ * Walkthroughs never take part. A recorded walk is a visit with its own date
+ * and its own place in the record, so it can neither supersede nor be
+ * superseded by a summary somebody wrote from photos that happen to cover it.
+ * That case is already handled, one rule further down, by the prose.
+ */
+function supersedes(newer: SummaryRowForSelection, older: SummaryRowForSelection): boolean {
+  if (newer.walkthrough_id || older.walkthrough_id) return false;
+  const olderIds = summaryPhotoIds(older);
+  if (!olderIds.size) return false;
+  const newerIds = summaryPhotoIds(newer);
+  if (newerIds.size < olderIds.size) return false;
+  for (const id of olderIds) if (!newerIds.has(id)) return false;
+  return true;
 }
 
 /**
@@ -275,6 +310,11 @@ function newestFirst(a: SummaryRowForSelection, b: SummaryRowForSelection): numb
  * are four generations of one walkthrough's summary, this returns the fourth,
  * and the Report carries one block where it used to carry four.
  *
+ * Three rules, narrowest first: the same thing summarised twice (`summaryGroupKey`),
+ * the same thing summarised again over a wider selection (`supersedes`), and the
+ * same body arriving under two keys (the prose). Each only ever drops a row that
+ * a later row already covers, so a job's write-ups can be reduced but never lost.
+ *
  * Exported and pure so the rule is testable without a database: the filtering
  * is the whole fix, and a fix living inside a query is a fix nothing can pin.
  */
@@ -287,15 +327,22 @@ export function currentSummaries<T extends SummaryRowForSelection>(rows: T[]): T
   }
 
   /*
-   * One more pass over the prose. Two groups can still hold the same body: a
-   * walkthrough summarised, then the same photos summarised again on their own,
-   * gives one row keyed by the walk and one keyed by the photos. Newest first
-   * here so the copy that survives is the current one, then back to oldest
-   * first for the caller.
+   * Two more passes, both newest first so the copy that survives is the current
+   * one, then back to oldest first for the caller.
+   *
+   * The selection, first. A redraft over a selection that has since grown keys
+   * differently from the row it replaces, so the exact-set key above cannot see
+   * it; `supersedes` can, and it is checked against what has already been kept,
+   * every one of which is newer than the row being judged.
+   *
+   * Then the prose. Two groups can still hold the same body: a walkthrough
+   * summarised, then the same photos summarised again on their own, gives one
+   * row keyed by the walk and one keyed by the photos.
    */
   const claimedBy = new Map<string, string | null>();
   const kept: T[] = [];
   for (const row of [...currentByGroup.values()].sort(newestFirst)) {
+    if (kept.some((newer) => supersedes(newer, row))) continue;
     const prose = proseFingerprint(row.markdown);
     if (prose) {
       const holder = claimedBy.get(prose);
@@ -641,18 +688,45 @@ Write the three Markdown sections only.`,
     );
 
   /*
-   * Client info leads, because "include client info" is what makes this the
-   * document somebody hands over rather than an internal tally.
+   * The title page, then the client info.
+   *
+   * "The project full report with the title page has disappeared." It opened on
+   * a panel of field labels, which is how an internal tally opens, not how the
+   * document somebody hands to a customer does - and the other report the
+   * product makes has had a cover since it was written. Same `coverPageHtml`,
+   * so the two cannot drift into looking like different products; the subtitle
+   * is what tells them apart on the page.
+   *
+   * The panel under it carries the client and nothing else. It used to open the
+   * document and so had to say what the document was about: project, location,
+   * who prepared it, when it was issued. The cover says all four now, a few
+   * centimetres higher, and printing them again immediately underneath is how
+   * a title page reads as a header somebody forgot to delete. What is left is
+   * the half a cover page has nowhere to put, which is also the half the
+   * client asked for: "include client info".
+   *
+   * Safe to drop unconditionally, not only when the cover is full: every one
+   * of the four is printed by the cover under exactly the condition that would
+   * have made it non-empty here, and `clientPanelHtml` already omits a row
+   * whose value is empty.
    */
   const contentHtml =
+    coverPageHtml({
+      title,
+      projectName: project.name ?? "",
+      address,
+      today: new Date().toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }),
+      author: profile?.full_name ?? "",
+      subtitle: "Full Project Report",
+    }) +
     clientPanelHtml([
-      ["Project", project.name ?? ""],
       ["Client", project.client_name ?? ""],
       ["Contact", project.client_contact ?? ""],
       ["Job number", project.project_number ?? ""],
-      ["Location", address],
-      ["Prepared by", profile?.full_name ?? ""],
-      ["Issued", new Date().toLocaleDateString(undefined, { dateStyle: "long" } as never)],
     ]) +
     figuresHtml(digest) +
     /*
