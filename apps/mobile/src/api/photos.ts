@@ -435,3 +435,89 @@ export async function signPhotoUrls(
 
   return out;
 }
+
+export type GalleryPhotoItem = PhotoListItem & {
+  project_id: string;
+  project_name: string | null;
+};
+
+export type GalleryPage = {
+  photos: GalleryPhotoItem[];
+  urls: Record<string, string>;
+  nextCursor: string | null;
+};
+
+/**
+ * One page of the whole workspace's photos, newest first, across every project.
+ *
+ * The web app has had this at `/gallery` since long before the field app
+ * existed, and it is the screen someone opens when they know what the photo
+ * looks like but not which job it was filed under. Without it the only way into
+ * a picture on the phone is to remember the project first, which is the wrong
+ * order for "the one of the cracked slab, last Tuesday".
+ *
+ * Paged and signed exactly like `listProjectPhotoPage`, for the same reasons: a
+ * keyset cursor so a capture landing mid-scroll cannot make the list repeat a
+ * row, and one signing pass per page rather than a re-sign of everything loaded.
+ *
+ * The project name rides along on the row. Fetching names separately would mean
+ * a second round trip per page and a tile that renders unlabelled first, and an
+ * unlabelled tile in a cross-project grid is the one thing this screen must not
+ * do.
+ */
+export async function listGalleryPhotoPage(
+  cursor: string | null,
+  limit = PHOTO_PAGE_SIZE,
+): Promise<GalleryPage> {
+  let query = supabase
+    .from("photos")
+    .select(
+      "id, caption, storage_path, thumb_path, image_url, created_at, taken_at, phase, tags, project_id, projects(name)",
+    )
+    // As everywhere else: `deleted_at` carries no RLS predicate, so the trash
+    // is excluded by hand or it shows up in the library.
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (cursor) query = query.lt("created_at", cursor);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  type Row = PhotoListItem & {
+    project_id: string;
+    /*
+     * PostgREST returns an embedded one-to-one as an object, but the generated
+     * types describe the relationship both ways, so this is narrowed by hand
+     * rather than trusted. A project with no row (deleted out from under the
+     * photo) comes back null and the tile falls back to no label.
+     */
+    projects: { name: string | null } | { name: string | null }[] | null;
+  };
+
+  const photos: GalleryPhotoItem[] = ((data as Row[]) ?? []).map((row) => {
+    const project = Array.isArray(row.projects) ? row.projects[0] : row.projects;
+    return {
+      id: row.id,
+      caption: row.caption,
+      storage_path: row.storage_path,
+      thumb_path: row.thumb_path,
+      image_url: row.image_url,
+      created_at: row.created_at,
+      taken_at: row.taken_at,
+      phase: row.phase,
+      tags: row.tags,
+      project_id: row.project_id,
+      project_name: project?.name ?? null,
+    };
+  });
+
+  const urls = await signPhotoUrls(photos);
+
+  return {
+    photos,
+    urls,
+    nextCursor: photos.length === limit ? (photos[photos.length - 1]?.created_at ?? null) : null,
+  };
+}

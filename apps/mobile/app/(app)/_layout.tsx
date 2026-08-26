@@ -33,7 +33,13 @@ export default function AppLayout() {
         contentStyle: { backgroundColor: theme.colors.background },
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Projects" }} />
+      {/*
+        The four tabs. Header off here because each tab draws its own with
+        `PageHeader`, which is what lets Projects keep a search field pinned
+        under the title while the list scrolls beneath it.
+      */}
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="capture-start" options={{ presentation: "modal", title: "New photos" }} />
       <Stack.Screen name="project/[id]/index" options={{ title: "Project" }} />
       <Stack.Screen
         name="project/[id]/capture"
@@ -53,14 +59,12 @@ export default function AppLayout() {
       />
       <Stack.Screen name="workflow/[id]" options={{ title: "Workflow" }} />
       <Stack.Screen name="checklist/[id]" options={{ title: "Checklist" }} />
-      <Stack.Screen name="activity" options={{ title: "Activity" }} />
       <Stack.Screen name="project-new" options={{ title: "New project" }} />
       <Stack.Screen
         name="photo/[id]/annotate"
         options={{ presentation: "fullScreenModal", headerShown: false }}
       />
       <Stack.Screen name="queue" options={{ title: "Upload queue" }} />
-      <Stack.Screen name="account" options={{ title: "Account" }} />
     </Stack>
   );
 }

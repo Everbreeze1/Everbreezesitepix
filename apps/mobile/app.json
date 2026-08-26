@@ -7,9 +7,22 @@
     "scheme": "everlumen",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#171B24",
+          "dark": {
+            "backgroundColor": "#171B24"
+          }
+        }
+      ],
       [
         "expo-camera",
         {
@@ -49,6 +62,10 @@
     },
     "android": {
       "package": "com.everlumen.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#171B24"
+      },
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -56,6 +73,9 @@
         "android.permission.READ_MEDIA_IMAGES"
       ],
       "blockedPermissions": ["android.permission.ACCESS_BACKGROUND_LOCATION"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
     }
   }
 }

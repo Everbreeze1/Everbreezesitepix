@@ -40,6 +40,13 @@ For EAS builds these come from the profile's `env` block in `eas.json`, except t
 npm run typecheck    # tsc --noEmit
 ```
 
+From the repo root, the two checks that catch what `tsc` cannot:
+
+```bash
+npx eslint -c eslint.mobile.config.js apps/mobile   # hooks rules, run separately from the root config
+cd apps/mobile && npx expo export --platform android  # Metro resolution and bundle size
+```
+
 ## Builds
 
 `eas.json` defines three profiles. All of them need an EAS project first: run `eas init` and replace `extra.eas.projectId` in `app.json`, which currently reads `replace-me`.
@@ -53,11 +60,27 @@ npm run typecheck    # tsc --noEmit
 ## Layout
 
 ```text
-app/          expo-router routes, kept thin
-src/api/      per-domain data access, mirrors apps/web/src/features/*
-src/lib/      supabase client, /v1 client, secure storage, query client
-src/theme/    design tokens, converted from the web brand palette
-src/components/
+app/(app)/(tabs)/   the four tab screens: projects, gallery, activity, account
+app/(app)/          everything pushed on top of them, kept thin
+src/ui/             the UI kit. Build screens from these
+src/api/            per-domain data access, mirrors apps/web/src/features/*
+src/lib/            supabase client, /v1 client, secure storage, query client
+src/theme/          design tokens, converted from the web brand palette
+src/components/     app-specific pieces that are not primitives
 ```
+
+### The UI kit
+
+`src/ui` is this app's answer to `apps/web/src/components/ui`. Import from `@/ui`:
+
+```tsx
+import { Button, Card, EmptyState, ListRow, PageHeader } from "@/ui";
+import { Camera, MapPin } from "@/ui/icons";
+```
+
+Two rules, both load-bearing:
+
+1. **Build screens out of the kit, and when a piece is missing add it to the kit rather than to the screen.** A screen with a `StyleSheet.create` full of borders and radii is what the kit exists to replace. Before it, all 24 files had one and the app had nine different bordered boxes with six different radii.
+2. **Icons come from `@/ui/icons`, never from `lucide-react-native`.** Metro does not tree-shake, so importing from the package barrel ships all ~1600 icons: it took the Android bundle from 3.7MB to 6.2MB when it was measured. `tests/mobile-icon-imports.test.ts` fails the build if that import comes back. To add an icon, add one line to `src/ui/icons.ts`.
 
 Session tokens go to the iOS Keychain and Android Keystore through `src/lib/secure-storage.ts`, never to AsyncStorage.

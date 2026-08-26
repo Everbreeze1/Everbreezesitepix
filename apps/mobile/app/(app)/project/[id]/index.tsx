@@ -5,12 +5,12 @@ import {
   Modal,
   Pressable,
   RefreshControl,
-  ScrollView,
   SectionList,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Camera, ClipboardCheck, ImageOff, ListTodo, MapPin, Video, Workflow } from "@/ui/icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
@@ -19,10 +19,23 @@ import { listProjectPhotoPage, PHOTO_PAGE_SIZE, type PhotoListItem } from "@/api
 import { formatAddress, getProject } from "@/api/projects";
 import { QueueBanner } from "@/components/QueueBanner";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import {
+  Badge,
+  Button,
+  ChipGroup,
+  EmptyState,
+  ErrorState,
+  ListGroup,
+  ListRow,
+  RowDivider,
+  SkeletonList,
+  Text as UIText,
+  type ChipOption,
+} from "@/ui";
 
 type PhaseFilter = "all" | "before" | "after" | "untagged";
 
-const FILTERS: { id: PhaseFilter; label: string }[] = [
+const FILTERS: ChipOption<PhaseFilter>[] = [
   { id: "all", label: "All" },
   { id: "before", label: "Before" },
   { id: "after", label: "After" },
@@ -133,25 +146,15 @@ export default function ProjectDetailScreen() {
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         <QueueBanner />
         {loading ? (
-          <ActivityIndicator style={{ marginTop: spacing.xxxl }} color={theme.colors.primary} />
+          <SkeletonList rows={5} />
         ) : error ? (
-          <View style={styles.centered}>
-            <Text style={[typography.body, { color: theme.colors.destructive }]}>
-              {error instanceof Error ? error.message : "Failed to load project"}
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              style={[styles.primaryButton, { backgroundColor: theme.colors.primary }]}
-              onPress={() => {
-                void projectQuery.refetch();
-                void photosQuery.refetch();
-              }}
-            >
-              <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-                Retry
-              </Text>
-            </Pressable>
-          </View>
+          <ErrorState
+            message={error instanceof Error ? error.message : "Failed to load project"}
+            onRetry={() => {
+              void projectQuery.refetch();
+              void photosQuery.refetch();
+            }}
+          />
         ) : (
           <SectionList
             sections={sections}
@@ -174,137 +177,98 @@ export default function ProjectDetailScreen() {
             }
             ListHeaderComponent={
               <View>
-                <View style={{ gap: spacing.xs, marginBottom: spacing.lg }}>
+                <View style={{ gap: spacing.md, marginBottom: spacing.lg }}>
                   {address ? (
-                    <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>
-                      {address}
-                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
+                      <MapPin size={14} color={theme.colors.mutedForeground} strokeWidth={2.25} />
+                      <UIText variant="caption" tone="muted" style={{ flex: 1 }}>
+                        {address}
+                      </UIText>
+                    </View>
                   ) : null}
-                  <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
-                    {photos.length}
-                    {photosQuery.hasNextPage ? "+" : ""} photo{photos.length === 1 ? "" : "s"} ·{" "}
-                    {project?.status}
-                  </Text>
 
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => router.push(`/project/${id}/walkthroughs`)}
-                    style={[
-                      styles.navRow,
-                      { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                    ]}
-                  >
-                    <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                      Walkthroughs
-                    </Text>
-                    <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>
-                      ›
-                    </Text>
-                  </Pressable>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+                    <Badge
+                      label={`${photos.length}${photosQuery.hasNextPage ? "+" : ""} photo${photos.length === 1 ? "" : "s"}`}
+                      tone="primary"
+                    />
+                    {project?.status ? <Badge label={project.status} tone="neutral" /> : null}
+                  </View>
 
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => router.push(`/project/${id}/workflows`)}
-                    style={[
-                      styles.navRow,
-                      { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                    ]}
-                  >
-                    <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                      Workflows
-                    </Text>
-                    <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>
-                      ›
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => router.push(`/project/${id}/tasks`)}
-                    style={[
-                      styles.navRow,
-                      { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                    ]}
-                  >
-                    <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                      Tasks
-                    </Text>
-                    <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>
-                      ›
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => router.push(`/project/${id}/checklists`)}
-                    style={[
-                      styles.navRow,
-                      { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                    ]}
-                  >
-                    <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                      Checklists
-                    </Text>
-                    <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>
-                      ›
-                    </Text>
-                  </Pressable>
+                  {/*
+                   * The four ways deeper into a job, as one grouped block.
+                   *
+                   * These were four separate bordered rows, each drawn inline
+                   * with a text chevron, and they carried no icons at all: on a
+                   * screen whose whole job is to be scanned quickly they were
+                   * four identical grey rectangles differing only by a word.
+                   */}
+                  <ListGroup>
+                    <ListRow
+                      icon={ClipboardCheck}
+                      title="Checklists"
+                      subtitle="Run the checks for this site"
+                      onPress={() => router.push(`/project/${id}/checklists`)}
+                    />
+                    <RowDivider />
+                    <ListRow
+                      icon={ListTodo}
+                      title="Tasks"
+                      subtitle="Punch list and assignments"
+                      onPress={() => router.push(`/project/${id}/tasks`)}
+                    />
+                    <RowDivider />
+                    <ListRow
+                      icon={Workflow}
+                      title="Workflows"
+                      subtitle="Phases and progress"
+                      onPress={() => router.push(`/project/${id}/workflows`)}
+                    />
+                    <RowDivider />
+                    <ListRow
+                      icon={Video}
+                      title="Walkthroughs"
+                      subtitle="Recorded site walks"
+                      onPress={() => router.push(`/project/${id}/walkthroughs`)}
+                    />
+                  </ListGroup>
                 </View>
 
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: spacing.sm, marginBottom: spacing.lg }}
-                >
-                  {FILTERS.map((option) => {
-                    const active = filter === option.id;
-                    return (
-                      <Pressable
-                        accessibilityRole="button"
-                        key={option.id}
-                        onPress={() => setFilter(option.id)}
-                        style={[
-                          styles.filterChip,
-                          {
-                            backgroundColor: active ? theme.colors.primary : theme.colors.card,
-                            borderColor: active ? theme.colors.primary : theme.colors.border,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            typography.caption,
-                            {
-                              fontWeight: "600",
-                              color: active
-                                ? theme.colors.primaryForeground
-                                : theme.colors.mutedForeground,
-                            },
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
+                {/*
+                  Was a hand-rolled row of Pressables with its own chip style.
+                  The same control exists on the gallery and the task list, so
+                  it lives in the kit now and all three agree on height.
+                */}
+                <View style={{ marginHorizontal: -spacing.lg, marginBottom: spacing.lg }}>
+                  <ChipGroup
+                    options={FILTERS}
+                    value={filter}
+                    onChange={setFilter}
+                    label="Filter photos by phase"
+                  />
+                </View>
               </View>
             }
             ListEmptyComponent={
-              <Text
-                style={[
-                  typography.body,
-                  {
-                    color: theme.colors.mutedForeground,
-                    textAlign: "center",
-                    marginTop: spacing.xxl,
-                  },
-                ]}
-              >
-                {photos.length === 0
-                  ? "No photos yet. Capture one from the field."
-                  : "No photos in this phase."}
-              </Text>
+              photos.length === 0 ? (
+                <EmptyState
+                  icon={Camera}
+                  title="No photos yet"
+                  body="Photos taken here upload on their own, and keep queueing when there is no signal."
+                  action={{
+                    label: "Take photos",
+                    icon: Camera,
+                    onPress: () => router.push(`/project/${id}/capture`),
+                  }}
+                />
+              ) : (
+                <EmptyState
+                  icon={ImageOff}
+                  title="Nothing in this phase"
+                  body="Switch the filter above, or tag some photos as you shoot them."
+                  action={{ label: "Show all", onPress: () => setFilter("all") }}
+                />
+              )
             }
             ListFooterComponent={
               photosQuery.isFetchingNextPage ? (
@@ -315,18 +279,13 @@ export default function ProjectDetailScreen() {
               ) : null
             }
             renderSectionHeader={({ section }) => (
-              <Text
-                style={[
-                  typography.overline,
-                  {
-                    color: theme.colors.mutedForeground,
-                    marginBottom: spacing.sm,
-                    marginTop: spacing.md,
-                  },
-                ]}
+              <UIText
+                variant="overline"
+                tone="muted"
+                style={{ marginBottom: spacing.sm, marginTop: spacing.md }}
               >
                 {section.title.toUpperCase()}
-              </Text>
+              </UIText>
             )}
             renderItem={({ item }) => (
               <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
@@ -352,15 +311,16 @@ export default function ProjectDetailScreen() {
           />
         )}
 
-        <Pressable
-          accessibilityRole="button"
-          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-          onPress={() => router.push(`/project/${id}/capture`)}
-        >
-          <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-            Capture
-          </Text>
-        </Pressable>
+        <View style={styles.fab}>
+          <Button
+            label="Capture"
+            icon={Camera}
+            size="lg"
+            onPress={() => router.push(`/project/${id}/capture`)}
+            accessibilityHint="Opens the camera for this project"
+            style={{ borderRadius: radius.pill }}
+          />
+        </View>
       </View>
 
       <Modal
@@ -421,42 +381,17 @@ export default function ProjectDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
   gridRow: { flexDirection: "row", gap: GRID_GAP },
   tile: { width: "100%", height: "100%", borderRadius: radius.sm },
-  navRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    marginTop: spacing.sm,
-    minHeight: HIT_TARGET,
-  },
-  filterChip: {
-    borderWidth: 1,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  primaryButton: {
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    minHeight: HIT_TARGET,
-    justifyContent: "center",
-  },
+  /*
+   * Positioning and lift only. The button itself is the kit's, so its height,
+   * radius and pressed state match every other primary action in the app.
+   */
   fab: {
     position: "absolute",
     right: spacing.lg,
     bottom: spacing.xl,
     borderRadius: radius.pill,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-    minHeight: HIT_TARGET,
-    justifyContent: "center",
     shadowColor: "#000",
     shadowOpacity: 0.2,
     shadowRadius: 12,

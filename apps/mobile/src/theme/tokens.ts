@@ -35,6 +35,16 @@ export type Palette = {
   /** Construction amber. Warnings, offline and pending states. */
   safety: string;
   safetyForeground: string;
+  /**
+   * Completion and pass states.
+   *
+   * The web app has no CSS variable for this: it reaches for Tailwind emerald
+   * directly (`text-emerald-600` in light, `text-emerald-400` in dark,
+   * `bg-emerald-500` for fills, roughly 90 usages). Those are the values
+   * mirrored here, so a completed checklist reads the same green on both.
+   */
+  success: string;
+  successForeground: string;
   /** Errors and destructive actions. */
   destructive: string;
   destructiveForeground: string;
@@ -65,6 +75,8 @@ const light: Palette = {
   accentForeground: "#0d2f4f",
   safety: "#f9a300",
   safetyForeground: "#0b1c2c",
+  success: "#059669",
+  successForeground: "#ffffff",
   destructive: "#df2225",
   destructiveForeground: "#fcfcfc",
   border: "#dae2ea",
@@ -91,6 +103,8 @@ const dark: Palette = {
   accentForeground: "#f2f6f8",
   safety: "#f9a300",
   safetyForeground: "#050e18",
+  success: "#34d399",
+  successForeground: "#050e18",
   destructive: "#f9423d",
   destructiveForeground: "#f5f5f5",
   border: "rgba(255, 255, 255, 0.12)",

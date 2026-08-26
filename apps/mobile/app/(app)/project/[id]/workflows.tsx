@@ -72,10 +72,11 @@ export default function ProjectWorkflowsScreen() {
                 <Link href={`/workflow/${item.id}`} asChild>
                   <Pressable
                     accessibilityRole="button"
-                    style={[
+                    // Flattened: `<Link asChild>` rejects an array style.
+                    style={StyleSheet.flatten([
                       styles.row,
                       { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                    ]}
+                    ])}
                   >
                     <Text style={[typography.heading, { color: theme.colors.foreground }]}>
                       {item.name}
