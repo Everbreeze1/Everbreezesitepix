@@ -187,7 +187,9 @@ export default function WorkflowRunnerScreen() {
     [data?.project_id, queryClient, queryKey, user?.id],
   );
 
-  const phases = data?.phases ?? [];
+  // Memoised for the same reason as the cursor below it: a fresh array each
+  // render would recompute the phase walk on every keystroke in a note field.
+  const phases = useMemo(() => data?.phases ?? [], [data?.phases]);
   const cursor = useMemo(
     () => currentPhaseIndex(phases.map((phase) => ({ phase, items: phase.items }))),
     [phases],

@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from "react-native";
 import { Redirect, router } from "expo-router";
 import { useAuth } from "@/lib/auth";

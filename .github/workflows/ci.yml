@@ -107,3 +107,18 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
         working-directory: apps/mobile
+
+      # Hooks rules only, through `eslint.mobile.config.js`. The root lint
+      # ignores `apps/mobile/**`, so nothing had ever checked these components
+      # for the one class of bug neither tsc nor a Metro bundle can see: a hook
+      # called conditionally type-checks, bundles, and then crashes the first
+      # time the branch flips.
+      #
+      # Installs at the repo root because eslint and its plugins live in the
+      # root `node_modules`, which the `apps/mobile` install above does not
+      # provide.
+      - name: Install root (for eslint)
+        run: npm ci
+
+      - name: Lint hooks
+        run: npm run lint:mobile

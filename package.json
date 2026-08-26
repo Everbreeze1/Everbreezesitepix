@@ -14,6 +14,7 @@
     "preview": "npm run preview -w @everlumen/web",
     "deploy": "npm run deploy -w @everlumen/web",
     "lint": "eslint .",
+    "lint:mobile": "eslint --config eslint.mobile.config.js apps/mobile/app apps/mobile/src",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write .",

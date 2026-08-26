@@ -51,7 +51,9 @@ export default function ProjectTasksScreen() {
     enabled: Boolean(id),
   });
 
-  const tasks = data ?? [];
+  // `data ?? []` mints a fresh array each render, which would make the memo
+  // below recompute every time and defeat its own purpose.
+  const tasks = useMemo(() => data ?? [], [data]);
 
   const visible = useMemo(() => {
     if (filter === "all") return tasks;

@@ -38,7 +38,7 @@ export default function NewProjectScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function useMyLocation() {
+  async function pinToMyLocation() {
     setBusy("Finding you");
     setError(null);
     try {
@@ -147,7 +147,7 @@ export default function NewProjectScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Pressable
-          onPress={() => void useMyLocation()}
+          onPress={() => void pinToMyLocation()}
           disabled={Boolean(busy)}
           style={[
             styles.locationButton,
