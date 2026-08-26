@@ -16,58 +16,65 @@ import { useAuth } from "@/lib/auth";
 import { type SocialProvider } from "@/lib/auth-providers";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 
-export default function LoginScreen() {
-  const { user, loading, signIn, signInWithProvider, sendPasswordReset } = useAuth();
+export default function SignUpScreen() {
+  const { user, loading, signUp, signInWithProvider } = useAuth();
   const theme = useTheme();
 
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState<null | "email" | SocialProvider | "reset">(null);
+  const [busy, setBusy] = useState(false);
+  const [oauth, setOauth] = useState<SocialProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
 
   if (!loading && user) return <Redirect href="/(app)/(tabs)" />;
 
   async function onSubmit() {
-    setBusy("email");
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password) {
+      setError("Email and password are both needed.");
+      return;
+    }
+    /*
+     * Checked here rather than left to the server. Supabase's own minimum is 6
+     * characters and its rejection arrives as a raw API string; saying it up
+     * front costs a round trip less and reads like a sentence.
+     */
+    if (password.length < 8) {
+      setError("Use at least 8 characters for the password.");
+      return;
+    }
+
+    setBusy(true);
     setError(null);
-    setNotice(null);
-    const result = await signIn(email.trim(), password);
-    setBusy(null);
+    const result = await signUp(cleanEmail, password, fullName.trim());
+    setBusy(false);
+
     if (result.error) {
       setError(result.error);
       return;
     }
-    router.replace("/(app)/(tabs)");
+
+    /*
+     * The project has email confirmation on, so there is no session yet. Saying
+     * "check your inbox" is the whole outcome; routing into the app here would
+     * bounce straight back to login and look like a failure.
+     */
+    setSent(true);
   }
 
+  /*
+   * Signing up with Google IS signing in with it: the provider creates the
+   * account on first use, so there is no separate "register" call. The button
+   * behaves identically on both screens, which is why they share a component.
+   */
   async function onProvider(provider: SocialProvider) {
-    setBusy(provider);
+    setOauth(provider);
     setError(null);
-    setNotice(null);
     const result = await signInWithProvider(provider);
-    setBusy(null);
+    setOauth(null);
     if (result.error) setError(result.error);
-    // No redirect on success: the auth listener flips `user`, and the guard at
-    // the top of this component moves on by itself.
-  }
-
-  async function onForgot() {
-    const trimmed = email.trim();
-    if (!trimmed) {
-      setError("Enter your email first, then tap Forgot password.");
-      return;
-    }
-    setBusy("reset");
-    setError(null);
-    setNotice(null);
-    const result = await sendPasswordReset(trimmed);
-    setBusy(null);
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-    setNotice("Password reset email sent. Open it on any device.");
   }
 
   const inputStyle = [
@@ -79,20 +86,55 @@ export default function LoginScreen() {
     },
   ];
 
+  if (sent) {
+    return (
+      <View style={[styles.done, { backgroundColor: theme.colors.background }]}>
+        <Text style={[typography.title, { color: theme.colors.foreground }]}>Check your inbox</Text>
+        <Text
+          style={[
+            typography.body,
+            { color: theme.colors.mutedForeground, textAlign: "center", marginTop: spacing.md },
+          ]}
+        >
+          We sent a confirmation link to {email.trim()}. Open it to finish setting up your account,
+          then come back and sign in.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.replace("/login")}
+          style={[styles.primary, { backgroundColor: theme.colors.primary, marginTop: spacing.xl }]}
+        >
+          <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
+            Back to sign in
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={{ flex: 1, backgroundColor: theme.colors.background }}
     >
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={[typography.display, { color: theme.colors.foreground }]}>Everlumen</Text>
+        <Text style={[typography.display, { color: theme.colors.foreground }]}>Create account</Text>
         <Text
           style={[typography.body, { color: theme.colors.mutedForeground, marginTop: spacing.xs }]}
         >
-          Sign in with your Everlumen account
+          Then join or start a team from the web app.
         </Text>
 
         <View style={{ marginTop: spacing.xxl, gap: spacing.md }}>
+          <TextInput
+            autoCapitalize="words"
+            autoComplete="name"
+            placeholder="Full name"
+            placeholderTextColor={theme.colors.mutedForeground}
+            style={inputStyle}
+            value={fullName}
+            onChangeText={setFullName}
+          />
           <TextInput
             autoCapitalize="none"
             autoComplete="email"
@@ -107,66 +149,50 @@ export default function LoginScreen() {
             placeholder="Password"
             placeholderTextColor={theme.colors.mutedForeground}
             secureTextEntry
-            autoComplete="current-password"
+            autoComplete="new-password"
             style={inputStyle}
             value={password}
             onChangeText={setPassword}
             onSubmitEditing={() => void onSubmit()}
           />
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => void onForgot()}
-            hitSlop={8}
-            style={styles.forgot}
-          >
-            <Text style={[typography.caption, { color: theme.colors.primary, fontWeight: "600" }]}>
-              {busy === "reset" ? "Sending…" : "Forgot password?"}
-            </Text>
-          </Pressable>
         </View>
 
         {error ? (
-          <Text style={[typography.caption, { color: theme.colors.destructive, marginTop: 4 }]}>
+          <Text style={[typography.caption, { color: theme.colors.destructive, marginTop: 8 }]}>
             {error}
-          </Text>
-        ) : null}
-        {notice ? (
-          <Text style={[typography.caption, { color: theme.colors.primary, marginTop: 4 }]}>
-            {notice}
           </Text>
         ) : null}
 
         <Pressable
           accessibilityRole="button"
+          disabled={busy}
+          onPress={() => void onSubmit()}
           style={[
             styles.primary,
             { backgroundColor: theme.colors.primary, opacity: busy ? 0.7 : 1 },
           ]}
-          disabled={Boolean(busy)}
-          onPress={() => void onSubmit()}
         >
-          {busy === "email" ? (
+          {busy ? (
             <ActivityIndicator color={theme.colors.primaryForeground} />
           ) : (
             <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-              Sign in
+              Create account
             </Text>
           )}
         </Pressable>
 
         <SocialSignIn
           onSelect={(provider) => void onProvider(provider)}
-          pending={busy === "google" || busy === "apple" ? (busy as SocialProvider) : null}
-          disabled={Boolean(busy)}
+          pending={oauth}
+          disabled={busy || Boolean(oauth)}
         />
 
         <View style={styles.footer}>
           <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>
-            No account yet?{" "}
+            Already have one?{" "}
           </Text>
-          <Pressable accessibilityRole="button" onPress={() => router.push("/signup")} hitSlop={8}>
-            <Text style={[typography.bodyStrong, { color: theme.colors.primary }]}>Create one</Text>
+          <Pressable accessibilityRole="button" onPress={() => router.replace("/login")} hitSlop={8}>
+            <Text style={[typography.bodyStrong, { color: theme.colors.primary }]}>Sign in</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -176,6 +202,7 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   content: { flexGrow: 1, justifyContent: "center", padding: spacing.xl },
+  done: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl },
   input: {
     borderWidth: 1,
     borderRadius: radius.md,
@@ -184,7 +211,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minHeight: HIT_TARGET,
   },
-  forgot: { alignSelf: "flex-end", minHeight: 32, justifyContent: "center" },
   primary: {
     borderRadius: radius.md,
     paddingVertical: spacing.lg,

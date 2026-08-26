@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CheckCircle2, ArrowRight, ArrowLeft } from "lucide-react";
+import { CheckCircle2, ArrowRight, ArrowLeft, Link2 as LinkIcon } from "lucide-react";
 import { authErrorMessage, isUnconfirmedEmail } from "@/lib/auth-errors";
 import { useAuthProviders } from "@/hooks/use-auth-providers";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -221,6 +221,33 @@ function LoginPage() {
           <p className="font-manrope mt-4 text-sm leading-6 text-muted-foreground">
             Log in to see what is moving across your projects.
           </p>
+
+          {/*
+            Somebody was sent a link into the app itself.
+
+            Only two people ever land here with a `redirect`: the owner, who
+            gets taken on to the page after signing in, and a customer holding a
+            URL that was never shareable - the private `/projects/...` or
+            `/summaries/...` address, copied out of the sender's address bar
+            instead of the Share button. Without this the second one just saw a
+            sign-in form, and reported that the link is broken. Say which of the
+            two they are and what to do about it.
+          */}
+          {redirect && (
+            <div className="mt-5 flex gap-3 rounded-xl border border-border bg-muted/30 px-4 py-3">
+              <LinkIcon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <div className="font-manrope text-sm leading-6">
+                <p className="font-bold text-foreground">
+                  That page is part of an Everlumen account.
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  Sign in and we will take you straight to it. If a contractor sent you this link,
+                  ask them for the share link instead: a shared report or summary opens with no
+                  account and no password.
+                </p>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
             <div>

@@ -5,6 +5,9 @@ import {
   ArrowLeft,
   Check,
   Clapperboard,
+  Copy,
+  ExternalLink,
+  Link2Off,
   Loader2,
   Save,
   Share2,
@@ -13,6 +16,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -57,6 +67,9 @@ export function SummaryDetailPage() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  /** A share token is being issued or cleared - both are one round trip. */
+  const [minting, setMinting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -101,36 +114,79 @@ export function SummaryDetailPage() {
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/share/summaries/${shareToken}`
     : "";
 
-  /** Issue the link on first use, then hand it over however the device can. */
+  /*
+   * Open the share panel, minting the link on first use.
+   *
+   * This button used to copy the URL to the clipboard and say so in a toast,
+   * and that was the whole interaction: the link itself was never shown, there
+   * was no sign that a summary was already shared, and nothing to click to
+   * check what a customer would see. A sender who missed the toast - or whose
+   * `navigator.share` sheet was dismissed, or whose browser refused the
+   * clipboard write, which Safari does for any write that lands after an
+   * `await` - had every reason to fall back to the URL in the address bar, and
+   * that URL is `/summaries/<id>`: private, and a sign-in wall for the person
+   * it was sent to. The panel below shows the public link and nothing else, so
+   * the right one is the one in front of them.
+   */
   const onShare = async () => {
-    let url = shareUrl;
-    if (!shareToken) {
-      try {
-        const { token } = await setSummaryShare({ data: { summaryId, enable: true } });
-        setShareToken(token);
-        url = `${window.location.origin}/share/summaries/${token}`;
-      } catch (e: any) {
-        toast.error(e?.message ?? "Could not create share link");
-        return;
-      }
-    }
-    const canNativeShare =
-      typeof navigator !== "undefined" && typeof navigator.share === "function";
-    if (canNativeShare) {
-      try {
-        await navigator.share({ title, text: title, url });
-        return;
-      } catch {
-        // Cancelled - fall through to copy.
-      }
-    }
+    setShareOpen(true);
+    if (shareToken || minting) return;
+    setMinting(true);
     try {
-      await navigator.clipboard.writeText(url);
+      const { token } = await setSummaryShare({ data: { summaryId, enable: true } });
+      setShareToken(token);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not create share link");
+      setShareOpen(false);
+    } finally {
+      setMinting(false);
+    }
+  };
+
+  const copyShareLink = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
       toast.success("Link copied");
     } catch {
-      toast.error("Could not copy link");
+      // The clipboard write is refused outside a secure context and, in Safari,
+      // once the gesture that started it has expired. The link is on screen, so
+      // say to take it by hand rather than failing silently.
+      toast.error("Couldn't copy - select the link and copy it");
+    }
+  };
+
+  /**
+   * Turn the link off.
+   *
+   * `setSummaryShare({ enable: false })` clears the token, so this is not a
+   * pause: the URL already sent to a customer stops resolving for good, and
+   * sharing again mints a different one. Said plainly in the panel, because the
+   * alternative is an owner switching it off to "tidy up" and quietly breaking
+   * the link in somebody's inbox.
+   */
+  const onStopSharing = async () => {
+    if (
+      !(await confirm({
+        title: "Turn off this link?",
+        description:
+          "The link you have already sent will stop working. Sharing again creates a new one.",
+        confirmText: "Turn it off",
+        variant: "destructive",
+      }))
+    )
+      return;
+    setMinting(true);
+    try {
+      await setSummaryShare({ data: { summaryId, enable: false } });
+      setShareToken(null);
+      toast.success("Link turned off");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not turn the link off");
+    } finally {
+      setMinting(false);
     }
   };
 
@@ -216,12 +272,8 @@ export function SummaryDetailPage() {
             ) : (
               <>
                 <Button size="sm" onClick={() => void onShare()}>
-                  {copied ? (
-                    <Check className="mr-1.5 h-3.5 w-3.5" />
-                  ) : (
-                    <Share2 className="mr-1.5 h-3.5 w-3.5" />
-                  )}
-                  {copied ? "Copied" : "Share"}
+                  <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                  {shareToken ? "Shared" : "Share"}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
                   <Save className="mr-1.5 h-3.5 w-3.5" />
@@ -280,6 +332,68 @@ export function SummaryDetailPage() {
           </>
         )}
       </Card>
+
+      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="truncate">Share “{title}”</DialogTitle>
+            <DialogDescription>
+              Anyone with this link can read the summary and its photos. They do not need an
+              Everlumen account, and they see nothing else on the job.
+            </DialogDescription>
+          </DialogHeader>
+
+          {minting && !shareToken ? (
+            <p className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Creating the link…
+            </p>
+          ) : shareToken ? (
+            <>
+              {/* Readable and selectable, not just copyable: a copy that the
+                  browser refuses has to leave something to take by hand. */}
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={shareUrl}
+                  className="h-9 text-xs"
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <Button size="sm" onClick={() => void copyShareLink()}>
+                  {copied ? (
+                    <Check className="mr-1.5 h-3.5 w-3.5" />
+                  ) : (
+                    <Copy className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Button asChild size="sm" variant="outline">
+                  <a href={shareUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                    Open what they will see
+                  </a>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={minting}
+                  onClick={() => void onStopSharing()}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Link2Off className="mr-1.5 h-3.5 w-3.5" />
+                  Turn off this link
+                </Button>
+              </div>
+            </>
+          ) : (
+            <p className="py-6 text-sm text-muted-foreground">
+              This summary has no link yet. Close this and press Share again to create one.
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

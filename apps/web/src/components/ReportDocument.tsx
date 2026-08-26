@@ -59,7 +59,22 @@ function addressOf(p: ReportDocProject | null): string {
     .join(" · ");
 }
 
-export function ReportDocument({ doc }: { doc: ReportDocModel }) {
+/**
+ * `authoring` is who is looking, not what is rendered.
+ *
+ * The same component draws the builder's preview and the page a customer opens
+ * from a share link, which is how "Switch to Edit to add one" ended up on an
+ * empty report sent to a client - an instruction for a control they cannot see,
+ * on a document that is not theirs to write. The builder passes the flag; the
+ * public route does not, and gets a line that simply states the fact.
+ */
+export function ReportDocument({
+  doc,
+  authoring = false,
+}: {
+  doc: ReportDocModel;
+  authoring?: boolean;
+}) {
   const addr = addressOf(doc.project);
   const totalPhotos = countPhotos(doc);
   return (
@@ -169,7 +184,9 @@ export function ReportDocument({ doc }: { doc: ReportDocModel }) {
         <ReportPage>
           <CompanyHeader company={doc.company} small />
           <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-            No sections yet. Switch to Edit to add one.
+            {authoring
+              ? "No sections yet. Switch to Edit to add one."
+              : "This report has no sections yet."}
           </div>
         </ReportPage>
       ) : (

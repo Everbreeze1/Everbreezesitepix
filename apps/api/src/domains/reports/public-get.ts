@@ -80,13 +80,18 @@ export async function getPublicProjectReportService(
     reviewLinks: [],
   });
 
-  const { data: report } = await (supabaseAdmin as any)
+  // `error` is read rather than dropped: a failed read and an unknown token are
+  // not the same answer, and collapsing them told a customer their link was
+  // invalid while the audit log recorded a clean 200. See the matching note in
+  // walkthroughs/summaries.ts.
+  const { data: report, error: reportError } = await (supabaseAdmin as any)
     .from("project_reports")
     .select(
       "id, project_id, created_by, title, summary, subtitle, photo_ids, include_project_info, allow_download, revoked_at, created_at, cover_enabled, cover_show_project_name, cover_show_address, cover_show_date, cover_show_author, photos_per_page, cover_photo_ids",
     )
     .eq("share_token", data.token)
     .maybeSingle();
+  if (reportError) throw new Error(`project_reports lookup failed: ${reportError.message}`);
   if (!report) return empty("not_found");
   if (report.revoked_at) return empty("revoked");
 

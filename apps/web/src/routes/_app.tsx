@@ -43,8 +43,28 @@ function AppLayout() {
   const justCheckedOut = useJustCheckedOut();
   const [checkoutAttempts, setCheckoutAttempts] = useState(0);
 
+  /*
+   * Carry the destination across to /login.
+   *
+   * A bare `/login` is how a shared link became a dead end. The URL in an
+   * owner's address bar while they are looking at a report or a summary is the
+   * private one (`/projects/<id>/reports/<id>`, `/summaries/<id>`), not the
+   * `/share/...` one, and that is the URL that gets pasted into a message to a
+   * customer. The customer arrived here, got bounced to a sign-in form that
+   * said nothing about where they had been going, and reported that the link
+   * does not open. The owner clicking their own link fared no better: they
+   * signed in and landed on the dashboard.
+   *
+   * `/login` already reads `?redirect=` and validates it (same-origin paths
+   * only); it was simply never being told. The explanation the customer needs
+   * lives there too, and only appears when this parameter is present.
+   */
   useEffect(() => {
-    if (!loading && !user) navigate({ to: "/login", replace: true });
+    if (loading || user) return;
+    const here =
+      typeof window === "undefined" ? "" : `${window.location.pathname}${window.location.search}`;
+    const redirect = here.startsWith("/") && !here.startsWith("//") ? here : undefined;
+    navigate({ to: "/login", search: redirect ? { redirect } : {}, replace: true });
   }, [loading, user, navigate]);
 
   useEffect(() => {

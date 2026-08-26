@@ -736,11 +736,23 @@ export async function getPublicSummaryService(data: { token: string }) {
   const supabaseAdmin = getSupabaseAdmin();
   const empty = { summary: null, project: null, photos: [] as ResolvedSummaryPhoto[] };
 
-  const { data: row } = await supabaseAdmin
+  /*
+   * `error` is read, not dropped.
+   *
+   * This lookup runs as the service role, and the only two things it can say
+   * are "no row with that token" and "the read itself failed" - a revoked grant
+   * on this table, a stale PostgREST schema cache, an outage. Discarding the
+   * second turned every one of those into the same sentence a customer sees for
+   * a link that was never real ("This summary is not available"), with a 200 in
+   * the audit log and nothing to go on. Throwing puts the reason in the log and
+   * answers 500, which is what a broken read is.
+   */
+  const { data: row, error } = await supabaseAdmin
     .from("walkthrough_summaries" as any)
     .select("*")
     .eq("share_token", data.token)
     .maybeSingle();
+  if (error) throw new Error(`walkthrough_summaries lookup failed: ${error.message}`);
   if (!row) return empty;
 
   const { data: project } = await supabaseAdmin
