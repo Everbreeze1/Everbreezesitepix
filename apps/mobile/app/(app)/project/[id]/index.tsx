@@ -156,6 +156,19 @@ export default function ProjectDetailScreen() {
               </Pressable>
 
               <Pressable
+                onPress={() => router.push(`/project/${id}/walkthroughs`)}
+                style={[
+                  styles.navRow,
+                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                ]}
+              >
+                <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
+                  Walkthroughs
+                </Text>
+                <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>›</Text>
+              </Pressable>
+
+              <Pressable
                 onPress={() => router.push(`/project/${id}/workflows`)}
                 style={[
                   styles.navRow,

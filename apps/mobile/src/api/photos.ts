@@ -170,6 +170,34 @@ async function uploadThumbnail(
   }
 }
 
+/**
+ * Compress a capture, upload the object and its thumbnail, and report what
+ * landed. Stops short of writing the `photos` row.
+ *
+ * Walkthrough captures need exactly this half: the row is written server-side
+ * by the `saveWalkthroughPhoto` op, which also links the photo to the session
+ * and its offset. Duplicating the compress-and-thumbnail work there would be
+ * two implementations of the sizing rules that have to stay identical.
+ */
+export async function uploadPhotoObject(
+  asset: CapturedAsset,
+  storagePath: string,
+): Promise<{ sizeBytes: number; thumbPath: string | null }> {
+  const source = new File(asset.uri);
+  if (!source.exists) throw new Error("Could not read image from device");
+
+  const compressed = await compressCapture(asset);
+  const bytes = await new File(compressed.uri).arrayBuffer();
+
+  const { error } = await supabase.storage
+    .from("site-photos")
+    .upload(storagePath, bytes, { contentType: "image/jpeg", upsert: true });
+  if (error) throw new Error(error.message);
+
+  const thumbPath = await uploadThumbnail(storagePath, asset, compressed.uri);
+  return { sizeBytes: compressed.size || bytes.byteLength, thumbPath };
+}
+
 export type UploadPhotoOptions = {
   userId: string;
   projectId: string;
