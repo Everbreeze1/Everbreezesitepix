@@ -1,14 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -22,7 +13,18 @@ import {
   signWalkthroughVideo,
   type WalkthroughShot,
 } from "@/api/walkthroughs";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { radius, spacing, useTheme } from "@/theme";
+import { FileText, Share2, VideoOff } from "@/ui/icons";
+import {
+  Badge,
+  Button,
+  Card,
+  ErrorState,
+  Icon,
+  SectionHeader,
+  SkeletonList,
+  Text,
+} from "@/ui";
 
 function timecode(seconds: number): string {
   const whole = Math.max(0, Math.round(seconds));
@@ -103,7 +105,7 @@ export default function WalkthroughDetailScreen() {
 
   async function onGenerateReport() {
     if (!id) return;
-    setBusy("Generating report");
+    setBusy("report");
     setNotice(null);
     try {
       await generateWalkthroughReport(id);
@@ -118,7 +120,7 @@ export default function WalkthroughDetailScreen() {
 
   async function onShare() {
     if (!id) return;
-    setBusy("Preparing link");
+    setBusy("share");
     setNotice(null);
     try {
       const token = detail?.share_token ?? (await setWalkthroughShare(id, true)).shareToken;
@@ -138,20 +140,29 @@ export default function WalkthroughDetailScreen() {
     }
   }
 
+  const videoBox = {
+    width: "100%" as const,
+    aspectRatio: 16 / 9,
+    borderRadius: radius.md,
+    overflow: "hidden" as const,
+    backgroundColor: theme.colors.muted,
+  };
+
   return (
     <>
       <Stack.Screen options={{ title: detail?.title ?? "Walkthrough" }} />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         {detailQuery.isLoading ? (
-          <ActivityIndicator style={{ marginTop: spacing.xxxl }} color={theme.colors.primary} />
+          <SkeletonList rows={4} />
         ) : detailQuery.error || !detail ? (
-          <View style={styles.centered}>
-            <Text style={[typography.body, { color: theme.colors.destructive }]}>
-              {detailQuery.error instanceof Error
+          <ErrorState
+            message={
+              detailQuery.error instanceof Error
                 ? detailQuery.error.message
-                : "Walkthrough not found"}
-            </Text>
-          </View>
+                : "Walkthrough not found"
+            }
+            onRetry={() => void detailQuery.refetch()}
+          />
         ) : (
           <ScrollView
             contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
@@ -159,156 +170,131 @@ export default function WalkthroughDetailScreen() {
               <RefreshControl
                 refreshing={detailQuery.isRefetching}
                 onRefresh={() => void detailQuery.refetch()}
-                tintColor={theme.colors.primary}
+                tintColor={theme.colors.mutedForeground}
+                colors={[theme.colors.primary]}
               />
             }
           >
             {detail.video_path ? (
               videoQuery.data ? (
-                <VideoView
-                  player={player}
-                  style={[styles.video, { backgroundColor: theme.colors.muted }]}
-                  nativeControls
-                  contentFit="contain"
-                />
+                <VideoView player={player} style={videoBox} nativeControls contentFit="contain" />
               ) : (
-                <View
-                  style={[
-                    styles.video,
-                    styles.videoPlaceholder,
-                    { backgroundColor: theme.colors.muted },
-                  ]}
-                >
+                <View style={[videoBox, { alignItems: "center", justifyContent: "center" }]}>
                   <ActivityIndicator color={theme.colors.primary} />
                 </View>
               )
             ) : (
               <View
                 style={[
-                  styles.video,
-                  styles.videoPlaceholder,
-                  { backgroundColor: theme.colors.muted },
+                  videoBox,
+                  { alignItems: "center", justifyContent: "center", gap: spacing.sm },
                 ]}
               >
-                <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
+                <Icon icon={VideoOff} size="xl" tone="muted" />
+                <Text variant="caption" tone="muted">
                   No video on this walkthrough
                 </Text>
               </View>
             )}
 
-            <Text
-              style={[
-                typography.caption,
-                { color: theme.colors.mutedForeground, marginTop: spacing.md },
-              ]}
-            >
-              {relativeTime(detail.created_at)} · {timecode(detail.duration_seconds)}
+            <Text variant="caption" tone="muted" style={{ marginTop: spacing.md }}>
+              {`${relativeTime(detail.created_at)} · ${timecode(detail.duration_seconds)}`}
             </Text>
 
             {detail.shots.length > 0 ? (
-              <View style={{ marginTop: spacing.lg }}>
-                <Text
-                  style={[
-                    typography.overline,
-                    { color: theme.colors.mutedForeground, marginBottom: spacing.sm },
-                  ]}
-                >
-                  PHOTOS ALONG THE WAY
-                </Text>
+              <>
+                <SectionHeader title="Photos along the way" count={detail.shots.length} />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={{ flexDirection: "row", gap: spacing.sm }}>
                     {detail.shots.map((shot) => (
                       <Pressable
-                        accessibilityRole="button"
                         key={shot.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Photo at ${timecode(shot.offset_seconds)}`}
+                        accessibilityHint="Jumps the recording to this moment"
                         onPress={() => seekTo(shot)}
-                        style={styles.shot}
+                        style={({ pressed }) => ({
+                          width: 96,
+                          gap: spacing.xs,
+                          opacity: pressed ? 0.7 : 1,
+                        })}
                       >
                         <Image
                           source={
                             shotUrls[shot.photo_id] ? { uri: shotUrls[shot.photo_id] } : undefined
                           }
-                          style={[styles.shotImage, { backgroundColor: theme.colors.muted }]}
+                          style={{
+                            width: 96,
+                            height: 96,
+                            borderRadius: radius.sm,
+                            backgroundColor: theme.colors.muted,
+                          }}
                           contentFit="cover"
                         />
-                        <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
+                        <Text variant="caption" tone="muted" align="center">
                           {timecode(shot.offset_seconds)}
                         </Text>
                       </Pressable>
                     ))}
                   </View>
                 </ScrollView>
-              </View>
+              </>
             ) : null}
 
-            <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
-              <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
-                TRANSCRIPT
-              </Text>
-              <Text
-                style={[
-                  typography.body,
-                  { color: detail.transcript ? theme.colors.foreground : theme.colors.safety },
-                ]}
-              >
-                {detail.transcript ??
-                  "Not transcribed yet. Recordings made on the phone are transcribed from the web app."}
-              </Text>
-            </View>
+            <SectionHeader title="Transcript" />
+            <Card>
+              {detail.transcript ? (
+                <Text variant="body">{detail.transcript}</Text>
+              ) : (
+                <>
+                  <Badge label="Not transcribed" tone="warning" />
+                  <Text variant="body" tone="muted" style={{ marginTop: spacing.sm }}>
+                    Recordings made on the phone are transcribed from the web app.
+                  </Text>
+                </>
+              )}
+            </Card>
 
             {summary ? (
-              <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
-                <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
-                  REPORT
-                </Text>
-                <Text style={[typography.body, { color: theme.colors.foreground }]}>{summary}</Text>
-              </View>
+              <>
+                <SectionHeader title="Report" />
+                <Card>
+                  <Text variant="body">{summary}</Text>
+                </Card>
+              </>
             ) : null}
 
             {notice ? (
-              <Text
-                style={[
-                  typography.caption,
-                  { color: theme.colors.mutedForeground, marginTop: spacing.lg },
-                ]}
-              >
+              <Text variant="caption" tone="muted" style={{ marginTop: spacing.lg }}>
                 {notice}
               </Text>
             ) : null}
 
             <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
-              <Pressable
-                accessibilityRole="button"
+              <Button
+                label="Generate report"
+                icon={FileText}
+                fullWidth
+                loading={busy === "report"}
                 disabled={Boolean(busy) || !detail.transcript}
                 onPress={() => void onGenerateReport()}
-                style={[
-                  styles.button,
-                  {
-                    backgroundColor: theme.colors.primary,
-                    opacity: busy || !detail.transcript ? 0.5 : 1,
-                  },
-                ]}
-              >
-                <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-                  {busy === "Generating report" ? "Generating…" : "Generate report"}
-                </Text>
-              </Pressable>
+              />
               {!detail.transcript ? (
-                <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
+                // Says why the button is dead rather than failing after the tap.
+                <Text variant="caption" tone="muted">
                   A report needs a transcript first.
                 </Text>
               ) : null}
 
-              <Pressable
-                accessibilityRole="button"
+              <Button
+                label={detail.share_token ? "Share link" : "Create share link"}
+                icon={Share2}
+                variant="outline"
+                fullWidth
+                loading={busy === "share"}
                 disabled={Boolean(busy)}
                 onPress={() => void onShare()}
-                style={[styles.secondary, { borderColor: theme.colors.border }]}
-              >
-                <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                  {detail.share_token ? "Share link" : "Create share link"}
-                </Text>
-              </Pressable>
+              />
             </View>
           </ScrollView>
         )}
@@ -316,26 +302,3 @@ export default function WalkthroughDetailScreen() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
-  video: { width: "100%", aspectRatio: 16 / 9, borderRadius: radius.md, overflow: "hidden" },
-  videoPlaceholder: { alignItems: "center", justifyContent: "center" },
-  shot: { width: 96, gap: 4 },
-  shotImage: { width: 96, height: 96, borderRadius: radius.sm },
-  button: {
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: HIT_TARGET,
-  },
-  secondary: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: HIT_TARGET,
-  },
-});

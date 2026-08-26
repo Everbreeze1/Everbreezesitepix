@@ -1,13 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   View,
   type NativeSyntheticEvent,
@@ -35,6 +33,20 @@ import {
 } from "@/api/task-mentions";
 import { useAuth } from "@/lib/auth";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { MessageSquare, Send } from "@/ui/icons";
+import {
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  ErrorState,
+  ProgressBar,
+  SectionHeader,
+  SkeletonList,
+  Text,
+} from "@/ui";
 
 export default function TaskDetailScreen() {
   const { id, projectId } = useLocalSearchParams<{ id: string; projectId?: string }>();
@@ -155,117 +167,136 @@ export default function TaskDetailScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={{ flex: 1, backgroundColor: theme.colors.background }}
     >
-      <Stack.Screen options={{ title: "Task" }} />
+      <Stack.Screen options={{ title: task?.title ?? "Task" }} />
 
       {collaborationQuery.isLoading ? (
-        <ActivityIndicator style={{ marginTop: spacing.xxxl }} color={theme.colors.primary} />
+        <SkeletonList rows={4} />
       ) : collaborationQuery.error ? (
-        <View style={styles.centered}>
-          <Text style={[typography.body, { color: theme.colors.destructive }]}>
-            {collaborationQuery.error instanceof Error
+        <ErrorState
+          message={
+            collaborationQuery.error instanceof Error
               ? collaborationQuery.error.message
-              : "Could not load the conversation"}
-          </Text>
-        </View>
+              : "Could not load the conversation"
+          }
+          onRetry={() => void collaborationQuery.refetch()}
+        />
       ) : (
         <ScrollView
-          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
+          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={collaborationQuery.isRefetching}
               onRefresh={() => void collaborationQuery.refetch()}
-              tintColor={theme.colors.primary}
+              tintColor={theme.colors.mutedForeground}
+              colors={[theme.colors.primary]}
             />
           }
         >
           {photoState && photoState.photos.length > 0 && !photoState.unavailable ? (
-            <View style={{ gap: spacing.sm }}>
-              <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
-                PHOTOS ON THIS TASK{progress ? ` · ${progress.done} of ${progress.total}` : ""}
-              </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <Card>
+              <SectionHeader title="Photos on this task" />
+              {progress ? (
+                <ProgressBar
+                  value={progress.done}
+                  total={progress.total}
+                  tone={progress.done === progress.total ? "success" : "primary"}
+                  showLabel
+                />
+              ) : null}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginTop: spacing.md }}
+              >
                 <View style={{ flexDirection: "row", gap: spacing.sm }}>
                   {photoState.photos.map((photo) => {
                     const done = photoIsDone(photoState.items, photo.id);
                     return (
                       <Pressable
-                        accessibilityRole="button"
                         key={photo.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={done ? "Photo done, tap to reopen" : "Photo open, tap to mark done"}
+                        accessibilityState={{ selected: done, disabled: togglePhoto.isPending }}
                         disabled={togglePhoto.isPending}
                         onPress={() => togglePhoto.mutate(photo.id)}
-                        style={[
-                          styles.taskPhoto,
-                          { borderColor: done ? theme.colors.primary : theme.colors.border },
-                        ]}
+                        style={({ pressed }) => ({
+                          width: 96,
+                          gap: spacing.xs,
+                          padding: 4,
+                          borderWidth: 2,
+                          borderRadius: radius.md,
+                          borderColor: done ? theme.colors.success : theme.colors.border,
+                          opacity: pressed ? 0.7 : 1,
+                        })}
                       >
                         <Image
                           source={photo.url ? { uri: photo.url } : undefined}
-                          style={[styles.taskPhotoImage, { backgroundColor: theme.colors.muted }]}
+                          style={{
+                            width: 84,
+                            height: 84,
+                            borderRadius: radius.sm,
+                            backgroundColor: theme.colors.muted,
+                          }}
                           contentFit="cover"
                         />
-                        <Text
-                          style={[
-                            typography.caption,
-                            {
-                              color: done ? theme.colors.primary : theme.colors.mutedForeground,
-                              fontWeight: done ? "700" : "400",
-                            },
-                          ]}
-                        >
-                          {done ? "Done" : "Open"}
-                        </Text>
+                        <Badge
+                          label={done ? "Done" : "Open"}
+                          tone={done ? "success" : "neutral"}
+                        />
                       </Pressable>
                     );
                   })}
                 </View>
               </ScrollView>
               {togglePhoto.error ? (
-                <Text style={[typography.caption, { color: theme.colors.destructive }]}>
+                <Text variant="caption" tone="destructive" style={{ marginTop: spacing.sm }}>
                   {togglePhoto.error instanceof Error
                     ? togglePhoto.error.message
                     : "Could not update that photo"}
                 </Text>
               ) : null}
-            </View>
+            </Card>
           ) : null}
 
           {comments.length === 0 ? (
-            <Text
-              style={[
-                typography.body,
-                { color: theme.colors.mutedForeground, textAlign: "center" },
-              ]}
-            >
-              No comments yet. Leave a note like "waiting on part" without editing the task.
-            </Text>
+            <EmptyState
+              icon={MessageSquare}
+              title="No comments yet"
+              body='Leave a note like "waiting on part" without editing the task itself.'
+            />
           ) : (
-            comments.map((comment) => (
-              <View
-                key={comment.id}
-                style={[
-                  styles.comment,
-                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                ]}
-              >
-                <View style={styles.commentHead}>
-                  <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                    {memberLabel(byId.get(comment.author_id))}
-                  </Text>
-                  <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
-                    {relativeTime(comment.created_at)}
-                  </Text>
-                </View>
-                <Text style={[typography.body, { color: theme.colors.foreground }]}>
-                  {comment.body}
-                </Text>
-                {comment.mentions.length > 0 ? (
-                  <Text style={[typography.caption, { color: theme.colors.primary }]}>
-                    Notified {comment.mentions.map((m) => memberLabel(byId.get(m))).join(", ")}
-                  </Text>
-                ) : null}
-              </View>
-            ))
+            comments.map((comment) => {
+              const author = memberLabel(byId.get(comment.author_id));
+              return (
+                <Card key={comment.id}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: spacing.sm,
+                      marginBottom: spacing.sm,
+                    }}
+                  >
+                    <Avatar name={author} size="sm" />
+                    <Text variant="bodyStrong" style={{ flex: 1 }} numberOfLines={1}>
+                      {author}
+                    </Text>
+                    <Text variant="caption" tone="muted">
+                      {relativeTime(comment.created_at)}
+                    </Text>
+                  </View>
+
+                  <Text variant="body">{comment.body}</Text>
+
+                  {comment.mentions.length > 0 ? (
+                    <Text variant="caption" tone="primary" style={{ marginTop: spacing.sm }}>
+                      {`Notified ${comment.mentions.map((m) => memberLabel(byId.get(m))).join(", ")}`}
+                    </Text>
+                  ) : null}
+                </Card>
+              );
+            })
           )}
         </ScrollView>
       )}
@@ -279,23 +310,17 @@ export default function TaskDetailScreen() {
           contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.lg }}
         >
           {matches.map((member) => (
-            <Pressable
-              accessibilityRole="button"
-              key={member.user_id}
-              onPress={() => insert(member)}
-              style={[
-                styles.mentionChip,
-                { backgroundColor: theme.colors.accent, borderColor: theme.colors.border },
-              ]}
-            >
-              <Text style={[typography.caption, { color: theme.colors.accentForeground }]}>
-                {memberLabel(member)}
-              </Text>
-            </Pressable>
+            <Chip key={member.user_id} label={memberLabel(member)} onPress={() => insert(member)} />
           ))}
         </ScrollView>
       ) : null}
 
+      {/*
+       * The composer stays a bespoke control rather than becoming a `Field`.
+       * It needs a ref to refocus after a mention is inserted and a selection
+       * handler to know where the caret is, and neither belongs on a form input
+       * used by six other screens. Its colours still come from the palette.
+       */}
       <View style={[styles.composerBar, { borderColor: theme.colors.border }]}>
         <TextInput
           ref={composer}
@@ -305,7 +330,9 @@ export default function TaskDetailScreen() {
           multiline
           placeholder="Add a comment, @ to mention"
           placeholderTextColor={theme.colors.mutedForeground}
+          accessibilityLabel="Comment"
           style={[
+            typography.body,
             styles.composer,
             {
               backgroundColor: theme.colors.card,
@@ -314,30 +341,20 @@ export default function TaskDetailScreen() {
             },
           ]}
         />
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          label="Send"
+          icon={Send}
+          loading={post.isPending}
           disabled={!draft.trim() || post.isPending}
           onPress={() => post.mutate()}
-          style={[
-            styles.send,
-            {
-              backgroundColor: theme.colors.primary,
-              opacity: !draft.trim() || post.isPending ? 0.5 : 1,
-            },
-          ]}
-        >
-          <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-            {post.isPending ? "…" : "Send"}
-          </Text>
-        </Pressable>
+        />
       </View>
 
       {post.error ? (
         <Text
-          style={[
-            typography.caption,
-            { color: theme.colors.destructive, paddingHorizontal: spacing.lg, paddingBottom: 8 },
-          ]}
+          variant="caption"
+          tone="destructive"
+          style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}
         >
           {post.error instanceof Error ? post.error.message : "Could not post the comment"}
         </Text>
@@ -347,19 +364,7 @@ export default function TaskDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
-  comment: { borderWidth: 1, borderRadius: radius.md, padding: spacing.lg, gap: spacing.xs },
-  taskPhoto: { width: 96, gap: 4, borderWidth: 2, borderRadius: radius.md, padding: 4 },
-  taskPhotoImage: { width: 84, height: 84, borderRadius: radius.sm },
-  commentHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   mentionBar: { maxHeight: 52, borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 8 },
-  mentionChip: {
-    borderWidth: 1,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    justifyContent: "center",
-  },
   composerBar: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -373,15 +378,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    fontSize: 16,
     minHeight: HIT_TARGET,
+    // Caps the growth of a long comment so the list behind it does not vanish.
     maxHeight: 120,
-  },
-  send: {
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    minHeight: HIT_TARGET,
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

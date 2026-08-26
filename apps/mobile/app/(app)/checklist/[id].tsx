@@ -1,14 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CHECKLIST_TYPE_LABELS, type ChecklistItemType } from "@everlumen/shared";
@@ -27,8 +18,31 @@ import { useAuth } from "@/lib/auth";
 import { checklistItemRowId, type ChecklistItemPatchPayload } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
+import { Camera, CircleCheck, Star } from "@/ui/icons";
+import {
+  Badge,
+  Button,
+  Card,
+  ErrorState,
+  Field,
+  Icon,
+  ProgressBar,
+  SkeletonList,
+  Text,
+} from "@/ui";
 
+/**
+ * The checklist runner: the screen someone actually stands in a building and
+ * uses.
+ *
+ * The write path below is unchanged and deliberately so. Every tap updates the
+ * cache first and queues the write second, so an answer lands identically on
+ * office wifi and in a basement. What changed is only what it looks like, and
+ * the one thing that was genuinely hard to read: progress was two lines of
+ * caption text, so "am I nearly done" had to be worked out by comparing two
+ * numbers. It is a bar now.
+ */
 export default function ChecklistRunnerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
@@ -131,39 +145,47 @@ export default function ChecklistRunnerScreen() {
         <QueueBanner />
 
         {isLoading ? (
-          <ActivityIndicator style={{ marginTop: spacing.xxxl }} color={theme.colors.primary} />
+          <SkeletonList rows={5} />
         ) : error || !data ? (
-          <View style={styles.centered}>
-            <Text style={[typography.body, { color: theme.colors.destructive }]}>
-              {error instanceof Error ? error.message : "Checklist not found"}
-            </Text>
-          </View>
+          <ErrorState
+            message={error instanceof Error ? error.message : "Checklist not found"}
+            onRetry={() => void refetch()}
+          />
         ) : (
           <ScrollView
-            contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
+            contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
             keyboardShouldPersistTaps="handled"
             refreshControl={
               <RefreshControl
                 refreshing={isRefetching}
                 onRefresh={() => void refetch()}
-                tintColor={theme.colors.primary}
+                tintColor={theme.colors.mutedForeground}
+                colors={[theme.colors.primary]}
               />
             }
           >
-            <View style={{ marginBottom: spacing.lg, gap: spacing.xs }}>
-              <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
-                {done} of {items.length} done
-              </Text>
+            <Card>
+              <ProgressBar
+                value={done}
+                total={items.length}
+                tone={outstandingRequired === 0 && items.length > 0 ? "success" : "primary"}
+                showLabel
+              />
               {outstandingRequired > 0 ? (
-                <Text style={[typography.caption, { color: theme.colors.safety }]}>
-                  {outstandingRequired} required item{outstandingRequired === 1 ? "" : "s"} left
-                </Text>
+                <Badge
+                  label={`${outstandingRequired} required left`}
+                  tone="warning"
+                  style={{ marginTop: spacing.md }}
+                />
               ) : items.length > 0 ? (
-                <Text style={[typography.caption, { color: theme.colors.primary }]}>
-                  All required items answered
-                </Text>
+                <Badge
+                  label="All required answered"
+                  tone="success"
+                  icon={CircleCheck}
+                  style={{ marginTop: spacing.md }}
+                />
               ) : null}
-            </View>
+            </Card>
 
             {items.map((item) => (
               <ChecklistRow
@@ -200,87 +222,58 @@ function ChecklistRow({
   const choices = choicesFor(item.item_type);
 
   return (
-    <View
-      style={[
-        styles.card,
-        {
-          backgroundColor: theme.colors.card,
-          borderColor: answered ? theme.colors.primary : theme.colors.border,
-        },
-      ]}
+    <Card
+      // An answered item keeps its green edge. On a long list this is what tells
+      // you where you stopped without reading a single label.
+      style={{ borderColor: answered ? theme.colors.success : theme.colors.border, gap: spacing.sm }}
     >
-      <View style={styles.cardHead}>
-        <Text style={[typography.bodyStrong, { color: theme.colors.foreground, flex: 1 }]}>
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.sm }}>
+        <Text variant="bodyStrong" style={{ flex: 1 }}>
           {item.label}
         </Text>
-        {item.required ? (
-          <Text style={[typography.overline, { color: theme.colors.safety }]}>REQUIRED</Text>
-        ) : null}
+        {item.required ? <Badge label="Required" tone="warning" /> : null}
+        {answered ? <Icon icon={CircleCheck} size="md" tone="success" /> : null}
       </View>
 
       {item.description ? (
-        <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
+        <Text variant="caption" tone="muted">
           {item.description}
         </Text>
       ) : null}
 
-      <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
-        {CHECKLIST_TYPE_LABELS[item.item_type as ChecklistItemType] ?? item.item_type}
+      <Text variant="overline" tone="muted">
+        {(CHECKLIST_TYPE_LABELS[item.item_type as ChecklistItemType] ?? item.item_type).toUpperCase()}
       </Text>
 
       {item.item_type === "checkbox" ? (
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          label={answered ? "Done" : "Mark done"}
+          icon={answered ? CircleCheck : undefined}
+          variant={answered ? "success" : "outline"}
+          fullWidth
           onPress={() => onToggleDone(item)}
-          style={[
-            styles.checkbox,
-            {
-              backgroundColor: answered ? theme.colors.primary : theme.colors.background,
-              borderColor: answered ? theme.colors.primary : theme.colors.border,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              typography.bodyStrong,
-              { color: answered ? theme.colors.primaryForeground : theme.colors.mutedForeground },
-            ]}
-          >
-            {answered ? "Done" : "Mark done"}
-          </Text>
-        </Pressable>
+        />
       ) : null}
 
       {choices ? (
-        <View style={styles.choiceRow}>
+        <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" }}>
           {choices.map((choice) => {
             const selected = item.response_value === choice;
             return (
-              <Pressable
-                accessibilityRole="button"
+              <Button
                 key={choice}
+                label={choice}
+                variant={selected ? "primary" : "outline"}
                 onPress={() =>
                   onSetResponse(item, toggledResponse(item.item_type, item.response_value, choice))
                 }
-                style={[
-                  styles.choice,
-                  {
-                    backgroundColor: selected ? theme.colors.primary : theme.colors.background,
-                    borderColor: selected ? theme.colors.primary : theme.colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    typography.bodyStrong,
-                    {
-                      color: selected ? theme.colors.primaryForeground : theme.colors.foreground,
-                    },
-                  ]}
-                >
-                  {choice}
-                </Text>
-              </Pressable>
+                /*
+                 * `flex` widens the button while its fixed height keeps the row
+                 * even. `alignSelf` stays at the Button default, which only
+                 * governs the cross axis and so cannot squash it here.
+                 */
+                style={{ flex: 1, minWidth: 96 }}
+              />
             );
           })}
         </View>
@@ -295,20 +288,28 @@ function ChecklistRow({
       <ItemNote item={item} onSetNote={onSetNote} />
 
       {projectId ? (
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          label="Add photo evidence"
+          icon={Camera}
+          variant="ghost"
+          size="sm"
+          fullWidth
           onPress={() => router.push(`/project/${projectId}/capture?checklistItemId=${item.id}`)}
-          style={[styles.attach, { borderColor: theme.colors.border }]}
-        >
-          <Text style={[typography.caption, { color: theme.colors.primary, fontWeight: "600" }]}>
-            Add photo evidence
-          </Text>
-        </Pressable>
+        />
       ) : null}
-    </View>
+    </Card>
   );
 }
 
+/**
+ * A one-to-five rating.
+ *
+ * Five identical numbered boxes is what this was, and five identical anything
+ * is the hardest control on the screen to read back: the score had to be
+ * counted. Stars fill left to right, so the value is legible without reading.
+ * The numeric accessibility labels are unchanged, because a screen reader gets
+ * nothing from a shape.
+ */
 function Rating({
   item,
   onSetResponse,
@@ -320,34 +321,34 @@ function Rating({
   const current = typeof item.response_value === "number" ? item.response_value : 0;
 
   return (
-    <View style={styles.choiceRow}>
+    <View style={{ flexDirection: "row", gap: spacing.sm }}>
       {[1, 2, 3, 4, 5].map((value) => {
         const active = value <= current;
         return (
           <Pressable
-            accessibilityRole="button"
             key={value}
+            accessibilityRole="button"
             accessibilityLabel={`Rate ${value} out of 5`}
             accessibilityState={{ selected: active }}
-            onPress={() =>
-              onSetResponse(item, toggledResponse("rating", item.response_value, value))
-            }
-            style={[
-              styles.star,
-              {
-                backgroundColor: active ? theme.colors.safety : theme.colors.background,
-                borderColor: active ? theme.colors.safety : theme.colors.border,
-              },
-            ]}
+            onPress={() => onSetResponse(item, toggledResponse("rating", item.response_value, value))}
+            style={({ pressed }) => ({
+              flex: 1,
+              minHeight: HIT_TARGET,
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: radius.md,
+              borderWidth: 1,
+              borderColor: active ? theme.colors.safety : theme.colors.border,
+              backgroundColor: theme.colors.card,
+              opacity: pressed ? 0.7 : 1,
+            })}
           >
-            <Text
-              style={[
-                typography.bodyStrong,
-                { color: active ? theme.colors.safetyForeground : theme.colors.mutedForeground },
-              ]}
-            >
-              {value}
-            </Text>
+            <Icon
+              icon={Star}
+              size="lg"
+              color={active ? theme.colors.safety : theme.colors.mutedForeground}
+              fill={active ? theme.colors.safety : "none"}
+            />
           </Pressable>
         );
       })}
@@ -369,25 +370,16 @@ function ItemNote({
   item: ChecklistItem;
   onSetNote: (item: ChecklistItem, text: string) => void;
 }) {
-  const theme = useTheme();
   const [draft, setDraft] = useState(item.notes ?? "");
 
   return (
-    <TextInput
+    <Field
       value={draft}
       onChangeText={setDraft}
       onBlur={() => onSetNote(item, draft)}
       multiline
+      rows={2}
       placeholder="Note (optional)"
-      placeholderTextColor={theme.colors.mutedForeground}
-      style={[
-        styles.note,
-        {
-          backgroundColor: theme.colors.background,
-          borderColor: theme.colors.border,
-          color: theme.colors.foreground,
-        },
-      ]}
     />
   );
 }
@@ -406,7 +398,6 @@ function FreeTextAnswer({
   item: ChecklistItem;
   onSetResponse: (item: ChecklistItem, value: unknown) => void;
 }) {
-  const theme = useTheme();
   const numeric = item.item_type === "numeric";
   const [draft, setDraft] = useState(
     hasResponse(item.response_value) ? String(item.response_value) : "",
@@ -429,87 +420,16 @@ function FreeTextAnswer({
   }
 
   return (
-    <TextInput
+    <Field
       value={draft}
       onChangeText={setDraft}
       onBlur={commit}
       onSubmitEditing={commit}
       keyboardType={numeric ? "numeric" : "default"}
       multiline={!numeric}
+      rows={2}
       placeholder={numeric ? "Enter a number" : "Enter a note"}
-      placeholderTextColor={theme.colors.mutedForeground}
-      style={[
-        styles.input,
-        {
-          backgroundColor: theme.colors.background,
-          borderColor: theme.colors.border,
-          color: theme.colors.foreground,
-        },
-      ]}
+      autoCapitalize={numeric ? "none" : "sentences"}
     />
   );
 }
-
-const styles = StyleSheet.create({
-  centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
-  card: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    gap: spacing.sm,
-  },
-  cardHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
-  checkbox: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: HIT_TARGET,
-  },
-  choiceRow: { flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" },
-  choice: {
-    flex: 1,
-    minWidth: 96,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: HIT_TARGET,
-  },
-  star: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: HIT_TARGET,
-  },
-  note: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: 15,
-    minHeight: 40,
-  },
-  attach: {
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: HIT_TARGET,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    fontSize: 16,
-    minHeight: HIT_TARGET,
-  },
-});

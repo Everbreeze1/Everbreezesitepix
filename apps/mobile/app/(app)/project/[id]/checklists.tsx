@@ -1,30 +1,28 @@
 import { useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { Link, Stack, useLocalSearchParams } from "expo-router";
+import { FlatList, RefreshControl, View } from "react-native";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { listProjectChecklists } from "@/api/checklists";
 import { getProjectContributors } from "@/api/task-comments";
 import { memberLabel } from "@/api/task-mentions";
 import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { spacing, useTheme } from "@/theme";
+import { ClipboardCheck } from "@/ui/icons";
+import {
+  Avatar,
+  Badge,
+  Card,
+  ChipGroup,
+  EmptyState,
+  ErrorState,
+  ProgressBar,
+  SkeletonList,
+  Text,
+  type ChipOption,
+} from "@/ui";
 
 type Filter = "all" | "mine" | "open";
-
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "open", label: "Unfinished" },
-  { id: "mine", label: "Mine" },
-  { id: "all", label: "All" },
-];
 
 export default function ProjectChecklistsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -64,136 +62,121 @@ export default function ProjectChecklistsScreen() {
     return all.filter((row) => row.total === 0 || row.done < row.total);
   }, [all, filter, user?.id]);
 
+  /*
+   * Counts are taken off the full list, so "Mine 2" keeps reading 2 while the
+   * Unfinished filter is showing. Counting the filtered list gives every
+   * unselected chip a zero, which reads as "there are none".
+   */
+  const filters: ChipOption<Filter>[] = [
+    {
+      id: "open",
+      label: "Unfinished",
+      count: all.filter((row) => row.total === 0 || row.done < row.total).length,
+    },
+    { id: "mine", label: "Mine", count: all.filter((row) => row.assigned_to === user?.id).length },
+    { id: "all", label: "All", count: all.length },
+  ];
+
   return (
     <>
       <Stack.Screen options={{ title: "Checklists" }} />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         <QueueBanner />
 
+        <View style={{ paddingVertical: spacing.sm }}>
+          <ChipGroup
+            options={filters}
+            value={filter}
+            onChange={setFilter}
+            label="Filter checklists"
+          />
+        </View>
+
         {isLoading ? (
-          <ActivityIndicator style={{ marginTop: spacing.xxxl }} color={theme.colors.primary} />
+          <SkeletonList rows={5} />
         ) : error ? (
-          <View style={styles.centered}>
-            <Text style={[typography.body, { color: theme.colors.destructive }]}>
-              {error instanceof Error ? error.message : "Failed to load checklists"}
-            </Text>
-          </View>
+          <ErrorState
+            message={error instanceof Error ? error.message : "Failed to load checklists"}
+            onRetry={() => void refetch()}
+          />
         ) : (
           <FlatList
             data={checklists}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={
-              checklists.length
-                ? { padding: spacing.lg }
-                : { flexGrow: 1, justifyContent: "center", padding: spacing.xl }
-            }
+            contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, flexGrow: 1 }}
             refreshControl={
               <RefreshControl
                 refreshing={isRefetching}
                 onRefresh={() => void refetch()}
-                tintColor={theme.colors.primary}
+                tintColor={theme.colors.mutedForeground}
+                colors={[theme.colors.primary]}
               />
             }
-            ListHeaderComponent={
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: spacing.sm, marginBottom: spacing.lg }}
-              >
-                {FILTERS.map((option) => {
-                  const active = filter === option.id;
-                  return (
-                    <Pressable
-                      key={option.id}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                      onPress={() => setFilter(option.id)}
-                      style={[
-                        styles.chip,
-                        {
-                          backgroundColor: active ? theme.colors.primary : theme.colors.card,
-                          borderColor: active ? theme.colors.primary : theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          typography.caption,
-                          {
-                            fontWeight: "600",
-                            color: active
-                              ? theme.colors.primaryForeground
-                              : theme.colors.mutedForeground,
-                          },
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            }
             ListEmptyComponent={
-              <Text
-                style={[
-                  typography.body,
-                  { color: theme.colors.mutedForeground, textAlign: "center" },
-                ]}
-              >
-                {all.length === 0
-                  ? "No checklists on this project. Apply one from the web app."
-                  : "Nothing matches that filter."}
-              </Text>
+              all.length === 0 ? (
+                <EmptyState
+                  icon={ClipboardCheck}
+                  title="No checklists here"
+                  body="Checklists are the checks this job has to pass. Apply one to this project from the web app."
+                />
+              ) : (
+                <EmptyState
+                  title="Nothing matches that filter"
+                  body="Every checklist on this project is either finished or assigned to someone else."
+                  action={{ label: "Show all", onPress: () => setFilter("all") }}
+                />
+              )
             }
             renderItem={({ item }) => {
               const complete = item.total > 0 && item.done === item.total;
-              const ratio = item.total > 0 ? item.done / item.total : 0;
+              const mine = item.assigned_to === user?.id;
+              const assignee = item.assigned_to ? nameById.get(item.assigned_to) : null;
+              const assigneeName = mine ? "You" : assignee ? memberLabel(assignee) : null;
+
               return (
-                <Link href={`/checklist/${item.id}`} asChild>
-                  <Pressable
-                    accessibilityRole="button"
-                    // Flattened: `<Link asChild>` rejects an array style.
-                    style={StyleSheet.flatten([
-                      styles.row,
-                      { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                    ])}
+                <Card
+                  onPress={() => router.push(`/checklist/${item.id}`)}
+                  accessibilityLabel={`${item.name}, ${item.done} of ${item.total} done${
+                    assigneeName ? `, assigned to ${assigneeName}` : ""
+                  }`}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "flex-start",
+                      gap: spacing.md,
+                      marginBottom: spacing.md,
+                    }}
                   >
-                    <Text style={[typography.heading, { color: theme.colors.foreground }]}>
+                    <Text variant="heading" style={{ flex: 1 }} numberOfLines={2}>
                       {item.name}
                     </Text>
-                    <Text
-                      style={[
-                        typography.caption,
-                        { color: theme.colors.mutedForeground, marginTop: spacing.xs },
-                      ]}
-                    >
-                      {item.done} of {item.total} done
-                      {item.assigned_to
-                        ? item.assigned_to === user?.id
-                          ? " · assigned to you"
-                          : ` · ${memberLabel(nameById.get(item.assigned_to))}`
-                        : ""}
-                    </Text>
+                    {complete ? <Badge label="Done" tone="success" /> : null}
+                  </View>
 
-                    <View style={[styles.track, { backgroundColor: theme.colors.muted }]}>
-                      <View
-                        style={[
-                          styles.fill,
-                          {
-                            // `flex` rather than a percentage width: a
-                            // percentage on a zero-width parent renders nothing
-                            // on the first layout pass.
-                            width: `${Math.round(ratio * 100)}%`,
-                            backgroundColor: complete
-                              ? theme.colors.primary
-                              : theme.colors.primaryGlow,
-                          },
-                        ]}
-                      />
+                  {assigneeName ? (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: spacing.sm,
+                        marginBottom: spacing.md,
+                      }}
+                    >
+                      <Avatar name={assigneeName} size="sm" />
+                      <Text variant="caption" tone={mine ? "primary" : "muted"}>
+                        {mine ? "Assigned to you" : assigneeName}
+                      </Text>
                     </View>
-                  </Pressable>
-                </Link>
+                  ) : null}
+
+                  <ProgressBar
+                    value={item.done}
+                    total={item.total}
+                    tone={complete ? "success" : "primary"}
+                    showLabel
+                  />
+                </Card>
               );
             }}
           />
@@ -202,22 +185,3 @@ export default function ProjectChecklistsScreen() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
-  row: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    minHeight: HIT_TARGET,
-  },
-  chip: {
-    borderWidth: 1,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  track: { height: 6, borderRadius: radius.pill, marginTop: spacing.md, overflow: "hidden" },
-  fill: { height: "100%", borderRadius: radius.pill },
-});

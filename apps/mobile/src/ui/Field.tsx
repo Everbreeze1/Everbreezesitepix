@@ -39,6 +39,8 @@ export type FieldProps = {
   secureTextEntry?: boolean;
   editable?: boolean;
   onSubmitEditing?: () => void;
+  /** Fired after the internal focus state clears. Checklist answers commit here. */
+  onBlur?: () => void;
   returnKeyType?: "done" | "next" | "search" | "send";
   style?: StyleProp<ViewStyle>;
 };
@@ -59,6 +61,7 @@ export function Field({
   secureTextEntry,
   editable = true,
   onSubmitEditing,
+  onBlur,
   returnKeyType,
   style,
 }: FieldProps) {
@@ -112,7 +115,10 @@ export function Field({
           onSubmitEditing={onSubmitEditing}
           returnKeyType={returnKeyType}
           onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onBlur={() => {
+            setFocused(false);
+            onBlur?.();
+          }}
           accessibilityLabel={label}
           accessibilityState={{ disabled: !editable }}
           style={[

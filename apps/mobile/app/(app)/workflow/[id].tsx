@@ -1,14 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WORKFLOW_KIND_LABELS, type WorkflowItemKind } from "@everlumen/shared";
@@ -36,7 +27,20 @@ import {
 } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { spacing, useTheme } from "@/theme";
+import { Camera, CircleCheck, PenLine } from "@/ui/icons";
+import {
+  Badge,
+  Button,
+  Card,
+  ErrorState,
+  Field,
+  Icon,
+  ProgressBar,
+  SkeletonList,
+  StepProgress,
+  Text,
+} from "@/ui";
 
 export default function WorkflowRunnerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -202,34 +206,42 @@ export default function WorkflowRunnerScreen() {
         <QueueBanner />
 
         {isLoading ? (
-          <ActivityIndicator style={{ marginTop: spacing.xxxl }} color={theme.colors.primary} />
+          <SkeletonList rows={4} />
         ) : error || !data ? (
-          <View style={styles.centered}>
-            <Text style={[typography.body, { color: theme.colors.destructive }]}>
-              {error instanceof Error ? error.message : "Workflow not found"}
-            </Text>
-          </View>
+          <ErrorState
+            message={error instanceof Error ? error.message : "Workflow not found"}
+            onRetry={() => void refetch()}
+          />
         ) : (
           <ScrollView
-            contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
+            contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
             keyboardShouldPersistTaps="handled"
             refreshControl={
               <RefreshControl
                 refreshing={isRefetching}
                 onRefresh={() => void refetch()}
-                tintColor={theme.colors.primary}
+                tintColor={theme.colors.mutedForeground}
+                colors={[theme.colors.primary]}
               />
             }
           >
-            {cursor === -1 && phases.length > 0 ? (
-              <Text
-                style={[
-                  typography.bodyStrong,
-                  { color: theme.colors.primary, marginBottom: spacing.lg },
-                ]}
-              >
-                Every phase is complete.
-              </Text>
+            {phases.length > 0 ? (
+              <Card>
+                {/*
+                 * One segment per phase, which a continuous bar cannot do. The
+                 * question here is "which phase am I on and how many are left",
+                 * and that is answered by counting blocks, not by a percentage.
+                 */}
+                <StepProgress
+                  steps={phases.map((phase) => phase.name)}
+                  currentIndex={cursor === -1 ? phases.length - 1 : cursor}
+                />
+                <Text variant="caption" tone="muted" style={{ marginTop: spacing.sm }}>
+                  {cursor === -1
+                    ? "Every phase is complete."
+                    : `Phase ${cursor + 1} of ${phases.length}: ${phases[cursor]?.name ?? ""}`}
+                </Text>
+              </Card>
             ) : null}
 
             {phases.map((phase, index) => (
@@ -275,39 +287,48 @@ function PhaseCard({
   const signable = canSignOff(phase, phase.items);
 
   return (
-    <View
-      style={[
-        styles.phase,
-        {
-          backgroundColor: theme.colors.card,
-          borderColor: isCurrent ? theme.colors.primary : theme.colors.border,
-          borderWidth: isCurrent ? 2 : 1,
-        },
-      ]}
+    <Card
+      style={{
+        // The phase being worked gets the heavier blue edge. On a workflow with
+        // eight phases this is the only thing that answers "where am I" without
+        // reading every heading.
+        borderColor: isCurrent
+          ? theme.colors.primary
+          : state.complete
+            ? theme.colors.success
+            : theme.colors.border,
+        borderWidth: isCurrent ? 2 : 1,
+        gap: spacing.sm,
+      }}
     >
-      <View style={styles.phaseHead}>
-        <Text style={[typography.heading, { color: theme.colors.foreground, flex: 1 }]}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+        <Text variant="heading" style={{ flex: 1 }} numberOfLines={2}>
           {phase.name}
         </Text>
         {isCurrent ? (
-          <Text style={[typography.overline, { color: theme.colors.primary }]}>NOW</Text>
+          <Badge label="Now" tone="primary" variant="solid" />
         ) : state.complete ? (
-          <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>DONE</Text>
+          <Badge label="Done" tone="success" icon={CircleCheck} />
         ) : null}
       </View>
 
       {phase.description ? (
-        <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
+        <Text variant="caption" tone="muted">
           {phase.description}
         </Text>
       ) : null}
 
-      <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
-        {state.done} of {state.total} steps
-        {state.requiredTotal > 0
-          ? ` · ${state.requiredDone} of ${state.requiredTotal} required`
-          : ""}
-      </Text>
+      <ProgressBar
+        value={state.done}
+        total={state.total}
+        tone={state.complete ? "success" : "primary"}
+        showLabel
+        label={
+          state.requiredTotal > 0
+            ? `${state.done} of ${state.total} steps · ${state.requiredDone}/${state.requiredTotal} required`
+            : `${state.done} of ${state.total} steps`
+        }
+      />
 
       {phase.items.map((item) => (
         <StepRow
@@ -319,71 +340,45 @@ function PhaseCard({
         />
       ))}
 
-      <TextInput
+      <Field
         value={phaseNote}
         onChangeText={setPhaseNote}
         onBlur={() => onSavePhaseNote(phase, phaseNote)}
         multiline
+        rows={2}
         placeholder="Phase note (optional)"
-        placeholderTextColor={theme.colors.mutedForeground}
-        style={[
-          styles.input,
-          {
-            backgroundColor: theme.colors.background,
-            borderColor: theme.colors.border,
-            color: theme.colors.foreground,
-          },
-        ]}
       />
 
       {phase.requires_signoff ? (
         phase.signed_off_at ? (
-          <Text style={[typography.caption, { color: theme.colors.primary }]}>
-            Signed off by {phase.signoff_name ?? "a teammate"}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+            <Icon icon={CircleCheck} size="md" tone="success" />
+            <Text variant="caption" tone="success">
+              {`Signed off by ${phase.signoff_name ?? "a teammate"}`}
+            </Text>
+          </View>
         ) : (
           <View style={{ gap: spacing.sm }}>
-            <TextInput
+            <Field
+              label="Sign off"
               value={signName}
               onChangeText={setSignName}
               placeholder="Type your name to sign off"
-              placeholderTextColor={theme.colors.mutedForeground}
               editable={signable}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.colors.background,
-                  borderColor: theme.colors.border,
-                  color: theme.colors.foreground,
-                  opacity: signable ? 1 : 0.5,
-                },
-              ]}
+              autoCapitalize="words"
+              hint={signable ? undefined : "Finish the required steps first."}
             />
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              label="Sign off phase"
+              icon={PenLine}
+              fullWidth
               disabled={!signable || !signName.trim()}
               onPress={() => onSignOff(phase, signName)}
-              style={[
-                styles.signButton,
-                {
-                  backgroundColor: theme.colors.primary,
-                  opacity: signable && signName.trim() ? 1 : 0.4,
-                },
-              ]}
-            >
-              <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-                Sign off phase
-              </Text>
-            </Pressable>
-            {!signable ? (
-              <Text style={[typography.caption, { color: theme.colors.safety }]}>
-                Finish the required steps before signing off.
-              </Text>
-            ) : null}
+            />
           </View>
         )
       ) : null}
-    </View>
+    </Card>
   );
 }
 
@@ -404,127 +399,57 @@ function StepRow({
   const kind = item.kind as WorkflowItemKind;
 
   return (
-    <View style={[styles.step, { borderColor: theme.colors.border }]}>
-      <View style={styles.stepHead}>
-        <Text style={[typography.body, { color: theme.colors.foreground, flex: 1 }]}>
+    <View
+      style={{
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: theme.colors.border,
+        paddingTop: spacing.md,
+        marginTop: spacing.sm,
+        gap: spacing.sm,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.sm }}>
+        <Text variant="body" style={{ flex: 1 }}>
           {item.label}
         </Text>
-        <Text
-          style={[
-            typography.overline,
-            { color: complete ? theme.colors.primary : theme.colors.mutedForeground },
-          ]}
-        >
-          {WORKFLOW_KIND_LABELS[kind] ?? item.kind}
-          {item.required ? " · REQ" : ""}
-        </Text>
+        {item.required ? <Badge label="Required" tone="warning" /> : null}
+        {complete ? <Icon icon={CircleCheck} size="md" tone="success" /> : null}
       </View>
 
+      <Text variant="overline" tone="muted">
+        {(WORKFLOW_KIND_LABELS[kind] ?? item.kind).toUpperCase()}
+      </Text>
+
       {kind === "check" ? (
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          label={complete ? "Done" : "Mark done"}
+          icon={complete ? CircleCheck : undefined}
+          variant={complete ? "success" : "outline"}
+          fullWidth
           onPress={() => onToggleCheck(item)}
-          style={[
-            styles.stepAction,
-            {
-              backgroundColor: complete ? theme.colors.primary : theme.colors.background,
-              borderColor: complete ? theme.colors.primary : theme.colors.border,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              typography.bodyStrong,
-              { color: complete ? theme.colors.primaryForeground : theme.colors.mutedForeground },
-            ]}
-          >
-            {complete ? "Done" : "Mark done"}
-          </Text>
-        </Pressable>
+        />
       ) : null}
 
       {kind === "note" ? (
-        <TextInput
+        <Field
           value={draft}
           onChangeText={setDraft}
           onBlur={() => onSaveNote(item, draft)}
           multiline
+          rows={2}
           placeholder="Write the note"
-          placeholderTextColor={theme.colors.mutedForeground}
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.colors.background,
-              borderColor: theme.colors.border,
-              color: theme.colors.foreground,
-            },
-          ]}
         />
       ) : null}
 
       {kind === "photo" ? (
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          label={complete ? "Photo attached · replace" : "Take photo"}
+          icon={Camera}
+          variant={complete ? "success" : "outline"}
+          fullWidth
           onPress={() => router.push(`/project/${projectId}/capture?workflowItemId=${item.id}`)}
-          style={[
-            styles.stepAction,
-            {
-              backgroundColor: complete ? theme.colors.primary : theme.colors.background,
-              borderColor: complete ? theme.colors.primary : theme.colors.border,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              typography.bodyStrong,
-              { color: complete ? theme.colors.primaryForeground : theme.colors.primary },
-            ]}
-          >
-            {complete ? "Photo attached · replace" : "Take photo"}
-          </Text>
-        </Pressable>
+        />
       ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
-  phase: {
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
-  },
-  phaseHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  step: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: spacing.md,
-    marginTop: spacing.sm,
-    gap: spacing.sm,
-  },
-  stepHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
-  stepAction: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: HIT_TARGET,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    fontSize: 16,
-    minHeight: HIT_TARGET,
-  },
-  signButton: {
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: HIT_TARGET,
-  },
-});

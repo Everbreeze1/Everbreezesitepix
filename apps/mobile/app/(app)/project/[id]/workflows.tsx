@@ -1,18 +1,30 @@
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { Link, Stack, useLocalSearchParams } from "expo-router";
+import { FlatList, RefreshControl, View } from "react-native";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { listProjectWorkflows } from "@/api/workflows";
 import { QueueBanner } from "@/components/QueueBanner";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { spacing, useTheme } from "@/theme";
+import { Workflow } from "@/ui/icons";
+import {
+  Badge,
+  Card,
+  EmptyState,
+  ErrorState,
+  ProgressBar,
+  SkeletonList,
+  Text,
+} from "@/ui";
 
+/**
+ * The workflows running on a project, with how far through each one is.
+ *
+ * The progress bar was already here as a hand-rolled track and fill. It moves to
+ * `ProgressBar` because the checklist runner and the upload queue draw the same
+ * thing, and the three had different heights and different radii. The one real
+ * change is the colour: a finished workflow now reads green rather than a
+ * slightly darker blue than an unfinished one, which was a distinction nobody
+ * could see.
+ */
 export default function ProjectWorkflowsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
@@ -32,78 +44,63 @@ export default function ProjectWorkflowsScreen() {
         <QueueBanner />
 
         {isLoading ? (
-          <ActivityIndicator style={{ marginTop: spacing.xxxl }} color={theme.colors.primary} />
+          <SkeletonList rows={4} />
         ) : error ? (
-          <View style={styles.centered}>
-            <Text style={[typography.body, { color: theme.colors.destructive }]}>
-              {error instanceof Error ? error.message : "Failed to load workflows"}
-            </Text>
-          </View>
+          <ErrorState
+            message={error instanceof Error ? error.message : "Failed to load workflows"}
+            onRetry={() => void refetch()}
+          />
         ) : (
           <FlatList
             data={workflows}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={
-              workflows.length
-                ? { padding: spacing.lg }
-                : { flexGrow: 1, justifyContent: "center", padding: spacing.xl }
-            }
+            contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, flexGrow: 1 }}
             refreshControl={
               <RefreshControl
                 refreshing={isRefetching}
                 onRefresh={() => void refetch()}
-                tintColor={theme.colors.primary}
+                tintColor={theme.colors.mutedForeground}
+                colors={[theme.colors.primary]}
               />
             }
             ListEmptyComponent={
-              <Text
-                style={[
-                  typography.body,
-                  { color: theme.colors.mutedForeground, textAlign: "center" },
-                ]}
-              >
-                No workflows on this project. Apply one from the web app.
-              </Text>
+              <EmptyState
+                icon={Workflow}
+                title="No workflows here"
+                body="Workflows are the named phases a job moves through. Apply one to this project from the web app."
+              />
             }
             renderItem={({ item }) => {
-              const ratio = item.total > 0 ? item.done / item.total : 0;
               const finished = Boolean(item.completed_at);
               return (
-                <Link href={`/workflow/${item.id}`} asChild>
-                  <Pressable
-                    accessibilityRole="button"
-                    // Flattened: `<Link asChild>` rejects an array style.
-                    style={StyleSheet.flatten([
-                      styles.row,
-                      { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                    ])}
+                <Card
+                  onPress={() => router.push(`/workflow/${item.id}`)}
+                  accessibilityLabel={`${item.name}, ${
+                    finished ? "complete" : `${item.done} of ${item.total} steps done`
+                  }`}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "flex-start",
+                      gap: spacing.md,
+                      marginBottom: spacing.md,
+                    }}
                   >
-                    <Text style={[typography.heading, { color: theme.colors.foreground }]}>
+                    <Text variant="heading" style={{ flex: 1 }} numberOfLines={2}>
                       {item.name}
                     </Text>
-                    <Text
-                      style={[
-                        typography.caption,
-                        { color: theme.colors.mutedForeground, marginTop: spacing.xs },
-                      ]}
-                    >
-                      {finished ? "Complete" : `${item.done} of ${item.total} steps done`}
-                    </Text>
-                    <View style={[styles.track, { backgroundColor: theme.colors.muted }]}>
-                      <View
-                        style={[
-                          styles.fill,
-                          {
-                            width: `${Math.round(ratio * 100)}%`,
-                            backgroundColor: finished
-                              ? theme.colors.primary
-                              : theme.colors.primaryGlow,
-                          },
-                        ]}
-                      />
-                    </View>
-                  </Pressable>
-                </Link>
+                    {finished ? <Badge label="Complete" tone="success" /> : null}
+                  </View>
+
+                  <ProgressBar
+                    value={item.done}
+                    total={item.total}
+                    tone={finished ? "success" : "primary"}
+                    showLabel
+                    label={finished ? "Complete" : `${item.done} of ${item.total} steps done`}
+                  />
+                </Card>
               );
             }}
           />
@@ -112,16 +109,3 @@ export default function ProjectWorkflowsScreen() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
-  row: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    minHeight: HIT_TARGET,
-  },
-  track: { height: 6, borderRadius: radius.pill, marginTop: spacing.md, overflow: "hidden" },
-  fill: { height: "100%", borderRadius: radius.pill },
-});

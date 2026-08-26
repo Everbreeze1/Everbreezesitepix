@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, View } from "react-native";
 import { Image } from "expo-image";
 import { relativeTime } from "@everlumen/shared";
 import { discard, listRows, retryFailed, type OutboxRow } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { useQueue } from "@/offline/use-queue";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { radius, spacing, useTheme } from "@/theme";
+import { CircleCheck, RefreshCw, Trash2 } from "@/ui/icons";
+import { Badge, Button, Card, EmptyState, Text, type BadgeTone } from "@/ui";
 
 /**
  * What is still on the phone, and why.
@@ -14,7 +16,27 @@ import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
  * that exists nowhere else, so "something went wrong" is not good enough: the
  * user needs the actual error, a way to try again, and a deliberate way to
  * throw it away.
+ *
+ * The three states are badged rather than written as a bold word, because a
+ * list where every row starts with bold text at the same size gives the eye no
+ * way to find the failed one. That is the only row anybody opens this screen
+ * for.
  */
+
+const STATE_LABEL: Record<OutboxRow["state"], string> = {
+  pending: "Waiting",
+  sending: "Uploading",
+  failed: "Failed",
+  done: "Sent",
+};
+
+const STATE_TONE: Record<OutboxRow["state"], BadgeTone> = {
+  pending: "neutral",
+  sending: "primary",
+  failed: "danger",
+  done: "success",
+};
+
 export default function QueueScreen() {
   const theme = useTheme();
   const counts = useQueue();
@@ -48,108 +70,85 @@ export default function QueueScreen() {
       <FlatList
         data={rows}
         keyExtractor={(row) => row.id}
-        contentContainerStyle={
-          rows.length
-            ? { padding: spacing.lg }
-            : { flexGrow: 1, justifyContent: "center", padding: spacing.xl }
-        }
+        contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, flexGrow: 1 }}
         ListHeaderComponent={
           counts.failed > 0 ? (
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              label={`Retry ${counts.failed} failed`}
+              icon={RefreshCw}
+              fullWidth
               onPress={() => void onRetryAll()}
-              style={[styles.retryAll, { backgroundColor: theme.colors.primary }]}
-            >
-              <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-                Retry {counts.failed} failed
-              </Text>
-            </Pressable>
+            />
           ) : null
         }
         ListEmptyComponent={
-          <Text
-            style={[typography.body, { color: theme.colors.mutedForeground, textAlign: "center" }]}
-          >
-            Everything has been uploaded.
-          </Text>
+          <EmptyState
+            icon={CircleCheck}
+            title="Everything is uploaded"
+            body="Photos captured without signal wait here until there is a connection, then send on their own."
+          />
         }
         renderItem={({ item }) => {
           const isFailed = item.state === "failed";
           return (
-            <View
-              style={[
-                styles.row,
-                { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-              ]}
-            >
-              {item.local_uri ? (
+            <Card padded={false}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: spacing.md,
+                  padding: spacing.md,
+                }}
+              >
+                {/*
+                 * The thumbnail is the local copy, not a signed URL. This row
+                 * exists precisely because the photo has not reached the server,
+                 * so there is nothing remote to point at.
+                 */}
                 <Image
-                  source={{ uri: item.local_uri }}
-                  style={[styles.thumb, { backgroundColor: theme.colors.muted }]}
+                  source={item.local_uri ? { uri: item.local_uri } : undefined}
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: radius.sm,
+                    backgroundColor: theme.colors.muted,
+                  }}
                   contentFit="cover"
                 />
-              ) : (
-                <View style={[styles.thumb, { backgroundColor: theme.colors.muted }]} />
-              )}
 
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                  {isFailed ? "Failed" : item.state === "sending" ? "Uploading" : "Waiting"}
-                </Text>
-                <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
-                  Captured {relativeTime(new Date(item.created_at).toISOString())}
-                  {item.attempts > 0
-                    ? ` · ${item.attempts} attempt${item.attempts === 1 ? "" : "s"}`
-                    : ""}
-                </Text>
-                {isFailed && item.last_error ? (
-                  <Text
-                    numberOfLines={3}
-                    style={[typography.caption, { color: theme.colors.destructive }]}
-                  >
-                    {item.last_error}
+                <View style={{ flex: 1, gap: spacing.xs }}>
+                  <Badge label={STATE_LABEL[item.state]} tone={STATE_TONE[item.state]} />
+                  <Text variant="caption" tone="muted">
+                    {`Captured ${relativeTime(new Date(item.created_at).toISOString())}`}
+                    {item.attempts > 0
+                      ? ` · ${item.attempts} attempt${item.attempts === 1 ? "" : "s"}`
+                      : ""}
                   </Text>
+                  {isFailed && item.last_error ? (
+                    // The real error text, verbatim. A rewritten one costs the
+                    // person the only clue they have and support the only clue
+                    // they will get.
+                    <Text variant="caption" tone="destructive" numberOfLines={3}>
+                      {item.last_error}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {isFailed ? (
+                  <Button
+                    label="Discard"
+                    variant="destructive"
+                    size="sm"
+                    icon={Trash2}
+                    onPress={() => void onDiscard(item.id)}
+                    accessibilityLabel="Discard this upload permanently"
+                  />
                 ) : null}
               </View>
-
-              {isFailed ? (
-                <Pressable
-                  accessibilityRole="button"
-                  hitSlop={8}
-                  onPress={() => void onDiscard(item.id)}
-                  style={styles.discard}
-                >
-                  <Text style={[typography.caption, { color: theme.colors.destructive }]}>
-                    Discard
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
+            </Card>
           );
         }}
       />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  thumb: { width: 56, height: 56, borderRadius: radius.sm },
-  discard: { minHeight: HIT_TARGET, justifyContent: "center", paddingHorizontal: spacing.sm },
-  retryAll: {
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: HIT_TARGET,
-    marginBottom: spacing.lg,
-  },
-});

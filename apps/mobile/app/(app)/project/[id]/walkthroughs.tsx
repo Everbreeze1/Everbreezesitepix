@@ -1,18 +1,12 @@
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { relativeTime } from "@everlumen/shared";
 import { listProjectWalkthroughs } from "@/api/walkthroughs";
 import { QueueBanner } from "@/components/QueueBanner";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { radius, spacing, useTheme } from "@/theme";
+import { Video } from "@/ui/icons";
+import { Badge, Button, Card, EmptyState, ErrorState, SkeletonList, Text } from "@/ui";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds || seconds < 1) return "";
@@ -40,112 +34,101 @@ export default function ProjectWalkthroughsScreen() {
         <QueueBanner />
 
         {isLoading ? (
-          <ActivityIndicator style={{ marginTop: spacing.xxxl }} color={theme.colors.primary} />
+          <SkeletonList rows={4} />
         ) : error ? (
-          <View style={styles.centered}>
-            <Text style={[typography.body, { color: theme.colors.destructive }]}>
-              {error instanceof Error ? error.message : "Failed to load walkthroughs"}
-            </Text>
-          </View>
+          <ErrorState
+            message={error instanceof Error ? error.message : "Failed to load walkthroughs"}
+            onRetry={() => void refetch()}
+          />
         ) : (
           <FlatList
             data={walkthroughs}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={
-              walkthroughs.length
-                ? { padding: spacing.lg, paddingBottom: 120 }
-                : { flexGrow: 1, justifyContent: "center", padding: spacing.xl }
-            }
+            contentContainerStyle={{
+              padding: spacing.lg,
+              gap: spacing.md,
+              // Clears the record button, which floats over the last row.
+              paddingBottom: 120,
+              flexGrow: 1,
+            }}
             refreshControl={
               <RefreshControl
                 refreshing={isRefetching}
                 onRefresh={() => void refetch()}
-                tintColor={theme.colors.primary}
+                tintColor={theme.colors.mutedForeground}
+                colors={[theme.colors.primary]}
               />
             }
             ListEmptyComponent={
-              <Text
-                style={[
-                  typography.body,
-                  { color: theme.colors.mutedForeground, textAlign: "center" },
-                ]}
-              >
-                No walkthroughs yet. Record one as you walk the site.
-              </Text>
+              <EmptyState
+                icon={Video}
+                title="No walkthroughs yet"
+                body="Record yourself walking the site and talking. The video, the photos you snap along the way and the narration stay together."
+                action={{
+                  label: "Record one",
+                  icon: Video,
+                  onPress: () => router.push(`/project/${id}/walkthrough-record`),
+                }}
+              />
             }
-            renderItem={({ item }) => (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => router.push(`/walkthrough/${item.id}`)}
-                style={[
-                  styles.row,
-                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                ]}
-              >
-                <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                  {item.title}
-                </Text>
-                <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
-                  {relativeTime(item.created_at)}
-                  {formatDuration(item.duration_seconds)
-                    ? ` · ${formatDuration(item.duration_seconds)}`
-                    : ""}
-                </Text>
-
-                {/*
-                 * Transcript state is shown plainly rather than hidden. A
-                 * walkthrough recorded on the phone has video and photos but no
-                 * transcript yet, and a report generated without one would be
-                 * thin for reasons the user cannot see from here.
-                 */}
-                <Text
-                  style={[
-                    typography.caption,
-                    { color: item.transcript ? theme.colors.primary : theme.colors.safety },
-                  ]}
+            renderItem={({ item }) => {
+              const duration = formatDuration(item.duration_seconds);
+              return (
+                <Card
+                  onPress={() => router.push(`/walkthrough/${item.id}`)}
+                  accessibilityLabel={`${item.title}, ${relativeTime(item.created_at)}${
+                    item.transcript ? ", transcript ready" : ", no transcript yet"
+                  }`}
                 >
-                  {item.transcript
-                    ? "Transcript ready"
-                    : "No transcript yet. Generate it from the web app."}
-                </Text>
-              </Pressable>
-            )}
+                  <View style={{ gap: spacing.xs }}>
+                    <Text variant="bodyStrong" numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <Text variant="caption" tone="muted">
+                      {relativeTime(item.created_at)}
+                      {duration ? ` · ${duration}` : ""}
+                    </Text>
+
+                    {/*
+                     * Transcript state is shown plainly rather than hidden. A
+                     * walkthrough recorded on the phone has video and photos but
+                     * no transcript yet, and a report generated without one
+                     * would be thin for reasons invisible from this screen. As a
+                     * badge rather than a third line of caption text, because it
+                     * is the one thing here that changes what you can do next.
+                     */}
+                    <Badge
+                      label={item.transcript ? "Transcript ready" : "No transcript"}
+                      tone={item.transcript ? "success" : "warning"}
+                      style={{ marginTop: spacing.xs }}
+                    />
+                  </View>
+                </Card>
+              );
+            }}
           />
         )}
 
-        <Pressable
-          accessibilityRole="button"
-          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-          onPress={() => router.push(`/project/${id}/walkthrough-record`)}
-        >
-          <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-            Record
-          </Text>
-        </Pressable>
+        <View style={styles.fab}>
+          <Button
+            label="Record"
+            icon={Video}
+            size="lg"
+            onPress={() => router.push(`/project/${id}/walkthrough-record`)}
+            accessibilityHint="Starts recording a walkthrough of this site"
+            style={{ borderRadius: radius.pill }}
+          />
+        </View>
       </View>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
-  row: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    gap: spacing.xs,
-    minHeight: HIT_TARGET,
-  },
   fab: {
     position: "absolute",
     right: spacing.lg,
     bottom: spacing.xl,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-    minHeight: HIT_TARGET,
-    justifyContent: "center",
     shadowColor: "#000",
     shadowOpacity: 0.2,
     shadowRadius: 12,

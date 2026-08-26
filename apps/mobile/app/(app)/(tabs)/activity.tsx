@@ -1,19 +1,60 @@
 import { useMemo } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { router, Stack } from "expo-router";
+import { RefreshControl, ScrollView, View } from "react-native";
+import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { relativeTime } from "@everlumen/shared";
-import { actorLabel, activityVerb, getTeamActivity } from "@/api/activity";
+import {
+  actorLabel,
+  activityVerb,
+  getTeamActivity,
+  type ActivityKind,
+  type ActivityItem,
+} from "@/api/activity";
 import { QueueBanner } from "@/components/QueueBanner";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { spacing, useTheme } from "@/theme";
+import { Camera, FileText, FolderKanban, Inbox, ListTodo } from "@/ui/icons";
+import {
+  Avatar,
+  Card,
+  EmptyState,
+  ErrorState,
+  Icon,
+  ListGroup,
+  ListRow,
+  PageHeader,
+  RowDivider,
+  SectionHeader,
+  SkeletonList,
+  Text,
+  type LucideIcon,
+} from "@/ui";
+
+/**
+ * What the team has been doing.
+ *
+ * Two questions, in the order people ask them: who is working (the contribution
+ * list, busiest first, because a table sorted by name buries whoever actually
+ * did the work this week) and what happened most recently.
+ *
+ * This screen is a tab, and tabs run with the navigator header switched off so
+ * each one can own its top area. It therefore has to draw `PageHeader` itself:
+ * the `Stack.Screen` title it used to carry is inert now, and without a header
+ * the first row would sit under the status bar.
+ */
+
+/**
+ * An icon per activity kind.
+ *
+ * `ActivityKind` is a string column upstream, so a value outside the union can
+ * arrive. The lookup falls back rather than rendering a blank square, which is
+ * the same defensive shape `activityVerb` already uses.
+ */
+const KIND_ICON: Record<ActivityKind, LucideIcon> = {
+  photo: Camera,
+  task: ListTodo,
+  report: FileText,
+  project: FolderKanban,
+};
 
 export default function ActivityScreen() {
   const theme = useTheme();
@@ -28,154 +69,139 @@ export default function ActivityScreen() {
     () =>
       (data?.members ?? [])
         .slice()
-        // Busiest first. A contribution table sorted by name buries the person
-        // who actually did the work this week.
         .sort((a, b) => b.photos + b.tasks - (a.photos + a.tasks)),
     [data?.members],
   );
 
   return (
-    <>
-      <Stack.Screen options={{ title: "Activity" }} />
-      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-        <QueueBanner />
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <PageHeader title="Activity" subtitle="Your team, most recent first" />
+      <QueueBanner />
 
-        {isLoading ? (
-          <ActivityIndicator style={{ marginTop: spacing.xxxl }} color={theme.colors.primary} />
-        ) : error ? (
-          <View style={styles.centered}>
-            <Text style={[typography.body, { color: theme.colors.destructive }]}>
-              {error instanceof Error ? error.message : "Could not load team activity"}
-            </Text>
-          </View>
-        ) : (
-          <ScrollView
-            contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefetching}
-                onRefresh={() => void refetch()}
-                tintColor={theme.colors.primary}
-              />
-            }
-          >
-            {members.length > 0 ? (
-              <View style={{ marginBottom: spacing.xl }}>
-                <Text
-                  style={[
-                    typography.overline,
-                    { color: theme.colors.mutedForeground, marginBottom: spacing.sm },
-                  ]}
-                >
-                  THE TEAM
-                </Text>
-                {members.map((member) => (
-                  <View
-                    key={member.userId}
-                    style={[
-                      styles.memberRow,
-                      { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                    ]}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                        {member.fullName?.trim() || member.email || "Teammate"}
-                      </Text>
-                      <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
-                        {member.photos} photo{member.photos === 1 ? "" : "s"} · {member.tasks} task
-                        {member.tasks === 1 ? "" : "s"}
-                        {member.lastActivityAt
-                          ? ` · ${relativeTime(member.lastActivityAt)}`
-                          : " · nothing yet"}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
+      {isLoading ? (
+        <SkeletonList rows={6} />
+      ) : error ? (
+        <ErrorState
+          message={error instanceof Error ? error.message : "Could not load team activity"}
+          onRetry={() => void refetch()}
+        />
+      ) : (
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: 120, flexGrow: 1 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={() => void refetch()}
+              tintColor={theme.colors.mutedForeground}
+              colors={[theme.colors.primary]}
+            />
+          }
+        >
+          {members.length > 0 ? (
+            <>
+              <SectionHeader title="The team" count={members.length} />
+              <View style={{ paddingHorizontal: spacing.lg }}>
+                <ListGroup>
+                  {members.map((member, index) => {
+                    const name = member.fullName?.trim() || member.email || "Teammate";
+                    return (
+                      <View key={member.userId}>
+                        {index === 0 ? null : <RowDivider />}
+                        <ListRow
+                          title={name}
+                          subtitle={contributionLine(member)}
+                          /*
+                           * An avatar rather than the generic person glyph every
+                           * row would otherwise share. Six names in one grey
+                           * weight is a wall of text; a tinted initial is the
+                           * cheapest thing that makes a row findable again, and
+                           * the tint derives from the name so it matches
+                           * wherever else that person appears.
+                           */
+                          right={<Avatar name={name} size="sm" />}
+                        />
+                      </View>
+                    );
+                  })}
+                </ListGroup>
               </View>
-            ) : null}
+            </>
+          ) : null}
 
-            <Text
-              style={[
-                typography.overline,
-                { color: theme.colors.mutedForeground, marginBottom: spacing.sm },
-              ]}
-            >
-              RECENT
-            </Text>
+          <SectionHeader title="Recent" />
 
-            {recent.length === 0 ? (
-              <Text
-                style={[
-                  typography.body,
-                  {
-                    color: theme.colors.mutedForeground,
-                    textAlign: "center",
-                    marginTop: spacing.xl,
-                  },
-                ]}
-              >
-                Nothing yet. Activity from everyone on your team shows up here.
-              </Text>
-            ) : (
-              recent.map((item) => {
-                const openable = Boolean(item.projectId);
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={`${item.kind}-${item.id}`}
-                    disabled={!openable}
-                    onPress={() => {
-                      if (item.projectId) router.push(`/project/${item.projectId}`);
-                    }}
-                    style={[
-                      styles.activityRow,
-                      { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                    ]}
-                  >
-                    <Text style={[typography.body, { color: theme.colors.foreground }]}>
-                      <Text style={typography.bodyStrong}>{actorLabel(item)}</Text>{" "}
-                      {activityVerb(item.kind)}
-                      {item.projectName ? ` on ${item.projectName}` : ""}
-                    </Text>
-                    {item.title ? (
-                      <Text
-                        numberOfLines={1}
-                        style={[typography.caption, { color: theme.colors.mutedForeground }]}
-                      >
-                        {item.title}
-                      </Text>
-                    ) : null}
-                    <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
-                      {relativeTime(item.at)}
-                    </Text>
-                  </Pressable>
-                );
-              })
-            )}
-          </ScrollView>
-        )}
-      </View>
-    </>
+          {recent.length === 0 ? (
+            <EmptyState
+              icon={Inbox}
+              title="Nothing yet"
+              body="Photos, tasks and reports from everyone on your team show up here as they happen."
+            />
+          ) : (
+            <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
+              {recent.map((item) => (
+                <ActivityCard key={`${item.kind}-${item.id}`} item={item} />
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      )}
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
-  memberRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    minHeight: HIT_TARGET,
-  },
-  activityRow: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    marginBottom: spacing.sm,
-    gap: 2,
-    minHeight: HIT_TARGET,
-  },
-});
+function ActivityCard({ item }: { item: ActivityItem }) {
+  const openable = Boolean(item.projectId);
+  const glyph = KIND_ICON[item.kind] ?? FolderKanban;
+
+  return (
+    <Card
+      padded={false}
+      onPress={
+        openable
+          ? () => {
+              if (item.projectId) router.push(`/project/${item.projectId}`);
+            }
+          : undefined
+      }
+      accessibilityLabel={`${actorLabel(item)} ${activityVerb(item.kind)}${
+        item.projectName ? ` on ${item.projectName}` : ""
+      }`}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          gap: spacing.md,
+          padding: spacing.lg,
+          alignItems: "flex-start",
+        }}
+      >
+        <Icon icon={glyph} size="md" tone="primary" />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text variant="body">
+            <Text variant="bodyStrong">{actorLabel(item)}</Text> {activityVerb(item.kind)}
+            {item.projectName ? ` on ${item.projectName}` : ""}
+          </Text>
+          {item.title ? (
+            <Text variant="caption" tone="muted" numberOfLines={1}>
+              {item.title}
+            </Text>
+          ) : null}
+          <Text variant="caption" tone="muted">
+            {relativeTime(item.at)}
+          </Text>
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+function contributionLine(member: {
+  photos: number;
+  tasks: number;
+  lastActivityAt: string | null;
+}): string {
+  const photos = `${member.photos} photo${member.photos === 1 ? "" : "s"}`;
+  const tasks = `${member.tasks} task${member.tasks === 1 ? "" : "s"}`;
+  const when = member.lastActivityAt ? relativeTime(member.lastActivityAt) : "nothing yet";
+  return `${photos} · ${tasks} · ${when}`;
+}

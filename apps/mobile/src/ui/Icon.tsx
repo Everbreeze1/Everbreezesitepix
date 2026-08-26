@@ -52,6 +52,14 @@ export type IconProps = {
    */
   color?: ColorValue;
   strokeWidth?: number;
+  /**
+   * Fills the glyph rather than only stroking it.
+   *
+   * Lucide draws outlines, which is right for almost everything here. A rating
+   * is the exception: five outlined stars and five solid ones are the only way
+   * to show a score at a glance, and an outline-only set cannot express it.
+   */
+  fill?: ColorValue;
 };
 
 export function Icon({
@@ -60,6 +68,7 @@ export function Icon({
   tone = "default",
   color,
   strokeWidth,
+  fill,
 }: IconProps) {
   const theme = useTheme();
   return (
@@ -72,6 +81,7 @@ export function Icon({
        * thinned to keep the optical weight matched.
        */
       strokeWidth={strokeWidth ?? (iconSize[size] <= 16 ? 2.25 : 2)}
+      fill={fill ?? "none"}
     />
   );
 }

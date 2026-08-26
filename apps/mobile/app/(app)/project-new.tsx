@@ -1,20 +1,12 @@
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { router, Stack } from "expo-router";
 import * as Location from "expo-location";
 import { useQueryClient } from "@tanstack/react-query";
 import { createProject, geocodeAddress } from "@/api/projects";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { spacing, useTheme } from "@/theme";
+import { LocateFixed, MapPin } from "@/ui/icons";
+import { Button, Card, Field, Icon, SectionHeader, Text } from "@/ui";
 
 /**
  * Start a job from the site.
@@ -23,6 +15,12 @@ import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
  * someone standing on a driveway with the crew waiting needs a project to
  * attach photos to, not a form. `newProjectName` gives an empty one a usable
  * name from whatever was filled in.
+ *
+ * The form used to build its inputs from a local `field()` helper, which is how
+ * this screen ended up with a different input height and focus behaviour from
+ * the login screen. It uses `Field` now, so there is one text input in the app
+ * and it shows a focus ring, which on a phone is the only thing indicating
+ * where the next keystroke will land once the keyboard covers half the screen.
  */
 export default function NewProjectScreen() {
   const theme = useTheme();
@@ -39,7 +37,7 @@ export default function NewProjectScreen() {
   const [error, setError] = useState<string | null>(null);
 
   async function pinToMyLocation() {
-    setBusy("Finding you");
+    setBusy("locating");
     setError(null);
     try {
       const granted = await Location.requestForegroundPermissionsAsync();
@@ -77,7 +75,7 @@ export default function NewProjectScreen() {
   }
 
   async function save() {
-    setBusy("Creating");
+    setBusy("creating");
     setError(null);
     try {
       let pin = coords;
@@ -109,33 +107,6 @@ export default function NewProjectScreen() {
     }
   }
 
-  const field = (
-    label: string,
-    value: string,
-    onChange: (text: string) => void,
-    extra?: { autoCapitalize?: "none" | "words"; keyboardType?: "default" | "number-pad" },
-  ) => (
-    <View style={{ gap: spacing.xs }}>
-      <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
-        {label.toUpperCase()}
-      </Text>
-      <TextInput
-        value={value}
-        onChangeText={onChange}
-        autoCapitalize={extra?.autoCapitalize ?? "words"}
-        keyboardType={extra?.keyboardType ?? "default"}
-        style={[
-          styles.input,
-          {
-            backgroundColor: theme.colors.card,
-            borderColor: theme.colors.border,
-            color: theme.colors.foreground,
-          },
-        ]}
-      />
-    </View>
-  );
-
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -143,94 +114,97 @@ export default function NewProjectScreen() {
     >
       <Stack.Screen options={{ title: "New project" }} />
       <ScrollView
-        contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}
+        contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxxl }}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => void pinToMyLocation()}
-          disabled={Boolean(busy)}
-          style={[
-            styles.locationButton,
-            {
-              borderColor: coords ? theme.colors.primary : theme.colors.border,
-              backgroundColor: coords ? theme.colors.accent : theme.colors.card,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              typography.bodyStrong,
-              { color: coords ? theme.colors.accentForeground : theme.colors.primary },
-            ]}
-          >
-            {busy === "Finding you"
-              ? "Finding you…"
-              : coords
-                ? "Pinned to where you are"
-                : "Use my location"}
-          </Text>
-        </Pressable>
+        {/*
+         * Location first, because it is the fastest path through this screen.
+         * One tap pins the job and fills the four address fields below it, so
+         * the crew types nothing at all in the common case.
+         */}
+        {coords ? (
+          <Card>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+              <Icon icon={MapPin} size="md" tone="success" />
+              <View style={{ flex: 1 }}>
+                <Text variant="bodyStrong">Pinned to where you are</Text>
+                <Text variant="caption" tone="muted">
+                  {`${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`}
+                </Text>
+              </View>
+              <Button
+                label="Redo"
+                variant="ghost"
+                size="sm"
+                loading={busy === "locating"}
+                onPress={() => void pinToMyLocation()}
+              />
+            </View>
+          </Card>
+        ) : (
+          <Button
+            label="Use my location"
+            icon={LocateFixed}
+            variant="outline"
+            size="lg"
+            fullWidth
+            loading={busy === "locating"}
+            disabled={Boolean(busy)}
+            onPress={() => void pinToMyLocation()}
+            accessibilityHint="Pins the project here and fills in the address"
+          />
+        )}
 
-        {field("Project name", name, setName)}
-        {field("Street", street, setStreet)}
-        {field("City", city, setCity)}
-        {field("State", state, setState)}
-        {field("Zip", zip, setZip, { keyboardType: "number-pad" })}
-        {field("Client", clientName, setClientName)}
+        <SectionHeader title="The job" />
+        <Field label="Project name" value={name} onChangeText={setName} autoCapitalize="words" />
+        <Field label="Client" value={clientName} onChangeText={setClientName} autoCapitalize="words" />
+
+        <SectionHeader title="Address" />
+        <Field
+          label="Street"
+          value={street}
+          onChangeText={setStreet}
+          autoCapitalize="words"
+          icon={MapPin}
+        />
+        <Field label="City" value={city} onChangeText={setCity} autoCapitalize="words" />
+        <View style={{ flexDirection: "row", gap: spacing.md }}>
+          <Field
+            label="State"
+            value={state}
+            onChangeText={setState}
+            autoCapitalize="characters"
+            style={{ flex: 1 }}
+          />
+          <Field
+            label="Zip"
+            value={zip}
+            onChangeText={setZip}
+            keyboardType="number-pad"
+            style={{ flex: 1 }}
+          />
+        </View>
 
         {error ? (
-          <Text style={[typography.caption, { color: theme.colors.destructive }]}>{error}</Text>
+          <Text variant="caption" tone="destructive">
+            {error}
+          </Text>
         ) : null}
 
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => void save()}
+        <Button
+          label="Create project"
+          size="lg"
+          fullWidth
+          loading={busy === "creating"}
           disabled={Boolean(busy)}
-          style={[
-            styles.primary,
-            { backgroundColor: theme.colors.primary, opacity: busy ? 0.6 : 1 },
-          ]}
-        >
-          {busy === "Creating" ? (
-            <ActivityIndicator color={theme.colors.primaryForeground} />
-          ) : (
-            <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-              Create project
-            </Text>
-          )}
-        </Pressable>
+          onPress={() => void save()}
+          style={{ marginTop: spacing.md }}
+        />
 
-        <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
+        <Text variant="caption" tone="muted">
           Everything here is optional. An unnamed project is named from the address or the date.
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  input: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    fontSize: 16,
-    minHeight: HIT_TARGET,
-  },
-  locationButton: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingVertical: spacing.lg,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: HIT_TARGET,
-  },
-  primary: {
-    borderRadius: radius.md,
-    paddingVertical: spacing.lg,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: HIT_TARGET,
-  },
-});
