@@ -104,7 +104,7 @@ export default function ProjectsScreen() {
             >
               {search.trim()
                 ? "No projects match that search."
-                : "No projects yet. Create one on the web app."}
+                : "No projects yet. Start one from the site."}
             </Text>
           }
           renderItem={({ item }) => {
@@ -145,6 +145,15 @@ export default function ProjectsScreen() {
           }}
         />
       )}
+
+      <Pressable
+        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+        onPress={() => router.push("/project-new")}
+      >
+        <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
+          New project
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -167,9 +176,24 @@ const styles = StyleSheet.create({
     minHeight: HIT_TARGET,
   },
   accountLink: { minHeight: HIT_TARGET, justifyContent: "center" },
-  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  list: { paddingHorizontal: spacing.lg, paddingBottom: 120 },
   centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
   row: { borderWidth: 1, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  fab: {
+    position: "absolute",
+    right: spacing.lg,
+    bottom: spacing.xl,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    minHeight: HIT_TARGET,
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
   primaryButton: {
     borderRadius: radius.md,
     paddingHorizontal: spacing.xl,
