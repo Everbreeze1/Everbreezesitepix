@@ -15,6 +15,7 @@ import {
   createWalkthroughSession,
   finishWalkthroughSession,
   saveWalkthroughPhoto,
+  transcribeWalkthrough,
   updateWalkthroughVideoPath,
   uploadWalkthroughVideo,
   walkthroughVideoPath,
@@ -209,7 +210,20 @@ export default function WalkthroughRecordScreen() {
       await updateWalkthroughVideoPath(session.id, path, "video/mp4");
       await finishWalkthroughSession(session.id, durationSeconds);
 
+      /*
+       * Last, and allowed to fail. The recording and its photos are saved by
+       * this point, so a refused transcription costs nothing that cannot be
+       * recovered from the web app. Long recordings are refused by design: the
+       * transcription endpoint takes inline data with a size ceiling, and the
+       * server says so in a sentence worth showing.
+       */
+      setStatus("Transcribing");
+      const transcription = await transcribeWalkthrough(session.id, path, "video/mp4");
+
       router.replace(`/project/${projectId}/walkthroughs`);
+      if (!transcription.ok && transcription.message) {
+        setError(transcription.message);
+      }
     } catch (e) {
       setStage("idle");
       setStatus(null);

@@ -182,6 +182,46 @@ export async function finishWalkthroughSession(
   );
 }
 
+/**
+ * Ask the server to transcribe the recording it already has.
+ *
+ * The path, not the bytes. The phone uploaded the video to storage a moment
+ * ago; sending it again through `/v1/rpc` as base64 would be a second upload of
+ * the same file, a third larger for the encoding, from the worst connection it
+ * will ever have.
+ *
+ * Never throws. Transcription is the one step in the walkthrough lifecycle that
+ * can fail without costing the user anything they cannot get back: the video
+ * and the photos are already saved, and the transcript can be produced later
+ * from the web app. Failing the whole save over it would be the wrong trade.
+ */
+export async function transcribeWalkthrough(
+  walkthroughId: string,
+  storagePath: string,
+  mimeType: string,
+): Promise<{ ok: boolean; message: string | null }> {
+  try {
+    await api.rpc(
+      "transcribeWalkthrough",
+      {
+        walkthroughId,
+        storagePath,
+        bucket: WALKTHROUGH_VIDEO_BUCKET,
+        mimeType,
+      },
+      // AI work, and charged for. A retry after a dropped response would pay
+      // for the same transcription twice without this.
+      { idempotencyKey: randomUUID() },
+    );
+    return { ok: true, message: null };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Could not transcribe the recording",
+    };
+  }
+}
+
 export async function generateWalkthroughReport(walkthroughId: string): Promise<void> {
   await api.rpc(
     "generateWalkthroughReport",

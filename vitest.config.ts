@@ -51,6 +51,20 @@ export default defineConfig({
        */
       { find: /^expo-sqlite$/, replacement: path("./tests/doubles/expo-sqlite.ts") },
       { find: /^expo-crypto$/, replacement: path("./tests/doubles/expo-crypto.ts") },
+      /*
+       * The same treatment for the modules `src/lib/secure-storage.ts` pulls
+       * in. That file holds the Supabase refresh token, splits it to fit
+       * SecureStore's size cap, and migrates it off AsyncStorage, so it is
+       * worth testing against a store that behaves like the real one rather
+       * than not testing at all.
+       */
+      { find: /^expo-secure-store$/, replacement: path("./tests/doubles/expo-secure-store.ts") },
+      {
+        find: /^@react-native-async-storage\/async-storage$/,
+        replacement: path("./tests/doubles/async-storage.ts"),
+      },
+      { find: /^react-native$/, replacement: path("./tests/doubles/react-native.ts") },
+      { find: /^expo-file-system$/, replacement: path("./tests/doubles/expo-file-system.ts") },
       { find: /^@\//, replacement: `${path("./apps/web/src")}/` },
     ],
   },

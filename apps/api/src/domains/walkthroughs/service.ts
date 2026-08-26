@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { chatEndpoint } from "../../lib/ai-provider";
+import { inlineRecordingAsBase64 } from "../../lib/inline-recording";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
 import { summarizePhotosReportService, transcribeAudio } from "../ai/service";
@@ -1650,11 +1651,31 @@ function estimateSpokenNote(
   return slice || null;
 }
 
-const transcribeSchema = z.object({
-  walkthroughId: z.string().uuid(),
-  audioBase64: z.string().min(1),
-  mimeType: z.string().min(1).max(100),
-});
+/**
+ * Either the bytes, or where to find them.
+ *
+ * The web recorder holds the MediaRecorder blob in the page and sends
+ * `audioBase64`. The mobile app records straight to a file and uploads it to
+ * storage, so it never has the bytes in JavaScript; it sends `storagePath`
+ * instead and the server reads the object it already has. Sending them from the
+ * phone would mean uploading the recording twice, the second time as base64
+ * through JSON.
+ *
+ * `audioBase64` stays required-or-`storagePath` rather than being replaced, so
+ * the web client is untouched by this.
+ */
+const transcribeSchema = z
+  .object({
+    walkthroughId: z.string().uuid(),
+    audioBase64: z.string().min(1).optional(),
+    storagePath: z.string().min(1).max(500).optional(),
+    /** Bucket holding `storagePath`. Only `site-videos` is expected today. */
+    bucket: z.string().min(1).max(100).optional(),
+    mimeType: z.string().min(1).max(100),
+  })
+  .refine((value) => Boolean(value.audioBase64) || Boolean(value.storagePath), {
+    message: "Provide either audioBase64 or storagePath",
+  });
 
 /**
  * Transcribe the completed walkthrough recording through Gemini audio
@@ -1664,7 +1685,13 @@ const transcribeSchema = z.object({
  */
 export async function transcribeWalkthroughService(
   ctx: AuthedContext,
-  data: { walkthroughId: string; audioBase64: string; mimeType: string },
+  data: {
+    walkthroughId: string;
+    audioBase64?: string;
+    storagePath?: string;
+    bucket?: string;
+    mimeType: string;
+  },
 ) {
   const { userId } = ctx;
   const supabaseAdmin = getSupabaseAdmin();
@@ -1680,12 +1707,40 @@ export async function transcribeWalkthroughService(
     walkthroughId: data.walkthroughId,
     userId,
     mimeType: data.mimeType,
-    base64Chars: data.audioBase64.length,
+    source: data.storagePath ? "storage" : "inline",
+    base64Chars: data.audioBase64?.length ?? 0,
   });
 
-  const bytes = Buffer.from(data.audioBase64, "base64");
-  if (bytes.byteLength < 2048)
-    throw Object.assign(new Error("That recording had no audio in it."), { status: 400 });
+  /*
+   * Resolve the recording to base64 whichever way it arrived. The storage path
+   * is signed with the admin client and read here, so the caller never has to
+   * hold the bytes; `inlineRecordingAsBase64` applies the size cap and the
+   * "no audio in it" floor.
+   */
+  let audioBase64: string;
+  if (data.storagePath) {
+    const bucket = data.bucket ?? "site-videos";
+    const { data: signed, error: signErr } = await supabaseAdmin.storage
+      .from(bucket)
+      .createSignedUrl(data.storagePath, 60 * 10);
+    if (signErr || !signed?.signedUrl) {
+      throw Object.assign(new Error("Could not read that recording from storage."), {
+        status: 404,
+      });
+    }
+    try {
+      audioBase64 = await inlineRecordingAsBase64(signed.signedUrl);
+    } catch (e) {
+      // Readable sentences already; keep them and mark them as the client's
+      // problem rather than a server fault.
+      throw Object.assign(e as Error, { status: 400 });
+    }
+  } else {
+    audioBase64 = data.audioBase64 as string;
+    const bytes = Buffer.from(audioBase64, "base64");
+    if (bytes.byteLength < 2048)
+      throw Object.assign(new Error("That recording had no audio in it."), { status: 400 });
+  }
 
   /*
    * Audio understanding on the chat endpoint - NOT a Whisper-style transcribe
@@ -1694,7 +1749,7 @@ export async function transcribeWalkthroughService(
    * so this call had never once returned a transcript in production. See
    * transcribeAudio for the whole story.
    */
-  const transcript = (await transcribeAudio(data.audioBase64, audioFormatForMime(data.mimeType)))
+  const transcript = (await transcribeAudio(audioBase64, audioFormatForMime(data.mimeType)))
     .replace(/\s+/g, " ")
     .trim();
   const finalTranscript = transcript || ((walk as any).transcript ?? "").trim();

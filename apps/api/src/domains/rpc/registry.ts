@@ -994,12 +994,23 @@ export const rpcRegistry: Record<string, RpcEntry> = {
     listProjectWalkthroughsService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   transcribeWalkthrough: authed(
+    /*
+     * `audioBase64` or `storagePath`, not both required. Web sends the bytes it
+     * already holds; mobile records to a file and uploads it, so it sends the
+     * path and the server reads the object rather than having the phone upload
+     * the whole recording a second time as JSON.
+     */
     (d) =>
       z
         .object({
           walkthroughId: z.string().uuid(),
-          audioBase64: z.string().min(1),
+          audioBase64: z.string().min(1).optional(),
+          storagePath: z.string().min(1).max(500).optional(),
+          bucket: z.string().min(1).max(100).optional(),
           mimeType: z.string().min(1).max(100),
+        })
+        .refine((value) => Boolean(value.audioBase64) || Boolean(value.storagePath), {
+          message: "Provide either audioBase64 or storagePath",
         })
         .parse(d),
     transcribeWalkthroughService as (ctx: ServiceContext, data: never) => Promise<unknown>,
