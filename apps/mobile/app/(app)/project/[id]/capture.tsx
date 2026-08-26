@@ -34,7 +34,21 @@ const PHASES: { id: PhotoPhase; label: string }[] = [
 ];
 
 export default function CaptureScreen() {
-  const { id: projectId } = useLocalSearchParams<{ id: string }>();
+  /*
+   * `checklistItemId` arrives when the capture was started from a checklist
+   * item, so the resulting photo becomes evidence against it. The link is made
+   * by the queue handler after the upload lands, because the photo has no id
+   * until then.
+   */
+  const {
+    id: projectId,
+    checklistItemId,
+    workflowItemId,
+  } = useLocalSearchParams<{
+    id: string;
+    checklistItemId?: string;
+    workflowItemId?: string;
+  }>();
   const theme = useTheme();
   const { user } = useAuth();
 
@@ -177,6 +191,8 @@ export default function CaptureScreen() {
         const payload: PhotoUploadPayload = {
           userId: user.id,
           projectId,
+          attachToChecklistItemId: checklistItemId ?? null,
+          attachToWorkflowItemId: workflowItemId ?? null,
           width: shot.width,
           height: shot.height,
           exif: shot.exif,

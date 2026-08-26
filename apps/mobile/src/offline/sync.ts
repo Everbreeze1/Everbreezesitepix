@@ -1,5 +1,6 @@
 import NetInfo from "@react-native-community/netinfo";
 import { AppState, type AppStateStatus } from "react-native";
+import { queryClient } from "@/lib/query";
 import { handlerFor, isPermanent } from "./handlers";
 import {
   claimNext,
@@ -34,6 +35,29 @@ export function subscribeToQueue(listener: Listener): () => void {
   listeners.add(listener);
   listener(latest);
   return () => listeners.delete(listener);
+}
+
+/**
+ * Drop the cached answer a refused write was optimistically showing.
+ *
+ * Every queued mutation updates the cache before it is sent, which is what
+ * makes the app usable with no signal. When the server then refuses the write
+ * for good, that optimistic value is a lie the user has no way to spot: the tick
+ * stays ticked, the task stays done, and the only hint is a number in a banner.
+ *
+ * Rows carry the query keys their optimistic update touched, so a permanent
+ * failure can put the real state back on screen.
+ */
+function invalidateFor(payload: string) {
+  try {
+    const parsed = JSON.parse(payload) as { invalidate?: unknown[][] };
+    if (!Array.isArray(parsed.invalidate)) return;
+    for (const queryKey of parsed.invalidate) {
+      if (Array.isArray(queryKey)) void queryClient.invalidateQueries({ queryKey });
+    }
+  } catch {
+    // A payload that will not parse is already failing for a better reason.
+  }
 }
 
 async function publish() {
@@ -88,7 +112,9 @@ async function drain(): Promise<void> {
           await markDone(row);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Upload failed";
-          await markFailed(row, message, isPermanent(error));
+          const permanent = isPermanent(error);
+          await markFailed(row, message, permanent);
+          if (permanent) invalidateFor(row.payload);
           // Park this project for the rest of the pass. Its next row is very
           // likely to fail the same way, and other jobs are waiting.
           parked.push(row.project_id ?? "");

@@ -9,7 +9,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CHECKLIST_TYPE_LABELS, type ChecklistItemType } from "@everlumen/shared";
 import {
@@ -61,7 +61,13 @@ export default function ChecklistRunnerScreen() {
         };
       });
 
-      const payload: ChecklistItemPatchPayload = { itemId: item.id, patch };
+      const payload: ChecklistItemPatchPayload & { invalidate: unknown[][] } = {
+        itemId: item.id,
+        patch,
+        // If the completion trigger refuses this, the drain uses these keys to
+        // put the real state back instead of leaving a tick that never landed.
+        invalidate: [queryKey],
+      };
       await enqueue({
         // Deterministic per item, so correcting an answer replaces the queued
         // write instead of stacking another one behind it.
@@ -143,6 +149,7 @@ export default function ChecklistRunnerScreen() {
               <ChecklistRow
                 key={item.id}
                 item={item}
+                projectId={data.project_id}
                 onSetResponse={setResponse}
                 onToggleDone={toggleDone}
               />
@@ -156,10 +163,12 @@ export default function ChecklistRunnerScreen() {
 
 function ChecklistRow({
   item,
+  projectId,
   onSetResponse,
   onToggleDone,
 }: {
   item: ChecklistItem;
+  projectId: string | undefined;
   onSetResponse: (item: ChecklistItem, value: unknown) => void;
   onToggleDone: (item: ChecklistItem) => void;
 }) {
@@ -256,6 +265,17 @@ function ChecklistRow({
 
       {item.item_type === "text" || item.item_type === "numeric" ? (
         <FreeTextAnswer item={item} onSetResponse={onSetResponse} />
+      ) : null}
+
+      {projectId ? (
+        <Pressable
+          onPress={() => router.push(`/project/${projectId}/capture?checklistItemId=${item.id}`)}
+          style={[styles.attach, { borderColor: theme.colors.border }]}
+        >
+          <Text style={[typography.caption, { color: theme.colors.primary, fontWeight: "600" }]}>
+            Add photo evidence
+          </Text>
+        </Pressable>
       ) : null}
     </View>
   );
@@ -396,6 +416,15 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: HIT_TARGET,
+  },
+  attach: {
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
     alignItems: "center",
     justifyContent: "center",
     minHeight: HIT_TARGET,

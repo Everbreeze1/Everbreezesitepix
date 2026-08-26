@@ -42,6 +42,9 @@ export default function AppLayout() {
         options={{ presentation: "fullScreenModal", headerShown: false }}
       />
       <Stack.Screen name="project/[id]/checklists" options={{ title: "Checklists" }} />
+      <Stack.Screen name="project/[id]/tasks" options={{ title: "Tasks" }} />
+      <Stack.Screen name="project/[id]/workflows" options={{ title: "Workflows" }} />
+      <Stack.Screen name="workflow/[id]" options={{ title: "Workflow" }} />
       <Stack.Screen name="checklist/[id]" options={{ title: "Checklist" }} />
       <Stack.Screen name="queue" options={{ title: "Upload queue" }} />
       <Stack.Screen name="account" options={{ title: "Account" }} />

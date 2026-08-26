@@ -13,7 +13,12 @@ import { discardCapture, sweepOrphans } from "./media";
 
 export { MAX_ATTEMPTS };
 
-export type OutboxKind = "photo_upload" | "checklist_item_patch";
+export type OutboxKind =
+  | "photo_upload"
+  | "checklist_item_patch"
+  | "task_patch"
+  | "workflow_item_patch"
+  | "workflow_phase_patch";
 
 export type OutboxState = "pending" | "sending" | "failed" | "done";
 

@@ -1,6 +1,9 @@
-import { applyItemPatch } from "@/api/checklists";
+import { applyItemPatch, attachPhotoToItem } from "@/api/checklists";
 import { uploadProjectPhoto, type PhotoPhase } from "@/api/photos";
 import type { Coords } from "@/api/photo-meta";
+import { applyTaskPatch } from "@/api/tasks";
+import { applyPhasePatch, applyWorkflowItemPatch } from "@/api/workflows";
+import { isCompletionRefusal, type TaskStatus } from "@/api/task-status";
 import type { OutboxKind, OutboxRow } from "./outbox";
 
 /**
@@ -15,6 +18,22 @@ export class PermanentError extends Error {}
 export type PhotoUploadPayload = {
   userId: string;
   projectId: string;
+  /**
+   * Checklist item this capture is evidence for.
+   *
+   * The link is made here rather than at capture time because the photo has no
+   * id until the upload lands. Queuing the capture and the link separately
+   * would mean the link row could be attempted first and fail against a photo
+   * that does not exist yet.
+   */
+  attachToChecklistItemId?: string | null;
+  /**
+   * Workflow photo step this capture satisfies.
+   *
+   * Same reasoning as the checklist link: the step is marked complete by
+   * writing `photo_id`, and the photo has no id until its upload lands.
+   */
+  attachToWorkflowItemId?: string | null;
   width?: number | null;
   height?: number | null;
   exif?: Record<string, unknown> | null;
@@ -34,6 +53,12 @@ export type PhotoUploadPayload = {
  */
 function classify(message: string): boolean {
   const lower = message.toLowerCase();
+  /*
+   * The completion trigger refuses anyone who is not the assignee, the
+   * assigner, or a manager. That is a rule the queue cannot outlast, and the
+   * sentence it raises is the explanation the user needs to see.
+   */
+  if (isCompletionRefusal(message)) return true;
   return (
     lower.includes("row-level security") ||
     lower.includes("violates foreign key") ||
@@ -66,6 +91,35 @@ export function checklistItemRowId(itemId: string): string {
   return `checklist_item_patch:${itemId}`;
 }
 
+export type TaskPatchPayload = {
+  taskId: string;
+  patch: { status: TaskStatus; completed_at: string | null };
+};
+
+/** Row id for a task status change, deterministic per task. */
+export function taskRowId(taskId: string): string {
+  return `task_patch:${taskId}`;
+}
+
+export type WorkflowItemPatchPayload = {
+  itemId: string;
+  patch: Record<string, unknown>;
+};
+
+export type WorkflowPhasePatchPayload = {
+  phaseId: string;
+  patch: Record<string, unknown>;
+};
+
+/** Row ids for workflow writes, deterministic per row so edits supersede. */
+export function workflowItemRowId(itemId: string): string {
+  return `workflow_item_patch:${itemId}`;
+}
+
+export function workflowPhaseRowId(phaseId: string): string {
+  return `workflow_phase_patch:${phaseId}`;
+}
+
 type Handler = (row: OutboxRow) => Promise<void>;
 
 const handlers: Record<OutboxKind, Handler> = {
@@ -76,7 +130,7 @@ const handlers: Record<OutboxKind, Handler> = {
       throw new PermanentError("Queued photo has no file on this device");
     }
 
-    await uploadProjectPhoto({
+    const uploaded = await uploadProjectPhoto({
       userId: payload.userId,
       projectId: payload.projectId,
       asset: {
@@ -94,6 +148,20 @@ const handlers: Record<OutboxKind, Handler> = {
       // duplicate check, so a repeat of a half-finished send converges.
       uploadId: row.id,
     });
+
+    if (payload.attachToChecklistItemId) {
+      await attachPhotoToItem(payload.attachToChecklistItemId, uploaded.id, payload.userId);
+    }
+
+    if (payload.attachToWorkflowItemId) {
+      // Writing `photo_id` is what completes a photo step, so this single
+      // update both attaches the evidence and closes the item.
+      await applyWorkflowItemPatch(payload.attachToWorkflowItemId, {
+        photo_id: uploaded.id,
+        completed_at: new Date().toISOString(),
+        completed_by: payload.userId,
+      });
+    }
   },
 
   checklist_item_patch: async (row) => {
@@ -104,6 +172,23 @@ const handlers: Record<OutboxKind, Handler> = {
      * of the photo path's duplicate check.
      */
     await applyItemPatch(payload.itemId, payload.patch);
+  },
+
+  workflow_item_patch: async (row) => {
+    const payload = JSON.parse(row.payload) as WorkflowItemPatchPayload;
+    await applyWorkflowItemPatch(payload.itemId, payload.patch);
+  },
+
+  workflow_phase_patch: async (row) => {
+    const payload = JSON.parse(row.payload) as WorkflowPhasePatchPayload;
+    await applyPhasePatch(payload.phaseId, payload.patch);
+  },
+
+  task_patch: async (row) => {
+    const payload = JSON.parse(row.payload) as TaskPatchPayload;
+    // Idempotent for the same reason as a checklist patch: the write carries
+    // the whole state, so repeating it lands on the same value.
+    await applyTaskPatch(payload.taskId, payload.patch);
   },
 };
 

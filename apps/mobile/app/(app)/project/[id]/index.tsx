@@ -143,6 +143,32 @@ export default function ProjectDetailScreen() {
               </Text>
 
               <Pressable
+                onPress={() => router.push(`/project/${id}/tasks`)}
+                style={[
+                  styles.navRow,
+                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                ]}
+              >
+                <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
+                  Tasks
+                </Text>
+                <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>›</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => router.push(`/project/${id}/workflows`)}
+                style={[
+                  styles.navRow,
+                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                ]}
+              >
+                <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
+                  Workflows
+                </Text>
+                <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>›</Text>
+              </Pressable>
+
+              <Pressable
                 onPress={() => router.push(`/project/${id}/checklists`)}
                 style={[
                   styles.navRow,
