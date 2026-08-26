@@ -183,6 +183,15 @@ export type UploadPhotoOptions = {
   deviceCoords?: Coords | null;
   /** The project's own coordinates, the last fallback. */
   projectCoords?: Coords | null;
+  /**
+   * Stable id for this upload, making the whole operation safe to repeat.
+   *
+   * The offline outbox passes its row id here. Retrying then targets the same
+   * storage path and the same duplicate check, so a send that failed after the
+   * object landed but before the row was written finishes cleanly instead of
+   * producing a second copy of the photo.
+   */
+  uploadId?: string;
 };
 
 /**
@@ -211,7 +220,23 @@ export async function uploadProjectPhoto(options: UploadPhotoOptions): Promise<{
    * function produces JPEG. Deriving the extension from a mime type that no
    * longer describes the bytes is how a PNG-named JPEG ends up in the bucket.
    */
-  const path = `${userId}/${projectId}/${randomUUID()}.jpg`;
+  const uploadId = options.uploadId ?? randomUUID();
+  const path = `${userId}/${projectId}/${uploadId}.jpg`;
+
+  /*
+   * A retry may be finishing an attempt that already wrote the row. There is no
+   * unique index on `photos.storage_path`, so nothing in the database would
+   * stop a second insert, and the user would find the same photo twice. The
+   * path is derived from `uploadId`, so its presence is the dedupe key.
+   */
+  if (options.uploadId) {
+    const { data: existing } = await supabase
+      .from("photos")
+      .select("id")
+      .eq("storage_path", path)
+      .maybeSingle();
+    if (existing?.id) return { id: existing.id };
+  }
 
   /*
    * Read bytes rather than `await fetch(uri).blob()`. React Native's Blob is a
@@ -223,7 +248,13 @@ export async function uploadProjectPhoto(options: UploadPhotoOptions): Promise<{
 
   const { error: upErr } = await supabase.storage
     .from("site-photos")
-    .upload(path, bytes, { contentType: "image/jpeg", upsert: false });
+    /*
+     * `upsert` only for a repeatable upload. A retry whose previous attempt
+     * left the object behind must overwrite it; without this the second attempt
+     * fails with "already exists" and the row can never be written. One-shot
+     * uploads keep `false` so a genuine uuid collision still surfaces.
+     */
+    .upload(path, bytes, { contentType: "image/jpeg", upsert: Boolean(options.uploadId) });
   if (upErr) throw new Error(upErr.message);
 
   const thumbPath = await uploadThumbnail(path, asset, compressed.uri);

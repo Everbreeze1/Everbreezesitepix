@@ -13,6 +13,7 @@ import { Link, router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { projectDisplayName } from "@everlumen/shared";
 import { formatAddress, listProjects } from "@/api/projects";
+import { QueueBanner } from "@/components/QueueBanner";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 
 export default function ProjectsScreen() {
@@ -39,6 +40,7 @@ export default function ProjectsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <QueueBanner />
       <View style={styles.toolbar}>
         <TextInput
           value={search}

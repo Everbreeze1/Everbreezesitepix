@@ -39,6 +39,18 @@ export default defineConfig({
      */
     alias: [
       { find: /^@everlumen\/shared$/, replacement: path("./packages/shared/src/index.ts") },
+      /*
+       * Test doubles for the two native modules the mobile offline layer
+       * imports. They cannot load in Node, and a bare `vi.mock("expo-sqlite")`
+       * inside `tests/` does not help: the package is installed under
+       * `apps/mobile`, so the specifier does not resolve from here and the mock
+       * registers against an id nothing matches. Aliasing resolves it.
+       *
+       * The SQLite double runs the app's real SQL against `node:sqlite`, so the
+       * queue's claim and backoff behaviour is tested rather than imitated.
+       */
+      { find: /^expo-sqlite$/, replacement: path("./tests/doubles/expo-sqlite.ts") },
+      { find: /^expo-crypto$/, replacement: path("./tests/doubles/expo-crypto.ts") },
       { find: /^@\//, replacement: `${path("./apps/web/src")}/` },
     ],
   },

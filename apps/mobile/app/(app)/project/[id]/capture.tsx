@@ -16,9 +16,13 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useQuery } from "@tanstack/react-query";
-import { uploadProjectPhoto, type CapturedAsset, type PhotoPhase } from "@/api/photos";
+import { type CapturedAsset, type PhotoPhase } from "@/api/photos";
 import { getProject, projectCoords } from "@/api/projects";
 import { useAuth } from "@/lib/auth";
+import { persistCapture } from "@/offline/media";
+import { enqueue, newOutboxId } from "@/offline/outbox";
+import { refreshQueue, requestSync } from "@/offline/sync";
+import type { PhotoUploadPayload } from "@/offline/handlers";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 
 type Shot = CapturedAsset & { key: string };
@@ -140,6 +144,15 @@ export default function CaptureScreen() {
     setShots((prev) => prev.filter((shot) => shot.key !== key));
   }
 
+  /**
+   * Hand the batch to the outbox and get out of the way.
+   *
+   * Nothing is uploaded here. Each shot is copied into app storage and written
+   * to the queue, which takes milliseconds and cannot fail for lack of signal,
+   * then the drain delivers it whenever the network allows. The alternative,
+   * uploading inline, means a progress bar the user has to stand still and
+   * watch on the one connection least likely to hold: a phone on a job site.
+   */
   async function save() {
     if (!projectId || !user || shots.length === 0 || busy) return;
     setBusy(true);
@@ -156,36 +169,45 @@ export default function CaptureScreen() {
     for (let i = 0; i < shots.length; i += 1) {
       const shot = shots[i];
       try {
-        await uploadProjectPhoto({
+        // The id is minted first: the durable copy is named after it, and it
+        // becomes the idempotency key for the upload itself.
+        const id = newOutboxId();
+        const localUri = persistCapture(shot.uri, id);
+
+        const payload: PhotoUploadPayload = {
           userId: user.id,
           projectId,
-          asset: shot,
+          width: shot.width,
+          height: shot.height,
+          exif: shot.exif,
           phase,
           tags,
           caption: caption.trim() || undefined,
           deviceCoords,
           projectCoords: projectCoords(project ?? null),
-        });
+        };
+
+        await enqueue({ id, kind: "photo_upload", projectId, localUri, payload });
       } catch {
         failed.push(shot);
       }
       setProgress({ done: i + 1, total: shots.length });
     }
 
+    await refreshQueue();
+    requestSync();
+
     setBusy(false);
     setProgress(null);
 
     if (failed.length) {
       /*
-       * Keep the failures on screen rather than dropping them. These files live
-       * in the camera cache and the OS is free to evict them, so a silent
-       * discard is a permanently lost site photo. Phase 2's outbox replaces
-       * this with a durable retry.
+       * Queueing failed, which means local storage, not the network. Keep the
+       * shots on screen: their files are still only in the camera cache, and
+       * dropping them here loses the photo for good.
        */
       setShots(failed);
-      setError(
-        `${failed.length} of ${progress?.total ?? shots.length} could not upload. Still queued here.`,
-      );
+      setError(`${failed.length} could not be saved to this device. Still here, try again.`);
       return;
     }
 
@@ -342,7 +364,7 @@ export default function CaptureScreen() {
             >
               {busy ? (
                 <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-                  Uploading {progress ? `${progress.done} of ${progress.total}` : ""}
+                  Saving {progress ? `${progress.done} of ${progress.total}` : ""}
                 </Text>
               ) : (
                 <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>

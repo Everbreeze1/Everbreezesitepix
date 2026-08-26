@@ -16,6 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { displayCaption, formatPhotoDateGroup } from "@everlumen/shared";
 import { listProjectPhotos, signPhotoUrls, type PhotoListItem } from "@/api/photos";
 import { formatAddress, getProject } from "@/api/projects";
+import { QueueBanner } from "@/components/QueueBanner";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 
 type PhaseFilter = "all" | "before" | "after" | "untagged";
@@ -100,6 +101,7 @@ export default function ProjectDetailScreen() {
     <>
       <Stack.Screen options={{ title: project?.name ?? "Project" }} />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <QueueBanner />
         {loading ? (
           <ActivityIndicator style={{ marginTop: spacing.xxxl }} color={theme.colors.primary} />
         ) : error ? (

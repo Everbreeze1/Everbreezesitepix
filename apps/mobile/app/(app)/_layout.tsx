@@ -41,6 +41,7 @@ export default function AppLayout() {
         // camera screen manages its own header.
         options={{ presentation: "fullScreenModal", headerShown: false }}
       />
+      <Stack.Screen name="queue" options={{ title: "Upload queue" }} />
       <Stack.Screen name="account" options={{ title: "Account" }} />
     </Stack>
   );

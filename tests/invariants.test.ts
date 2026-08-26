@@ -82,6 +82,15 @@ describe("family: soft-delete leakage (photos.deleted_at)", () => {
         // checklist or report, which is a different decision from keeping the
         // trash out of a *picker*.
         if (/\.in\(\s*"id"/.test(window)) return;
+        /*
+         * Same exemption, for the mobile outbox's duplicate check. It asks
+         * whether a row already exists at one exact `storage_path` before
+         * re-inserting after an interrupted upload, and it has to see trashed
+         * rows to answer that. Filtering the trash out here would mean a photo
+         * the user uploaded and then deleted comes back the next time its
+         * queue row retries, which is a resurrection, not a picker leak.
+         */
+        if (/\.eq\(\s*"storage_path"/.test(window)) return;
         if (!window.includes("deleted_at")) offenders.push(`${rel}:${i + 1}`);
       });
     }
