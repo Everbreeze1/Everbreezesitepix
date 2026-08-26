@@ -131,6 +131,7 @@ export default function ProjectTasksScreen() {
                 const active = filter === option.id;
                 return (
                   <Pressable
+                    accessibilityRole="button"
                     key={option.id}
                     onPress={() => setFilter(option.id)}
                     style={[
@@ -226,7 +227,7 @@ function TaskCard({
         { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
       ]}
     >
-      <Pressable onPress={onOpen} style={{ flex: 1, gap: 4 }}>
+      <Pressable accessibilityRole="button" onPress={onOpen} style={{ flex: 1, gap: 4 }}>
         <Text
           style={[
             typography.bodyStrong,
@@ -283,6 +284,7 @@ function TaskCard({
       </Pressable>
 
       <Pressable
+        accessibilityRole="button"
         onPress={onCycle}
         accessibilityLabel={`Status ${TASK_STATUS_LABELS[status]}, tap to advance`}
         style={[styles.statusButton, { borderColor: statusColor }]}

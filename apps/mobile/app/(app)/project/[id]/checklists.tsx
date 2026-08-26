@@ -1,14 +1,36 @@
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { Link, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { ActivityIndicator } from "react-native";
 import { listProjectChecklists } from "@/api/checklists";
+import { getProjectContributors } from "@/api/task-comments";
+import { memberLabel } from "@/api/task-mentions";
 import { QueueBanner } from "@/components/QueueBanner";
+import { useAuth } from "@/lib/auth";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+
+type Filter = "all" | "mine" | "open";
+
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: "open", label: "Unfinished" },
+  { id: "mine", label: "Mine" },
+  { id: "all", label: "All" },
+];
 
 export default function ProjectChecklistsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
+  const { user } = useAuth();
+  const [filter, setFilter] = useState<Filter>("open");
 
   const { data, isLoading, isRefetching, error, refetch } = useQuery({
     queryKey: ["project-checklists", id],
@@ -16,7 +38,31 @@ export default function ProjectChecklistsScreen() {
     enabled: Boolean(id),
   });
 
-  const checklists = data ?? [];
+  /*
+   * Names for `assigned_to`, which is a bare user id on the row. Shown rather
+   * than hidden because a checklist assigned to someone else is the single most
+   * useful thing to know before starting one: two people working the same list
+   * is how a job gets signed off twice and inspected once.
+   */
+  const membersQuery = useQuery({
+    queryKey: ["project-contributors", id],
+    queryFn: () => getProjectContributors(id!),
+    enabled: Boolean(id),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const nameById = useMemo(
+    () => new Map((membersQuery.data ?? []).map((member) => [member.user_id, member])),
+    [membersQuery.data],
+  );
+
+  const all = useMemo(() => data ?? [], [data]);
+
+  const checklists = useMemo(() => {
+    if (filter === "all") return all;
+    if (filter === "mine") return all.filter((row) => row.assigned_to === user?.id);
+    return all.filter((row) => row.total === 0 || row.done < row.total);
+  }, [all, filter, user?.id]);
 
   return (
     <>
@@ -48,6 +94,46 @@ export default function ProjectChecklistsScreen() {
                 tintColor={theme.colors.primary}
               />
             }
+            ListHeaderComponent={
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: spacing.sm, marginBottom: spacing.lg }}
+              >
+                {FILTERS.map((option) => {
+                  const active = filter === option.id;
+                  return (
+                    <Pressable
+                      key={option.id}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      onPress={() => setFilter(option.id)}
+                      style={[
+                        styles.chip,
+                        {
+                          backgroundColor: active ? theme.colors.primary : theme.colors.card,
+                          borderColor: active ? theme.colors.primary : theme.colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          typography.caption,
+                          {
+                            fontWeight: "600",
+                            color: active
+                              ? theme.colors.primaryForeground
+                              : theme.colors.mutedForeground,
+                          },
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            }
             ListEmptyComponent={
               <Text
                 style={[
@@ -55,7 +141,9 @@ export default function ProjectChecklistsScreen() {
                   { color: theme.colors.mutedForeground, textAlign: "center" },
                 ]}
               >
-                No checklists on this project. Apply one from the web app.
+                {all.length === 0
+                  ? "No checklists on this project. Apply one from the web app."
+                  : "Nothing matches that filter."}
               </Text>
             }
             renderItem={({ item }) => {
@@ -64,6 +152,7 @@ export default function ProjectChecklistsScreen() {
               return (
                 <Link href={`/checklist/${item.id}`} asChild>
                   <Pressable
+                    accessibilityRole="button"
                     style={[
                       styles.row,
                       { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
@@ -79,6 +168,11 @@ export default function ProjectChecklistsScreen() {
                       ]}
                     >
                       {item.done} of {item.total} done
+                      {item.assigned_to
+                        ? item.assigned_to === user?.id
+                          ? " · assigned to you"
+                          : ` · ${memberLabel(nameById.get(item.assigned_to))}`
+                        : ""}
                     </Text>
 
                     <View style={[styles.track, { backgroundColor: theme.colors.muted }]}>
@@ -116,6 +210,12 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.md,
     minHeight: HIT_TARGET,
+  },
+  chip: {
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   track: { height: 6, borderRadius: radius.pill, marginTop: spacing.md, overflow: "hidden" },
   fill: { height: "100%", borderRadius: radius.pill },

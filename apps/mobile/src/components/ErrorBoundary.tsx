@@ -57,7 +57,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </ScrollView>
         ) : null}
 
-        <Pressable style={styles.button} onPress={this.handleReset}>
+        <Pressable accessibilityRole="button" style={styles.button} onPress={this.handleReset}>
           <Text style={styles.buttonText}>Try again</Text>
         </Pressable>
       </View>

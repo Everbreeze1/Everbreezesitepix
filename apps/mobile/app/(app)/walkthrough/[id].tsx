@@ -218,7 +218,12 @@ export default function WalkthroughDetailScreen() {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={{ flexDirection: "row", gap: spacing.sm }}>
                     {detail.shots.map((shot) => (
-                      <Pressable key={shot.id} onPress={() => seekTo(shot)} style={styles.shot}>
+                      <Pressable
+                        accessibilityRole="button"
+                        key={shot.id}
+                        onPress={() => seekTo(shot)}
+                        style={styles.shot}
+                      >
                         <Image
                           source={
                             shotUrls[shot.photo_id] ? { uri: shotUrls[shot.photo_id] } : undefined
@@ -273,6 +278,7 @@ export default function WalkthroughDetailScreen() {
 
             <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
               <Pressable
+                accessibilityRole="button"
                 disabled={Boolean(busy) || !detail.transcript}
                 onPress={() => void onGenerateReport()}
                 style={[
@@ -294,6 +300,7 @@ export default function WalkthroughDetailScreen() {
               ) : null}
 
               <Pressable
+                accessibilityRole="button"
                 disabled={Boolean(busy)}
                 onPress={() => void onShare()}
                 style={[styles.secondary, { borderColor: theme.colors.border }]}

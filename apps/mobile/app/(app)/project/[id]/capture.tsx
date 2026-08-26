@@ -255,6 +255,7 @@ export default function CaptureScreen() {
           Everlumen uses the camera to attach job-site photos to this project.
         </Text>
         <Pressable
+          accessibilityRole="button"
           style={[styles.primaryButton, { backgroundColor: theme.colors.primary }]}
           onPress={() => void requestPermission()}
         >
@@ -279,6 +280,7 @@ export default function CaptureScreen() {
               <View key={shot.key} style={styles.reviewTile}>
                 <Image source={{ uri: shot.uri }} style={styles.reviewImage} contentFit="cover" />
                 <Pressable
+                  accessibilityRole="button"
                   style={styles.removeBadge}
                   hitSlop={8}
                   onPress={() => removeShot(shot.key)}
@@ -298,6 +300,7 @@ export default function CaptureScreen() {
                 const active = phase === option.id;
                 return (
                   <Pressable
+                    accessibilityRole="button"
                     key={option.id}
                     onPress={() => setPhase(option.id)}
                     style={[
@@ -371,6 +374,7 @@ export default function CaptureScreen() {
 
           <View style={{ gap: spacing.sm }}>
             <Pressable
+              accessibilityRole="button"
               disabled={busy || shots.length === 0}
               style={[
                 styles.primaryButton,
@@ -390,6 +394,7 @@ export default function CaptureScreen() {
             </Pressable>
 
             <Pressable
+              accessibilityRole="button"
               disabled={busy}
               style={[styles.secondaryButton, { borderColor: theme.colors.border }]}
               onPress={() => setReviewing(false)}
@@ -416,19 +421,28 @@ export default function CaptureScreen() {
       />
 
       <View style={styles.topBar}>
-        <Pressable style={styles.chip} onPress={() => router.back()} hitSlop={8}>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.chip}
+          onPress={() => router.back()}
+          hitSlop={8}
+        >
           <Text style={styles.chipText}>Close</Text>
         </Pressable>
         <Pressable
+          accessibilityRole="button"
           style={styles.chip}
           hitSlop={8}
+          accessibilityLabel={`Flash ${flash}. Tap to change`}
           onPress={() => setFlash(flash === "off" ? "auto" : flash === "auto" ? "on" : "off")}
         >
           <Text style={styles.chipText}>Flash {flash}</Text>
         </Pressable>
         <Pressable
+          accessibilityRole="button"
           style={styles.chip}
           hitSlop={8}
+          accessibilityLabel="Switch camera"
           onPress={() => setFacing(facing === "back" ? "front" : "back")}
         >
           <Text style={styles.chipText}>Flip</Text>
@@ -446,15 +460,26 @@ export default function CaptureScreen() {
       {error ? <Text style={styles.cameraError}>{error}</Text> : null}
 
       <View style={styles.bottomBar}>
-        <Pressable style={styles.sideAction} onPress={() => void pickFromLibrary()}>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.sideAction}
+          onPress={() => void pickFromLibrary()}
+        >
           <Text style={styles.chipText}>Library</Text>
         </Pressable>
 
-        <Pressable style={styles.shutter} onPress={() => void takeShot()}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Take photo"
+          accessibilityHint="Adds a photo to this batch without leaving the camera"
+          style={styles.shutter}
+          onPress={() => void takeShot()}
+        >
           <View style={styles.shutterInner} />
         </Pressable>
 
         <Pressable
+          accessibilityRole="button"
           style={styles.sideAction}
           disabled={shots.length === 0}
           onPress={() => setReviewing(true)}

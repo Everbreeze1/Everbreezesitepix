@@ -121,6 +121,7 @@ export default function ActivityScreen() {
                 const openable = Boolean(item.projectId);
                 return (
                   <Pressable
+                    accessibilityRole="button"
                     key={`${item.kind}-${item.id}`}
                     disabled={!openable}
                     onPress={() => {

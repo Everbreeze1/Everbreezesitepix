@@ -140,6 +140,7 @@ export default function ProjectDetailScreen() {
               {error instanceof Error ? error.message : "Failed to load project"}
             </Text>
             <Pressable
+              accessibilityRole="button"
               style={[styles.primaryButton, { backgroundColor: theme.colors.primary }]}
               onPress={() => {
                 void projectQuery.refetch();
@@ -186,6 +187,7 @@ export default function ProjectDetailScreen() {
                   </Text>
 
                   <Pressable
+                    accessibilityRole="button"
                     onPress={() => router.push(`/project/${id}/walkthroughs`)}
                     style={[
                       styles.navRow,
@@ -201,6 +203,7 @@ export default function ProjectDetailScreen() {
                   </Pressable>
 
                   <Pressable
+                    accessibilityRole="button"
                     onPress={() => router.push(`/project/${id}/workflows`)}
                     style={[
                       styles.navRow,
@@ -216,6 +219,7 @@ export default function ProjectDetailScreen() {
                   </Pressable>
 
                   <Pressable
+                    accessibilityRole="button"
                     onPress={() => router.push(`/project/${id}/tasks`)}
                     style={[
                       styles.navRow,
@@ -231,6 +235,7 @@ export default function ProjectDetailScreen() {
                   </Pressable>
 
                   <Pressable
+                    accessibilityRole="button"
                     onPress={() => router.push(`/project/${id}/checklists`)}
                     style={[
                       styles.navRow,
@@ -255,6 +260,7 @@ export default function ProjectDetailScreen() {
                     const active = filter === option.id;
                     return (
                       <Pressable
+                        accessibilityRole="button"
                         key={option.id}
                         onPress={() => setFilter(option.id)}
                         style={[
@@ -326,8 +332,11 @@ export default function ProjectDetailScreen() {
               <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
                 {item.photos.map((photo) => (
                   <Pressable
+                    accessibilityRole="button"
                     key={photo.id}
                     onPress={() => setLightboxId(photo.id)}
+                    accessibilityLabel={displayCaption(photo.caption, "Photo")}
+                    accessibilityHint="Opens the photo full screen"
                     style={{ width: tileSize, height: tileSize }}
                   >
                     <Image
@@ -344,6 +353,7 @@ export default function ProjectDetailScreen() {
         )}
 
         <Pressable
+          accessibilityRole="button"
           style={[styles.fab, { backgroundColor: theme.colors.primary }]}
           onPress={() => router.push(`/project/${id}/capture`)}
         >
@@ -359,7 +369,11 @@ export default function ProjectDetailScreen() {
         animationType="fade"
         onRequestClose={() => setLightboxId(null)}
       >
-        <Pressable style={styles.lightbox} onPress={() => setLightboxId(null)}>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.lightbox}
+          onPress={() => setLightboxId(null)}
+        >
           {lightboxPhoto ? (
             <>
               <Image

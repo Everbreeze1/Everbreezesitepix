@@ -57,10 +57,20 @@ export default function ProjectsScreen() {
             },
           ]}
         />
-        <Pressable onPress={() => router.push("/activity")} hitSlop={8} style={styles.accountLink}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push("/activity")}
+          hitSlop={8}
+          style={styles.accountLink}
+        >
           <Text style={[typography.bodyStrong, { color: theme.colors.primary }]}>Activity</Text>
         </Pressable>
-        <Pressable onPress={() => router.push("/account")} hitSlop={8} style={styles.accountLink}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push("/account")}
+          hitSlop={8}
+          style={styles.accountLink}
+        >
           <Text style={[typography.bodyStrong, { color: theme.colors.primary }]}>Account</Text>
         </Pressable>
       </View>
@@ -73,6 +83,7 @@ export default function ProjectsScreen() {
             {error instanceof Error ? error.message : "Failed to load projects"}
           </Text>
           <Pressable
+            accessibilityRole="button"
             style={[styles.primaryButton, { backgroundColor: theme.colors.primary }]}
             onPress={() => void refetch()}
           >
@@ -112,6 +123,7 @@ export default function ProjectsScreen() {
             return (
               <Link href={`/project/${item.id}`} asChild>
                 <Pressable
+                  accessibilityRole="button"
                   style={[
                     styles.row,
                     { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
@@ -147,6 +159,7 @@ export default function ProjectsScreen() {
       )}
 
       <Pressable
+        accessibilityRole="button"
         style={[styles.fab, { backgroundColor: theme.colors.primary }]}
         onPress={() => router.push("/project-new")}
       >

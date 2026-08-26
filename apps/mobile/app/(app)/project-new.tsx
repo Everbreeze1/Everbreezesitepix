@@ -147,6 +147,7 @@ export default function NewProjectScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Pressable
+          accessibilityRole="button"
           onPress={() => void pinToMyLocation()}
           disabled={Boolean(busy)}
           style={[
@@ -183,6 +184,7 @@ export default function NewProjectScreen() {
         ) : null}
 
         <Pressable
+          accessibilityRole="button"
           onPress={() => void save()}
           disabled={Boolean(busy)}
           style={[

@@ -71,6 +71,7 @@ export default function ProjectWorkflowsScreen() {
               return (
                 <Link href={`/workflow/${item.id}`} asChild>
                   <Pressable
+                    accessibilityRole="button"
                     style={[
                       styles.row,
                       { backgroundColor: theme.colors.card, borderColor: theme.colors.border },

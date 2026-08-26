@@ -56,6 +56,7 @@ export default function QueueScreen() {
         ListHeaderComponent={
           counts.failed > 0 ? (
             <Pressable
+              accessibilityRole="button"
               onPress={() => void onRetryAll()}
               style={[styles.retryAll, { backgroundColor: theme.colors.primary }]}
             >
@@ -113,6 +114,7 @@ export default function QueueScreen() {
 
               {isFailed ? (
                 <Pressable
+                  accessibilityRole="button"
                   hitSlop={8}
                   onPress={() => void onDiscard(item.id)}
                   style={styles.discard}

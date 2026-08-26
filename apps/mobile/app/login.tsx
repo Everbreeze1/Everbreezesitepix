@@ -86,6 +86,7 @@ export default function LoginScreen() {
       ) : null}
 
       <Pressable
+        accessibilityRole="button"
         style={[styles.button, { backgroundColor: theme.colors.primary, opacity: busy ? 0.7 : 1 }]}
         disabled={busy}
         onPress={() => void onSubmit()}

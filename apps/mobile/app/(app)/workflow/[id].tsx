@@ -360,6 +360,7 @@ function PhaseCard({
               ]}
             />
             <Pressable
+              accessibilityRole="button"
               disabled={!signable || !signName.trim()}
               onPress={() => onSignOff(phase, signName)}
               style={[
@@ -421,6 +422,7 @@ function StepRow({
 
       {kind === "check" ? (
         <Pressable
+          accessibilityRole="button"
           onPress={() => onToggleCheck(item)}
           style={[
             styles.stepAction,
@@ -462,6 +464,7 @@ function StepRow({
 
       {kind === "photo" ? (
         <Pressable
+          accessibilityRole="button"
           onPress={() => router.push(`/project/${projectId}/capture?workflowItemId=${item.id}`)}
           style={[
             styles.stepAction,

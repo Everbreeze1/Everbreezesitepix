@@ -53,6 +53,7 @@ export default function AccountScreen() {
         {health}
       </Text>
       <Pressable
+        accessibilityRole="button"
         style={[styles.button, { backgroundColor: theme.colors.primary }]}
         onPress={() => void onSignOut()}
       >

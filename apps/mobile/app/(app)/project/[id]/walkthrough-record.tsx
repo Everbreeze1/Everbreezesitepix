@@ -250,6 +250,7 @@ export default function WalkthroughRecordScreen() {
           Camera access needed
         </Text>
         <Pressable
+          accessibilityRole="button"
           style={[styles.primary, { backgroundColor: theme.colors.primary }]}
           onPress={() => void requestCamera()}
         >
@@ -295,7 +296,12 @@ export default function WalkthroughRecordScreen() {
       <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} mode="video" />
 
       <View style={styles.topBar}>
-        <Pressable style={styles.chip} onPress={() => router.back()} hitSlop={8}>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.chip}
+          onPress={() => router.back()}
+          hitSlop={8}
+        >
           <Text style={styles.chipText}>Close</Text>
         </Pressable>
         {stage === "recording" ? (
@@ -316,6 +322,7 @@ export default function WalkthroughRecordScreen() {
 
       <View style={styles.bottomBar}>
         <Pressable
+          accessibilityRole="button"
           style={styles.sideAction}
           disabled={stage !== "recording"}
           onPress={() => void snap()}
@@ -326,11 +333,21 @@ export default function WalkthroughRecordScreen() {
         </Pressable>
 
         {stage === "recording" ? (
-          <Pressable style={styles.stopButton} onPress={stop}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Stop recording"
+            style={styles.stopButton}
+            onPress={stop}
+          >
             <View style={styles.stopInner} />
           </Pressable>
         ) : (
-          <Pressable style={styles.recordButton} onPress={() => void start()}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Start recording"
+            style={styles.recordButton}
+            onPress={() => void start()}
+          >
             <View style={styles.recordInner} />
           </Pressable>
         )}

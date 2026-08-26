@@ -230,6 +230,7 @@ function ChecklistRow({
 
       {item.item_type === "checkbox" ? (
         <Pressable
+          accessibilityRole="button"
           onPress={() => onToggleDone(item)}
           style={[
             styles.checkbox,
@@ -256,6 +257,7 @@ function ChecklistRow({
             const selected = item.response_value === choice;
             return (
               <Pressable
+                accessibilityRole="button"
                 key={choice}
                 onPress={() =>
                   onSetResponse(item, toggledResponse(item.item_type, item.response_value, choice))
@@ -294,6 +296,7 @@ function ChecklistRow({
 
       {projectId ? (
         <Pressable
+          accessibilityRole="button"
           onPress={() => router.push(`/project/${projectId}/capture?checklistItemId=${item.id}`)}
           style={[styles.attach, { borderColor: theme.colors.border }]}
         >
@@ -322,8 +325,10 @@ function Rating({
         const active = value <= current;
         return (
           <Pressable
+            accessibilityRole="button"
             key={value}
             accessibilityLabel={`Rate ${value} out of 5`}
+            accessibilityState={{ selected: active }}
             onPress={() =>
               onSetResponse(item, toggledResponse("rating", item.response_value, value))
             }

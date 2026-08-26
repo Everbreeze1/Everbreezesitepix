@@ -75,6 +75,7 @@ export default function ProjectWalkthroughsScreen() {
             }
             renderItem={({ item }) => (
               <Pressable
+                accessibilityRole="button"
                 onPress={() => router.push(`/walkthrough/${item.id}`)}
                 style={[
                   styles.row,
@@ -113,6 +114,7 @@ export default function ProjectWalkthroughsScreen() {
         )}
 
         <Pressable
+          accessibilityRole="button"
           style={[styles.fab, { backgroundColor: theme.colors.primary }]}
           onPress={() => router.push(`/project/${id}/walkthrough-record`)}
         >

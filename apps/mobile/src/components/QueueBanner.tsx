@@ -22,6 +22,7 @@ export function QueueBanner() {
 
   return (
     <Pressable
+      accessibilityRole="button"
       onPress={() => router.push("/queue")}
       style={[
         styles.root,

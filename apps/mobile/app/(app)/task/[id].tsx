@@ -190,6 +190,7 @@ export default function TaskDetailScreen() {
                     const done = photoIsDone(photoState.items, photo.id);
                     return (
                       <Pressable
+                        accessibilityRole="button"
                         key={photo.id}
                         disabled={togglePhoto.isPending}
                         onPress={() => togglePhoto.mutate(photo.id)}
@@ -279,6 +280,7 @@ export default function TaskDetailScreen() {
         >
           {matches.map((member) => (
             <Pressable
+              accessibilityRole="button"
               key={member.user_id}
               onPress={() => insert(member)}
               style={[
@@ -313,6 +315,7 @@ export default function TaskDetailScreen() {
           ]}
         />
         <Pressable
+          accessibilityRole="button"
           disabled={!draft.trim() || post.isPending}
           onPress={() => post.mutate()}
           style={[
