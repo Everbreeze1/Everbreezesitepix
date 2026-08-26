@@ -155,3 +155,23 @@ export {
   type ProjectNameFields,
   type DescribedProject,
 } from "./project-name";
+export {
+  TASK_PHOTO_ITEMS_TABLE,
+  TASK_PHOTO_ITEM_COLUMNS,
+  indexTaskPhotoItems,
+  isMissingTaskPhotoItems,
+  taskPhotoItemErrorMessage,
+  taskPhotoIds,
+  taskPhotoProgress,
+  taskStatusFromPhotos,
+  photoIsDone,
+  photoPositionInTask,
+  taskWorkSummary,
+  taskPhotoItemPatch,
+  taskPhotoItemRows,
+  type TaskPhotoStatus,
+  type TaskPhotoItem,
+  type TaskPhotoItemIndex,
+  type TaskPhotoProgress,
+  type TaskWorkSummary,
+} from "./task-photo-items";

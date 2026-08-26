@@ -512,7 +512,10 @@ describe("the SQL half still says the same thing", () => {
       "Only the assignee, the person who assigned it, or a manager can mark this photo done.",
     ]) {
       expect(sql).toContain(`RAISE EXCEPTION '${sentence}'`);
-      expect(read("apps/web/src/lib/task-photo-items.ts")).toContain(sentence);
+      // The allow-list moved to `@everlumen/shared` so the mobile task screens
+      // judge photo completion by the same rules. `apps/web/src/lib/
+      // task-photo-items.ts` is now a re-export, so the sentences live here.
+      expect(read("packages/shared/src/task-photo-items.ts")).toContain(sentence);
     }
   });
 

@@ -15,7 +15,10 @@ import {
 } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { relativeTime } from "@everlumen/shared";
+import { photoIsDone, relativeTime, taskPhotoProgress } from "@everlumen/shared";
+import { Image } from "expo-image";
+import { listProjectTasks } from "@/api/tasks";
+import { getTaskPhotoState, setTaskPhotoStatus } from "@/api/task-photos";
 import {
   createTaskComment,
   getProjectContributors,
@@ -58,6 +61,44 @@ export default function TaskDetailScreen() {
     enabled: Boolean(projectId),
     // Teammates change rarely, and this only feeds a picker.
     staleTime: 10 * 60 * 1000,
+  });
+
+  /*
+   * The task row is read from the project list rather than fetched alone: the
+   * list is already cached from the screen the user tapped through, so this
+   * costs nothing and keeps `photo_ids` in one place.
+   */
+  const tasksQuery = useQuery({
+    queryKey: ["project-tasks", projectId],
+    queryFn: () => listProjectTasks(projectId!),
+    enabled: Boolean(projectId),
+  });
+
+  const task = tasksQuery.data?.find((row) => row.id === id) ?? null;
+
+  const photosQuery = useQuery({
+    queryKey: ["task-photos", id, task?.photo_ids?.length ?? 0],
+    queryFn: () => getTaskPhotoState(id!, task?.photo_ids ?? []),
+    enabled: Boolean(id) && Boolean(task?.photo_ids?.length),
+  });
+
+  const photoState = photosQuery.data;
+  const progress = useMemo(
+    () => (photoState ? taskPhotoProgress(task?.photo_ids ?? [], photoState.items) : null),
+    [photoState, task?.photo_ids],
+  );
+
+  const togglePhoto = useMutation({
+    mutationFn: async (photoId: string) => {
+      const done = photoIsDone(photoState?.items, photoId);
+      await setTaskPhotoStatus(id!, photoId, done ? "open" : "done");
+    },
+    onSuccess: () => {
+      void photosQuery.refetch();
+      // The parent task's status is rolled up by a trigger, so the list has to
+      // be re-read rather than patched from here.
+      void queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+    },
   });
 
   const members = useMemo(() => membersQuery.data ?? [], [membersQuery.data]);
@@ -138,6 +179,56 @@ export default function TaskDetailScreen() {
             />
           }
         >
+          {photoState && photoState.photos.length > 0 && !photoState.unavailable ? (
+            <View style={{ gap: spacing.sm }}>
+              <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
+                PHOTOS ON THIS TASK{progress ? ` · ${progress.done} of ${progress.total}` : ""}
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                  {photoState.photos.map((photo) => {
+                    const done = photoIsDone(photoState.items, photo.id);
+                    return (
+                      <Pressable
+                        key={photo.id}
+                        disabled={togglePhoto.isPending}
+                        onPress={() => togglePhoto.mutate(photo.id)}
+                        style={[
+                          styles.taskPhoto,
+                          { borderColor: done ? theme.colors.primary : theme.colors.border },
+                        ]}
+                      >
+                        <Image
+                          source={photo.url ? { uri: photo.url } : undefined}
+                          style={[styles.taskPhotoImage, { backgroundColor: theme.colors.muted }]}
+                          contentFit="cover"
+                        />
+                        <Text
+                          style={[
+                            typography.caption,
+                            {
+                              color: done ? theme.colors.primary : theme.colors.mutedForeground,
+                              fontWeight: done ? "700" : "400",
+                            },
+                          ]}
+                        >
+                          {done ? "Done" : "Open"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+              {togglePhoto.error ? (
+                <Text style={[typography.caption, { color: theme.colors.destructive }]}>
+                  {togglePhoto.error instanceof Error
+                    ? togglePhoto.error.message
+                    : "Could not update that photo"}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
           {comments.length === 0 ? (
             <Text
               style={[
@@ -255,6 +346,8 @@ export default function TaskDetailScreen() {
 const styles = StyleSheet.create({
   centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
   comment: { borderWidth: 1, borderRadius: radius.md, padding: spacing.lg, gap: spacing.xs },
+  taskPhoto: { width: 96, gap: 4, borderWidth: 2, borderRadius: radius.md, padding: 4 },
+  taskPhotoImage: { width: 84, height: 84, borderRadius: radius.sm },
   commentHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   mentionBar: { maxHeight: 52, borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 8 },
   mentionChip: {

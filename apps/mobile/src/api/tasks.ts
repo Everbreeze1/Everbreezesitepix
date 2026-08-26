@@ -20,12 +20,14 @@ export type TaskRow = {
   completed_at: string | null;
   assignee_user_id: string | null;
   assignee_email: string | null;
+  /** Photos the task covers. A plain uuid[] with no uniqueness behind it. */
+  photo_ids: string[] | null;
   position: number;
   updated_at: string;
 };
 
 const TASK_FIELDS =
-  "id, project_id, title, description, status, priority, due_date, completed_at, assignee_user_id, assignee_email, position, updated_at";
+  "id, project_id, title, description, status, priority, due_date, completed_at, assignee_user_id, assignee_email, photo_ids, position, updated_at";
 
 export async function listProjectTasks(projectId: string): Promise<TaskRow[]> {
   const { data, error } = await supabase
