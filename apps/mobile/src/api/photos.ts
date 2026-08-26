@@ -326,6 +326,59 @@ export async function uploadProjectPhoto(options: UploadPhotoOptions): Promise<{
   return { id: data.id };
 }
 
+export type PhotoPage = {
+  photos: PhotoListItem[];
+  urls: Record<string, string>;
+  /** `created_at` of the last row, or null when this was the final page. */
+  nextCursor: string | null;
+};
+
+/** How many photos one scroll-page pulls. */
+export const PHOTO_PAGE_SIZE = 45;
+
+/**
+ * One page of a project's photos, with its display URLs already signed.
+ *
+ * Signing happens here rather than in a separate query so each page is signed
+ * exactly once. Re-signing the whole loaded set every time a page arrives turns
+ * scrolling a busy project into a quadratic pile of storage requests.
+ *
+ * Paged by `created_at` rather than by offset. A capture landing while someone
+ * is scrolling shifts every offset by one, which makes an offset-paged list
+ * repeat one row and skip another. A keyset cursor is unaffected.
+ */
+export async function listProjectPhotoPage(
+  projectId: string,
+  cursor: string | null,
+  limit = PHOTO_PAGE_SIZE,
+): Promise<PhotoPage> {
+  let query = supabase
+    .from("photos")
+    .select("id, caption, storage_path, thumb_path, image_url, created_at, taken_at, phase, tags")
+    // The trash is not part of the photo library, and `deleted_at` has no RLS
+    // predicate behind it, so this read excludes it by hand like the rest.
+    .is("deleted_at", null)
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (cursor) query = query.lt("created_at", cursor);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const photos = (data as PhotoListItem[]) ?? [];
+  const urls = await signPhotoUrls(photos);
+
+  return {
+    photos,
+    urls,
+    // A short page is the last page. Asking for one extra row to find out would
+    // cost a round trip on every scroll.
+    nextCursor: photos.length === limit ? (photos[photos.length - 1]?.created_at ?? null) : null,
+  };
+}
+
 /** Photos for a project, newest first. Walkthrough captures included, trash excluded. */
 export async function listProjectPhotos(projectId: string, limit = 60): Promise<PhotoListItem[]> {
   const { data, error } = await supabase

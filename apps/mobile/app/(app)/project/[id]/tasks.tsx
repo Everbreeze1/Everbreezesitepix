@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { calendarDueLabel } from "@everlumen/shared";
 import {
@@ -172,7 +172,12 @@ export default function ProjectTasksScreen() {
               </Text>
             ) : (
               visible.map((task) => (
-                <TaskCard key={task.id} task={task} onCycle={() => void cycleStatus(task)} />
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  onCycle={() => void cycleStatus(task)}
+                  onOpen={() => router.push(`/task/${task.id}?projectId=${task.project_id}`)}
+                />
               ))
             )}
           </ScrollView>
@@ -182,7 +187,15 @@ export default function ProjectTasksScreen() {
   );
 }
 
-function TaskCard({ task, onCycle }: { task: TaskRow; onCycle: () => void }) {
+function TaskCard({
+  task,
+  onCycle,
+  onOpen,
+}: {
+  task: TaskRow;
+  onCycle: () => void;
+  onOpen: () => void;
+}) {
   const theme = useTheme();
   const status = normaliseStatus(task.status);
   const done = status === "done";
@@ -211,7 +224,7 @@ function TaskCard({ task, onCycle }: { task: TaskRow; onCycle: () => void }) {
         { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
       ]}
     >
-      <View style={{ flex: 1, gap: 4 }}>
+      <Pressable onPress={onOpen} style={{ flex: 1, gap: 4 }}>
         <Text
           style={[
             typography.bodyStrong,
@@ -265,7 +278,7 @@ function TaskCard({ task, onCycle }: { task: TaskRow; onCycle: () => void }) {
             </Text>
           ) : null}
         </View>
-      </View>
+      </Pressable>
 
       <Pressable
         onPress={onCycle}

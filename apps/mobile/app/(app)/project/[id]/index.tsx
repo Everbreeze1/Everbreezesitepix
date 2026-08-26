@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -6,15 +6,16 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { displayCaption, formatPhotoDateGroup } from "@everlumen/shared";
-import { listProjectPhotos, signPhotoUrls, type PhotoListItem } from "@/api/photos";
+import { listProjectPhotoPage, PHOTO_PAGE_SIZE, type PhotoListItem } from "@/api/photos";
 import { formatAddress, getProject } from "@/api/projects";
 import { QueueBanner } from "@/components/QueueBanner";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
@@ -31,6 +32,18 @@ const FILTERS: { id: PhaseFilter; label: string }[] = [
 const COLUMNS = 3;
 const GRID_GAP = spacing.xs;
 
+/** One rendered row of the grid. Sections hold rows, not photos. */
+type PhotoRow = { key: string; photos: PhotoListItem[] };
+
+function chunk(photos: PhotoListItem[], size: number): PhotoRow[] {
+  const rows: PhotoRow[] = [];
+  for (let i = 0; i < photos.length; i += size) {
+    const slice = photos.slice(i, i + size);
+    rows.push({ key: slice[0].id, photos: slice });
+  }
+  return rows;
+}
+
 export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
@@ -43,36 +56,38 @@ export default function ProjectDetailScreen() {
     enabled: Boolean(id),
   });
 
-  const photosQuery = useQuery({
+  /*
+   * Photos arrive a page at a time and each page carries its own signed URLs.
+   * A busy project runs to hundreds of photos, and the previous version read
+   * the first 60 and stopped: everything older was simply unreachable from the
+   * phone.
+   */
+  const photosQuery = useInfiniteQuery({
     queryKey: ["project-photos", id],
-    queryFn: () => listProjectPhotos(id!),
+    queryFn: ({ pageParam }) => listProjectPhotoPage(id!, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled: Boolean(id),
   });
 
-  const photos = useMemo(() => photosQuery.data ?? [], [photosQuery.data]);
+  const photos = useMemo(
+    () => photosQuery.data?.pages.flatMap((page) => page.photos) ?? [],
+    [photosQuery.data],
+  );
 
-  /*
-   * Signed URLs are fetched for the whole page in one request rather than per
-   * tile. Supabase signs in batch, and a grid of 60 tiles each signing its own
-   * URL is 60 round trips on a connection that may only have one bar.
-   */
-  const urlsQuery = useQuery({
-    queryKey: ["photo-urls", id, photos.map((p) => p.id).join(",")],
-    queryFn: () => signPhotoUrls(photos),
-    enabled: photos.length > 0,
-    // Signed URLs last an hour; refetching sooner just burns requests.
-    staleTime: 45 * 60 * 1000,
-  });
-
-  const urls = urlsQuery.data ?? {};
+  const urls = useMemo(() => {
+    const merged: Record<string, string> = {};
+    for (const page of photosQuery.data?.pages ?? []) Object.assign(merged, page.urls);
+    return merged;
+  }, [photosQuery.data]);
 
   const filtered = useMemo(() => {
     if (filter === "all") return photos;
     return photos.filter((photo) => (photo.phase ?? "untagged") === filter);
   }, [photos, filter]);
 
-  /** Photos bucketed by capture day, newest day first. */
-  const groups = useMemo(() => {
+  /** Photos bucketed by capture day, newest day first, each day chunked into rows. */
+  const sections = useMemo(() => {
     const buckets = new Map<string, PhotoListItem[]>();
     for (const photo of filtered) {
       // `taken_at` is when the shutter fired; `created_at` is when it finished
@@ -84,7 +99,10 @@ export default function ProjectDetailScreen() {
       if (bucket) bucket.push(photo);
       else buckets.set(label, [photo]);
     }
-    return Array.from(buckets.entries());
+    return Array.from(buckets.entries()).map(([title, items]) => ({
+      title,
+      data: chunk(items, COLUMNS),
+    }));
   }, [filtered]);
 
   const project = projectQuery.data;
@@ -96,6 +114,18 @@ export default function ProjectDetailScreen() {
   const tileSize = (screenWidth - spacing.lg * 2 - GRID_GAP * (COLUMNS - 1)) / COLUMNS;
 
   const lightboxPhoto = filtered.find((photo) => photo.id === lightboxId) ?? null;
+
+  const loadMore = useCallback(() => {
+    /*
+     * A filter hides rows without changing what has been fetched, so a filtered
+     * view can run out of visible photos long before the project does. Fetching
+     * on until the filter finds something keeps "Before" from looking empty on a
+     * project whose before-shots are all older than the first page.
+     */
+    if (photosQuery.hasNextPage && !photosQuery.isFetchingNextPage) {
+      void photosQuery.fetchNextPage();
+    }
+  }, [photosQuery]);
 
   return (
     <>
@@ -122,117 +152,139 @@ export default function ProjectDetailScreen() {
             </Pressable>
           </View>
         ) : (
-          <ScrollView
+          <SectionList
+            sections={sections}
+            keyExtractor={(row) => row.key}
+            stickySectionHeadersEnabled={false}
             contentContainerStyle={{ padding: spacing.lg, paddingBottom: 120 }}
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.6}
+            // The grid is fixed-height rows, so windowing can be tighter than
+            // the default without blank space appearing during a fast scroll.
+            initialNumToRender={Math.ceil(PHOTO_PAGE_SIZE / COLUMNS)}
+            windowSize={7}
+            removeClippedSubviews
             refreshControl={
               <RefreshControl
-                refreshing={photosQuery.isRefetching}
+                refreshing={photosQuery.isRefetching && !photosQuery.isFetchingNextPage}
                 onRefresh={() => void photosQuery.refetch()}
                 tintColor={theme.colors.primary}
               />
             }
-          >
-            <View style={{ gap: spacing.xs, marginBottom: spacing.lg }}>
-              {address ? (
-                <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>
-                  {address}
-                </Text>
-              ) : null}
-              <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
-                {photos.length} photo{photos.length === 1 ? "" : "s"} · {project?.status}
-              </Text>
+            ListHeaderComponent={
+              <View>
+                <View style={{ gap: spacing.xs, marginBottom: spacing.lg }}>
+                  {address ? (
+                    <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>
+                      {address}
+                    </Text>
+                  ) : null}
+                  <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
+                    {photos.length}
+                    {photosQuery.hasNextPage ? "+" : ""} photo{photos.length === 1 ? "" : "s"} ·{" "}
+                    {project?.status}
+                  </Text>
 
-              <Pressable
-                onPress={() => router.push(`/project/${id}/tasks`)}
-                style={[
-                  styles.navRow,
-                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                ]}
-              >
-                <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                  Tasks
-                </Text>
-                <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>›</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => router.push(`/project/${id}/walkthroughs`)}
-                style={[
-                  styles.navRow,
-                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                ]}
-              >
-                <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                  Walkthroughs
-                </Text>
-                <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>›</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => router.push(`/project/${id}/workflows`)}
-                style={[
-                  styles.navRow,
-                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                ]}
-              >
-                <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                  Workflows
-                </Text>
-                <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>›</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => router.push(`/project/${id}/checklists`)}
-                style={[
-                  styles.navRow,
-                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                ]}
-              >
-                <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                  Checklists
-                </Text>
-                <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>›</Text>
-              </Pressable>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: spacing.sm, marginBottom: spacing.lg }}
-            >
-              {FILTERS.map((option) => {
-                const active = filter === option.id;
-                return (
                   <Pressable
-                    key={option.id}
-                    onPress={() => setFilter(option.id)}
+                    onPress={() => router.push(`/project/${id}/walkthroughs`)}
                     style={[
-                      styles.filterChip,
-                      {
-                        backgroundColor: active ? theme.colors.primary : theme.colors.card,
-                        borderColor: active ? theme.colors.primary : theme.colors.border,
-                      },
+                      styles.navRow,
+                      { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
                     ]}
                   >
-                    <Text
-                      style={[
-                        typography.caption,
-                        {
-                          fontWeight: "600",
-                          color: active
-                            ? theme.colors.primaryForeground
-                            : theme.colors.mutedForeground,
-                        },
-                      ]}
-                    >
-                      {option.label}
+                    <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
+                      Walkthroughs
+                    </Text>
+                    <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>
+                      ›
                     </Text>
                   </Pressable>
-                );
-              })}
-            </ScrollView>
 
-            {filtered.length === 0 ? (
+                  <Pressable
+                    onPress={() => router.push(`/project/${id}/workflows`)}
+                    style={[
+                      styles.navRow,
+                      { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                    ]}
+                  >
+                    <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
+                      Workflows
+                    </Text>
+                    <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>
+                      ›
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => router.push(`/project/${id}/tasks`)}
+                    style={[
+                      styles.navRow,
+                      { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                    ]}
+                  >
+                    <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
+                      Tasks
+                    </Text>
+                    <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>
+                      ›
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => router.push(`/project/${id}/checklists`)}
+                    style={[
+                      styles.navRow,
+                      { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                    ]}
+                  >
+                    <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
+                      Checklists
+                    </Text>
+                    <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>
+                      ›
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: spacing.sm, marginBottom: spacing.lg }}
+                >
+                  {FILTERS.map((option) => {
+                    const active = filter === option.id;
+                    return (
+                      <Pressable
+                        key={option.id}
+                        onPress={() => setFilter(option.id)}
+                        style={[
+                          styles.filterChip,
+                          {
+                            backgroundColor: active ? theme.colors.primary : theme.colors.card,
+                            borderColor: active ? theme.colors.primary : theme.colors.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            typography.caption,
+                            {
+                              fontWeight: "600",
+                              color: active
+                                ? theme.colors.primaryForeground
+                                : theme.colors.mutedForeground,
+                            },
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            }
+            ListEmptyComponent={
               <Text
                 style={[
                   typography.body,
@@ -247,37 +299,48 @@ export default function ProjectDetailScreen() {
                   ? "No photos yet. Capture one from the field."
                   : "No photos in this phase."}
               </Text>
-            ) : (
-              groups.map(([label, items]) => (
-                <View key={label} style={{ marginBottom: spacing.xl }}>
-                  <Text
-                    style={[
-                      typography.overline,
-                      { color: theme.colors.mutedForeground, marginBottom: spacing.sm },
-                    ]}
-                  >
-                    {label.toUpperCase()}
-                  </Text>
-                  <View style={styles.grid}>
-                    {items.map((photo) => (
-                      <Pressable
-                        key={photo.id}
-                        onPress={() => setLightboxId(photo.id)}
-                        style={{ width: tileSize, height: tileSize }}
-                      >
-                        <Image
-                          source={urls[photo.id] ? { uri: urls[photo.id] } : undefined}
-                          style={[styles.tile, { backgroundColor: theme.colors.muted }]}
-                          contentFit="cover"
-                          transition={120}
-                        />
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-              ))
+            }
+            ListFooterComponent={
+              photosQuery.isFetchingNextPage ? (
+                <ActivityIndicator
+                  style={{ marginVertical: spacing.lg }}
+                  color={theme.colors.primary}
+                />
+              ) : null
+            }
+            renderSectionHeader={({ section }) => (
+              <Text
+                style={[
+                  typography.overline,
+                  {
+                    color: theme.colors.mutedForeground,
+                    marginBottom: spacing.sm,
+                    marginTop: spacing.md,
+                  },
+                ]}
+              >
+                {section.title.toUpperCase()}
+              </Text>
             )}
-          </ScrollView>
+            renderItem={({ item }) => (
+              <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
+                {item.photos.map((photo) => (
+                  <Pressable
+                    key={photo.id}
+                    onPress={() => setLightboxId(photo.id)}
+                    style={{ width: tileSize, height: tileSize }}
+                  >
+                    <Image
+                      source={urls[photo.id] ? { uri: urls[photo.id] } : undefined}
+                      style={[styles.tile, { backgroundColor: theme.colors.muted }]}
+                      contentFit="cover"
+                      transition={120}
+                    />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          />
         )}
 
         <Pressable
@@ -323,7 +386,7 @@ export default function ProjectDetailScreen() {
 
 const styles = StyleSheet.create({
   centered: { padding: spacing.xl, alignItems: "center", gap: spacing.md },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: GRID_GAP },
+  gridRow: { flexDirection: "row", gap: GRID_GAP },
   tile: { width: "100%", height: "100%", borderRadius: radius.sm },
   navRow: {
     flexDirection: "row",
