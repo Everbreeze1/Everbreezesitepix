@@ -192,6 +192,111 @@ export async function generateWalkthroughReport(walkthroughId: string): Promise<
   );
 }
 
+export type WalkthroughShot = {
+  id: string;
+  photo_id: string;
+  offset_seconds: number;
+  position: number;
+  spoken_note: string | null;
+  /** Filled in from the `photos` row so the timeline can show a thumbnail. */
+  storage_path: string | null;
+  thumb_path: string | null;
+};
+
+export type WalkthroughDetail = {
+  id: string;
+  project_id: string;
+  title: string;
+  status: string;
+  duration_seconds: number;
+  transcript: string | null;
+  summary_markdown: string | null;
+  video_path: string | null;
+  video_mime_type: string | null;
+  share_token: string | null;
+  created_at: string;
+  shots: WalkthroughShot[];
+};
+
+/**
+ * One walkthrough with its photo timeline.
+ *
+ * Read over RLS rather than through an op: this is ordinary owner-scoped
+ * reading, and `docs/data-access.md` reserves `/v1` for privileged work.
+ */
+export async function getWalkthroughDetail(
+  walkthroughId: string,
+): Promise<WalkthroughDetail | null> {
+  const { data: walkthrough, error } = await supabase
+    .from("walkthroughs")
+    .select(
+      "id, project_id, title, status, duration_seconds, transcript, summary_markdown, video_path, video_mime_type, share_token, created_at",
+    )
+    .eq("id", walkthroughId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!walkthrough) return null;
+
+  const { data: links, error: linkError } = await supabase
+    .from("walkthrough_photos")
+    .select("id, photo_id, offset_seconds, position, spoken_note")
+    .eq("walkthrough_id", walkthroughId)
+    .order("position", { ascending: true });
+
+  if (linkError) throw new Error(linkError.message);
+  const linkRows = (links as Omit<WalkthroughShot, "storage_path" | "thumb_path">[]) ?? [];
+
+  let shots: WalkthroughShot[] = linkRows.map((row) => ({
+    ...row,
+    storage_path: null,
+    thumb_path: null,
+  }));
+
+  if (linkRows.length > 0) {
+    /*
+     * The paths come from a second read rather than a nested select. The link
+     * table has no RLS relationship hint to `photos`, and a photo moved to the
+     * trash between recording and viewing simply drops out here, which is the
+     * behaviour we want: the timeline entry stays, without a broken tile.
+     */
+    const { data: photos } = await supabase
+      .from("photos")
+      .select("id, storage_path, thumb_path")
+      .is("deleted_at", null)
+      .in(
+        "id",
+        linkRows.map((row) => row.photo_id),
+      );
+
+    const byId = new Map(
+      ((photos as { id: string; storage_path: string; thumb_path: string | null }[]) ?? []).map(
+        (photo) => [photo.id, photo],
+      ),
+    );
+
+    shots = linkRows.map((row) => ({
+      ...row,
+      storage_path: byId.get(row.photo_id)?.storage_path ?? null,
+      thumb_path: byId.get(row.photo_id)?.thumb_path ?? null,
+    }));
+  }
+
+  return { ...(walkthrough as Omit<WalkthroughDetail, "shots">), shots };
+}
+
+/** Turn the public share link on or off. */
+export async function setWalkthroughShare(
+  walkthroughId: string,
+  enable: boolean,
+): Promise<{ shareToken: string | null }> {
+  const result = await api.rpc<{ shareToken?: string | null; share_token?: string | null }>(
+    "setWalkthroughShare",
+    { walkthroughId, enable },
+  );
+  return { shareToken: result?.shareToken ?? result?.share_token ?? null };
+}
+
 /** Signed playback URL for a stored recording. */
 export async function signWalkthroughVideo(videoPath: string): Promise<string | null> {
   const { data } = await supabase.storage

@@ -45,6 +45,7 @@ export default function AppLayout() {
       <Stack.Screen name="project/[id]/tasks" options={{ title: "Tasks" }} />
       <Stack.Screen name="project/[id]/workflows" options={{ title: "Workflows" }} />
       <Stack.Screen name="project/[id]/walkthroughs" options={{ title: "Walkthroughs" }} />
+      <Stack.Screen name="walkthrough/[id]" options={{ title: "Walkthrough" }} />
       <Stack.Screen
         name="project/[id]/walkthrough-record"
         options={{ presentation: "fullScreenModal", headerShown: false }}

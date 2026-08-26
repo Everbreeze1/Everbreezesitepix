@@ -74,7 +74,8 @@ export default function ProjectWalkthroughsScreen() {
               </Text>
             }
             renderItem={({ item }) => (
-              <View
+              <Pressable
+                onPress={() => router.push(`/walkthrough/${item.id}`)}
                 style={[
                   styles.row,
                   { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
@@ -106,7 +107,7 @@ export default function ProjectWalkthroughsScreen() {
                     ? "Transcript ready"
                     : "No transcript yet. Generate it from the web app."}
                 </Text>
-              </View>
+              </Pressable>
             )}
           />
         )}
