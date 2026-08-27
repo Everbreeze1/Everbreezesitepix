@@ -1,0 +1,73 @@
+# What NOT to upload to EAS Build.
+#
+# EAS archives from the git root, so a mobile build was shipping the whole
+# monorepo: 16.9MB, of which apps/web alone is 11MB. The Android build reads
+# apps/mobile and the three packages it links to, and nothing else. A 16.9MB
+# upload also fails more often than a 2MB one, which is what prompted this: a
+# build died with ECONNRESET partway through the tarball.
+#
+# IMPORTANT: when this file exists, EAS uses it INSTEAD of .gitignore, not in
+# addition to it. Everything .gitignore excludes has to be repeated here or it
+# gets uploaded, and the first thing that would land in the tarball is every
+# node_modules directory in the repo. Keep the two in step.
+
+# ---------------------------------------------------------------
+# Repeated from .gitignore
+# ---------------------------------------------------------------
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+.output
+.vinxi
+.tanstack/
+.nitro
+*.local
+
+.vercel/
+
+.env
+.env.local
+apps/api/.env
+apps/api/.env.local
+
+/docs/
+/scratch_*
+/artifacts/
+*.tok
+*.token
+
+.vscode/*
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+/CLAUDE.md
+.claude/
+/LAUNCH.md
+
+supabase/.temp/
+
+# ---------------------------------------------------------------
+# Not needed by a mobile build
+#
+# packages/ is deliberately absent from this list. apps/mobile links to
+# @everlumen/shared, @everlumen/db and @everlumen/api-client through `file:`
+# paths, so excluding them would break npm install on the build worker.
+# ---------------------------------------------------------------
+apps/web/
+apps/api/
+supabase/
+tests/
+scripts/
+.github/

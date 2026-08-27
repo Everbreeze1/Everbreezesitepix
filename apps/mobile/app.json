@@ -44,7 +44,9 @@
           "locationWhenInUsePermission": "Everlumen records where a photo was taken so it can be placed on the project map.",
           "isAndroidBackgroundLocationEnabled": false
         }
-      ]
+      ],
+      "expo-sqlite",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -72,13 +74,27 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.READ_MEDIA_IMAGES",
         "android.permission.RECORD_AUDIO"
       ],
-      "blockedPermissions": ["android.permission.ACCESS_BACKGROUND_LOCATION"]
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "owner": "everlumen1"
+    "owner": "everlumen1",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/2b7e8e0a-5180-4417-b36f-1324977fb86e"
+    }
   }
 }
