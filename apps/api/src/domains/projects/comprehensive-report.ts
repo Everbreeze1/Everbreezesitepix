@@ -24,23 +24,31 @@ import { stripPhotoGallery } from "../walkthroughs/summaries";
  * per-photo prose is what makes a report take a minute; this asks for the
  * narrative only and lets the deterministic half do the organising.
  *
- * **It reads the walkthrough summaries too.** "The comprehensive longer Report
- * that contains all meta data including all walkthrough summery data". Those
- * summaries are the only place on a job where somebody said what was actually
- * happening, so a whole-job report that ignored them would be a report written
- * from filenames and tag counts while the real account of the work sat one
- * table over. They are quoted into the report and fed to the drafter as
- * context.
+ * **It reads the walkthrough summaries, and writes from them.** Those summaries
+ * are the only place on a job where somebody said out loud what was actually
+ * happening, so a whole-job report that ignored them would be written from
+ * filenames and tag counts while the real account of the work sat one table
+ * over. They reach the drafter as source material and come back folded into its
+ * three sections.
  *
- * **The current one, per walkthrough. Not the whole table.** A Summary is its
- * own document, with its own page and its own share link, and it stays that
- * way: a Report draws on Summaries, it does not absorb them.
+ * **They are never reprinted.** "Full Project Report is also listing the
+ * walkthrough summaries in series in the same report. Walkthrough Summary and
+ * Full Project Report are completely separate things. Full project report
+ * gathers all meta data including AI summaries and writes a polished client
+ * facing document." A Summary is its own document with its own page and its own
+ * share link; quoting each one under its own heading turned the back half of
+ * this report into a stack of other documents, and a stack of summaries is not
+ * a report however few of them survive the filtering below. The write-ups go to
+ * the model, not to the page.
+ *
+ * **The current one, per walkthrough. Not the whole table.**
  * `walkthrough_summaries` gains a row per generation, so reading it by project
  * hands back every write-up ever made on the job - which is how "the 194
  * Daniels Drive report shows four near-identical Summary blocks in its body
- * instead of one" happened. `currentSummaries` reduces those rows to the
- * current summary of each thing summarised, before either the prompt or the
- * document sees them.
+ * instead of one" happened. Nothing is quoted any more and the filtering still
+ * matters: four accounts of one walk in the context is what makes a narrative
+ * describe four visits. `currentSummaries` reduces those rows to the current
+ * summary of each thing summarised, before the prompt sees them.
  */
 
 /** Photos read for the digest. A job with more than this is summarised from a sample. */
@@ -166,6 +174,11 @@ const COMPREHENSIVE_SYSTEM =
   "Write in complete, professional prose. Do NOT invent a photo count, a date, or a label that is not in the figures given - " +
   "those are supplied and are correct. The figures are context for you, not the story of the job: do not recite them back. " +
   "Do NOT include a title or photo-by-photo notes. " +
+  "You may also be given the field write-ups from this job's walkthroughs. They are SOURCE MATERIAL, not content: " +
+  "take the components, the work and the dates out of them and fold that into the three sections above, alongside " +
+  "what the notes say. Never reproduce a write-up, never give a visit a section or a heading of its own, and never " +
+  "tell the reader to see a summary elsewhere - this report is the whole of what they receive. Where the write-ups " +
+  "and the notes cover the same work, say it once. " +
   WORK_VOICE_RULES +
   " STYLE RULES: neutral and factual. Never call anything 'critical', a 'code violation' or a 'safety hazard'. " +
   "Never invent defects, findings, recommendations or risks the source material does not state. " +
@@ -174,15 +187,16 @@ const COMPREHENSIVE_SYSTEM =
   "Never write an em dash; use a comma, a colon or a plain hyphen.";
 
 /**
- * A summary's prose, ready to be reused.
+ * A summary's prose, ready to hand to the drafter.
  *
  * The cleaning is not optional. This reads `walkthrough_summaries.markdown`
  * straight from the table, which bypasses the repair `toSummary` performs on
  * every other read - so a summary written before the split arrives with its
  * original `# Title` and its `## Photos` gallery of `![](photo:id)` refs still
- * attached. `markdownToHtml` has no image support, so those refs came out as
- * literal "![Photo 1](photo:76edc...)" text in the middle of a document meant
- * for a client, beneath a duplicate of the title already printed above it.
+ * attached. Back when the write-ups were quoted into the document those refs
+ * reached the client as literal "![Photo 1](photo:76edc...)" text; they now
+ * reach the model instead, where a block of image refs is both noise and an
+ * invitation to write about the photographs rather than about the work.
  */
 export function summaryProse(markdown: string | null): string {
   return stripPhotoGallery(markdown ?? "").slice(0, MAX_SUMMARY_CHARS);
@@ -364,24 +378,7 @@ export function currentSummaries<T extends SummaryRowForSelection>(rows: T[]): T
 }
 
 /**
- * A summary's own headings, turned into bold lead-ins.
- *
- * Kept rather than flattened away: "Overview" and "Key Points" are how the
- * write-up is organised, and dropping them left the section reading as an
- * unbroken wall with two orphan words in it.
- *
- * Bold rather than a deeper heading because there is no deeper heading to use.
- * `markdownToHtml` recognises `#{1,3}` and nothing beyond it
- * (packages/shared/src/markdown-rich.ts), so `####` is not a heading at all -
- * it renders as the literal text "#### Overview" - and `###` would collide with
- * the `<h3>` this report already gives each summary.
- */
-export function demoteHeadings(markdown: string): string {
-  return markdown.replace(/^#{1,6}\s*(.+?)\s*$/gm, "**$1**");
-}
-
-/**
- * Headings removed entirely, for prompt context only.
+ * Headings removed entirely, because prompt context is all a write-up is now.
  *
  * A model handed source text containing "## Conclusion" tends to echo that
  * structure back instead of writing the sections it was asked for.
@@ -415,7 +412,16 @@ function clientPanelHtml(fields: Array<[string, string]>): string {
   return rows ? `<div data-panel="meta">${rows}</div>` : "";
 }
 
-/** The figures, as a block the reader can check the prose against. */
+/**
+ * The figures, as a block the reader can check the prose against.
+ *
+ * No count of walkthroughs here, though the write-ups no longer appear on the
+ * page and one was tried. Nothing this file can reach is the number a label
+ * like that would promise: the summary rows say how many walks were summarised
+ * and are capped, and a walk recorded but never summarised is invisible here
+ * either way. A figure a client cannot reconcile is worse than no figure, and
+ * "Days on site" already answers how much time the job took.
+ */
 function figuresHtml(d: ReturnType<typeof digestPhotos>): string {
   const span =
     d.firstAt && d.lastAt && d.firstAt.slice(0, 10) !== d.lastAt.slice(0, 10)
@@ -441,45 +447,6 @@ function figuresHtml(d: ReturnType<typeof digestPhotos>): string {
     ],
   ];
   return clientPanelHtml(rows);
-}
-
-/**
- * The walkthrough write-ups, quoted into the report.
- *
- * Reproduced rather than merely referenced: this document is the one a client
- * receives, and "see the walkthrough summary" is not something they can act on.
- * Each keeps its own heading and its date so the report reads as a record of
- * visits rather than one undifferentiated wall of prose.
- *
- * One entry per walkthrough, and `currentSummaries` is what guarantees it. The
- * lead line says so on the page, because a reader who knows four walks were
- * documented needs to be able to tell one entry per walk from one entry per
- * time somebody pressed Generate.
- *
- * `documentedAt` is when the walk happened, which is not when its current
- * summary row was written. Taking the newest row per walkthrough is what fixed
- * the duplicate blocks, and a row rewritten three weeks later carries that
- * later `created_at` - so dating the block by the row would print a visit as
- * having happened on the day somebody last pressed Regenerate, in the document
- * that is meant to be the record of when the work was done.
- */
-function walkthroughSummariesHtml(
-  summaries: Array<{ title: string; markdown: string | null; documentedAt: string | null }>,
-): string {
-  if (!summaries.length) return "";
-  return (
-    `<h2>Walkthrough Summaries</h2>` +
-    `<p>The current summary for each walkthrough documented on this job. Each one remains its own report, viewable and shareable on its own.</p>` +
-    summaries
-      .map((r) => {
-        const when = longDate(r.documentedAt);
-        return (
-          `<h3>${escapeHtml(r.title)}${when ? ` &middot; ${escapeHtml(when)}` : ""}</h3>` +
-          markdownToHtml(demoteHeadings(summaryProse(r.markdown)))
-        );
-      })
-      .join("")
-  );
 }
 
 /**
@@ -607,8 +574,12 @@ export async function generateComprehensiveReportService(
   const summaries = current.slice(-MAX_SUMMARIES_INCLUDED);
 
   /*
-   * Dated by the visit and ordered by it, so the section reads as a record of
-   * when the work was done rather than of when the write-ups were last redone.
+   * Dated by the visit and ordered by it, so the drafter reads the job forward
+   * and can date the work by when it was done rather than by when its write-up
+   * was last redone. A summary regenerated three weeks after the walk carries
+   * that later `created_at`, and a date the model repeats is one a customer
+   * checks against the invoice.
+   *
    * The cap above is by row age, which is a different question from reading
    * order: it decides which walks make it in, this decides what order they sit
    * in once they have.
@@ -647,8 +618,15 @@ FIGURES (these are correct - use them, do not invent others):
 What the technicians recorded doing on site (these are your source for the work performed):
 ${digest.captions.map((c) => `- ${c}`).join("\n") || "(none)"}
 
-Walkthrough write-ups on this job (${summaries.length}):
-${summaries.map((r) => `### ${r.title}\n${flattenHeadings(summaryProse(r.markdown))}`).join("\n\n") || "(none)"}
+Field write-ups from the walkthroughs on this job (${dated.length}), oldest first. SOURCE MATERIAL: fold what they say into the three sections. Do not reproduce them and do not give any visit a section of its own:
+${
+  dated
+    .map((r, i) => {
+      const when = longDate(r.documentedAt);
+      return `Write-up ${i + 1} of ${dated.length}${when ? `, ${when}` : ""}:\n${flattenHeadings(summaryProse(r.markdown))}`;
+    })
+    .join("\n\n") || "(none)"
+}
 
 Write the three Markdown sections only.`,
     );
@@ -737,10 +715,16 @@ Write the three Markdown sections only.`,
      * document somebody hands to a client. Omitted instead: the report still
      * carries the client details, the figures and the photographic record, and
      * the caller is told through `aiFailed` so it can say the text is missing.
+     *
+     * That is also the whole of what a failed draft costs the walkthroughs.
+     * Their write-ups are input to these three sections rather than a section
+     * of their own, so a report drafted while the provider was down carries no
+     * account of the visits - which is correct, and is not a reason to fall
+     * back on pasting the summaries in: the author regenerates and gets the
+     * document they asked for.
      */
     (summary ? `<h2>Executive Summary</h2>` + markdownToHtml(summary) : "") +
     (work ? `<h2>Work Performed</h2>` + markdownToHtml(work) : "") +
-    walkthroughSummariesHtml(dated) +
     photoEvidenceHtml(evidence, perPage) +
     (conclusion ? `<h2>Conclusion</h2>` + markdownToHtml(conclusion) : "");
 

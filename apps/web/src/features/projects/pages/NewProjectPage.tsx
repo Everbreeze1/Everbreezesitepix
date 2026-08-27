@@ -1,10 +1,11 @@
 import { useNavigate, Link, useSearch } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
   FilePlus2,
   Loader2,
   LocateFixed,
@@ -12,17 +13,20 @@ import {
   LayoutTemplate,
   Pencil,
   Star,
+  TriangleAlert,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { useCompanySetup } from "@/hooks/use-company-setup";
+import { useSiteLocation, type SiteCoords } from "@/hooks/use-site-location";
 import { applyProjectBlueprint } from "@/lib/blueprint.functions";
-import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { BlueprintOutcomePreview } from "@/features/settings/components/BlueprintOutcomePreview";
 import { useBlueprintContents } from "@/hooks/use-blueprint-contents";
@@ -36,6 +40,9 @@ import { writeWithNewColumns, PROJECT_CLIENT_KEYS } from "@/lib/merge-field-colu
 /** The "no blueprint" sentinel. Radix rejects an empty string as a value. */
 const NO_BLUEPRINT = "__none";
 
+/** Roughly the middle of the United States, for a map with nothing on it yet. */
+const NOWHERE_IN_PARTICULAR = { lat: 39.8283, lng: -98.5795 };
+
 interface BlueprintOption {
   id: string;
   name: string;
@@ -45,26 +52,9 @@ interface BlueprintOption {
   isDefault: boolean;
 }
 
-interface AddrParts {
-  street: string;
-  city: string;
-  state: string;
-  zip: string;
-  formatted: string;
-}
-
-function parseComponents(comps: any[]): AddrParts {
-  const get = (type: string, short = false) => {
-    const c = comps.find((x) => x.types?.includes(type));
-    return (short ? (c?.short_name ?? c?.shortText) : (c?.long_name ?? c?.longText)) ?? "";
-  };
-  const street = `${get("street_number")} ${get("route")}`.trim();
-  const city =
-    get("locality") || get("postal_town") || get("sublocality") || get("sublocality_level_1");
-  const state = get("administrative_area_level_1", true);
-  const zip = get("postal_code");
-  return { street, city, state, zip, formatted: "" };
-}
+/** Address fields that the detected location is allowed to fill in. */
+const ADDRESS_KEYS = ["street", "city", "state", "zip", "formatted"] as const;
+type AddressKey = (typeof ADDRESS_KEYS)[number];
 
 export function NewProjectPage() {
   const { user } = useAuth();
@@ -73,16 +63,30 @@ export function NewProjectPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/_app/projects/new" });
   const qc = useQueryClient();
-  const mapDivRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
-  const geocoderRef = useRef<any>(null);
 
-  const [ready, setReady] = useState(false);
-  const [locating, setLocating] = useState(false);
-  const [reverseLoading, setReverseLoading] = useState(false);
+  /*
+   * The location starts being worked out here, at the top of the page, before
+   * anything is rendered and before the user has chosen anything. That is the
+   * whole point: by the time they reach the form the site address is already in
+   * it, and the only thing left to type is who the job is for.
+   *
+   * It deliberately does NOT wait for the map. The map is confirmation; the
+   * address is the answer, and it arrives as soon as the geocoding library
+   * does.
+   */
+  const {
+    phase: locPhase,
+    coords,
+    address: detected,
+    source: locSource,
+    mapsReady,
+    mapsFailed,
+    detect,
+    pin,
+    accept,
+  } = useSiteLocation();
+
   const [saving, setSaving] = useState(false);
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [form, setForm] = useState({
     name: "",
     street: "",
@@ -96,6 +100,20 @@ export function NewProjectPage() {
     client_contact: "",
     project_number: "",
   });
+
+  /*
+   * Address fields the user has typed into themselves. A detected address fills
+   * everything else and leaves these alone: someone correcting a unit number
+   * while the geocoder is still thinking must not have it overwritten a second
+   * later.
+   *
+   * Cleared whenever the user asks for a different location outright (they move
+   * the pin, they search, they press Use my location), because at that point
+   * they are asking for the new answer, not defending the old one.
+   */
+  const editedRef = useRef(new Set<AddressKey>());
+  const noteEdit = (key: AddressKey) => editedRef.current.add(key);
+
   const [projectTemplates, setProjectTemplates] = useState<BlueprintOption[]>([]);
   const [blueprintsLoaded, setBlueprintsLoaded] = useState(false);
   // "New project from this" on the Templates page arrives with the blueprint
@@ -231,124 +249,229 @@ export function NewProjectPage() {
     if (blueprintsLoaded && !beginAtChooser && step === "blueprint") setStep("details");
   }, [blueprintsLoaded, beginAtChooser, step]);
 
-  // Load Maps JS
+  // ---------------------------------------------------------------------------
+  // Location
+  // ---------------------------------------------------------------------------
+
+  // A detected address fills the form. Everything the user typed survives it.
   useEffect(() => {
-    let cancelled = false;
-    loadGoogleMaps()
-      .then(async () => {
-        await (window as any).google.maps.importLibrary("maps");
-        await (window as any).google.maps.importLibrary("marker");
-        await (window as any).google.maps.importLibrary("geocoding");
-        if (cancelled) return;
-        setReady(true);
-      })
-      .catch(() => toast.error("Could not load map"));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (!detected) return;
+    setForm((f) => ({
+      ...f,
+      street: editedRef.current.has("street") ? f.street : detected.street,
+      city: editedRef.current.has("city") ? f.city : detected.city,
+      state: editedRef.current.has("state") ? f.state : detected.state,
+      zip: editedRef.current.has("zip") ? f.zip : detected.zip,
+      formatted: editedRef.current.has("formatted") ? f.formatted : detected.formatted,
+    }));
+  }, [detected]);
 
-  // Init map once ready
+  /** The user asked for a different location, so their old corrections lapse. */
+  const relocate = useCallback(
+    (run: () => void) => {
+      editedRef.current = new Set();
+      run();
+    },
+    // `editedRef` is a ref; nothing here changes between renders.
+    [],
+  );
+
+  const movePin = useCallback(
+    (next: SiteCoords) => relocate(() => pin(next, "pin")),
+    [relocate, pin],
+  );
+  const useMyLocation = useCallback(() => relocate(detect), [relocate, detect]);
+
+  const mapNodeRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
+  /*
+   * Bumped each time a map instance is built. The marker effect below keys off
+   * it, because a ref changing is invisible to React: stepping back to the
+   * blueprint chooser and forward again builds a second map, and without this
+   * the pin would be missing from it.
+   */
+  const [mapEpoch, setMapEpoch] = useState(0);
+  // Read inside the ref callback, which must not re-run every time the pin
+  // moves - re-running it would tear down and rebuild the map on every fix.
+  const coordsRef = useRef<SiteCoords | null>(null);
   useEffect(() => {
-    if (!ready || !mapDivRef.current || mapRef.current) return;
+    coordsRef.current = coords;
+  }, [coords]);
+
+  const attachMap = useCallback(
+    (node: HTMLDivElement | null) => {
+      mapNodeRef.current = node;
+      if (!node) {
+        // Step one unmounts the map. Keeping an instance bound to a detached
+        // node is what left a grey box behind on the way back to step two.
+        mapRef.current = null;
+        markerRef.current = null;
+        return;
+      }
+      if (!mapsReady || mapRef.current) return;
+      const g = (window as any).google;
+      const start = coordsRef.current;
+      const map = new g.maps.Map(node, {
+        center: start ?? NOWHERE_IN_PARTICULAR,
+        zoom: start ? 17 : 4,
+        disableDefaultUI: true,
+        zoomControl: true,
+        gestureHandling: "greedy",
+        clickableIcons: false,
+      });
+      map.addListener("click", (e: any) => movePin({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
+      mapRef.current = map;
+      setMapEpoch((n) => n + 1);
+    },
+    [mapsReady, movePin],
+  );
+
+  // Keep the pin and the viewport on the current coordinates.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !coords) return;
     const g = (window as any).google;
-    const initial = { lat: 39.8283, lng: -98.5795 }; // US center fallback
-    mapRef.current = new g.maps.Map(mapDivRef.current, {
-      center: initial,
-      zoom: 4,
-      disableDefaultUI: true,
-      zoomControl: true,
-      gestureHandling: "greedy",
-      clickableIcons: false,
-    });
-    geocoderRef.current = new g.maps.Geocoder();
-
-    mapRef.current.addListener("click", (e: any) => {
-      const lat = e.latLng.lat();
-      const lng = e.latLng.lng();
-      void setLocation(lat, lng, { pan: false });
-    });
-
-    // Try geolocation immediately
-    void locateMe(true);
-  }, [ready]);
-
-  const placeMarker = (lat: number, lng: number) => {
-    const g = (window as any).google;
-    if (!mapRef.current) return;
     if (!markerRef.current) {
       markerRef.current = new g.maps.Marker({
-        position: { lat, lng },
-        map: mapRef.current,
+        position: coords,
+        map,
         draggable: true,
         animation: g.maps.Animation.DROP,
+        title: "Drag to move the job site",
       });
-      markerRef.current.addListener("dragend", (e: any) => {
-        const la = e.latLng.lat();
-        const ln = e.latLng.lng();
-        void setLocation(la, ln, { pan: false });
-      });
+      markerRef.current.addListener("dragend", (e: any) =>
+        movePin({ lat: e.latLng.lat(), lng: e.latLng.lng() }),
+      );
     } else {
-      markerRef.current.setPosition({ lat, lng });
+      markerRef.current.setPosition(coords);
     }
-  };
+    map.panTo(coords);
+    if ((map.getZoom() ?? 0) < 15) map.setZoom(17);
+  }, [coords, mapEpoch, movePin]);
 
-  const reverseGeocode = async (lat: number, lng: number) => {
-    if (!geocoderRef.current) return;
-    setReverseLoading(true);
-    try {
-      const { results } = await geocoderRef.current.geocode({ location: { lat, lng } });
-      const first = results?.[0];
-      if (!first) return;
-      const parts = parseComponents(first.address_components ?? []);
-      setForm((f) => ({
-        ...f,
-        street: parts.street || f.street,
-        city: parts.city || f.city,
-        state: parts.state || f.state,
-        zip: parts.zip || f.zip,
-        formatted: first.formatted_address ?? "",
-        name: f.name || (parts.street ? `${parts.street} - Site visit` : f.name),
-      }));
-    } catch {
-      // ignore
-    } finally {
-      setReverseLoading(false);
-    }
-  };
+  // ---------------------------------------------------------------------------
+  // The address, as one line
+  // ---------------------------------------------------------------------------
 
-  const setLocation = async (lat: number, lng: number, opts: { pan?: boolean } = { pan: true }) => {
-    setCoords({ lat, lng });
-    placeMarker(lat, lng);
-    if (mapRef.current) {
-      if (opts.pan !== false) {
-        mapRef.current.panTo({ lat, lng });
-        if ((mapRef.current.getZoom() ?? 0) < 15) mapRef.current.setZoom(17);
-      }
-    }
-    await reverseGeocode(lat, lng);
-  };
+  /**
+   * What the user reads instead of four inputs.
+   *
+   * Built from the fields that actually get saved rather than from Google's
+   * formatted string, so correcting the street number below changes the line
+   * above it instead of leaving the two disagreeing.
+   */
+  const addressLine = useMemo(() => {
+    const region = [form.state.trim(), form.zip.trim()].filter(Boolean).join(" ");
+    const parts = [form.street.trim(), form.city.trim(), region].filter(Boolean);
+    return parts.length ? parts.join(", ") : form.formatted.trim();
+  }, [form.street, form.city, form.state, form.zip, form.formatted]);
 
-  const locateMe = async (silent = false) => {
-    if (!navigator.geolocation) {
-      if (!silent) toast.error("Geolocation not available");
-      return;
+  const [addressOpen, setAddressOpen] = useState(false);
+  // Opened for the user when there is nothing to confirm, so a refused
+  // permission lands on a usable form rather than on an empty card.
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (autoOpened.current) return;
+    const stuck = locPhase === "denied" || locPhase === "unavailable" || mapsFailed;
+    if (!stuck) return;
+    autoOpened.current = true;
+    setAddressOpen(true);
+  }, [locPhase, mapsFailed]);
+
+  const status = useMemo(() => {
+    if (locPhase === "locating") {
+      return {
+        kind: "busy" as const,
+        title: "Finding the job site",
+        detail: "Reading your device location",
+      };
     }
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocating(false);
-        void setLocation(pos.coords.latitude, pos.coords.longitude);
+    if (locPhase === "resolving") {
+      return {
+        kind: "busy" as const,
+        title: "Looking up the address",
+        detail: "You are pinned, the street is on its way",
+      };
+    }
+    if (locPhase === "denied") {
+      return {
+        kind: "warn" as const,
+        title: "Location is blocked for this site",
+        detail: "Allow it in your browser, or search for the address below",
+      };
+    }
+    if (locPhase === "unavailable") {
+      return {
+        kind: "warn" as const,
+        title: "Your device could not place you",
+        detail: "Search for the address below instead",
+      };
+    }
+    if (locPhase === "pinned") {
+      return {
+        kind: "warn" as const,
+        title: "Pinned, but no address matched",
+        detail: "Move the pin, or fill the address in below",
+      };
+    }
+    /*
+     * The address landed and the form is one render behind it, because the fill
+     * runs in an effect. Reading that gap as "no address matched" is what made
+     * the card flash a warning at the exact moment it succeeded.
+     */
+    if (!addressLine) {
+      return {
+        kind: "busy" as const,
+        title: "Looking up the address",
+        detail: "You are pinned, the street is on its way",
+      };
+    }
+    return {
+      kind: "ok" as const,
+      title: addressLine,
+      detail:
+        locSource === "device"
+          ? "Found from your device. Worth a glance before you create the job."
+          : locSource === "pin"
+            ? "From the pin you dropped"
+            : "From the address you picked",
+    };
+  }, [locPhase, addressLine, locSource]);
+
+  const locating = locPhase === "locating" || locPhase === "resolving";
+
+  // ---------------------------------------------------------------------------
+  // Naming
+  // ---------------------------------------------------------------------------
+
+  /**
+   * What the project gets called when nobody names it.
+   *
+   * The customer plus the street, because that is how a crew refers to a job out
+   * loud, and because the two of them together are the only pair that stays
+   * unique across a street of identical addresses and a customer with four
+   * properties. `newProjectName` still has the last word, so a job with neither
+   * one filled in gets its stamped fallback rather than an empty string.
+   */
+  const suggestedName = useMemo(() => {
+    const client = form.client_name.trim();
+    const street = form.street.trim();
+    if (client && street) return `${client} - ${street}`;
+    return client || street;
+  }, [form.client_name, form.street]);
+
+  const finalName = () =>
+    newProjectName(
+      {
+        name: form.name.trim() || suggestedName,
+        street: form.street,
+        client_name: form.client_name,
       },
-      (err) => {
-        setLocating(false);
-        if (!silent) toast.error(err.message || "Could not get location");
-      },
-      { enableHighAccuracy: true, timeout: 10000 },
+      new Date(),
     );
-  };
 
-  const applyTemplate = async (projectId: string, templateId: string) => {
+  const applyTemplate = async (projectId: string, templateId: string, projectName: string) => {
     // Returned, not discarded: a per-item failure comes back 200 with a `failed`
     // list rather than throwing, so dropping the result meant a blueprint could
     // half-apply under an unqualified "Project created".
@@ -356,10 +479,7 @@ export function NewProjectPage() {
       data: {
         blueprintId: templateId,
         projectId,
-        projectName: newProjectName(
-          { name: form.name, street: form.street, client_name: form.client_name },
-          new Date(),
-        ),
+        projectName,
         projectAddress:
           [form.street, form.city, form.state, form.zip].filter(Boolean).join(", ") || null,
       },
@@ -372,15 +492,12 @@ export function NewProjectPage() {
     if (!user) return;
     /*
      * Stamped when the crew gave us nothing to go on. The bare constant is what
-     * filled workspaces with rows of interchangeable "Untitled project"
-     * entries - identical in every picker, and the Move destination list was
-     * the place it hurt, because picking the wrong one moves photos. Fixed
-     * here, at the only place that mints the name, rather than in each picker.
+     * filled workspaces with rows of interchangeable placeholder entries -
+     * identical in every picker, and the Move destination list was the place it
+     * hurt, because picking the wrong one moves photos. Fixed here, at the only
+     * place that mints the name, rather than in each picker.
      */
-    const name = newProjectName(
-      { name: form.name, street: form.street, client_name: form.client_name },
-      new Date(),
-    );
+    const name = finalName();
     setSaving(true);
     // Retried without the client columns if this database predates them, so
     // creating a project never fails over a field the user may not have filled.
@@ -415,7 +532,7 @@ export function NewProjectPage() {
     const projectId = (data as any).id as string;
     if (selectedTemplateId && selectedTemplateId !== NO_BLUEPRINT) {
       try {
-        const res = await applyTemplate(projectId, selectedTemplateId);
+        const res = await applyTemplate(projectId, selectedTemplateId, name);
         // The catch below only fires for transport/HTTP throws (plan gate,
         // ownership). Per-item failures resolve successfully with a `failed`
         // list, so they have to be inspected here or they are invisible - the
@@ -461,6 +578,11 @@ export function NewProjectPage() {
    * a name in a list cannot carry that. The same BlueprintOutcomePreview runs
    * on the blueprint's own page and inside the apply dialog, so the promise
    * made here is literally the same picture the other two screens make.
+   *
+   * The location is being worked out underneath this the whole time, which is
+   * why the footer says so: the user should arrive at step two knowing the
+   * address was found for them rather than wondering why a form pre-filled
+   * itself.
    */
   if (step === "blueprint") {
     return (
@@ -581,6 +703,25 @@ export function NewProjectPage() {
                 {selectedBlueprint ? `Continue with "${selectedBlueprint.name}"` : "Continue blank"}
                 <ArrowRight className="ml-1.5 h-4 w-4" />
               </Button>
+
+              <p className="flex items-center gap-1.5 text-center text-[11px] text-muted-foreground">
+                {locating ? (
+                  <>
+                    <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+                    Finding the job site address while you choose…
+                  </>
+                ) : addressLine ? (
+                  <>
+                    <MapPin className="h-3 w-3 shrink-0 text-primary" />
+                    <span className="truncate">Site address ready: {addressLine}</span>
+                  </>
+                ) : (
+                  <>
+                    <MapPin className="h-3 w-3 shrink-0" />
+                    You will add the address on the next step.
+                  </>
+                )}
+              </p>
             </div>
           </div>
         </div>
@@ -591,219 +732,350 @@ export function NewProjectPage() {
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col md:h-[calc(100dvh-4rem)]">
       {/* Top bar */}
-      <div className="flex items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
+        {/* Back goes to step one when there was one, rather than out of the flow
+            entirely. Losing a half-filled form to the Back arrow is the reason
+            people stop trusting a two-step screen. */}
+        {beginAtChooser ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9"
+            aria-label="Back to blueprints"
+            onClick={() => setStep("blueprint")}
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        ) : (
           <Button asChild variant="ghost" size="icon" className="h-9 w-9">
-            <Link to="/projects">
+            <Link to="/projects" aria-label="Back to projects">
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
-          <div>
-            <h1 className="text-base font-semibold leading-tight">New project</h1>
-            <p className="text-[11px] text-muted-foreground">
-              Drop a pin or use your current location
-            </p>
-          </div>
+        )}
+        <div className="min-w-0">
+          <h1 className="text-base font-semibold leading-tight">New project</h1>
+          <p className="truncate text-[11px] text-muted-foreground">
+            {beginAtChooser
+              ? "Step 2 of 2 - where it is, and who it is for"
+              : "Where it is, and who it is for"}
+          </p>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => locateMe(false)}
-          disabled={locating}
-          className="gap-1.5"
-        >
-          {locating ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <LocateFixed className="h-4 w-4" />
-          )}
-          <span className="hidden sm:inline">Use my location</span>
-        </Button>
       </div>
 
-      {/* Map */}
-      <div className="relative flex-1 min-h-[40vh]">
-        <div ref={mapDivRef} className="absolute inset-0 bg-muted" />
-        {!ready && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        )}
-        {coords && (
-          <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-border bg-background/95 px-3 py-1 text-[11px] font-medium shadow-md backdrop-blur">
-            <MapPin className="mr-1 inline h-3 w-3" />
-            {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
-            {reverseLoading && <Loader2 className="ml-2 inline h-3 w-3 animate-spin" />}
-          </div>
-        )}
-      </div>
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-2xl space-y-4 px-4 py-4">
+          {/*
+           * The job site, found rather than typed.
+           *
+           * The map used to own most of this screen and the form was squeezed
+           * into a strip under it, which put the four address inputs - the ones
+           * nobody should be filling in by hand - in the most prominent place on
+           * the page. It is a card now: enough map to recognise the street, the
+           * detected address as one line of text, and the inputs a click away
+           * for the unit number or the correction the geocoder got wrong.
+           */}
+          <section className="overflow-hidden rounded-2xl border border-border/60 bg-card">
+            {!mapsFailed && (
+              <div className="relative h-40 sm:h-52">
+                <div ref={attachMap} className="absolute inset-0 bg-muted" />
+                {!mapsReady && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+                {mapsReady && !coords && !locating && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/60 px-6 text-center">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Tap the map to drop a pin, or search the address below.
+                    </p>
+                  </div>
+                )}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={useMyLocation}
+                  disabled={locating}
+                  className="absolute bottom-2.5 right-2.5 h-8 gap-1.5 rounded-full border border-border/60 px-3 text-xs font-bold shadow-md"
+                >
+                  {locating ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <LocateFixed className="h-3.5 w-3.5" />
+                  )}
+                  {coords ? "Re-locate" : "Use my location"}
+                </Button>
+                {coords && (
+                  <div className="pointer-events-none absolute bottom-2.5 left-2.5 rounded-full border border-border/60 bg-background/95 px-2.5 py-1 text-[10px] font-medium tabular-nums shadow-sm backdrop-blur">
+                    {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
+                  </div>
+                )}
+              </div>
+            )}
 
-      {/* Form */}
-      <div className="border-t border-border bg-background px-4 py-4 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.25)]">
-        <div className="mx-auto max-w-2xl space-y-3">
+            {/* What we think the address is */}
+            <div
+              className={cn(
+                "flex items-start gap-3 px-3.5 py-3",
+                !mapsFailed && "border-t border-border/60",
+              )}
+            >
+              <span
+                className={cn(
+                  "mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg",
+                  status.kind === "ok" && "bg-primary/10 text-primary",
+                  status.kind === "busy" && "bg-muted text-muted-foreground",
+                  status.kind === "warn" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                )}
+              >
+                {status.kind === "busy" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : status.kind === "warn" ? (
+                  <TriangleAlert className="h-4 w-4" />
+                ) : (
+                  <MapPin className="h-4 w-4" />
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold leading-snug">{status.title}</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  {status.detail}
+                </p>
+              </div>
+            </div>
+
+            {/* The four fields, out of the way until something needs correcting */}
+            <Collapsible open={addressOpen} onOpenChange={setAddressOpen}>
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between border-t border-border/60 px-3.5 py-2.5 text-left text-xs font-bold text-muted-foreground transition hover:bg-muted/40 hover:text-foreground"
+                >
+                  {addressOpen ? "Hide address details" : "Search or edit the address"}
+                  <ChevronDown
+                    className={cn("h-4 w-4 transition-transform", addressOpen && "rotate-180")}
+                  />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="space-y-3 border-t border-border/60 bg-muted/20 px-3.5 py-3.5">
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="np-search"
+                      className="text-[11px] uppercase tracking-wide text-muted-foreground"
+                    >
+                      Search a different address
+                    </Label>
+                    <AddressAutocomplete
+                      id="np-search"
+                      value={form.formatted}
+                      onChange={(v) => {
+                        noteEdit("formatted");
+                        setForm((f) => ({ ...f, formatted: v }));
+                      }}
+                      onSelect={(addr) => {
+                        relocate(() => {
+                          setForm((f) => ({
+                            ...f,
+                            street: addr.street,
+                            city: addr.city,
+                            state: addr.state,
+                            zip: addr.zip,
+                            formatted: addr.formatted,
+                          }));
+                          accept(
+                            {
+                              street: addr.street,
+                              city: addr.city,
+                              state: addr.state,
+                              zip: addr.zip,
+                              formatted: addr.formatted,
+                            },
+                            addr.latitude != null && addr.longitude != null
+                              ? { lat: addr.latitude, lng: addr.longitude }
+                              : null,
+                          );
+                        });
+                      }}
+                      placeholder="Start typing an address…"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-12 gap-2">
+                    <div className="col-span-12 space-y-1">
+                      <Label
+                        htmlFor="street"
+                        className="text-[11px] uppercase tracking-wide text-muted-foreground"
+                      >
+                        Street
+                      </Label>
+                      <Input
+                        id="street"
+                        value={form.street}
+                        onChange={(e) => {
+                          noteEdit("street");
+                          setForm({ ...form, street: e.target.value });
+                        }}
+                        placeholder="123 Main St"
+                      />
+                    </div>
+                    <div className="col-span-6 space-y-1">
+                      <Label
+                        htmlFor="city"
+                        className="text-[11px] uppercase tracking-wide text-muted-foreground"
+                      >
+                        City
+                      </Label>
+                      <Input
+                        id="city"
+                        value={form.city}
+                        onChange={(e) => {
+                          noteEdit("city");
+                          setForm({ ...form, city: e.target.value });
+                        }}
+                      />
+                    </div>
+                    <div className="col-span-3 space-y-1">
+                      <Label
+                        htmlFor="state"
+                        className="text-[11px] uppercase tracking-wide text-muted-foreground"
+                      >
+                        State
+                      </Label>
+                      <Input
+                        id="state"
+                        value={form.state}
+                        maxLength={3}
+                        onChange={(e) => {
+                          noteEdit("state");
+                          setForm({ ...form, state: e.target.value });
+                        }}
+                      />
+                    </div>
+                    <div className="col-span-3 space-y-1">
+                      <Label
+                        htmlFor="zip"
+                        className="text-[11px] uppercase tracking-wide text-muted-foreground"
+                      >
+                        Zip
+                      </Label>
+                      <Input
+                        id="zip"
+                        value={form.zip}
+                        inputMode="numeric"
+                        onChange={(e) => {
+                          noteEdit("zip");
+                          setForm({ ...form, zip: e.target.value });
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </section>
+
+          {/*
+           * The one field this screen actually asks for.
+           *
+           * Everything above it was filled in by the phone and everything below
+           * it is optional, so this is the whole job of the form: say who the
+           * work is for. It names the project too, which is why it sits on its
+           * own rather than inside the optional block it used to live in.
+           */}
           <div className="space-y-1.5">
-            <Label
-              htmlFor="search"
-              className="text-xs uppercase tracking-wide text-muted-foreground"
-            >
-              Search address
-            </Label>
-            <AddressAutocomplete
-              id="search"
-              value={form.formatted}
-              onChange={(v) => setForm((f) => ({ ...f, formatted: v }))}
-              onSelect={(addr) => {
-                setForm((f) => ({
-                  ...f,
-                  street: addr.street,
-                  city: addr.city,
-                  state: addr.state,
-                  zip: addr.zip,
-                  formatted: addr.formatted,
-                  name: f.name || (addr.street ? `${addr.street} - Site visit` : f.name),
-                }));
-                if (addr.latitude != null && addr.longitude != null) {
-                  void setLocation(addr.latitude, addr.longitude);
-                }
-              }}
-              placeholder="Search or type address…"
-            />
-          </div>
-
-          <div className="grid grid-cols-12 gap-2">
-            <div className="col-span-12 space-y-1">
-              <Label
-                htmlFor="street"
-                className="text-[11px] uppercase tracking-wide text-muted-foreground"
-              >
-                Street
-              </Label>
-              <Input
-                id="street"
-                value={form.street}
-                onChange={(e) => setForm({ ...form, street: e.target.value })}
-                placeholder="123 Main St"
-              />
-            </div>
-            <div className="col-span-6 space-y-1">
-              <Label
-                htmlFor="city"
-                className="text-[11px] uppercase tracking-wide text-muted-foreground"
-              >
-                City
-              </Label>
-              <Input
-                id="city"
-                value={form.city}
-                onChange={(e) => setForm({ ...form, city: e.target.value })}
-              />
-            </div>
-            <div className="col-span-3 space-y-1">
-              <Label
-                htmlFor="state"
-                className="text-[11px] uppercase tracking-wide text-muted-foreground"
-              >
-                State
-              </Label>
-              <Input
-                id="state"
-                value={form.state}
-                maxLength={3}
-                onChange={(e) => setForm({ ...form, state: e.target.value })}
-              />
-            </div>
-            <div className="col-span-3 space-y-1">
-              <Label
-                htmlFor="zip"
-                className="text-[11px] uppercase tracking-wide text-muted-foreground"
-              >
-                Zip
-              </Label>
-              <Input
-                id="zip"
-                value={form.zip}
-                inputMode="numeric"
-                onChange={(e) => setForm({ ...form, zip: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <Label
-              htmlFor="name"
-              className="text-[11px] uppercase tracking-wide text-muted-foreground"
-            >
-              Project name <span className="normal-case text-muted-foreground/70">(optional)</span>
+            <Label htmlFor="np-client" className="flex items-center gap-1.5 text-sm font-bold">
+              <User className="h-3.5 w-3.5 text-muted-foreground" />
+              Who is this job for?
             </Label>
             <Input
-              id="name"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder={form.street ? `${form.street} - Site visit` : "Auto-named from address"}
+              id="np-client"
+              value={form.client_name}
+              placeholder="Customer name"
+              autoComplete="off"
+              className="h-11 text-base"
+              onChange={(e) => setForm({ ...form, client_name: e.target.value })}
             />
+            <p className="text-[11px] text-muted-foreground">
+              {suggestedName
+                ? `This job will be called "${form.name.trim() || suggestedName}". Every document for it gets the name filled in.`
+                : "Names the project, and fills itself into every document for this job."}
+            </p>
           </div>
 
-          {/* Merge fields. Every document template asks for these; filling them
-              in once here means the job's documents arrive already complete. */}
-          <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-3">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Client &amp; job details{" "}
-              <span className="normal-case text-muted-foreground/70">
-                (optional, fills documents in for you)
-              </span>
-            </Label>
-            <div className="space-y-1">
-              <Label
-                htmlFor="np-client"
-                className="text-[11px] uppercase tracking-wide text-muted-foreground"
+          {/* Optional. Collapsed, because a form that asks for six things when it
+              needs one is why nobody fills any of them in. */}
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="group flex w-full items-center justify-between rounded-xl border border-border/60 bg-card px-3.5 py-3 text-left transition hover:border-border"
               >
-                Client name
-              </Label>
-              <Input
-                id="np-client"
-                value={form.client_name}
-                placeholder="e.g. Sarah Whitfield"
-                onChange={(e) => setForm({ ...form, client_name: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label
-                  htmlFor="np-client-contact"
-                  className="text-[11px] uppercase tracking-wide text-muted-foreground"
-                >
-                  Client contact
-                </Label>
-                <Input
-                  id="np-client-contact"
-                  value={form.client_contact}
-                  placeholder="Email or phone"
-                  onChange={(e) => setForm({ ...form, client_contact: e.target.value })}
-                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold">Job details</span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    Project name, contact, job number. All optional.
+                  </span>
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="mt-2 space-y-3 rounded-xl border border-border/60 bg-muted/20 p-3.5">
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="name"
+                    className="text-[11px] uppercase tracking-wide text-muted-foreground"
+                  >
+                    Project name
+                  </Label>
+                  <Input
+                    id="name"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder={suggestedName || "Named from the date if you leave this blank"}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="np-client-contact"
+                      className="text-[11px] uppercase tracking-wide text-muted-foreground"
+                    >
+                      Client contact
+                    </Label>
+                    <Input
+                      id="np-client-contact"
+                      value={form.client_contact}
+                      placeholder="Email or phone"
+                      onChange={(e) => setForm({ ...form, client_contact: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="np-number"
+                      className="text-[11px] uppercase tracking-wide text-muted-foreground"
+                    >
+                      Project number
+                    </Label>
+                    <Input
+                      id="np-number"
+                      value={form.project_number}
+                      placeholder="e.g. PRJ-00421"
+                      onChange={(e) => setForm({ ...form, project_number: e.target.value })}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="space-y-1">
-                <Label
-                  htmlFor="np-number"
-                  className="text-[11px] uppercase tracking-wide text-muted-foreground"
-                >
-                  Project number
-                </Label>
-                <Input
-                  id="np-number"
-                  value={form.project_number}
-                  placeholder="e.g. PRJ-00421"
-                  onChange={(e) => setForm({ ...form, project_number: e.target.value })}
-                />
-              </div>
-            </div>
-          </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           {/* The blueprint was chosen in step one, so what belongs here is the
               decision as a fact and a way back to it - not the same picker
               again. `beginAtChooser` is false when there was no step one to go
               back to, in which case this row stays out of the way entirely. */}
           {beginAtChooser && (
-            <div className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5">
+            <div className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3.5 py-3">
               <span
                 className={cn(
                   "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
@@ -841,22 +1113,26 @@ export function NewProjectPage() {
               </Button>
             </div>
           )}
+        </div>
+      </div>
 
-          <div className="flex gap-2 pt-1">
-            <Button asChild variant="ghost" className="flex-1">
-              <Link to="/projects">Cancel</Link>
-            </Button>
-            <Button onClick={create} disabled={saving} className="flex-[2]">
-              {saving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating…
-                </>
-              ) : (
-                "Create & start taking photos"
-              )}
-            </Button>
-          </div>
+      {/* Always reachable, so the answer to "am I done?" never depends on how far
+          the page happens to be scrolled. */}
+      <div className="border-t border-border bg-background px-4 py-3 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.25)]">
+        <div className="mx-auto flex max-w-2xl gap-2">
+          <Button asChild variant="ghost" className="flex-1">
+            <Link to="/projects">Cancel</Link>
+          </Button>
+          <Button onClick={create} disabled={saving} className="flex-[2]">
+            {saving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating…
+              </>
+            ) : (
+              "Create project"
+            )}
+          </Button>
         </div>
       </div>
     </div>
