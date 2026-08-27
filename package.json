@@ -21,7 +21,10 @@
     "test:ssr:share": "node scripts/ssr-share-test.mjs",
     "test:ssr": "npm run build && node scripts/ssr-share-test.mjs",
     "typecheck:api": "npm run typecheck -w @everlumen/api",
-    "mobile": "npm --prefix apps/mobile start"
+    "mobile": "npm --prefix apps/mobile start",
+    "mobile:build": "npm --prefix apps/mobile run build:dev",
+    "mobile:build:preview": "npm --prefix apps/mobile run build:preview",
+    "mobile:build:prod": "npm --prefix apps/mobile run build:prod"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",

@@ -56,3 +56,10 @@ apps/api/.env.local
 
 # Supabase CLI scratch state (the linked project ref, cached CLI version).
 supabase/.temp/
+
+# Running an EAS command from the repo root instead of apps/mobile makes the CLI
+# generate a blank eas.json here, which has none of the real profiles and
+# silently shadows the intended config. It has been committed by accident once.
+# Anchored with a leading slash so apps/mobile/eas.json, the real one, is
+# unaffected.
+/eas.json

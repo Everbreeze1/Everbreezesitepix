@@ -49,6 +49,20 @@ cd apps/mobile && npx expo export --platform android  # Metro resolution and bun
 
 ## Builds
 
+**Run these from the repo root**, not by hand:
+
+```bash
+npm run mobile:build           # development client, Android
+npm run mobile:build:preview   # internal QA build
+npm run mobile:build:prod      # store submission
+```
+
+These exist because `eas` must run in `apps/mobile`, beside `eas.json`. Run it
+from the repo root instead and the CLI generates a blank `eas.json` there, then
+fails with "The `expo` package was not found", because the root `package.json`
+has no `expo` dependency. That has happened more than once; the scripts carry
+the working directory so it cannot.
+
 `eas.json` defines three profiles. The EAS project exists: **@everlumen1/everlumen**, and `extra.eas.projectId` in `app.json` points at it.
 
 **EAS builds from the committed git state, not your working tree.** Uncommitted work is silently absent from the build, which is a confusing way to lose an afternoon. Commit first.
