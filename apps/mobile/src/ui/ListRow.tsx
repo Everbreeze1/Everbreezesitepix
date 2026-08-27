@@ -64,8 +64,21 @@ export function ListRow({
           <Icon icon={icon} size="md" tone={destructive ? "destructive" : iconTone} />
         </View>
       ) : null}
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text variant="bodyStrong" tone={destructive ? "destructive" : "default"} numberOfLines={1}>
+      {/*
+        `minWidth: 0` is what actually lets the title truncate instead of
+        shoving the row. A flex child defaults to its content width as its
+        minimum, so a long title pushes the badge and chevron off the end rather
+        than shortening itself, and the first fix people reach for
+        (`numberOfLines={1}`) then bites far too early because the text block is
+        still being measured against the width it wanted.
+      */}
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        {/*
+          Two lines, not one. "Team and collaborators" next to a Web chip and a
+          chevron came out as "Team and collabo..." on a 6 inch screen, which is
+          the row failing at the one job it has.
+        */}
+        <Text variant="bodyStrong" tone={destructive ? "destructive" : "default"} numberOfLines={2}>
           {title}
         </Text>
         {subtitle ? (
@@ -79,7 +92,8 @@ export function ListRow({
           {value}
         </Text>
       ) : null}
-      {right}
+      {/* Never shrinks: a badge that gets compressed to a sliver is worse than one that wraps the title. */}
+      {right ? <View style={{ flexShrink: 0 }}>{right}</View> : null}
       {onPress ? <Icon icon={ChevronRight} size="md" tone="muted" /> : null}
     </>
   );

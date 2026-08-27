@@ -16,7 +16,9 @@ export { MAX_ATTEMPTS };
 export type OutboxKind =
   | "photo_upload"
   | "checklist_item_patch"
+  | "task_create"
   | "task_patch"
+  | "task_edit"
   | "workflow_item_patch"
   | "workflow_phase_patch";
 

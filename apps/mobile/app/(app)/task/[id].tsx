@@ -5,7 +5,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   TextInput,
   View,
   type NativeSyntheticEvent,
@@ -13,9 +12,9 @@ import {
 } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { photoIsDone, relativeTime, taskPhotoProgress } from "@everlumen/shared";
+import { calendarDueLabel, photoIsDone, relativeTime, taskPhotoProgress } from "@everlumen/shared";
 import { Image } from "expo-image";
-import { listProjectTasks } from "@/api/tasks";
+import { listProjectTasks, type TaskDraft, type TaskRow } from "@/api/tasks";
 import { getTaskPhotoState, setTaskPhotoStatus } from "@/api/task-photos";
 import {
   createTaskComment,
@@ -31,22 +30,40 @@ import {
   resolveMentions,
   type MentionMember,
 } from "@/api/task-mentions";
+import {
+  normaliseStatus,
+  TASK_PRIORITY_LABELS,
+  TASK_STATUS_LABELS,
+  type TaskPriority,
+  type TaskStatus,
+} from "@/api/task-status";
+import { TaskEditorSheet } from "@/components/TaskEditorSheet";
 import { useAuth } from "@/lib/auth";
+import { taskEditRowId, type TaskEditPayload } from "@/offline/handlers";
+import { enqueue } from "@/offline/outbox";
+import { refreshQueue, requestSync } from "@/offline/sync";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
-import { MessageSquare, Send } from "@/ui/icons";
+import { Calendar, CircleCheck, MessageSquare, PenLine, Send, User } from "@/ui/icons";
 import {
   Avatar,
   Badge,
-  Button,
   Card,
-  Chip,
   EmptyState,
   ErrorState,
+  Icon,
+  IconButton,
   ProgressBar,
   SectionHeader,
   SkeletonList,
   Text,
+  type BadgeTone,
 } from "@/ui";
+
+const STATUS_TONE: Record<TaskStatus, BadgeTone> = {
+  open: "neutral",
+  in_progress: "warning",
+  done: "success",
+};
 
 export default function TaskDetailScreen() {
   const { id, projectId } = useLocalSearchParams<{ id: string; projectId?: string }>();
@@ -57,9 +74,11 @@ export default function TaskDetailScreen() {
   const [draft, setDraft] = useState("");
   const [cursor, setCursor] = useState(0);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState(false);
   const composer = useRef<TextInput>(null);
 
   const queryKey = useMemo(() => ["task-collaboration", id], [id]);
+  const tasksKey = useMemo(() => ["project-tasks", projectId], [projectId]);
 
   const collaborationQuery = useQuery({
     queryKey,
@@ -81,7 +100,7 @@ export default function TaskDetailScreen() {
    * costs nothing and keeps `photo_ids` in one place.
    */
   const tasksQuery = useQuery({
-    queryKey: ["project-tasks", projectId],
+    queryKey: tasksKey,
     queryFn: () => listProjectTasks(projectId!),
     enabled: Boolean(projectId),
   });
@@ -109,7 +128,7 @@ export default function TaskDetailScreen() {
       void photosQuery.refetch();
       // The parent task's status is rolled up by a trigger, so the list has to
       // be re-read rather than patched from here.
-      void queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+      void queryClient.invalidateQueries({ queryKey: tasksKey });
     },
   });
 
@@ -140,6 +159,42 @@ export default function TaskDetailScreen() {
     },
   });
 
+  /**
+   * Save an edit.
+   *
+   * Optimistic against the project task list, because that is the cache this
+   * screen reads the task out of. Queued on its own row id, separate from the
+   * status row: a queued edit and a queued status change carry different fields
+   * and must not replace one another.
+   */
+  const saveEdit = useCallback(
+    async (next: TaskDraft) => {
+      if (!id) return;
+
+      queryClient.setQueryData<TaskRow[]>(tasksKey, (current) =>
+        (current ?? []).map((row) => (row.id === id ? { ...row, ...next } : row)),
+      );
+      setEditing(false);
+
+      const payload: TaskEditPayload & { invalidate: unknown[][] } = {
+        taskId: id,
+        draft: next,
+        invalidate: [tasksKey],
+      };
+
+      await enqueue({
+        id: taskEditRowId(id),
+        kind: "task_edit",
+        projectId: projectId ?? null,
+        payload,
+      });
+
+      await refreshQueue();
+      requestSync();
+    },
+    [id, projectId, queryClient, tasksKey],
+  );
+
   const onSelectionChange = useCallback(
     (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
       setCursor(event.nativeEvent.selection.start);
@@ -167,7 +222,21 @@ export default function TaskDetailScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={{ flex: 1, backgroundColor: theme.colors.background }}
     >
-      <Stack.Screen options={{ title: task?.title ?? "Task" }} />
+      <Stack.Screen
+        options={{
+          title: "Task",
+          headerRight: () =>
+            task ? (
+              <IconButton
+                icon={PenLine}
+                accessibilityLabel="Edit task"
+                surface={false}
+                tone="primary"
+                onPress={() => setEditing(true)}
+              />
+            ) : null,
+        }}
+      />
 
       {collaborationQuery.isLoading ? (
         <SkeletonList rows={4} />
@@ -182,7 +251,7 @@ export default function TaskDetailScreen() {
         />
       ) : (
         <ScrollView
-          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, flexGrow: 1 }}
+          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
           keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
@@ -193,9 +262,18 @@ export default function TaskDetailScreen() {
             />
           }
         >
+          {/*
+            The task itself, which this screen never showed.
+            It opened straight into the comment thread, so the title, who it is
+            on and when it is due were only visible on the screen behind.
+          */}
+          {task ? <TaskSummary task={task} /> : null}
+
           {photoState && photoState.photos.length > 0 && !photoState.unavailable ? (
-            <Card>
-              <SectionHeader title="Photos on this task" />
+            <View style={{ gap: spacing.sm }}>
+              <Text variant="overline" tone="muted">
+                PHOTOS ON THIS TASK
+              </Text>
               {progress ? (
                 <ProgressBar
                   value={progress.done}
@@ -204,11 +282,7 @@ export default function TaskDetailScreen() {
                   showLabel
                 />
               ) : null}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={{ marginTop: spacing.md }}
-              >
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={{ flexDirection: "row", gap: spacing.sm }}>
                   {photoState.photos.map((photo) => {
                     const done = photoIsDone(photoState.items, photo.id);
@@ -216,8 +290,8 @@ export default function TaskDetailScreen() {
                       <Pressable
                         key={photo.id}
                         accessibilityRole="button"
-                        accessibilityLabel={done ? "Photo done, tap to reopen" : "Photo open, tap to mark done"}
-                        accessibilityState={{ selected: done, disabled: togglePhoto.isPending }}
+                        accessibilityLabel={done ? "Done, tap to reopen" : "Open, tap to mark done"}
+                        accessibilityState={{ selected: done }}
                         disabled={togglePhoto.isPending}
                         onPress={() => togglePhoto.mutate(photo.id)}
                         style={({ pressed }) => ({
@@ -240,63 +314,62 @@ export default function TaskDetailScreen() {
                           }}
                           contentFit="cover"
                         />
-                        <Badge
-                          label={done ? "Done" : "Open"}
-                          tone={done ? "success" : "neutral"}
-                        />
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 3,
+                            justifyContent: "center",
+                          }}
+                        >
+                          {done ? <Icon icon={CircleCheck} size="xs" tone="success" /> : null}
+                          <Text variant="caption" tone={done ? "success" : "muted"}>
+                            {done ? "Done" : "Open"}
+                          </Text>
+                        </View>
                       </Pressable>
                     );
                   })}
                 </View>
               </ScrollView>
               {togglePhoto.error ? (
-                <Text variant="caption" tone="destructive" style={{ marginTop: spacing.sm }}>
+                <Text variant="caption" tone="destructive">
                   {togglePhoto.error instanceof Error
                     ? togglePhoto.error.message
                     : "Could not update that photo"}
                 </Text>
               ) : null}
-            </Card>
+            </View>
           ) : null}
+
+          <SectionHeader title="Comments" count={comments.length || undefined} />
 
           {comments.length === 0 ? (
             <EmptyState
               icon={MessageSquare}
               title="No comments yet"
-              body='Leave a note like "waiting on part" without editing the task itself.'
+              body="Leave a note like waiting on part, without editing the task itself."
             />
           ) : (
-            comments.map((comment) => {
-              const author = memberLabel(byId.get(comment.author_id));
-              return (
-                <Card key={comment.id}>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: spacing.sm,
-                      marginBottom: spacing.sm,
-                    }}
-                  >
-                    <Avatar name={author} size="sm" />
-                    <Text variant="bodyStrong" style={{ flex: 1 }} numberOfLines={1}>
-                      {author}
-                    </Text>
-                    <Text variant="caption" tone="muted">
-                      {relativeTime(comment.created_at)}
-                    </Text>
-                  </View>
-
-                  <Text variant="body">{comment.body}</Text>
-
-                  {comment.mentions.length > 0 ? (
-                    <Text variant="caption" tone="primary" style={{ marginTop: spacing.sm }}>
-                      {`Notified ${comment.mentions.map((m) => memberLabel(byId.get(m))).join(", ")}`}
-                    </Text>
-                  ) : null}
-                </Card>
-              );
-            })
+            comments.map((comment) => (
+              <Card key={comment.id} style={{ gap: spacing.xs }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+                  <Avatar name={memberLabel(byId.get(comment.author_id))} size="sm" />
+                  <Text variant="bodyStrong" style={{ flex: 1 }} numberOfLines={1}>
+                    {memberLabel(byId.get(comment.author_id))}
+                  </Text>
+                  <Text variant="caption" tone="muted">
+                    {relativeTime(comment.created_at)}
+                  </Text>
+                </View>
+                <Text variant="body">{comment.body}</Text>
+                {comment.mentions.length > 0 ? (
+                  <Text variant="caption" tone="primary">
+                    {`Notified ${comment.mentions.map((m) => memberLabel(byId.get(m))).join(", ")}`}
+                  </Text>
+                ) : null}
+              </Card>
+            ))
           )}
         </ScrollView>
       )}
@@ -306,22 +379,50 @@ export default function TaskDetailScreen() {
           horizontal
           keyboardShouldPersistTaps="always"
           showsHorizontalScrollIndicator={false}
-          style={[styles.mentionBar, { borderColor: theme.colors.border }]}
+          style={{
+            maxHeight: 56,
+            borderTopWidth: 1,
+            borderTopColor: theme.colors.border,
+            paddingVertical: spacing.sm,
+          }}
           contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.lg }}
         >
           {matches.map((member) => (
-            <Chip key={member.user_id} label={memberLabel(member)} onPress={() => insert(member)} />
+            <Pressable
+              key={member.user_id}
+              accessibilityRole="button"
+              accessibilityLabel={`Mention ${memberLabel(member)}`}
+              onPress={() => insert(member)}
+              style={({ pressed }) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                gap: spacing.sm,
+                paddingHorizontal: spacing.md,
+                borderRadius: radius.pill,
+                backgroundColor: theme.colors.accent,
+                opacity: pressed ? 0.75 : 1,
+              })}
+            >
+              <Avatar name={memberLabel(member)} size="sm" />
+              <Text variant="caption" style={{ color: theme.colors.accentForeground }}>
+                {memberLabel(member)}
+              </Text>
+            </Pressable>
           ))}
         </ScrollView>
       ) : null}
 
-      {/*
-       * The composer stays a bespoke control rather than becoming a `Field`.
-       * It needs a ref to refocus after a mention is inserted and a selection
-       * handler to know where the caret is, and neither belongs on a form input
-       * used by six other screens. Its colours still come from the palette.
-       */}
-      <View style={[styles.composerBar, { borderColor: theme.colors.border }]}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "flex-end",
+          gap: spacing.sm,
+          padding: spacing.lg,
+          borderTopWidth: 1,
+          borderTopColor: theme.colors.border,
+          backgroundColor: theme.colors.card,
+        }}
+      >
         <TextInput
           ref={composer}
           value={draft}
@@ -333,18 +434,24 @@ export default function TaskDetailScreen() {
           accessibilityLabel="Comment"
           style={[
             typography.body,
-            styles.composer,
             {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
+              flex: 1,
+              borderWidth: 1,
+              borderRadius: radius.md,
+              borderColor: theme.colors.input,
+              backgroundColor: theme.colors.background,
               color: theme.colors.foreground,
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.sm,
+              minHeight: HIT_TARGET,
+              maxHeight: 120,
             },
           ]}
         />
-        <Button
-          label="Send"
+        <IconButton
           icon={Send}
-          loading={post.isPending}
+          accessibilityLabel="Send comment"
+          tone="primary"
           disabled={!draft.trim() || post.isPending}
           onPress={() => post.mutate()}
         />
@@ -359,27 +466,68 @@ export default function TaskDetailScreen() {
           {post.error instanceof Error ? post.error.message : "Could not post the comment"}
         </Text>
       ) : null}
+
+      <TaskEditorSheet
+        visible={editing}
+        onClose={() => setEditing(false)}
+        projectId={projectId ?? ""}
+        task={task}
+        onSave={(next) => void saveEdit(next)}
+      />
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  mentionBar: { maxHeight: 52, borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 8 },
-  composerBar: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: spacing.sm,
-    padding: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  composer: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    minHeight: HIT_TARGET,
-    // Caps the growth of a long comment so the list behind it does not vanish.
-    maxHeight: 120,
-  },
-});
+/** Title, status, priority, due date and assignee: the task itself. */
+function TaskSummary({ task }: { task: TaskRow }) {
+  const status = normaliseStatus(task.status);
+  const priority = (task.priority as TaskPriority) ?? "normal";
+  const due = calendarDueLabel(task.due_date);
+  const done = status === "done";
+
+  return (
+    <Card style={{ gap: spacing.sm }}>
+      <Text variant="title">{task.title}</Text>
+
+      {task.description ? (
+        <Text variant="body" tone="muted">
+          {task.description}
+        </Text>
+      ) : null}
+
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
+        <Badge label={TASK_STATUS_LABELS[status]} tone={STATUS_TONE[status]} variant="solid" />
+        {priority === "high" || priority === "urgent" ? (
+          <Badge label={TASK_PRIORITY_LABELS[priority]} tone="danger" variant="outline" />
+        ) : (
+          <Badge label={TASK_PRIORITY_LABELS[priority]} tone="neutral" />
+        )}
+        {due ? (
+          <Badge
+            label={due.overdue && !done ? `Overdue · ${due.label}` : due.label}
+            tone={done ? "neutral" : due.overdue ? "danger" : "warning"}
+            icon={Calendar}
+          />
+        ) : null}
+      </View>
+
+      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+        {task.assignee_email ? (
+          <>
+            <Avatar name={task.assignee_email} size="sm" />
+            <Text variant="caption" tone="muted" numberOfLines={1} style={{ flex: 1 }}>
+              {task.assignee_email}
+            </Text>
+          </>
+        ) : (
+          <>
+            <Icon icon={User} size="sm" tone="muted" />
+            <Text variant="caption" tone="muted">
+              Not assigned
+            </Text>
+          </>
+        )}
+      </View>
+    </Card>
+  );
+}

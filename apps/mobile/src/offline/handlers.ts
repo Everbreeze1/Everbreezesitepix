@@ -1,7 +1,13 @@
 import { applyItemPatch, attachPhotoToItem } from "@/api/checklists";
 import { uploadProjectPhoto, type PhotoPhase } from "@/api/photos";
 import type { Coords } from "@/api/photo-meta";
-import { applyTaskPatch } from "@/api/tasks";
+import {
+  applyTaskEdit,
+  applyTaskPatch,
+  createTask,
+  type CreateTaskInput,
+  type TaskDraft,
+} from "@/api/tasks";
 import { applyPhasePatch, applyWorkflowItemPatch } from "@/api/workflows";
 import { isCompletionRefusal, type TaskStatus } from "@/api/task-status";
 import type { OutboxKind, OutboxRow } from "./outbox";
@@ -101,6 +107,31 @@ export type TaskPatchPayload = {
 };
 
 /** Row id for a task status change, deterministic per task. */
+export type TaskCreatePayload = {
+  input: CreateTaskInput;
+};
+
+export type TaskEditPayload = {
+  taskId: string;
+  draft: TaskDraft;
+};
+
+/**
+ * The queue row id for a create.
+ *
+ * Keyed on the task id the device generated, so a create that is edited again
+ * before it drains replaces its own queued row instead of stacking a second
+ * insert behind the first.
+ */
+export function taskCreateRowId(taskId: string): string {
+  return `task-create:${taskId}`;
+}
+
+/** Separate from the status row, so an edit and a status change cannot clobber each other. */
+export function taskEditRowId(taskId: string): string {
+  return `task-edit:${taskId}`;
+}
+
 export function taskRowId(taskId: string): string {
   return `task_patch:${taskId}`;
 }
@@ -196,6 +227,18 @@ const handlers: Record<OutboxKind, Handler> = {
   workflow_phase_patch: async (row) => {
     const payload = JSON.parse(row.payload) as WorkflowPhasePatchPayload;
     await applyPhasePatch(payload.phaseId, payload.patch);
+  },
+
+  task_create: async (row) => {
+    const payload = JSON.parse(row.payload) as TaskCreatePayload;
+    // Idempotent because the id travels in the payload: see createTask.
+    await createTask(payload.input);
+  },
+
+  task_edit: async (row) => {
+    const payload = JSON.parse(row.payload) as TaskEditPayload;
+    // Carries the whole draft, so replaying it lands on the same values.
+    await applyTaskEdit(payload.taskId, payload.draft);
   },
 
   task_patch: async (row) => {

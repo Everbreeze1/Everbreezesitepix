@@ -27,6 +27,7 @@
 
 export { default as Activity } from "lucide-react-native/dist/esm/icons/activity";
 export { default as Building2 } from "lucide-react-native/dist/esm/icons/building-2";
+export { default as Calendar } from "lucide-react-native/dist/esm/icons/calendar";
 export { default as Camera } from "lucide-react-native/dist/esm/icons/camera";
 export { default as ChevronRight } from "lucide-react-native/dist/esm/icons/chevron-right";
 export { default as CircleCheck } from "lucide-react-native/dist/esm/icons/circle-check";
@@ -36,6 +37,7 @@ export { default as CloudUpload } from "lucide-react-native/dist/esm/icons/cloud
 export { default as CreditCard } from "lucide-react-native/dist/esm/icons/credit-card";
 export { default as ExternalLink } from "lucide-react-native/dist/esm/icons/external-link";
 export { default as FileText } from "lucide-react-native/dist/esm/icons/file-text";
+export { default as Flag } from "lucide-react-native/dist/esm/icons/flag";
 export { default as FolderKanban } from "lucide-react-native/dist/esm/icons/folder-kanban";
 export { default as FolderPlus } from "lucide-react-native/dist/esm/icons/folder-plus";
 export { default as ImageOff } from "lucide-react-native/dist/esm/icons/image-off";
@@ -59,6 +61,8 @@ export { default as Share2 } from "lucide-react-native/dist/esm/icons/share-2";
 export { default as Star } from "lucide-react-native/dist/esm/icons/star";
 export { default as TriangleAlert } from "lucide-react-native/dist/esm/icons/triangle-alert";
 export { default as User } from "lucide-react-native/dist/esm/icons/user";
+export { default as UserPlus } from "lucide-react-native/dist/esm/icons/user-plus";
+export { default as UserX } from "lucide-react-native/dist/esm/icons/user-x";
 export { default as Users } from "lucide-react-native/dist/esm/icons/users";
 export { default as Video } from "lucide-react-native/dist/esm/icons/video";
 export { default as VideoOff } from "lucide-react-native/dist/esm/icons/video-off";

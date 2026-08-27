@@ -58,3 +58,74 @@ export async function applyTaskPatch(
 }
 
 export type { TaskPriority, TaskStatus };
+
+/** The fields a person can set on a task from the phone. */
+export type TaskDraft = {
+  title: string;
+  description: string | null;
+  priority: TaskPriority;
+  due_date: string | null;
+  assignee_user_id: string | null;
+  assignee_email: string | null;
+};
+
+export type CreateTaskInput = TaskDraft & {
+  /** Generated on the device so the optimistic row and the server row share an id. */
+  id: string;
+  projectId: string;
+  createdBy: string;
+};
+
+/**
+ * Insert a task the phone invented.
+ *
+ * The id is supplied by the caller rather than left to the column default, and
+ * that is what makes this safe to retry. A queued create that was interrupted
+ * after the insert landed but before the app heard back would otherwise be sent
+ * again and produce a second identical task, which is the exact duplication the
+ * photo path solved with `uploadId`. Same trick here: look for the row first,
+ * and treat finding it as success.
+ *
+ * `priority` is typed to the four values the CHECK constraint in
+ * `20260618220000` allows. Web shipped a quick-add that sent "medium" for a
+ * while and every insert was refused by the database, so the type is doing real
+ * work rather than documenting.
+ */
+export async function createTask(input: CreateTaskInput): Promise<void> {
+  const existing = await supabase.from("tasks").select("id").eq("id", input.id).maybeSingle();
+  if (existing.data) return;
+
+  const { error } = await supabase.from("tasks").insert({
+    id: input.id,
+    project_id: input.projectId,
+    created_by: input.createdBy,
+    title: input.title,
+    description: input.description,
+    assignee_user_id: input.assignee_user_id,
+    assignee_email: input.assignee_email,
+    due_date: input.due_date,
+    priority: input.priority,
+    status: "open",
+    completed_at: null,
+    photo_ids: [],
+  } as never);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Save an edit to an existing task.
+ *
+ * Deliberately separate from `applyTaskPatch`, which only ever moves status and
+ * `completed_at`. Folding the two together would mean a queued status change
+ * and a queued edit could overwrite each other's fields, because each write
+ * carries the whole patch it was given.
+ */
+export async function applyTaskEdit(taskId: string, draft: TaskDraft): Promise<void> {
+  const { error } = await supabase
+    .from("tasks")
+    .update(draft as never)
+    .eq("id", taskId);
+
+  if (error) throw new Error(error.message);
+}

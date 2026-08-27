@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { randomUUID } from "expo-crypto";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,19 +13,26 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/api/task-status";
-import { listProjectTasks, type TaskRow } from "@/api/tasks";
+import { listProjectTasks, type TaskDraft, type TaskRow } from "@/api/tasks";
 import { QueueBanner } from "@/components/QueueBanner";
+import { TaskEditorSheet } from "@/components/TaskEditorSheet";
 import { useAuth } from "@/lib/auth";
-import { taskRowId, type TaskPatchPayload } from "@/offline/handlers";
+import {
+  taskCreateRowId,
+  taskRowId,
+  type TaskCreatePayload,
+  type TaskPatchPayload,
+} from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
-import { ListTodo } from "@/ui/icons";
+import { ListTodo, Plus } from "@/ui/icons";
 import {
   Avatar,
   Badge,
   Card,
   ChipGroup,
+  IconButton,
   EmptyState,
   ErrorState,
   SkeletonList,
@@ -48,6 +56,7 @@ export default function ProjectTasksScreen() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>("open");
+  const [composing, setComposing] = useState(false);
 
   const queryKey = useMemo(() => ["project-tasks", id], [id]);
 
@@ -119,9 +128,82 @@ export default function ProjectTasksScreen() {
     [queryClient, queryKey],
   );
 
+  /**
+   * Add a task from the phone.
+   *
+   * The id is minted here rather than left to the database, which is what lets
+   * the task appear in the list instantly and still be the same row when the
+   * insert eventually lands. Without it the optimistic entry and the server row
+   * are two different tasks, and a drain that ran twice would leave two.
+   *
+   * Queued like every other write, so a task thought of while standing in a
+   * basement is recorded rather than lost.
+   */
+  const createTask = useCallback(
+    async (draft: TaskDraft) => {
+      if (!id || !user?.id) return;
+      const taskId = randomUUID();
+
+      const optimistic: TaskRow = {
+        id: taskId,
+        project_id: id,
+        title: draft.title,
+        description: draft.description,
+        status: "open",
+        priority: draft.priority,
+        due_date: draft.due_date,
+        completed_at: null,
+        assignee_user_id: draft.assignee_user_id,
+        assignee_email: draft.assignee_email,
+        photo_ids: [],
+        // The database owns the real ordering; this only places the row in the
+        // list until the next read replaces it.
+        position: tasks.length,
+        updated_at: new Date().toISOString(),
+      };
+
+      queryClient.setQueryData<TaskRow[]>(queryKey, (current) => [...(current ?? []), optimistic]);
+      setComposing(false);
+
+      const payload: TaskCreatePayload & { invalidate: unknown[][] } = {
+        input: {
+          id: taskId,
+          projectId: id,
+          createdBy: user.id,
+          ...draft,
+        },
+        invalidate: [queryKey],
+      };
+
+      await enqueue({
+        id: taskCreateRowId(taskId),
+        kind: "task_create",
+        projectId: id,
+        payload,
+      });
+
+      await refreshQueue();
+      requestSync();
+    },
+    [id, user?.id, tasks.length, queryClient, queryKey],
+  );
+
   return (
     <>
-      <Stack.Screen options={{ title: "Tasks" }} />
+      <Stack.Screen
+        options={{
+          title: "Tasks",
+          headerRight: () => (
+            <IconButton
+              icon={Plus}
+              accessibilityLabel="New task"
+              surface={false}
+              tone="primary"
+              onPress={() => setComposing(true)}
+            />
+          ),
+        }}
+      />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         <QueueBanner />
 
@@ -158,7 +240,8 @@ export default function ProjectTasksScreen() {
                 <EmptyState
                   icon={ListTodo}
                   title="No tasks here"
-                  body="Tasks are the punch list for this job. Add them from the web app, or from a photo."
+                  body="Tasks are the punch list for this job. Add the first one now, or attach one to a photo."
+                  action={{ label: "New task", icon: Plus, onPress: () => setComposing(true) }}
                 />
               ) : (
                 <EmptyState
@@ -180,6 +263,13 @@ export default function ProjectTasksScreen() {
           </ScrollView>
         )}
       </View>
+
+      <TaskEditorSheet
+        visible={composing}
+        onClose={() => setComposing(false)}
+        projectId={id ?? ""}
+        onSave={(draft) => void createTask(draft)}
+      />
     </>
   );
 }
