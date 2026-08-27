@@ -29,6 +29,7 @@ export { default as Activity } from "lucide-react-native/dist/esm/icons/activity
 export { default as Building2 } from "lucide-react-native/dist/esm/icons/building-2";
 export { default as Calendar } from "lucide-react-native/dist/esm/icons/calendar";
 export { default as Camera } from "lucide-react-native/dist/esm/icons/camera";
+export { default as CheckCheck } from "lucide-react-native/dist/esm/icons/check-check";
 export { default as ChevronRight } from "lucide-react-native/dist/esm/icons/chevron-right";
 export { default as CircleCheck } from "lucide-react-native/dist/esm/icons/circle-check";
 export { default as CircleQuestionMark } from "lucide-react-native/dist/esm/icons/circle-question-mark";
@@ -38,6 +39,7 @@ export { default as CreditCard } from "lucide-react-native/dist/esm/icons/credit
 export { default as ExternalLink } from "lucide-react-native/dist/esm/icons/external-link";
 export { default as FileText } from "lucide-react-native/dist/esm/icons/file-text";
 export { default as Flag } from "lucide-react-native/dist/esm/icons/flag";
+export { default as FolderInput } from "lucide-react-native/dist/esm/icons/folder-input";
 export { default as FolderKanban } from "lucide-react-native/dist/esm/icons/folder-kanban";
 export { default as FolderPlus } from "lucide-react-native/dist/esm/icons/folder-plus";
 export { default as ImageOff } from "lucide-react-native/dist/esm/icons/image-off";
@@ -53,9 +55,12 @@ export { default as MessageSquare } from "lucide-react-native/dist/esm/icons/mes
 export { default as PenLine } from "lucide-react-native/dist/esm/icons/pen-line";
 export { default as Plus } from "lucide-react-native/dist/esm/icons/plus";
 export { default as RefreshCw } from "lucide-react-native/dist/esm/icons/refresh-cw";
+export { default as RotateCcw } from "lucide-react-native/dist/esm/icons/rotate-ccw";
 export { default as Search } from "lucide-react-native/dist/esm/icons/search";
 export { default as Send } from "lucide-react-native/dist/esm/icons/send";
 export { default as Server } from "lucide-react-native/dist/esm/icons/server";
+export { default as SquareCheckBig } from "lucide-react-native/dist/esm/icons/square-check-big";
+export { default as Tag } from "lucide-react-native/dist/esm/icons/tag";
 export { default as Trash2 } from "lucide-react-native/dist/esm/icons/trash-2";
 export { default as Share2 } from "lucide-react-native/dist/esm/icons/share-2";
 export { default as Star } from "lucide-react-native/dist/esm/icons/star";

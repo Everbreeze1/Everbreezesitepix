@@ -23,6 +23,7 @@ const ACTION_LABELS: Record<string, string> = {
   revoke_share_links: "Revoked share links",
   set_user_team_role: "Changed a team role",
   export_users: "Exported the user list",
+  create_user: "Created an account",
   delete_user: "Deleted an account",
   user_suspend: "Suspended an account",
   user_reinstate: "Reinstated an account",

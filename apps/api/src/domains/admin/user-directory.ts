@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { requirePlatformAdmin, type AdminRole } from "../../lib/admin-context";
 import { escapeLikeValue, isMissingFunction, isMissingTable } from "../../lib/postgrest";
+import { sendSignupConfirmationEmail } from "../email/signup-confirmation";
 import { logAdminAction } from "./audit";
 import type { AuthedContext } from "../../lib/user-context";
 
@@ -559,6 +560,8 @@ export const bulkUserActionInputSchema = z.object({
   userIds: z.array(z.string().uuid()).min(1).max(100),
   action: z.enum(["suspend", "reinstate", "resend_confirmation"]),
   reason: z.string().trim().min(3).max(500),
+  /** Where the emailed links should land. Defaults to the production site. */
+  origin: z.string().url().optional(),
 });
 
 /**
@@ -581,6 +584,7 @@ export async function runBulkUserActionService(
 ): Promise<{ succeeded: number; failed: Array<{ userId: string; reason: string }> }> {
   await requirePlatformAdmin(ctx.userId, "support");
   const admin = getSupabaseAdmin();
+  const origin = (data.origin ?? "https://everlumen.co").replace(/\/+$/, "");
 
   let succeeded = 0;
   const failed: Array<{ userId: string; reason: string }> = [];
@@ -596,8 +600,16 @@ export async function runBulkUserActionService(
           succeeded += 1;
           continue;
         }
-        const { error } = await admin.auth.resend({ type: "signup", email });
-        if (error) throw new Error(error.message);
+        /*
+         * Ours to deliver, for the reason spelled out on the single-account
+         * version of this in ./user-detail.ts: `auth.resend` delegates to the
+         * Send Email hook, and a hook that does not answer drops the message
+         * without an error anyone here would see. Selecting forty unconfirmed
+         * accounts and being told "40 done" while nothing was sent is the
+         * worst version of that bug, because it also closes the ticket.
+         */
+        const res = await sendSignupConfirmationEmail(email, origin);
+        if (!res.sent) throw new Error(res.reason ?? "confirmation email could not be sent");
       } else {
         const { error } = await admin.auth.admin.updateUserById(userId, {
           ban_duration: data.action === "suspend" ? "876000h" : "none",

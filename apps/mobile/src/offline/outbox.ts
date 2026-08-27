@@ -19,6 +19,7 @@ export type OutboxKind =
   | "task_create"
   | "task_patch"
   | "task_edit"
+  | "photo_patch"
   | "workflow_item_patch"
   | "workflow_phase_patch";
 

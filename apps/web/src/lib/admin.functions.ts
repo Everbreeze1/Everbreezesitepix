@@ -579,9 +579,55 @@ export const runBulkUserAction = rpcOp<
     userIds: string[];
     action: "suspend" | "reinstate" | "resend_confirmation";
     reason: string;
+    /** So a resend from a preview or local build links back to that build. */
+    origin?: string;
   },
   { succeeded: number; failed: Array<{ userId: string; reason: string }> }
 >("runBulkUserAction");
+
+// ---------------------------------------------------------------------------
+// Creating an account from the console
+//
+// Mirrors apps/api/src/domains/admin/create-user.ts.
+// ---------------------------------------------------------------------------
+
+/** Owner is transferred rather than assigned, so it is never offered here. */
+export type CreatableTeamRole = "admin" | "manager" | "standard" | "restricted";
+
+export interface CreatePlatformUserInput {
+  email: string;
+  fullName?: string;
+  company?: string;
+  team?: { teamId: string; role: CreatableTeamRole; overSeatLimit: boolean };
+  /** Omitted means "mail them a link to choose their own". */
+  password?: string;
+  /** Required by the server whenever a team is attached. */
+  note?: string;
+  origin?: string;
+}
+
+export interface CreatePlatformUserResult {
+  userId: string;
+  email: string;
+  emailSent: boolean;
+  emailReason: string | null;
+  /** The one-shot set-password link, for handing over when mail fails. */
+  setupLink: string | null;
+  team: { id: string; name: string; role: CreatableTeamRole; overSeatLimit: boolean } | null;
+}
+
+export const createPlatformUser = rpcOp<CreatePlatformUserInput, CreatePlatformUserResult>(
+  "createPlatformUser",
+  /*
+   * Keyed so a network-level retry of one request cannot mint two accounts.
+   *
+   * It does NOT collapse a double-click: `rpcOp` mints a fresh key per call,
+   * so two clicks are two requests with two keys. The submit button being
+   * disabled while the mutation is in flight is what handles that, and the
+   * server's 409 on an address that already has an account is the backstop.
+   */
+  { idempotent: true },
+);
 
 export const exportUsers = rpcOp<
   UserDirectoryFilters & { max?: number },

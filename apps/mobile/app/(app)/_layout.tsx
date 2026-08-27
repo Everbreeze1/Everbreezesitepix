@@ -47,6 +47,7 @@ export default function AppLayout() {
         // camera screen manages its own header.
         options={{ presentation: "fullScreenModal", headerShown: false }}
       />
+      <Stack.Screen name="project/[id]/trash" options={{ title: "Trash" }} />
       <Stack.Screen name="project/[id]/checklists" options={{ title: "Checklists" }} />
       <Stack.Screen name="project/[id]/tasks" options={{ title: "Tasks" }} />
       <Stack.Screen name="task/[id]" options={{ title: "Task" }} />

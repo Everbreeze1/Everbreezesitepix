@@ -9,11 +9,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
  * instead of one."
  *
  * The selection rule has its own unit tests in walkthrough-summary-split.test.ts
- * and those prove the rule. They do not prove the Report uses it, that the row
- * the rule needs is actually selected out of the table, or that what lands in
- * `project_pages.content_html` carries one block rather than four - which is
- * the thing the client counted. So this drives the real service against a fake
- * database and reads the HTML that comes out.
+ * and those prove the rule. They do not prove the Report uses it, or that the
+ * row the rule needs is actually selected out of the table. So this drives the
+ * real service against a fake database and reads both what came out and what
+ * the drafter was told.
+ *
+ * The body does not quote the write-ups at all any more: "Walkthrough Summary
+ * and Full Project Report are completely separate things", so a Report is
+ * written FROM the Summaries rather than assembled out of them. That moves the
+ * filtering assertions onto the prompt, where four accounts of one walk is what
+ * makes a narrative describe four visits, and leaves the document checked for
+ * their absence.
  */
 
 /** The state each test arranges. Rows come back from the fake in table order. */
@@ -167,10 +173,20 @@ async function generate() {
   return await generateComprehensiveReportService(ctx, { projectId: "p1" });
 }
 
-/** Every `<h3>` under the Walkthrough Summaries heading. */
-function summaryBlocks(html: string): string[] {
-  const section = html.split("<h2>Walkthrough Summaries</h2>")[1] ?? "";
-  return [...section.matchAll(/<h3>(.*?)<\/h3>/g)].map((m) => m[1]);
+/**
+ * The write-up entries handed to the drafter, in the order it reads them.
+ *
+ * The prompt is where the selection shows now. Counting blocks in the HTML
+ * would count zero however many superseded drafts survived the filtering.
+ */
+function writeUps(prompt: string): string[] {
+  const block = (prompt.split("Field write-ups from the walkthroughs on this job")[1] ?? "").split(
+    "Write the three Markdown sections only.",
+  )[0];
+  return block
+    .split(/(?=Write-up \d+ of \d+)/)
+    .slice(1)
+    .map((s) => s.trim());
 }
 
 beforeEach(() => {
@@ -217,28 +233,31 @@ describe("the Report, generated against four generations of one summary", () => 
     ];
   });
 
-  it("prints one summary block, not four", async () => {
+  it("hands the drafter one write-up, not four", async () => {
+    // Four copies of one walk in the context is what makes the narrative
+    // describe four visits.
     const res = await generate();
     expect(res.summaryCount).toBe(1);
-    expect(summaryBlocks(DB.inserted.content_html)).toHaveLength(1);
+    expect(writeUps(DB.prompt)).toHaveLength(1);
+    expect(DB.prompt).toContain("Field write-ups from the walkthroughs on this job (1)");
   });
 
-  it("prints the current one, and none of the superseded text", async () => {
+  it("gives it the current one, and none of the superseded text", async () => {
+    await generate();
+    expect(DB.prompt).toContain("Fourth pass over the same walk.");
+    expect(DB.prompt).not.toContain("Third pass");
+    expect(DB.prompt).not.toContain("Second pass");
+    expect(DB.prompt).not.toContain("First pass");
+  });
+
+  it("prints none of the four, current one included", async () => {
+    // The write-ups are material for the narrative, not part of the document.
     await generate();
     const html: string = DB.inserted.content_html;
-    expect(html).toContain("Fourth pass over the same walk.");
-    expect(html).not.toContain("Third pass");
-    expect(html).not.toContain("Second pass");
-    expect(html).not.toContain("First pass");
-  });
-
-  it("tells the drafter about one write-up, not four", async () => {
-    // The prompt is the other half of "pulling in": four copies of one walk in
-    // the context is what makes the narrative describe four visits.
-    await generate();
-    expect(DB.prompt).toContain("Walkthrough write-ups on this job (1):");
-    expect(DB.prompt).toContain("Fourth pass over the same walk.");
-    expect(DB.prompt).not.toContain("First pass over the same walk.");
+    expect(html).not.toContain("Walkthrough Summaries");
+    for (const pass of ["Fourth pass", "Third pass", "Second pass", "First pass"]) {
+      expect(html).not.toContain(pass);
+    }
   });
 
   it("still files as a Report, with its client info and its photos", async () => {
@@ -330,42 +349,43 @@ describe("194 Daniels Drive, from the live rows", () => {
     ];
   });
 
-  it("prints one block where the filed reports carried four", async () => {
+  it("draws on one write-up where the filed reports carried four blocks", async () => {
     const res = await generate();
     expect(res.summaryCount).toBe(1);
-    expect(summaryBlocks(DB.inserted.content_html)).toHaveLength(1);
+    expect(writeUps(DB.prompt)).toHaveLength(1);
   });
 
   it("keeps the newest draft and none of the four superseded ones", async () => {
     await generate();
-    const html: string = DB.inserted.content_html;
-    expect(html).toContain("Fifth draft.");
+    expect(DB.prompt).toContain("Fifth draft.");
     for (const gone of ["Fourth draft", "Third draft", "Second draft", "First draft"]) {
-      expect(html).not.toContain(gone);
+      expect(DB.prompt).not.toContain(gone);
     }
+    // And the survivor is still material rather than content.
+    expect(DB.inserted.content_html).not.toContain("Fifth draft.");
   });
 
   it("groups them despite the notes being in different orders", async () => {
     // Two of the five list the same nine photos in reverse. Sorting the ids
     // inside the key is what makes those the same selection rather than two.
     await generate();
-    expect(summaryBlocks(DB.inserted.content_html)).toHaveLength(1);
+    expect(writeUps(DB.prompt)).toHaveLength(1);
   });
 
-  it("does not print a legacy row's own title on top of the heading it gets", async () => {
-    // Three of the five open with `# Summary - Aug NN, 2026`, and the block
-    // already carries that as its <h3>.
+  it("strips a legacy row's own title before the drafter sees it", async () => {
+    // Three of the five open with `# Summary - Aug NN, 2026`. A model handed a
+    // titled, headed document writes an answer shaped like it instead of the
+    // three sections it was asked for.
     DB.summaries = DB.summaries.filter((r) => r.id === "0ac2c023");
     await generate();
-    const html: string = DB.inserted.content_html;
-    expect(html).toContain("<h3>Summary - Aug 20, 2026");
-    expect(html).not.toContain("<h1>");
-    expect(html).not.toContain("# Summary - Aug 20, 2026");
+    expect(DB.prompt).toContain("First draft.");
+    expect(DB.prompt).not.toContain("Summary - Aug 20, 2026");
+    expect(DB.inserted.content_html).not.toContain("Summary - Aug 20, 2026");
   });
 
   it("tells the drafter about one write-up, not five", async () => {
     await generate();
-    expect(DB.prompt).toContain("Walkthrough write-ups on this job (1):");
+    expect(DB.prompt).toContain("Field write-ups from the walkthroughs on this job (1)");
     expect(DB.prompt).not.toContain("First draft");
   });
 });
@@ -401,22 +421,22 @@ describe("the Report, generated after a summary was redrafted over more photos",
     ];
   });
 
-  it("prints the updated write-up and not the one it replaced", async () => {
+  it("feeds the updated write-up and not the one it replaced", async () => {
+    // The old write-up in the context is what makes the narrative describe two
+    // visits over one set of photos.
     const res = await generate();
-    const html: string = DB.inserted.content_html;
     expect(res.summaryCount).toBe(1);
-    expect(summaryBlocks(html)).toHaveLength(1);
-    expect(html).toContain("Updated draft.");
-    expect(html).not.toContain("Old draft.");
-  });
-
-  it("does not feed the superseded draft to the drafter either", async () => {
-    // The prompt is the other half of it: the old write-up in the context is
-    // what makes the narrative describe two visits over one set of photos.
-    await generate();
-    expect(DB.prompt).toContain("Walkthrough write-ups on this job (1):");
+    expect(writeUps(DB.prompt)).toHaveLength(1);
     expect(DB.prompt).toContain("Updated draft.");
     expect(DB.prompt).not.toContain("Old draft.");
+  });
+
+  it("keeps both drafts off the page", async () => {
+    await generate();
+    const html: string = DB.inserted.content_html;
+    expect(html).not.toContain("Walkthrough Summaries");
+    expect(html).not.toContain("Updated draft.");
+    expect(html).not.toContain("Old draft.");
   });
 
   it("still carries both when neither selection contains the other", async () => {
@@ -425,7 +445,7 @@ describe("the Report, generated after a summary was redrafted over more photos",
     DB.summaries[0].photo_notes = [{ photoId: "p2" }, { photoId: "p3" }];
     const res = await generate();
     expect(res.summaryCount).toBe(2);
-    expect(summaryBlocks(DB.inserted.content_html)).toHaveLength(2);
+    expect(writeUps(DB.prompt)).toHaveLength(2);
   });
 });
 
@@ -455,13 +475,13 @@ describe("the Report, generated against the other shapes of summary history", ()
       }),
     ];
     await generate();
-    const html: string = DB.inserted.content_html;
-    const blocks = summaryBlocks(html);
-    expect(blocks).toHaveLength(2);
-    // Oldest first: the report reads forward through the job.
-    expect(blocks[0]).toContain("First visit");
-    expect(blocks[1]).toContain("Second visit");
-    expect(html).not.toContain("superseded");
+    const ups = writeUps(DB.prompt);
+    expect(ups).toHaveLength(2);
+    // Oldest first: the drafter reads the job forward.
+    expect(ups[0]).toContain("First visit.");
+    expect(ups[1]).toContain("Second visit, current.");
+    expect(DB.prompt).not.toContain("superseded");
+    expect(DB.inserted.content_html).not.toContain("Second visit");
   });
 
   it("collapses repeat runs of a summary written from photos", async () => {
@@ -492,8 +512,9 @@ describe("the Report, generated against the other shapes of summary history", ()
       }),
     ];
     await generate();
-    expect(summaryBlocks(DB.inserted.content_html)).toHaveLength(1);
-    expect(DB.inserted.content_html).toContain("Third run");
+    expect(writeUps(DB.prompt)).toHaveLength(1);
+    expect(DB.prompt).toContain("Third run");
+    expect(DB.inserted.content_html).not.toContain("Third run");
   });
 
   it("keeps two walks whose summaries came out word for word the same", async () => {
@@ -520,23 +541,26 @@ describe("the Report, generated against the other shapes of summary history", ()
       }),
     ];
     await generate();
-    const blocks = summaryBlocks(DB.inserted.content_html);
-    expect(blocks).toHaveLength(2);
-    expect(blocks[0]).toContain("Monday");
-    expect(blocks[1]).toContain("Tuesday");
+    const ups = writeUps(DB.prompt);
+    expect(ups).toHaveLength(2);
+    // Word for word the same body, so the date is the only thing telling the
+    // drafter it is reading two visits.
+    expect(ups[0]).toContain("August 4, 2026");
+    expect(ups[1]).toContain("August 5, 2026");
   });
 
   it("says nothing about walkthroughs on a job that has none", async () => {
     // An empty heading is a blank promise on a document handed to a client.
     await generate();
     expect(DB.inserted.content_html).not.toContain("Walkthrough Summaries");
+    expect(DB.prompt).toContain("Field write-ups from the walkthroughs on this job (0)");
   });
 
   it("skips a summary that is still generating and has no prose yet", async () => {
     DB.summaries = [summaryRow({ id: "e1", walkthrough_id: "w1", markdown: null })];
     const res = await generate();
     expect(res.summaryCount).toBe(0);
-    expect(DB.inserted.content_html).not.toContain("Walkthrough Summaries");
+    expect(writeUps(DB.prompt)).toHaveLength(0);
   });
 
   it("asks the database for the newest rows and for the column it groups on", async () => {
@@ -555,16 +579,17 @@ describe("the Report, generated against the other shapes of summary history", ()
   });
 });
 
-describe("the date a summary block carries", () => {
+describe("the date each write-up carries into the prompt", () => {
   /*
    * Taking the newest row per walkthrough is what fixed the duplicate blocks,
    * and it is also what made this necessary: a summary regenerated three weeks
-   * after the walk carries that later `created_at`, so dating the block by the
-   * row prints the visit as having happened on the day somebody last pressed
-   * Regenerate. In the document that is meant to be the record of when the work
-   * was done.
+   * after the walk carries that later `created_at`, so dating the write-up by
+   * the row tells the drafter the visit happened on the day somebody last
+   * pressed Regenerate. It repeats that date into the document that is meant
+   * to be the record of when the work was done, and a date in a report is one
+   * a customer checks against the invoice.
    */
-  it("dates the block by the walk, not by the regeneration", async () => {
+  it("dates the write-up by the walk, not by the regeneration", async () => {
     DB.walkthroughs = [{ id: "w1", started_at: "2026-08-01T08:30:00Z", created_at: null }];
     DB.summaries = [
       summaryRow({
@@ -575,12 +600,12 @@ describe("the date a summary block carries", () => {
       }),
     ];
     await generate();
-    const [block] = summaryBlocks(DB.inserted.content_html);
-    expect(block).toContain("August 1, 2026");
-    expect(block).not.toContain("August 22, 2026");
+    const [up] = writeUps(DB.prompt);
+    expect(up).toContain("August 1, 2026");
+    expect(up).not.toContain("August 22, 2026");
   });
 
-  it("orders the blocks by when the walks happened", async () => {
+  it("orders the write-ups by when the walks happened", async () => {
     DB.walkthroughs = [
       { id: "w1", started_at: "2026-08-01T08:00:00Z", created_at: null },
       { id: "w2", started_at: "2026-08-08T08:00:00Z", created_at: null },
@@ -603,9 +628,11 @@ describe("the date a summary block carries", () => {
       }),
     ];
     await generate();
-    const blocks = summaryBlocks(DB.inserted.content_html);
-    expect(blocks[0]).toContain("First visit");
-    expect(blocks[1]).toContain("Second visit");
+    const ups = writeUps(DB.prompt);
+    expect(ups[0]).toContain("First visit.");
+    expect(ups[1]).toContain("Second visit.");
+    expect(ups[0]).toContain("August 1, 2026");
+    expect(ups[1]).toContain("August 8, 2026");
   });
 
   it("falls back to the summary's own date when the recording is gone", async () => {
@@ -621,7 +648,7 @@ describe("the date a summary block carries", () => {
       }),
     ];
     await generate();
-    expect(summaryBlocks(DB.inserted.content_html)[0]).toContain("August 6, 2026");
+    expect(writeUps(DB.prompt)[0]).toContain("August 6, 2026");
   });
 
   it("asks for no visit dates at all when nothing is keyed to a walk", async () => {
@@ -767,14 +794,16 @@ describe("the Report's brief asks for the work, not the photographs of it", () =
   });
 });
 
-describe("a summary written before the split, quoted into the Report", () => {
+describe("a summary written before the split, read into the Report", () => {
   /*
    * Pinned here because it is the pairing that broke last time: the report
    * reads `markdown` straight from the table, which skips the repair every
    * other read performs, and a legacy row carries its own `# Title` and a
-   * `## Photos` gallery of refs `markdownToHtml` cannot render.
+   * `## Photos` gallery of refs. Those used to reach the client as literal
+   * "![Photo 1](photo:76edc...)" text; they now reach the model, where a block
+   * of image refs is an invitation to write about the photographs.
    */
-  it("carries neither the old title nor the old gallery into the document", async () => {
+  beforeEach(() => {
     DB.summaries = [
       summaryRow({
         id: "legacy",
@@ -783,14 +812,108 @@ describe("a summary written before the split, quoted into the Report", () => {
           "# Summary - Aug 14, 2026\n\n## Overview\n\nWalked the crawlspace.\n\n## Photos\n\n### Photo 1\n\n![Photo 1](photo:76edc)\n",
       }),
     ];
+  });
+
+  it("carries neither the old title nor the old gallery into the prompt", async () => {
+    await generate();
+    const [up] = writeUps(DB.prompt);
+    expect(up).toContain("Walked the crawlspace.");
+    expect(up).not.toContain("photo:76edc");
+    expect(up).not.toContain("Summary - Aug 14, 2026");
+    // And no headings of its own: a model handed "## Overview" writes that
+    // back as the shape of its answer.
+    expect(up).not.toMatch(/^#/m);
+    expect(up).toContain("Overview");
+  });
+
+  it("keeps its prose out of the document either way", async () => {
     await generate();
     const html: string = DB.inserted.content_html;
-    expect(html).toContain("Walked the crawlspace.");
-    expect(html).not.toContain("photo:76edc");
+    expect(html).not.toContain("Walked the crawlspace.");
     expect(html).not.toContain("Summary - Aug 14, 2026");
-    // Its own headings survive as bold lead-ins, not as a level the converter
-    // renders literally.
-    expect(html).toContain("<strong>Overview</strong>");
-    expect(html).not.toContain("#### ");
+    expect(html).not.toContain("photo:76edc");
+  });
+});
+
+/*
+ * A Report is written from the Summaries. It is not a stack of them.
+ *
+ * "Full Project Report is also listing the walkthrough summeries in series in
+ * the same report. Walkthrough Summery and Full project Details are completely
+ * separte things. Full project report gathers all meta data inclduing AI
+ * summeries and writes a polisehd client facing docuemnt with a cover page."
+ *
+ * The write-ups were quoted in under a heading apiece, each with its own date,
+ * which made the back half of a client-facing report a run of other documents
+ * the client can already open on their own share links. Everything below is one
+ * rule read two ways: the prose goes to the model, and the page gets what the
+ * model wrote.
+ */
+describe("the Report does not reprint the Summaries", () => {
+  beforeEach(() => {
+    DB.walkthroughs = [{ id: "w1", started_at: "2026-08-01T08:30:00Z", created_at: null }];
+    DB.summaries = [
+      summaryRow({
+        id: "s1",
+        walkthrough_id: "w1",
+        title: "First visit - Summary",
+        markdown:
+          "## Overview\n\nWalked the attic and the condenser pad.\n\n## Key Points\n\n- Unit runs.",
+      }),
+    ];
+  });
+
+  it("carries no section of quoted write-ups", async () => {
+    await generate();
+    const html: string = DB.inserted.content_html;
+    expect(html).not.toContain("Walkthrough Summaries");
+    expect(html).not.toContain("Walked the attic and the condenser pad.");
+    expect(html).not.toContain("First visit - Summary");
+  });
+
+  it("hands the same prose to the drafter instead", async () => {
+    await generate();
+    expect(DB.prompt).toContain("Field write-ups from the walkthroughs on this job (1)");
+    expect(DB.prompt).toContain("Walked the attic and the condenser pad.");
+  });
+
+  it("tells the model to fold them in rather than narrate them one by one", async () => {
+    // Handed a set of finished documents with no instruction, a model narrates
+    // them in order, which is the shape being removed.
+    await generate();
+    expect(DB.system).toContain("SOURCE MATERIAL");
+    expect(DB.system).toMatch(/Never reproduce a write-up/);
+    expect(DB.system).toMatch(/never give a visit a section or a heading of its own/);
+    expect(DB.system).toMatch(/never tell the reader to see a summary elsewhere/);
+  });
+
+  it("leaves the visits to the prose, with no counter standing in for them", async () => {
+    /*
+     * A "Walkthroughs recorded" row on the figures panel was tried and taken
+     * out: the only counts available here are of summary rows, capped, and
+     * blind to a walk nobody summarised. What the reader gets instead is the
+     * work itself, dated, in the sections the model wrote.
+     */
+    await generate();
+    const html: string = DB.inserted.content_html;
+    expect(html).not.toContain("Walkthroughs recorded");
+    expect(html).toContain('<span class="panel-label">Days on site</span>');
+  });
+
+  it("draws on a write-up that has no walkthrough behind it too", async () => {
+    // A summary written from a photo selection is still the only place someone
+    // said what happened, whether or not a recording sits behind it.
+    DB.walkthroughs = [];
+    DB.summaries = [
+      summaryRow({
+        id: "fromPhotos",
+        photo_notes: [{ photoId: "ph1" }],
+        markdown: "## Overview\n\nDrafted from a photo selection.",
+      }),
+    ];
+    await generate();
+    expect(writeUps(DB.prompt)).toHaveLength(1);
+    expect(DB.prompt).toContain("Drafted from a photo selection.");
+    expect(DB.inserted.content_html).not.toContain("Drafted from a photo selection.");
   });
 });

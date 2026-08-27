@@ -5,7 +5,6 @@ import { parsePhotoNotes, stripPhotoGallery } from "../apps/api/src/domains/walk
 import {
   digestPhotos,
   summaryProse,
-  demoteHeadings,
   flattenHeadings,
   currentSummaries,
 } from "../apps/api/src/domains/projects/comprehensive-report";
@@ -355,11 +354,17 @@ describe("the video page carries no summary", () => {
 });
 
 /*
- * The comprehensive Report reads the walkthrough write-ups too.
+ * The comprehensive Report writes FROM the walkthrough write-ups. It does not
+ * carry them.
  *
- * "The comprehensive longer Report that contains all meta data including all
- * walkthrough summery data". Those summaries are the only place on a job where
- * somebody said what was actually happening.
+ * "Full Project Report is also listing the walkthrough summaries in series in
+ * the same report. Walkthrough Summary and Full Project Report are completely
+ * separate things. Full project report gathers all meta data including AI
+ * summaries and writes a polished client facing document."
+ *
+ * The summaries are still the only place on a job where somebody said out loud
+ * what was happening, so the Report reads them. What changed is where they come
+ * out: folded into the narrative, not quoted under a heading apiece.
  */
 describe("the comprehensive Report includes walkthrough summary data", () => {
   const REPORT = "apps/api/src/domains/projects/comprehensive-report.ts";
@@ -370,14 +375,35 @@ describe("the comprehensive Report includes walkthrough summary data", () => {
     expect(src).toContain("MAX_SUMMARIES_INCLUDED");
   });
 
-  it("quotes them into the document, not just into the prompt", () => {
-    // "see the walkthrough summary" is not something a client receiving a PDF
-    // can act on.
+  it("feeds them to the drafter and prints none of them", () => {
+    // Proven end to end against the real service, on the HTML that lands in
+    // `project_pages`, in tests/report-summary-selection.test.ts.
     const src = read(REPORT);
-    // Fed the filtered, visit-dated set; proven end to end in
-    // tests/report-summary-selection.test.ts.
-    expect(src).toContain("walkthroughSummariesHtml(dated)");
-    expect(src).toContain("<h2>Walkthrough Summaries</h2>");
+    expect(src).toContain("Field write-ups from the walkthroughs on this job");
+    expect(src).not.toContain("walkthroughSummariesHtml");
+    expect(src).not.toContain("<h2>Walkthrough Summaries</h2>");
+  });
+
+  it("tells the model the write-ups are material and not content", () => {
+    // Handed a set of finished documents with no instruction, a model narrates
+    // them one after another, which is the shape being removed.
+    const src = read(REPORT);
+    expect(src).toContain("SOURCE MATERIAL");
+    expect(src).toMatch(/Never reproduce a write-up/);
+    expect(src).toMatch(/never give a visit a section or a heading of its own/);
+  });
+
+  it("puts no walkthrough count on the figures panel", () => {
+    /*
+     * Tried, and taken out again. Nothing this file reaches is the number such
+     * a label promises: the summary rows count walks that were summarised and
+     * are capped at MAX_SUMMARIES_INCLUDED, and a walk recorded but never
+     * summarised never appears here at all. A figure a client cannot reconcile
+     * is worse than no figure.
+     */
+    const src = read(REPORT);
+    expect(src).not.toContain("Walkthroughs recorded");
+    expect(src).toContain('["Days on site", d.days ? String(d.days) : ""]');
   });
 
   it("flattens their headings before using them as prompt context", () => {
@@ -454,7 +480,7 @@ describe("page break", () => {
  * The comprehensive Report reuses summary prose, and that reuse has a shape.
  *
  * Every one of these was found by generating the report against real data and
- * reading the HTML that came out, not by reasoning about the code.
+ * reading what came out, not by reasoning about the code.
  */
 describe("summary prose reused inside the Report", () => {
   const REPORT = "apps/api/src/domains/projects/comprehensive-report.ts";
@@ -464,25 +490,13 @@ describe("summary prose reused inside the Report", () => {
      * The report queries `walkthrough_summaries.markdown` directly, which skips
      * the repair `toSummary` does on every other read. Without this, a summary
      * written before the split contributed its old `# Title` and its
-     * `![](photo:id)` gallery - and since `markdownToHtml` has no image
-     * support, those came out as literal "![Photo 1](photo:76edc...)" text in a
-     * document meant for a client.
+     * `![](photo:id)` gallery. Those used to reach the client as literal
+     * "![Photo 1](photo:76edc...)" text; now they would reach the model, where
+     * a block of image refs invites prose about the photographs.
      */
     const src = read(REPORT);
     expect(src).toContain("stripPhotoGallery");
     expect(src).toContain("function summaryProse");
-  });
-
-  it("does not emit a heading level the converter cannot render", () => {
-    /*
-     * `markdownToHtml` matches `#{1,3}` and nothing deeper
-     * (packages/shared/src/markdown-rich.ts), so a `####` is not a heading -
-     * it renders as the literal text "#### Overview". Bold lead-ins instead,
-     * which also avoids colliding with the <h3> each summary already gets.
-     */
-    const src = read(REPORT);
-    expect(src).not.toContain('"#### "');
-    expect(src).toContain('"**$1**"');
   });
 
   it("keeps the converter's limit visible where it matters", () => {
@@ -499,7 +513,7 @@ describe("summary prose reused inside the Report", () => {
  * them found by generating the report against real data and reading the HTML.
  * They are pinned as behaviour here so the next change to it has to keep them.
  */
-describe("summaryProse / demoteHeadings / flattenHeadings", () => {
+describe("summaryProse / flattenHeadings", () => {
   const LEGACY = [
     "# Summary - Aug 14, 2026",
     "",
@@ -551,22 +565,6 @@ describe("summaryProse / demoteHeadings / flattenHeadings", () => {
   it("caps one long write-up so it cannot crowd out the rest", () => {
     const huge = "## Overview\n\n" + "word ".repeat(5000);
     expect(summaryProse(huge).length).toBeLessThanOrEqual(4000);
-  });
-
-  it("turns headings into bold, never into a level the converter drops", () => {
-    /*
-     * `markdownToHtml` matches `#{1,3}` and nothing deeper, so `####` is not a
-     * heading - it renders as the literal text "#### Overview". That shipped
-     * once.
-     */
-    const out = demoteHeadings(summaryProse(LEGACY));
-    expect(out).not.toMatch(/^#/m);
-    expect(out).toContain("**Overview**");
-    expect(out).toContain("**Key Points**");
-  });
-
-  it("leaves body text alone when demoting", () => {
-    expect(demoteHeadings("## Overview\n\nPlain text.")).toContain("Plain text.");
   });
 
   it("removes headings entirely for prompt context", () => {
@@ -847,17 +845,22 @@ describe("the Report takes only the current summary per walkthrough", () => {
     );
   });
 
-  it("says on the page that it is one per walkthrough", () => {
+  it("still filters even though nothing is quoted any more", () => {
+    /*
+     * The reason moved rather than went away. Four generations of one walk used
+     * to print as four blocks; they would now reach the model as four accounts
+     * of one visit, which is what makes a narrative describe four visits.
+     */
     const src = read(REPORT);
-    expect(src).toContain("The current summary for each walkthrough documented on this job");
-    expect(src).toContain("its own report");
+    expect(src).toContain("Write-up ${i + 1} of ${dated.length}");
+    expect(src).not.toContain("The current summary for each walkthrough documented on this job");
   });
 
   it("leaves the Summary a document of its own", () => {
     /*
      * "Summary should also remain independently viewable and generatable as its
-     * own report, separate from being embedded in a Report's body." Quoting one
-     * into a Report must not become the only way to reach it: it keeps its own
+     * own report, separate from being embedded in a Report's body." A Report
+     * drawing on one must not become the only way to reach it: it keeps its own
      * route and its own generate calls.
      */
     expect(read("apps/web/src/routeTree.gen.ts")).toContain("/summaries/$summaryId");

@@ -12,6 +12,7 @@ import {
   Loader2,
   MailCheck,
   Search,
+  UserPlus,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePrompt } from "@/hooks/use-prompt";
 import { useAdminRole } from "../hooks/use-admin-role";
 import { CapabilityNotice } from "../components/AdminTable";
+import { CreateUserDialog } from "../components/CreateUserDialog";
 import { cn } from "@/lib/utils";
 
 /*
@@ -74,6 +76,13 @@ export function AdminUsersPage() {
   const prompt = usePrompt();
   const { denyReason } = useAdminRole();
   const deniedBulk = denyReason("support");
+  /*
+   * Creating an account is superadmin-only, a step above the rest of this
+   * screen. It is the one action here that can end in a working login into a
+   * customer's workspace - see the note on createPlatformUserService.
+   */
+  const deniedCreate = denyReason("owner");
+  const [createOpen, setCreateOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<UserStatusFilter | "all">("all");
   const [plan, setPlan] = useState<"starter" | "pro" | "team" | "all">("all");
@@ -153,7 +162,19 @@ export function AdminUsersPage() {
     setBusy(true);
     try {
       const res = await runBulkUserAction({
-        data: { userIds: ids, action, reason: reason.trim() },
+        data: {
+          userIds: ids,
+          action,
+          reason: reason.trim(),
+          /*
+           * Where the link should land. A local console mints local links;
+           * anything the mailer does not recognise as ours falls back to
+           * production rather than being trusted (resolveAppOrigin in
+           * domains/email/auth-send.ts), so this cannot point a customer's
+           * confirmation at a host we do not own.
+           */
+          origin: window.location.origin,
+        },
       });
       // Partial success is reported as partial, never rounded up to success.
       if (res.failed.length) {
@@ -259,16 +280,28 @@ export function AdminUsersPage() {
             ))}
           </div>
 
-          <Button
-            size="sm"
-            variant="outline"
-            className="ml-auto"
-            disabled={busy || total === 0}
-            onClick={doExport}
-          >
-            <Download className="mr-1.5 h-3.5 w-3.5" /> Export CSV
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button size="sm" variant="outline" disabled={busy || total === 0} onClick={doExport}>
+              <Download className="mr-1.5 h-3.5 w-3.5" /> Export CSV
+            </Button>
+            {/*
+              Shown to every admin, disabled for the ones who may not use it.
+              A control that is simply absent reads as a missing feature - which
+              is exactly how this screen got reported as "admin can't add user"
+              in the first place.
+            */}
+            <Button
+              size="sm"
+              disabled={busy || !!deniedCreate}
+              title={deniedCreate ?? undefined}
+              onClick={() => setCreateOpen(true)}
+            >
+              <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Add user
+            </Button>
+          </div>
         </div>
+
+        <CapabilityNotice reason={deniedCreate} />
 
         {selected.size > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/40 p-2.5">
@@ -415,6 +448,21 @@ export function AdminUsersPage() {
           </>
         )}
       </div>
+
+      <CreateUserDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        /*
+         * Clear the page and selection, not just the cache. A new account is
+         * newest-first under the default sort, so an operator who was on page
+         * 3 would not see the person they just added and would reasonably
+         * conclude it had failed.
+         */
+        onCreated={() => {
+          setOffset(0);
+          setSelected(new Set());
+        }}
+      />
     </div>
   );
 }

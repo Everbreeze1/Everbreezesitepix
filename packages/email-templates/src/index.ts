@@ -6,3 +6,4 @@ export { EmailChangeEmail } from "./email-change";
 export { ReauthenticationEmail } from "./reauthentication";
 export { FieldReportEmail } from "./field-report";
 export { TaskNotificationEmail } from "./task-notification";
+export { AccountCreatedEmail } from "./account-created";

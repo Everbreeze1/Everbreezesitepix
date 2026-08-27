@@ -1,8 +1,12 @@
+import { useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Loader2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, ExternalLink, Loader2, UserPlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { getPlatformTeamDetail, type PlatformBusinessProfile } from "@/lib/admin.functions";
 import { formatBytes } from "@/hooks/use-storage-usage";
+import { useAdminRole } from "../hooks/use-admin-role";
+import { CreateUserDialog } from "../components/CreateUserDialog";
 import { TeamBillingPanel } from "../components/TeamBillingPanel";
 import {
   COMPANY_GOALS,
@@ -15,6 +19,10 @@ import {
 
 export function AdminTeamDetailPage() {
   const { teamId } = useParams({ from: "/_app/admin/teams_/$teamId" });
+  const qc = useQueryClient();
+  const { denyReason } = useAdminRole();
+  const deniedCreate = denyReason("owner");
+  const [addOpen, setAddOpen] = useState(false);
 
   const { data, isPending } = useQuery({
     queryKey: ["admin", "teams", "detail", teamId],
@@ -77,9 +85,26 @@ export function AdminTeamDetailPage() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-border bg-card p-6">
-          <p className="text-sm font-extrabold text-foreground">
-            Members <span className="text-muted-foreground">({data.members.length})</span>
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-extrabold text-foreground">
+              Members <span className="text-muted-foreground">({data.members.length})</span>
+            </p>
+            {/*
+              The other half of "instead of creating a new subscription": the
+              operator is already looking at the customer who should absorb the
+              seat, so make the account here rather than sending them to the
+              users list to search for a team they have open.
+            */}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!!deniedCreate}
+              title={deniedCreate ?? undefined}
+              onClick={() => setAddOpen(true)}
+            >
+              <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Add member
+            </Button>
+          </div>
           <div className="mt-3 space-y-2">
             {data.members.map((m) => (
               <div
@@ -127,6 +152,21 @@ export function AdminTeamDetailPage() {
           </div>
         </div>
       </div>
+
+      <CreateUserDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        presetTeam={{
+          id: data.id,
+          name: data.name,
+          plan: data.plan,
+          isInternal: data.isInternal,
+          memberCount: data.members.length,
+        }}
+        onCreated={() =>
+          void qc.invalidateQueries({ queryKey: ["admin", "teams", "detail", teamId] })
+        }
+      />
     </div>
   );
 }

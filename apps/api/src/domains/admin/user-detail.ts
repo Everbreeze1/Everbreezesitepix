@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { requirePlatformAdmin } from "../../lib/admin-context";
 import { selectIn } from "../../lib/chunked-in";
+import { sendSignupConfirmationEmail } from "../email/signup-confirmation";
 import { logAdminAction, logAdminRead } from "./audit";
 import type { AuthedContext } from "../../lib/user-context";
 
@@ -334,12 +335,19 @@ export async function runUserSupportActionService(
         // is "they are already confirmed, this is not their problem".
         return { ok: true, message: "That address is already confirmed. Nothing sent." };
       }
-      const { error } = await admin.auth.resend({
-        type: "signup",
-        email,
-        options: { emailRedirectTo: `${origin}/dashboard` },
-      });
-      if (error) throw new Error(error.message);
+      /*
+       * Sent by us over Resend, not handed to `auth.resend`.
+       *
+       * `auth.resend` is GoTrue's mailer, and GoTrue does not send this
+       * itself: it calls the project's Send Email hook, and a hook URL that
+       * does not answer means nothing is ever composed. Against production
+       * that path returned 422 `hook_timeout_after_retry` - so the one button
+       * in this console for "they never got their confirmation" was itself
+       * silently sending nothing, which is the same fault the invite flow was
+       * moved off in ../email/signup-confirmation.ts.
+       */
+      const res = await sendSignupConfirmationEmail(email, origin);
+      if (!res.sent) throw new Error(res.reason ?? "The confirmation email could not be sent.");
       message = `Confirmation email resent to ${email}.`;
       break;
     }

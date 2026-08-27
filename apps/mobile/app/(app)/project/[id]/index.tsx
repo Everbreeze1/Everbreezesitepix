@@ -10,19 +10,42 @@ import {
   Text,
   View,
 } from "react-native";
-import { Camera, ClipboardCheck, ImageOff, ListTodo, MapPin, Video, Workflow } from "@/ui/icons";
+import {
+  Camera,
+  CheckCheck,
+  CircleCheck,
+  ClipboardCheck,
+  ImageOff,
+  ListTodo,
+  MapPin,
+  Trash2,
+  Video,
+  Workflow,
+} from "@/ui/icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { displayCaption, formatPhotoDateGroup } from "@everlumen/shared";
-import { listProjectPhotoPage, PHOTO_PAGE_SIZE, type PhotoListItem } from "@/api/photos";
+import {
+  listProjectPhotoPage,
+  PHOTO_PAGE_SIZE,
+  type PhotoListItem,
+  type PhotoPage,
+} from "@/api/photos";
+import { mergeTags, phasePatch, trashPhotos, type PhotoPatch } from "@/api/photo-edit";
 import { formatAddress, getProject } from "@/api/projects";
 import { QueueBanner } from "@/components/QueueBanner";
+import { PhotoBulkBar, type PhotoBulkAction } from "@/components/PhotoBulkBar";
+import { photoPatchRowId, type PhotoPatchPayload } from "@/offline/handlers";
+import { enqueue } from "@/offline/outbox";
+import { refreshQueue, requestSync } from "@/offline/sync";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 import {
   Badge,
   Button,
   ChipGroup,
+  Icon,
+  IconButton,
   EmptyState,
   ErrorState,
   ListGroup,
@@ -62,6 +85,16 @@ export default function ProjectDetailScreen() {
   const theme = useTheme();
   const [filter, setFilter] = useState<PhaseFilter>("all");
   const [lightboxId, setLightboxId] = useState<string | null>(null);
+  /*
+   * Selection lives as a Set of ids rather than a flag plus a list, so a photo
+   * scrolled far out of view cannot fall out of the selection when the list
+   * recycles its rows.
+   */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const queryClient = useQueryClient();
+
+  const selecting = selected.size > 0;
 
   const projectQuery = useQuery({
     queryKey: ["project", id],
@@ -140,9 +173,112 @@ export default function ProjectDetailScreen() {
     }
   }, [photosQuery]);
 
+  const toggle = useCallback((photoId: string) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(photoId)) next.delete(photoId);
+      else next.add(photoId);
+      return next;
+    });
+  }, []);
+
+  /**
+   * Apply a bulk action to the selection.
+   *
+   * Optimistic against the paged cache, then queued, like every other write in
+   * the app. Trash and move remove the rows from this project's grid; phase and
+   * tags rewrite them in place.
+   *
+   * Tags are merged per photo rather than written as one shared array. A single
+   * `tags` value applied across a selection would overwrite each photo's own
+   * tags with the union of everyone's, quietly relabelling work.
+   */
+  const applyBulk = useCallback(
+    async (action: PhotoBulkAction) => {
+      const ids = Array.from(selected);
+      if (ids.length === 0) return;
+      setBusy(true);
+
+      const removesFromThisProject = action.kind === "trash" || action.kind === "move";
+      const basePatch: PhotoPatch =
+        action.kind === "phase"
+          ? phasePatch(action.phase)
+          : action.kind === "trash"
+            ? trashPhotos()
+            : action.kind === "move"
+              ? { project_id: action.projectId }
+              : {};
+
+      // Tag writes differ per photo, so they queue one row per photo.
+      const perPhoto: { ids: string[]; patch: PhotoPatch }[] =
+        action.kind === "tags"
+          ? photos
+              .filter((photo) => selected.has(photo.id))
+              .map((photo) => ({
+                ids: [photo.id],
+                patch: { tags: mergeTags(photo.tags, action.tags) },
+              }))
+          : [{ ids, patch: basePatch }];
+
+      queryClient.setQueryData<{ pages: PhotoPage[]; pageParams: unknown[] }>(
+        ["project-photos", id],
+        (current) => {
+          if (!current) return current;
+          return {
+            ...current,
+            pages: current.pages.map((page) => ({
+              ...page,
+              photos: removesFromThisProject
+                ? page.photos.filter((photo) => !selected.has(photo.id))
+                : page.photos.map((photo) => {
+                    if (!selected.has(photo.id)) return photo;
+                    const patch = perPhoto.find((p) => p.ids[0] === photo.id)?.patch ?? basePatch;
+                    return { ...photo, ...patch };
+                  }),
+            })),
+          };
+        },
+      );
+
+      for (const write of perPhoto) {
+        const payload: PhotoPatchPayload & { invalidate: unknown[][] } = {
+          photoIds: write.ids,
+          patch: write.patch,
+          invalidate: [["project-photos", id], ["gallery-photos"]],
+        };
+        await enqueue({
+          id: photoPatchRowId(action.kind, write.ids),
+          kind: "photo_patch",
+          projectId: id ?? null,
+          payload,
+        });
+      }
+
+      await refreshQueue();
+      requestSync();
+      setSelected(new Set());
+      setBusy(false);
+    },
+    [selected, photos, queryClient, id],
+  );
+
   return (
     <>
-      <Stack.Screen options={{ title: project?.name ?? "Project" }} />
+      <Stack.Screen
+        options={{
+          title: selecting ? `${selected.size} selected` : (project?.name ?? "Project"),
+          headerRight: () =>
+            selecting ? (
+              <IconButton
+                icon={CheckCheck}
+                accessibilityLabel="Select all loaded photos"
+                surface={false}
+                tone="primary"
+                onPress={() => setSelected(new Set(filtered.map((photo) => photo.id)))}
+              />
+            ) : null,
+        }}
+      />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         <QueueBanner />
         {loading ? (
@@ -231,6 +367,14 @@ export default function ProjectDetailScreen() {
                       subtitle="Recorded site walks"
                       onPress={() => router.push(`/project/${id}/walkthroughs`)}
                     />
+                    <RowDivider />
+                    <ListRow
+                      icon={Trash2}
+                      iconTone="muted"
+                      title="Trash"
+                      subtitle="Restore deleted photos"
+                      onPress={() => router.push(`/project/${id}/trash`)}
+                    />
                   </ListGroup>
                 </View>
 
@@ -289,38 +433,88 @@ export default function ProjectDetailScreen() {
             )}
             renderItem={({ item }) => (
               <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
-                {item.photos.map((photo) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={photo.id}
-                    onPress={() => setLightboxId(photo.id)}
-                    accessibilityLabel={displayCaption(photo.caption, "Photo")}
-                    accessibilityHint="Opens the photo full screen"
-                    style={{ width: tileSize, height: tileSize }}
-                  >
-                    <Image
-                      source={urls[photo.id] ? { uri: urls[photo.id] } : undefined}
-                      style={[styles.tile, { backgroundColor: theme.colors.muted }]}
-                      contentFit="cover"
-                      transition={120}
-                    />
-                  </Pressable>
-                ))}
+                {item.photos.map((photo) => {
+                  const picked = selected.has(photo.id);
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      key={photo.id}
+                      /*
+                       * Long press starts a selection, tap continues it. That is
+                       * the platform convention for a photo grid, and it means a
+                       * single tap keeps meaning "look at this" until the person
+                       * has said otherwise.
+                       */
+                      onLongPress={() => toggle(photo.id)}
+                      onPress={() => (selecting ? toggle(photo.id) : setLightboxId(photo.id))}
+                      accessibilityLabel={displayCaption(photo.caption, "Photo")}
+                      accessibilityHint={
+                        selecting
+                          ? "Adds or removes this photo from the selection"
+                          : "Opens the photo full screen"
+                      }
+                      accessibilityState={{ selected: picked }}
+                      style={{ width: tileSize, height: tileSize }}
+                    >
+                      <Image
+                        source={urls[photo.id] ? { uri: urls[photo.id] } : undefined}
+                        style={[styles.tile, { backgroundColor: theme.colors.muted }]}
+                        contentFit="cover"
+                        transition={120}
+                      />
+                      {selecting ? (
+                        <View
+                          style={[
+                            styles.tileOverlay,
+                            {
+                              borderColor: picked ? theme.colors.primary : "transparent",
+                              // Unpicked tiles dim so the chosen ones read at a
+                              // glance across a three-column grid.
+                              backgroundColor: picked ? "transparent" : "rgba(0,0,0,0.35)",
+                            },
+                          ]}
+                        >
+                          {picked ? (
+                            <View style={styles.tileCheck}>
+                              <Icon icon={CircleCheck} size="lg" tone="inverse" />
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
               </View>
             )}
           />
         )}
 
-        <View style={styles.fab}>
-          <Button
-            label="Capture"
-            icon={Camera}
-            size="lg"
-            onPress={() => router.push(`/project/${id}/capture`)}
-            accessibilityHint="Opens the camera for this project"
-            style={{ borderRadius: radius.pill }}
+        {/*
+          The capture button and the bulk bar are the same slot, never both.
+          Offering "Capture" while forty photos are selected invites a tap that
+          throws the selection away, and the two intents have nothing to do with
+          each other.
+        */}
+        {selecting ? (
+          <PhotoBulkBar
+            count={selected.size}
+            busy={busy}
+            currentProjectId={id}
+            onCancel={() => setSelected(new Set())}
+            onAction={(action) => void applyBulk(action)}
           />
-        </View>
+        ) : (
+          <View style={styles.fab}>
+            <Button
+              label="Capture"
+              icon={Camera}
+              size="lg"
+              onPress={() => router.push(`/project/${id}/capture`)}
+              accessibilityHint="Opens the camera for this project"
+              style={{ borderRadius: radius.pill }}
+            />
+          </View>
+        )}
       </View>
 
       <Modal
@@ -383,6 +577,23 @@ export default function ProjectDetailScreen() {
 const styles = StyleSheet.create({
   gridRow: { flexDirection: "row", gap: GRID_GAP },
   tile: { width: "100%", height: "100%", borderRadius: radius.sm },
+  /* Sits over the whole tile so the ring reads as the tile being selected. */
+  tileOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: radius.sm,
+    borderWidth: 3,
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+    padding: 4,
+  },
+  tileCheck: {
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderRadius: radius.pill,
+  },
   /*
    * Positioning and lift only. The button itself is the kit's, so its height,
    * radius and pressed state match every other primary action in the app.

@@ -237,6 +237,10 @@ import {
   setUserTeamRoleService,
 } from "../admin/user-directory";
 import {
+  createPlatformUserInputSchema,
+  createPlatformUserService,
+} from "../admin/create-user";
+import {
   getContentLibraryService,
   getPlatformUsageInputSchema,
   getPlatformUsageService,
@@ -1246,6 +1250,15 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   listUserDirectory: authed(
     (d) => listUserDirectoryInputSchema.parse(d),
     listUserDirectoryService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  createPlatformUser: authed(
+    (d) => createPlatformUserInputSchema.parse(d),
+    createPlatformUserService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    // Safe to replay: a retried request carrying the same key returns the
+    // first result rather than creating a second account. Two *separate*
+    // submissions carry two keys, and the 409 on an existing profile is what
+    // stops those.
+    { idempotent: true },
   ),
   setAdminRole: authed(
     (d) => setAdminRoleInputSchema.parse(d),

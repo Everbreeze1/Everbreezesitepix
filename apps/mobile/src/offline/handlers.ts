@@ -1,6 +1,7 @@
 import { applyItemPatch, attachPhotoToItem } from "@/api/checklists";
 import { uploadProjectPhoto, type PhotoPhase } from "@/api/photos";
 import type { Coords } from "@/api/photo-meta";
+import { applyPhotoPatch, type PhotoPatch } from "@/api/photo-edit";
 import {
   applyTaskEdit,
   applyTaskPatch,
@@ -107,6 +108,23 @@ export type TaskPatchPayload = {
 };
 
 /** Row id for a task status change, deterministic per task. */
+export type PhotoPatchPayload = {
+  photoIds: string[];
+  patch: PhotoPatch;
+};
+
+/**
+ * One queue row per bulk action, keyed by what it does and to what.
+ *
+ * Not keyed on the photo ids alone: tagging a set and then trashing the same
+ * set are two different intents that must both land, in order. Keyed on the
+ * field being written, so correcting a phase replaces the queued phase write
+ * rather than stacking a second one behind it.
+ */
+export function photoPatchRowId(field: string, photoIds: string[]): string {
+  return `photo-patch:${field}:${photoIds.join(",")}`;
+}
+
 export type TaskCreatePayload = {
   input: CreateTaskInput;
 };
@@ -227,6 +245,13 @@ const handlers: Record<OutboxKind, Handler> = {
   workflow_phase_patch: async (row) => {
     const payload = JSON.parse(row.payload) as WorkflowPhasePatchPayload;
     await applyPhasePatch(payload.phaseId, payload.patch);
+  },
+
+  photo_patch: async (row) => {
+    const payload = JSON.parse(row.payload) as PhotoPatchPayload;
+    // Idempotent: the patch carries the whole value for every column it sets,
+    // so replaying it lands on the same result.
+    await applyPhotoPatch(payload.photoIds, payload.patch);
   },
 
   task_create: async (row) => {
