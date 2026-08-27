@@ -49,7 +49,7 @@ cd apps/mobile && npx expo export --platform android  # Metro resolution and bun
 
 ## Builds
 
-`eas.json` defines three profiles. The EAS project exists: **@miny32720/everlumen**, and `extra.eas.projectId` in `app.json` points at it.
+`eas.json` defines three profiles. The EAS project exists: **@everlumen1/everlumen**, and `extra.eas.projectId` in `app.json` points at it.
 
 **EAS builds from the committed git state, not your working tree.** Uncommitted work is silently absent from the build, which is a confusing way to lose an afternoon. Commit first.
 

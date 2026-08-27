@@ -54,7 +54,7 @@
       "apiBaseUrl": "",
       "router": {},
       "eas": {
-        "projectId": "e6102a65-912b-4dfd-99e1-cc45bd42a2d7"
+        "projectId": "2b7e8e0a-5180-4417-b36f-1324977fb86e"
       }
     },
     "ios": {
@@ -74,13 +74,11 @@
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.RECORD_AUDIO"
       ],
-      "blockedPermissions": [
-        "android.permission.ACCESS_BACKGROUND_LOCATION"
-      ]
+      "blockedPermissions": ["android.permission.ACCESS_BACKGROUND_LOCATION"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "owner": "miny32720"
+    "owner": "everlumen1"
   }
 }
