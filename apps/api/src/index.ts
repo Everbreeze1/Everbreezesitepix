@@ -121,6 +121,7 @@ export {
   acceptInviteSignupService,
   resendInviteService,
   resendMemberConfirmationService,
+  resendInviteConfirmationService,
   getTeamActivityService,
   getProjectContributorsService,
   saveCompanyProfileService,

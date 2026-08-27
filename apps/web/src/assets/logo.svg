@@ -1,59 +1,62 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Everlumen">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 150" width="512" height="512" role="img" aria-label="Everlumen">
+  <!--
+    The Everlumen aperture: a full circular disc of six blades tiled edge to
+    edge, closing solid except for a small hexagonal opening at the centre.
+
+    Geometry, so it can be reasoned about rather than nudged:
+      outer vertices  r = 50 about (75,75), every 60 degrees from -90
+      inner vertices  r = 22 about (75,75), every 60 degrees from -115
+    The 25 degree offset between the two rings is the twist. Each blade runs
+    outer[n] -> arc -> outer[n+1] -> inner[n+1] -> inner[n], so neighbouring
+    blades share their straight edge exactly and no seam can open up.
+
+    Coordinates are lifted unchanged from the source design file and must stay
+    that way: apps/mobile/src/components/BrandMark.tsx and
+    apps/web/src/components/BrandMark.tsx are ports of this artwork and are
+    diffed against it.
+  -->
   <defs>
-    <linearGradient id="b0" gradientUnits="userSpaceOnUse" x1="377.686" y1="404.515" x2="256" y2="256">
-      <stop offset="0" stop-color="#1E5AA6"/>
-      <stop offset="1" stop-color="#3E8ADF"/>
-    </linearGradient>
-    <linearGradient id="b1" gradientUnits="userSpaceOnUse" x1="445.46" y1="224.875" x2="256" y2="256">
-      <stop offset="0" stop-color="#1E5AA6"/>
-      <stop offset="1" stop-color="#3E8ADF"/>
-    </linearGradient>
-    <linearGradient id="b2" gradientUnits="userSpaceOnUse" x1="323.775" y1="76.36" x2="256" y2="256">
-      <stop offset="0" stop-color="#1E5AA6"/>
-      <stop offset="1" stop-color="#3E8ADF"/>
-    </linearGradient>
-    <linearGradient id="b3" gradientUnits="userSpaceOnUse" x1="134.314" y1="107.485" x2="256" y2="256">
-      <stop offset="0" stop-color="#1E5AA6"/>
-      <stop offset="1" stop-color="#3E8ADF"/>
-    </linearGradient>
-    <linearGradient id="b4" gradientUnits="userSpaceOnUse" x1="66.54" y1="287.125" x2="256" y2="256">
-      <stop offset="0" stop-color="#1E5AA6"/>
-      <stop offset="1" stop-color="#3E8ADF"/>
-    </linearGradient>
-    <linearGradient id="b5" gradientUnits="userSpaceOnUse" x1="188.225" y1="435.64" x2="256" y2="256">
-      <stop offset="0" stop-color="#1E5AA6"/>
-      <stop offset="1" stop-color="#3E8ADF"/>
-    </linearGradient>
-    <radialGradient id="well" gradientUnits="userSpaceOnUse" cx="256" cy="256" r="88.32">
-      <stop offset="0" stop-color="#FFF8EC"/>
-      <stop offset="0.45" stop-color="#CFE7FF"/>
-      <stop offset="1" stop-color="#7DB6EE"/>
+    <radialGradient id="ground" cx="35%" cy="30%" r="85%">
+      <stop offset="0" stop-color="#262A44"/>
+      <stop offset="1" stop-color="#0A0A10"/>
     </radialGradient>
-    <radialGradient id="halo" gradientUnits="userSpaceOnUse" cx="256" cy="256" r="76.8">
-      <stop offset="0" stop-color="#FFF8EC" stop-opacity="0.45"/>
-      <stop offset="0.4" stop-color="#FFF8EC" stop-opacity="0.2"/>
-      <stop offset="0.75" stop-color="#A8D4FF" stop-opacity="0.07"/>
-      <stop offset="1" stop-color="#A8D4FF" stop-opacity="0"/>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#FFB020" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#FFB020" stop-opacity="0"/>
     </radialGradient>
+    <filter id="blur">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+    <!-- Keeps the light bleeding past the disc rim out of the aperture, so the
+         opening still reads as a hole rather than as a lit well. -->
+    <mask id="hole">
+      <rect width="150" height="150" fill="white"/>
+      <polygon points="65.70,55.06 87.62,56.98 96.92,76.92 84.30,94.94 62.38,93.02 53.08,73.08" fill="black"/>
+    </mask>
   </defs>
-  <rect width="512" height="512" fill="#171B24"/>
-  <circle cx="256" cy="256" r="88.32" fill="url(#well)"/>
-  <g>
-    <path fill="url(#b0)" d="M 287.125 445.46 L 332.693 231.081 L 435.64 323.775 A 192 192 0 0 1 287.125 445.46 Z"/>
-    <path fill="url(#b1)" d="M 435.64 323.775 L 272.766 177.122 L 404.515 134.314 A 192 192 0 0 1 435.64 323.775 Z"/>
-    <path fill="url(#b2)" d="M 404.515 134.314 L 196.073 202.041 L 224.875 66.54 A 192 192 0 0 1 404.515 134.314 Z"/>
-    <path fill="url(#b3)" d="M 224.875 66.54 L 179.307 280.919 L 76.36 188.225 A 192 192 0 0 1 224.875 66.54 Z"/>
-    <path fill="url(#b4)" d="M 76.36 188.225 L 239.234 334.878 L 107.485 377.686 A 192 192 0 0 1 76.36 188.225 Z"/>
-    <path fill="url(#b5)" d="M 107.485 377.686 L 315.927 309.959 L 287.125 445.46 A 192 192 0 0 1 107.485 377.686 Z"/>
+
+  <rect width="150" height="150" fill="url(#ground)"/>
+  <circle cx="75" cy="75" r="58" fill="url(#glow)" filter="url(#blur)" mask="url(#hole)"/>
+
+  <!-- Alternating opacity is what turns six flat wedges into blades catching
+       light at different angles. The hairline is the ground colour, not a
+       darker outline: it separates the blades without drawing on them. -->
+  <g stroke="#171A2C" stroke-width="1" stroke-linejoin="round">
+    <path d="M75,25 A50,50 0 0 1 118.3,50 L 87.62,56.98 L 65.70,55.06 Z" fill="#FFB020"/>
+    <path d="M118.3,50 A50,50 0 0 1 118.3,100 L 96.92,76.92 L 87.62,56.98 Z" fill="#FFB020" opacity="0.88"/>
+    <path d="M118.3,100 A50,50 0 0 1 75,125 L 84.30,94.94 L 96.92,76.92 Z" fill="#FFB020"/>
+    <path d="M75,125 A50,50 0 0 1 31.7,100 L 62.38,93.02 L 84.30,94.94 Z" fill="#FFB020" opacity="0.88"/>
+    <path d="M31.7,100 A50,50 0 0 1 31.7,50 L 53.08,73.08 L 62.38,93.02 Z" fill="#FFB020"/>
+    <path d="M31.7,50 A50,50 0 0 1 75,25 L 65.70,55.06 L 53.08,73.08 Z" fill="#FFB020" opacity="0.88"/>
   </g>
-  <g stroke="#171B24" stroke-width="14" stroke-linecap="butt" fill="none">
-    <path d="M 315.927 309.959 L 287.125 445.46"/>
-    <path d="M 332.693 231.081 L 435.64 323.775"/>
-    <path d="M 272.766 177.122 L 404.515 134.314"/>
-    <path d="M 196.073 202.041 L 224.875 66.54"/>
-    <path d="M 179.307 280.919 L 76.36 188.225"/>
-    <path d="M 239.234 334.878 L 107.485 377.686"/>
+
+  <!-- The twisted seams. Without them the silhouette is a plain gold circle. -->
+  <g fill="none" stroke="#1E2B4D" stroke-width="3" stroke-linecap="round">
+    <path d="M75,25 L65.70,55.06"/>
+    <path d="M118.3,50 L87.62,56.98"/>
+    <path d="M118.3,100 L96.92,76.92"/>
+    <path d="M75,125 L84.30,94.94"/>
+    <path d="M31.7,100 L62.38,93.02"/>
+    <path d="M31.7,50 L53.08,73.08"/>
   </g>
-  <circle cx="256" cy="256" r="76.8" fill="url(#halo)"/>
-  <circle cx="256" cy="256" r="32.64" fill="#FFF8EC"/>
 </svg>

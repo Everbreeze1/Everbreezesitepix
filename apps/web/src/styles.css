@@ -61,6 +61,13 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
 
+  /* Brand. `brand` is the wordmark gold, which flips for light and dark
+     grounds; `brand-gold` is the mark gold itself and never flips, for use on
+     surfaces that are dark whatever the app theme is (the sidebar, the
+     marketing hero). */
+  --color-brand: var(--brand-wordmark);
+  --color-brand-gold: var(--brand-gold);
+
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Barlow Condensed", ui-sans-serif, system-ui, sans-serif;
   --font-manrope: "Manrope", ui-sans-serif, system-ui, sans-serif;
@@ -119,6 +126,18 @@
   --sidebar-accent: rgba(255, 255, 255, 0.08);
   --sidebar-accent-foreground: #ffffff;
   --sidebar-ring: #2584f4;
+
+  /*
+   * Everlumen brand, taken from the logo artwork in src/assets/logo.svg.
+   *
+   * The wordmark gold is darkened on light grounds because #ffb020 on white
+   * measures about 1.8:1. #d97c0a reaches 3.3:1, which clears AA for the large
+   * bold display sizes the wordmark is ever set at, and nothing smaller uses it.
+   */
+  --brand-gold: #ffb020;
+  --brand-navy: #1e2b4d;
+  --brand-ground: #171a2c;
+  --brand-wordmark: #d97c0a;
 }
 
 .dark {
@@ -131,6 +150,9 @@
   --primary: oklch(0.68 0.15 245);
   --primary-foreground: oklch(0.16 0.025 250);
   --primary-glow: oklch(0.75 0.14 245);
+  /* On a dark ground the mark gold is legible as-is, so the wordmark matches
+     the blades exactly. */
+  --brand-wordmark: #ffb020;
   --secondary: oklch(0.26 0.04 250);
   --secondary-foreground: oklch(0.97 0.005 240);
   --muted: oklch(0.26 0.04 250);

@@ -1,4 +1,4 @@
-import Svg, { Circle, Defs, G, LinearGradient, Path, RadialGradient, Stop } from "react-native-svg";
+import Svg, { Circle, Defs, G, Path, RadialGradient, Stop } from "react-native-svg";
 
 /**
  * The Everlumen aperture, drawn from the same geometry as the web logo.
@@ -8,119 +8,86 @@ import Svg, { Circle, Defs, G, LinearGradient, Path, RadialGradient, Stop } from
  * gradients, and cannot drift from the web mark the way a re-drawn or
  * AI-generated copy does. It also costs no image asset in the bundle.
  *
- * The viewBox is the original 512 grid, so every coordinate below is lifted
- * unchanged from the source file and can be diffed against it.
+ * The viewBox is the original 150 grid, so every coordinate below is lifted
+ * unchanged from the source file and can be diffed against it. Outer vertices
+ * sit at r=50 about (75,75) every 60 degrees from -90, inner vertices at r=22
+ * every 60 degrees from -115, and the 25 degree offset between the two rings is
+ * the twist. Each blade runs outer[n] -> arc -> outer[n+1] -> inner[n+1] ->
+ * inner[n], so neighbouring blades share their straight edge exactly and the
+ * disc closes solid except for the hexagonal opening at the centre.
  */
 
-/** Blade gradients: each runs from a different outer point toward the centre. */
-const BLADES = [
-  {
-    id: "b0",
-    x1: 377.686,
-    y1: 404.515,
-    d: "M 287.125 445.46 L 332.693 231.081 L 435.64 323.775 A 192 192 0 0 1 287.125 445.46 Z",
-  },
-  {
-    id: "b1",
-    x1: 445.46,
-    y1: 224.875,
-    d: "M 435.64 323.775 L 272.766 177.122 L 404.515 134.314 A 192 192 0 0 1 435.64 323.775 Z",
-  },
-  {
-    id: "b2",
-    x1: 323.775,
-    y1: 76.36,
-    d: "M 404.515 134.314 L 196.073 202.041 L 224.875 66.54 A 192 192 0 0 1 404.515 134.314 Z",
-  },
-  {
-    id: "b3",
-    x1: 134.314,
-    y1: 107.485,
-    d: "M 224.875 66.54 L 179.307 280.919 L 76.36 188.225 A 192 192 0 0 1 224.875 66.54 Z",
-  },
-  {
-    id: "b4",
-    x1: 66.54,
-    y1: 287.125,
-    d: "M 76.36 188.225 L 239.234 334.878 L 107.485 377.686 A 192 192 0 0 1 76.36 188.225 Z",
-  },
-  {
-    id: "b5",
-    x1: 188.225,
-    y1: 435.64,
-    d: "M 107.485 377.686 L 315.927 309.959 L 287.125 445.46 A 192 192 0 0 1 107.485 377.686 Z",
-  },
+/**
+ * The six blades. The alternating opacity is what makes them read as blades
+ * catching light at different angles rather than as a flat pinwheel.
+ */
+const BLADES: Array<{ d: string; opacity: number }> = [
+  { d: "M75,25 A50,50 0 0 1 118.3,50 L 87.62,56.98 L 65.70,55.06 Z", opacity: 1 },
+  { d: "M118.3,50 A50,50 0 0 1 118.3,100 L 96.92,76.92 L 87.62,56.98 Z", opacity: 0.88 },
+  { d: "M118.3,100 A50,50 0 0 1 75,125 L 84.30,94.94 L 96.92,76.92 Z", opacity: 1 },
+  { d: "M75,125 A50,50 0 0 1 31.7,100 L 62.38,93.02 L 84.30,94.94 Z", opacity: 0.88 },
+  { d: "M31.7,100 A50,50 0 0 1 31.7,50 L 53.08,73.08 L 62.38,93.02 Z", opacity: 1 },
+  { d: "M31.7,50 A50,50 0 0 1 75,25 L 65.70,55.06 L 53.08,73.08 Z", opacity: 0.88 },
 ];
 
-/** The dark gaps between blades, which is what makes it read as an iris. */
-const SEPARATORS = [
-  "M 315.927 309.959 L 287.125 445.46",
-  "M 332.693 231.081 L 435.64 323.775",
-  "M 272.766 177.122 L 404.515 134.314",
-  "M 196.073 202.041 L 224.875 66.54",
-  "M 179.307 280.919 L 76.36 188.225",
-  "M 239.234 334.878 L 107.485 377.686",
+/**
+ * Outer vertex to the inner vertex 25 degrees behind it: the twisted seams.
+ * They are what breaks the silhouette, so without them the mark is a gold disc.
+ */
+const SEAMS = [
+  "M75,25 L65.70,55.06",
+  "M118.3,50 L87.62,56.98",
+  "M118.3,100 L96.92,76.92",
+  "M75,125 L84.30,94.94",
+  "M31.7,100 L62.38,93.02",
+  "M31.7,50 L53.08,73.08",
 ];
 
 export type BrandMarkProps = {
   size: number;
   /**
-   * Colour of the gaps between blades. Matches whatever sits behind the mark so
-   * the blades read as separate rather than as one disc with lines drawn on it.
+   * Colour of the hairline between blades. Matches whatever sits behind the
+   * mark so the blades read as separate rather than as one disc with lines
+   * drawn on it.
    */
   gapColor?: string;
 };
 
-export function BrandMark({ size, gapColor = "#171B24" }: BrandMarkProps) {
+export function BrandMark({ size, gapColor = "#171A2C" }: BrandMarkProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 512 512">
+    <Svg width={size} height={size} viewBox="0 0 150 150">
       <Defs>
-        {BLADES.map((blade) => (
-          <LinearGradient
-            key={blade.id}
-            id={blade.id}
-            gradientUnits="userSpaceOnUse"
-            x1={blade.x1}
-            y1={blade.y1}
-            x2={256}
-            y2={256}
-          >
-            <Stop offset="0" stopColor="#1E5AA6" />
-            <Stop offset="1" stopColor="#3E8ADF" />
-          </LinearGradient>
-        ))}
-
-        {/* The lit well at the centre: warm white cooling outward into blue. */}
-        <RadialGradient id="well" gradientUnits="userSpaceOnUse" cx={256} cy={256} r={88.32}>
-          <Stop offset="0" stopColor="#FFF8EC" />
-          <Stop offset="0.45" stopColor="#CFE7FF" />
-          <Stop offset="1" stopColor="#7DB6EE" />
-        </RadialGradient>
-
-        <RadialGradient id="halo" gradientUnits="userSpaceOnUse" cx={256} cy={256} r={76.8}>
-          <Stop offset="0" stopColor="#FFF8EC" stopOpacity={0.45} />
-          <Stop offset="0.4" stopColor="#FFF8EC" stopOpacity={0.2} />
-          <Stop offset="0.75" stopColor="#A8D4FF" stopOpacity={0.07} />
-          <Stop offset="1" stopColor="#A8D4FF" stopOpacity={0} />
+        {/*
+         * The rim glow.
+         *
+         * The web artwork blurs a filled disc and masks the aperture out of it.
+         * react-native-svg has no dependable `feGaussianBlur` across both
+         * platforms, so this is a gradient shaped to the same result instead:
+         * held at zero out past the aperture, so no light leaks through the
+         * opening, and carrying only in the band from the rim outward, which is
+         * the only part the opaque blades do not cover anyway.
+         */}
+        <RadialGradient id="rim" gradientUnits="userSpaceOnUse" cx={75} cy={75} r={58}>
+          <Stop offset="0" stopColor="#FFB020" stopOpacity={0} />
+          <Stop offset="0.45" stopColor="#FFB020" stopOpacity={0} />
+          <Stop offset="0.86" stopColor="#FFB020" stopOpacity={0.28} />
+          <Stop offset="1" stopColor="#FFB020" stopOpacity={0} />
         </RadialGradient>
       </Defs>
 
-      <Circle cx={256} cy={256} r={88.32} fill="url(#well)" />
+      <Circle cx={75} cy={75} r={58} fill="url(#rim)" />
 
-      <G>
+      <G stroke={gapColor} strokeWidth={1} strokeLinejoin="round">
         {BLADES.map((blade) => (
-          <Path key={blade.id} d={blade.d} fill={`url(#${blade.id})`} />
+          <Path key={blade.d} d={blade.d} fill="#FFB020" opacity={blade.opacity} />
         ))}
       </G>
 
-      <G stroke={gapColor} strokeWidth={14} strokeLinecap="butt" fill="none">
-        {SEPARATORS.map((d) => (
+      <G fill="none" stroke="#1E2B4D" strokeWidth={3} strokeLinecap="round">
+        {SEAMS.map((d) => (
           <Path key={d} d={d} />
         ))}
       </G>
-
-      <Circle cx={256} cy={256} r={76.8} fill="url(#halo)" />
-      <Circle cx={256} cy={256} r={32.64} fill="#FFF8EC" />
     </Svg>
   );
 }

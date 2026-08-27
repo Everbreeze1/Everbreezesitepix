@@ -53,7 +53,7 @@ function ContactPage() {
         <Link to="/" className="flex items-center gap-2">
           <BrandLogo size={28} />
           <span className="text-sm font-bold tracking-tight">
-            Ever<span className="text-primary">lumen</span>
+            Ever<span className="text-brand">lumen</span>
           </span>
         </Link>
       </header>

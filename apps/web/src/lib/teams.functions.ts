@@ -19,6 +19,7 @@ import type {
   acceptInviteSignupService,
   resendInviteService,
   resendMemberConfirmationService,
+  resendInviteConfirmationService,
   getTeamActivityService,
   getProjectContributorsService,
   saveCompanyProfileService,
@@ -96,7 +97,7 @@ export const acceptInvite = rpcOp<{ token: string }, Result<typeof acceptInviteS
 );
 
 export const acceptInviteSignup = rpcOp<
-  { token: string; fullName: string; password: string },
+  { token: string; fullName: string; password: string; origin?: string },
   Result<typeof acceptInviteSignupService>
 >("acceptInviteSignup");
 
@@ -106,9 +107,23 @@ export const resendInvite = rpcOp<
 >("resendInvite", { idempotent: true });
 
 /**
+ * The same resend, asked for by the invitee on the invite page instead of by
+ * an owner on the roster. Public - their account exists but cannot sign in
+ * yet, so there is no session to send. The invite token is the credential and
+ * the mail can only ever go to the invited address.
+ */
+export const resendInviteConfirmation = rpcOp<
+  { token: string; origin?: string },
+  Result<typeof resendInviteConfirmationService>
+  // No `idempotent`, unlike the owner-side resends: the dispatcher only caches
+  // an idempotency key against a user id, and a public op has none. The
+  // per-token limiter in the service is what bounds this one.
+>("resendInviteConfirmation");
+
+/**
  * For a member who accepted their invite but never confirmed their email.
- * `resendInvite` refuses those - the invite is spent - so this asks GoTrue for
- * the confirmation mail again instead.
+ * `resendInvite` refuses those - the invite is spent - so this asks for the
+ * confirmation mail again instead.
  */
 export const resendMemberConfirmation = rpcOp<
   { memberId: string; origin?: string },

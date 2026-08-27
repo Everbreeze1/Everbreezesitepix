@@ -157,7 +157,7 @@ function LoginPage() {
           <Link to="/" className="flex items-center gap-2.5">
             <BrandLogo size={40} />
             <span className="font-manrope text-lg font-extrabold tracking-[-0.45px] text-sidebar-foreground">
-              Ever<span className="text-sidebar-ring">lumen</span>
+              Ever<span className="text-brand-gold">lumen</span>
             </span>
           </Link>
 
@@ -208,7 +208,7 @@ function LoginPage() {
             <BrandLogo size={44} />
             <div className="mt-3 flex items-baseline text-xl font-bold tracking-tight">
               <span className="text-foreground">Ever</span>
-              <span className="text-primary">lumen</span>
+              <span className="text-brand">lumen</span>
             </div>
           </div>
 

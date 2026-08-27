@@ -25,14 +25,15 @@ import { spacing, typography } from "@/theme/tokens";
  */
 
 /**
- * The mark occupies only 75% of its own box.
+ * The mark occupies only two thirds of its own box.
  *
- * `BrandMark`'s blades are `A 192 192` arcs inside a 512 viewBox, so a quarter
- * of the height it is given is transparent padding. Sizing it naively makes the
- * logo look undersized and every surrounding gap read about 25% looser than the
- * spacing tokens claim, which is what made the first version float.
+ * `BrandMark`'s blades are `A 50 50` arcs inside a 150 viewBox, so a sixth of
+ * the height it is given is transparent padding on each edge. Sizing it naively
+ * makes the logo look undersized and every surrounding gap read about a third
+ * looser than the spacing tokens claim, which is what made the first version
+ * float.
  */
-const MARK_INK_RATIO = 0.75;
+const MARK_INK_RATIO = 2 / 3;
 
 /** Visible diameter of the mark, before the box padding is added back. */
 const MARK_INK = { fraction: 0.4, max: 180 };
@@ -256,10 +257,10 @@ export function LaunchScreen({ visible, onHidden, actionLabel, onAction }: Launc
                 <Defs>
                   <RadialGradient id="bloom" cx="50%" cy="50%" r="50%">
                     {/* Warm at the core, matching the light the mark itself
-                        emits, cooling out into the blade blue. */}
-                    <Stop offset="0%" stopColor="#FFF8EC" stopOpacity={0.1} />
-                    <Stop offset="42%" stopColor="#3E8ADF" stopOpacity={0.22} />
-                    <Stop offset="100%" stopColor="#1E5AA6" stopOpacity={0} />
+                        emits, cooling out into the blade gold. */}
+                    <Stop offset="0%" stopColor="#FFF6DA" stopOpacity={0.12} />
+                    <Stop offset="42%" stopColor="#FFB020" stopOpacity={0.2} />
+                    <Stop offset="100%" stopColor="#D97C0A" stopOpacity={0} />
                   </RadialGradient>
                 </Defs>
                 <Rect width={bloomSize} height={bloomSize} fill="url(#bloom)" />

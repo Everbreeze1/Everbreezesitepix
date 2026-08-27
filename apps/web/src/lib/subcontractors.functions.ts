@@ -51,6 +51,6 @@ export const acceptSubcontractorInvite = rpcOp<
 >("acceptSubcontractorInvite");
 
 export const acceptSubcontractorInviteSignup = rpcOp<
-  { token: string; fullName: string; password: string },
+  { token: string; fullName: string; password: string; origin?: string },
   Result<typeof acceptSubcontractorInviteSignupService>
 >("acceptSubcontractorInviteSignup");

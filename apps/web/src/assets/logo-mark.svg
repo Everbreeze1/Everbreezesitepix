@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 150" width="512" height="512" role="img" aria-label="Everlumen">
+  <!--
+    The aperture with no ground behind it, for surfaces that supply their own:
+    the Android adaptive-icon foreground layer, e-mail headers, print.
+    Geometry notes live in logo.svg, which is the master.
+
+    The hairline between blades has to be painted in whatever sits behind the
+    mark, and here nothing does, so this file has none. That is fine at the
+    sizes it gets used at; the twisted seams already break the silhouette.
+  -->
+  <g>
+    <path d="M75,25 A50,50 0 0 1 118.3,50 L 87.62,56.98 L 65.70,55.06 Z" fill="#FFB020"/>
+    <path d="M118.3,50 A50,50 0 0 1 118.3,100 L 96.92,76.92 L 87.62,56.98 Z" fill="#FFB020" opacity="0.88"/>
+    <path d="M118.3,100 A50,50 0 0 1 75,125 L 84.30,94.94 L 96.92,76.92 Z" fill="#FFB020"/>
+    <path d="M75,125 A50,50 0 0 1 31.7,100 L 62.38,93.02 L 84.30,94.94 Z" fill="#FFB020" opacity="0.88"/>
+    <path d="M31.7,100 A50,50 0 0 1 31.7,50 L 53.08,73.08 L 62.38,93.02 Z" fill="#FFB020"/>
+    <path d="M31.7,50 A50,50 0 0 1 75,25 L 65.70,55.06 L 53.08,73.08 Z" fill="#FFB020" opacity="0.88"/>
+  </g>
+  <g fill="none" stroke="#1E2B4D" stroke-width="3" stroke-linecap="round">
+    <path d="M75,25 L65.70,55.06"/>
+    <path d="M118.3,50 L87.62,56.98"/>
+    <path d="M118.3,100 L96.92,76.92"/>
+    <path d="M75,125 L84.30,94.94"/>
+    <path d="M31.7,100 L62.38,93.02"/>
+    <path d="M31.7,50 L53.08,73.08"/>
+  </g>
+</svg>

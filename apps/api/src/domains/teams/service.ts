@@ -5,6 +5,7 @@ import { rateLimit } from "../../lib/rate-limit";
 import { ACTIVE_SUBSCRIPTION_STATUSES, PLAN_MEMBER_CAP } from "../../lib/team-plan";
 import { insertNotification } from "../notifications/service";
 import { sendTeamInviteEmail } from "../email/team-invite";
+import { sendSignupConfirmationEmail } from "../email/signup-confirmation";
 import {
   ROLE_LABEL,
   assignableRoles,
@@ -120,35 +121,6 @@ async function sendInviteEmail(opts: {
 }
 
 /*
- * Ask GoTrue to mail the signup confirmation for an account created through
- * the invite flow. `auth.admin.createUser` never sends anything, so without
- * this an invitee would be left holding an unconfirmed account with no way to
- * confirm it. Routed through Supabase - and therefore through the same Send
- * Email hook the invite itself uses - rather than lib/send-email.ts, so it
- * lands in the pipeline that is already known to deliver.
- *
- * Best effort: a mail failure must not roll back an account that now exists.
- */
-async function sendSignupConfirmationEmail(email: string, origin: string) {
-  try {
-    const supabaseAdmin = getSupabaseAdmin();
-    const { error } = await supabaseAdmin.auth.resend({
-      type: "signup",
-      email,
-      options: { emailRedirectTo: `${origin}/dashboard` },
-    });
-    if (error) {
-      console.error("[teams] signup confirmation email error", error);
-      return { sent: false };
-    }
-    return { sent: true };
-  } catch (e) {
-    console.error("[teams] signup confirmation email error", e);
-    return { sent: false };
-  }
-}
-
-/*
  * Per-token rate limits for the two PUBLIC invite ops (`lookupInvite`,
  * `acceptInviteSignup` - both registered with `pub()` in the RPC registry).
  *
@@ -161,6 +133,7 @@ async function sendSignupConfirmationEmail(email: string, origin: string) {
  */
 const INVITE_LOOKUP_RATE = { limit: 30, windowMs: 60_000 };
 const INVITE_SIGNUP_RATE = { limit: 5, windowMs: 15 * 60_000 };
+const INVITE_CONFIRM_RATE = { limit: 4, windowMs: 15 * 60_000 };
 
 function limitInviteOp(scope: string, token: string, rate: { limit: number; windowMs: number }) {
   const rl = rateLimit({ key: `invite:${scope}:${token}`, ...rate });
@@ -1612,7 +1585,16 @@ export async function acceptInviteSignupService(data: any) {
     .eq("id", (claimed as any).id);
 
   const origin = data.origin?.replace(/\/+$/, "") || "https://everlumen.co";
-  const confirmRes = await sendSignupConfirmationEmail(inviteEmail, origin);
+  /*
+   * The password goes with it so the link can be minted as a `signup`
+   * confirmation rather than a magic link - see `sendSignupConfirmationEmail`.
+   * It is the password this request just created the account with, so nothing
+   * is being changed or revealed; GoTrue only needs it because
+   * `generateLink({ type: "signup" })` takes one.
+   */
+  const confirmRes = await sendSignupConfirmationEmail(inviteEmail, origin, {
+    password: data.password,
+  });
 
   await insertNotification(supabaseAdmin, {
     recipientId: (invite as any).invited_by,
@@ -1726,6 +1708,70 @@ export async function resendMemberConfirmationService(
   if (!email)
     throw Object.assign(new Error("That member has no email address on file."), { status: 422 });
   if ((target?.user as any)?.email_confirmed_at) {
+    return { ok: true, alreadyConfirmed: true, emailSent: false };
+  }
+
+  const origin = data.origin?.replace(/\/+$/, "") || "https://everlumen.co";
+  const res = await sendSignupConfirmationEmail(email, origin);
+  return { ok: true, alreadyConfirmed: false, emailSent: res.sent };
+}
+
+/**
+ * Send the signup confirmation again, asked for by the INVITEE rather than the
+ * owner. Public: the invite token is the credential, exactly as it is for
+ * `acceptInviteSignup`.
+ *
+ * Somebody who accepts an invite and never receives the confirmation is the
+ * one person in this flow who cannot help themselves. Their account exists but
+ * is inert, so they cannot sign in to ask for anything; `resendInvite` refuses
+ * them because their invite is spent; and `resendMemberConfirmation` needs an
+ * owner or admin to notice and press a button on a page the invitee cannot
+ * see. That is how a new hire stays "added" for a week.
+ *
+ * It is safe to leave unauthenticated because of what it cannot do. The only
+ * address it will ever mail is the one the invite was issued to, and it
+ * refuses unless the account that spent this token still owns that address, so
+ * a leaked token cannot redirect the mail anywhere. It carries no reply: the
+ * result says only whether a message went out. And it is rate limited per
+ * token, so the token cannot be used to pump mail at its own owner.
+ */
+export async function resendInviteConfirmationService(data: { token: string; origin?: string }) {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  limitInviteOp("confirm", data.token, INVITE_CONFIRM_RATE);
+
+  const { data: invite } = await supabaseAdmin
+    .from("team_invites" as any)
+    .select("email, accepted_at, accepted_by")
+    .eq("token", data.token)
+    .maybeSingle();
+  if (!invite) throw new Error("Invite not found.");
+
+  const email = String((invite as any).email ?? "").toLowerCase();
+  const acceptedBy = (invite as any).accepted_by as string | null;
+  /*
+   * Only for an invite that was actually spent on a new account. An open
+   * invite has no account to confirm - what that person needs is the invite
+   * email, which is `resendInvite`.
+   */
+  if (!(invite as any).accepted_at || !acceptedBy) {
+    throw new Error("This invite has not been accepted yet.");
+  }
+
+  const { data: target } = await supabaseAdmin.auth.admin.getUserById(acceptedBy);
+  const account = target?.user as any;
+  if (!account) throw new Error("That account no longer exists.");
+  /*
+   * The account must still hold the invited address. Without this an account
+   * that later changed its email would have mail about it sent to an address
+   * it no longer owns, and the check is what makes the whole op safe to leave
+   * public: the recipient is pinned to the invite, not to anything the caller
+   * supplies.
+   */
+  if (String(account.email ?? "").toLowerCase() !== email) {
+    throw Object.assign(new Error("This invite is no longer available."), { status: 403 });
+  }
+  if (account.email_confirmed_at) {
     return { ok: true, alreadyConfirmed: true, emailSent: false };
   }
 

@@ -86,8 +86,14 @@ function AcceptSubcontractorInvitePage() {
 
     setSubmitting(true);
     try {
-      await acceptSubcontractorInviteSignup({
-        data: { token, fullName: fullName.trim(), password },
+      const res: any = await acceptSubcontractorInviteSignup({
+        data: {
+          token,
+          fullName: fullName.trim(),
+          password,
+          // Mint the confirmation link on the host they are actually using.
+          origin: typeof window !== "undefined" ? window.location.origin : undefined,
+        },
       });
       // The account is created unconfirmed on purpose (see the service), so a
       // sign-in here may legitimately fail until they click the confirmation
@@ -99,7 +105,18 @@ function AcceptSubcontractorInvitePage() {
       });
       if (signErr) {
         setState("accepted");
-        setMessage("Check your email to confirm your address, then sign in.");
+        /*
+         * This used to say "check your email" unconditionally, and nothing in
+         * this flow had ever sent one - the service created the account and
+         * asked for no confirmation at all, so the sentence pointed at an
+         * empty inbox. It sends one now, and this says which of the two things
+         * actually happened rather than assuming the good one.
+         */
+        setMessage(
+          res?.confirmationEmailSent === false
+            ? `We could not send your confirmation email. Ask ${companyName} to invite you again.`
+            : "Check your email to confirm your address, then sign in.",
+        );
         return;
       }
       setState("accepted");
@@ -130,7 +147,7 @@ function AcceptSubcontractorInvitePage() {
         <Link to="/" className="mb-8 inline-flex items-center gap-2">
           <BrandLogo size={40} />
           <span className="font-manrope text-lg font-extrabold tracking-tight text-foreground">
-            Ever<span className="text-primary">lumen</span>
+            Ever<span className="text-brand">lumen</span>
           </span>
         </Link>
 

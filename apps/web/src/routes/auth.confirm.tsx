@@ -109,7 +109,7 @@ function ConfirmPage() {
         <Link to="/" className="mb-8 flex items-center justify-center gap-2">
           <BrandLogo size={40} />
           <span className="text-lg font-bold">
-            Ever<span className="text-primary">lumen</span>
+            Ever<span className="text-brand">lumen</span>
           </span>
         </Link>
         <Card className="p-8 shadow-elegant">

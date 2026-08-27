@@ -71,7 +71,11 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
               scrolled ? "text-foreground" : "text-white",
             )}
           >
-            Ever<span className="text-primary">lumen</span>
+            Ever
+            {/* The hero behind an unscrolled header is dark, so the mark gold
+                carries there as-is; once the header condenses onto a card it
+                needs the light-ground gold instead. */}
+            <span className={scrolled ? "text-brand" : "text-brand-gold"}>lumen</span>
           </span>
         </Link>
 

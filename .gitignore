@@ -63,3 +63,7 @@ supabase/.temp/
 # Anchored with a leading slash so apps/mobile/eas.json, the real one, is
 # unaffected.
 /eas.json
+
+# Apple Sign in with Apple signing keys - downloadable once, never in git
+*.p8
+AuthKey_*.p8

@@ -186,7 +186,7 @@ function SignupPage() {
           <Link to="/" className="inline-flex w-fit items-center gap-2.5">
             <BrandLogo size={40} />
             <span className="font-manrope text-lg font-extrabold tracking-tight text-sidebar-foreground">
-              Ever<span className="text-sidebar-ring">lumen</span>
+              Ever<span className="text-brand-gold">lumen</span>
             </span>
           </Link>
 
@@ -225,7 +225,7 @@ function SignupPage() {
             <Link to="/" className="inline-flex items-center gap-2">
               <BrandLogo size={40} />
               <span className="font-manrope text-lg font-extrabold tracking-tight text-foreground">
-                Ever<span className="text-primary">lumen</span>
+                Ever<span className="text-brand">lumen</span>
               </span>
             </Link>
           </div>

@@ -83,6 +83,7 @@ import {
   removeMemberService,
   resendInviteService,
   resendMemberConfirmationService,
+  resendInviteConfirmationService,
   revokeInviteService,
   saveCompanyProfileService,
   updateMemberRoleService,
@@ -732,6 +733,8 @@ export const rpcRegistry: Record<string, RpcEntry> = {
           token: z.string().min(10).max(200),
           fullName: z.string().trim().min(1).max(120),
           password: z.string().min(8).max(200),
+          // Where to mint the confirmation link, same as every other invite op.
+          origin: z.string().url().max(300).optional(),
         })
         .parse(d),
     acceptSubcontractorInviteSignupService as (data: never) => Promise<unknown>,
@@ -818,6 +821,15 @@ export const rpcRegistry: Record<string, RpcEntry> = {
           token: z.string().min(10).max(200),
           fullName: z.string().trim().min(1).max(120),
           password: z.string().min(8).max(200),
+          /*
+           * Where to mint the confirmation link. Every other invite op already
+           * took this; this one did not, so the mail an invitee needs in order
+           * to finish signing up always pointed at the production apex no
+           * matter which host they accepted on - unusable from a preview
+           * deploy or a local run, and one redirect hop away from www in
+           * production.
+           */
+          origin: z.string().url().max(300).optional(),
         })
         .parse(d),
     acceptInviteSignupService as (data: never) => Promise<unknown>,
@@ -832,6 +844,21 @@ export const rpcRegistry: Record<string, RpcEntry> = {
         .parse(d),
     resendInviteService as (ctx: ServiceContext, data: never) => Promise<unknown>,
     { idempotent: true },
+  ),
+  /*
+   * Public, like `acceptInviteSignup`: the invitee it serves has an account
+   * that cannot sign in yet, so there is no session to authenticate with. See
+   * the service for why the token is a sufficient credential here.
+   */
+  resendInviteConfirmation: pub(
+    (d) =>
+      z
+        .object({
+          token: z.string().min(10).max(200),
+          origin: z.string().url().max(300).optional(),
+        })
+        .parse(d),
+    resendInviteConfirmationService as (data: never) => Promise<unknown>,
   ),
   resendMemberConfirmation: authed(
     (d) =>

@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, CircleCheck, CheckCircle2, AlertCircle, LogIn, Loader2 } from "lucide-react";
+import {
+  ArrowRight,
+  CircleCheck,
+  CheckCircle2,
+  AlertCircle,
+  LogIn,
+  Loader2,
+  MailCheck,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +17,13 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { MobileAppBanner } from "@/components/MobileAppBanner";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/everlumen/client";
-import { lookupInvite, acceptInvite, acceptInviteSignup } from "@/lib/teams.functions";
+import {
+  lookupInvite,
+  acceptInvite,
+  acceptInviteSignup,
+  resendInviteConfirmation,
+} from "@/lib/teams.functions";
+import { authErrorMessage, isUnconfirmedEmail } from "@/lib/auth-errors";
 import heroImg from "@/assets/hero-construction.png";
 import { can, roleLabelForTier, type BillingTier } from "@everlumen/shared/team-permissions";
 
@@ -17,6 +31,9 @@ export const Route = createFileRoute("/invite/$token")({
   head: () => ({ meta: [{ title: "Accept your invitation - Everlumen" }] }),
   component: AcceptInvitePage,
 });
+
+/** Supabase's per-address resend window is ~60s; match it rather than guess. */
+const RESEND_COOLDOWN_SECONDS = 60;
 
 /** Shared field styling, lifted verbatim from the signup page. */
 const FIELD_CLASS =
@@ -41,9 +58,9 @@ function AcceptInvitePage() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
 
-  const [state, setState] = useState<"loading" | "ready" | "invalid" | "accepted" | "error">(
-    "loading",
-  );
+  const [state, setState] = useState<
+    "loading" | "ready" | "confirm" | "invalid" | "accepted" | "error"
+  >("loading");
   const [team, setTeam] = useState<{ id: string; name: string } | null>(null);
   const [invite, setInvite] = useState<any | null>(null);
   // The plan this team is on, only so the seat is named the way that tier
@@ -55,6 +72,23 @@ function AcceptInvitePage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  /*
+   * The "check your email" state. `confirmationSent` is false when the server
+   * told us it could not send the message, which is the difference between
+   * "wait a minute" and "press this button", and the invitee is the only
+   * person who can tell those apart from where they are standing.
+   */
+  const [confirmEmail, setConfirmEmail] = useState("");
+  const [confirmationSent, setConfirmationSent] = useState(true);
+  const [resending, setResending] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = window.setInterval(() => setCooldown((n) => (n <= 1 ? 0 : n - 1)), 1000);
+    return () => window.clearInterval(t);
+  }, [cooldown > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     (async () => {
@@ -97,19 +131,103 @@ function AcceptInvitePage() {
     setSubmitting(true);
     try {
       const res: any = await acceptInviteSignup({
-        data: { token, fullName: fullName.trim(), password },
+        data: {
+          token,
+          fullName: fullName.trim(),
+          password,
+          // Mint the confirmation link on the host they are actually using.
+          origin: typeof window !== "undefined" ? window.location.origin : undefined,
+        },
       });
-      const { error: signErr } = await supabase.auth.signInWithPassword({
-        email: res.email,
-        password,
-      });
-      if (signErr) throw signErr;
-      setState("accepted");
-      setTimeout(() => navigate({ to: "/projects" }), 900);
+
+      /*
+       * Past this line the account exists, the team membership exists, and the
+       * invite token is SPENT. So every branch from here has to be terminal:
+       * leaving them on the form means their only next move is to submit it
+       * again, and that submit is guaranteed to come back "This invite has
+       * already been used."
+       *
+       * Which is exactly what used to happen. The account is created
+       * unconfirmed on purpose (see the SECURITY note in
+       * `acceptInviteSignupService`), so this sign-in legitimately fails with
+       * "Email not confirmed" on any project that requires confirmation - and
+       * that error was thrown into the catch below and rendered raw, in the
+       * error colour, under a form that could never succeed again. Nothing on
+       * screen said an account had been created, that they had joined the
+       * team, or that a confirmation email was on its way. The owner then saw
+       * them on the roster as "Email not confirmed" and the teammate believed
+       * signup had failed. That is the bug this page was reported for.
+       */
+      const email: string = res?.email ?? invite.email;
+      setConfirmEmail(email);
+
+      /*
+       * Its own try, so that even a thrown sign-in (offline, DNS, a proxy
+       * eating the request) lands on the panel below rather than in the catch
+       * at the bottom, which would put them back on the unsubmittable form.
+       */
+      let signErr: unknown = null;
+      try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        signErr = error;
+      } catch (e) {
+        signErr = e;
+      }
+
+      if (!signErr) {
+        setState("accepted");
+        setTimeout(() => navigate({ to: "/projects" }), 900);
+        return;
+      }
+
+      console.error("[invite] sign-in after signup failed", signErr);
+      const sent = res?.confirmationEmailSent !== false;
+      setConfirmationSent(sent);
+      // A message we just sent starts the clock; one that failed to send must
+      // not, or the way out is greyed out for a minute.
+      setCooldown(sent ? RESEND_COOLDOWN_SECONDS : 0);
+      /*
+       * "Email not confirmed" is the expected answer here and the panel below
+       * already says so far better than an error line would. Anything else is
+       * genuinely unexpected and worth showing.
+       */
+      setMessage(isUnconfirmedEmail(signErr) ? "" : authErrorMessage(signErr));
+      setState("confirm");
     } catch (err: any) {
+      // Nothing was created: `acceptInviteSignup` releases its claim on any
+      // failure, so the invite is still open and the form is still the way in.
       setMessage(err?.message ?? "Could not complete signup");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const doResendConfirmation = async () => {
+    setResending(true);
+    try {
+      const res: any = await resendInviteConfirmation({
+        data: {
+          token,
+          origin: typeof window !== "undefined" ? window.location.origin : undefined,
+        },
+      });
+      if (res?.alreadyConfirmed) {
+        setConfirmationSent(true);
+        setMessage("That address is already confirmed. You can sign in now.");
+        return;
+      }
+      if (res?.emailSent) {
+        setConfirmationSent(true);
+        setCooldown(RESEND_COOLDOWN_SECONDS);
+        setMessage("");
+        return;
+      }
+      setConfirmationSent(false);
+      setMessage("We still could not send it. Ask whoever invited you to resend from Team.");
+    } catch (e: any) {
+      setMessage(e?.message ?? "Could not send that email");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -146,7 +264,7 @@ function AcceptInvitePage() {
           <Link to="/" className="inline-flex w-fit items-center gap-2.5">
             <BrandLogo size={40} />
             <span className="font-manrope text-lg font-extrabold tracking-tight text-sidebar-foreground">
-              Ever<span className="text-sidebar-ring">lumen</span>
+              Ever<span className="text-brand-gold">lumen</span>
             </span>
           </Link>
 
@@ -187,7 +305,7 @@ function AcceptInvitePage() {
             <Link to="/" className="inline-flex items-center gap-2">
               <BrandLogo size={40} />
               <span className="font-manrope text-lg font-extrabold tracking-tight text-foreground">
-                Ever<span className="text-primary">lumen</span>
+                Ever<span className="text-brand">lumen</span>
               </span>
             </Link>
           </div>
@@ -394,6 +512,77 @@ function AcceptInvitePage() {
                 </form>
               )}
             </>
+          )}
+
+          {/*
+            The terminal state for an invitee whose account was created but who
+            cannot sign in yet. It answers the three things they are staring at
+            the screen wondering: did it work, what happens next, and what if
+            the email never turns up.
+          */}
+          {state === "confirm" && (
+            <div aria-live="polite">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+                <MailCheck className="h-7 w-7 text-primary" />
+              </div>
+              <h2 className="font-display mt-6 text-[40px] font-black uppercase leading-[0.92] tracking-[-1.4px] text-foreground">
+                One more step
+              </h2>
+              <p className="font-manrope mt-4 text-sm leading-6 text-muted-foreground">
+                Your account is created and you have joined {teamName}. Confirm{" "}
+                <span className="font-bold text-foreground">{confirmEmail}</span> and you are in.
+              </p>
+
+              {confirmationSent ? (
+                <>
+                  <p className="font-manrope mt-3 text-sm leading-6 text-muted-foreground">
+                    We sent a confirmation link to that address. Opening it signs you straight in.
+                  </p>
+                  <p className="font-manrope mt-3 text-sm leading-6 text-muted-foreground">
+                    It usually arrives within a minute. Check your spam folder if you do not see it.
+                  </p>
+                </>
+              ) : (
+                <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 font-manrope text-sm leading-6 text-amber-700 dark:text-amber-400">
+                  We could not send the confirmation email just now. Your account and your place on
+                  the team are safe. Try again below.
+                </div>
+              )}
+
+              {message && (
+                <div className="mt-4 rounded-lg border border-border bg-muted/50 p-3 font-manrope text-sm leading-6 text-muted-foreground">
+                  {message}
+                </div>
+              )}
+
+              <div className="mt-8 space-y-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={doResendConfirmation}
+                  disabled={resending || cooldown > 0}
+                  className="h-12 w-full rounded-lg font-manrope text-sm font-bold"
+                >
+                  {resending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending…
+                    </>
+                  ) : cooldown > 0 ? (
+                    `Resend confirmation email (${cooldown}s)`
+                  ) : (
+                    "Resend confirmation email"
+                  )}
+                </Button>
+                <Button
+                  asChild
+                  variant="ghost"
+                  className="h-12 w-full rounded-lg font-manrope text-sm font-bold text-muted-foreground"
+                >
+                  <Link to="/login">Already confirmed? Sign in</Link>
+                </Button>
+              </div>
+            </div>
           )}
 
           {state === "accepted" && (

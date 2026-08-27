@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "../../lib/supabase";
+import { sendSignupConfirmationEmail } from "../email/signup-confirmation";
 import { rateLimit } from "../../lib/rate-limit";
 import { getCallerTeamPlan } from "../../lib/team-plan";
 import { sendTeamInviteEmail } from "../email/team-invite";
@@ -481,5 +482,27 @@ export async function acceptSubcontractorInviteSignupService(data: any) {
     throw new Error("This invite has already been used.");
   }
 
-  return { ok: true, teamId: claimed.team_id };
+  /*
+   * Ask for the confirmation mail. `createUser` sends nothing, and nothing
+   * here used to ask - so a collaborator who accepted was told by the page to
+   * "check your email to confirm your address" when no such email had been
+   * sent, or ever would be. The account was inert and there was no way, from
+   * anywhere in the product, to make one arrive.
+   *
+   * Best effort, after the claim: the account and the grant are real either
+   * way, and `confirmationEmailSent` lets the page say which of "check your
+   * inbox" and "we could not send it" is actually true.
+   */
+  const origin = String(data.origin ?? "").replace(/\/+$/, "") || "https://everlumen.co";
+  const confirmRes = await sendSignupConfirmationEmail(email, origin, {
+    password: data.password,
+  });
+
+  return {
+    ok: true,
+    teamId: claimed.team_id,
+    email,
+    emailConfirmationRequired: true,
+    confirmationEmailSent: confirmRes.sent,
+  };
 }
