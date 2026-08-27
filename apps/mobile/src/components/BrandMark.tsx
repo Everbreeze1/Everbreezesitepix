@@ -46,9 +46,15 @@ const SEAMS = [
 export type BrandMarkProps = {
   size: number;
   /**
-   * Colour of the hairline between blades. Matches whatever sits behind the
-   * mark so the blades read as separate rather than as one disc with lines
-   * drawn on it.
+   * Colour of the hairline around each blade, which has to match whatever sits
+   * behind the mark.
+   *
+   * Worth being precise about, because the obvious reading is wrong: the seams
+   * are drawn over the shared edges at four times the width, so the only
+   * hairline anyone ever sees is on the disc rim and around the aperture. Both
+   * of those are places the background shows through, so this is a backdrop
+   * colour, not an outline colour, and a value darker than the backdrop puts a
+   * keyline round the mark.
    */
   gapColor?: string;
 };

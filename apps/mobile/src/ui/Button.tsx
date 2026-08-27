@@ -8,7 +8,8 @@ import { Text, type TextTone } from "./Text";
  * The app's button.
  *
  * `BrandButton` is not this: it is the gradient pill built for the launch
- * screen, sized to a dark marketing surface and hardcoded to white on blue.
+ * screen, sized to a dark marketing surface and hardcoded to the mark's own
+ * gold, which is a brand decision rather than a palette one.
  * This is the one for the other two hundred taps in the product, and it exists
  * because every screen had been drawing its own. Three screens had a
  * `primaryButton` style, each with a different radius, and the checklist runner

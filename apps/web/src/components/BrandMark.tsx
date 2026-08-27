@@ -68,9 +68,16 @@ export type BrandMarkProps = {
   /** Whether the mark sits on a dark or a light ground. */
   tone?: keyof typeof TONES;
   /**
-   * Colour of the hairline between blades. It has to match whatever is
-   * actually behind the mark, so override it when the surface is not the
-   * default for the tone; pass `null` to drop the hairline entirely.
+   * Colour of the hairline around each blade, which has to match whatever is
+   * actually behind the mark. Override it when the surface is not the default
+   * for the tone; pass `null` to drop the hairline entirely.
+   *
+   * Worth being precise about, because the obvious reading is wrong: the seams
+   * are drawn over the shared edges at three times the width, so the only
+   * hairline anyone ever sees is on the disc rim and around the aperture. Both
+   * of those are places the background shows through, so this is a backdrop
+   * colour, not an outline colour, and a value darker than the backdrop puts a
+   * keyline round the mark.
    */
   gapColor?: string | null;
   className?: string;

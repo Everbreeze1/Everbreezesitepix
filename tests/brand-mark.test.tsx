@@ -66,6 +66,57 @@ describe("the aperture is one artwork", () => {
     }
   });
 
+  it("hides every shared blade edge under a seam, leaving only rim and aperture", () => {
+    /*
+     * This is what makes `gapColor` a backdrop colour rather than an outline
+     * colour, and it is not what the name suggests. Each blade's three straight
+     * edges are two seams and one aperture edge, and the seams are stroked
+     * three times wider, so no hairline between two blades is ever visible. The
+     * hairline only shows where the background does: the disc rim and the
+     * aperture. Pass anything darker than the backdrop and the mark gains a
+     * keyline, which is exactly the bug the launch screen shipped with.
+     */
+    const stripArcs = (d: string) => d.replace(/A[\d.]+,[\d.]+\s+\d+\s+\d+\s+\d+/g, " ");
+    const points = (d: string) =>
+      [...stripArcs(d).matchAll(/(-?[\d.]+),\s*(-?[\d.]+)/g)].map(
+        (m) => [Number(m[1]), Number(m[2])] as [number, number],
+      );
+    const edgeKey = (a: [number, number], b: [number, number]) =>
+      [a, b]
+        .map((p) => p.map((n) => n.toFixed(2)).join(","))
+        .sort()
+        .join("|");
+    const radius = (p: [number, number]) => Math.hypot(p[0] - 75, p[1] - 75);
+
+    const blades = master.filter((d) => d.includes("A50,50"));
+    const seams = new Set(
+      master
+        .filter((d) => !d.includes("A50,50"))
+        .map((d) => {
+          const [a, b] = points(d);
+          return edgeKey(a, b);
+        }),
+    );
+
+    let underSeam = 0;
+    let apertureEdge = 0;
+    for (const blade of blades) {
+      const p = points(blade);
+      expect(p).toHaveLength(4); // outer[n], outer[n+1], inner[n+1], inner[n]
+      for (const [a, b] of [
+        [p[1], p[2]],
+        [p[2], p[3]],
+        [p[3], p[0]],
+      ] as Array<[[number, number], [number, number]]>) {
+        if (seams.has(edgeKey(a, b))) underSeam++;
+        else if (radius(a) < 23 && radius(b) < 23) apertureEdge++;
+        else throw new Error(`blade edge ${edgeKey(a, b)} is neither a seam nor an aperture edge`);
+      }
+    }
+    expect(underSeam).toBe(12);
+    expect(apertureEdge).toBe(6);
+  });
+
   it("the blades close on the aperture rather than on the centre", () => {
     /*
      * Each blade ends at two inner vertices, and those sit at r=22 about

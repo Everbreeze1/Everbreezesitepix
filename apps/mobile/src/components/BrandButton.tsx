@@ -15,8 +15,10 @@ import { typography } from "@/theme/tokens";
  * 2. **Width.** A control spanning the whole screen reads as a bar or a banner.
  *    Constrained to roughly two thirds, it reads as a button.
  * 3. **Contrast.** Flat `#00599C` against `#171B24` is too close in value; it
- *    sinks. The fill is the same gradient the aperture blades use, which lifts
- *    the top end to `#3E8ADF` and ties the action to the mark above it.
+ *    sinks. The fill is the gold the aperture blades are cut from, which parts
+ *    hard from the dark screen and ties the action to the mark above it. The
+ *    label had to flip to dark ink to follow the mark: white on `#FFB020`
+ *    measures 1.8:1, where the brand navy on it measures 9.4:1.
  * 4. **Depth.** A coloured glow rather than a black drop shadow. Black shadows
  *    are invisible on a dark background; light is what separates a surface from
  *    the dark around it.
@@ -72,14 +74,15 @@ export function BrandButton({
           <Svg width={width} height={HEIGHT} style={StyleSheet.absoluteFill}>
             <Defs>
               <LinearGradient id="cta" x1="0" y1="0" x2="1" y2="1">
-                <Stop offset="0" stopColor="#1E5AA6" />
                 {/*
-                 * Stops at #2A72C6 rather than the blades' #3E8ADF. White on
-                 * #3E8ADF measures 3.56:1, which fails AA for a label this
-                 * size; this end gives 4.86:1 and still reads as the same
-                 * gradient family as the mark.
+                 * Deep gold into blade gold, and it cannot start any deeper.
+                 * The label is dark ink now, so the constraint runs the other
+                 * way round to the blue this replaced: #D97C0A still measures
+                 * 5.6:1 behind the label where the blade end gives 9.4:1, and
+                 * anything darker drops the top of the pill under AA.
                  */}
-                <Stop offset="1" stopColor="#2A72C6" />
+                <Stop offset="0" stopColor="#D97C0A" />
+                <Stop offset="1" stopColor="#FFB020" />
               </LinearGradient>
             </Defs>
             <Rect width={width} height={HEIGHT} rx={HEIGHT / 2} ry={HEIGHT / 2} fill="url(#cta)" />
@@ -100,11 +103,11 @@ export function BrandButton({
 const styles = StyleSheet.create({
   pressable: {
     /*
-     * The glow is tinted with the button's own blue. A black shadow on a dark
+     * The glow is tinted with the button's own gold. A black shadow on a dark
      * background does nothing at all; a coloured one reads as the button
      * casting light, which is also what the mark above it is doing.
      */
-    shadowColor: "#3E8ADF",
+    shadowColor: "#FFB020",
     shadowOpacity: 0.45,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
@@ -113,7 +116,8 @@ const styles = StyleSheet.create({
   fill: { flex: 1, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   label: {
     ...typography.bodyStrong,
-    color: "#FFFFFF",
+    /* The mark's own ground, so the label reads as cut out of the gold. */
+    color: "#171A2C",
     letterSpacing: 0.4,
   },
 });

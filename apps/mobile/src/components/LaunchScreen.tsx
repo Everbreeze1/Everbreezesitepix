@@ -267,7 +267,12 @@ export function LaunchScreen({ visible, onHidden, actionLabel, onAction }: Launc
               </Svg>
             </Animated.View>
 
-            <BrandMark size={markBox} gapColor="#141A26" />
+            {/* The wash's own colour where the mark sits, near its 38% origin.
+                This has to track the backdrop: the hairline falls on the disc
+                rim and the aperture edge, so a value darker than the wash (it
+                was #141A26, chosen when this prop still painted the thick
+                separators) rings the mark in a keyline nothing asked for. */}
+            <BrandMark size={markBox} gapColor="#22304A" />
           </Animated.View>
 
           <Animated.View style={[styles.words, { opacity: wordFade }]}>
