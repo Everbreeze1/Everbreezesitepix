@@ -52,8 +52,9 @@
     },
     "extra": {
       "apiBaseUrl": "",
+      "router": {},
       "eas": {
-        "projectId": "replace-me"
+        "projectId": "e6102a65-912b-4dfd-99e1-cc45bd42a2d7"
       }
     },
     "ios": {
@@ -70,12 +71,16 @@
         "android.permission.CAMERA",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.READ_MEDIA_IMAGES"
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO"
       ],
-      "blockedPermissions": ["android.permission.ACCESS_BACKGROUND_LOCATION"]
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "owner": "miny32720"
   }
 }

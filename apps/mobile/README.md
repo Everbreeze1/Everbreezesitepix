@@ -32,7 +32,7 @@ All three variables are public by nature and end up readable inside the app bund
 | `EXPO_PUBLIC_EVERLUMEN_SUPABASE_PUBLISHABLE_KEY` | Supabase anon/publishable key                            |
 | `EXPO_PUBLIC_API_BASE_URL`                       | Origin serving `/v1`, for example `https://everlumen.co` |
 
-For EAS builds these come from the profile's `env` block in `eas.json`, except the publishable key, which is set once per environment with `eas env:create`.
+For EAS builds these come from the profile's `env` block in `eas.json`, except the publishable key, which lives in EAS environment variables. It is already set for all three environments; `eas env:list --environment development` shows it. To change it, use `eas env:set` (`eas env:create` is deprecated).
 
 ## Checks
 
@@ -49,7 +49,11 @@ cd apps/mobile && npx expo export --platform android  # Metro resolution and bun
 
 ## Builds
 
-`eas.json` defines three profiles. All of them need an EAS project first: run `eas init` and replace `extra.eas.projectId` in `app.json`, which currently reads `replace-me`.
+`eas.json` defines three profiles. The EAS project exists: **@miny32720/everlumen**, and `extra.eas.projectId` in `app.json` points at it.
+
+**EAS builds from the committed git state, not your working tree.** Uncommitted work is silently absent from the build, which is a confusing way to lose an afternoon. Commit first.
+
+**Android only for now.** An iOS device build needs an Apple Developer Program membership for provisioning, and an iOS simulator build needs macOS to run it.
 
 | Profile       | Command                                          | Produces                                                        |
 | ------------- | ------------------------------------------------ | --------------------------------------------------------------- |
