@@ -16,6 +16,15 @@ export const api = createApiClient({
 });
 
 /**
+ * Origin of the web app, for building public share links.
+ *
+ * Same value `/v1` is served from, so there is one variable to set rather than
+ * two that can disagree. Empty when unconfigured, which `shareUrl` treats as
+ * "cannot build a link" rather than producing a relative one.
+ */
+export const webAppUrl = baseUrl;
+
+/**
  * A path on the web app, or null when no origin is configured.
  *
  * Report authoring, the portfolio builder, template and blueprint editing and

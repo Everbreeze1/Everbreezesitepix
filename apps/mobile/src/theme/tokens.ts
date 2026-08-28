@@ -20,6 +20,14 @@ export type Palette = {
   /** Raised surfaces: cards, rows, sheets. */
   card: string;
   cardForeground: string;
+  /**
+   * The wordmark gold, from the logo artwork.
+   *
+   * Darkened on the light palette: #ffb020 on a white canvas measures about
+   * 1.8:1, and #d97c0a reaches 3.3:1, which clears AA for the large bold sizes
+   * the wordmark is ever set at. Nothing smaller than that may use it.
+   */
+  brand: string;
   /** Brand blue. Primary actions. */
   primary: string;
   primaryForeground: string;
@@ -64,6 +72,7 @@ const light: Palette = {
   foreground: "#0b1c2c",
   card: "#ffffff",
   cardForeground: "#0b1c2c",
+  brand: "#d97c0a",
   primary: "#00599c",
   primaryForeground: "#f9fcff",
   primaryGlow: "#008cdf",
@@ -92,6 +101,7 @@ const dark: Palette = {
   foreground: "#f2f6f8",
   card: "#0b1723",
   cardForeground: "#f2f6f8",
+  brand: "#ffb020",
   primary: "#339fee",
   primaryForeground: "#050e18",
   primaryGlow: "#57b6ff",

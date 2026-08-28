@@ -20,6 +20,7 @@ import {
   ListTodo,
   MapPin,
   PenLine,
+  Share2,
   Star,
   Trash2,
   Video,
@@ -45,6 +46,12 @@ import {
   type ProjectDraft,
   type ProjectPatch,
 } from "@/api/project-patch";
+import {
+  createPhotoShareToken,
+  ensureProjectShareToken,
+  openShareSheet,
+  publicUrl,
+} from "@/api/sharing";
 import { QueueBanner } from "@/components/QueueBanner";
 import { PhotoBulkBar, type PhotoBulkAction } from "@/components/PhotoBulkBar";
 import { ProjectEditorSheet } from "@/components/ProjectEditorSheet";
@@ -112,6 +119,7 @@ export default function ProjectDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const selecting = selected.size > 0;
@@ -232,6 +240,52 @@ export default function ProjectDetailScreen() {
     },
     [id, queryClient],
   );
+
+  /**
+   * Hand this project to someone outside the workspace.
+   *
+   * Not queued: a share link is only useful once it exists on the server and
+   * someone else can open it, so an offline share would produce a URL that
+   * resolves to nothing. The failure is surfaced rather than swallowed.
+   */
+  const shareProject = useCallback(async () => {
+    if (!id) return;
+    setActionsOpen(false);
+    try {
+      const token = await ensureProjectShareToken(id);
+      const url = publicUrl("projects", token);
+      if (!url) {
+        setShareError("Sharing is not set up for this workspace.");
+        return;
+      }
+      setShareError(null);
+      await openShareSheet(url, project?.name ?? "Project");
+    } catch (e) {
+      setShareError(e instanceof Error ? e.message : "Could not create the link");
+    }
+  }, [id, project?.name]);
+
+  /**
+   * Share the photo currently open in the lightbox.
+   *
+   * A fresh token per share, with a one week expiry from `createPhotoShareToken`.
+   * A photo link usually settles a question that is live right now, and one
+   * that outlives the conversation leaves site imagery on the open internet.
+   */
+  const sharePhoto = useCallback(async (photoId: string, caption: string | null) => {
+    try {
+      const token = await createPhotoShareToken(photoId);
+      const url = publicUrl("photos", token);
+      if (!url) {
+        setShareError("Sharing is not set up for this workspace.");
+        return;
+      }
+      setShareError(null);
+      await openShareSheet(url, displayCaption(caption, "Photo"));
+    } catch (e) {
+      setShareError(e instanceof Error ? e.message : "Could not create the link");
+    }
+  }, []);
 
   const toggle = useCallback((photoId: string) => {
     setSelected((current) => {
@@ -364,6 +418,15 @@ export default function ProjectDetailScreen() {
       />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         <QueueBanner />
+        {shareError ? (
+          <UIText
+            variant="caption"
+            tone="destructive"
+            style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}
+          >
+            {shareError}
+          </UIText>
+        ) : null}
         {loading ? (
           <SkeletonList rows={5} />
         ) : error ? (
@@ -624,6 +687,7 @@ export default function ProjectDetailScreen() {
         title="Project"
         actions={[
           { label: "Edit details", icon: PenLine, onPress: () => setEditing(true) },
+          { label: "Share project", icon: Share2, onPress: () => void shareProject() },
           {
             label: project?.starred ? "Remove star" : "Star this project",
             icon: Star,
@@ -691,6 +755,19 @@ export default function ProjectDetailScreen() {
                 <Text style={[typography.bodyStrong, { color: "#fff" }]}>Annotate</Text>
               </Pressable>
 
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Share this photo"
+                onPress={() => {
+                  const photo = lightboxPhoto;
+                  setLightboxId(null);
+                  void sharePhoto(photo.id, photo.caption);
+                }}
+                style={styles.shareButton}
+              >
+                <Text style={[typography.bodyStrong, { color: "#fff" }]}>Share</Text>
+              </Pressable>
+
               <View style={styles.lightboxMeta}>
                 <Text style={[typography.bodyStrong, { color: "#fff" }]} numberOfLines={2}>
                   {displayCaption(lightboxPhoto.caption, "Photo")}
@@ -749,6 +826,18 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 56,
     right: spacing.xl,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    minHeight: HIT_TARGET,
+    justifyContent: "center",
+  },
+  /* Sits left of Annotate, same pill, so the two read as one control group. */
+  shareButton: {
+    position: "absolute",
+    top: 56,
+    right: spacing.xl + 150,
     backgroundColor: "rgba(255,255,255,0.18)",
     borderRadius: radius.pill,
     paddingHorizontal: spacing.xl,

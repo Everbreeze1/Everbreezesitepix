@@ -85,7 +85,9 @@ export default function LoginScreen() {
       style={{ flex: 1, backgroundColor: theme.colors.background }}
     >
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={[typography.display, { color: theme.colors.foreground }]}>Everlumen</Text>
+        <Text style={[typography.display, { color: theme.colors.foreground }]}>
+          Ever<Text style={{ color: theme.colors.brand }}>lumen</Text>
+        </Text>
         <Text
           style={[typography.body, { color: theme.colors.mutedForeground, marginTop: spacing.xs }]}
         >

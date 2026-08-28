@@ -24,6 +24,33 @@ import type { AuthedContext } from "../../lib/user-context";
 export const FEEDBACK_STATUSES = ["new", "triaged", "resolved", "dismissed"] as const;
 export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
 
+/** Mirrors FEEDBACK_BUCKET in apps/web/src/lib/feedback.ts. */
+export const FEEDBACK_BUCKET = "feedback-attachments";
+
+/** How long a signed attachment link lives. Long enough to work a queue. */
+const ATTACHMENT_URL_TTL_SECONDS = 60 * 60;
+
+/**
+ * One screenshot on a report, ready to render.
+ *
+ * The row holds only a storage path, and the bucket is private (20260921000000)
+ * with a read policy that scopes an object to the folder of the account that
+ * uploaded it. So a path is useless to the admin console: an admin looking at
+ * someone else's report is not that someone, and the object has no public URL
+ * to fall back on. It has to be signed here, with the service role, or it
+ * cannot be looked at at all.
+ */
+export interface FeedbackAttachment {
+  /** The storage path, which is what `issue_reports.attachments` actually holds. */
+  path: string;
+  /** The reporter's filename, recovered from the path. */
+  name: string;
+  /** `image` renders inline. Everything else gets a link. */
+  kind: "image" | "pdf" | "file";
+  /** Signed for an hour, or null when the object could not be signed. */
+  url: string | null;
+}
+
 export interface FeedbackReport {
   id: string;
   status: string;
@@ -34,11 +61,116 @@ export interface FeedbackReport {
   description: string | null;
   url: string | null;
   userAgent: string | null;
-  attachments: string[];
+  attachments: FeedbackAttachment[];
   createdAt: string;
   projectId: string | null;
   /** Whoever filed it. Null for a signal from a session we could not resolve. */
   reporter: { id: string | null; name: string | null; email: string | null };
+}
+
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp"]);
+
+/**
+ * The reporter's filename, back out of the storage path.
+ *
+ * uploadFeedbackAttachments writes `{auth_uid}/{epoch_ms}-{n}-{safe-name}`, so
+ * the path carries three things triage does not want to read: somebody's user
+ * id, a timestamp already shown as the report's date, and the index of the file
+ * within its send. Stripping them is the difference between a caption that says
+ * `screenshot.png` and one that says
+ * `9f2c.../1758412800000-0-screenshot.png`.
+ *
+ * The prefix is matched rather than assumed: a path that does not carry one is
+ * left alone, so an attachment written by anything but the current uploader
+ * still gets a name instead of an empty caption.
+ */
+export function attachmentName(path: string): string {
+  const base = path.split("/").pop() ?? path;
+  return base.replace(/^\d{10,}-\d+-/, "") || base;
+}
+
+/** Whether it can be shown, linked, or only named. */
+export function attachmentKind(path: string): FeedbackAttachment["kind"] {
+  const ext = (path.split(".").pop() ?? "").toLowerCase();
+  if (IMAGE_EXTENSIONS.has(ext)) return "image";
+  if (ext === "pdf") return "pdf";
+  return "file";
+}
+
+/** One entry of a `createSignedUrls` response. */
+export interface SignedUrlResult {
+  path?: string | null;
+  signedUrl?: string | null;
+  error?: string | null;
+}
+
+/**
+ * Turns a `createSignedUrls` response into a path -> URL map.
+ *
+ * Keyed by the `path` each result carries, NOT by its position, and that is the
+ * whole reason this is a function worth naming and testing.
+ *
+ * Position looks equivalent and is not. The reports on one page belong to
+ * different customers, so their screenshots sit in different folders and go into
+ * one signing call together. If storage ever answers with the failures omitted
+ * or reordered, every index after the gap shifts by one and each report renders
+ * the NEXT report's screenshot: one customer's screen shown on another
+ * customer's report, captioned with a filename that looks entirely right. A
+ * wrong picture is far worse than the missing one this whole change fixes.
+ *
+ * The index is the fallback only, for an entry that came back without a path.
+ */
+export function indexSignedUrls(
+  results: SignedUrlResult[] | null | undefined,
+  requestedPaths: string[],
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  (results ?? []).forEach((r, i) => {
+    const path = r.path ?? requestedPaths[i];
+    if (!path) return;
+    if (r.signedUrl) out[path] = r.signedUrl;
+    else console.error("[admin/feedback] could not sign one attachment", { path, error: r.error });
+  });
+  return out;
+}
+
+/**
+ * Signs every attachment path on a page of reports in one call.
+ *
+ * Batched deliberately: `createSignedUrls` signs an array in a single request,
+ * where the singular call would cost one round trip per screenshot on a page of
+ * fifty reports.
+ *
+ * Never throws. A screenshot that cannot be signed - the bucket not created
+ * yet, an object deleted out from under the row - must not take the whole
+ * feedback queue down with it. Those come back with a null url, and the console
+ * says so next to the filename rather than rendering a broken image.
+ */
+async function signFeedbackAttachments(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  paths: string[],
+): Promise<Record<string, string>> {
+  const unique = Array.from(new Set(paths.filter(Boolean)));
+  if (!unique.length) return {};
+
+  try {
+    const { data: signed, error } = await admin.storage
+      .from(FEEDBACK_BUCKET)
+      .createSignedUrls(unique, ATTACHMENT_URL_TTL_SECONDS);
+    if (error) {
+      console.error("[admin/feedback] could not sign attachment URLs", {
+        error: error.message,
+        count: unique.length,
+      });
+      return {};
+    }
+    return indexSignedUrls(signed, unique);
+  } catch (e) {
+    console.error("[admin/feedback] attachment signing threw", {
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return {};
+  }
 }
 
 export const listFeedbackInputSchema = z.object({
@@ -91,6 +223,21 @@ export async function listFeedbackService(
     : { data: [] };
   const profileById = new Map(((profileRows as any[]) ?? []).map((p) => [p.id, p]));
 
+  /*
+   * The screenshots, made viewable.
+   *
+   * The column has been carrying paths since 20260921000000 and the console had
+   * no way to open one: the bucket is private, and its only read policy is the
+   * reporter's own folder, so the path a report hands you is readable by exactly
+   * the one person who does not need to see it. Signed here with the service
+   * role, and skipped entirely when nothing on the page has an attachment,
+   * which is the common case.
+   */
+  const attachmentPaths = page.flatMap((r) =>
+    Array.isArray(r.attachments) ? (r.attachments as string[]).filter(Boolean) : [],
+  );
+  const urlByPath = await signFeedbackAttachments(admin, attachmentPaths);
+
   return {
     reports: page.map((r) => ({
       id: r.id,
@@ -102,7 +249,14 @@ export async function listFeedbackService(
       description: r.description,
       url: r.url,
       userAgent: r.user_agent,
-      attachments: Array.isArray(r.attachments) ? r.attachments : [],
+      attachments: (Array.isArray(r.attachments) ? (r.attachments as string[]) : [])
+        .filter(Boolean)
+        .map((path) => ({
+          path,
+          name: attachmentName(path),
+          kind: attachmentKind(path),
+          url: urlByPath[path] ?? null,
+        })),
       createdAt: r.created_at,
       projectId: r.project_id,
       reporter: {
@@ -188,7 +342,7 @@ export const setFeedbackStatusInputSchema = z.object({
  * queue correcting itself, and telling someone their fixed bug is unfixed
  * again on the strength of a misclick is worse than saying nothing.
  */
-const STATUS_NOTICE: Partial<Record<FeedbackStatus, { title: string; lead: string }>> = {
+export const STATUS_NOTICE: Partial<Record<FeedbackStatus, { title: string; lead: string }>> = {
   triaged: {
     title: "We're looking into your report",
     lead: "We've confirmed this one and it's being worked on.",
@@ -204,16 +358,39 @@ const STATUS_NOTICE: Partial<Record<FeedbackStatus, { title: string; lead: strin
 };
 
 /**
+ * Of the reports about to be moved, the ones whose reporter should hear about
+ * it: they have a reporter at all, and they are not already sitting in the
+ * status they are being moved to.
+ *
+ * That second half is what stops a duplicate. A bulk update over a selection
+ * can include rows already in the target status, and "Your report was
+ * resolved" arriving twice for one bug is the kind of thing that gets
+ * notifications muted. Pulled out of the service because it is the only real
+ * logic in the move, and inline it could only ever be checked by reading the
+ * source.
+ *
+ * Not reachable from the admin console today, which offers a report every
+ * status except its current one, so a no-op move cannot be clicked. It guards
+ * the bulk path the input schema already allows (up to 100 ids).
+ */
+export function reportsNeedingNotice<T extends { user_id: string | null; status: string }>(
+  rows: T[] | null | undefined,
+  status: FeedbackStatus,
+): T[] {
+  return (rows ?? []).filter((row) => !!row.user_id && row.status !== status);
+}
+
+/**
  * Enough of the report for the reporter to know which one this is about.
  *
  * Short, and on one line, because of where it lands. Both notification
  * surfaces render the body into a `line-clamp-2` paragraph with no
  * `whitespace-pre-wrap` (AppHeader.tsx, NotificationsPage.tsx), so a newline
- * here would collapse to a space and a long quote would be clipped by the
- * clamp - taking with it the only part that says which report this is. 80
- * characters keeps the lead and the quote inside two lines of the 360px bell.
+ * here collapses to a space either way. The 80 characters are what makes the
+ * whole body fit on the notifications page, where the clamp would otherwise
+ * cut it mid-word; the 360px bell clamps at two lines whatever the length.
  */
-function quoteReport(description: string | null): string {
+export function quoteReport(description: string | null): string {
   const text = (description ?? "").replace(/\s+/g, " ").trim();
   if (!text) return "";
   return ` "${text.length > 80 ? `${text.slice(0, 79)}…` : text}"`;
@@ -263,14 +440,15 @@ export async function setFeedbackStatusService(
    */
   const notice = STATUS_NOTICE[data.status];
   if (notice) {
-    const moved = (
-      ((beforeRows as any[]) ?? []) as Array<{
+    const moved = reportsNeedingNotice(
+      (beforeRows as Array<{
         id: string;
         user_id: string | null;
         status: string;
         description: string | null;
-      }>
-    ).filter((row) => row.user_id && row.status !== data.status);
+      }> | null) ?? [],
+      data.status,
+    );
 
     await Promise.all(
       moved.map((row) =>

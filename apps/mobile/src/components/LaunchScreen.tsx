@@ -282,7 +282,11 @@ export function LaunchScreen({ visible, onHidden, actionLabel, onAction }: Launc
               maxFontSizeMultiplier={MAX_FONT_SCALE}
               style={styles.wordmark}
             >
-              EVERLUMEN
+              {/* Split for the brand lockup, not for emphasis. The
+                  `accessibilityLabel` above keeps it one word to a screen
+                  reader, which is why the nested Text carries no label of its
+                  own. */}
+              EVER<Text style={styles.wordmarkAccent}>LUMEN</Text>
             </Text>
             <Text
               accessibilityLabel="Field documentation"
@@ -352,6 +356,10 @@ const styles = StyleSheet.create({
      */
     marginLeft: 2,
   },
+  /* The mark gold, hardcoded like everything else on this screen: the launch
+     wash is dark whatever the OS theme is, so there is no light ground to
+     darken for here. */
+  wordmarkAccent: { color: "#FFB020" },
   tagline: {
     /*
      * Overline, not caption. At 13pt with 2pt tracking "FIELD DOCUMENTATION"

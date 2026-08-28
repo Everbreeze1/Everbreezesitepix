@@ -181,6 +181,21 @@ export const listAdminAuditLog = rpcOp<
 export const FEEDBACK_STATUSES = ["new", "triaged", "resolved", "dismissed"] as const;
 export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
 
+/**
+ * A screenshot on a report, already signed by the API.
+ *
+ * The bucket is private and its read policy scopes an object to the folder of
+ * the account that uploaded it, so the browser cannot turn a path into a URL
+ * here - only the service role can, and it does that in listFeedbackService.
+ * `url` is null when it could not.
+ */
+export interface FeedbackAttachment {
+  path: string;
+  name: string;
+  kind: "image" | "pdf" | "file";
+  url: string | null;
+}
+
 export interface FeedbackReport {
   id: string;
   status: string;
@@ -191,7 +206,7 @@ export interface FeedbackReport {
   description: string | null;
   url: string | null;
   userAgent: string | null;
-  attachments: string[];
+  attachments: FeedbackAttachment[];
   createdAt: string;
   projectId: string | null;
   reporter: { id: string | null; name: string | null; email: string | null };

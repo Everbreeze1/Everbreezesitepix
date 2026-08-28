@@ -259,7 +259,10 @@ export function AppSidebar() {
           <BrandLogo size={collapsed ? 28 : 36} />
           {!collapsed && (
             <span className="text-[17px] font-bold leading-tight tracking-tight text-sidebar-foreground">
-              Everlumen
+              {/* The sidebar is fixed dark navy whatever the app theme is, so
+                  this takes the mark gold directly rather than the token that
+                  darkens for light grounds. */}
+              Ever<span className="text-brand-gold">lumen</span>
             </span>
           )}
         </Link>

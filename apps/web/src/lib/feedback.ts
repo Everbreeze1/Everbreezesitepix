@@ -196,7 +196,14 @@ export async function uploadFeedbackAttachments(
         .upload(path, file, { contentType: file.type || "application/octet-stream" });
       if (error) throw error;
       paths.push(path);
-    } catch {
+    } catch (e) {
+      // Logged as well as reported. The toast has to stay short and blameless,
+      // so without this the actual cause - a bucket that was never created, a
+      // MIME type the bucket rejects, a policy - left no trace anywhere.
+      console.error("[feedback] attachment upload failed", {
+        path,
+        error: (e as { message?: string } | null)?.message ?? String(e),
+      });
       failed.push(file.name);
     }
   }
