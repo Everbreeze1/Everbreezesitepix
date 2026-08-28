@@ -40,6 +40,14 @@ export type ChecklistDetail = {
   name: string;
   project_id: string;
   completed_at: string | null;
+  /*
+   * Minted when the checklist is created and kept for good. Sharing is switched
+   * off by stamping a revoked timestamp, not by destroying the token, so turning
+   * it back on restores the same URL rather than invalidating one already sent
+   * to a customer.
+   */
+  share_token: string | null;
+  revoked_at: string | null;
   items: ChecklistItem[];
 };
 
@@ -90,7 +98,7 @@ export async function listProjectChecklists(projectId: string): Promise<Checklis
 export async function getChecklist(checklistId: string): Promise<ChecklistDetail | null> {
   const { data: list, error } = await supabase
     .from("project_checklists")
-    .select("id, name, project_id, completed_at")
+    .select("id, name, project_id, completed_at, share_token, revoked_at")
     .eq("id", checklistId)
     .maybeSingle();
 

@@ -13,13 +13,14 @@ import {
   type ChecklistDetail,
   type ChecklistItem,
 } from "@/api/checklists";
+import { isShareLive, openShareSheet, publicUrl, setRecordShareEnabled } from "@/api/sharing";
 import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
 import { checklistItemRowId, type ChecklistItemPatchPayload } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
-import { Camera, CircleCheck, Star } from "@/ui/icons";
+import { Camera, CircleCheck, Share2, Star } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -27,6 +28,7 @@ import {
   ErrorState,
   Field,
   Icon,
+  IconButton,
   ProgressBar,
   SkeletonList,
   Text,
@@ -48,6 +50,8 @@ export default function ChecklistRunnerScreen() {
   const theme = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+
+  const [shareError, setShareError] = useState<string | null>(null);
 
   const queryKey = useMemo(() => ["checklist", id], [id]);
 
@@ -134,15 +138,75 @@ export default function ChecklistRunnerScreen() {
     [patchItem, user?.id],
   );
 
+  /**
+   * Share this checklist, turning the link on first if it is off.
+   *
+   * One tap rather than a settings sheet: the reason someone opens this on site
+   * is to hand the record to an inspector standing next to them, and a two-step
+   * "enable, then share" is a step that exists only because the data model has
+   * two fields.
+   */
+  const shareChecklist = useCallback(async () => {
+    if (!data) return;
+    try {
+      if (!isShareLive(data.share_token, data.revoked_at)) {
+        await setRecordShareEnabled("project_checklists", data.id, true);
+        await refetch();
+      }
+      const url = publicUrl("checklists", data.share_token);
+      if (!url) {
+        setShareError("This checklist has no share link yet. Pull to refresh and try again.");
+        return;
+      }
+      setShareError(null);
+      await openShareSheet(url, data.name);
+    } catch (e) {
+      setShareError(e instanceof Error ? e.message : "Could not share this checklist");
+    }
+  }, [data, refetch]);
+
   const items = data?.items ?? [];
   const done = items.filter((item) => item.completed_at).length;
   const outstandingRequired = items.filter((item) => item.required && !item.completed_at).length;
 
   return (
     <>
-      <Stack.Screen options={{ title: data?.name ?? "Checklist" }} />
+      <Stack.Screen
+        options={{
+          title: data?.name ?? "Checklist",
+          headerRight: () =>
+            data ? (
+              <IconButton
+                icon={Share2}
+                accessibilityLabel={
+                  isShareLive(data.share_token, data.revoked_at)
+                    ? "Share this checklist"
+                    : "Turn on sharing for this checklist"
+                }
+                surface={false}
+                /*
+                 * Tinted while the link is live, muted while it is off, so the
+                 * header says whether this record is currently public without
+                 * anyone having to open the sheet to find out.
+                 */
+                tone={isShareLive(data.share_token, data.revoked_at) ? "primary" : "muted"}
+                onPress={() => void shareChecklist()}
+              />
+            ) : null,
+        }}
+      />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         <QueueBanner />
+
+        {shareError ? (
+          <Text
+            variant="caption"
+            tone="destructive"
+            style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}
+          >
+            {shareError}
+          </Text>
+        ) : null}
 
         {isLoading ? (
           <SkeletonList rows={5} />
@@ -225,7 +289,10 @@ function ChecklistRow({
     <Card
       // An answered item keeps its green edge. On a long list this is what tells
       // you where you stopped without reading a single label.
-      style={{ borderColor: answered ? theme.colors.success : theme.colors.border, gap: spacing.sm }}
+      style={{
+        borderColor: answered ? theme.colors.success : theme.colors.border,
+        gap: spacing.sm,
+      }}
     >
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.sm }}>
         <Text variant="bodyStrong" style={{ flex: 1 }}>
@@ -242,7 +309,9 @@ function ChecklistRow({
       ) : null}
 
       <Text variant="overline" tone="muted">
-        {(CHECKLIST_TYPE_LABELS[item.item_type as ChecklistItemType] ?? item.item_type).toUpperCase()}
+        {(
+          CHECKLIST_TYPE_LABELS[item.item_type as ChecklistItemType] ?? item.item_type
+        ).toUpperCase()}
       </Text>
 
       {item.item_type === "checkbox" ? (
@@ -330,7 +399,9 @@ function Rating({
             accessibilityRole="button"
             accessibilityLabel={`Rate ${value} out of 5`}
             accessibilityState={{ selected: active }}
-            onPress={() => onSetResponse(item, toggledResponse("rating", item.response_value, value))}
+            onPress={() =>
+              onSetResponse(item, toggledResponse("rating", item.response_value, value))
+            }
             style={({ pressed }) => ({
               flex: 1,
               minHeight: HIT_TARGET,

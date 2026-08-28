@@ -46,6 +46,13 @@ export type WorkflowDetail = {
   project_id: string;
   description: string | null;
   completed_at: string | null;
+  /*
+   * Same pair as a checklist: the token is minted with the row and kept, and
+   * sharing is switched off with a revoked timestamp rather than by destroying
+   * it. So a workflow can hold a token and still not be shared.
+   */
+  share_token: string | null;
+  revoked_at: string | null;
   phases: WorkflowPhase[];
 };
 
@@ -113,7 +120,7 @@ export async function listProjectWorkflows(projectId: string): Promise<WorkflowS
 export async function getWorkflow(workflowId: string): Promise<WorkflowDetail | null> {
   const { data: workflow, error } = await supabase
     .from("project_workflows")
-    .select("id, name, project_id, description, completed_at")
+    .select("id, name, project_id, description, completed_at, share_token, revoked_at")
     .eq("id", workflowId)
     .maybeSingle();
 

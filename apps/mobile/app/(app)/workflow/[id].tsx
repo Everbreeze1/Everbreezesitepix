@@ -17,6 +17,7 @@ import {
   type WorkflowItem,
   type WorkflowPhase,
 } from "@/api/workflows";
+import { isShareLive, openShareSheet, publicUrl, setRecordShareEnabled } from "@/api/sharing";
 import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
 import {
@@ -28,7 +29,7 @@ import {
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { spacing, useTheme } from "@/theme";
-import { Camera, CircleCheck, PenLine } from "@/ui/icons";
+import { Camera, CircleCheck, PenLine, Share2 } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -36,6 +37,7 @@ import {
   ErrorState,
   Field,
   Icon,
+  IconButton,
   ProgressBar,
   SkeletonList,
   StepProgress,
@@ -48,6 +50,8 @@ export default function WorkflowRunnerScreen() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  const [shareError, setShareError] = useState<string | null>(null);
+
   const queryKey = useMemo(() => ["workflow", id], [id]);
 
   const { data, isLoading, isRefetching, error, refetch } = useQuery({
@@ -55,6 +59,33 @@ export default function WorkflowRunnerScreen() {
     queryFn: () => getWorkflow(id!),
     enabled: Boolean(id),
   });
+
+  /**
+   * Share this workflow, turning the link on first if it is off.
+   *
+   * Same one-tap shape as the checklist runner: the reason to open this on site
+   * is to hand the record to someone standing next to you, and splitting it
+   * into "enable" then "share" is a step that exists only because the row has
+   * two columns.
+   */
+  const shareWorkflow = useCallback(async () => {
+    if (!data) return;
+    try {
+      if (!isShareLive(data.share_token, data.revoked_at)) {
+        await setRecordShareEnabled("project_workflows", data.id, true);
+        await refetch();
+      }
+      const url = publicUrl("workflows", data.share_token);
+      if (!url) {
+        setShareError("This workflow has no share link yet. Pull to refresh and try again.");
+        return;
+      }
+      setShareError(null);
+      await openShareSheet(url, data.name);
+    } catch (e) {
+      setShareError(e instanceof Error ? e.message : "Could not share this workflow");
+    }
+  }, [data, refetch]);
 
   const patchLocalItem = useCallback(
     (itemId: string, patch: Record<string, unknown>) => {
@@ -201,9 +232,39 @@ export default function WorkflowRunnerScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: data?.name ?? "Workflow" }} />
+      <Stack.Screen
+        options={{
+          title: data?.name ?? "Workflow",
+          headerRight: () =>
+            data ? (
+              <IconButton
+                icon={Share2}
+                accessibilityLabel={
+                  isShareLive(data.share_token, data.revoked_at)
+                    ? "Share this workflow"
+                    : "Turn on sharing for this workflow"
+                }
+                surface={false}
+                // Tinted while live, muted while off: the header states whether
+                // this record is public without anyone opening a sheet.
+                tone={isShareLive(data.share_token, data.revoked_at) ? "primary" : "muted"}
+                onPress={() => void shareWorkflow()}
+              />
+            ) : null,
+        }}
+      />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         <QueueBanner />
+
+        {shareError ? (
+          <Text
+            variant="caption"
+            tone="destructive"
+            style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}
+          >
+            {shareError}
+          </Text>
+        ) : null}
 
         {isLoading ? (
           <SkeletonList rows={4} />
