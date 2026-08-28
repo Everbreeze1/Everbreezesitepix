@@ -181,6 +181,35 @@ export const setFeedbackStatusInputSchema = z.object({
   status: z.enum(FEEDBACK_STATUSES),
 });
 
+/**
+ * What the reporter is told when their report moves.
+ *
+ * Only the three that are news to them. Moving something back to 'new' is the
+ * queue correcting itself, and telling someone their fixed bug is unfixed
+ * again on the strength of a misclick is worse than saying nothing.
+ */
+const STATUS_NOTICE: Partial<Record<FeedbackStatus, { title: string; lead: string }>> = {
+  triaged: {
+    title: "We're looking into your report",
+    lead: "We've confirmed this one and it's being worked on.",
+  },
+  resolved: {
+    title: "Your report was resolved",
+    lead: "This has been fixed or answered.",
+  },
+  dismissed: {
+    title: "Your report was closed",
+    lead: "We've closed this without a change. Send it again if it's still happening.",
+  },
+};
+
+/** Enough of the report for the reporter to know which one this is about. */
+function quoteReport(description: string | null): string {
+  const text = (description ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  return `\n\n"${text.length > 140 ? `${text.slice(0, 139)}…` : text}"`;
+}
+
 export async function setFeedbackStatusService(
   ctx: AuthedContext,
   data: z.infer<typeof setFeedbackStatusInputSchema>,
@@ -188,11 +217,67 @@ export async function setFeedbackStatusService(
   await requirePlatformAdmin(ctx.userId, "support");
   const admin = getSupabaseAdmin();
 
+  /*
+   * Read before the write, so the notifications below go only to reports that
+   * actually moved. A bulk update over a selection can easily include rows
+   * already sitting in the target status, and "Your report was resolved"
+   * arriving twice for one bug is the kind of thing that gets notifications
+   * muted.
+   */
+  const { data: beforeRows } = await (admin as any)
+    .from("issue_reports")
+    .select("id, user_id, status, description")
+    .in("id", data.reportIds);
+
   const { error } = await (admin as any)
     .from("issue_reports")
     .update({ status: data.status })
     .in("id", data.reportIds);
   if (error) throw new Error(error.message);
+
+  /*
+   * Tell the people who filed them.
+   *
+   * The list on the Feedback page shows the move, but only to someone who
+   * thinks to go and look. Without this, nothing ever told them to: replying
+   * (below) was the only thing that reached anyone, and it needs an admin to
+   * type a message, so a report closed with no reply reached nobody at all.
+   *
+   * `admin_announcement` rather than a new notification type: it is already in
+   * the table's CHECK constraint, and a new value would need a migration
+   * applied by hand before this could ship. `entity_type` is left unset for the
+   * same reason - its constraint (last widened in 20260919000000) has no
+   * 'issue_report', and insertNotification only logs a failed insert, so
+   * setting it would drop every one of these on the floor exactly as silently
+   * as the missing notification this replaces. `link_path` carries the
+   * destination, which is all anything reads.
+   */
+  const notice = STATUS_NOTICE[data.status];
+  if (notice) {
+    const moved = (
+      ((beforeRows as any[]) ?? []) as Array<{
+        id: string;
+        user_id: string | null;
+        status: string;
+        description: string | null;
+      }>
+    ).filter((row) => row.user_id && row.status !== data.status);
+
+    await Promise.all(
+      moved.map((row) =>
+        insertNotification(admin, {
+          recipientId: row.user_id as string,
+          actorId: null,
+          type: "admin_announcement",
+          title: notice.title,
+          body: `${notice.lead}${quoteReport(row.description)}`,
+          // Lands on the Feedback page, where the reporter's own list of
+          // reports and their statuses lives.
+          linkPath: "/report-issue",
+        }),
+      ),
+    );
+  }
 
   await logAdminAction(admin, {
     actorId: ctx.userId,
@@ -246,7 +331,9 @@ export async function replyToFeedbackService(
     type: "admin_announcement",
     title: "Re: your feedback",
     body: data.message,
-    linkPath: null,
+    // The Feedback page, where the reporter can see the report this answers
+    // and what it was moved to.
+    linkPath: "/report-issue",
   });
 
   if (data.status) {

@@ -83,6 +83,20 @@ const reportIssueItem = { title: "Feedback", url: "/report-issue", icon: LifeBuo
  */
 const adminItem = { title: "Admin", url: "/admin", icon: ShieldCheck } as const;
 
+/**
+ * The brand-blue rule down the left edge of the current row. Purely a marker:
+ * the row's own tint and full-strength label are what carry "you are here" on
+ * screen, and `isActive` on the button is what says it to a screen reader.
+ */
+function ActiveMarker() {
+  return (
+    <span
+      aria-hidden
+      className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-sidebar-ring"
+    />
+  );
+}
+
 function getInitials(name?: string | null, email?: string | null) {
   const trimmed = name?.trim();
   if (trimmed) {
@@ -101,8 +115,10 @@ export function AppSidebar() {
   const { signOut, user } = useAuth();
   const { profile } = useProfile();
 
-  // Only the team owner (account owner who created the team) sees the
-  // Teams tab and the Upgrade tab. Invited members are scoped to their work.
+  // Only the team owner (account owner who created the team) sees the Teams
+  // tab, and only an owner is ever offered Upgrade - an invited member cannot
+  // buy anything for a team that is not theirs. Owners are scoped further by
+  // tier below.
   const fetchTeam = getMyTeam;
   const { data: teamData } = useQuery({
     queryKey: ["my-team"],
@@ -110,8 +126,8 @@ export function AppSidebar() {
     enabled: !!user,
     staleTime: 60_000,
   });
-  // Hide Teams/Upgrade only when we've confirmed the signed-in user is an
-  // invited (non-owner) member of a team. Owners and solo users see both.
+  // Only once we've confirmed the signed-in user is an invited (non-owner)
+  // member of a team. Owners and solo users are not treated as members.
   const isInvitedMember =
     !!teamData && !!teamData.team && !!teamData.myRole && teamData.myRole !== "owner";
   const showOwnerNav = !isInvitedMember;
@@ -119,6 +135,13 @@ export function AppSidebar() {
   // (they can apply templates); only owners/admins can create/edit (enforced on the page).
   const plan: string = (teamData?.plan as string | undefined) ?? "starter";
   const showTemplates = plan === "pro" || plan === "team";
+  /*
+   * Full Team access, named once because two rows read it: the Portfolio gate
+   * below, and whether "Upgrade" is worth showing at all. Internal /
+   * complimentary teams count as Team here, the same way useSubscription()
+   * treats them.
+   */
+  const hasTeamAccess = !!teamData?.isInternal || (!!teamData?.isActive && plan === "team");
   /*
    * Portfolio is a Team-tier feature, but it is *badged*, never removed.
    *
@@ -134,7 +157,7 @@ export function AppSidebar() {
    * worse question than "why is this read-only?" - only one answers itself.
    * Nothing leaks by showing the row: the API and RLS gate on team membership.
    */
-  const portfolioLocked = !(!!teamData?.isInternal || (!!teamData?.isActive && plan === "team"));
+  const portfolioLocked = !hasTeamAccess;
   const navItems: Array<{ title: string; url: string; icon: LucideIcon; locked?: boolean }> = [
     ...baseItems,
     ...(showTemplates ? [templatesItem] : []),
@@ -154,8 +177,23 @@ export function AppSidebar() {
     enabled: !!user,
     staleTime: 5 * 60_000,
   });
+  /*
+   * "Upgrade" is only a row while there is something left to upgrade to.
+   *
+   * Team is the top self-serve tier, so on it this crown sat in Workspace
+   * tools advertising the plan the account already pays for: the one customer
+   * who is not missing anything was the one being told they were. That is the
+   * opposite of the plan-gated rows above, which stay visible and badged
+   * precisely because they point at something the account could still get.
+   *
+   * Nothing is stranded by dropping it. The plan itself - invoices, seats,
+   * what is included - lives in Settings > Billing, which the account row in
+   * the footer opens. An inactive or lapsed account keeps the row whatever its
+   * plan column says, because for them /pricing is the way back to a working
+   * workspace.
+   */
   const toolItems = [
-    ...(showOwnerNav ? [pricingItem] : []),
+    ...(showOwnerNav && !hasTeamAccess ? [pricingItem] : []),
     trashItem,
     helpItem,
     reportIssueItem,
@@ -181,43 +219,71 @@ export function AppSidebar() {
   const displayName = profile?.full_name || user?.email || "";
   const initials = getInitials(profile?.full_name, user?.email);
 
+  /*
+   * Every row used to carry its icon inside a filled rounded box, so a rail of
+   * a dozen entries read as a dozen grey tiles stacked on the navy, and the
+   * current row was a white slab with a drop shadow - a raised button floating
+   * on the flat surface it is part of.
+   *
+   * The chips are gone, because an icon on a rail does not need a container to
+   * be legible. That, plus the shorter rows, is also what buys back the height
+   * the list was overflowing by: at a 900px window the nav needed 765px in a
+   * 671px box, so the last rows were sliced in half by the footer and a
+   * scrollbar ran down the navy.
+   *
+   * The current row is a quiet tint with the brand blue as a rule down its
+   * left edge. Deliberately not a solid blue pill: white on #2584f4 is 3.7:1,
+   * under AA at this size, while white on the tint clears 12:1 and the blue
+   * does its work as an accent instead of as a background.
+   */
   const buttonBase = isMobile
-    ? "flex items-center gap-3 h-14 px-3 rounded-xl text-base font-bold transition-colors"
-    : "flex items-center gap-3 h-[52px] px-3 rounded-xl text-sm font-bold transition-colors";
-  const iconBoxBase = isMobile
-    ? "flex items-center justify-center h-9 w-9 rounded-lg shrink-0"
-    : "flex items-center justify-center h-7 w-7 rounded-lg shrink-0";
-  const iconBase = isMobile ? "h-5 w-5" : "h-4 w-4";
+    ? "relative flex items-center gap-3 h-[52px] px-3 rounded-lg text-[15px] font-semibold transition-colors"
+    : "relative flex items-center gap-3 h-11 px-3 rounded-lg text-sm font-semibold transition-colors";
+  const iconBase = isMobile ? "h-5 w-5" : "h-[18px] w-[18px]";
 
   const navButtonClass = (active: boolean) =>
-    `${buttonBase} ${active ? "bg-sidebar-foreground text-sidebar shadow-lg" : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground/80"}`;
-  const navIconBoxClass = (active: boolean) =>
-    `${iconBoxBase} ${active ? "bg-sidebar-ring/10 text-sidebar-ring" : "bg-sidebar-foreground/10 text-sidebar-foreground/75"}`;
+    `${buttonBase} ${
+      active
+        ? "bg-sidebar-accent text-sidebar-foreground"
+        : "text-sidebar-foreground/60 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+    }`;
+  const navIconClass = (active: boolean) =>
+    `${iconBase} ${active ? "text-sidebar-foreground" : "text-sidebar-foreground/45"}`;
 
   return (
     <Sidebar collapsible="icon" className="border-r-0 bg-sidebar text-sidebar-foreground">
-      <SidebarHeader className="px-3 py-6">
+      <SidebarHeader className="px-3 py-4">
         <Link to="/dashboard" className="flex items-center gap-2.5 px-1">
-          <BrandLogo size={40} />
+          {/* The collapsed rail is 48px wide and this Link is inset 16px, so a
+              36px mark hung 5px out over the page beside it. */}
+          <BrandLogo size={collapsed ? 28 : 36} />
           {!collapsed && (
-            <span className="text-lg font-extrabold leading-tight tracking-tight text-sidebar-foreground">
+            <span className="text-[17px] font-bold leading-tight tracking-tight text-sidebar-foreground">
               Everlumen
             </span>
           )}
         </Link>
       </SidebarHeader>
-      <SidebarContent className="px-2 gap-0">
-        <SidebarGroup className="pt-5">
+      <SidebarContent className="scroll-slim px-2 gap-0">
+        <SidebarGroup className="pt-1">
           <SidebarGroupContent>
-            <SidebarMenu className={`${isMobile ? "gap-2" : "gap-1"}`}>
+            <SidebarMenu className={`${isMobile ? "gap-1.5" : "gap-0.5"}`}>
               {navItems.map((item) => {
                 const active = pathname === item.url || pathname.startsWith(item.url + "/");
                 return (
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton asChild isActive={active} className={navButtonClass(active)}>
                       <Link to={item.url}>
-                        <span className={navIconBoxClass(active)}>
-                          <item.icon className={iconBase} />
+                        {active && !collapsed && <ActiveMarker />}
+                        {/*
+                          The icon keeps a wrapper even with the chip gone:
+                          SidebarMenuButton's own variant carries
+                          `[&>svg]:size-4`, which outranks a class set on the
+                          svg itself and would pin every icon to 16px, mobile
+                          included.
+                        */}
+                        <span className="flex shrink-0 items-center">
+                          <item.icon className={navIconClass(active)} />
                         </span>
                         {!collapsed && <span>{item.title}</span>}
                         {!collapsed && item.locked && (
@@ -240,14 +306,14 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup className="pt-5 mt-2 border-t border-sidebar-border">
+        <SidebarGroup className="mt-2 border-t border-sidebar-border pt-3">
           {!collapsed && (
-            <SidebarGroupLabel className="text-[10px] font-extrabold uppercase tracking-[1.5px] text-sidebar-foreground/40 mb-1">
+            <SidebarGroupLabel className="mb-1 text-[10px] font-bold uppercase tracking-[1.2px] text-sidebar-foreground/35">
               Workspace tools
             </SidebarGroupLabel>
           )}
           <SidebarGroupContent>
-            <SidebarMenu className={`${isMobile ? "gap-2" : "gap-1"}`}>
+            <SidebarMenu className={`${isMobile ? "gap-1.5" : "gap-0.5"}`}>
               {toolItems.map((item) => {
                 const active = pathname === item.url || pathname.startsWith(item.url + "/");
                 const badge = item.url === trashItem.url && trashTotal > 0 ? trashTotal : 0;
@@ -255,8 +321,9 @@ export function AppSidebar() {
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton asChild isActive={active} className={navButtonClass(active)}>
                       <Link to={item.url}>
-                        <span className={`relative ${navIconBoxClass(active)}`}>
-                          <item.icon className={iconBase} />
+                        {active && !collapsed && <ActiveMarker />}
+                        <span className="relative flex shrink-0 items-center">
+                          <item.icon className={navIconClass(active)} />
                           {/*
                             Collapsed to icons there is no room for a number, but
                             "something is in here" still has to survive - so the
@@ -266,14 +333,14 @@ export function AppSidebar() {
                           {badge > 0 && collapsed && (
                             <span
                               aria-hidden
-                              className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-sidebar-ring ring-2 ring-sidebar"
+                              className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-sidebar-ring ring-2 ring-sidebar"
                             />
                           )}
                         </span>
                         {!collapsed && <span>{item.title}</span>}
                         {!collapsed && badge > 0 && (
                           <span className="ml-auto flex shrink-0 items-center">
-                            <span className="rounded-full bg-sidebar-foreground/15 px-2 py-0.5 text-[11px] font-extrabold tabular-nums text-sidebar-foreground/80">
+                            <span className="rounded-full bg-sidebar-foreground/12 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-sidebar-foreground/70">
                               {badge > 99 ? "99+" : badge}
                             </span>
                           </span>
@@ -295,11 +362,11 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="px-2 pb-3 pt-2 border-t border-sidebar-border">
+      <SidebarFooter className="border-t border-sidebar-border px-2 pb-2 pt-1">
         {user && (
           <Link
             to="/settings"
-            className={`flex items-center gap-3 rounded-xl px-3 hover:bg-sidebar-accent transition-colors ${isMobile ? "h-16" : "h-16"}`}
+            className={`flex items-center gap-3 rounded-lg px-3 transition-colors hover:bg-sidebar-accent ${isMobile ? "h-16" : "h-14"}`}
           >
             {profile?.avatar_url ? (
               <img
@@ -315,10 +382,10 @@ export function AppSidebar() {
             {!collapsed && (
               <>
                 <span className="flex flex-col min-w-0 flex-1">
-                  <span className="text-sm font-bold text-sidebar-foreground/65 truncate">
+                  <span className="truncate text-sm font-semibold text-sidebar-foreground/85">
                     {displayName}
                   </span>
-                  <span className="text-[10px] font-medium text-sidebar-foreground/45">
+                  <span className="text-[11px] font-medium text-sidebar-foreground/45">
                     Account &amp; settings
                   </span>
                 </span>
@@ -330,10 +397,16 @@ export function AppSidebar() {
         <Button
           variant="ghost"
           onClick={signOut}
-          className={`justify-center w-full mt-1 ${isMobile ? "h-12 text-base" : "h-11 text-sm"} font-bold rounded-xl text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground/70`}
+          aria-label="Sign out"
+          title="Sign out"
+          className={`mt-1 w-full justify-center ${isMobile ? "h-12 text-base" : "h-9 text-sm"} rounded-lg font-semibold text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground/80`}
         >
           <LogOut className={isMobile ? "h-5 w-5" : "h-4 w-4"} />
-          <span className="ml-2.5">Sign out</span>
+          {/* Collapsed to icons the label had nowhere to go and ran out past
+              the rail. The accessible name moves onto the button so the
+              icon-only state is still announced, and the tooltip says it to
+              everyone else. */}
+          {!collapsed && <span className="ml-2.5">Sign out</span>}
         </Button>
       </SidebarFooter>
     </Sidebar>

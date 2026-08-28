@@ -183,8 +183,15 @@ function ProjectCard({ project }: { project: ProjectListItem }) {
       accessibilityLabel={`${projectDisplayName(project)}${address ? `, ${address}` : ""}, ${label}`}
     >
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.md }}>
-        <View style={{ flex: 1, gap: spacing.xs }}>
-          <Text variant="heading" numberOfLines={1}>
+        {/*
+          `minWidth: 0` and two lines, for the reason `ListRow` needed the same:
+          a flex child defaults to its content width as its minimum, so a long
+          name is measured against the width it wanted rather than the width it
+          has, and `numberOfLines={1}` then cuts far too early. Seen on device
+          as "20 Charlcote Crescent - ..." with most of the card still empty.
+        */}
+        <View style={{ flex: 1, minWidth: 0, gap: spacing.xs }}>
+          <Text variant="heading" numberOfLines={2}>
             {projectDisplayName(project)}
           </Text>
           {address ? (

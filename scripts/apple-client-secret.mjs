@@ -51,7 +51,11 @@ if (!keyPath) {
  * the filename. Reading it from there removes a copy-paste step that is easy
  * to get wrong and produces a signature Apple rejects without saying why.
  */
-const keyId = process.argv[3] ?? basename(keyPath).replace(/^AuthKey_/, "").replace(/\.p8$/, "");
+const keyId =
+  process.argv[3] ??
+  basename(keyPath)
+    .replace(/^AuthKey_/, "")
+    .replace(/\.p8$/, "");
 if (!/^[A-Z0-9]{10}$/.test(keyId)) {
   console.error(`Could not read a key id from "${basename(keyPath)}".`);
   console.error("Pass it explicitly: node scripts/apple-client-secret.mjs <key.p8> <KEY_ID>");
@@ -94,4 +98,6 @@ const signature = signer.sign({ key: privateKey, dsaEncoding: "ieee-p1363" }, "b
 process.stdout.write(`${header}.${payload}.${signature}\n`);
 
 console.error(`team ${TEAM_ID}  key ${keyId}  client ${CLIENT_ID}`);
-console.error(`expires ${new Date(exp * 1000).toISOString().slice(0, 10)} - regenerate before then`);
+console.error(
+  `expires ${new Date(exp * 1000).toISOString().slice(0, 10)} - regenerate before then`,
+);

@@ -93,6 +93,66 @@ export async function submitFeedback(input: SubmitFeedbackInput): Promise<void> 
 }
 
 // ---------------------------------------------------------------------------
+// The reporter's own reports
+// ---------------------------------------------------------------------------
+
+/** Mirrors FEEDBACK_STATUSES in apps/api/src/domains/admin/feedback.ts. */
+export type FeedbackStatus = "new" | "triaged" | "resolved" | "dismissed";
+
+const FEEDBACK_STATUSES: FeedbackStatus[] = ["new", "triaged", "resolved", "dismissed"];
+
+export interface MyFeedbackReport {
+  id: string;
+  kind: FeedbackKind;
+  status: FeedbackStatus;
+  description: string;
+  feature: string | null;
+  createdAt: string;
+}
+
+/**
+ * Everything this account has filed, newest first.
+ *
+ * `issue_reports` has let a reporter read their own rows since 20260803020000
+ * ("Users view own issue reports") and nothing ever did. So a report vanished
+ * the moment it was sent: triage moves `status` in the admin console, and the
+ * person who filed it had no surface anywhere that showed the move. This is the
+ * reader for the half of the loop that was never built.
+ *
+ * `user_id` is filtered here as well as by the policy, so the query is a lookup
+ * rather than a scan the policy then throws most of away.
+ *
+ * Text only. A one-tap thumbs signal from the in-app prompt is feedback, but it
+ * carries no message and gets no reply, so listing those back would pad this
+ * with rows that say nothing and never change.
+ */
+export async function listMyFeedback(userId: string): Promise<MyFeedbackReport[]> {
+  const { data, error } = await supabase
+    .from("issue_reports")
+    .select("id, kind, status, description, feature, created_at")
+    .eq("user_id", userId)
+    .not("description", "is", null)
+    .neq("description", "")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(error.message);
+
+  return ((data as any[]) ?? []).map((row) => ({
+    id: row.id as string,
+    kind: (row.kind ?? "bug") as FeedbackKind,
+    /*
+     * The column had no CHECK constraint until 20260822130000, so a row older
+     * than that is not guaranteed to hold one of the four. Falling back to
+     * "new" beats rendering an empty badge.
+     */
+    status: FEEDBACK_STATUSES.includes(row.status) ? (row.status as FeedbackStatus) : "new",
+    description: (row.description as string | null) ?? "",
+    feature: (row.feature as string | null) ?? null,
+    createdAt: row.created_at as string,
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // Attachments
 // ---------------------------------------------------------------------------
 

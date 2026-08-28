@@ -75,6 +75,19 @@ export default defineConfig(async ({ command, mode }) => {
     server: {
       host: true,
       port: 8080,
+      /**
+       * Fail on a busy port instead of quietly taking the next one.
+       *
+       * Vite defaults `strictPort` to false, so a second `npm run dev` moves to
+       * 8081 without saying anything much. 8081 is React Native's well-known
+       * Metro port, so the web dev server silently squats on it and the mobile
+       * app then cannot load a bundle at all: the phone shows "Unable to load
+       * script", Metro reports the port is in use, and nothing points at the web
+       * app as the cause. Diagnosed once by tracing the PID holding the port.
+       *
+       * Failing here costs one clear error message and saves that hunt.
+       */
+      strictPort: true,
       watch: {
         /**
          * Never watch build output.

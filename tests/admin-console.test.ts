@@ -251,3 +251,77 @@ describe("feedback inbox", () => {
     expect(read("apps/web/src/routeTree.gen.ts")).toContain("/_app/admin/feedback");
   });
 });
+
+/*
+ * The reporter's half of the loop.
+ *
+ * Reported by a customer: "bugs I have submitted that are marked resolved are
+ * not showing for me". Both halves of that were true. `status` moved only in
+ * the admin console and nothing was sent to the person who filed the report,
+ * and no screen in the product had ever read a reporter's own rows back - so a
+ * bug that got fixed looked exactly like one nobody had read. These are
+ * absences, so like the rest of this file they are guarded by reading the
+ * source.
+ */
+describe("feedback reaches the reporter", () => {
+  it("notifies whoever filed a report when it is moved", () => {
+    const src = read("apps/api/src/domains/admin/feedback.ts");
+    expect(src).toContain("STATUS_NOTICE");
+    // Inside setFeedbackStatusService, not only in the reply path - a report
+    // closed without a typed reply used to reach nobody at all.
+    const setStatus = src.slice(src.indexOf("export async function setFeedbackStatusService"));
+    expect(setStatus).toContain("insertNotification");
+    expect(setStatus).toContain('linkPath: "/report-issue"');
+  });
+
+  it("reads the rows before the update so a no-op move notifies nobody", () => {
+    // A bulk update over a selection can include rows already in the target
+    // status. Without the before-read they would all be told again.
+    const src = read("apps/api/src/domains/admin/feedback.ts");
+    const setStatus = src.slice(src.indexOf("export async function setFeedbackStatusService"));
+    expect(setStatus.indexOf("beforeRows")).toBeLessThan(setStatus.indexOf(".update("));
+    expect(setStatus).toContain("row.status !== data.status");
+  });
+
+  it("never stamps an entity_type the notifications constraint rejects", () => {
+    // insertNotification only console.errors a failed insert, so a value
+    // outside the CHECK would drop these notifications silently - the exact
+    // failure they exist to fix. 'issue_report' is not in the vocabulary.
+    const src = read("apps/api/src/domains/admin/feedback.ts");
+    expect(src).not.toContain('entityType: "issue_report"');
+    const sql = read("supabase/migrations/20260919000000_project_assignment_notifications.sql");
+    expect(sql).not.toContain("'issue_report'");
+  });
+
+  it("lets a reporter read their own reports back", () => {
+    const lib = read("apps/web/src/lib/feedback.ts");
+    expect(lib).toContain("export async function listMyFeedback");
+    expect(lib).toContain('.from("issue_reports")');
+    // The policy already scopes this, but the filter keeps it an index lookup.
+    expect(lib).toContain('.eq("user_id", userId)');
+
+    // And the policy that makes it possible is actually in the migrations.
+    const sql = read("supabase/migrations/20260803020000_feedback_signals.sql");
+    expect(sql).toContain('CREATE POLICY "Users view own issue reports"');
+  });
+
+  it("shows the status on the page that collects the reports", () => {
+    const page = read("apps/web/src/features/settings/pages/ReportIssuePage.tsx");
+    expect(page).toContain("listMyFeedback");
+    expect(page).toContain("Your reports");
+    // Triage words, translated. "Triaged" is internal and "Dismissed" reads as
+    // a brush-off; the stored value is unchanged, only the label.
+    expect(page).toContain('label: "In progress"');
+    expect(page).toContain('label: "Resolved"');
+    expect(page).toContain('label: "Closed"');
+  });
+
+  it("keeps the reporter-facing status vocabulary in step with the queue's", () => {
+    const api = read("apps/api/src/domains/admin/feedback.ts");
+    const lib = read("apps/web/src/lib/feedback.ts");
+    for (const s of ["new", "triaged", "resolved", "dismissed"]) {
+      expect(lib, `reporter-side missing ${s}`).toContain(`"${s}"`);
+      expect(api, `API missing ${s}`).toContain(`"${s}"`);
+    }
+  });
+});

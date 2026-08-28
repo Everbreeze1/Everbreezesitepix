@@ -313,7 +313,15 @@ export default function NewProjectScreen() {
           size="lg"
           fullWidth
           loading={busy === "creating"}
-          disabled={Boolean(busy)}
+          /*
+           * Only the save blocks this, not the locate. The locate now runs by
+           * itself on mount, and gating Create on it meant the button was dead
+           * for the first second or two of every visit - or indefinitely on a
+           * phone that never gets a fix. Creating before the address lands is
+           * allowed: `save` geocodes whatever was typed, and a project with no
+           * pin is still a project.
+           */
+          disabled={busy === "creating"}
           onPress={() => void save()}
           style={{ marginTop: spacing.md }}
         />

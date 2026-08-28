@@ -267,6 +267,39 @@
   animation: accordion-up 160ms ease-in;
 }
 
+/*
+ * A scrollbar that belongs to a dark panel.
+ *
+ * The app sidebar is fixed navy in both themes, and its nav list does scroll
+ * on a short window. The platform scrollbar there is a light grey slab running
+ * the height of the rail, which is the single least considered thing on the
+ * screen it appears on.
+ *
+ * Chrome and Firefox both honour `scrollbar-width`/`scrollbar-color`, and
+ * Chrome ignores the `::-webkit-` rules once they are set, so the two blocks
+ * do not fight: the standard properties drive everywhere except Safari, which
+ * falls through to the webkit ones.
+ */
+@utility scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+  }
+}
+
 @layer base {
   html,
   body {

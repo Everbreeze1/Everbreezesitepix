@@ -472,7 +472,7 @@ export async function listGalleryPhotoPage(
   let query = supabase
     .from("photos")
     .select(
-      "id, caption, storage_path, thumb_path, image_url, created_at, taken_at, phase, tags, project_id, projects(name)",
+      "id, caption, storage_path, thumb_path, image_url, created_at, taken_at, phase, tags, project_id",
     )
     // As everywhere else: `deleted_at` carries no RLS predicate, so the trash
     // is excluded by hand or it shows up in the library.
@@ -485,33 +485,55 @@ export async function listGalleryPhotoPage(
   const { data, error } = await query;
   if (error) throw new Error(error.message);
 
-  type Row = PhotoListItem & {
-    project_id: string;
-    /*
-     * PostgREST returns an embedded one-to-one as an object, but the generated
-     * types describe the relationship both ways, so this is narrowed by hand
-     * rather than trusted. A project with no row (deleted out from under the
-     * photo) comes back null and the tile falls back to no label.
-     */
-    projects: { name: string | null } | { name: string | null }[] | null;
-  };
+  type Row = PhotoListItem & { project_id: string };
+  const rows = (data as Row[]) ?? [];
 
-  const photos: GalleryPhotoItem[] = ((data as Row[]) ?? []).map((row) => {
-    const project = Array.isArray(row.projects) ? row.projects[0] : row.projects;
-    return {
-      id: row.id,
-      caption: row.caption,
-      storage_path: row.storage_path,
-      thumb_path: row.thumb_path,
-      image_url: row.image_url,
-      created_at: row.created_at,
-      taken_at: row.taken_at,
-      phase: row.phase,
-      tags: row.tags,
-      project_id: row.project_id,
-      project_name: project?.name ?? null,
-    };
-  });
+  /*
+   * Project names come from a second query, not a PostgREST embed.
+   *
+   * The first version wrote `projects(name)` into the select above. That
+   * typechecks, lints, bundles and passes every test, then fails at runtime
+   * with "Could not find a relationship between photos and projects in the
+   * schema cache": an embed needs a foreign key PostgREST can see, and nothing
+   * else in this codebase embeds projects into a photos read, so there was no
+   * precedent to copy and no check that could catch it. It was found by taking
+   * a screenshot of the running app.
+   *
+   * One extra round trip per page over at most `limit` distinct ids, and it
+   * cannot break on a schema-cache state.
+   */
+  const projectIds = Array.from(new Set(rows.map((row) => row.project_id).filter(Boolean)));
+
+  const names = new Map<string, string | null>();
+  if (projectIds.length > 0) {
+    const { data: projects, error: nameError } = await supabase
+      .from("projects")
+      .select("id, name")
+      .in("id", projectIds);
+    /*
+     * A failure here costs the labels, not the photos. The grid is still worth
+     * showing unlabelled, and throwing would discard a page that loaded fine.
+     */
+    if (!nameError) {
+      for (const project of (projects as { id: string; name: string | null }[]) ?? []) {
+        names.set(project.id, project.name);
+      }
+    }
+  }
+
+  const photos: GalleryPhotoItem[] = rows.map((row) => ({
+    id: row.id,
+    caption: row.caption,
+    storage_path: row.storage_path,
+    thumb_path: row.thumb_path,
+    image_url: row.image_url,
+    created_at: row.created_at,
+    taken_at: row.taken_at,
+    phase: row.phase,
+    tags: row.tags,
+    project_id: row.project_id,
+    project_name: names.get(row.project_id) ?? null,
+  }));
 
   const urls = await signPhotoUrls(photos);
 

@@ -67,3 +67,6 @@ supabase/.temp/
 # Apple Sign in with Apple signing keys - downloadable once, never in git
 *.p8
 AuthKey_*.p8
+
+# Screenshots taken while checking the mobile app on a device.
+.mobile-shots/

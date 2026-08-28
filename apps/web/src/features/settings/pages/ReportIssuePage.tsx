@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Bug,
   Check,
   ChevronDown,
+  Heart,
   Image as ImageIcon,
+  Inbox,
   Laptop,
   Lightbulb,
   Loader2,
@@ -29,9 +31,12 @@ import {
   ATTACHMENT_ACCEPT,
   MAX_ATTACHMENTS,
   MAX_ATTACHMENT_BYTES,
+  listMyFeedback,
   submitFeedback,
   uploadFeedbackAttachments,
   type FeedbackKind,
+  type FeedbackStatus,
+  type MyFeedbackReport,
 } from "@/lib/feedback";
 import { clientContextRows, readClientContext, type ClientContext } from "@/lib/feedback-context";
 import { projectDisplayName } from "@everlumen/shared";
@@ -110,6 +115,8 @@ export function ReportIssuePage() {
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState<null | { kind: "bug" | "idea"; attachments: number }>(null);
   const [showDeviceDetails, setShowDeviceDetails] = useState(false);
+  const [myReports, setMyReports] = useState<MyFeedbackReport[] | null>(null);
+  const [reportsError, setReportsError] = useState<string | null>(null);
 
   const fileInput = useRef<HTMLInputElement>(null);
   const textareaRef = useAutoGrow(message);
@@ -150,6 +157,28 @@ export function ReportIssuePage() {
       cancelled = true;
     };
   }, [user]);
+
+  /*
+   * The status of everything this account has already sent. Reloaded after a
+   * send rather than optimistically prepended: the row the list wants is the
+   * one the database now holds, and a send is rare enough to afford the trip.
+   */
+  const loadMyReports = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      setReportsError(null);
+      setMyReports(await listMyFeedback(user.id));
+    } catch (e: any) {
+      // Never fatal. The form above is the point of the page, and it works
+      // whether or not the history below it loads.
+      setMyReports([]);
+      setReportsError(e?.message ?? "Couldn't load your reports.");
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    void loadMyReports();
+  }, [loadMyReports]);
 
   const addFiles = (picked: FileList | null) => {
     if (!picked?.length) return;
@@ -216,6 +245,7 @@ export function ReportIssuePage() {
 
       setSent({ kind, attachments: attachments.length });
       resetForm();
+      void loadMyReports();
     } catch (e: any) {
       toast.error(e?.message ?? "Couldn't send that - try again.");
     } finally {
@@ -387,8 +417,170 @@ export function ReportIssuePage() {
             </div>
           </>
         )}
+
+        <MyReportsSection reports={myReports} error={reportsError} />
       </div>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------------- */
+
+/*
+ * What triage does, said in the reporter's words.
+ *
+ * The admin console's vocabulary is a queue's vocabulary - New, Triaged,
+ * Resolved, Dismissed - and two of those words are wrong to show the person who
+ * filed the report. "Triaged" is internal, and "Dismissed" reads as a brush-off
+ * for what is usually "working as intended" or "already fixed". The stored
+ * value is unchanged; only the label is.
+ */
+const REPORT_STATUS: Record<FeedbackStatus, { label: string; note: string; className: string }> = {
+  new: {
+    label: "Received",
+    note: "",
+    className: "bg-primary/10 text-primary",
+  },
+  triaged: {
+    label: "In progress",
+    note: "We've confirmed this one and it's being worked on.",
+    className: "bg-amber-500/10 text-amber-600",
+  },
+  resolved: {
+    label: "Resolved",
+    note: "Fixed or answered. Any reply from the team is in your notifications.",
+    className: "bg-emerald-500/10 text-emerald-600",
+  },
+  dismissed: {
+    label: "Closed",
+    note: "Closed without a change. Send it again if it's still happening.",
+    className: "bg-muted text-muted-foreground",
+  },
+};
+
+const REPORT_KIND: Record<string, { label: string; icon: typeof Bug }> = {
+  bug: { label: "Problem", icon: Bug },
+  idea: { label: "Suggestion", icon: Lightbulb },
+  praise: { label: "Praise", icon: Heart },
+};
+
+/**
+ * The half of the loop this page never had.
+ *
+ * Reports went in and nothing came back out: triage moved `status` in the admin
+ * console and the reporter had no surface that showed it, so a bug that got
+ * fixed looked identical to one nobody had read. Everything here is already
+ * readable by the reporter under the row-level policy the table has carried
+ * since 20260803020000 - this is the first thing to ask for it.
+ */
+function MyReportsSection({
+  reports,
+  error,
+}: {
+  reports: MyFeedbackReport[] | null;
+  error: string | null;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  // Long enough to cover most accounts, short enough that a heavy reporter does
+  // not push the form off the top of the page.
+  const VISIBLE = 5;
+
+  if (reports === null) {
+    return (
+      <div className="mt-10 flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="font-manrope">Loading your reports…</span>
+      </div>
+    );
+  }
+
+  const shown = expanded ? reports : reports.slice(0, VISIBLE);
+
+  return (
+    <section className="mt-10">
+      <h2 className="font-display text-[22px] font-bold tracking-[-0.6px] text-foreground">
+        Your reports
+      </h2>
+      <p className="font-manrope mt-1.5 text-sm leading-6 text-muted-foreground">
+        Everything you&rsquo;ve sent, and where it stands. This updates as the team works through
+        them.
+      </p>
+
+      {error && (
+        <p className="font-manrope mt-3 text-sm text-muted-foreground">
+          {error} Try reloading the page.
+        </p>
+      )}
+
+      {!error && reports.length === 0 ? (
+        <div className="mt-4 rounded-[20px] border border-dashed border-border bg-card/50 px-6 py-8 text-center">
+          <div className="mx-auto grid h-10 w-10 place-items-center rounded-full bg-muted text-muted-foreground">
+            <Inbox className="h-5 w-5" />
+          </div>
+          <p className="font-manrope mt-3 text-sm font-extrabold text-foreground">Nothing yet</p>
+          <p className="font-manrope mt-1 text-sm text-muted-foreground">
+            Anything you send shows up here, with its status.
+          </p>
+        </div>
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {shown.map((report) => (
+            <ReportRow key={report.id} report={report} />
+          ))}
+        </ul>
+      )}
+
+      {reports.length > VISIBLE && (
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setExpanded((v) => !v)}
+          className="font-manrope mt-3 h-9 rounded-lg px-3 text-sm font-bold"
+        >
+          {expanded ? "Show less" : `Show all ${reports.length}`}
+        </Button>
+      )}
+    </section>
+  );
+}
+
+function ReportRow({ report }: { report: MyFeedbackReport }) {
+  const status = REPORT_STATUS[report.status];
+  const kind = REPORT_KIND[report.kind] ?? REPORT_KIND.bug;
+  const KindIcon = kind.icon;
+
+  return (
+    <li className="rounded-[20px] border border-border bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <KindIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="font-manrope text-sm font-extrabold text-foreground">{kind.label}</span>
+          <span className="font-manrope shrink-0 text-xs text-muted-foreground">
+            {new Date(report.createdAt).toLocaleDateString(undefined, {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </span>
+        </div>
+        <span
+          className={cn(
+            "font-manrope shrink-0 rounded-full px-2.5 py-1 text-[11px] font-extrabold",
+            status.className,
+          )}
+        >
+          {status.label}
+        </span>
+      </div>
+
+      <p className="font-manrope mt-2 line-clamp-3 whitespace-pre-wrap text-sm leading-6 text-foreground">
+        {report.description}
+      </p>
+
+      {status.note && (
+        <p className="font-manrope mt-2 text-xs leading-5 text-muted-foreground">{status.note}</p>
+      )}
+    </li>
   );
 }
 
