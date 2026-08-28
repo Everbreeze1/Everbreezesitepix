@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import type Svg from "react-native-svg";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { CameraView, useCameraPermissions, type CameraType, type FlashMode } from "expo-camera";
 import { Image } from "expo-image";
@@ -17,6 +18,9 @@ import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useQuery } from "@tanstack/react-query";
 import { type CapturedAsset, type PhotoPhase } from "@/api/photos";
+import { tagForPhase, type WatermarkTag } from "@/api/watermark";
+import { renderWatermarked } from "@/api/watermark-render";
+import { WatermarkCanvas } from "@/components/WatermarkCanvas";
 import { getProject, projectCoords } from "@/api/projects";
 import { useAuth } from "@/lib/auth";
 import { persistCapture } from "@/offline/media";
@@ -66,6 +70,22 @@ export default function CaptureScreen() {
   const [phase, setPhase] = useState<PhotoPhase>("untagged");
   const [caption, setCaption] = useState("");
   const [tagText, setTagText] = useState("");
+
+  /*
+   * The off-screen surface the before/after pill is burnt in on.
+   *
+   * One shot at a time rather than mounting a canvas per photo: a burst of
+   * twenty at 2048px would be twenty full-resolution images held at once, and
+   * the phone that just took them is the one least able to afford it.
+   */
+  const stampRef = useRef<Svg>(null);
+  const [stamping, setStamping] = useState<{
+    uri: string;
+    width: number;
+    height: number;
+    tag: WatermarkTag;
+  } | null>(null);
+  const stampResolve = useRef<((uri: string) => void) | null>(null);
 
   const [deviceCoords, setDeviceCoords] = useState<{
     latitude: number;
@@ -159,6 +179,67 @@ export default function CaptureScreen() {
   }
 
   /**
+   * Burn the before/after pill into one shot.
+   *
+   * **Fails open, always.** Any problem here returns the original photo rather
+   * than throwing, and the capture queues unwatermarked. Losing a pill is a
+   * cosmetic difference from a web-captured photo; losing the photo is the
+   * thing the whole offline queue exists to prevent, and this is the last
+   * screen where that could still happen.
+   *
+   * `untagged` gets nothing, matching web. See `tagForPhase`.
+   */
+  const stamp = useCallback(async (shot: Shot, currentPhase: PhotoPhase): Promise<string> => {
+    const tag = tagForPhase(currentPhase);
+    // No pill wanted, or the picker gave us no dimensions to size one against.
+    if (!tag || !shot.width || !shot.height) return shot.uri;
+
+    try {
+      const rendered = await new Promise<string>((resolve, reject) => {
+        stampResolve.current = resolve;
+        setStamping({ uri: shot.uri, width: shot.width!, height: shot.height!, tag });
+        // The canvas has to mount and lay out before it can rasterise. This is
+        // the outer bound on that, separate from the rasteriser's own timeout.
+        setTimeout(() => reject(new Error("Watermark surface never became ready")), 20_000);
+      });
+      return rendered;
+    } catch {
+      return shot.uri;
+    } finally {
+      stampResolve.current = null;
+      setStamping(null);
+    }
+  }, []);
+
+  /*
+   * Rasterise once the surface has actually mounted.
+   *
+   * Driven by an effect rather than called inline, because `toDataURL` needs a
+   * laid-out native view and the ref is null until React has committed it.
+   */
+  useEffect(() => {
+    if (!stamping) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const uri = await renderWatermarked(stampRef.current);
+          if (!cancelled) stampResolve.current?.(uri);
+        } catch {
+          // Resolving with the original is what makes this fail open.
+          if (!cancelled) stampResolve.current?.(stamping.uri);
+        }
+      })();
+      // One frame is enough for the view to exist; 120ms is generous cover for
+      // a slow device decoding a 2048px image into the surface first.
+    }, 120);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [stamping]);
+
+  /**
    * Hand the batch to the outbox and get out of the way.
    *
    * Nothing is uploaded here. Each shot is copied into app storage and written
@@ -186,7 +267,11 @@ export default function CaptureScreen() {
         // The id is minted first: the durable copy is named after it, and it
         // becomes the idempotency key for the upload itself.
         const id = newOutboxId();
-        const localUri = persistCapture(shot.uri, id);
+        // Watermark first, then persist, so the durable copy the queue owns is
+        // the one with the pill already in it. Persisting first and stamping
+        // after would leave the outbox pointing at the unstamped file.
+        const stamped = await stamp(shot, phase);
+        const localUri = persistCapture(stamped, id);
 
         const payload: PhotoUploadPayload = {
           userId: user.id,
@@ -274,6 +359,28 @@ export default function CaptureScreen() {
         style={{ flex: 1, backgroundColor: theme.colors.background }}
       >
         <Stack.Screen options={{ title: `Review ${shots.length}`, headerShown: true }} />
+
+        {/*
+          The watermark surface, mounted off-screen while a shot is being
+          stamped and unmounted immediately after.
+
+          Positioned far off the left edge rather than hidden with
+          `opacity: 0` or `display: none`: the rasteriser needs a real, laid
+          out native view, and a view the layout engine has skipped produces a
+          blank image rather than an error.
+        */}
+        {stamping ? (
+          <View style={styles.stampSurface} pointerEvents="none" accessibilityElementsHidden>
+            <WatermarkCanvas
+              ref={stampRef}
+              uri={stamping.uri}
+              width={stamping.width}
+              height={stamping.height}
+              tag={stamping.tag}
+            />
+          </View>
+        ) : null}
+
         <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}>
           <View style={styles.reviewGrid}>
             {shots.map((shot) => (
@@ -549,6 +656,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   shutterInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#fff" },
+  /*
+   * Off-screen, not invisible. `opacity: 0` would still lay out, but a future
+   * reader reaching for `display: none` would silently break the rasteriser,
+   * so the offset says the view has to genuinely exist.
+   */
+  stampSurface: { position: "absolute", left: -10000, top: 0 },
   reviewGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   reviewTile: { width: "31%", aspectRatio: 1 },
   reviewImage: { width: "100%", height: "100%", borderRadius: radius.md, backgroundColor: "#ddd" },

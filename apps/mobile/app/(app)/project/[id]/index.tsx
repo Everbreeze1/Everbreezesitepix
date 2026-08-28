@@ -733,40 +733,42 @@ export default function ProjectDetailScreen() {
                 style={styles.lightboxImage}
                 contentFit="contain"
               />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Annotate this photo"
-                onPress={() => {
-                  const photo = lightboxPhoto;
-                  setLightboxId(null);
-                  router.push({
-                    pathname: "/photo/[id]/annotate",
-                    params: {
-                      id: photo.id,
-                      uri: urls[photo.id] ?? "",
-                      projectId: String(id),
-                      caption: photo.caption ?? "",
-                      phase: photo.phase ?? "untagged",
-                    },
-                  });
-                }}
-                style={styles.annotateButton}
-              >
-                <Text style={[typography.bodyStrong, { color: "#fff" }]}>Annotate</Text>
-              </Pressable>
+              <View style={styles.lightboxActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Annotate this photo"
+                  onPress={() => {
+                    const photo = lightboxPhoto;
+                    setLightboxId(null);
+                    router.push({
+                      pathname: "/photo/[id]/annotate",
+                      params: {
+                        id: photo.id,
+                        uri: urls[photo.id] ?? "",
+                        projectId: String(id),
+                        caption: photo.caption ?? "",
+                        phase: photo.phase ?? "untagged",
+                      },
+                    });
+                  }}
+                  style={styles.lightboxAction}
+                >
+                  <Text style={[typography.bodyStrong, { color: "#fff" }]}>Annotate</Text>
+                </Pressable>
 
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Share this photo"
-                onPress={() => {
-                  const photo = lightboxPhoto;
-                  setLightboxId(null);
-                  void sharePhoto(photo.id, photo.caption);
-                }}
-                style={styles.shareButton}
-              >
-                <Text style={[typography.bodyStrong, { color: "#fff" }]}>Share</Text>
-              </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Share this photo"
+                  onPress={() => {
+                    const photo = lightboxPhoto;
+                    setLightboxId(null);
+                    void sharePhoto(photo.id, photo.caption);
+                  }}
+                  style={styles.lightboxAction}
+                >
+                  <Text style={[typography.bodyStrong, { color: "#fff" }]}>Share</Text>
+                </Pressable>
+              </View>
 
               <View style={styles.lightboxMeta}>
                 <Text style={[typography.bodyStrong, { color: "#fff" }]} numberOfLines={2}>
@@ -822,22 +824,22 @@ const styles = StyleSheet.create({
   },
   lightbox: { flex: 1, backgroundColor: "rgba(0,0,0,0.94)", justifyContent: "center" },
   lightboxImage: { width: "100%", height: "78%" },
-  annotateButton: {
+  /*
+   * One right-anchored row, not two absolutely positioned pills.
+   *
+   * Share was originally placed with `right: spacing.xl + 150`, a number
+   * chosen to clear the word "Annotate" at the current font size. It happened
+   * to work and would have collided the first time either label changed or the
+   * OS font scale went up. A row cannot drift.
+   */
+  lightboxActions: {
     position: "absolute",
     top: 56,
     right: spacing.xl,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    minHeight: HIT_TARGET,
-    justifyContent: "center",
+    flexDirection: "row-reverse",
+    gap: spacing.sm,
   },
-  /* Sits left of Annotate, same pill, so the two read as one control group. */
-  shareButton: {
-    position: "absolute",
-    top: 56,
-    right: spacing.xl + 150,
+  lightboxAction: {
     backgroundColor: "rgba(255,255,255,0.18)",
     borderRadius: radius.pill,
     paddingHorizontal: spacing.xl,
