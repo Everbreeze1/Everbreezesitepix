@@ -26,6 +26,7 @@
  */
 
 export { default as Activity } from "lucide-react-native/dist/esm/icons/activity";
+export { default as Archive } from "lucide-react-native/dist/esm/icons/archive";
 export { default as Building2 } from "lucide-react-native/dist/esm/icons/building-2";
 export { default as Calendar } from "lucide-react-native/dist/esm/icons/calendar";
 export { default as Camera } from "lucide-react-native/dist/esm/icons/camera";

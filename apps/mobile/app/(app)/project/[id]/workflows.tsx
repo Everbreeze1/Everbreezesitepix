@@ -1,15 +1,24 @@
+import { useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listProjectWorkflows } from "@/api/workflows";
+import {
+  applyWorkflowTemplate,
+  listWorkflowTemplates,
+  type TemplateSummary,
+} from "@/api/templates";
 import { QueueBanner } from "@/components/QueueBanner";
+import { TemplatePickerSheet } from "@/components/TemplatePickerSheet";
+import { useAuth } from "@/lib/auth";
 import { spacing, useTheme } from "@/theme";
-import { Workflow } from "@/ui/icons";
+import { Plus, Workflow } from "@/ui/icons";
 import {
   Badge,
   Card,
   EmptyState,
   ErrorState,
+  IconButton,
   ProgressBar,
   SkeletonList,
   Text,
@@ -28,6 +37,35 @@ import {
 export default function ProjectWorkflowsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [picking, setPicking] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+
+  /**
+   * Start a workflow template on this project.
+   *
+   * Three tables in a fixed order, so this needs a connection and cannot be
+   * queued. On success it opens the workflow: applying a template and then
+   * being left on the grid to find the card it created is the interaction the
+   * web version explicitly fixed.
+   */
+  async function applyTemplate(template: TemplateSummary) {
+    if (!id || !user?.id) return;
+    setApplying(true);
+    setApplyError(null);
+    try {
+      const workflowId = await applyWorkflowTemplate(id, template, user.id);
+      await queryClient.invalidateQueries({ queryKey: ["project-workflows", id] });
+      setPicking(false);
+      router.push(`/workflow/${workflowId}`);
+    } catch (e) {
+      setApplyError(e instanceof Error ? e.message : "Could not start that workflow");
+    } finally {
+      setApplying(false);
+    }
+  }
 
   const { data, isLoading, isRefetching, error, refetch } = useQuery({
     queryKey: ["project-workflows", id],
@@ -39,7 +77,20 @@ export default function ProjectWorkflowsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Workflows" }} />
+      <Stack.Screen
+        options={{
+          title: "Workflows",
+          headerRight: () => (
+            <IconButton
+              icon={Plus}
+              accessibilityLabel="Start a workflow from a template"
+              surface={false}
+              tone="primary"
+              onPress={() => setPicking(true)}
+            />
+          ),
+        }}
+      />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         <QueueBanner />
 
@@ -67,7 +118,8 @@ export default function ProjectWorkflowsScreen() {
               <EmptyState
                 icon={Workflow}
                 title="No workflows here"
-                body="Workflows are the named phases a job moves through. Apply one to this project from the web app."
+                body="Workflows are the named phases a job moves through. Start one from a template."
+                action={{ label: "Use a template", icon: Plus, onPress: () => setPicking(true) }}
               />
             }
             renderItem={({ item }) => {
@@ -106,6 +158,16 @@ export default function ProjectWorkflowsScreen() {
           />
         )}
       </View>
+      <TemplatePickerSheet
+        visible={picking}
+        onClose={() => setPicking(false)}
+        title="Start a workflow"
+        subtitle="From a workspace template"
+        load={{ key: "workflow-templates", fetch: listWorkflowTemplates }}
+        applying={applying}
+        error={applyError}
+        onPick={(template) => void applyTemplate(template)}
+      />
     </>
   );
 }

@@ -164,7 +164,13 @@ export function IconButton({
   onPress?: () => void;
   accessibilityLabel: string;
   size?: ButtonSize;
-  tone?: "default" | "muted" | "primary" | "destructive";
+  /*
+   * The same tones `Icon` offers, minus `inverse` which needs a coloured
+   * surface behind it. A starred project wants the safety amber and there was
+   * no way to ask for it, which is the kind of gap that ends with a screen
+   * hardcoding a hex.
+   */
+  tone?: "default" | "muted" | "primary" | "safety" | "success" | "destructive";
   /** Draws the tinted circle behind the glyph. Off gives a bare tappable glyph. */
   surface?: boolean;
   disabled?: boolean;

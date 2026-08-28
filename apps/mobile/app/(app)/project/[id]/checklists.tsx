@@ -1,14 +1,20 @@
 import { useMemo, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listProjectChecklists } from "@/api/checklists";
+import {
+  applyChecklistTemplate,
+  listChecklistTemplates,
+  type TemplateSummary,
+} from "@/api/templates";
 import { getProjectContributors } from "@/api/task-comments";
 import { memberLabel } from "@/api/task-mentions";
 import { QueueBanner } from "@/components/QueueBanner";
+import { TemplatePickerSheet } from "@/components/TemplatePickerSheet";
 import { useAuth } from "@/lib/auth";
 import { spacing, useTheme } from "@/theme";
-import { ClipboardCheck } from "@/ui/icons";
+import { ClipboardCheck, Plus } from "@/ui/icons";
 import {
   Avatar,
   Badge,
@@ -16,6 +22,7 @@ import {
   ChipGroup,
   EmptyState,
   ErrorState,
+  IconButton,
   ProgressBar,
   SkeletonList,
   Text,
@@ -28,6 +35,34 @@ export default function ProjectChecklistsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [picking, setPicking] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+
+  /**
+   * Start a template on this project.
+   *
+   * Needs a connection, unlike everything else here: the checklist row has to
+   * exist before its items can reference it. On success it opens the new
+   * checklist rather than dropping the user back on the list to hunt for the
+   * card that just appeared.
+   */
+  async function applyTemplate(template: TemplateSummary) {
+    if (!id || !user?.id) return;
+    setApplying(true);
+    setApplyError(null);
+    try {
+      const checklistId = await applyChecklistTemplate(id, template, user.id);
+      await queryClient.invalidateQueries({ queryKey: ["project-checklists", id] });
+      setPicking(false);
+      router.push(`/checklist/${checklistId}`);
+    } catch (e) {
+      setApplyError(e instanceof Error ? e.message : "Could not start that checklist");
+    } finally {
+      setApplying(false);
+    }
+  }
   const [filter, setFilter] = useState<Filter>("open");
 
   const { data, isLoading, isRefetching, error, refetch } = useQuery({
@@ -79,7 +114,20 @@ export default function ProjectChecklistsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Checklists" }} />
+      <Stack.Screen
+        options={{
+          title: "Checklists",
+          headerRight: () => (
+            <IconButton
+              icon={Plus}
+              accessibilityLabel="Start a checklist from a template"
+              surface={false}
+              tone="primary"
+              onPress={() => setPicking(true)}
+            />
+          ),
+        }}
+      />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         <QueueBanner />
 
@@ -117,7 +165,8 @@ export default function ProjectChecklistsScreen() {
                 <EmptyState
                   icon={ClipboardCheck}
                   title="No checklists here"
-                  body="Checklists are the checks this job has to pass. Apply one to this project from the web app."
+                  body="Checklists are the checks this job has to pass. Start one from a template."
+                  action={{ label: "Use a template", icon: Plus, onPress: () => setPicking(true) }}
                 />
               ) : (
                 <EmptyState
@@ -182,6 +231,16 @@ export default function ProjectChecklistsScreen() {
           />
         )}
       </View>
+      <TemplatePickerSheet
+        visible={picking}
+        onClose={() => setPicking(false)}
+        title="Start a checklist"
+        subtitle="From a workspace template"
+        load={{ key: "checklist-templates", fetch: listChecklistTemplates }}
+        applying={applying}
+        error={applyError}
+        onPick={(template) => void applyTemplate(template)}
+      />
     </>
   );
 }

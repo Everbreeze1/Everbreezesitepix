@@ -212,11 +212,19 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      {/*
+        A column rather than the default grid, because this form is long: name,
+        status, stage, four address fields, three client fields and a
+        description. At laptop height that is taller than the window, and a
+        dialog taller than the window used to centre itself with Save changes
+        below the bottom edge. Header and footer are pinned, the fields between
+        them scroll, so the buttons are on screen at every window height.
+      */}
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+        <DialogHeader className="shrink-0 border-b border-border px-6 py-4 pr-14">
           <DialogTitle>Edit project</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
           <div className="space-y-1.5">
             <Label htmlFor="ep-name">Project name</Label>
             <Input
@@ -428,7 +436,7 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Prop
             />
           </div>
         </div>
-        <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+        <DialogFooter className="shrink-0 flex-col gap-2 border-t border-border px-6 py-4 sm:flex-row sm:justify-between">
           <Button
             variant="ghost"
             size="sm"

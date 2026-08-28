@@ -814,7 +814,7 @@ export function WalkthroughRecorder({
       }}
     >
       <DialogContent
-        className="fixed inset-0 left-0 top-0 z-50 h-screen min-h-[100svh] max-h-none w-screen max-w-none translate-x-0 translate-y-0 overflow-hidden border-0 bg-black p-0 text-white duration-0 data-[state=open]:animate-none data-[state=closed]:animate-none sm:rounded-none [&>button[aria-label='Close']]:hidden"
+        className="fixed inset-0 left-0 top-0 z-50 h-screen min-h-[100svh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 overflow-hidden border-0 bg-black p-0 text-white duration-0 data-[state=open]:animate-none data-[state=closed]:animate-none sm:rounded-none [&>button[aria-label='Close']]:hidden"
         style={{ width: "100vw", height: "100dvh", maxHeight: "100dvh" }}
       >
         <div

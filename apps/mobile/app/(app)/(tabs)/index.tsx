@@ -69,7 +69,7 @@ export default function ProjectsScreen() {
 
   const projects = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return all.filter((project) => {
+    const matched = all.filter((project) => {
       if (status !== "all" && project.status !== status) return false;
       if (!needle) return true;
       const address = formatAddress(project) ?? "";
@@ -78,6 +78,14 @@ export default function ProjectsScreen() {
         address.toLowerCase().includes(needle)
       );
     });
+
+    /*
+     * Starred first, then the existing order (most recently updated).
+     * A star that does not move the row up the list is decoration: the whole
+     * point is that the two or three jobs someone is actually on stay reachable
+     * without scrolling past the ones they are not.
+     */
+    return [...matched].sort((a, b) => Number(Boolean(b.starred)) - Number(Boolean(a.starred)));
   }, [all, search, status]);
 
   const filters: ChipOption<StatusFilter>[] = [

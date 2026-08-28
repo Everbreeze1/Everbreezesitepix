@@ -187,7 +187,7 @@ export function ScanCrop({ open, imageUrl, onCancel, onApply }: Props) {
       }}
     >
       <DialogContent
-        className="fixed inset-0 z-[110] h-screen w-screen max-w-none translate-x-0 translate-y-0 overflow-hidden border-0 bg-black p-0 text-white [&>button[aria-label='Close']]:hidden"
+        className="fixed inset-0 z-[110] h-screen max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 overflow-hidden border-0 bg-black p-0 text-white [&>button[aria-label='Close']]:hidden"
         style={{ width: "100vw", height: "100dvh", maxHeight: "100dvh" }}
       >
         <div className="relative flex h-full w-full flex-col">

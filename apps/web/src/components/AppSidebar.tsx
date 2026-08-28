@@ -238,7 +238,7 @@ export function AppSidebar() {
    */
   const buttonBase = isMobile
     ? "relative flex items-center gap-3 h-[52px] px-3 rounded-lg text-[15px] font-semibold transition-colors"
-    : "relative flex items-center gap-3 h-11 px-3 rounded-lg text-sm font-semibold transition-colors";
+    : "relative flex items-center gap-3 h-(--rail-row) px-3 rounded-lg text-sm font-semibold transition-colors";
   const iconBase = isMobile ? "h-5 w-5" : "h-[18px] w-[18px]";
 
   const navButtonClass = (active: boolean) =>
@@ -252,7 +252,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="border-r-0 bg-sidebar text-sidebar-foreground">
-      <SidebarHeader className="px-3 py-4">
+      <SidebarHeader className="px-3 py-4 [@media(max-height:719px)]:py-2">
         <Link to="/dashboard" className="flex items-center gap-2.5 px-1">
           {/* The collapsed rail is 48px wide and this Link is inset 16px, so a
               36px mark hung 5px out over the page beside it. */}
@@ -267,7 +267,7 @@ export function AppSidebar() {
       <SidebarContent className="scroll-slim px-2 gap-0">
         <SidebarGroup className="pt-1">
           <SidebarGroupContent>
-            <SidebarMenu className={`${isMobile ? "gap-1.5" : "gap-0.5"}`}>
+            <SidebarMenu className={`${isMobile ? "gap-1.5" : "gap-(--rail-gap)"}`}>
               {navItems.map((item) => {
                 const active = pathname === item.url || pathname.startsWith(item.url + "/");
                 return (
@@ -313,7 +313,7 @@ export function AppSidebar() {
             </SidebarGroupLabel>
           )}
           <SidebarGroupContent>
-            <SidebarMenu className={`${isMobile ? "gap-1.5" : "gap-0.5"}`}>
+            <SidebarMenu className={`${isMobile ? "gap-1.5" : "gap-(--rail-gap)"}`}>
               {toolItems.map((item) => {
                 const active = pathname === item.url || pathname.startsWith(item.url + "/");
                 const badge = item.url === trashItem.url && trashTotal > 0 ? trashTotal : 0;
@@ -399,7 +399,7 @@ export function AppSidebar() {
           onClick={signOut}
           aria-label="Sign out"
           title="Sign out"
-          className={`mt-1 w-full justify-center ${isMobile ? "h-12 text-base" : "h-9 text-sm"} rounded-lg font-semibold text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground/80`}
+          className={`mt-1 w-full justify-center ${isMobile ? "h-12 text-base" : "h-9 text-sm [@media(max-height:719px)]:h-8"} rounded-lg font-semibold text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground/80`}
         >
           <LogOut className={isMobile ? "h-5 w-5" : "h-4 w-4"} />
           {/* Collapsed to icons the label had nowhere to go and ran out past

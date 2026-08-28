@@ -17,6 +17,14 @@ import { Icon, Text } from "@/ui";
  * a coloured block, which reads as a notice rather than a control, so nobody
  * tapped it. A cloud on the left says what it is about and a chevron on the
  * right says it goes somewhere.
+ *
+ * The wording says "change", not "photo". The outbox began as a photo queue and
+ * the copy was written for that, but it now also carries task creates and
+ * edits, checklist and workflow answers, and bulk photo edits. Adding a task on
+ * site made the banner announce "1 photo waiting to upload", which is a lie
+ * about work the person can see they did not do. Nothing in the type system
+ * catches copy drifting away from what the code does; this was found by adding
+ * a task on a device and reading the banner.
  */
 export function QueueBanner() {
   const { pending, sending, failed, outstanding } = useQueue();
@@ -39,8 +47,8 @@ export function QueueBanner() {
       accessibilityRole="button"
       accessibilityLabel={
         hasFailures
-          ? `${failed} uploads need attention. Opens the upload queue.`
-          : `${waiting} photos waiting to upload. Opens the upload queue.`
+          ? `${failed} changes need attention. Opens the upload queue.`
+          : `${waiting} changes waiting to send. Opens the upload queue.`
       }
       onPress={() => router.push("/queue")}
       style={({ pressed }) => [
@@ -57,8 +65,8 @@ export function QueueBanner() {
       <View style={{ flex: 1 }}>
         <Text variant="bodyStrong" style={{ color: ink }}>
           {hasFailures
-            ? `${failed} upload${failed === 1 ? "" : "s"} need attention`
-            : `${waiting} photo${waiting === 1 ? "" : "s"} waiting to upload`}
+            ? `${failed} change${failed === 1 ? "" : "s"} need attention`
+            : `${waiting} change${waiting === 1 ? "" : "s"} waiting to send`}
         </Text>
         <Text variant="caption" style={{ color: ink, opacity: 0.85 }}>
           {hasFailures && waiting > 0

@@ -2,6 +2,8 @@ import { applyItemPatch, attachPhotoToItem } from "@/api/checklists";
 import { uploadProjectPhoto, type PhotoPhase } from "@/api/photos";
 import type { Coords } from "@/api/photo-meta";
 import { applyPhotoPatch, type PhotoPatch } from "@/api/photo-edit";
+import { applyProjectPatch } from "@/api/projects";
+import type { ProjectPatch } from "@/api/project-patch";
 import {
   applyTaskEdit,
   applyTaskPatch,
@@ -108,6 +110,22 @@ export type TaskPatchPayload = {
 };
 
 /** Row id for a task status change, deterministic per task. */
+export type ProjectPatchPayload = {
+  projectId: string;
+  patch: ProjectPatch;
+};
+
+/**
+ * One queue row per project per field being written.
+ *
+ * Keyed on the field so a star toggled twice replaces its own row rather than
+ * stacking, while an edit to the name and a change of status stay independent
+ * and both land.
+ */
+export function projectPatchRowId(field: string, projectId: string): string {
+  return `project-patch:${field}:${projectId}`;
+}
+
 export type PhotoPatchPayload = {
   photoIds: string[];
   patch: PhotoPatch;
@@ -245,6 +263,12 @@ const handlers: Record<OutboxKind, Handler> = {
   workflow_phase_patch: async (row) => {
     const payload = JSON.parse(row.payload) as WorkflowPhasePatchPayload;
     await applyPhasePatch(payload.phaseId, payload.patch);
+  },
+
+  project_patch: async (row) => {
+    const payload = JSON.parse(row.payload) as ProjectPatchPayload;
+    // Idempotent: the patch carries the whole value for every column it sets.
+    await applyProjectPatch(payload.projectId, payload.patch);
   },
 
   photo_patch: async (row) => {

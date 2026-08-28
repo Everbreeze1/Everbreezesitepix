@@ -276,11 +276,14 @@ describe("feedback reaches the reporter", () => {
 
   it("reads the rows before the update so a no-op move notifies nobody", () => {
     // A bulk update over a selection can include rows already in the target
-    // status. Without the before-read they would all be told again.
+    // status. Without the before-read they would all be told again. The
+    // filtering itself is real logic and gets real assertions in
+    // tests/feedback-status-notice.test.ts; the ordering is what has to be
+    // read out of the source, because only the source shows it.
     const src = read("apps/api/src/domains/admin/feedback.ts");
     const setStatus = src.slice(src.indexOf("export async function setFeedbackStatusService"));
     expect(setStatus.indexOf("beforeRows")).toBeLessThan(setStatus.indexOf(".update("));
-    expect(setStatus).toContain("row.status !== data.status");
+    expect(setStatus).toContain("reportsNeedingNotice");
   });
 
   it("never stamps an entity_type the notifications constraint rejects", () => {

@@ -1,11 +1,20 @@
 import { newProjectName } from "@everlumen/shared";
 import { api } from "@/lib/api";
+import type { ProjectPatch } from "./project-patch";
 import { supabase } from "@/lib/supabase";
 
 export type ProjectListItem = {
   id: string;
   name: string;
   status: string;
+  /*
+   * Starred and archived are read by the web list as filters. They are here so
+   * the phone can show and set the same state rather than inventing a second
+   * notion of "important" that nothing else understands.
+   */
+  starred: boolean | null;
+  archived: boolean | null;
+  client_name: string | null;
   location: string | null;
   street: string | null;
   city: string | null;
@@ -17,7 +26,7 @@ export type ProjectListItem = {
 };
 
 const PROJECT_FIELDS =
-  "id, name, status, location, street, city, state, zip, latitude, longitude, updated_at";
+  "id, name, status, starred, archived, client_name, location, street, city, state, zip, latitude, longitude, updated_at";
 
 export function formatAddress(
   project: Pick<ProjectListItem, "street" | "city" | "state" | "zip" | "location">,
@@ -142,4 +151,21 @@ export async function getProject(id: string): Promise<ProjectListItem | null> {
 
   if (error) throw new Error(error.message);
   return (data as ProjectListItem) ?? null;
+}
+
+/**
+ * Apply an edit to a project.
+ *
+ * The same direct RLS update the web list uses for starring and archiving, so
+ * a row written from the phone is indistinguishable from one written in a
+ * browser. Errors throw: a silent failure here means the list shows a name the
+ * database does not have.
+ */
+export async function applyProjectPatch(projectId: string, patch: ProjectPatch): Promise<void> {
+  const { error } = await supabase
+    .from("projects")
+    .update(patch as never)
+    .eq("id", projectId);
+
+  if (error) throw new Error(error.message);
 }

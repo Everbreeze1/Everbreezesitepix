@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import {
+  Archive,
   Camera,
   CheckCheck,
   CircleCheck,
@@ -18,6 +19,8 @@ import {
   ImageOff,
   ListTodo,
   MapPin,
+  PenLine,
+  Star,
   Trash2,
   Video,
   Workflow,
@@ -33,14 +36,29 @@ import {
   type PhotoPage,
 } from "@/api/photos";
 import { mergeTags, phasePatch, trashPhotos, type PhotoPatch } from "@/api/photo-edit";
-import { formatAddress, getProject } from "@/api/projects";
+import { formatAddress, getProject, type ProjectListItem } from "@/api/projects";
+import {
+  archivePatch,
+  draftToPatch,
+  starPatch,
+  trashProjectPatch,
+  type ProjectDraft,
+  type ProjectPatch,
+} from "@/api/project-patch";
 import { QueueBanner } from "@/components/QueueBanner";
 import { PhotoBulkBar, type PhotoBulkAction } from "@/components/PhotoBulkBar";
-import { photoPatchRowId, type PhotoPatchPayload } from "@/offline/handlers";
+import { ProjectEditorSheet } from "@/components/ProjectEditorSheet";
+import {
+  photoPatchRowId,
+  projectPatchRowId,
+  type PhotoPatchPayload,
+  type ProjectPatchPayload,
+} from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 import {
+  ActionSheet,
   Badge,
   Button,
   ChipGroup,
@@ -92,6 +110,8 @@ export default function ProjectDetailScreen() {
    */
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const selecting = selected.size > 0;
@@ -172,6 +192,46 @@ export default function ProjectDetailScreen() {
       void photosQuery.fetchNextPage();
     }
   }, [photosQuery]);
+
+  /**
+   * Write a change to this project.
+   *
+   * Optimistic against both caches this screen and the list read from, then
+   * queued. Starring a job while walking back to the van should not depend on
+   * signal any more than a photo does.
+   *
+   * `field` keys the queue row, so toggling a star twice replaces its own row
+   * while an edit to the name queues independently and both still land.
+   */
+  const patchProject = useCallback(
+    async (field: string, patch: ProjectPatch) => {
+      if (!id) return;
+
+      queryClient.setQueryData<ProjectListItem | null>(["project", id], (current) =>
+        current ? { ...current, ...patch } : current,
+      );
+      queryClient.setQueryData<ProjectListItem[]>(["projects"], (current) =>
+        (current ?? []).map((row) => (row.id === id ? { ...row, ...patch } : row)),
+      );
+
+      const payload: ProjectPatchPayload & { invalidate: unknown[][] } = {
+        projectId: id,
+        patch,
+        invalidate: [["project", id], ["projects"]],
+      };
+
+      await enqueue({
+        id: projectPatchRowId(field, id),
+        kind: "project_patch",
+        projectId: id,
+        payload,
+      });
+
+      await refreshQueue();
+      requestSync();
+    },
+    [id, queryClient],
+  );
 
   const toggle = useCallback((photoId: string) => {
     setSelected((current) => {
@@ -276,7 +336,30 @@ export default function ProjectDetailScreen() {
                 tone="primary"
                 onPress={() => setSelected(new Set(filtered.map((photo) => photo.id)))}
               />
-            ) : null,
+            ) : (
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                {/*
+                  A filled star for starred, an outline for not. Colour alone
+                  would not carry it: the header is the one place the app draws
+                  on the chrome background, where a tinted glyph reads as
+                  "tappable" rather than as "on".
+                */}
+                <IconButton
+                  icon={Star}
+                  accessibilityLabel={project?.starred ? "Remove star" : "Star this project"}
+                  surface={false}
+                  tone={project?.starred ? "safety" : "muted"}
+                  onPress={() => void patchProject("starred", starPatch(!project?.starred))}
+                />
+                <IconButton
+                  icon={PenLine}
+                  accessibilityLabel="Project actions"
+                  surface={false}
+                  tone="primary"
+                  onPress={() => setActionsOpen(true)}
+                />
+              </View>
+            ),
         }}
       />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -495,6 +578,14 @@ export default function ProjectDetailScreen() {
           throws the selection away, and the two intents have nothing to do with
           each other.
         */}
+        {/*
+          No floating Capture button while the grid is empty.
+          The empty state already offers the action ("Take photos", or "Show
+          all" when a filter hid everything), and on device the button sat over
+          the empty state body: "tag some photos as you shoot them" ran
+          underneath it. Two controls for one intent, one of them obscuring the
+          other.
+        */}
         {selecting ? (
           <PhotoBulkBar
             count={selected.size}
@@ -503,7 +594,7 @@ export default function ProjectDetailScreen() {
             onCancel={() => setSelected(new Set())}
             onAction={(action) => void applyBulk(action)}
           />
-        ) : (
+        ) : filtered.length === 0 ? null : (
           <View style={styles.fab}>
             <Button
               label="Capture"
@@ -516,6 +607,49 @@ export default function ProjectDetailScreen() {
           </View>
         )}
       </View>
+
+      <ProjectEditorSheet
+        visible={editing}
+        onClose={() => setEditing(false)}
+        project={project ?? null}
+        onSave={(draft: ProjectDraft) => {
+          setEditing(false);
+          void patchProject("details", draftToPatch(draft));
+        }}
+      />
+
+      <ActionSheet
+        visible={actionsOpen}
+        onClose={() => setActionsOpen(false)}
+        title="Project"
+        actions={[
+          { label: "Edit details", icon: PenLine, onPress: () => setEditing(true) },
+          {
+            label: project?.starred ? "Remove star" : "Star this project",
+            icon: Star,
+            onPress: () => void patchProject("starred", starPatch(!project?.starred)),
+          },
+          {
+            label: project?.archived ? "Unarchive" : "Archive",
+            icon: Archive,
+            onPress: () => void patchProject("archived", archivePatch(!project?.archived)),
+          },
+          {
+            /*
+             * Trashing leaves the screen, because staying on the detail view of
+             * a project that is no longer in the list reads as the delete
+             * having failed.
+             */
+            label: "Move project to trash",
+            icon: Trash2,
+            destructive: true,
+            onPress: () => {
+              void patchProject("deleted", trashProjectPatch());
+              router.back();
+            },
+          },
+        ]}
+      />
 
       <Modal
         visible={Boolean(lightboxPhoto)}

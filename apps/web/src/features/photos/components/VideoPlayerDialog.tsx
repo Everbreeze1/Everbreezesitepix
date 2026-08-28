@@ -31,7 +31,7 @@ export function VideoPlayerDialog({
         if (!o) onClose();
       }}
     >
-      <DialogContent className="left-0 top-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 bg-black p-0 text-white [&>button]:hidden">
+      <DialogContent className="left-0 top-0 h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 bg-black p-0 text-white [&>button]:hidden">
         <DialogTitle className="sr-only">{title ?? "Video preview"}</DialogTitle>
         <div className="relative flex h-full w-full items-center justify-center bg-black">
           {videoUrl ? (

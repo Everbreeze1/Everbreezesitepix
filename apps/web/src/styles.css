@@ -119,6 +119,16 @@
   );
   --gradient-subtle: linear-gradient(180deg, oklch(0.99 0.005 240) 0%, oklch(0.96 0.012 240) 100%);
 
+  /*
+   * Height and spacing of one nav row in the app sidebar.
+   *
+   * Variables rather than fixed classes because the rail has to tighten on a
+   * short window: the max-height rules below re-point them, and the rows in
+   * components/AppSidebar.tsx read them as h-(--rail-row) / gap-(--rail-gap).
+   */
+  --rail-row: 2.75rem;
+  --rail-gap: 0.125rem;
+
   /* App sidebar stays fixed dark navy regardless of light/dark app theme */
   --sidebar: #101929;
   --sidebar-foreground: #ffffff;
@@ -138,6 +148,45 @@
   --brand-navy: #1e2b4d;
   --brand-ground: #171a2c;
   --brand-wordmark: #d97c0a;
+}
+
+/*
+ * The app sidebar's nav rows tighten on a short window.
+ *
+ * The rail carries up to a dozen destinations above a pinned account footer,
+ * and at 44px each that simply does not fit a 720px-tall window: the list
+ * scrolled and the footer sliced the last row through the middle, which is the
+ * one thing a fixed rail should never do. Four pixels off each row and the
+ * gaps closed buys back 64px, which is more than the overflow, so every row
+ * stays whole and nothing has to be dropped from the nav to achieve it.
+ *
+ * A height media query rather than a resize observer on the list, deliberately:
+ * reacting to measured overflow feeds straight back into the measurement,
+ * because tightening removes the overflow that triggered it. Window height is
+ * the only input here and it cannot oscillate.
+ */
+@media (max-height: 895px) {
+  :root {
+    --rail-row: 2.5rem;
+    --rail-gap: 0px;
+  }
+}
+
+/*
+ * A second step for a genuinely short window - a 1366x768 laptop with the
+ * browser not maximised, or a 720p screen. 40px rows still left the last row
+ * sliced there, and the rest of the rail gives up its slack alongside them:
+ * see the max-height variants on the header and the sign-out button in
+ * components/AppSidebar.tsx.
+ *
+ * This is the floor. Below roughly 620px the list scrolls whatever it is told,
+ * and it does so against a slim translucent thumb (`scroll-slim`) rather than
+ * the platform's grey slab.
+ */
+@media (max-height: 719px) {
+  :root {
+    --rail-row: 2.25rem;
+  }
 }
 
 .dark {

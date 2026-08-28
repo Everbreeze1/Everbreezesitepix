@@ -1138,7 +1138,7 @@ export function PhotoAnnotator({
       }}
     >
       <DialogContent
-        className="max-w-none w-screen h-[100dvh] p-0 gap-0 overflow-hidden border-0 rounded-none bg-neutral-950 text-white sm:rounded-none z-[120] [&>button[aria-label='Close']]:hidden"
+        className="max-w-none w-screen h-[100dvh] max-h-[100dvh] p-0 gap-0 overflow-hidden border-0 rounded-none bg-neutral-950 text-white sm:rounded-none z-[120] [&>button[aria-label='Close']]:hidden"
         style={{ zIndex: 120 }}
         /*
          * The window listener above owns Escape outright: it has to, because
