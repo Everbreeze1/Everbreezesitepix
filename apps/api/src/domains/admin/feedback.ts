@@ -203,11 +203,20 @@ const STATUS_NOTICE: Partial<Record<FeedbackStatus, { title: string; lead: strin
   },
 };
 
-/** Enough of the report for the reporter to know which one this is about. */
+/**
+ * Enough of the report for the reporter to know which one this is about.
+ *
+ * Short, and on one line, because of where it lands. Both notification
+ * surfaces render the body into a `line-clamp-2` paragraph with no
+ * `whitespace-pre-wrap` (AppHeader.tsx, NotificationsPage.tsx), so a newline
+ * here would collapse to a space and a long quote would be clipped by the
+ * clamp - taking with it the only part that says which report this is. 80
+ * characters keeps the lead and the quote inside two lines of the 360px bell.
+ */
 function quoteReport(description: string | null): string {
   const text = (description ?? "").replace(/\s+/g, " ").trim();
   if (!text) return "";
-  return `\n\n"${text.length > 140 ? `${text.slice(0, 139)}…` : text}"`;
+  return ` "${text.length > 80 ? `${text.slice(0, 79)}…` : text}"`;
 }
 
 export async function setFeedbackStatusService(

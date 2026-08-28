@@ -27,6 +27,13 @@ additional_redirect_urls = [
   # Local dev - Vite serves on 8080 (apps/web/vite.config.ts `server.port`).
   "http://localhost:8080/**",
   "http://127.0.0.1:8080/**",
+  # The mobile app's deep link. `AuthSession.makeRedirectUri({ scheme:
+  # "everlumen" })` in apps/mobile/src/lib/auth.tsx sends users back here after
+  # Google/Apple sign-in, and the live project already allows it - this line
+  # only records that. Without it a `config push` would silently drop the entry
+  # and break social sign-in on mobile while leaving web untouched, which is a
+  # miserable thing to diagnose.
+  "everlumen://**",
   # UNVERIFIED: Vercel preview deployments. Uncomment and substitute the Vercel
   # team slug (Vercel dashboard → project → Deployments → any preview URL) if
   # previews need to sign in. Left commented rather than guessed, because a

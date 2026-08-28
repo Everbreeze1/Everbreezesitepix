@@ -133,6 +133,28 @@ describe("the address does not wait on the map", () => {
     expect(src).toMatch(/started\.current = true;\s*detect\(\);/);
   });
 
+  it("stops queueing once the script has failed, rather than spinning for ever", () => {
+    /*
+     * The order that made this necessary: the script rejects almost at once
+     * when the browser key is missing, while the device takes a second or two.
+     * So the failure lands while the phase is still "locating", the effect
+     * watching `mapsFailed` correctly leaves it alone, and the position then
+     * arrives, sets "resolving" and queues itself for a geocoder that is never
+     * coming. Nothing is left to notice, and the card spins for ever instead of
+     * offering the address search.
+     *
+     * A ref rather than the state, because `lookup` has to stay stable - a
+     * `lookup` that changed identity would rebuild the map on every fix.
+     */
+    expect(src).toMatch(/mapsDeadRef\.current = true;/);
+    expect(src).toMatch(/if \(mapsDeadRef\.current\) setPhase\("pinned"\);/);
+    const dead = src.indexOf("if (mapsDeadRef.current) setPhase");
+    const queue = src.indexOf("pendingRef.current = next;");
+    // The dead check has to come first, or the queue swallows the fix anyway.
+    expect(dead).toBeGreaterThan(-1);
+    expect(dead).toBeLessThan(queue);
+  });
+
   it("says something when a lookup fails instead of showing an empty address", () => {
     // A quota error and a place with no address are different answers, and
     // swallowing the first makes it look like the second.
@@ -223,6 +245,18 @@ describe("the mobile project screen asks the phone first", () => {
     expect(customer).toBeGreaterThan(-1);
     expect(street).toBeGreaterThan(-1);
     expect(customer).toBeLessThan(street);
+  });
+
+  it("does not gate Create on the locate it now starts by itself", () => {
+    // `disabled={Boolean(busy)}` was fine while locating only ever happened on
+    // a tap. Now that it runs on mount, the same expression leaves the button
+    // dead for the first seconds of every visit, and indefinitely on a phone
+    // that never gets a fix.
+    const at = src.indexOf('label="Create project"');
+    expect(at).toBeGreaterThan(-1);
+    const button = src.slice(at, at + 800);
+    expect(button).toContain('disabled={busy === "creating"}');
+    expect(button).not.toContain("disabled={Boolean(busy)}");
   });
 
   it("still only fills address fields that are empty", () => {

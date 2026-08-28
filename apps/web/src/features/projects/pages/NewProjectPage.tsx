@@ -282,7 +282,6 @@ export function NewProjectPage() {
   );
   const useMyLocation = useCallback(() => relocate(detect), [relocate, detect]);
 
-  const mapNodeRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
   /*
@@ -301,7 +300,6 @@ export function NewProjectPage() {
 
   const attachMap = useCallback(
     (node: HTMLDivElement | null) => {
-      mapNodeRef.current = node;
       if (!node) {
         // Step one unmounts the map. Keeping an instance bound to a detached
         // node is what left a grey box behind on the way back to step two.

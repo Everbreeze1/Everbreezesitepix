@@ -126,6 +126,15 @@ export function useSiteLocation(options: { auto?: boolean } = {}): SiteLocation 
   const pendingRef = useRef<SiteCoords | null>(null);
   /** Guards against an older lookup landing after a newer pin and overwriting it. */
   const lookupRef = useRef(0);
+  /*
+   * Read inside `lookup`, which has to stay stable, so it cannot close over the
+   * state. Without it a fix that arrives AFTER the script has already failed
+   * gets queued for a geocoder that is never coming, and the card spins for
+   * ever: the failure lands while the device is still being asked, so the
+   * effect below sees a phase of "locating" and correctly leaves it alone, and
+   * by the time the position turns up there is nothing left to notice.
+   */
+  const mapsDeadRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,6 +153,7 @@ export function useSiteLocation(options: { auto?: boolean } = {}): SiteLocation 
       .catch((e) => {
         if (cancelled) return;
         console.error("Google Maps could not be loaded", e);
+        mapsDeadRef.current = true;
         setMapsFailed(true);
       });
     return () => {
@@ -154,7 +164,10 @@ export function useSiteLocation(options: { auto?: boolean } = {}): SiteLocation 
   const lookup = useCallback((next: SiteCoords) => {
     const geocoder = geocoderRef.current;
     if (!geocoder) {
-      pendingRef.current = next;
+      // Queue it only while there is still a geocoder on its way. Once the
+      // script has failed, waiting is a spinner that never ends.
+      if (mapsDeadRef.current) setPhase("pinned");
+      else pendingRef.current = next;
       return;
     }
     const id = ++lookupRef.current;

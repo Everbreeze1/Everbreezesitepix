@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CheckCircle2, ArrowRight, ArrowLeft, Link2 as LinkIcon } from "lucide-react";
+import { CheckCircle2, ArrowRight, ArrowLeft, Link2 as LinkIcon, Loader2 } from "lucide-react";
 import { authErrorMessage, isUnconfirmedEmail } from "@/lib/auth-errors";
 import { useAuthProviders } from "@/hooks/use-auth-providers";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -62,6 +62,7 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
   const [resending, setResending] = useState(false);
+  const [oauthPending, setOauthPending] = useState<"google" | "apple" | null>(null);
 
   /*
    * Same normalisation as signup. Without it an account created as
@@ -117,11 +118,17 @@ function LoginPage() {
   };
 
   const handleOAuth = async (provider: "google" | "apple") => {
+    // Guarded the same way as signup: the redirect takes a moment, and nothing
+    // on screen changed to say so, so a second click during it started a
+    // competing handshake whose `state` overwrote the first one's.
+    if (oauthPending) return;
+    setOauthPending(provider);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: `${window.location.origin}${redirect || "/dashboard"}` },
     });
     if (error) {
+      setOauthPending(null);
       console.error("[login] oauth failed", error);
       toast.error(authErrorMessage(error, `${provider} sign-in failed`));
     }
@@ -341,18 +348,30 @@ function LoginPage() {
                   <button
                     type="button"
                     onClick={() => handleOAuth("google")}
-                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border-[0.8px] border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F6FC]"
+                    disabled={!!oauthPending}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border-[0.8px] border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F6FC] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <GoogleIcon /> Continue with Google
+                    {oauthPending === "google" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <GoogleIcon />
+                    )}
+                    Continue with Google
                   </button>
                 )}
                 {social.has("apple") && (
                   <button
                     type="button"
                     onClick={() => handleOAuth("apple")}
-                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border-[0.8px] border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F6FC]"
+                    disabled={!!oauthPending}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border-[0.8px] border-[#DAE2EA] bg-[#F9FCFF] font-manrope text-sm font-bold text-[#0B1C2C] shadow-sm hover:bg-[#F0F6FC] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <AppleIcon /> Continue with Apple
+                    {oauthPending === "apple" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <AppleIcon />
+                    )}
+                    Continue with Apple
                   </button>
                 )}
               </div>
