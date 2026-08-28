@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   PanResponder,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -21,7 +23,9 @@ import {
   extendShape,
   normalise,
   redoLast,
+  timestampText,
   undo,
+  withText,
   type AnnotationState,
   type AnnotationTool,
   type Shape,
@@ -36,6 +40,7 @@ const TOOLS: { id: AnnotationTool; label: string }[] = [
   { id: "arrow", label: "Arrow" },
   { id: "rect", label: "Box" },
   { id: "ellipse", label: "Circle" },
+  { id: "text", label: "Text" },
 ];
 
 export default function AnnotateScreen() {
@@ -61,6 +66,31 @@ export default function AnnotateScreen() {
   const [draft, setDraft] = useState<Shape | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /*
+   * A stamp waiting for its words.
+   *
+   * Placed on the photo already, but held out of `state` until it has text: an
+   * empty stamp is dropped on commit, so putting it in the document first
+   * would draw a caret that vanishes the moment the person cancels.
+   */
+  const [pendingStamp, setPendingStamp] = useState<Shape | null>(null);
+  const [stampText, setStampText] = useState("");
+
+  /**
+   * Put the pending stamp into the document with its words.
+   *
+   * `commitShape` drops an empty one, so cancelling and confirming with a blank
+   * field land in the same place, which is what someone who changed their mind
+   * expects either way.
+   */
+  const commitStamp = useCallback(() => {
+    const shape = pendingStamp;
+    setPendingStamp(null);
+    if (!shape) return;
+    setState((current) => commitShape(current, withText(shape, stampText)));
+    setStampText("");
+  }, [pendingStamp, stampText]);
 
   const canvasRef = useRef<Svg>(null);
   const box = useRef({ width: 0, height: 0 });
@@ -118,7 +148,19 @@ export default function AnnotateScreen() {
           const shape = draftRef.current;
           draftRef.current = null;
           setDraft(null);
-          if (shape) setState((current) => commitShape(current, shape));
+          if (!shape) return;
+          if (shape.tool === "text") {
+            /*
+             * Held rather than committed. An empty stamp is dropped by
+             * `isMeaningful`, so it has to collect its words first, and asking
+             * after the placement means the caret is already where the person
+             * pointed.
+             */
+            setPendingStamp(shape);
+            setStampText("");
+            return;
+          }
+          setState((current) => commitShape(current, shape));
         },
         onPanResponderTerminate: () => {
           draftRef.current = null;
@@ -221,6 +263,23 @@ export default function AnnotateScreen() {
               </Pressable>
             );
           })}
+
+          {/*
+            One tap, no typing. The time is the single most common thing anyone
+            writes on a site photo, and making them type it while wearing gloves
+            is the reason nobody would.
+          */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Stamp the current time"
+            onPress={() => {
+              setTool("text");
+              setStampText(timestampText());
+            }}
+            style={styles.tool}
+          >
+            <Text style={styles.chromeText}>Time</Text>
+          </Pressable>
         </View>
 
         <View style={styles.row}>
@@ -270,11 +329,81 @@ export default function AnnotateScreen() {
 
         <Text style={styles.hint}>Saved as a new photo. The original is left as it was.</Text>
       </View>
+
+      {/*
+        Collects the words for a stamp that has already been placed.
+
+        Deliberately not the kit's Sheet: this screen is a full-bleed dark
+        surface with its own chrome, and dropping a light card onto it would
+        read as a different app. It is also the one screen the design system
+        does not govern, for the same reason the camera is not governed.
+      */}
+      <Modal
+        visible={pendingStamp !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingStamp(null)}
+      >
+        <View style={styles.stampBackdrop}>
+          <View style={[styles.stampCard, { backgroundColor: theme.colors.chrome }]}>
+            <Text style={[typography.heading, { color: "#fff" }]}>Label</Text>
+            <TextInput
+              value={stampText}
+              onChangeText={setStampText}
+              autoFocus
+              placeholder="What is this?"
+              placeholderTextColor="rgba(255,255,255,0.45)"
+              accessibilityLabel="Stamp text"
+              style={[styles.stampInput, typography.body]}
+              onSubmitEditing={() => commitStamp()}
+              returnKeyType="done"
+            />
+            <View style={styles.row}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setPendingStamp(null)}
+                style={styles.tool}
+              >
+                <Text style={styles.chromeText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => commitStamp()}
+                style={[styles.tool, { backgroundColor: theme.colors.primary }]}
+              >
+                <Text style={styles.chromeText}>Add</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  stampBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.xl,
+  },
+  stampCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  stampInput: {
+    color: "#fff",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    minHeight: HIT_TARGET,
+  },
   root: { flex: 1, justifyContent: "space-between" },
   topBar: {
     flexDirection: "row",

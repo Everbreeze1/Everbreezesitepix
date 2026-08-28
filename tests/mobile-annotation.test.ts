@@ -13,7 +13,10 @@ import {
   normalise,
   penPath,
   redoLast,
+  STAMP_SIZE,
+  timestampText,
   undo,
+  withText,
   type Shape,
 } from "../apps/mobile/src/api/annotation";
 
@@ -230,5 +233,76 @@ describe("annotatedCaption", () => {
   it("has something to say about a photo with no caption", () => {
     expect(annotatedCaption(null)).toBe("Annotated: Photo");
     expect(annotatedCaption("   ")).toBe("Annotated: Photo");
+  });
+});
+
+describe("text stamps", () => {
+  /*
+   * Stamps were added after the drawing tools, and they break two assumptions
+   * the originals baked in: every shape has a stroke width, and every shape is
+   * dragged between two points. Both are pinned here.
+   */
+
+  it("places a stamp where it was tapped and leaves it there", () => {
+    // A label marks a specific thing. If dragging moved it, the caret would
+    // walk away from whatever it was pointing at.
+    const placed = beginShape("text", "#df2225", { x: 0.4, y: 0.6 }, "s1");
+    const dragged = extendShape(placed, { x: 0.9, y: 0.9 });
+    expect(dragged).toEqual(placed);
+  });
+
+  it("drops a stamp with no words", () => {
+    // Same rule as a zero-length stroke: keeping it gives an undo that appears
+    // to do nothing, because what it removed was invisible.
+    const empty = beginShape("text", "#df2225", { x: 0.4, y: 0.6 }, "s1");
+    expect(isMeaningful(empty)).toBe(false);
+    expect(isMeaningful(withText(empty, "   "))).toBe(false);
+    expect(isMeaningful(withText(empty, "cracked lintel"))).toBe(true);
+  });
+
+  it("does not commit an empty stamp", () => {
+    const empty = beginShape("text", "#df2225", { x: 0.4, y: 0.6 }, "s1");
+    expect(commitShape(EMPTY_ANNOTATION, empty).shapes).toHaveLength(0);
+    expect(commitShape(EMPTY_ANNOTATION, withText(empty, "note")).shapes).toHaveLength(1);
+  });
+
+  it("clamps a stamp placed outside the photo", () => {
+    const outside = beginShape("text", "#df2225", { x: 1.4, y: -0.2 }, "s1");
+    expect(outside.tool === "text" && outside.at).toEqual({ x: 1, y: 0 });
+  });
+
+  it("stores size normalised so the saved copy matches the editor", () => {
+    /*
+     * The editor draws at screen size and the saved image renders at the
+     * photo's real pixels, usually four times larger. A stamp stored in points
+     * would come out tiny in the saved file only, which looks correct until
+     * someone opens it on the web.
+     */
+    const stamp = beginShape("text", "#df2225", { x: 0.5, y: 0.5 }, "s1");
+    expect(stamp.tool === "text" && stamp.size).toBe(STAMP_SIZE);
+    expect(STAMP_SIZE).toBeGreaterThan(0);
+    expect(STAMP_SIZE).toBeLessThan(1);
+  });
+});
+
+describe("timestampText", () => {
+  it("reads local time, not UTC", () => {
+    /*
+     * This goes onto a photograph read by someone standing on the site it was
+     * taken at, so it has to match the clock on their wrist. A UTC stamp would
+     * be hours off and unexplainable.
+     */
+    const at = () => new Date(2026, 7, 29, 14, 5);
+    expect(timestampText(at)).toBe("2026-08-29 14:05");
+  });
+
+  it("pads every field", () => {
+    const at = () => new Date(2026, 0, 4, 9, 7);
+    expect(timestampText(at)).toBe("2026-01-04 09:07");
+  });
+
+  it("carries no seconds", () => {
+    // Precision nobody reads, taking width from a photo.
+    expect(timestampText(() => new Date(2026, 7, 29, 14, 5, 33))).toBe("2026-08-29 14:05");
   });
 });

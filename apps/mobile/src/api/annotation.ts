@@ -13,7 +13,7 @@
  * once at render time.
  */
 
-export type AnnotationTool = "pen" | "arrow" | "rect" | "ellipse";
+export type AnnotationTool = "pen" | "arrow" | "rect" | "ellipse" | "text";
 
 export type Point = { x: number; y: number };
 
@@ -21,7 +21,16 @@ export type Shape =
   | { id: string; tool: "pen"; color: string; width: number; points: Point[] }
   | { id: string; tool: "arrow"; color: string; width: number; from: Point; to: Point }
   | { id: string; tool: "rect"; color: string; width: number; from: Point; to: Point }
-  | { id: string; tool: "ellipse"; color: string; width: number; from: Point; to: Point };
+  | { id: string; tool: "ellipse"; color: string; width: number; from: Point; to: Point }
+  /*
+   * A stamp: words placed on the photo at one point.
+   *
+   * Unlike every other shape this is anchored rather than dragged between two
+   * corners, because a label is placed, not swept. `size` is normalised like
+   * the stroke widths, so a stamp that looked right in the editor is the same
+   * proportion of the saved image.
+   */
+  | { id: string; tool: "text"; color: string; at: Point; text: string; size: number };
 
 export type AnnotationState = {
   shapes: Shape[];
@@ -43,6 +52,14 @@ export const ANNOTATION_COLORS = ["#df2225", "#f9a300", "#00599c", "#ffffff"] as
 /** Stroke width in normalised units, so it scales with the rendered image. */
 export const STROKE_WIDTH = 0.006;
 
+/**
+ * Stamp height as a fraction of the image height.
+ *
+ * Large enough to read on a phone showing the whole photo, which is the only
+ * place anyone checks whether their markup makes sense before saving it.
+ */
+export const STAMP_SIZE = 0.045;
+
 /** Clamp to the image box. A finger leaving the photo should stop at its edge. */
 export function clampPoint(point: Point): Point {
   return {
@@ -62,7 +79,31 @@ export function beginShape(tool: AnnotationTool, color: string, at: Point, id: s
   if (tool === "pen") {
     return { id, tool, color, width: STROKE_WIDTH, points: [point] };
   }
+  if (tool === "text") {
+    // Placed empty and filled in afterwards. The caller opens an input and
+    // replaces the text before committing, so an abandoned stamp is one with
+    // no words, which `isMeaningful` then drops.
+    return { id, tool, color, at: point, text: "", size: STAMP_SIZE };
+  }
   return { id, tool, color, width: STROKE_WIDTH, from: point, to: point };
+}
+
+/** A stamp with its words set. */
+export function withText(shape: Shape, text: string): Shape {
+  return shape.tool === "text" ? { ...shape, text } : shape;
+}
+
+/**
+ * The wording a timestamp stamp carries.
+ *
+ * Local time, not UTC, and no seconds. This goes onto a photograph that will be
+ * read by someone standing on the site it was taken at, so it has to match the
+ * clock on their own wrist rather than a server's.
+ */
+export function timestampText(now: () => Date = () => new Date()): string {
+  const at = now();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
 
 /** Extend the shape being drawn to follow the finger. */
@@ -71,6 +112,9 @@ export function extendShape(shape: Shape, at: Point): Shape {
   if (shape.tool === "pen") {
     return { ...shape, points: [...shape.points, point] };
   }
+  // A stamp is anchored where it was placed. Dragging after a tap must not
+  // move it, or the caret walks away from the thing it was labelling.
+  if (shape.tool === "text") return shape;
   return { ...shape, to: point };
 }
 
@@ -82,6 +126,11 @@ export function extendShape(shape: Shape, at: Point): Shape {
  * it removed was invisible.
  */
 export function isMeaningful(shape: Shape): boolean {
+  if (shape.tool === "text") {
+    // A stamp with no words is an invisible mark. Keeping it gives the same
+    // do-nothing undo a zero-length stroke does.
+    return shape.text.trim().length > 0;
+  }
   if (shape.tool === "pen") {
     if (shape.points.length < 2) return false;
     const first = shape.points[0];
