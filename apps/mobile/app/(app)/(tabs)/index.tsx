@@ -21,6 +21,7 @@ import { spacing } from "@/theme";
 import {
   Activity,
   Bell,
+  Calendar,
   Camera,
   CircleCheck,
   CloudUpload,
@@ -215,6 +216,20 @@ export default function HomeScreen() {
                 title="Map"
                 subtitle="Every job with a location, nearest first"
                 onPress={() => router.push("/map")}
+              />
+              <RowDivider />
+              <ListRow
+                icon={FolderKanban}
+                title="Pipelines"
+                subtitle="Which stage each job is standing in"
+                onPress={() => router.push("/pipelines")}
+              />
+              <RowDivider />
+              <ListRow
+                icon={Calendar}
+                title="Timeline"
+                subtitle="A month of site work at a glance"
+                onPress={() => router.push("/timeline")}
               />
               <RowDivider />
               <ListRow

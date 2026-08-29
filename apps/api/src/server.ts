@@ -13,6 +13,7 @@ import {
   handleAuthSendEmail,
   handleFieldReportEmail,
   handlePurgeTrash,
+  handleSendPush,
   handleArchiveOldPhotos,
   handleReportPdf,
   handleWalkthroughPdf,
@@ -179,6 +180,7 @@ app.post("/v1/auth/send-email", (c) => handleAuthSendEmail(c.req.raw));
 app.post("/v1/email/field-report", (c) => handleFieldReportEmail(c.req.raw));
 app.post("/v1/hooks/purge-trash", (c) => handlePurgeTrash(c.req.raw));
 app.post("/v1/hooks/archive-old-photos", (c) => handleArchiveOldPhotos(c.req.raw));
+app.post("/v1/hooks/send-push", (c) => handleSendPush(c.req.raw));
 app.post("/v1/billing/webhook", (c) => handleStripeWebhook(c.req.raw));
 app.get("/v1/reports/:token/pdf", (c) => handleReportPdf(c.req.param("token")));
 app.get("/v1/walkthroughs/:token/pdf", (c) => handleWalkthroughPdf(c.req.param("token")));
@@ -188,6 +190,7 @@ app.post("/api/auth/send-email", (c) => handleAuthSendEmail(c.req.raw));
 app.post("/api/email-report", (c) => handleFieldReportEmail(c.req.raw));
 app.post("/api/public/hooks/purge-trash", (c) => handlePurgeTrash(c.req.raw));
 app.post("/api/public/hooks/archive-old-photos", (c) => handleArchiveOldPhotos(c.req.raw));
+app.post("/api/public/hooks/send-push", (c) => handleSendPush(c.req.raw));
 app.get("/api/public/reports/:token/pdf", (c) => handleReportPdf(c.req.param("token")));
 app.get("/api/public/walkthroughs/:token/pdf", (c) => handleWalkthroughPdf(c.req.param("token")));
 

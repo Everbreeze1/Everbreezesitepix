@@ -215,21 +215,19 @@ export default function AccountScreen() {
             subtitle="Business profile, labels"
             onPress={() => router.push("/workspace")}
           />
+          <RowDivider />
+          <ListRow
+            icon={LayoutTemplate}
+            title="Templates"
+            subtitle="The checklists your crews start from"
+            onPress={() => router.push("/templates")}
+          />
         </ListGroup>
       </View>
 
       <SectionHeader title="Open on the web" />
       <View style={{ paddingHorizontal: spacing.lg }}>
         <ListGroup>
-          <ListRow
-            icon={LayoutTemplate}
-            title="Templates and blueprints"
-            subtitle="Checklists, workflows, reports"
-            right={<ExternalLinkMark />}
-            disabled={!canOpenWeb}
-            onPress={() => void openOnWeb("/templates")}
-          />
-          <RowDivider />
           <ListRow
             icon={CreditCard}
             title="Plan and billing"

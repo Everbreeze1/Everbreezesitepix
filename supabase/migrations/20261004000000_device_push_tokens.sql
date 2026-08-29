@@ -119,3 +119,42 @@ END $$;
 
 REVOKE ALL ON FUNCTION public.sweep_stale_push_tokens() FROM public;
 GRANT EXECUTE ON FUNCTION public.sweep_stale_push_tokens() TO service_role;
+
+-- =========================
+-- Delivery marker on `notifications`
+-- =========================
+
+/*
+ * Push is delivered by a sweep, not by the code that raises a notification.
+ *
+ * Most notifications come from database triggers - task_assigned,
+ * checklist_assigned, every *_completed, task_comment, project_assigned - which
+ * are written in SQL and never pass through server code at all. Hooking the
+ * send into `insertNotification` would therefore cover the four service-layer
+ * types and silently skip the nine that matter most.
+ *
+ * So `/v1/hooks/send-push` sweeps for rows this column has not stamped. It is
+ * set whether or not anything was actually sent: a recipient with no registered
+ * device produces no message, and without the stamp every future sweep would
+ * reconsider every notification belonging to somebody who has never opened the
+ * app.
+ */
+ALTER TABLE public.notifications
+  ADD COLUMN IF NOT EXISTS push_sent_at timestamptz;
+
+-- The sweep's only query: unstamped, newest first, inside its age window. A
+-- partial index because the stamped rows are the overwhelming majority within a
+-- day of launch and none of them is ever read by this path again.
+CREATE INDEX IF NOT EXISTS notifications_push_pending_idx
+  ON public.notifications(created_at DESC)
+  WHERE push_sent_at IS NULL;
+
+/*
+ * Not granted to `authenticated`.
+ *
+ * The existing grant is `UPDATE (read_at)` and column-scoped on purpose, so a
+ * client can mark something read and cannot rewrite anything else. Adding a
+ * column does not widen that, and this one must stay server-only: a client that
+ * could stamp `push_sent_at` could stop its own notifications being delivered
+ * to its own other devices.
+ */

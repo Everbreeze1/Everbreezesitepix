@@ -80,9 +80,13 @@ export default function AppLayout() {
       <Stack.Screen name="activity" options={{ title: "Team activity" }} />
       <Stack.Screen name="notifications" options={{ title: "Notifications" }} />
       <Stack.Screen name="map" options={{ title: "Map" }} />
+      <Stack.Screen name="timeline" options={{ title: "Timeline" }} />
+      <Stack.Screen name="pipelines" options={{ title: "Pipelines" }} />
       <Stack.Screen name="team" options={{ title: "Team" }} />
       <Stack.Screen name="workspace" options={{ title: "Workspace" }} />
       <Stack.Screen name="labels" options={{ title: "Labels" }} />
+      <Stack.Screen name="templates" options={{ title: "Templates" }} />
+      <Stack.Screen name="template/[id]" options={{ title: "Template" }} />
       <Stack.Screen name="project/[id]/site-logs" options={{ title: "Site logs" }} />
       <Stack.Screen name="site-log/[logId]" options={{ title: "Site log" }} />
       <Stack.Screen name="photo/[id]/analysis" options={{ title: "Photo analysis" }} />
