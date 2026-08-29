@@ -16,7 +16,8 @@
       "distribution": "internal",
       "channel": "development",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://everlumen.co"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.everlumen.co",
+        "EXPO_PUBLIC_WEB_BASE_URL": "https://everlumen.co"
       },
       "ios": {
         "simulator": true
@@ -27,7 +28,8 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://everlumen.co"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.everlumen.co",
+        "EXPO_PUBLIC_WEB_BASE_URL": "https://everlumen.co"
       }
     },
     "production": {
@@ -36,7 +38,8 @@
       "channel": "production",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://everlumen.co"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.everlumen.co",
+        "EXPO_PUBLIC_WEB_BASE_URL": "https://everlumen.co"
       }
     }
   },
