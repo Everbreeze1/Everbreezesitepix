@@ -36,12 +36,15 @@ import {
  * laptop is the kind of small friction that has people stop using the library
  * and hand-write the same list instead.
  *
- * **Checklist templates are editable here; the others are not, yet.** Workflow
- * templates are listed read-only because their editor is a second nested list
- * (phases, then items within phases) and shipping half of that is worse than
- * shipping none. Report and walkthrough templates need the rich-text work in
- * Phase 10.1 before an editor makes sense. Both say so rather than being absent,
- * because a missing row reads as a missing feature.
+ * **Checklist and workflow templates are both editable here.** The workflow
+ * editor was the last thing built, because it is a nested list (phases, then
+ * steps within phases) on two tables whose `position` columns are independent,
+ * and shipping half of that would have looked finished.
+ *
+ * Report and walkthrough templates are still web: they are long-form documents,
+ * and their editor is the rich-text problem rather than a list problem. The row
+ * says so rather than being absent, because a missing row reads as a missing
+ * feature.
  */
 export default function TemplatesScreen() {
   const queryClient = useQueryClient();
@@ -219,21 +222,26 @@ export default function TemplatesScreen() {
                         icon={Workflow}
                         title={template.name}
                         subtitle={template.description ?? undefined}
+                        onPress={
+                          canManage
+                            ? () =>
+                                router.push({
+                                  pathname: "/workflow-template/[templateId]",
+                                  params: { templateId: template.id, name: template.name },
+                                })
+                            : undefined
+                        }
                       />
                     </View>
                   ))}
                 </ListGroup>
               )}
-              {/*
-                Said out loud rather than left as a list that does nothing when
-                tapped. A row that looks editable and is not is worse than a row
-                that says why it is not.
-              */}
-              <Text variant="caption" tone="muted">
-                Workflow templates can be applied to a project from here, and edited on the web for
-                now. Their editor is a list of phases each holding its own list, which is a separate
-                piece of work.
-              </Text>
+              {!canManage ? (
+                <Text variant="caption" tone="muted">
+                  Only an owner or admin can change the shared library. You can still start a
+                  workflow from any of these on a project.
+                </Text>
+              ) : null}
             </View>
 
             <SectionHeader title="Report and walkthrough templates" />

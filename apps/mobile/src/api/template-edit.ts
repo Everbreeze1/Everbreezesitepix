@@ -14,10 +14,24 @@ import type { ChecklistItemType } from "@everlumen/shared";
  * whole list, and the renumbering is what is tested.
  */
 
-export type TemplateItem = {
+/**
+ * Anything this file can order.
+ *
+ * The ordering helpers below were written for checklist items and are used
+ * unchanged by workflow template **phases** and workflow template **items**,
+ * which are three different tables with three different shapes and exactly the
+ * same `position` problem. Widening them to this beat writing the same
+ * renumber-after-every-edit logic twice more, and it means the tests that pin
+ * the awkward cases cover all three.
+ */
+export type Positioned = {
   id: string;
   position: number;
+  /** The tie-break when two rows share a position. */
   label: string;
+};
+
+export type TemplateItem = Positioned & {
   description: string | null;
   required: boolean;
   item_type: ChecklistItemType | string;
@@ -35,7 +49,7 @@ export const MAX_LABEL = 200;
  * items sharing a position swap places between renders depending on the order
  * the rows came back, which reads as the list shuffling itself.
  */
-export function ordered(items: TemplateItem[]): TemplateItem[] {
+export function ordered<T extends Positioned>(items: T[]): T[] {
   return [...items].sort((a, b) => {
     if (a.position !== b.position) return a.position - b.position;
     return a.label.localeCompare(b.label);
@@ -50,7 +64,7 @@ export function ordered(items: TemplateItem[]): TemplateItem[] {
  * controls behave predictably in and the cost of rewriting a list of twenty
  * integers is nothing.
  */
-export function renumber(items: TemplateItem[]): TemplateItem[] {
+export function renumber<T extends Positioned>(items: T[]): T[] {
   return items.map((item, index) =>
     item.position === index ? item : { ...item, position: index },
   );
@@ -63,7 +77,7 @@ export function renumber(items: TemplateItem[]): TemplateItem[] {
  * so reordering is two arrows. Out-of-range moves return the same array rather
  * than throwing, so the top item's up arrow is simply inert.
  */
-export function moved(items: TemplateItem[], id: string, by: -1 | 1): TemplateItem[] {
+export function moved<T extends Positioned>(items: T[], id: string, by: -1 | 1): T[] {
   const list = ordered(items);
   const from = list.findIndex((item) => item.id === id);
   if (from === -1) return items;
@@ -76,7 +90,7 @@ export function moved(items: TemplateItem[], id: string, by: -1 | 1): TemplateIt
 }
 
 /** Drop an item, then close the gap it left. */
-export function removed(items: TemplateItem[], id: string): TemplateItem[] {
+export function removed<T extends Positioned>(items: T[], id: string): T[] {
   return renumber(ordered(items).filter((item) => item.id !== id));
 }
 
@@ -86,9 +100,9 @@ export function removed(items: TemplateItem[], id: string): TemplateItem[] {
  * A renumber usually moves two of twenty, and writing all twenty back is
  * nineteen wasted round trips on a connection that may be one bar.
  */
-export function positionChanges(
-  before: TemplateItem[],
-  after: TemplateItem[],
+export function positionChanges<T extends Positioned>(
+  before: T[],
+  after: T[],
 ): { id: string; position: number }[] {
   const was = new Map(before.map((item) => [item.id, item.position]));
   return after
@@ -160,6 +174,6 @@ export function templateSummary(itemCount: number, requiredCount: number): strin
  * Max plus one rather than length, because a list read mid-edit can be sparse
  * and `length` would collide with an existing row.
  */
-export function nextPosition(items: TemplateItem[]): number {
+export function nextPosition(items: Positioned[]): number {
   return items.reduce((max, item) => Math.max(max, item.position + 1), 0);
 }

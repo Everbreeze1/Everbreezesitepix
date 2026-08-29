@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { reportError } from "@/lib/errors";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { palettes, radius, spacing, typography } from "@/theme/tokens";
 
@@ -30,9 +31,17 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Phase 7 replaces this with Sentry. Until then the trace at least reaches
-    // the Metro console during development.
-    console.error("[everlumen] render error", error, info.componentStack);
+    /*
+     * Through `reportError`, not `console.error`.
+     *
+     * The console reaches Metro during development and nobody at all in
+     * production: a crew hits this on a roof and the only account of it is what
+     * they remember by the time they mention it. `reportError` keeps a redacted
+     * copy the Account screen can show, and is the one place a crash service
+     * would be wired in if one is ever chosen.
+     */
+    reportError(error, "render");
+    if (__DEV__) console.error("[everlumen] component stack", info.componentStack);
   }
 
   handleReset = () => {

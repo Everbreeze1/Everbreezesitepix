@@ -72,7 +72,16 @@ export async function listDocumentTree(projectId: string): Promise<DocumentTree>
 export async function getPage(pageId: string): Promise<PageDetail> {
   const result = await api.rpc<{ page?: PageDetail }>("getProjectPage", { pageId });
   const page = result?.page;
-  if (!page?.id) throw new Error("Page not found");
+  /*
+   * Deliberately NOT the same wording the server uses.
+   *
+   * `getProjectPageService` throws "Page not found" when its own read misses,
+   * and this used to throw the identical string when the response shape was
+   * unexpected. Two different failures reading the same on screen means the
+   * only way to tell them apart is to read both source files, which is exactly
+   * what somebody debugging at 4pm on a site does not have.
+   */
+  if (!page?.id) throw new Error("The server answered, but with no page in it.");
   return page;
 }
 

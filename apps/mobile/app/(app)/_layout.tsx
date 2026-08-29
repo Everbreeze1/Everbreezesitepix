@@ -88,6 +88,10 @@ export default function AppLayout() {
       <Stack.Screen name="workspace" options={{ title: "Workspace" }} />
       <Stack.Screen name="labels" options={{ title: "Labels" }} />
       <Stack.Screen name="templates" options={{ title: "Templates" }} />
+      <Stack.Screen
+        name="workflow-template/[templateId]"
+        options={{ title: "Workflow template" }}
+      />
       <Stack.Screen name="template/[id]" options={{ title: "Template" }} />
       <Stack.Screen name="project/[id]/site-logs" options={{ title: "Site logs" }} />
       <Stack.Screen name="site-log/[logId]" options={{ title: "Site log" }} />
