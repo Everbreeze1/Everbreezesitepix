@@ -330,11 +330,13 @@ export async function setWalkthroughShare(
   walkthroughId: string,
   enable: boolean,
 ): Promise<{ shareToken: string | null }> {
-  const result = await api.rpc<{ shareToken?: string | null; share_token?: string | null }>(
-    "setWalkthroughShare",
-    { walkthroughId, enable },
-  );
-  return { shareToken: result?.shareToken ?? result?.share_token ?? null };
+  // `{ token }`. Neither `shareToken` nor `share_token`, both of which were
+  // guesses: sharing a walkthrough appeared to succeed and produced no link.
+  const result = await api.rpc<{ token?: string | null }>("setWalkthroughShare", {
+    walkthroughId,
+    enable,
+  });
+  return { shareToken: result?.token ?? null };
 }
 
 /** Signed playback URL for a stored recording. */

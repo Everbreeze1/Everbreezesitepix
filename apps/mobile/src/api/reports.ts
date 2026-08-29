@@ -101,12 +101,13 @@ export async function draftReportSummary(
   photoIds: string[],
   title?: string,
 ): Promise<string | null> {
-  const result = await api.rpc<{ summary?: string; text?: string }>("summarizePhotosReport", {
+  // `{ markdown, photoCount }`. Not `summary`, and not `text`: reading either
+  // returned null every time, so the Draft button always reported that the
+  // model had said nothing.
+  const result = await api.rpc<{ markdown?: string }>("summarizePhotosReport", {
     photoIds,
     ...(title ? { title } : {}),
   });
-  // The op has been through more than one response shape. Reading both and
-  // defaulting to null means an unexpected one leaves the box untouched rather
-  // than filling it with "undefined".
-  return result?.summary ?? result?.text ?? null;
+  const markdown = result?.markdown?.trim();
+  return markdown ? markdown : null;
 }

@@ -60,10 +60,20 @@ export async function listDocumentTree(projectId: string): Promise<DocumentTree>
   };
 }
 
+/**
+ * One page.
+ *
+ * The op answers `{ page, tokens }`, not the row. Reading `result.id` gets
+ * `undefined` and throws "Page not found" on every page that exists, which is
+ * what it did until the response was checked against the service rather than
+ * guessed at. `tokens` is the merge-token list the web editor uses and the
+ * phone has no use for.
+ */
 export async function getPage(pageId: string): Promise<PageDetail> {
-  const result = await api.rpc<PageDetail>("getProjectPage", { pageId });
-  if (!result?.id) throw new Error("Page not found");
-  return result;
+  const result = await api.rpc<{ page?: PageDetail }>("getProjectPage", { pageId });
+  const page = result?.page;
+  if (!page?.id) throw new Error("Page not found");
+  return page;
 }
 
 /**
@@ -79,12 +89,13 @@ export async function createPage(args: {
   title?: string;
   template?: "daily_log" | "summary" | "blank";
 }): Promise<{ id: string }> {
-  const result = await api.rpc<{ id?: string; pageId?: string }>("createProjectPage", {
+  // `{ page: row }`, like `getProjectPage`. Not `{ id }`.
+  const result = await api.rpc<{ page?: { id?: string } }>("createProjectPage", {
     projectId: args.projectId,
     ...(args.title ? { title: args.title } : {}),
     template: args.template ?? "blank",
   });
-  const id = result?.id ?? result?.pageId;
+  const id = result?.page?.id;
   if (!id) throw new Error("The page was not created.");
   return { id };
 }
