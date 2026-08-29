@@ -8,7 +8,13 @@
  */
 
 /** The kinds of record the phone can hand to someone outside the workspace. */
-export type ShareKind = "photos" | "projects" | "checklists" | "workflows" | "walkthroughs";
+export type ShareKind =
+  | "photos"
+  | "projects"
+  | "checklists"
+  | "workflows"
+  | "walkthroughs"
+  | "reports";
 
 /**
  * Route prefix per kind, matching `apps/web/src/routes/share.<kind>.$token.tsx`.
@@ -23,6 +29,7 @@ const SHARE_PATHS: Record<ShareKind, string> = {
   checklists: "/share/checklists",
   workflows: "/share/workflows",
   walkthroughs: "/share/walkthroughs",
+  reports: "/share/reports",
 };
 
 /**

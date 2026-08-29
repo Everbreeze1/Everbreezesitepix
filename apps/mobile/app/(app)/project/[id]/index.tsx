@@ -21,6 +21,7 @@ import {
   ListTodo,
   MapPin,
   PenLine,
+  Send,
   Share2,
   Star,
   Trash2,
@@ -517,6 +518,13 @@ export default function ProjectDetailScreen() {
                       title="Workflows"
                       subtitle="Phases and progress"
                       onPress={() => router.push(`/project/${id}/workflows`)}
+                    />
+                    <RowDivider />
+                    <ListRow
+                      icon={Send}
+                      title="Reports"
+                      subtitle="What the client receives"
+                      onPress={() => router.push(`/project/${id}/reports`)}
                     />
                     <RowDivider />
                     <ListRow

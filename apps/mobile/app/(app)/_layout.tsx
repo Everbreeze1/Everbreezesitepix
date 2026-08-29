@@ -90,6 +90,8 @@ export default function AppLayout() {
       <Stack.Screen name="template/[id]" options={{ title: "Template" }} />
       <Stack.Screen name="project/[id]/site-logs" options={{ title: "Site logs" }} />
       <Stack.Screen name="site-log/[logId]" options={{ title: "Site log" }} />
+      <Stack.Screen name="project/[id]/reports" options={{ title: "Reports" }} />
+      <Stack.Screen name="report/[reportId]" options={{ title: "Report" }} />
       <Stack.Screen name="photo/[id]/analysis" options={{ title: "Photo analysis" }} />
     </Stack>
   );
