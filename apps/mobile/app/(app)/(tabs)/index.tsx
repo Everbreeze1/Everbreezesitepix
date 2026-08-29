@@ -26,6 +26,7 @@ import {
   CircleCheck,
   CloudUpload,
   FolderKanban,
+  FolderPlus,
   Images,
   MapPin,
 } from "@/ui/icons";
@@ -216,6 +217,13 @@ export default function HomeScreen() {
                 title="Map"
                 subtitle="Every job with a location, nearest first"
                 onPress={() => router.push("/map")}
+              />
+              <RowDivider />
+              <ListRow
+                icon={FolderPlus}
+                title="Groups"
+                subtitle="Your own filing of jobs"
+                onPress={() => router.push("/groups")}
               />
               <RowDivider />
               <ListRow
