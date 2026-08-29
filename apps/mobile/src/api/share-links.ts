@@ -14,7 +14,14 @@ export type ShareKind =
   | "checklists"
   | "workflows"
   | "walkthroughs"
-  | "reports";
+  | "reports"
+  /*
+   * The Portfolio's public pages. The kind keeps the old `showcases` name
+   * because the route does: `apps/web/src/routes/share.showcases.$token.tsx`.
+   * That is an identifier, and identifiers may say showcase. Nothing a person
+   * reads may: the site is the "Portfolio" and each page is a "project".
+   */
+  | "showcases";
 
 /**
  * Route prefix per kind, matching `apps/web/src/routes/share.<kind>.$token.tsx`.
@@ -30,6 +37,7 @@ const SHARE_PATHS: Record<ShareKind, string> = {
   workflows: "/share/workflows",
   walkthroughs: "/share/walkthroughs",
   reports: "/share/reports",
+  showcases: "/share/showcases",
 };
 
 /**

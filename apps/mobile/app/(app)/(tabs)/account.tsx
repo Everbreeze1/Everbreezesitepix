@@ -10,6 +10,7 @@ import {
   LifeBuoy,
   LogOut,
   Server,
+  Sparkles,
   CloudUpload,
   Users,
 } from "@/ui/icons";
@@ -221,6 +222,13 @@ export default function AccountScreen() {
             title="Templates"
             subtitle="The checklists your crews start from"
             onPress={() => router.push("/templates")}
+          />
+          <RowDivider />
+          <ListRow
+            icon={Sparkles}
+            title="Portfolio"
+            subtitle="Your public mini-site of finished work"
+            onPress={() => router.push("/portfolio")}
           />
         </ListGroup>
       </View>
