@@ -62,6 +62,18 @@ describe("pushStatusLabel", () => {
     expect(pushStatusLabel(null, true)).toBe("On for this phone");
     expect(pushStatusLabel(null, false)).toBe("Setting up");
   });
+
+  it("does not leave a failed registration claiming to be in progress", () => {
+    /*
+     * The bug this covers. A failed mint used to reset the reason to null,
+     * which renders as "Setting up", so the row sat there saying something was
+     * happening when nothing was and nothing would. Found on the device after
+     * watching it not change for half a minute.
+     */
+    const label = pushStatusLabel("unavailable", false);
+    expect(label).not.toBe("Setting up");
+    expect(label).toContain("try again");
+  });
 });
 
 describe("canPrompt", () => {

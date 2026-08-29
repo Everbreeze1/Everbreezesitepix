@@ -48,6 +48,16 @@ import {
  * puts the ones that have coordinates on a map.
  */
 
+/**
+ * How long to wait for a live fix before giving up on sorting.
+ *
+ * Eight seconds is past the point where somebody is still looking at the list
+ * wondering, and well short of the indefinite wait `getCurrentPositionAsync`
+ * defaults to. The screen is fully usable throughout: this only decides whether
+ * the rows get distances on them.
+ */
+const FIX_TIMEOUT_MS = 8000;
+
 /** Set by `app.config.js` when the build was given a Google Maps Android key. */
 const googleMapsConfigured = Boolean(
   (Constants.expoConfig?.extra as { googleMapsConfigured?: boolean } | undefined)
@@ -58,7 +68,8 @@ export default function MapScreen() {
   const theme = useTheme();
   const mapRef = useRef<MapView | null>(null);
   const [here, setHere] = useState<Coord | null>(null);
-  const [locationDenied, setLocationDenied] = useState(false);
+  /** No usable fix: denied, switched off, or no signal before the deadline. */
+  const [noFix, setNoFix] = useState(false);
 
   const query = useQuery({ queryKey: ["projects"], queryFn: listProjects });
 
@@ -85,33 +96,74 @@ export default function MapScreen() {
    * screen that blocks on the permission dialog would leave somebody who
    * declined it staring at nothing, when the map itself needs no permission at
    * all.
+   *
+   * **`getCurrentPositionAsync` can hang forever, and on a jobsite it does.**
+   * It resolves when the device gets a fix, and a phone in a basement, a
+   * steel-framed building or an emulator with no GPS never gets one: it does
+   * not throw, it simply never settles. The first version of this screen
+   * awaited it bare, so the list silently never sorted AND never showed the
+   * line explaining why, which is the worst of both. Found on the device; no
+   * test would have caught it.
+   *
+   * So: take the cached fix first, which is instant when there is one, and race
+   * the live read against a timer.
    */
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
     void (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (cancelled) return;
         if (status !== "granted") {
-          setLocationDenied(true);
+          setNoFix(true);
           return;
         }
-        // `Balanced` and not `Highest`: this picks which of several sites you
-        // are at, which is a hundred-metre question, and the high-accuracy fix
-        // costs seconds and battery to answer it no better.
-        const fix = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
+
+        /*
+         * The last known fix, first. It returns immediately or not at all, and
+         * for "which of these sites am I at" a fix from ten minutes ago is the
+         * same answer as one from now.
+         */
+        const cached = await Location.getLastKnownPositionAsync();
         if (cancelled) return;
-        setHere({ latitude: fix.coords.latitude, longitude: fix.coords.longitude });
+        if (cached) {
+          setHere({ latitude: cached.coords.latitude, longitude: cached.coords.longitude });
+        }
+
+        /*
+         * Then the live one, against a deadline.
+         *
+         * `Balanced` and not `Highest`: this picks which of several sites you
+         * are at, which is a hundred-metre question, and the high-accuracy fix
+         * costs seconds and battery to answer it no better.
+         */
+        const fix = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+          new Promise<null>((resolve) => {
+            timer = setTimeout(() => resolve(null), FIX_TIMEOUT_MS);
+          }),
+        ]);
+        if (cancelled) return;
+
+        if (fix) {
+          setHere({ latitude: fix.coords.latitude, longitude: fix.coords.longitude });
+        } else if (!cached) {
+          // Timed out with nothing cached to fall back on. Say so, rather than
+          // leaving a list that looks sorted by distance and is not.
+          setNoFix(true);
+        }
       } catch {
-        // A device with location off throws rather than returning a status.
-        // Same outcome either way: no sorting, everything else works.
-        if (!cancelled) setLocationDenied(true);
+        // Location switched off at the OS level throws rather than returning a
+        // status. Same outcome: no sorting, everything else works.
+        if (!cancelled) setNoFix(true);
       }
     })();
+
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, []);
 
@@ -234,15 +286,15 @@ export default function MapScreen() {
               title={here ? `Nearest first (${pinned.length})` : `On the map (${pinned.length})`}
             />
             <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
-              {locationDenied ? (
+              {noFix ? (
                 <Text variant="caption" tone="muted">
                   {/*
                     Order is left alone without a fix rather than guessed at. A
                     list that claims to be sorted by distance and is sorted by
                     something else is worse than an unsorted one.
                   */}
-                  Location is off, so these are in the order they were last worked on rather than by
-                  distance.
+                  No location fix, so these are in the order they were last worked on rather than by
+                  distance. Location may be off, or the phone may not have a signal here.
                 </Text>
               ) : null}
 

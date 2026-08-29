@@ -140,11 +140,15 @@ export function usePush() {
       } catch {
         /*
          * Minting talks to Expo's servers, so this fails on a phone with no
-         * signal, which is the normal state of a jobsite phone. Silent and
-         * retried on the next launch: push is a convenience, and the whole app
-         * must not degrade because it could not be set up.
+         * signal, which is the normal state of a jobsite phone. It retries on
+         * the next launch: push is a convenience, and the whole app must not
+         * degrade because it could not be set up.
+         *
+         * Reported as `unavailable`, not left as null. Null renders as "Setting
+         * up", so a registration that failed once sat there claiming to be in
+         * progress forever. Seen on the device.
          */
-        if (!cancelled) setBlocked(null);
+        if (!cancelled) setBlocked("unavailable");
       }
     })();
 

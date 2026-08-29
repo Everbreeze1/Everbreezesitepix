@@ -26,7 +26,10 @@
     "mobile:build:preview": "npm --prefix apps/mobile run build:preview",
     "mobile:build:prod": "npm --prefix apps/mobile run build:prod",
     "mobile:shot": "bash scripts/mobile-screen.sh shot",
-    "mobile:doctor": "bash scripts/mobile-screen.sh doctor"
+    "mobile:doctor": "bash scripts/mobile-screen.sh doctor",
+    "mobile:metro": "bash scripts/mobile-screen.sh metro",
+    "mobile:reload": "bash scripts/mobile-screen.sh reload",
+    "mobile:env": "bash scripts/mobile-screen.sh env"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",

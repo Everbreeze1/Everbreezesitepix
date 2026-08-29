@@ -60,6 +60,7 @@ export { default as LogOut } from "lucide-react-native/dist/esm/icons/log-out";
 export { default as MapPin } from "lucide-react-native/dist/esm/icons/map-pin";
 export { default as Megaphone } from "lucide-react-native/dist/esm/icons/megaphone";
 export { default as MessageSquare } from "lucide-react-native/dist/esm/icons/message-square";
+export { default as Paperclip } from "lucide-react-native/dist/esm/icons/paperclip";
 export { default as PenLine } from "lucide-react-native/dist/esm/icons/pen-line";
 export { default as Plus } from "lucide-react-native/dist/esm/icons/plus";
 export { default as RefreshCw } from "lucide-react-native/dist/esm/icons/refresh-cw";

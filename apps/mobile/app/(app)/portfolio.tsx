@@ -17,7 +17,6 @@ import {
   isPublished,
   LAYOUTS,
   normaliseLayout,
-  orderedPortfolio,
   portfolioSummary,
   portfolioTitleError,
   publishedCount,
@@ -82,7 +81,9 @@ export default function PortfolioScreen() {
   const teamQuery = useQuery({ queryKey: ["my-team"], queryFn: getMyTeam });
 
   const canManage = can(teamQuery.data?.myRole, "manage_templates");
-  const pages = useMemo(() => orderedPortfolio(portfolioQuery.data ?? []), [portfolioQuery.data]);
+  // The service already returns these in the portfolio's running order. See
+  // the note in `portfolio-view.ts` for why re-sorting here was wrong.
+  const pages = useMemo(() => portfolioQuery.data ?? [], [portfolioQuery.data]);
   const live = publishedCount(pages);
   const projects = useMemo(
     () => (projectsQuery.data ?? []).filter((project) => !project.archived),
@@ -260,9 +261,9 @@ export default function PortfolioScreen() {
               pages.map((project) => (
                 <Card key={project.id}>
                   <View style={{ gap: spacing.md }}>
-                    {project.coverUrl ? (
+                    {project.cover_image_url ? (
                       <Image
-                        source={{ uri: project.coverUrl }}
+                        source={{ uri: project.cover_image_url }}
                         style={{
                           width: "100%",
                           aspectRatio: 16 / 9,

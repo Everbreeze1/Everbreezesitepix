@@ -3,7 +3,7 @@ import {
   covers,
   groupNameError,
   groupSummary,
-  memberIds,
+  memberCount,
   orderedSelection,
   selectionChanged,
   toggled,
@@ -20,19 +20,26 @@ import {
  * insertion order.
  */
 
-describe("memberIds", () => {
-  it("reads the ids", () => {
-    expect(memberIds({ projectIds: ["a", "b"] })).toEqual(["a", "b"]);
+describe("memberCount", () => {
+  it("reads project_count, which is what the service actually sends", () => {
+    /*
+     * The bug this replaces. The list op returns `project_count`, a number, and
+     * no ids at all. Reading a guessed `projectIds` array returned `[]` every
+     * time, so every group read "No projects yet" however many projects were in
+     * it, and no cover ever rendered. Nothing threw; it was only visible on the
+     * device.
+     */
+    expect(memberCount({ project_count: 4 })).toBe(4);
   });
 
-  it("survives a response that carried none", () => {
-    expect(memberIds({})).toEqual([]);
-    expect(memberIds({ projectIds: undefined })).toEqual([]);
-    expect(memberIds({ projectIds: null as never })).toEqual([]);
+  it("survives a response that carried no count", () => {
+    expect(memberCount({})).toBe(0);
+    expect(memberCount({ project_count: undefined })).toBe(0);
+    expect(memberCount({ project_count: null as never })).toBe(0);
   });
 
-  it("drops anything that is not a string", () => {
-    expect(memberIds({ projectIds: ["a", null, 7] as never })).toEqual(["a"]);
+  it("never reports a negative count", () => {
+    expect(memberCount({ project_count: -1 })).toBe(0);
   });
 });
 
@@ -128,18 +135,24 @@ describe("groupNameError", () => {
 });
 
 describe("covers", () => {
+  it("reads `thumbnails`, the field the service sends", () => {
+    // Not `photoUrls`, which was a guess and meant no group ever showed a
+    // cover. Same class of bug as the count above.
+    expect(covers({ thumbnails: ["1", "2"] })).toEqual(["1", "2"]);
+  });
+
   it("caps at four", () => {
     // More than four on a phone is a strip of thumbnails too small to
     // recognise anything in.
-    expect(covers({ photoUrls: ["1", "2", "3", "4", "5", "6"] })).toHaveLength(4);
+    expect(covers({ thumbnails: ["1", "2", "3", "4", "5", "6"] })).toHaveLength(4);
   });
 
   it("drops blanks and non-strings", () => {
-    expect(covers({ photoUrls: ["1", "", null, 5] as never })).toEqual(["1"]);
+    expect(covers({ thumbnails: ["1", "", null, 5] as never })).toEqual(["1"]);
   });
 
   it("survives a response with no photos at all", () => {
     expect(covers({})).toEqual([]);
-    expect(covers({ photoUrls: undefined })).toEqual([]);
+    expect(covers({ thumbnails: undefined })).toEqual([]);
   });
 });

@@ -10,12 +10,14 @@
 /**
  * Whether registering is even possible here.
  *
- * Three separate reasons it might not be, and they want different words. A
+ * Four separate reasons it might not be, and they want different words. A
  * simulator cannot receive push at all, which is not a problem to fix. A denied
  * permission is the person's decision and is reversible in Settings. A missing
- * project id is a build misconfiguration and is ours.
+ * project id is a build misconfiguration and is ours. And `unavailable` is the
+ * one the caller sets rather than this function: registration was attempted and
+ * failed, usually because the device could not reach Expo's push service.
  */
-export type PushBlocked = "simulator" | "denied" | "no_project_id" | null;
+export type PushBlocked = "simulator" | "denied" | "no_project_id" | "unavailable" | null;
 
 export function pushBlocked(opts: {
   isDevice: boolean;
@@ -42,6 +44,14 @@ export function pushStatusLabel(blocked: PushBlocked, registered: boolean): stri
       // Ours, not theirs. Saying "turned off" here would send somebody into
       // Settings to fix something that is not there.
       return "This build cannot receive push";
+    case "unavailable":
+      /*
+       * Tried, and could not. Distinct from "Setting up" because that reads as
+       * in-progress: a registration that failed once used to sit on "Setting
+       * up" forever, which is a screen telling somebody something is happening
+       * when nothing is. It retries on the next launch, so say that.
+       */
+      return "Could not set up on this phone. It will try again next launch.";
     default:
       return registered ? "On for this phone" : "Setting up";
   }

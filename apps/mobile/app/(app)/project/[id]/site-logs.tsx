@@ -123,7 +123,13 @@ export default function ProjectSiteLogsScreen() {
               <EmptyState
                 icon={FileText}
                 title="No site logs yet"
-                body="Pick the day's photos, write a line against each and add anything that still needs doing. It exports as a PDF."
+                /*
+                  No PDF claim. Export calls `generateSiteLogPdf`, which returns
+                  a file the phone would then have to save or share, and that
+                  half is not built. Advertising it here is the app promising
+                  something it cannot do, which is worse than not mentioning it.
+                */
+                body="Pick the day's photos, write a line against each, and add anything that still needs doing before you leave."
                 action={{ label: "Start a log", onPress: () => create.mutate(), icon: Plus }}
               />
             ) : (

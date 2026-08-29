@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { Image } from "expo-image";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { displayCaption } from "@everlumen/shared";
 import { analyzePhoto, extractPhotoText, getPhotoAnalysis } from "@/api/photo-ai";
 import {
   isAnalysisEmpty,
@@ -110,11 +111,17 @@ export default function PhotoAnalysisScreen() {
         ) : null}
 
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md }}>
-          {caption ? (
-            <Text variant="bodyStrong" numberOfLines={2}>
-              {caption}
-            </Text>
-          ) : null}
+          {/*
+            Through `displayCaption`, like every other surface that shows one.
+            A caption is often the camera's filename, and this screen was the
+            one place rendering it raw: the same photo read "Photo" in the
+            lightbox and "1 (9).jpg" here. That is the "unfriendly info"
+            complaint, and it is exactly what `isFilenameLikeCaption` in
+            `@everlumen/shared` exists to stop.
+          */}
+          <Text variant="bodyStrong" numberOfLines={2}>
+            {displayCaption(caption ?? null, "Photo")}
+          </Text>
 
           <ButtonRow>
             <Button

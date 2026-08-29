@@ -6,7 +6,6 @@ import {
   isPublished,
   LAYOUTS,
   normaliseLayout,
-  orderedPortfolio,
   portfolioSummary,
   portfolioTitleError,
   publishedCount,
@@ -32,12 +31,10 @@ const page = (over: Partial<PortfolioProject> = {}): PortfolioProject => ({
   layout: "grid",
   share_token: "tok-1",
   revoked_at: null,
-  cover_photo_id: null,
-  coverUrl: null,
-  itemCount: 12,
+  cover_image_url: null,
+  item_count: 12,
   city: "Manchester",
   state: null,
-  position: 0,
   created_at: "2026-08-01T00:00:00.000Z",
   updated_at: "2026-08-01T00:00:00.000Z",
   ...over,
@@ -66,42 +63,21 @@ describe("publishedCount", () => {
   });
 });
 
-describe("orderedPortfolio", () => {
-  it("uses position, then newest", () => {
+describe("the response order is preserved", () => {
+  it("has no client-side sort to get wrong", () => {
     /*
-     * The list on the phone is also the running order of the public grid, so
-     * the two have to agree or reordering on the web looks broken here.
+     * `listShowcases` orders by `position` then `created_at` in SQL and does
+     * not send `position`. A client-side re-sort therefore read `undefined` for
+     * every row and silently fell back to date order, which is not the order of
+     * the public grid. The fix was to delete the sort, so the guard is that
+     * nothing exports one.
      */
-    const out = orderedPortfolio([
-      page({ id: "c", position: 2 }),
-      page({ id: "a", position: 0 }),
-      page({ id: "b", position: 1 }),
-    ]);
-    expect(out.map((p) => p.id)).toEqual(["a", "b", "c"]);
-  });
+    const src = readFileSync(join(process.cwd(), "apps/mobile/src/api/portfolio-view.ts"), "utf8");
+    expect(src).not.toMatch(/export function orderedPortfolio/);
 
-  it("puts a page with no position last, not first", () => {
-    // A null sorting as zero would jump an unpositioned page to the front of
-    // somebody's portfolio.
-    const out = orderedPortfolio([
-      page({ id: "none", position: null }),
-      page({ id: "first", position: 0 }),
-    ]);
-    expect(out.map((p) => p.id)).toEqual(["first", "none"]);
-  });
-
-  it("breaks a tie on newest", () => {
-    const out = orderedPortfolio([
-      page({ id: "older", position: 0, created_at: "2026-01-01T00:00:00.000Z" }),
-      page({ id: "newer", position: 0, created_at: "2026-08-01T00:00:00.000Z" }),
-    ]);
-    expect(out.map((p) => p.id)).toEqual(["newer", "older"]);
-  });
-
-  it("does not mutate its input", () => {
-    const rows = [page({ id: "b", position: 1 }), page({ id: "a", position: 0 })];
-    orderedPortfolio(rows);
-    expect(rows[0].id).toBe("b");
+    // And the screen must not be sorting either.
+    const screen = readFileSync(join(process.cwd(), "apps/mobile/app/(app)/portfolio.tsx"), "utf8");
+    expect(screen).not.toContain("orderedPortfolio");
   });
 });
 
@@ -118,12 +94,22 @@ describe("portfolioSummary", () => {
     expect(portfolioSummary(page({ city: null, state: null }))).toBe("12 photos · live");
   });
 
+  it("reads item_count, the field the service actually sends", () => {
+    /*
+     * The bug. The service sends `item_count`; an earlier version read
+     * `itemCount`, so every card said "0 photos" whatever the page held, and
+     * `isPortfolioProjectEmpty` called every page empty. Both only visible on
+     * the device.
+     */
+    expect(portfolioSummary(page({ item_count: 5, city: null }))).toBe("5 photos · live");
+  });
+
   it("copes with a response that carried no count", () => {
-    expect(portfolioSummary(page({ itemCount: undefined, city: null }))).toBe("0 photos · live");
+    expect(portfolioSummary(page({ item_count: undefined, city: null }))).toBe("0 photos · live");
   });
 
   it("gets the singular right", () => {
-    expect(portfolioSummary(page({ itemCount: 1, city: null }))).toBe("1 photo · live");
+    expect(portfolioSummary(page({ item_count: 1, city: null }))).toBe("1 photo · live");
   });
 });
 
@@ -131,9 +117,9 @@ describe("isPortfolioProjectEmpty", () => {
   it("is true for a page with no photos", () => {
     // Publishing one puts a title on an empty page under the company's name, in
     // public. The screen asks first rather than blocking: it is their call.
-    expect(isPortfolioProjectEmpty(page({ itemCount: 0 }))).toBe(true);
-    expect(isPortfolioProjectEmpty(page({ itemCount: undefined }))).toBe(true);
-    expect(isPortfolioProjectEmpty(page({ itemCount: 1 }))).toBe(false);
+    expect(isPortfolioProjectEmpty(page({ item_count: 0 }))).toBe(true);
+    expect(isPortfolioProjectEmpty(page({ item_count: undefined }))).toBe(true);
+    expect(isPortfolioProjectEmpty(page({ item_count: 1 }))).toBe(false);
   });
 });
 

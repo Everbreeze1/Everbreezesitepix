@@ -521,6 +521,13 @@ export default function ProjectDetailScreen() {
                     />
                     <RowDivider />
                     <ListRow
+                      icon={FileText}
+                      title="Documents"
+                      subtitle="Pages and files on this job"
+                      onPress={() => router.push(`/project/${id}/documents`)}
+                    />
+                    <RowDivider />
+                    <ListRow
                       icon={Send}
                       title="Reports"
                       subtitle="What the client receives"

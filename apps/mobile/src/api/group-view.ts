@@ -12,15 +12,21 @@ export type GroupLike = {
   id: string;
   name: string;
   description: string | null;
-  projectIds?: string[];
-  photoUrls?: string[];
+  /** The service sends a count here, not the ids. See `ProjectGroup`. */
+  project_count?: number;
+  thumbnails?: string[];
 };
 
-/** The ids in a group, whatever the response carried. */
-export function memberIds(group: Pick<GroupLike, "projectIds">): string[] {
-  return Array.isArray(group.projectIds)
-    ? group.projectIds.filter((id) => typeof id === "string")
-    : [];
+/**
+ * How many projects a group holds.
+ *
+ * Reads `project_count`, which is what the service sends. Guessing a
+ * `projectIds` array here is exactly what made every group report "No projects
+ * yet" however many it had.
+ */
+export function memberCount(group: Pick<GroupLike, "project_count">): number {
+  const count = group.project_count;
+  return typeof count === "number" && count > 0 ? count : 0;
 }
 
 /** The line under a group's name. */
@@ -84,8 +90,8 @@ export function toggled(selected: ReadonlySet<string>, id: string): Set<string> 
  * Capped at four: the service sends up to four and a row of more than that on a
  * phone is a strip of thumbnails too small to recognise anything in.
  */
-export function covers(group: Pick<GroupLike, "photoUrls">, max = 4): string[] {
-  return (Array.isArray(group.photoUrls) ? group.photoUrls : [])
+export function covers(group: Pick<GroupLike, "thumbnails">, max = 4): string[] {
+  return (Array.isArray(group.thumbnails) ? group.thumbnails : [])
     .filter((url) => typeof url === "string" && url.length > 0)
     .slice(0, max);
 }

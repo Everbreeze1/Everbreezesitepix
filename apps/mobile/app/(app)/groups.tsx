@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createProjectGroup,
   deleteProjectGroup,
+  getGroupProjectIds,
   listProjectGroups,
   setGroupProjects,
   updateProjectGroup,
@@ -15,7 +16,7 @@ import {
   covers,
   groupNameError,
   groupSummary,
-  memberIds,
+  memberCount,
   orderedSelection,
   selectionChanged,
   toggled,
@@ -78,6 +79,7 @@ export default function GroupsScreen() {
     mutationFn: async (work: () => Promise<unknown>) => work(),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["project-groups"] });
+      void queryClient.invalidateQueries({ queryKey: ["project-group-members"] });
       setFailure(null);
     },
     onError: (error: unknown) =>
@@ -166,7 +168,7 @@ export default function GroupsScreen() {
             ) : (
               <>
                 {groups.map((group) => {
-                  const ids = memberIds(group);
+                  const count = memberCount(group);
                   const thumbs = covers(group);
                   return (
                     <Card key={group.id}>
@@ -183,7 +185,7 @@ export default function GroupsScreen() {
                               {group.name}
                             </Text>
                             <Text variant="caption" tone="muted">
-                              {groupSummary(ids.length)}
+                              {groupSummary(count)}
                             </Text>
                           </View>
                           <IconButton
@@ -336,14 +338,32 @@ function ProjectPicker({
   onClose: () => void;
   onSave: (groupId: string, projectIds: string[]) => void;
 }) {
-  const stored = group ? memberIds(group) : [];
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(stored));
+  /*
+   * The membership comes from `getProjectGroup`, not from the row this sheet
+   * was handed.
+   *
+   * `listProjectGroups` returns a `project_count` and no ids at all, so seeding
+   * from the list row opened every picker empty: a group with four projects in
+   * it offered four unticked rows, and saving would have removed all four.
+   */
+  const membersQuery = useQuery({
+    queryKey: ["project-group-members", group?.id],
+    queryFn: () => getGroupProjectIds(group!.id),
+    enabled: Boolean(group),
+  });
+  const stored = useMemo(() => membersQuery.data ?? [], [membersQuery.data]);
 
-  // Re-seed each time it opens on a different group, so a cancelled edit does
-  // not leak into the next one.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+
+  /*
+   * Re-seed when the membership arrives, and when a different group is opened.
+   * Keyed on the group plus the stored list so a slow fetch still seeds once it
+   * lands rather than leaving the sheet permanently empty.
+   */
   const [seenFor, setSeenFor] = useState<string | null>(null);
-  if (group && seenFor !== group.id) {
-    setSeenFor(group.id);
+  const seedKey = group ? `${group.id}:${stored.join(",")}` : null;
+  if (seedKey && seenFor !== seedKey) {
+    setSeenFor(seedKey);
     setSelected(new Set(stored));
   }
 
@@ -357,14 +377,14 @@ function ProjectPicker({
       subtitle={`${selected.size} chosen`}
       footer={
         <Button
-          label={changed ? "Save" : "Nothing changed"}
+          label={membersQuery.isLoading ? "Loading" : changed ? "Save" : "Nothing changed"}
           fullWidth
-          disabled={!changed}
+          disabled={!changed || membersQuery.isLoading}
           onPress={() => group && onSave(group.id, orderedSelection(projects, selected))}
         />
       }
     >
-      {loading ? (
+      {loading || membersQuery.isLoading ? (
         <SkeletonList rows={4} />
       ) : projects.length === 0 ? (
         <EmptyState icon={FolderKanban} title="No projects to add yet" />

@@ -197,7 +197,11 @@ export default function ReportScreen() {
 
           <ButtonRow>
             <Button
-              label={chosen.length ? `${chosen.length} photos` : "Choose photos"}
+              label={
+                chosen.length
+                  ? `${chosen.length} photo${chosen.length === 1 ? "" : "s"}`
+                  : "Choose photos"
+              }
               icon={Images}
               variant="secondary"
               onPress={() => setPicking(true)}

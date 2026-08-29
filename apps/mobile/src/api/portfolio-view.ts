@@ -18,6 +18,18 @@
 
 export type PortfolioLayout = "grid" | "masonry" | "featured";
 
+/**
+ * A portfolio page as `listShowcases` returns it.
+ *
+ * **Every field name here is the service's.** An earlier version guessed
+ * `itemCount` and `coverUrl`; the service sends `item_count` and
+ * `cover_image_url`, so every card read "0 photos" and showed the empty-cover
+ * placeholder however many photos the page actually held. Nothing threw. The
+ * same mistake was in the groups screen, found the same way: on the device.
+ *
+ * `position` is deliberately absent. The service orders by it in SQL and does
+ * not send it, so the array arrives already in the portfolio's running order.
+ */
 export type PortfolioProject = {
   id: string;
   title: string;
@@ -25,17 +37,16 @@ export type PortfolioProject = {
   layout: PortfolioLayout | string;
   share_token: string | null;
   revoked_at: string | null;
-  cover_photo_id: string | null;
-  /** Signed cover URL, attached by the list op. */
-  coverUrl?: string | null;
-  /** How many photos the page holds, attached by the list op. */
-  itemCount?: number;
+  /** Signed cover URL, or null when the page has no photos. */
+  cover_image_url?: string | null;
+  /** How many photos the page holds. */
+  item_count?: number;
   slug?: string | null;
   service_type?: string | null;
   city?: string | null;
   state?: string | null;
+  on_site?: boolean | null;
   featured?: boolean | null;
-  position?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -59,25 +70,19 @@ export function publishedCount(projects: PortfolioProject[]): number {
   return projects.filter(isPublished).length;
 }
 
-/**
- * Portfolio order.
+/*
+ * There is no `orderedPortfolio` here, on purpose.
  *
- * `position` first, then newest, matching the server's own ordering. The list
- * on a phone is also the running order of the public grid, so the two have to
- * agree or reordering on the web looks broken here.
+ * The service orders by `position` then `created_at` in SQL and returns the
+ * rows in that order, which is the running order of the public grid. It does
+ * not send `position`, so a client-side re-sort had nothing to sort on: it read
+ * `undefined` for every row and silently fell back to date order. Preserving
+ * the response order is both correct and the only thing that can be correct.
  */
-export function orderedPortfolio(projects: PortfolioProject[]): PortfolioProject[] {
-  return [...projects].sort((a, b) => {
-    const ap = a.position ?? Number.MAX_SAFE_INTEGER;
-    const bp = b.position ?? Number.MAX_SAFE_INTEGER;
-    if (ap !== bp) return ap - bp;
-    return b.created_at.localeCompare(a.created_at);
-  });
-}
 
 /** The line under a portfolio project's title. */
 export function portfolioSummary(project: PortfolioProject): string {
-  const photos = project.itemCount ?? 0;
+  const photos = project.item_count ?? 0;
   const parts = [`${photos} photo${photos === 1 ? "" : "s"}`];
 
   const place = [project.city, project.state].filter(Boolean).join(", ");
@@ -107,7 +112,7 @@ export function taglineError(tagline: string): string | null {
  * it is their call, but it says this first.
  */
 export function isPortfolioProjectEmpty(project: PortfolioProject): boolean {
-  return (project.itemCount ?? 0) === 0;
+  return (project.item_count ?? 0) === 0;
 }
 
 /**
