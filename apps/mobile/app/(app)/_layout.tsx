@@ -1,11 +1,22 @@
 import { Redirect, Stack } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "@/lib/auth";
+import { usePush } from "@/push/use-push";
 import { useTheme } from "@/theme";
 
 export default function AppLayout() {
   const { user, loading } = useAuth();
   const theme = useTheme();
+
+  /*
+   * Push is set up here, once, for the whole authenticated tree.
+   *
+   * Not in a screen: registration has to survive tab switches, and a tapped
+   * notification arriving on a cold start has to be handled before any screen
+   * has mounted. Hooks cannot be called conditionally, so this runs above the
+   * `!user` redirect and the hook itself does nothing without a user.
+   */
+  usePush();
 
   if (loading) {
     return (
@@ -66,6 +77,15 @@ export default function AppLayout() {
         options={{ presentation: "fullScreenModal", headerShown: false }}
       />
       <Stack.Screen name="queue" options={{ title: "Upload queue" }} />
+      <Stack.Screen name="activity" options={{ title: "Team activity" }} />
+      <Stack.Screen name="notifications" options={{ title: "Notifications" }} />
+      <Stack.Screen name="map" options={{ title: "Map" }} />
+      <Stack.Screen name="team" options={{ title: "Team" }} />
+      <Stack.Screen name="workspace" options={{ title: "Workspace" }} />
+      <Stack.Screen name="labels" options={{ title: "Labels" }} />
+      <Stack.Screen name="project/[id]/site-logs" options={{ title: "Site logs" }} />
+      <Stack.Screen name="site-log/[logId]" options={{ title: "Site log" }} />
+      <Stack.Screen name="photo/[id]/analysis" options={{ title: "Photo analysis" }} />
     </Stack>
   );
 }

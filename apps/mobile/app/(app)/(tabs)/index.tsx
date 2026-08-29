@@ -18,7 +18,16 @@ import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
 import { useQueue } from "@/offline/use-queue";
 import { spacing } from "@/theme";
-import { Activity, Bell, Camera, CircleCheck, CloudUpload, FolderKanban, Images } from "@/ui/icons";
+import {
+  Activity,
+  Bell,
+  Camera,
+  CircleCheck,
+  CloudUpload,
+  FolderKanban,
+  Images,
+  MapPin,
+} from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -199,6 +208,13 @@ export default function HomeScreen() {
                 right={unread > 0 ? <CountBadge count={unread} tone="primary" /> : undefined}
                 unread={unread > 0}
                 onPress={() => router.push("/notifications")}
+              />
+              <RowDivider />
+              <ListRow
+                icon={MapPin}
+                title="Map"
+                subtitle="Every job with a location, nearest first"
+                onPress={() => router.push("/map")}
               />
               <RowDivider />
               <ListRow

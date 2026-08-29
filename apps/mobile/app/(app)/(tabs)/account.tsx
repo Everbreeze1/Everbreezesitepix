@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Bell,
+  BellRing,
   Building2,
   CircleQuestionMark,
   CreditCard,
@@ -18,6 +19,8 @@ import * as WebBrowser from "expo-web-browser";
 import { useQuery } from "@tanstack/react-query";
 import { ApiClientError } from "@everlumen/api-client";
 import { getUnreadNotificationCount } from "@/api/notifications";
+import { pushStatusLabel } from "@/api/push-view";
+import { usePush } from "@/push/use-push";
 import { api, webAppLink } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useQueue } from "@/offline/use-queue";
@@ -54,6 +57,12 @@ import {
 export default function AccountScreen() {
   const { user, signOut } = useAuth();
   const queue = useQueue();
+  /*
+   * The same hook the authenticated layout mounts. Calling it twice is safe:
+   * registration is an upsert keyed on the token, so the second call writes the
+   * row the first one already wrote.
+   */
+  const push = usePush();
   const [health, setHealth] = useState<string | null>(null);
   const [healthy, setHealthy] = useState<boolean | null>(null);
 
@@ -153,6 +162,26 @@ export default function AccountScreen() {
       <SectionHeader title="On this phone" />
       <View style={{ paddingHorizontal: spacing.lg }}>
         <ListGroup>
+          <ListRow
+            icon={BellRing}
+            iconTone={push.blocked ? "muted" : "primary"}
+            title="Push notifications"
+            /*
+              Named honestly rather than reduced to on/off. "Not available on a
+              simulator" and "turned off in your phone settings" send somebody
+              to two different places, and collapsing them into "off" sends them
+              to the wrong one.
+            */
+            subtitle={pushStatusLabel(push.blocked, Boolean(push.token))}
+            right={
+              push.blocked ? (
+                <Badge label="Off" tone="neutral" variant="outline" />
+              ) : push.token ? (
+                <Badge label="On" tone="success" />
+              ) : undefined
+            }
+          />
+          <RowDivider />
           <ListRow
             icon={CloudUpload}
             iconTone={queue.failed > 0 ? "destructive" : "primary"}
@@ -256,6 +285,13 @@ export default function AccountScreen() {
           fullWidth
           onPress={() => {
             void (async () => {
+              /*
+                Unregister before signing out, not after. After, the session is
+                already gone and the RLS delete would be refused, leaving the
+                phone receiving notifications for somebody who is no longer
+                signed in on it.
+              */
+              await push.unregister();
               await signOut();
               router.replace("/login");
             })();
