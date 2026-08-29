@@ -58,6 +58,14 @@ apps/api/.env.local
 
 supabase/.temp/
 
+# Screenshots taken while checking the app on a device, and logs pasted in for
+# diagnosis. Both are gitignored, but `.easignore` replaces `.gitignore` rather
+# than adding to it, so they were being uploaded: the tarball grew from 9.2MB to
+# 15.6MB between two builds purely from PNGs of the app being looked at.
+.mobile-shots/
+error.txt
+*.png.bak
+
 # ---------------------------------------------------------------
 # Not needed by a mobile build
 #

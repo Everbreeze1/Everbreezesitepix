@@ -16,6 +16,7 @@ import {
   CheckCheck,
   CircleCheck,
   ClipboardCheck,
+  FileText,
   ImageOff,
   ListTodo,
   MapPin,
@@ -106,10 +107,21 @@ function chunk(photos: PhotoListItem[], size: number): PhotoRow[] {
 }
 
 export default function ProjectDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  /*
+   * `photo` is a deep link, not something this screen ever sets.
+   *
+   * A comment mention notification is about one photo, and photos have no
+   * screen of their own: they are viewed in the lightbox below. So the inbox
+   * opens the project carrying the photo id, and the lightbox starts open on
+   * it. Without this the reader lands on a grid of forty photos and has to find
+   * the one somebody wrote about, which is the tap doing half its job.
+   */
+  const { id, photo: deepLinkPhoto } = useLocalSearchParams<{ id: string; photo?: string }>();
   const theme = useTheme();
   const [filter, setFilter] = useState<PhaseFilter>("all");
-  const [lightboxId, setLightboxId] = useState<string | null>(null);
+  // Seeded from the param rather than set in an effect, so the lightbox is
+  // already open on the first render instead of flashing the grid first.
+  const [lightboxId, setLightboxId] = useState<string | null>(deepLinkPhoto ?? null);
   /*
    * Selection lives as a Set of ids rather than a flag plus a list, so a photo
    * scrolled far out of view cannot fall out of the selection when the list
@@ -508,6 +520,13 @@ export default function ProjectDetailScreen() {
                     />
                     <RowDivider />
                     <ListRow
+                      icon={FileText}
+                      title="Site logs"
+                      subtitle="The day's photos, written up"
+                      onPress={() => router.push(`/project/${id}/site-logs`)}
+                    />
+                    <RowDivider />
+                    <ListRow
                       icon={Video}
                       title="Walkthroughs"
                       subtitle="Recorded site walks"
@@ -754,6 +773,32 @@ export default function ProjectDetailScreen() {
                   style={styles.lightboxAction}
                 >
                   <Text style={[typography.bodyStrong, { color: "#fff" }]}>Annotate</Text>
+                </Pressable>
+
+                {/*
+                  Analyse sits next to Annotate because they are the same kind
+                  of act: both take this one photograph and add to it. It reads
+                  the equipment plate and finds visible defects, which is worth
+                  doing while still standing in front of the thing.
+                */}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Analyse this photo"
+                  onPress={() => {
+                    const photo = lightboxPhoto;
+                    setLightboxId(null);
+                    router.push({
+                      pathname: "/photo/[id]/analysis",
+                      params: {
+                        id: photo.id,
+                        uri: urls[photo.id] ?? "",
+                        caption: photo.caption ?? "",
+                      },
+                    });
+                  }}
+                  style={styles.lightboxAction}
+                >
+                  <Text style={[typography.bodyStrong, { color: "#fff" }]}>Analyse</Text>
                 </Pressable>
 
                 <Pressable

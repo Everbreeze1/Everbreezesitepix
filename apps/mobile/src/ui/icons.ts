@@ -27,6 +27,7 @@
 
 export { default as Activity } from "lucide-react-native/dist/esm/icons/activity";
 export { default as Archive } from "lucide-react-native/dist/esm/icons/archive";
+export { default as Bell } from "lucide-react-native/dist/esm/icons/bell";
 export { default as Building2 } from "lucide-react-native/dist/esm/icons/building-2";
 export { default as Calendar } from "lucide-react-native/dist/esm/icons/calendar";
 export { default as Camera } from "lucide-react-native/dist/esm/icons/camera";
@@ -43,6 +44,7 @@ export { default as Flag } from "lucide-react-native/dist/esm/icons/flag";
 export { default as FolderInput } from "lucide-react-native/dist/esm/icons/folder-input";
 export { default as FolderKanban } from "lucide-react-native/dist/esm/icons/folder-kanban";
 export { default as FolderPlus } from "lucide-react-native/dist/esm/icons/folder-plus";
+export { default as House } from "lucide-react-native/dist/esm/icons/house";
 export { default as ImageOff } from "lucide-react-native/dist/esm/icons/image-off";
 export { default as Images } from "lucide-react-native/dist/esm/icons/images";
 export { default as Inbox } from "lucide-react-native/dist/esm/icons/inbox";
@@ -52,6 +54,7 @@ export { default as ListTodo } from "lucide-react-native/dist/esm/icons/list-tod
 export { default as LocateFixed } from "lucide-react-native/dist/esm/icons/locate-fixed";
 export { default as LogOut } from "lucide-react-native/dist/esm/icons/log-out";
 export { default as MapPin } from "lucide-react-native/dist/esm/icons/map-pin";
+export { default as Megaphone } from "lucide-react-native/dist/esm/icons/megaphone";
 export { default as MessageSquare } from "lucide-react-native/dist/esm/icons/message-square";
 export { default as PenLine } from "lucide-react-native/dist/esm/icons/pen-line";
 export { default as Plus } from "lucide-react-native/dist/esm/icons/plus";
@@ -60,16 +63,17 @@ export { default as RotateCcw } from "lucide-react-native/dist/esm/icons/rotate-
 export { default as Search } from "lucide-react-native/dist/esm/icons/search";
 export { default as Send } from "lucide-react-native/dist/esm/icons/send";
 export { default as Server } from "lucide-react-native/dist/esm/icons/server";
+export { default as Share2 } from "lucide-react-native/dist/esm/icons/share-2";
+export { default as Sparkles } from "lucide-react-native/dist/esm/icons/sparkles";
 export { default as SquareCheckBig } from "lucide-react-native/dist/esm/icons/square-check-big";
+export { default as Star } from "lucide-react-native/dist/esm/icons/star";
 export { default as Tag } from "lucide-react-native/dist/esm/icons/tag";
 export { default as Trash2 } from "lucide-react-native/dist/esm/icons/trash-2";
-export { default as Share2 } from "lucide-react-native/dist/esm/icons/share-2";
-export { default as Star } from "lucide-react-native/dist/esm/icons/star";
 export { default as TriangleAlert } from "lucide-react-native/dist/esm/icons/triangle-alert";
 export { default as User } from "lucide-react-native/dist/esm/icons/user";
 export { default as UserPlus } from "lucide-react-native/dist/esm/icons/user-plus";
-export { default as UserX } from "lucide-react-native/dist/esm/icons/user-x";
 export { default as Users } from "lucide-react-native/dist/esm/icons/users";
+export { default as UserX } from "lucide-react-native/dist/esm/icons/user-x";
 export { default as Video } from "lucide-react-native/dist/esm/icons/video";
 export { default as VideoOff } from "lucide-react-native/dist/esm/icons/video-off";
 export { default as WifiOff } from "lucide-react-native/dist/esm/icons/wifi-off";

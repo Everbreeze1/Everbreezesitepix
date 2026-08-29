@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  Bell,
   Building2,
   CircleQuestionMark,
   CreditCard,
@@ -14,7 +15,9 @@ import {
 import { View } from "react-native";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
+import { useQuery } from "@tanstack/react-query";
 import { ApiClientError } from "@everlumen/api-client";
+import { getUnreadNotificationCount } from "@/api/notifications";
 import { api, webAppLink } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useQueue } from "@/offline/use-queue";
@@ -53,6 +56,23 @@ export default function AccountScreen() {
   const queue = useQueue();
   const [health, setHealth] = useState<string | null>(null);
   const [healthy, setHealthy] = useState<boolean | null>(null);
+
+  /*
+   * The unread count on the notifications row.
+   *
+   * Its own query rather than a slice of the inbox list, because the count has
+   * to be right without having loaded a page of notifications: someone who has
+   * never opened the inbox should still see that four things are waiting. The
+   * inbox invalidates this key whenever it marks anything read.
+   */
+  const unreadQuery = useQuery({
+    queryKey: ["notifications-unread"],
+    queryFn: getUnreadNotificationCount,
+    // A badge one minute stale is fine; refetching it on every tab focus is
+    // a request per glance at the account screen.
+    staleTime: 60_000,
+  });
+  const unread = unreadQuery.data ?? 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -116,6 +136,20 @@ export default function AccountScreen() {
         </View>
       </View>
 
+      <SectionHeader title="Inbox" />
+      <View style={{ paddingHorizontal: spacing.lg }}>
+        <ListGroup>
+          <ListRow
+            icon={Bell}
+            title="Notifications"
+            subtitle={unread === 0 ? "Assignments, mentions and completions" : `${unread} unread`}
+            right={unread > 0 ? <CountBadge count={unread} tone="primary" /> : undefined}
+            unread={unread > 0}
+            onPress={() => router.push("/notifications")}
+          />
+        </ListGroup>
+      </View>
+
       <SectionHeader title="On this phone" />
       <View style={{ paddingHorizontal: spacing.lg }}>
         <ListGroup>
@@ -136,18 +170,28 @@ export default function AccountScreen() {
         </ListGroup>
       </View>
 
-      <SectionHeader title="Open on the web" />
+      <SectionHeader title="Workspace" />
       <View style={{ paddingHorizontal: spacing.lg }}>
         <ListGroup>
           <ListRow
             icon={Users}
             title="Team and collaborators"
             subtitle="Invite people, set roles"
-            right={<ExternalLinkMark />}
-            disabled={!canOpenWeb}
-            onPress={() => void openOnWeb("/teams")}
+            onPress={() => router.push("/team")}
           />
           <RowDivider />
+          <ListRow
+            icon={Building2}
+            title="Workspace settings"
+            subtitle="Business profile, labels"
+            onPress={() => router.push("/workspace")}
+          />
+        </ListGroup>
+      </View>
+
+      <SectionHeader title="Open on the web" />
+      <View style={{ paddingHorizontal: spacing.lg }}>
+        <ListGroup>
           <ListRow
             icon={LayoutTemplate}
             title="Templates and blueprints"
@@ -155,15 +199,6 @@ export default function AccountScreen() {
             right={<ExternalLinkMark />}
             disabled={!canOpenWeb}
             onPress={() => void openOnWeb("/templates")}
-          />
-          <RowDivider />
-          <ListRow
-            icon={Building2}
-            title="Workspace settings"
-            subtitle="Business profile, labels"
-            right={<ExternalLinkMark />}
-            disabled={!canOpenWeb}
-            onPress={() => void openOnWeb("/settings")}
           />
           <RowDivider />
           <ListRow

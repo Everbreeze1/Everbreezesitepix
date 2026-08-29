@@ -31,6 +31,16 @@ export type ListRowProps = {
   onPress?: () => void;
   disabled?: boolean;
   destructive?: boolean;
+  /**
+   * Not yet read: a dot and a tinted ground.
+   *
+   * Two signals rather than one because either alone is unreliable. A dot is
+   * easy to miss on a scrolling list held at arm's length in daylight, and a
+   * tint alone disappears entirely for anyone who cannot separate it from the
+   * card behind it. Weight on the title is deliberately not the third, because
+   * `bodyStrong` is already what a row title uses.
+   */
+  unread?: boolean;
   accessibilityHint?: string;
 };
 
@@ -44,6 +54,7 @@ export function ListRow({
   onPress,
   disabled = false,
   destructive = false,
+  unread = false,
   accessibilityHint,
 }: ListRowProps) {
   const theme = useTheme();
@@ -94,6 +105,17 @@ export function ListRow({
       ) : null}
       {/* Never shrinks: a badge that gets compressed to a sliver is worse than one that wraps the title. */}
       {right ? <View style={{ flexShrink: 0 }}>{right}</View> : null}
+      {unread ? (
+        <View
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            flexShrink: 0,
+            backgroundColor: theme.colors.primary,
+          }}
+        />
+      ) : null}
       {onPress ? <Icon icon={ChevronRight} size="md" tone="muted" /> : null}
     </>
   );
@@ -106,6 +128,9 @@ export function ListRow({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     opacity: disabled ? 0.45 : 1,
+    // `accent` and not `secondary`, which is what a pressed row uses. Sharing
+    // one colour would make every unread row look permanently held down.
+    backgroundColor: unread ? theme.colors.accent : "transparent",
   };
 
   if (!onPress) return <View style={layout}>{body}</View>;
@@ -113,14 +138,19 @@ export function ListRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={subtitle ? `${title}. ${subtitle}` : title}
+      /*
+        Unread is announced, not just drawn. A screen reader gets the dot as
+        nothing at all otherwise, which is the one piece of information the row
+        exists to carry.
+      */
+      accessibilityLabel={[unread ? "Unread." : null, title, subtitle].filter(Boolean).join(". ")}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         layout,
-        { backgroundColor: pressed ? theme.colors.secondary : "transparent" },
+        pressed ? { backgroundColor: theme.colors.secondary } : null,
       ]}
     >
       {body}
