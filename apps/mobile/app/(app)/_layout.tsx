@@ -85,6 +85,7 @@ export default function AppLayout() {
       <Stack.Screen name="groups" options={{ title: "Groups" }} />
       <Stack.Screen name="portfolio" options={{ title: "Portfolio" }} />
       <Stack.Screen name="team" options={{ title: "Team" }} />
+      <Stack.Screen name="collaborators" options={{ title: "Collaborators" }} />
       <Stack.Screen name="workspace" options={{ title: "Workspace" }} />
       <Stack.Screen name="labels" options={{ title: "Labels" }} />
       <Stack.Screen name="templates" options={{ title: "Templates" }} />

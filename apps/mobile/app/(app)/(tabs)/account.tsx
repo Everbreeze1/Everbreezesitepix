@@ -12,6 +12,7 @@ import {
   Server,
   Sparkles,
   CloudUpload,
+  UserPlus,
   Users,
 } from "@/ui/icons";
 import { View } from "react-native";
@@ -205,9 +206,16 @@ export default function AccountScreen() {
         <ListGroup>
           <ListRow
             icon={Users}
-            title="Team and collaborators"
+            title="Team"
             subtitle="Invite people, set roles"
             onPress={() => router.push("/team")}
+          />
+          <RowDivider />
+          <ListRow
+            icon={UserPlus}
+            title="Collaborators"
+            subtitle="Outside firms, scoped to named jobs"
+            onPress={() => router.push("/collaborators")}
           />
           <RowDivider />
           <ListRow
