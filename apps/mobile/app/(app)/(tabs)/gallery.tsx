@@ -279,6 +279,29 @@ export default function GalleryScreen() {
                  * photo you found here is usually the start of a job you now
                  * want to be inside, not the end of the search.
                  */}
+                {/*
+                  Same action as the project grid's lightbox. A photo found in
+                  the cross-project gallery is just as likely to be the one
+                  somebody needs to ask a question about.
+                */}
+                <Button
+                  label="Comments"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => {
+                    const photo = lightboxPhoto;
+                    setLightboxId(null);
+                    router.push({
+                      pathname: "/photo/[id]/comments",
+                      params: {
+                        id: photo.id,
+                        uri: urls[photo.id] ?? "",
+                        projectId: photo.project_id,
+                        caption: photo.caption ?? "",
+                      },
+                    });
+                  }}
+                />
                 {lightboxPhoto.project_name ? (
                   <Button
                     label={`Open ${lightboxPhoto.project_name}`}

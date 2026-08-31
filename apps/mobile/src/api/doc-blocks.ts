@@ -331,7 +331,19 @@ export function pagePreview(html: string, max = 120): string {
  * work; adding today's entry to one is not.
  */
 export function appendBlocks(existingHtml: string, blocks: Block[]): string {
-  const addition = serialiseBlocks(meaningfulBlocks(blocks));
+  return appendHtml(existingHtml, serialiseBlocks(meaningfulBlocks(blocks)));
+}
+
+/**
+ * The same append, for content that is already HTML.
+ *
+ * Exists for snippets, which are stored as `content_html` and may hold markup
+ * the block model cannot represent. Parsing one into blocks first would quietly
+ * drop its table or its emphasis; concatenating preserves it exactly, and is no
+ * less safe, because the reason appending is safe is that it never reads.
+ */
+export function appendHtml(existingHtml: string, additionHtml: string): string {
+  const addition = (additionHtml ?? "").trim();
   if (!addition) return existingHtml ?? "";
 
   const existing = (existingHtml ?? "").trimEnd();

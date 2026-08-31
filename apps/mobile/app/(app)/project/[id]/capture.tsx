@@ -25,6 +25,7 @@ import { getProject, projectCoords } from "@/api/projects";
 import { useAuth } from "@/lib/auth";
 import { persistCapture } from "@/offline/media";
 import { enqueue, newOutboxId } from "@/offline/outbox";
+import { recordSessionPhoto } from "@/offline/capture-session";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import type { PhotoUploadPayload } from "@/offline/handlers";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
@@ -261,6 +262,22 @@ export default function CaptureScreen() {
 
     const failed: Shot[] = [];
 
+    /*
+     * One session per Save, which is what the Daily Log is written against.
+     *
+     * A technician makes several trips to the van and back; each trip is a
+     * session and gets its own timestamped section in today's log. The id is
+     * minted here rather than server-side because the photos it covers have no
+     * ids yet: they are queued, and each gets one only when its upload lands.
+     *
+     * The offset is read from THIS device, on purpose. "Daily" has to mean the
+     * technician's day: the API runs in UTC, so a 6:30pm job in California is
+     * already tomorrow to the server, and grouping on the server's clock filed
+     * an evening's photos into the next day's log.
+     */
+    const sessionId = newOutboxId();
+    const tzOffsetMinutes = new Date().getTimezoneOffset();
+
     for (let i = 0; i < shots.length; i += 1) {
       const shot = shots[i];
       try {
@@ -276,6 +293,7 @@ export default function CaptureScreen() {
         const payload: PhotoUploadPayload = {
           userId: user.id,
           projectId,
+          captureSessionId: sessionId,
           attachToChecklistItemId: checklistItemId ?? null,
           attachToWorkflowItemId: workflowItemId ?? null,
           width: shot.width,
@@ -289,6 +307,15 @@ export default function CaptureScreen() {
         };
 
         await enqueue({ id, kind: "photo_upload", projectId, localUri, payload });
+        // After the enqueue, so a session row can never point at a photo that
+        // was never queued. A failure here costs the log, not the photograph.
+        await recordSessionPhoto({
+          outboxId: id,
+          sessionId,
+          projectId,
+          source: "camera",
+          tzOffsetMinutes,
+        }).catch(() => {});
       } catch {
         failed.push(shot);
       }

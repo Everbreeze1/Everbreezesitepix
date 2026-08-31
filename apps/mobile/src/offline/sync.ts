@@ -2,6 +2,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { AppState, type AppStateStatus } from "react-native";
 import { queryClient } from "@/lib/query";
 import { handlerFor, isPermanent } from "./handlers";
+import { flushCaptureSessions } from "./capture-session";
 import {
   claimNext,
   counts,
@@ -125,6 +126,13 @@ async function drain(): Promise<void> {
     } while (rerun);
 
     await sweepOrphanedMedia();
+
+    /*
+     * Last, and only once the queue has gone quiet. A session is finished when
+     * its photos have all landed or all given up, which is a question only
+     * answerable after a pass rather than during one.
+     */
+    await flushCaptureSessions();
   } finally {
     draining = false;
     await publish();

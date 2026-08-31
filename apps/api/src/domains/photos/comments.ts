@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  photoCommentErrorMessage,
+  photoCommentDeleteErrorMessage,
+  photoCommentListErrorMessage,
+} from "@everlumen/shared";
 import type { ServiceContext } from "../../lib/user-context";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { insertNotification } from "../notifications/service";
@@ -101,7 +106,7 @@ export async function listPhotoCommentsService(
     .select("id, photo_id, project_id, author_id, body, mentions, created_at")
     .eq("photo_id", data.photoId)
     .order("created_at", { ascending: true });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(photoCommentListErrorMessage(error));
   const list = (rows ?? []) as Array<{
     id: string;
     photo_id: string;
@@ -155,7 +160,9 @@ export async function createPhotoCommentService(
     } as never)
     .select("id, photo_id, project_id, author_id, body, mentions, created_at")
     .single();
-  if (error) throw new Error(error.message);
+  // Translated here rather than on the client: this crosses `/v1/rpc` as a
+  // message string, so the SQLSTATE only exists on this side of the wire.
+  if (error) throw new Error(photoCommentErrorMessage(error));
   const typed = row as {
     id: string;
     photo_id: string;
@@ -206,6 +213,6 @@ export async function deletePhotoCommentService(
     .from("photo_comments" as never)
     .delete()
     .eq("id", data.commentId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(photoCommentDeleteErrorMessage(error));
   return { ok: true };
 }

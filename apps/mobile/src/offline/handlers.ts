@@ -14,6 +14,7 @@ import {
 import { applyPhasePatch, applyWorkflowItemPatch } from "@/api/workflows";
 import { isCompletionRefusal, type TaskStatus } from "@/api/task-status";
 import type { OutboxKind, OutboxRow } from "./outbox";
+import { completeSessionPhoto } from "./capture-session";
 
 /**
  * What each queued row actually does when its turn comes.
@@ -27,6 +28,15 @@ export class PermanentError extends Error {}
 export type PhotoUploadPayload = {
   userId: string;
   projectId: string;
+  /**
+   * The capture session this shot belongs to.
+   *
+   * Carried so the Daily Log can be written up when the session finishes, which
+   * on a phone is when the queue finishes rather than when the camera closes.
+   * Optional because rows queued by a build older than this one do not have it,
+   * and those still have to drain.
+   */
+  captureSessionId?: string | null;
   /**
    * Checklist item this capture is evidence for.
    *
@@ -229,6 +239,15 @@ const handlers: Record<OutboxKind, Handler> = {
       // duplicate check, so a repeat of a half-finished send converges.
       uploadId: row.id,
     });
+
+    // The photo has an id for the first time here, which is the only moment the
+    // Daily Log's record of this session can be completed.
+    if (payload.captureSessionId) {
+      await completeSessionPhoto(row.id, uploaded.id).catch(() => {
+        // A log that does not get written is a worse outcome than a photo that
+        // does not get delivered, but only just: never fail the upload for it.
+      });
+    }
 
     if (payload.attachToChecklistItemId) {
       await attachPhotoToItem(payload.attachToChecklistItemId, uploaded.id, payload.userId);

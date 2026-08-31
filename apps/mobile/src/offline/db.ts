@@ -22,7 +22,7 @@ let handle: Promise<SQLite.SQLiteDatabase> | null = null;
  * a block that has already shipped, because installs in the field have already
  * run it.
  */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 async function migrate(db: SQLite.SQLiteDatabase) {
   // WAL keeps a reader from blocking the drain's writes. `NORMAL` sync is the
@@ -55,6 +55,36 @@ async function migrate(db: SQLite.SQLiteDatabase) {
 
       CREATE INDEX IF NOT EXISTS outbox_project_idx
         ON outbox (project_id, state, created_at);
+    `);
+  }
+
+  if (current < 2) {
+    /*
+     * Which photos belonged to which capture session.
+     *
+     * The Daily Log is meant to write itself when a capture session finishes,
+     * and on the phone a session does not finish when the camera closes: the
+     * shots go to the outbox and land minutes or hours later, whenever there is
+     * signal. So the session has to outlive the screen that made it.
+     *
+     * One row per queued photo, keyed by the outbox row id. `photo_id` is null
+     * until that upload lands, which is also the only moment the real id
+     * exists. A session is finished when none of its rows are still waiting on
+     * an outbox row, which is a join rather than a guess.
+     */
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS capture_session_photos (
+        outbox_id     TEXT PRIMARY KEY NOT NULL,
+        session_id    TEXT NOT NULL,
+        project_id    TEXT NOT NULL,
+        photo_id      TEXT,
+        source        TEXT,
+        tz_offset     INTEGER,
+        created_at    INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS capture_session_idx
+        ON capture_session_photos (session_id, created_at);
     `);
   }
 

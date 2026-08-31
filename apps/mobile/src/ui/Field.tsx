@@ -42,6 +42,20 @@ export type FieldProps = {
   /** Fired after the internal focus state clears. Checklist answers commit here. */
   onBlur?: () => void;
   returnKeyType?: "done" | "next" | "search" | "send";
+  /**
+   * Where the caret is, as the platform reports it.
+   *
+   * Only needed by a field that has to know what is being typed *at the caret*
+   * rather than what the whole value says. The comment composer uses it to spot
+   * a half-written `@handle` and open the mention picker.
+   */
+  onSelectionChange?: (selection: { start: number; end: number }) => void;
+  /**
+   * Where to put the caret. Controlled, so leave it undefined unless you are
+   * moving it: passing a fixed value pins the caret and the field stops
+   * behaving like a text box.
+   */
+  selection?: { start: number; end: number };
   style?: StyleProp<ViewStyle>;
 };
 
@@ -63,6 +77,8 @@ export function Field({
   onSubmitEditing,
   onBlur,
   returnKeyType,
+  onSelectionChange,
+  selection,
   style,
 }: FieldProps) {
   const theme = useTheme();
@@ -114,6 +130,12 @@ export function Field({
           editable={editable}
           onSubmitEditing={onSubmitEditing}
           returnKeyType={returnKeyType}
+          onSelectionChange={
+            onSelectionChange
+              ? (event) => onSelectionChange(event.nativeEvent.selection)
+              : undefined
+          }
+          selection={selection}
           onFocus={() => setFocused(true)}
           onBlur={() => {
             setFocused(false);

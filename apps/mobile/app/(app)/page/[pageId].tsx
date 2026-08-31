@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getPage, savePage } from "@/api/pages";
 import {
   appendBlocks,
+  appendHtml,
   BLOCK_LABELS,
   emptyBlock,
   insertBlock,
@@ -21,7 +22,7 @@ import {
   type BlockKind,
 } from "@/api/doc-blocks";
 import { spacing } from "@/theme";
-import { ChevronDown, ChevronUp, Plus, TriangleAlert, Trash2 } from "@/ui/icons";
+import { ChevronDown, ChevronUp, Library, Plus, TriangleAlert, Trash2 } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -34,6 +35,7 @@ import {
   Screen,
   SectionHeader,
   SkeletonList,
+  SnippetSheet,
   Text,
 } from "@/ui";
 
@@ -66,6 +68,7 @@ export default function PageScreen() {
   const [draft, setDraft] = useState<Block[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [snippetsOpen, setSnippetsOpen] = useState(false);
 
   const queryKey = useMemo(() => ["project-page", pageId], [pageId]);
 
@@ -129,6 +132,22 @@ export default function PageScreen() {
     save.mutate({ contentHtml: appendBlocks(page.content_html, keep) });
     setDraft([]);
   }, [draft, page, save]);
+
+  /**
+   * Add a snippet's markup straight to the end of the page.
+   *
+   * Saved immediately rather than staged in the composer, because the composer
+   * holds plain blocks and this is markup that could not survive being turned
+   * into one. `appendHtml` never reads the existing page, so this is exactly as
+   * safe as appending typed text.
+   */
+  const appendSnippetHtml = useCallback(
+    (html: string) => {
+      if (!page) return;
+      save.mutate({ contentHtml: appendHtml(page.content_html, html) });
+    },
+    [page, save],
+  );
 
   if (query.isLoading) {
     return (
@@ -287,6 +306,18 @@ export default function PageScreen() {
                 )
               }
             />
+            {/*
+              The library is worth more here than it is on the web. Retyping a
+              standing safety note is tedious on a keyboard and genuinely
+              expensive on a phone, standing on a job in gloves.
+            */}
+            <Button
+              label="Snippets"
+              icon={Library}
+              variant="secondary"
+              size="sm"
+              onPress={() => setSnippetsOpen(true)}
+            />
             <Button
               label="Append"
               size="sm"
@@ -296,6 +327,21 @@ export default function PageScreen() {
           </ButtonRow>
         </View>
       </Screen>
+
+      <SnippetSheet
+        visible={snippetsOpen}
+        onClose={() => setSnippetsOpen(false)}
+        // Loaded into the composer rather than saved, so it can be edited
+        // before it goes in. That is most of the value of a snippet: it is a
+        // starting point, not a stamp.
+        onInsertBlocks={(inserted) => setDraft((cur) => [...cur, ...inserted])}
+        onInsertHtml={appendSnippetHtml}
+        // Only offered when there is something to save. Serialised from the
+        // composer, so what gets stored is what is on screen.
+        saveableHtml={
+          meaningfulBlocks(draft).length > 0 ? serialiseBlocks(meaningfulBlocks(draft)) : undefined
+        }
+      />
     </>
   );
 }

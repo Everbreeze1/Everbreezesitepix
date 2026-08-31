@@ -175,3 +175,8 @@ export {
   type TaskPhotoProgress,
   type TaskWorkSummary,
 } from "./task-photo-items";
+export {
+  photoCommentErrorMessage,
+  photoCommentDeleteErrorMessage,
+  photoCommentListErrorMessage,
+} from "./photo-comment-errors";

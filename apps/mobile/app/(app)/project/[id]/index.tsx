@@ -62,10 +62,13 @@ import {
   type PhotoPatchPayload,
   type ProjectPatchPayload,
 } from "@/offline/handlers";
+import { useQueue } from "@/offline/use-queue";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { gridColumns, HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 import {
+  DailyLogCard,
+  ProjectCrew,
   ActionSheet,
   Badge,
   Button,
@@ -121,6 +124,9 @@ export default function ProjectDetailScreen() {
    * chunks photos into fixed rows, so the count has to exist before it runs.
    */
   const { width: screenWidth } = useWindowDimensions();
+  // Photos still in the outbox: the Daily Log for them has not been written
+  // yet, because on a phone a capture session finishes when the queue does.
+  const { outstanding: queued } = useQueue();
   const columns = gridColumns(screenWidth - spacing.lg * 2);
   /*
    * `photo` is a deep link, not something this screen ever sets.
@@ -495,6 +501,14 @@ export default function ProjectDetailScreen() {
                     </View>
                   ) : null}
 
+                  {/*
+                    Who is on the job, directly under the address. It is the
+                    same kind of fact: where this is and who is there. The row
+                    shows for everybody and only offers "Change" to a role the
+                    server would actually accept a write from.
+                  */}
+                  <ProjectCrew projectId={String(id)} />
+
                   <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
                     <Badge
                       label={`${photos.length}${photosQuery.hasNextPage ? "+" : ""} photo${photos.length === 1 ? "" : "s"}`}
@@ -584,6 +598,14 @@ export default function ProjectDetailScreen() {
                     label="Filter photos by phase"
                   />
                 </View>
+
+                {/*
+                  Directly above the grid it was written from. The log is the
+                  prose version of these photographs, and putting it anywhere
+                  else makes it a report somebody has to go and find, which is
+                  the exact thing it exists not to be.
+                */}
+                <DailyLogCard projectId={String(id)} pending={queued > 0} />
               </View>
             }
             ListEmptyComponent={
@@ -826,6 +848,33 @@ export default function ProjectDetailScreen() {
                   style={styles.lightboxAction}
                 >
                   <Text style={[typography.bodyStrong, { color: "#fff" }]}>Analyse</Text>
+                </Pressable>
+
+                {/*
+                  Comments last, because the first three change the photograph
+                  and this one talks about it. `photo_comments` has been in the
+                  database since July and the web has had a panel for it all
+                  along; the phone could not read a word of it.
+                */}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Comment on this photo"
+                  onPress={() => {
+                    const photo = lightboxPhoto;
+                    setLightboxId(null);
+                    router.push({
+                      pathname: "/photo/[id]/comments",
+                      params: {
+                        id: photo.id,
+                        uri: urls[photo.id] ?? "",
+                        projectId: String(id),
+                        caption: photo.caption ?? "",
+                      },
+                    });
+                  }}
+                  style={styles.lightboxAction}
+                >
+                  <Text style={[typography.bodyStrong, { color: "#fff" }]}>Comments</Text>
                 </Pressable>
 
                 <Pressable

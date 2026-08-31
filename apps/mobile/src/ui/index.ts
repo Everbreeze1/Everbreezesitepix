@@ -45,3 +45,6 @@ export { ActionSheet, Sheet, type SheetAction } from "./Sheet";
 export { ProgressBar, StepProgress } from "./Progress";
 export { Avatar, AvatarStack, type AvatarSize } from "./Avatar";
 export { PhotoThumb, type PhotoThumbProps } from "./PhotoThumb";
+export { DailyLogCard } from "./DailyLogCard";
+export { SnippetSheet } from "./SnippetSheet";
+export { ProjectCrew } from "./ProjectCrew";
