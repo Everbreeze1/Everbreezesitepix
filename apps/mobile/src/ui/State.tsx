@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Inbox, TriangleAlert, WifiOff } from "@/ui/icons";
 import { Animated, Easing, View, type DimensionValue } from "react-native";
+import { readsAsDatabaseInternals } from "@everlumen/shared";
 import { radius, spacing, useTheme } from "@/theme";
 import { Button } from "./Button";
 import { Icon, type LucideIcon } from "./Icon";
@@ -75,6 +76,21 @@ export function EmptyState({
  * that says "Something went wrong" gives the person holding it nothing to act
  * on and gives whoever they call nothing to go on either. The offline case gets
  * its own icon because it is the one the user can actually fix by walking.
+ *
+ * With one exception, which is not a softening of the above: a message that is
+ * Postgres describing its own schema. 67 places in this app throw
+ * `error.message` straight off a Supabase call, so a refused write reached the
+ * screen as
+ *
+ *     new row violates row-level security policy for table "photo_comments"
+ *
+ * That fails the rule it looks like it satisfies. It is the real error text and
+ * it still gives the crew member nothing to act on, gives support a table name
+ * rather than a symptom, and reads as the app being broken. So schema text is
+ * replaced and everything else - "Network request failed", a timeout, a
+ * plan gate, anything written for a person - is passed through exactly as
+ * before. `readsAsDatabaseInternals` is the same predicate the API uses on its
+ * own responses, shared so the two cannot drift.
  */
 export function ErrorState({
   title = "Could not load this",
@@ -87,6 +103,11 @@ export function ErrorState({
   offline?: boolean;
   onRetry?: () => void;
 }) {
+  const readable =
+    message && readsAsDatabaseInternals(message)
+      ? "The server refused that. Try again, and tell us if it keeps happening."
+      : message;
+
   return (
     <View style={{ alignItems: "center", padding: spacing.xxl, gap: spacing.md }}>
       <Icon
@@ -97,9 +118,9 @@ export function ErrorState({
       <Text variant="heading" align="center">
         {offline ? "No connection" : title}
       </Text>
-      {message ? (
+      {readable ? (
         <Text variant="caption" tone="muted" align="center" style={{ maxWidth: 320 }}>
-          {message}
+          {readable}
         </Text>
       ) : null}
       {onRetry ? <Button label="Try again" variant="outline" onPress={onRetry} /> : null}

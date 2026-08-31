@@ -21,7 +21,17 @@ import {
   getProjectContributors,
   listTaskCollaboration,
   type TaskComment,
+  addTaskWatchers,
+  removeTaskWatcher,
+  type TaskWatcher,
 } from "@/api/task-comments";
+import {
+  addableWatchers,
+  commentAuthor,
+  sortedWatchers,
+  watcherName,
+  watcherSummary,
+} from "@/api/task-watchers-view";
 import {
   applyMention,
   memberLabel,
@@ -43,10 +53,11 @@ import { taskEditRowId, type TaskEditPayload } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
-import { Calendar, CircleCheck, MessageSquare, PenLine, Send, User } from "@/ui/icons";
+import { Calendar, CircleCheck, MessageSquare, PenLine, Plus, Send, User } from "@/ui/icons";
 import {
   Avatar,
   Badge,
+  Button,
   Card,
   EmptyState,
   ErrorState,
@@ -216,6 +227,58 @@ export default function TaskDetailScreen() {
   );
 
   const comments = collaborationQuery.data?.comments ?? [];
+  const watchers = collaborationQuery.data?.watchers ?? [];
+
+  // Everyone on the project who is not already watching, and not the caller.
+  // The server would accept both, but an action that visibly does nothing is
+  // worse than one that is not offered.
+  const addable = addableWatchers(members, watchers, user?.id ?? null);
+
+  /**
+   * Loop somebody in, or drop them.
+   *
+   * One mutation for both directions so the list cannot be mid-add and
+   * mid-remove at once, which on a phone is a double tap away.
+   */
+  const changeWatcher = useMutation({
+    mutationFn: async (change: { kind: "add" | "remove"; userId: string }) => {
+      if (change.kind === "add") await addTaskWatchers(String(id), [change.userId]);
+      else await removeTaskWatcher(String(id), change.userId);
+      return change;
+    },
+    onSuccess: (change) => {
+      // Patched rather than refetched: the thread above is a long list and
+      // rebuilding it to add one name loses the scroll position.
+      queryClient.setQueryData<{ comments: TaskComment[]; watchers: TaskWatcher[] }>(
+        queryKey,
+        (current) => {
+          if (!current) return current;
+          if (change.kind === "remove") {
+            return {
+              ...current,
+              watchers: current.watchers.filter((w) => w.userId !== change.userId),
+            };
+          }
+          const member = members.find((m) => m.user_id === change.userId);
+          if (current.watchers.some((w) => w.userId === change.userId)) return current;
+          return {
+            ...current,
+            watchers: [
+              ...current.watchers,
+              {
+                userId: change.userId,
+                addedBy: user?.id ?? null,
+                createdAt: new Date().toISOString(),
+                fullName: member?.full_name ?? null,
+                email: member?.email ?? null,
+                avatarUrl: null,
+              },
+            ],
+          };
+        },
+      );
+    },
+  });
 
   return (
     <KeyboardAvoidingView
@@ -342,6 +405,76 @@ export default function TaskDetailScreen() {
             </View>
           ) : null}
 
+          {/*
+            Watchers sit above the thread because they decide who READS it.
+            Adding somebody emails them, so the section says that out loud
+            rather than leaving it to be discovered by the person interrupted.
+          */}
+          <SectionHeader title="Watching" count={watchers.length || undefined} />
+
+          <View style={{ gap: spacing.sm }}>
+            <Text variant="caption" tone="muted">
+              {watcherSummary(watchers)}
+            </Text>
+
+            {sortedWatchers(watchers).map((watcher) => (
+              <Card
+                key={watcher.userId}
+                style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}
+              >
+                <Avatar name={watcherName(watcher)} uri={watcher.avatarUrl} size="sm" />
+                <Text variant="body" style={{ flex: 1 }} numberOfLines={1}>
+                  {watcherName(watcher)}
+                </Text>
+                <Button
+                  label="Remove"
+                  variant="secondary"
+                  size="sm"
+                  disabled={changeWatcher.isPending}
+                  onPress={() => changeWatcher.mutate({ kind: "remove", userId: watcher.userId })}
+                />
+              </Card>
+            ))}
+
+            {addable.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                  {addable.map((member) => (
+                    <Pressable
+                      key={member.user_id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add ${memberLabel(member)} as a watcher`}
+                      disabled={changeWatcher.isPending}
+                      onPress={() => changeWatcher.mutate({ kind: "add", userId: member.user_id })}
+                      style={({ pressed }) => ({
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: spacing.xs,
+                        paddingVertical: spacing.xs,
+                        paddingHorizontal: spacing.sm,
+                        borderRadius: radius.md,
+                        borderWidth: 1,
+                        borderColor: theme.colors.border,
+                        opacity: pressed ? 0.6 : 1,
+                      })}
+                    >
+                      <Icon icon={Plus} size="sm" tone="primary" />
+                      <Text variant="caption">{memberLabel(member)}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
+            ) : null}
+
+            {changeWatcher.error ? (
+              <Text variant="caption" tone="destructive">
+                {changeWatcher.error instanceof Error
+                  ? changeWatcher.error.message
+                  : "Could not change who is watching"}
+              </Text>
+            ) : null}
+          </View>
+
           <SectionHeader title="Comments" count={comments.length || undefined} />
 
           {comments.length === 0 ? (
@@ -353,13 +486,20 @@ export default function TaskDetailScreen() {
           ) : (
             comments.map((comment) => (
               <Card key={comment.id} style={{ gap: spacing.xs }}>
+                {/*
+                  The author comes from the comment itself, not from a roster
+                  lookup. The service already joins `profiles` and sends the
+                  name and avatar, and a lookup fails outright for anybody who
+                  has since left the team - which is exactly whose old comments
+                  you are most likely to be reading.
+                */}
                 <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
-                  <Avatar name={memberLabel(byId.get(comment.author_id))} size="sm" />
+                  <Avatar name={commentAuthor(comment)} uri={comment.authorAvatarUrl} size="sm" />
                   <Text variant="bodyStrong" style={{ flex: 1 }} numberOfLines={1}>
-                    {memberLabel(byId.get(comment.author_id))}
+                    {commentAuthor(comment)}
                   </Text>
                   <Text variant="caption" tone="muted">
-                    {relativeTime(comment.created_at)}
+                    {relativeTime(comment.createdAt)}
                   </Text>
                 </View>
                 <Text variant="body">{comment.body}</Text>

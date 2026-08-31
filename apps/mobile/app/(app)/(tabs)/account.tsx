@@ -11,6 +11,7 @@ import {
   LogOut,
   Server,
   Sparkles,
+  Trash2,
   CloudUpload,
   UserPlus,
   Users,
@@ -23,6 +24,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ApiClientError } from "@everlumen/api-client";
 import { checkIsPlatformAdmin } from "@/api/admin";
 import { getUnreadNotificationCount } from "@/api/notifications";
+import { getTrashCounts } from "@/api/trash";
 import { pushStatusLabel } from "@/api/push-view";
 import { usePush } from "@/push/use-push";
 import { api, webAppLink } from "@/lib/api";
@@ -78,6 +80,14 @@ export default function AccountScreen() {
    * never opened the inbox should still see that four things are waiting. The
    * inbox invalidates this key whenever it marks anything read.
    */
+  const trashCounts = useQuery({
+    queryKey: ["trash-counts"],
+    queryFn: getTrashCounts,
+    // Cheap and rarely changing. Stale for a minute keeps the Account screen
+    // from firing it on every tab switch.
+    staleTime: 60_000,
+  });
+
   const unreadQuery = useQuery({
     queryKey: ["notifications-unread"],
     queryFn: getUnreadNotificationCount,
@@ -214,6 +224,29 @@ export default function AccountScreen() {
             }
             right={<CountBadge count={pending} tone={queue.failed > 0 ? "danger" : "primary"} />}
             onPress={() => router.push("/queue")}
+          />
+          <RowDivider />
+          {/*
+            Next to the upload queue, because both answer "where did my work
+            go". A job deleted on the web could not be found from the phone at
+            all until now, let alone put back.
+          */}
+          <ListRow
+            icon={Trash2}
+            title="Trash"
+            subtitle={
+              trashCounts.data
+                ? trashCounts.data.projects === 0
+                  ? "Nothing deleted"
+                  : `${trashCounts.data.projects} project${trashCounts.data.projects === 1 ? "" : "s"}, recoverable for 60 days`
+                : "Deleted projects, recoverable for 60 days"
+            }
+            right={
+              trashCounts.data?.projects ? (
+                <CountBadge count={trashCounts.data.projects} tone="neutral" />
+              ) : undefined
+            }
+            onPress={() => router.push("/trash")}
           />
         </ListGroup>
       </View>

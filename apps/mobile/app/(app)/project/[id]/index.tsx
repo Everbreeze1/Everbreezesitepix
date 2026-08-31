@@ -47,12 +47,7 @@ import {
   type ProjectDraft,
   type ProjectPatch,
 } from "@/api/project-patch";
-import {
-  createPhotoShareToken,
-  ensureProjectShareToken,
-  openShareSheet,
-  publicUrl,
-} from "@/api/sharing";
+import { ensureProjectShareToken, openShareSheet, publicUrl } from "@/api/sharing";
 import { QueueBanner } from "@/components/QueueBanner";
 import { PhotoBulkBar, type PhotoBulkAction } from "@/components/PhotoBulkBar";
 import { ProjectEditorSheet } from "@/components/ProjectEditorSheet";
@@ -68,6 +63,8 @@ import { refreshQueue, requestSync } from "@/offline/sync";
 import { gridColumns, HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 import {
   DailyLogCard,
+  PhotoSharesSheet,
+  ProjectBlueprint,
   ProjectCrew,
   ActionSheet,
   Badge,
@@ -143,6 +140,7 @@ export default function ProjectDetailScreen() {
   // Seeded from the param rather than set in an effect, so the lightbox is
   // already open on the first render instead of flashing the grid first.
   const [lightboxId, setLightboxId] = useState<string | null>(deepLinkPhoto ?? null);
+  const [sharing, setSharing] = useState<{ photoId: string; caption: string } | null>(null);
   /*
    * Selection lives as a Set of ids rather than a flag plus a list, so a photo
    * scrolled far out of view cannot fall out of the selection when the list
@@ -298,25 +296,22 @@ export default function ProjectDetailScreen() {
   }, [id, project?.name]);
 
   /**
-   * Share the photo currently open in the lightbox.
+   * Show the links already open on this photograph, and offer another.
    *
-   * A fresh token per share, with a one week expiry from `createPhotoShareToken`.
-   * A photo link usually settles a question that is live right now, and one
-   * that outlives the conversation leaves site imagery on the open internet.
+   * A share link is a jobsite photograph on the open internet with no login in
+   * front of it, so the sheet leads with what already exists rather than
+   * quietly adding to it.
    */
-  const sharePhoto = useCallback(async (photoId: string, caption: string | null) => {
-    try {
-      const token = await createPhotoShareToken(photoId);
-      const url = publicUrl("photos", token);
-      if (!url) {
-        setShareError("Sharing is not set up for this workspace.");
-        return;
-      }
-      setShareError(null);
-      await openShareSheet(url, displayCaption(caption, "Photo"));
-    } catch (e) {
-      setShareError(e instanceof Error ? e.message : "Could not create the link");
-    }
+  const sharePhoto = useCallback((photoId: string, caption: string | null) => {
+    /*
+     * Opens the links sheet rather than minting one on the spot.
+     *
+     * The old path created a FRESH token per tap and showed nothing, so three
+     * taps left three independently live URLs on the open internet with nothing
+     * on the phone able to count or withdraw them.
+     */
+    setShareError(null);
+    setSharing({ photoId, caption: displayCaption(caption, "Photo") });
   }, []);
 
   const toggle = useCallback((photoId: string) => {
@@ -508,6 +503,17 @@ export default function ProjectDetailScreen() {
                     server would actually accept a write from.
                   */}
                   <ProjectCrew projectId={String(id)} />
+
+                  {/*
+                    Next to the crew, because they are the same act: setting a
+                    job up is deciding who is on it and what it needs. The row
+                    reads as provenance once a blueprint has been applied.
+                  */}
+                  <ProjectBlueprint
+                    projectId={String(id)}
+                    projectName={project?.name ?? ""}
+                    projectAddress={address}
+                  />
 
                   <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
                     <Badge
@@ -883,7 +889,7 @@ export default function ProjectDetailScreen() {
                   onPress={() => {
                     const photo = lightboxPhoto;
                     setLightboxId(null);
-                    void sharePhoto(photo.id, photo.caption);
+                    sharePhoto(photo.id, photo.caption);
                   }}
                   style={styles.lightboxAction}
                 >
@@ -904,6 +910,15 @@ export default function ProjectDetailScreen() {
           ) : null}
         </Pressable>
       </Modal>
+
+      {sharing ? (
+        <PhotoSharesSheet
+          visible
+          onClose={() => setSharing(null)}
+          photoId={sharing.photoId}
+          caption={sharing.caption}
+        />
+      ) : null}
     </>
   );
 }
@@ -953,11 +968,31 @@ const styles = StyleSheet.create({
    * to work and would have collided the first time either label changed or the
    * OS font scale went up. A row cannot drift.
    */
+  /*
+   * Bounded on both sides, and allowed to wrap.
+   *
+   * This was anchored to `right` only, with no left edge and no wrap, so the
+   * row grew leftwards off the screen. Three pills fitted; the fourth did not.
+   * Measured on a 1080px screen: Annotate ended at 1008, Analyse at 644,
+   * Comments at 0 - already flush against the left edge - which put Share at a
+   * negative x and made it unreachable. Not clipped visually and still in the
+   * layout, so it drew nothing, took no taps, and merged into the parent
+   * accessibility node, where the only trace of it was a screen-wide element
+   * labelled "Share this photo, Photo, Jul 17 . before".
+   *
+   * It went unnoticed because Share was the newest of the four and the row had
+   * fitted the previous three, so nothing about adding one more looked risky.
+   * With `left` set the row has a width to wrap inside, so a fifth action, a
+   * longer word, or a larger font size pushes a line down instead of off.
+   */
   lightboxActions: {
     position: "absolute",
     top: 56,
+    left: spacing.xl,
     right: spacing.xl,
     flexDirection: "row-reverse",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
     gap: spacing.sm,
   },
   lightboxAction: {

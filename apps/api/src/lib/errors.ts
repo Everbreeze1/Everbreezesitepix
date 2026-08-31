@@ -1,3 +1,4 @@
+import { readsAsDatabaseInternals } from "@everlumen/shared";
 import type { ZodError, ZodIssue } from "zod";
 
 import { AuthError } from "./user-context";
@@ -85,6 +86,8 @@ function codeForStatus(status: number): string {
   }
 }
 
+export { readsAsDatabaseInternals } from "@everlumen/shared";
+
 export function jsonFromUnknownError(err: unknown, fallbackStatus = 500): Response {
   if (err instanceof AuthError) {
     return jsonError(err.status, "unauthorized", err.message);
@@ -120,7 +123,15 @@ export function jsonFromUnknownError(err: unknown, fallbackStatus = 500): Respon
     const message = err instanceof Error ? err.message : "Upstream request failed";
     return jsonError(status, status === 503 ? "service_unavailable" : "upstream_error", message);
   }
-  const message = err instanceof Error ? err.message : "Internal error";
+  const raw = err instanceof Error ? err.message : "Internal error";
+  /*
+   * The audit log still keeps the real text (see the `meta` field where this is
+   * caught), so nothing is lost for whoever has to diagnose it. What changes is
+   * that the customer stops reading it.
+   */
+  const message = readsAsDatabaseInternals(raw)
+    ? "Something went wrong saving that. Try again, and tell us if it keeps happening."
+    : raw;
   return jsonError(fallbackStatus, "internal_error", message);
 }
 

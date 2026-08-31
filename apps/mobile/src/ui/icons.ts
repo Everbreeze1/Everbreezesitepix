@@ -35,6 +35,7 @@ export { default as Calendar } from "lucide-react-native/dist/esm/icons/calendar
 export { default as Camera } from "lucide-react-native/dist/esm/icons/camera";
 export { default as CheckCheck } from "lucide-react-native/dist/esm/icons/check-check";
 export { default as Library } from "lucide-react-native/dist/esm/icons/library";
+export { default as Link2 } from "lucide-react-native/dist/esm/icons/link-2";
 export { default as Lock } from "lucide-react-native/dist/esm/icons/lock";
 export { default as NotebookPen } from "lucide-react-native/dist/esm/icons/notebook-pen";
 export { default as ChevronDown } from "lucide-react-native/dist/esm/icons/chevron-down";

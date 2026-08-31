@@ -48,3 +48,5 @@ export { PhotoThumb, type PhotoThumbProps } from "./PhotoThumb";
 export { DailyLogCard } from "./DailyLogCard";
 export { SnippetSheet } from "./SnippetSheet";
 export { ProjectCrew } from "./ProjectCrew";
+export { ProjectBlueprint } from "./ProjectBlueprint";
+export { PhotoSharesSheet } from "./PhotoSharesSheet";

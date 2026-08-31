@@ -124,3 +124,46 @@ describe("no row hides its own title behind its controls", () => {
     expect(slot).toContain("<IconButton");
   });
 });
+
+describe("no action row pushes a control off the screen", () => {
+  /*
+   * The same failure as above in a different shape: a control that does not fit
+   * is not clipped visibly, it is simply unreachable.
+   *
+   * The project lightbox's action row was `position: absolute` anchored to
+   * `right` with no `left` and no wrap, so it grew leftwards without limit.
+   * Three pills fitted. The fourth did not. Measured on a 1080px screen:
+   * Annotate ended at 1008, Analyse at 644, Comments at 0 - flush against the
+   * left edge - which left Share at a negative x.
+   *
+   * Nothing reported it. It was in the layout, so it drew nothing and took no
+   * taps, and Android merged it into the parent, where the only evidence was a
+   * screen-sized accessibility node labelled
+   * "Share this photo, Photo, Jul 17 . before". tsc, lint and the suite were
+   * green, and `PhotoSharesSheet` - built specifically so share links could be
+   * withdrawn - had no reachable entry point on that screen at all.
+   */
+  const screen = () => readFileSync(join(ROOT, "app/(app)/project/[id]/index.tsx"), "utf8");
+
+  const actionRow = () => {
+    const s = screen();
+    const start = s.indexOf("lightboxActions: {");
+    expect(start, "lightboxActions style should exist").toBeGreaterThan(-1);
+    return s.slice(start, s.indexOf("}", start));
+  };
+
+  it("is bounded on both sides, so it has a width to wrap inside", () => {
+    // `right` alone gives the row nowhere to stop.
+    const row = actionRow();
+    expect(row).toMatch(/left:/);
+    expect(row).toMatch(/right:/);
+  });
+
+  it("wraps rather than overflowing", () => {
+    /*
+     * The part that keeps this fixed. A fifth action, a longer word, or a
+     * larger system font size should push a line down, not push a button off.
+     */
+    expect(actionRow()).toMatch(/flexWrap: "wrap"/);
+  });
+});

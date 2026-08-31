@@ -61,11 +61,60 @@ export async function setProjectShareEnabled(projectId: string, enable: boolean)
 export async function createPhotoShareToken(
   photoId: string,
   expiresInHours = 24 * 7,
+  /**
+   * Whether the recipient may save the file, rather than only look at it.
+   *
+   * **Required by the schema, and omitting it was a live outage.**
+   * `createPhotoShareInputSchema` declares `allowDownload: z.boolean()` with no
+   * default and no `.optional()`, and the registry runs `.parse()` on the way
+   * in, so a request without it was rejected before the service ever ran: every
+   * Share tap on the phone failed. Nothing caught it because the op name was
+   * real, the two fields sent were real, and the client declares its own types.
+   *
+   * True, matching both web call sites. A client sent a photograph to settle a
+   * question usually needs to keep it, and a link that renders an image the
+   * browser will not save is a puzzle rather than a policy.
+   */
+  allowDownload = true,
 ): Promise<string | null> {
-  const result = (await api.rpc("createPhotoShare", { photoId, expiresInHours })) as {
+  const result = (await api.rpc("createPhotoShare", {
+    photoId,
+    expiresInHours,
+    allowDownload,
+  })) as {
     token?: string | null;
   } | null;
   return result?.token ?? null;
+}
+
+/** A link already minted for a photo. Field names are the server's. */
+export type PhotoShare = {
+  id: string;
+  token: string;
+  expires_at: string | null;
+  allow_download: boolean;
+  created_at: string;
+  revoked_at: string | null;
+};
+
+/**
+ * Every link ever minted for this photo.
+ *
+ * Needed because the phone could mint them and never see them again. Each tap
+ * of Share creates a **fresh** token rather than reusing one, so three taps
+ * leave three independently live URLs pointing at the same site photograph,
+ * and until now there was no way to count them, let alone withdraw one.
+ */
+export async function listPhotoShares(photoId: string): Promise<PhotoShare[]> {
+  // The service returns the rows directly rather than wrapping them, unlike
+  // most ops here. Guarded so a shape change renders empty instead of throwing.
+  const result = await api.rpc<PhotoShare[]>("listPhotoShares", { photoId });
+  return Array.isArray(result) ? result : [];
+}
+
+/** Withdraw one link. Stamps `revoked_at`; the token stops resolving. */
+export async function revokePhotoShare(shareId: string): Promise<void> {
+  await api.rpc("revokePhotoShare", { shareId });
 }
 
 /** The two record tables that carry their own `share_token` and `revoked_at`. */
