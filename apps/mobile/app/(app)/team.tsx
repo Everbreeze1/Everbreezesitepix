@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { Alert, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert, Pressable, ScrollView, View } from "react-native";
 import { Stack } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -35,8 +35,28 @@ import {
   type TeamMember,
 } from "@/api/team-roster";
 import { useAuth } from "@/lib/auth";
-import { spacing } from "@/theme";
-import { LogOut, Send, TriangleAlert, UserPlus, Users, UserX } from "@/ui/icons";
+import { getMemberProjects, setMemberProjects } from "@/api/member-projects";
+import {
+  canScopeProjects,
+  needsProjectScope,
+  scopeChanged,
+  scopeChangeWarning,
+  scopeSummary,
+  sortedProjects,
+  toggledProject,
+} from "@/api/member-projects-view";
+import { listProjects } from "@/api/projects";
+import { radius, spacing, useTheme } from "@/theme";
+import {
+  Check,
+  FolderKanban,
+  LogOut,
+  Send,
+  TriangleAlert,
+  UserPlus,
+  Users,
+  UserX,
+} from "@/ui/icons";
 import {
   ActionSheet,
   Avatar,
@@ -45,6 +65,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  Icon,
   ListGroup,
   ListRow,
   RowDivider,
@@ -84,8 +105,12 @@ export default function TeamScreen() {
   const [inviteRole, setInviteRole] = useState<"admin" | "member">("member");
   const [inviteError, setInviteError] = useState<string | null>(null);
 
+  const theme = useTheme();
   const [actionsFor, setActionsFor] = useState<TeamMember | null>(null);
   const [roleFor, setRoleFor] = useState<TeamMember | null>(null);
+  /** The Restricted member whose jobs are being chosen, and the picked set. */
+  const [scopeFor, setScopeFor] = useState<TeamMember | null>(null);
+  const [scopePicked, setScopePicked] = useState<string[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
 
   const query = useQuery({ queryKey: QUERY_KEY, queryFn: getMyTeam });
@@ -171,6 +196,40 @@ export default function TeamScreen() {
     );
   }, [run]);
 
+  /*
+   * The jobs this Restricted member currently holds, and everything they could
+   * be given. Both only load once a member is actually picked: a roster of
+   * twenty would otherwise fetch a project list nobody has asked to see.
+   */
+  const scopeQuery = useQuery({
+    queryKey: ["member-projects", scopeFor?.id],
+    queryFn: () => getMemberProjects(scopeFor!.id),
+    enabled: Boolean(scopeFor),
+  });
+
+  const projectsQuery = useQuery({
+    queryKey: ["projects-for-scope"],
+    queryFn: () => listProjects(),
+    enabled: Boolean(scopeFor),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Re-seeded whenever the sheet opens on somebody, so an abandoned edit cannot
+  // carry into the next member and silently change THEIR jobs.
+  useEffect(() => {
+    if (scopeFor && scopeQuery.data) setScopePicked(scopeQuery.data);
+  }, [scopeFor, scopeQuery.data]);
+
+  const saveScope = useMutation({
+    mutationFn: () => setMemberProjects(scopeFor!.id, scopePicked),
+    onSuccess: () => {
+      setScopeFor(null);
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    },
+    onError: (error: unknown) =>
+      setFailure(error instanceof Error ? error.message : "Could not save their jobs."),
+  });
+
   const rowActions = useCallback(
     (member: TeamMember): SheetAction[] => {
       const allowed = memberActions(myRole, member, user?.id ?? null);
@@ -183,6 +242,23 @@ export default function TeamScreen() {
           label: "Resend confirmation email",
           icon: Send,
           onPress: () => run.mutate(() => resendMemberConfirmation(member.id)),
+        });
+      }
+      /*
+       * Only a Restricted member is fenced to particular jobs, and only a
+       * caller with `manage_users` may change it - which is NARROWER than this
+       * screen's own `canManageUsers`, that also allows `manage_own_crew`.
+       * Offering it any wider would put a control in front of somebody whose
+       * save the server refuses.
+       */
+      if (
+        needsProjectScope(member) &&
+        canScopeProjects({ manageUsers: can(myRole, "manage_users") })
+      ) {
+        actions.push({
+          label: "Choose their jobs",
+          icon: FolderKanban,
+          onPress: () => setScopeFor(member),
         });
       }
       if (allowed.has("remove")) {
@@ -372,6 +448,79 @@ export default function TeamScreen() {
           </View>
         ) : null}
       </Screen>
+
+      <Sheet
+        visible={Boolean(scopeFor)}
+        onClose={() => setScopeFor(null)}
+        title="Jobs they can see"
+        subtitle={
+          scopeFor
+            ? // The current count leads, because "No jobs yet, so they see
+              // nothing" is the state a manager most needs to notice.
+              `${scopeSummary(scopeQuery.data?.length ?? 0)}. They see only the jobs ticked here, and ticking one also puts them on it as crew.`
+            : undefined
+        }
+        footer={
+          <View style={{ gap: spacing.sm }}>
+            {/*
+              Emptying the list is legitimate - it is how somebody is parked
+              without being removed from the team - but it is indistinguishable
+              from a mistake unless the consequence is said out loud.
+            */}
+            {scopeFor && scopeChangeWarning(scopePicked, memberName(scopeFor)) ? (
+              <Text variant="caption" tone="muted">
+                {scopeChangeWarning(scopePicked, memberName(scopeFor))}
+              </Text>
+            ) : null}
+            <Button
+              label={saveScope.isPending ? "Saving" : "Save their jobs"}
+              fullWidth
+              disabled={saveScope.isPending || !scopeChanged(scopeQuery.data ?? [], scopePicked)}
+              onPress={() => saveScope.mutate()}
+            />
+          </View>
+        }
+      >
+        {scopeQuery.isLoading || projectsQuery.isLoading ? (
+          <SkeletonList rows={4} />
+        ) : projectsQuery.error || scopeQuery.error ? (
+          <Text variant="body" tone="muted">
+            Could not load the jobs list. Close this and try again.
+          </Text>
+        ) : (
+          <ScrollView style={{ maxHeight: 380 }}>
+            <View style={{ gap: spacing.xs }}>
+              {sortedProjects(projectsQuery.data ?? [], scopePicked).map((project) => {
+                const on = scopePicked.includes(project.id);
+                return (
+                  <Pressable
+                    key={project.id}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: on }}
+                    accessibilityLabel={project.name ?? "Project"}
+                    onPress={() => setScopePicked((cur) => toggledProject(cur, project.id))}
+                    style={({ pressed }) => ({
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: spacing.sm,
+                      padding: spacing.md,
+                      borderRadius: radius.md,
+                      borderWidth: 1,
+                      borderColor: on ? theme.colors.primary : theme.colors.border,
+                      backgroundColor: pressed ? theme.colors.secondary : theme.colors.card,
+                    })}
+                  >
+                    <Text variant="body" style={{ flex: 1 }} numberOfLines={1}>
+                      {project.name ?? "Untitled job"}
+                    </Text>
+                    {on ? <Icon icon={Check} size="md" tone="primary" /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
+        )}
+      </Sheet>
 
       <ActionSheet
         visible={actionsFor !== null}

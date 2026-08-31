@@ -346,3 +346,41 @@ export async function signWalkthroughVideo(videoPath: string): Promise<string | 
     .createSignedUrl(videoPath, 60 * 60);
   return data?.signedUrl ?? null;
 }
+
+/**
+ * Turn a walkthrough into a report the client actually receives.
+ *
+ * The end of a chain the phone had only half of. `generateWalkthroughReport`
+ * writes the structured report CONTENT onto the walkthrough and stops there -
+ * it never touches `project_reports` - so a crew could record a walk, generate
+ * its report from the van, and still need a desk to produce the thing anybody
+ * outside the company ever sees.
+ *
+ * Idempotent by design rather than by an idempotency key: the service looks for
+ * an existing report for this walkthrough and answers `alreadyExisted` instead
+ * of writing a second one. So a second tap is safe, and the screen must not
+ * claim it made a new report when it did not.
+ *
+ * Pro and Team only, enforced server-side. The recorder UI is already behind
+ * that gate, so the phone does not re-derive it - it lets the refusal through
+ * and shows what the server said.
+ */
+export async function createReportFromWalkthrough(
+  walkthroughId: string,
+  photosPerPage?: number,
+): Promise<{ reportId: string | null; alreadyExisted: boolean }> {
+  const result = await api.rpc<{ reportId?: string; alreadyExisted?: boolean }>(
+    "createReportFromWalkthrough",
+    {
+      walkthroughId,
+      ...(photosPerPage ? { photosPerPage } : {}),
+    },
+  );
+  return {
+    reportId: result?.reportId ?? null,
+    // Absent is treated as "new", which is the safe direction for the wording:
+    // saying a report was created when one already existed is a smaller error
+    // than telling somebody nothing happened when it did.
+    alreadyExisted: Boolean(result?.alreadyExisted),
+  };
+}

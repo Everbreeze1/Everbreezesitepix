@@ -1,30 +1,30 @@
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, View } from "react-native";
-import { Stack, useLocalSearchParams } from "expo-router";
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Share,
+  View,
+} from "react-native";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useQuery } from "@tanstack/react-query";
 import { cleanWalkthroughMarkdown, relativeTime } from "@everlumen/shared";
 import { signPhotoUrls } from "@/api/photos";
+import { canOpenReport, reportRefusal, reportResultMessage } from "@/api/walkthrough-report-view";
 import {
   generateWalkthroughReport,
   getWalkthroughDetail,
   setWalkthroughShare,
   signWalkthroughVideo,
   type WalkthroughShot,
+  createReportFromWalkthrough,
 } from "@/api/walkthroughs";
 import { radius, spacing, useTheme } from "@/theme";
 import { FileText, Share2, VideoOff } from "@/ui/icons";
-import {
-  Badge,
-  Button,
-  Card,
-  ErrorState,
-  Icon,
-  SectionHeader,
-  SkeletonList,
-  Text,
-} from "@/ui";
+import { Badge, Button, Card, ErrorState, Icon, SectionHeader, SkeletonList, Text } from "@/ui";
 
 function timecode(seconds: number): string {
   const whole = Math.max(0, Math.round(seconds));
@@ -102,6 +102,35 @@ export default function WalkthroughDetailScreen() {
     () => (detail?.summary_markdown ? cleanWalkthroughMarkdown(detail.summary_markdown) : null),
     [detail?.summary_markdown],
   );
+
+  /**
+   * Make the report a client actually receives.
+   *
+   * The other button writes the report CONTENT onto the walkthrough and stops
+   * there; nothing in `project_reports` exists until this runs. Idempotent on
+   * the server by lookup rather than by key, so a second tap opens the same
+   * report rather than making a second one - and the message says which
+   * happened instead of claiming a new one either way.
+   */
+  async function onCreateClientReport() {
+    if (!id) return;
+    setBusy("clientReport");
+    setNotice(null);
+    try {
+      const result = await createReportFromWalkthrough(id);
+      setNotice(reportResultMessage(result));
+      if (canOpenReport(result)) {
+        router.push({
+          pathname: "/report/[reportId]",
+          params: { reportId: result.reportId! },
+        });
+      }
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Could not create the report");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function onGenerateReport() {
     if (!id) return;
@@ -283,6 +312,26 @@ export default function WalkthroughDetailScreen() {
                 // Says why the button is dead rather than failing after the tap.
                 <Text variant="caption" tone="muted">
                   A report needs a transcript first.
+                </Text>
+              ) : null}
+
+              {/*
+                The end of the chain. "Generate report" above writes the
+                report's content onto the walkthrough; this makes the
+                `project_reports` row anybody outside the company ever sees.
+              */}
+              <Button
+                label="Make a client report"
+                icon={FileText}
+                variant="outline"
+                fullWidth
+                loading={busy === "clientReport"}
+                disabled={Boolean(busy) || Boolean(reportRefusal(Boolean(detail.transcript)))}
+                onPress={() => void onCreateClientReport()}
+              />
+              {reportRefusal(Boolean(detail.transcript)) ? (
+                <Text variant="caption" tone="muted">
+                  {reportRefusal(Boolean(detail.transcript))}
                 </Text>
               ) : null}
 
