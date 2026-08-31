@@ -1,7 +1,14 @@
 import type { ReactNode } from "react";
-import { RefreshControl, ScrollView, View, type StyleProp, type ViewStyle } from "react-native";
+import {
+  RefreshControl,
+  ScrollView,
+  useWindowDimensions,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { spacing, useTheme } from "@/theme";
+import { contentInset, spacing, useTheme } from "@/theme";
 
 /**
  * The screen scaffold.
@@ -45,9 +52,27 @@ export function Screen({
 }: ScreenProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+
+  /*
+   * On a tablet the content is centred in a column rather than stretched.
+   *
+   * `supportsTablet` is true, so Apple reviews this on an iPad, and every
+   * screen here was laid out against a 390pt phone. At 1024pt a full-width
+   * primary button is a metre across and a line of body text is too wide to
+   * read without losing your place. Done here rather than per screen because
+   * every screen is built on this component, so one change fixes all of them
+   * and none of them can be forgotten.
+   *
+   * Padding rather than a fixed width: children keep using `flex: 1` and stay
+   * full width of the column. A fixed width would need `alignSelf` on every
+   * screen, which is the kind of change that gets applied to nine and missed on
+   * the tenth.
+   */
+  const horizontal = contentInset(width, padded ? spacing.lg : 0);
 
   const padding: StyleProp<ViewStyle> = {
-    paddingHorizontal: padded ? spacing.lg : 0,
+    paddingHorizontal: horizontal,
     paddingBottom: insets.bottom + bottomInset + spacing.lg,
   };
 

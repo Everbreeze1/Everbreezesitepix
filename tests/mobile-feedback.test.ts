@@ -238,3 +238,42 @@ describe("the two clients agree on the columns", () => {
     }
   });
 });
+
+describe("an empty diagnostics section never reaches support", () => {
+  /*
+   * Found by sending a real report from the phone and reading the row back.
+   * `issue_reports.description` came out as:
+   *
+   *   Testing the feedback path from the phone
+   *
+   *   --- Recent errors on this phone ---
+   *   No errors recorded on this phone.
+   *
+   * with the attach switch showing "No" on screen. `errorsForSupport` answers
+   * with that sentence rather than an empty string, which is right for the
+   * preview and wrong for the body, so `appendErrorLog`'s `!log.trim()` guard
+   * never fired. Every report from a healthy phone carried a diagnostics
+   * heading with no diagnostics under it.
+   */
+  const screen = () =>
+    readFileSync(join(process.cwd(), "apps/mobile/app/(app)/report-issue.tsx"), "utf8");
+
+  it("sends on whether there are errors, not just on the switch", () => {
+    const s = screen();
+    expect(s).toContain("const attaching = attachLog && errorCount > 0;");
+    expect(s).toContain("appendErrorLog(cleanDescription(message), log, attaching)");
+  });
+
+  it("never passes the bare switch to appendErrorLog", () => {
+    // The exact call that shipped the empty section.
+    expect(screen()).not.toMatch(/appendErrorLog\([^)]*,\s*attachLog\s*\)/);
+  });
+
+  it("the badge, the preview and the body read the same value", () => {
+    /*
+     * They disagreed once: the badge said "No" while the send path attached.
+     * One name for one condition is what keeps them from drifting apart again.
+     */
+    expect(screen()).not.toMatch(/attachLog && errorCount > 0 \?/);
+  });
+});

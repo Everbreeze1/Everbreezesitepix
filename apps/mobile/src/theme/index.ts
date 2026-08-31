@@ -12,6 +12,15 @@ import {
 } from "./tokens";
 
 export {
+  CONTENT_MAX_WIDTH,
+  TARGET_TILE,
+  contentInset,
+  contentWidth,
+  gridColumns,
+  isWide,
+} from "./layout";
+
+export {
   elevation,
   HIT_TARGET,
   palettes,

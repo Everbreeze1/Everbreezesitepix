@@ -60,6 +60,21 @@ export default function ReportIssueScreen() {
   const log = useMemo(() => errorsForSupport(), []);
   const errorCount = useMemo(() => recentErrors().length, []);
 
+  /*
+   * Whether anything is actually being attached, as one value.
+   *
+   * The switch being on is not enough: `errorsForSupport` answers with the
+   * sentence "No errors recorded on this phone." rather than an empty string,
+   * which is right for the preview below and wrong for the report body. Sending
+   * on `attachLog` alone appended a "Recent errors" heading followed by that
+   * sentence to every report from a phone that had not failed, so support read a
+   * diagnostics section that carried no diagnostics.
+   *
+   * Held here rather than repeated at each use, because the badge, the preview
+   * and the send path have to agree and this drifted once already.
+   */
+  const attaching = attachLog && errorCount > 0;
+
   const context: DeviceContext = useMemo(
     () => ({
       platform: Platform.OS,
@@ -76,7 +91,7 @@ export default function ReportIssueScreen() {
     mutationFn: () =>
       submitIssueReport({
         kind,
-        description: appendErrorLog(cleanDescription(message), log, attachLog),
+        description: appendErrorLog(cleanDescription(message), log, attaching),
         projectId: projectId ?? null,
         screen: from ?? null,
         context,
@@ -166,7 +181,7 @@ export default function ReportIssueScreen() {
           <ListGroup>
             <ListRow
               icon={TriangleAlert}
-              iconTone={attachLog && errorCount > 0 ? "primary" : "muted"}
+              iconTone={attaching ? "primary" : "muted"}
               title="Attach recent errors"
               subtitle={
                 errorCount === 0
@@ -175,9 +190,9 @@ export default function ReportIssueScreen() {
               }
               right={
                 <Badge
-                  label={attachLog && errorCount > 0 ? "Yes" : "No"}
-                  tone={attachLog && errorCount > 0 ? "primary" : "neutral"}
-                  variant={attachLog && errorCount > 0 ? "soft" : "outline"}
+                  label={attaching ? "Yes" : "No"}
+                  tone={attaching ? "primary" : "neutral"}
+                  variant={attaching ? "soft" : "outline"}
                 />
               }
               disabled={errorCount === 0}
@@ -185,7 +200,7 @@ export default function ReportIssueScreen() {
             />
           </ListGroup>
 
-          {attachLog && errorCount > 0 ? (
+          {attaching ? (
             <Card>
               <View style={{ gap: spacing.xs }}>
                 <Text variant="caption" tone="muted">

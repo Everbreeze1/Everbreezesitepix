@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   Modal,
   Pressable,
   RefreshControl,
@@ -9,6 +8,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import {
   Archive,
@@ -64,7 +64,7 @@ import {
 } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { gridColumns, HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 import {
   ActionSheet,
   Badge,
@@ -92,7 +92,6 @@ const FILTERS: ChipOption<PhaseFilter>[] = [
   { id: "untagged", label: "Untagged" },
 ];
 
-const COLUMNS = 3;
 const GRID_GAP = spacing.xs;
 
 /** One rendered row of the grid. Sections hold rows, not photos. */
@@ -108,6 +107,21 @@ function chunk(photos: PhotoListItem[], size: number): PhotoRow[] {
 }
 
 export default function ProjectDetailScreen() {
+  /*
+   * Grid width from the LIVE screen width.
+   *
+   * Two bugs in what this replaced, both only visible on a tablet. The count
+   * was a hardcoded 3, which at 1024pt makes each tile over 300pt: a contact
+   * sheet showing nine photos where it could show twenty-five. And the width
+   * came from `Dimensions.get("window")`, read once at render and never again,
+   * so rotating an iPad or dropping the app into split screen left the tiles
+   * sized for the old width.
+   *
+   * Computed here rather than beside `tileSize` below because the section memo
+   * chunks photos into fixed rows, so the count has to exist before it runs.
+   */
+  const { width: screenWidth } = useWindowDimensions();
+  const columns = gridColumns(screenWidth - spacing.lg * 2);
   /*
    * `photo` is a deep link, not something this screen ever sets.
    *
@@ -188,17 +202,16 @@ export default function ProjectDetailScreen() {
     }
     return Array.from(buckets.entries()).map(([title, items]) => ({
       title,
-      data: chunk(items, COLUMNS),
+      data: chunk(items, columns),
     }));
-  }, [filtered]);
+  }, [filtered, columns]);
 
   const project = projectQuery.data;
   const address = project ? formatAddress(project) : null;
   const loading = projectQuery.isLoading || photosQuery.isLoading;
   const error = projectQuery.error ?? photosQuery.error;
 
-  const screenWidth = Dimensions.get("window").width;
-  const tileSize = (screenWidth - spacing.lg * 2 - GRID_GAP * (COLUMNS - 1)) / COLUMNS;
+  const tileSize = (screenWidth - spacing.lg * 2 - GRID_GAP * (columns - 1)) / columns;
 
   const lightboxPhoto = filtered.find((photo) => photo.id === lightboxId) ?? null;
 
@@ -460,7 +473,7 @@ export default function ProjectDetailScreen() {
             onEndReachedThreshold={0.6}
             // The grid is fixed-height rows, so windowing can be tighter than
             // the default without blank space appearing during a fast scroll.
-            initialNumToRender={Math.ceil(PHOTO_PAGE_SIZE / COLUMNS)}
+            initialNumToRender={Math.ceil(PHOTO_PAGE_SIZE / columns)}
             windowSize={7}
             removeClippedSubviews
             refreshControl={

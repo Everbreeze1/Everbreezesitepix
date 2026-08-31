@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Dimensions, Pressable, View } from "react-native";
+import { Pressable, useWindowDimensions, View } from "react-native";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { listMyOpenTasks, listRecentCaptureTimes } from "@/api/dashboard";
@@ -17,7 +17,7 @@ import { listProjects } from "@/api/projects";
 import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
 import { useQueue } from "@/offline/use-queue";
-import { radius, spacing, useTheme } from "@/theme";
+import { contentWidth, gridColumns, radius, spacing, useTheme } from "@/theme";
 import {
   Activity,
   Bell,
@@ -78,10 +78,27 @@ import {
  * silently became two columns. Percentages cannot see the gap; arithmetic can.
  * Same approach the photo grids use.
  */
-const BROWSE_COLUMNS = 3;
-const BROWSE_TILE =
-  (Dimensions.get("window").width - spacing.lg * 2 - spacing.sm * (BROWSE_COLUMNS - 1)) /
-  BROWSE_COLUMNS;
+/*
+ * Three across on a phone, more on a tablet, and measured every render.
+ *
+ * The count was hardcoded and the width came from `Dimensions.get("window")`,
+ * read once and never again, so rotating an iPad left the tiles at the old
+ * size. It is `contentWidth` rather than the raw width because this screen is
+ * inside a `Screen`, which centres its content in a 640pt column on a wide
+ * display: sizing five tiles across 1024pt would push them straight out of it.
+ *
+ * The target is smaller than the photo-grid default on purpose. These are
+ * shortcut buttons, not thumbnails, and the 130pt photo tile would give a phone
+ * two columns where it has always had three.
+ */
+const BROWSE_TARGET_TILE = 110;
+
+function useBrowseTile(): number {
+  const { width } = useWindowDimensions();
+  const usable = contentWidth(width) - spacing.lg * 2;
+  const columns = gridColumns(usable, BROWSE_TARGET_TILE);
+  return (usable - spacing.sm * (columns - 1)) / columns;
+}
 
 const BROWSE: { icon: LucideIcon; label: string; href: string }[] = [
   { icon: MapPin, label: "Map", href: "/map" },
@@ -365,13 +382,14 @@ function QuickTile({
   onPress: () => void;
 }) {
   const theme = useTheme();
+  const tile = useBrowseTile();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
       style={({ pressed }) => ({
-        width: BROWSE_TILE,
+        width: tile,
         alignItems: "center",
         justifyContent: "center",
         gap: spacing.xs,

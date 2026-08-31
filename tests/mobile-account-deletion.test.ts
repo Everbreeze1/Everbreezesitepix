@@ -134,3 +134,88 @@ describe("the client and the server agree", () => {
     expect(service).toContain("does not match this account");
   });
 });
+
+describe("closing an account clears its storage", () => {
+  /*
+   * The gap this covers, which was real and shipped: `deleteUser` cascades
+   * through `projects.created_by`, so the projects and their photo rows went and
+   * the files they named stayed. Nothing in Supabase links a storage object to a
+   * row, so those photographs sat in `site-photos` permanently with nothing left
+   * pointing at them - not listable from the database, not attributable to
+   * anyone, and impossible to clean up afterwards precisely because the rows
+   * that held the paths were the ones just deleted.
+   *
+   * Text assertions rather than a mocked client, because what matters here is
+   * the ORDER, and an ordering bug is exactly what a mock with no real cascade
+   * would let through.
+   */
+  const service = () =>
+    readFileSync(join(process.cwd(), "apps/api/src/domains/account/delete-account.ts"), "utf8");
+
+  it("removes objects from the photo bucket", () => {
+    const s = service();
+    expect(s).toContain('from("site-photos")');
+    expect(s).toContain(".remove(");
+  });
+
+  it("uses the shared path builder, so thumbnails go too", () => {
+    /*
+     * Each photo owns two objects. Taking only `storage_path` would leave every
+     * thumbnail behind and the bug would look half-fixed.
+     *
+     * The call, not the name: asserting on the bare identifier passed against a
+     * copy of the file with the call replaced by `photoRows.map(r =>
+     * r.storage_path)`, because the import line still carried the word.
+     */
+    expect(service()).toContain("allPhotoObjectPaths(photoRows)");
+  });
+
+  it("collects the paths before the auth user is deleted", () => {
+    /*
+     * The ordering that makes it work at all. After `deleteUser` the rows have
+     * cascaded away and there is nothing left to read a path from.
+     */
+    const s = service();
+    const removeAt = s.indexOf('from("site-photos")');
+    // The call, not the sentence about it in the file's doc comment.
+    const deleteUserAt = s.indexOf("await admin.auth.admin.deleteUser(");
+    expect(removeAt).toBeGreaterThan(-1);
+    expect(deleteUserAt).toBeGreaterThan(-1);
+    expect(removeAt).toBeLessThan(deleteUserAt);
+  });
+
+  it("scopes the files to projects they created", () => {
+    /*
+     * `photos.uploaded_by` is SET NULL, not cascade: a photo somebody took in a
+     * teammate's project keeps its row and stays that project's evidence.
+     * Selecting by uploader instead of by project would delete a colleague's
+     * site record because of who was holding the phone.
+     */
+    const s = service();
+    expect(s).toContain('.eq("created_by", ctx.userId)');
+    expect(s).not.toMatch(/\.eq\("uploaded_by"/);
+  });
+
+  it("chunks the requests", () => {
+    // Same PostgREST header ceiling every other bulk path hit. A workspace with
+    // 400 projects would fail the read and silently clear nothing.
+    expect(service()).toContain("chunk(");
+  });
+
+  it("still closes the account when storage fails", () => {
+    /*
+     * Deliberately best-effort. An orphaned file is a problem to sweep later; a
+     * person who cannot leave because a bucket call timed out is a promise
+     * broken, and Google requires this route to work.
+     */
+    const s = service();
+    const storageBlock = s.slice(
+      s.indexOf("let filesRemoved"),
+      s.indexOf("await admin.auth.admin.deleteUser("),
+    );
+    expect(storageBlock).toContain("try {");
+    expect(storageBlock).toContain("catch");
+    // A throw inside the block would make a storage outage block the deletion.
+    expect(storageBlock).not.toContain("throw");
+  });
+});

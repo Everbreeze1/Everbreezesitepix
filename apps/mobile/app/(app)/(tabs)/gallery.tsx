@@ -1,11 +1,18 @@
 import { useCallback, useMemo, useState } from "react";
 import { Images } from "@/ui/icons";
-import { Dimensions, FlatList, Modal, Pressable, RefreshControl, View } from "react-native";
+import {
+  FlatList,
+  Modal,
+  Pressable,
+  RefreshControl,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { router } from "expo-router";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { displayCaption, formatPhotoDateGroup } from "@everlumen/shared";
 import { listGalleryPhotoPage, type GalleryPhotoItem } from "@/api/photos";
-import { radius, spacing, useTheme } from "@/theme";
+import { gridColumns, radius, spacing, useTheme } from "@/theme";
 import {
   Button,
   ChipGroup,
@@ -42,10 +49,11 @@ const FILTERS: ChipOption<PhaseFilter>[] = [
   { id: "untagged", label: "Untagged" },
 ];
 
-const COLUMNS = 3;
 const GAP = spacing.xs;
 
 export default function GalleryScreen() {
+  // Live width: a value read once never updates when an iPad rotates.
+  const { width } = useWindowDimensions();
   const theme = useTheme();
   const [search, setSearch] = useState("");
   const [phase, setPhase] = useState<PhaseFilter>("all");
@@ -105,7 +113,16 @@ export default function GalleryScreen() {
     if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
   }, [query]);
 
-  const tile = (Dimensions.get("window").width - spacing.lg * 2 - GAP * (COLUMNS - 1)) / COLUMNS;
+  /*
+   * Columns and tile size from the LIVE width.
+   *
+   * Was a hardcoded 3 and a one-off `Dimensions.get("window")`. Both are wrong
+   * on a tablet: three tiles at 1024pt are over 300pt each, a contact sheet
+   * showing nine photos where it could show twenty-five, and a width read once
+   * never updates when an iPad rotates or is put into split screen.
+   */
+  const columns = gridColumns(width - spacing.lg * 2);
+  const tile = (width - spacing.lg * 2 - GAP * (columns - 1)) / columns;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -120,7 +137,7 @@ export default function GalleryScreen() {
       </PageHeader>
 
       {query.isLoading ? (
-        <GallerySkeleton tile={tile} />
+        <GallerySkeleton tile={tile} columns={columns} />
       ) : query.error ? (
         <ErrorState
           message={query.error instanceof Error ? query.error.message : "Failed to load photos"}
@@ -309,14 +326,14 @@ function groupByDay(photos: GalleryPhotoItem[]): DaySection[] {
   return sections;
 }
 
-function GallerySkeleton({ tile }: { tile: number }) {
+function GallerySkeleton({ tile, columns }: { tile: number; columns: number }) {
   return (
     <View style={{ paddingHorizontal: spacing.lg, gap: spacing.lg, paddingTop: spacing.lg }}>
       {[0, 1].map((section) => (
         <View key={section} style={{ gap: spacing.sm }}>
           <Skeleton width="30%" height={11} />
           <View style={{ flexDirection: "row", gap: GAP }}>
-            {Array.from({ length: COLUMNS }, (_, i) => (
+            {Array.from({ length: columns }, (_, i) => (
               <Skeleton key={i} width={tile} height={tile} rounded={radius.sm} />
             ))}
           </View>

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Dimensions, Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, useWindowDimensions, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { displayCaption, relativeTime } from "@everlumen/shared";
@@ -13,7 +13,7 @@ import { signPhotoUrls } from "@/api/photos";
 import { photoPatchRowId, type PhotoPatchPayload } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { radius, spacing, useTheme } from "@/theme";
+import { gridColumns, radius, spacing, useTheme } from "@/theme";
 import { CheckCheck, CircleCheck, RotateCcw, Trash2 } from "@/ui/icons";
 import {
   Badge,
@@ -27,7 +27,6 @@ import {
   Text,
 } from "@/ui";
 
-const COLUMNS = 3;
 const GAP = spacing.xs;
 
 /**
@@ -43,6 +42,8 @@ const GAP = spacing.xs;
  * disk space that urgently. Restore is the action a phone should have.
  */
 export default function ProjectTrashScreen() {
+  // Live width: a value read once never updates when an iPad rotates.
+  const { width } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const queryClient = useQueryClient();
@@ -114,7 +115,16 @@ export default function ProjectTrashScreen() {
     setBusy(false);
   }, [selected, queryClient, queryKey, id]);
 
-  const tile = (Dimensions.get("window").width - spacing.lg * 2 - GAP * (COLUMNS - 1)) / COLUMNS;
+  /*
+   * Columns and tile size from the LIVE width.
+   *
+   * Was a hardcoded 3 and a one-off `Dimensions.get("window")`. Both are wrong
+   * on a tablet: three tiles at 1024pt are over 300pt each, a contact sheet
+   * showing nine photos where it could show twenty-five, and a width read once
+   * never updates when an iPad rotates or is put into split screen.
+   */
+  const columns = gridColumns(width - spacing.lg * 2);
+  const tile = (width - spacing.lg * 2 - GAP * (columns - 1)) / columns;
 
   return (
     <>
