@@ -237,3 +237,37 @@ export async function setPageShare(pageId: string, enable: boolean): Promise<str
   });
   return result?.shareToken ?? null;
 }
+
+/**
+ * Copy a document, contents and all.
+ *
+ * The phone's answer to "start today's log from yesterday's", and deliberately
+ * a copy rather than a template instantiation: creating a page from a seeded
+ * template produces markup the phone editor refuses, so it would be read-only
+ * the moment it existed. Copying a page that already exists sidesteps that
+ * entirely - whatever the original was editable as, the copy is too.
+ *
+ * Two things the server does NOT carry over, both of which matter enough to say
+ * on screen:
+ *
+ *   the share token   a copy of a shared document is not itself public, which
+ *                     is the safe direction and the one people assume wrongly.
+ *   `source_template` so a copy of a report is a plain document rather than a
+ *                     second report filed under the Reports tab.
+ *
+ * The title is numbered against the project's existing ones by
+ * `uniqueDocumentTitle`, so duplicating twice does not leave two rows both
+ * called "Copy of X".
+ */
+export async function duplicatePage(pageId: string): Promise<DocumentPageSummary> {
+  const result = await api.rpc<{ page?: { id: string; title: string; updated_at: string } }>(
+    "duplicateProjectPage",
+    { pageId },
+  );
+  const page = result?.page;
+  if (!page?.id) throw new Error("The copy could not be made.");
+  return { id: page.id, title: page.title, updatedAt: page.updated_at };
+}
+
+/** The three fields `duplicateProjectPage` answers with. */
+export type DocumentPageSummary = { id: string; title: string; updatedAt: string };

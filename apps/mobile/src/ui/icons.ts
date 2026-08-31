@@ -38,6 +38,7 @@ export { default as Library } from "lucide-react-native/dist/esm/icons/library";
 export { default as Link2 } from "lucide-react-native/dist/esm/icons/link-2";
 export { default as Lock } from "lucide-react-native/dist/esm/icons/lock";
 export { default as NotebookPen } from "lucide-react-native/dist/esm/icons/notebook-pen";
+export { default as Copy } from "lucide-react-native/dist/esm/icons/copy";
 export { default as ChevronDown } from "lucide-react-native/dist/esm/icons/chevron-down";
 export { default as ChevronLeft } from "lucide-react-native/dist/esm/icons/chevron-left";
 export { default as ChevronRight } from "lucide-react-native/dist/esm/icons/chevron-right";

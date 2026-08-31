@@ -3,10 +3,17 @@ import { Alert, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { relativeTime, titleWithinProject } from "@everlumen/shared";
-import { createPage, deletePage, listDocumentTree, type DocumentPage } from "@/api/pages";
+import {
+  createPage,
+  deletePage,
+  listDocumentTree,
+  type DocumentPage,
+  duplicatePage,
+} from "@/api/pages";
 import { getProject } from "@/api/projects";
+import { duplicateNotice } from "@/api/folders-view";
 import { spacing } from "@/theme";
-import { FileText, Paperclip, Plus, Trash2 } from "@/ui/icons";
+import { Copy, FileText, Paperclip, Plus, Trash2 } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -89,6 +96,40 @@ export default function ProjectDocumentsScreen() {
       setFailure(error instanceof Error ? error.message : "Could not create that page."),
   });
 
+  /**
+   * Copy a document.
+   *
+   * The phone's answer to "start today's log from yesterday's". A copy rather
+   * than a template instantiation, because a page made from a seeded template
+   * is read-only here the moment it exists - whereas a copy is editable exactly
+   * as far as its original was.
+   */
+  const duplicate = useMutation({
+    mutationFn: (pageId: string) => duplicatePage(pageId),
+    onSuccess: (page) => {
+      void queryClient.invalidateQueries({ queryKey });
+      router.push({ pathname: "/page/[pageId]", params: { pageId: page.id } });
+    },
+    onError: (error: unknown) =>
+      setFailure(error instanceof Error ? error.message : "Could not copy that page."),
+  });
+
+  const confirmDuplicate = useCallback(
+    (page: DocumentPage) => {
+      Alert.alert(
+        `Copy "${page.title}"?`,
+        // Both halves are things people assume wrongly: a copy of a shared
+        // document is not shared, and a copy of a report is not a report.
+        duplicateNotice(false, page.bucket === "report"),
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Make a copy", onPress: () => duplicate.mutate(page.id) },
+        ],
+      );
+    },
+    [duplicate],
+  );
+
   const remove = useMutation({
     mutationFn: (pageId: string) => deletePage(pageId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
@@ -157,13 +198,21 @@ export default function ProjectDocumentsScreen() {
                             .filter(Boolean)
                             .join(" · ")}
                           right={
-                            <IconButton
-                              icon={Trash2}
-                              tone="destructive"
-                              surface={false}
-                              accessibilityLabel={`Delete ${page.title}`}
-                              onPress={() => confirmDelete(page)}
-                            />
+                            <View style={{ flexDirection: "row", alignItems: "center" }}>
+                              <IconButton
+                                icon={Copy}
+                                surface={false}
+                                accessibilityLabel={`Copy ${page.title}`}
+                                onPress={() => confirmDuplicate(page)}
+                              />
+                              <IconButton
+                                icon={Trash2}
+                                tone="destructive"
+                                surface={false}
+                                accessibilityLabel={`Delete ${page.title}`}
+                                onPress={() => confirmDelete(page)}
+                              />
+                            </View>
                           }
                           onPress={() =>
                             router.push({ pathname: "/page/[pageId]", params: { pageId: page.id } })

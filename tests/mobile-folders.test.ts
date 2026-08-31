@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   deleteFolderWarning,
+  duplicateNotice,
   folderNameError,
   groupByFolder,
   groupCount,
@@ -268,5 +269,73 @@ describe("the phone reads the field names the service sends", () => {
     // `moveDocument` takes a discriminator, not a table name.
     expect(s).toContain('kind: z.enum(["page", "file"])');
     expect(c).toContain('kind: "page" | "file"');
+  });
+});
+
+describe("duplicateNotice", () => {
+  it("always says the copy carries the contents", () => {
+    expect(duplicateNotice(false, false)).toContain("everything this document holds");
+  });
+
+  it("warns that a copy of a shared document is NOT shared", () => {
+    /*
+     * The safe direction, and the one people assume wrongly. The service copies
+     * the body, the header and the footer and deliberately leaves `share_token`
+     * behind, so the public link stays on the original only. Somebody who
+     * assumed otherwise would hand out a link that shows the old version.
+     */
+    expect(duplicateNotice(true, false)).toContain("not be shared");
+    expect(duplicateNotice(false, false)).not.toContain("not be shared");
+  });
+
+  it("warns that a copy of a report is not a second report", () => {
+    /*
+     * `source_template` is not carried either, and that column is what
+     * `page-filing.ts` uses to put a page in the Reports tab. So a copy of a
+     * report is a plain document and will not appear beside its original.
+     */
+    expect(duplicateNotice(false, true)).toContain("files as a document");
+    expect(duplicateNotice(false, false)).not.toContain("files as a document");
+  });
+
+  it("says both when both apply", () => {
+    const notice = duplicateNotice(true, true);
+    expect(notice).toContain("not be shared");
+    expect(notice).toContain("files as a document");
+  });
+});
+
+describe("duplicating a document: the phone and the server agree", () => {
+  const service = () =>
+    readFileSync(join(process.cwd(), "apps/api/src/domains/projects/pages.ts"), "utf8");
+
+  it("copies the body but not the share token", () => {
+    // The claim `duplicateNotice` makes, read from the service rather than
+    // remembered: an insert listing exactly what carries over.
+    const s = service();
+    const at = s.indexOf("export async function duplicateProjectPageService");
+    const body = s.slice(at, at + 1400);
+    expect(body).toContain("content_html: source.content_html");
+    expect(body).toContain("header_html: source.header_html");
+    expect(body).not.toContain("share_token");
+  });
+
+  it("does not carry source_template, so a copy of a report is not a report", () => {
+    const s = service();
+    const at = s.indexOf("export async function duplicateProjectPageService");
+    expect(s.slice(at, at + 1400)).not.toContain("source_template");
+  });
+
+  it("numbers the title against what the project already holds", () => {
+    // Otherwise duplicating twice leaves two rows both called "Copy of X".
+    const s = service();
+    const at = s.indexOf("export async function duplicateProjectPageService");
+    expect(s.slice(at, at + 1400)).toContain("uniqueDocumentTitle(");
+  });
+
+  it("reads the three fields the service answers with", () => {
+    expect(service()).toContain('.select("id, title, updated_at")');
+    const client = readFileSync(join(process.cwd(), "apps/mobile/src/api/pages.ts"), "utf8");
+    expect(client).toContain("page.updated_at");
   });
 });

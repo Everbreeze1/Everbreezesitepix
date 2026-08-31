@@ -135,3 +135,20 @@ export function deleteFolderWarning(group: FolderGroup): string {
   if (count === 0) return `Delete the folder "${group.name}"? It is empty.`;
   return `Delete the folder "${group.name}"? It holds ${count} item${count === 1 ? "" : "s"}. Check the job afterwards to see where they went.`;
 }
+
+/**
+ * What a copy of a document is, and is not.
+ *
+ * Said before the tap because both halves are things people assume wrongly. A
+ * copy of a shared document is NOT itself shared - the server does not carry
+ * the token over, which is the safe direction and the surprising one. And a
+ * copy of a report is a plain document rather than a second report, because
+ * `source_template` is not carried either, so it will not appear in the Reports
+ * tab beside the original.
+ */
+export function duplicateNotice(isShared: boolean, isReport: boolean): string {
+  const parts = ["The copy opens with everything this document holds."];
+  if (isShared) parts.push("It will not be shared: the public link stays on the original only.");
+  if (isReport) parts.push("It files as a document rather than as a second report.");
+  return parts.join(" ");
+}
