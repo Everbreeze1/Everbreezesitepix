@@ -5,7 +5,7 @@ import { projectDisplayName } from "@everlumen/shared";
 import { formatAddress, listProjects } from "@/api/projects";
 import type { PhotoPhase } from "@/api/photos";
 import { spacing, useTheme } from "@/theme";
-import { FolderInput, MapPin, Tag, Trash2, X } from "@/ui/icons";
+import { FolderInput, MapPin, Sparkles, Tag, Trash2, X } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -37,6 +37,16 @@ export type PhotoBulkAction =
   | { kind: "phase"; phase: PhotoPhase }
   | { kind: "tags"; tags: string[] }
   | { kind: "move"; projectId: string }
+  /*
+   * The odd one out, and deliberately last in the bar.
+   *
+   * Every other action here is a patch that goes through the offline outbox and
+   * lands whenever there is signal. This one is an online RPC that spends an
+   * LLM call and produces a NEW artefact - a write-up of the photographs
+   * selected - so it cannot be queued and it is not undone by selecting
+   * differently afterwards.
+   */
+  | { kind: "summarise" }
   | { kind: "trash" };
 
 export function PhotoBulkBar({
@@ -101,6 +111,18 @@ export function PhotoBulkBar({
             variant="outline"
             disabled={busy}
             onPress={() => setSheet("tags")}
+          />
+          {/*
+            Placed before the destructive one and after the cheap ones, because
+            it is the only button here that costs anything to press.
+          */}
+          <Button
+            label="Write up"
+            icon={Sparkles}
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onPress={() => onAction({ kind: "summarise" })}
           />
           <Button
             label="Move"

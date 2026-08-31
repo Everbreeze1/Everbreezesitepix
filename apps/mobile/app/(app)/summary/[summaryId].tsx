@@ -12,6 +12,7 @@ import {
   updateSummary,
 } from "@/api/summaries";
 import {
+  bodyError,
   deleteWarning,
   isNarrated,
   offsetLabel,
@@ -25,7 +26,7 @@ import {
 } from "@/api/summary-view";
 import { openShareSheet } from "@/api/sharing";
 import { radius, spacing, useTheme } from "@/theme";
-import { Link2, Quote, RefreshCw, Sparkles, Trash2, TriangleAlert } from "@/ui/icons";
+import { Link2, PenLine, Quote, RefreshCw, Sparkles, Trash2, TriangleAlert } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -60,6 +61,7 @@ export default function SummaryScreen() {
   const queryClient = useQueryClient();
 
   const [editingTitle, setEditingTitle] = useState(false);
+  const [editingBody, setEditingBody] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -139,6 +141,35 @@ export default function SummaryScreen() {
     onError: (error: unknown) =>
       Alert.alert("Could not delete", error instanceof Error ? error.message : "Please try again."),
   });
+
+  /**
+   * Edit the write-up itself.
+   *
+   * The body is written by a model and people disagree with models, so the one
+   * thing they need is to be able to fix it. Saved as markdown - the phone
+   * renders it stripped, and what goes back is what was typed, because
+   * round-tripping it through the stripper would silently destroy every heading
+   * the model wrote.
+   */
+  const saveBody = useMutation({
+    mutationFn: () => updateSummary({ summaryId: String(summaryId), markdown: editingBody ?? "" }),
+    onSuccess: () => {
+      setEditingBody(null);
+      setFormError(null);
+      void queryClient.invalidateQueries({ queryKey });
+    },
+    onError: (error: unknown) =>
+      setFormError(error instanceof Error ? error.message : "That did not save."),
+  });
+
+  const commitBody = useCallback(() => {
+    const bad = bodyError(editingBody ?? "");
+    if (bad) {
+      setFormError(bad);
+      return;
+    }
+    saveBody.mutate();
+  }, [editingBody, saveBody]);
 
   const startRename = useCallback(() => {
     setTitle(summary?.title ?? "");
@@ -248,7 +279,44 @@ export default function SummaryScreen() {
           </Card>
         ) : null}
 
-        {summary.markdown ? (
+        {editingBody !== null ? (
+          <>
+            <SectionHeader title="Summary" />
+            <Field
+              value={editingBody}
+              onChangeText={(next) => {
+                setEditingBody(next);
+                if (formError) setFormError(null);
+              }}
+              multiline
+              rows={12}
+              error={formError ?? undefined}
+              /*
+                Markdown, shown as markdown while editing. The reader strips it,
+                but hiding the syntax from the person changing it would mean
+                their headings vanished the moment they saved.
+              */
+              hint="Markdown. Headings and lists are kept."
+            />
+            <ButtonRow>
+              <Button
+                label="Cancel"
+                variant="secondary"
+                size="sm"
+                onPress={() => {
+                  setEditingBody(null);
+                  setFormError(null);
+                }}
+              />
+              <Button
+                label={saveBody.isPending ? "Saving" : "Save"}
+                size="sm"
+                disabled={saveBody.isPending}
+                onPress={commitBody}
+              />
+            </ButtonRow>
+          </>
+        ) : summary.markdown ? (
           <>
             <SectionHeader title="Summary" />
             {/*
@@ -319,6 +387,19 @@ export default function SummaryScreen() {
         <View style={{ gap: spacing.sm }}>
           {!editingTitle ? (
             <Button label="Rename" variant="secondary" fullWidth onPress={startRename} />
+          ) : null}
+
+          {editingBody === null ? (
+            <Button
+              label="Edit the write-up"
+              icon={PenLine}
+              variant="secondary"
+              fullWidth
+              onPress={() => {
+                setFormError(null);
+                setEditingBody(summary.markdown ?? "");
+              }}
+            />
           ) : null}
 
           {/*

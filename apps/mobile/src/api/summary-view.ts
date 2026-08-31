@@ -127,6 +127,26 @@ export function titleError(title: string): string | null {
 }
 
 /**
+ * Why an edited body cannot be saved, or null.
+ *
+ * The ceiling is the server's (`max(200_000)`), and it is generous enough that
+ * nobody will meet it by typing. It is here because a write-up is markdown a
+ * person can paste into, and a paste is how a limit like this is actually hit -
+ * at which point being refused by a server you cannot see, after losing the
+ * edit, is the bad outcome.
+ *
+ * An EMPTY body is allowed, deliberately: clearing a write-up somebody disagrees
+ * with and leaving the photographs is a legitimate thing to want, and the
+ * screen already distinguishes "nothing written" from "still being written".
+ */
+export function bodyError(markdown: string): string | null {
+  if (markdown.length > MAX_SUMMARY_MARKDOWN) {
+    return `That is ${markdown.length - MAX_SUMMARY_MARKDOWN} characters too long to save.`;
+  }
+  return null;
+}
+
+/**
  * Why these photos cannot be summarised, or null.
  *
  * The upper bound is the server's and it rejects rather than trimming, so

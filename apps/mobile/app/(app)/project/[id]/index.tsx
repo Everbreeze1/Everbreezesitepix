@@ -50,6 +50,9 @@ import {
 import { ensureProjectShareToken, openShareSheet, publicUrl } from "@/api/sharing";
 import { QueueBanner } from "@/components/QueueBanner";
 import { PhotoBulkBar, type PhotoBulkAction } from "@/components/PhotoBulkBar";
+import { generateSummaryFromPhotos } from "@/api/summaries";
+import { photoSelectionError } from "@/api/summary-view";
+import { randomUUID } from "expo-crypto";
 import { ProjectEditorSheet } from "@/components/ProjectEditorSheet";
 import {
   photoPatchRowId,
@@ -151,6 +154,13 @@ export default function ProjectDetailScreen() {
   const [editing, setEditing] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
+  /*
+   * Kept apart from `shareError` rather than reusing it. They surface in
+   * different places - one under the share action, one over the bulk bar - and
+   * one message showing up in the wrong half of the screen is how somebody
+   * concludes the wrong thing failed.
+   */
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const selecting = selected.size > 0;
@@ -338,6 +348,43 @@ export default function ProjectDetailScreen() {
     async (action: PhotoBulkAction) => {
       const ids = Array.from(selected);
       if (ids.length === 0) return;
+
+      /*
+       * The write-up leaves before the patch machinery below, because it is not
+       * a patch: it spends an LLM call and produces a new artefact rather than
+       * changing these photographs. Handled first so the optimistic cache
+       * rewrite never runs for it.
+       */
+      if (action.kind === "summarise") {
+        // The server rejects over its cap rather than trimming, so refusing
+        // here saves the wait and the quota slot.
+        const refusal = photoSelectionError(ids.length);
+        if (refusal) {
+          setBulkError(refusal);
+          return;
+        }
+        setBusy(true);
+        try {
+          const { summaryId } = await generateSummaryFromPhotos({
+            projectId: String(id),
+            photoIds: ids,
+            // Fresh per tap: asking for a second write-up of the same photos is
+            // legitimate, a retry after a dropped response is not.
+            idempotencyKey: randomUUID(),
+          });
+          setSelected(new Set());
+          setBulkError(null);
+          if (summaryId) {
+            router.push({ pathname: "/summary/[summaryId]", params: { summaryId } });
+          }
+        } catch (error) {
+          setBulkError(error instanceof Error ? error.message : "Could not write those photos up.");
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
+
       setBusy(true);
 
       const removesFromThisProject = action.kind === "trash" || action.kind === "move";
@@ -719,6 +766,20 @@ export default function ProjectDetailScreen() {
           underneath it. Two controls for one intent, one of them obscuring the
           other.
         */}
+        {selecting && bulkError ? (
+          <View
+            style={{
+              paddingHorizontal: spacing.lg,
+              paddingBottom: spacing.xs,
+              backgroundColor: theme.colors.background,
+            }}
+          >
+            <UIText variant="caption" tone="destructive">
+              {bulkError}
+            </UIText>
+          </View>
+        ) : null}
+
         {selecting ? (
           <PhotoBulkBar
             count={selected.size}

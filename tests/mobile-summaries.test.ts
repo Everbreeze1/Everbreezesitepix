@@ -2,9 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  bodyError,
   deleteWarning,
   isNarrated,
   markdownPreview,
+  MAX_SUMMARY_MARKDOWN,
   MAX_SUMMARY_PHOTOS,
   MAX_SUMMARY_TITLE,
   offsetLabel,
@@ -303,5 +305,66 @@ describe("the phone and the server agree", () => {
     const c = client();
     expect(c).toContain('publicUrl("summaries"');
     expect(c).not.toContain("`${webAppUrl}/share/");
+  });
+});
+
+describe("writing up a selection of photos", () => {
+  const screen = () =>
+    readFileSync(join(process.cwd(), "apps/mobile/app/(app)/project/[id]/index.tsx"), "utf8");
+
+  it("refuses an over-large selection before spending the call", () => {
+    /*
+     * The server rejects over its cap rather than trimming, so without this
+     * somebody who selected sixty photographs waits, spends a quota slot, and
+     * is refused by a server they cannot see.
+     */
+    expect(screen()).toContain("photoSelectionError(ids.length)");
+  });
+
+  it("leaves before the patch machinery, because it is not a patch", () => {
+    /*
+     * Every other bulk action is an offline-queued patch on the selected
+     * photographs. This one spends an LLM call and produces a new artefact, so
+     * it must not run the optimistic cache rewrite that follows.
+     */
+    const s = screen();
+    const branchAt = s.indexOf('if (action.kind === "summarise")');
+    const patchAt = s.indexOf("const basePatch: PhotoPatch");
+    expect(branchAt).toBeGreaterThan(-1);
+    expect(patchAt).toBeGreaterThan(-1);
+    expect(branchAt).toBeLessThan(patchAt);
+  });
+
+  it("carries a fresh idempotency key per tap", () => {
+    // A second write-up of the same photos is legitimate; a retry after a
+    // dropped response is not.
+    expect(screen()).toContain("idempotencyKey: randomUUID()");
+  });
+});
+
+describe("bodyError", () => {
+  it("allows an empty write-up", () => {
+    /*
+     * Deliberate. Clearing a write-up somebody disagrees with, and leaving the
+     * photographs and their notes, is a legitimate thing to want - and the
+     * reader already distinguishes "nothing written" from "still being
+     * written", so an empty body does not read as a stuck generation.
+     */
+    expect(bodyError("")).toBeNull();
+  });
+
+  it("mirrors the server's ceiling", () => {
+    expect(bodyError("x".repeat(MAX_SUMMARY_MARKDOWN))).toBeNull();
+    expect(bodyError("x".repeat(MAX_SUMMARY_MARKDOWN + 7))).toContain("7 characters");
+  });
+
+  it("counts the raw text, not the trimmed text", () => {
+    /*
+     * The server's `max()` runs on what is sent. Trimming here would let a
+     * paste that is over the limit by its whitespace through, to be refused by
+     * a server the person cannot see, after they lose the edit.
+     */
+    const body = " ".repeat(10) + "x".repeat(MAX_SUMMARY_MARKDOWN);
+    expect(bodyError(body)).toContain("10 characters");
   });
 });

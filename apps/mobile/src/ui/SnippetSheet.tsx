@@ -5,6 +5,7 @@ import {
   createTextSnippet,
   deleteTextSnippet,
   listTextSnippets,
+  updateTextSnippet,
   type TextSnippet,
 } from "@/api/snippets";
 import {
@@ -18,7 +19,7 @@ import {
 } from "@/api/snippets-view";
 import type { Block } from "@/api/doc-blocks";
 import { radius, spacing, useTheme } from "@/theme";
-import { Library, Plus, Trash2, TriangleAlert } from "./icons";
+import { Library, PenLine, Plus, Trash2, TriangleAlert } from "./icons";
 import { Badge } from "./Badge";
 import { Button, IconButton } from "./Button";
 import { Field } from "./Field";
@@ -62,6 +63,7 @@ export function SnippetSheet({
 
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [title, setTitle] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -107,6 +109,38 @@ export function SnippetSheet({
       Alert.alert("Could not delete", error instanceof Error ? error.message : "Please try again.");
     },
   });
+
+  /**
+   * Rename a snippet in place.
+   *
+   * The library is team-shared and names are how anybody finds anything in it,
+   * so a snippet saved in a hurry as "Standard 3" needs to be fixable from the
+   * phone rather than only from a desk. Inline rather than a native prompt:
+   * `Alert.prompt` does not exist on Android.
+   */
+  const rename = useMutation({
+    mutationFn: (args: { id: string; title: string }) =>
+      updateTextSnippet({ snippetId: args.id, title: args.title }),
+    onSuccess: (_ok, args) => {
+      queryClient.setQueryData<TextSnippet[]>(["text-snippets"], (prev) =>
+        (prev ?? []).map((s) => (s.id === args.id ? { ...s, title: args.title.trim() } : s)),
+      );
+      setRenaming(null);
+      setFormError(null);
+    },
+    onError: (error: unknown) =>
+      setFormError(error instanceof Error ? error.message : "Could not rename that."),
+  });
+
+  function saveRename() {
+    if (!renaming) return;
+    const bad = snippetTitleError(renaming.title);
+    if (bad) {
+      setFormError(bad);
+      return;
+    }
+    rename.mutate(renaming);
+  }
 
   function startSave() {
     const bad = snippetBodyError(saveableHtml ?? "");
@@ -260,37 +294,82 @@ export function SnippetSheet({
                       backgroundColor: theme.colors.card,
                     }}
                   >
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Insert ${snippet.title}`}
-                      onPress={() => insert(snippet)}
-                      style={({ pressed }) => ({ flex: 1, gap: 2, opacity: pressed ? 0.6 : 1 })}
-                    >
-                      <Text variant="bodyStrong" numberOfLines={1}>
-                        {snippet.title}
-                      </Text>
-                      <Text variant="caption" tone="muted" numberOfLines={2}>
-                        {snippetPreview(snippet)}
-                      </Text>
-                      {plan.mode === "html" ? (
-                        // Flagged in the list rather than only at the moment of
-                        // insertion, so somebody choosing between two snippets
-                        // can see which one costs them the phone editor.
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: spacing.xs,
-                            paddingTop: 2,
-                          }}
-                        >
-                          <Icon icon={TriangleAlert} size="sm" tone="safety" />
-                          <Text variant="caption" tone="muted">
-                            Adds formatting the phone cannot edit
-                          </Text>
+                    {renaming?.id === snippet.id ? (
+                      <View style={{ flex: 1, gap: spacing.sm }}>
+                        <Field
+                          label="Snippet name"
+                          value={renaming.title}
+                          onChangeText={(title) =>
+                            setRenaming((cur) => (cur ? { ...cur, title } : cur))
+                          }
+                        />
+                        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                          <Button
+                            label="Cancel"
+                            variant="secondary"
+                            size="sm"
+                            style={{ flex: 1 }}
+                            onPress={() => {
+                              setRenaming(null);
+                              setFormError(null);
+                            }}
+                          />
+                          <Button
+                            label={rename.isPending ? "Saving" : "Save"}
+                            size="sm"
+                            style={{ flex: 1 }}
+                            disabled={rename.isPending}
+                            onPress={saveRename}
+                          />
                         </View>
-                      ) : null}
-                    </Pressable>
+                      </View>
+                    ) : (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Insert ${snippet.title}`}
+                        onPress={() => insert(snippet)}
+                        style={({ pressed }) => ({ flex: 1, gap: 2, opacity: pressed ? 0.6 : 1 })}
+                      >
+                        <Text variant="bodyStrong" numberOfLines={1}>
+                          {snippet.title}
+                        </Text>
+                        <Text variant="caption" tone="muted" numberOfLines={2}>
+                          {snippetPreview(snippet)}
+                        </Text>
+                        {plan.mode === "html" ? (
+                          // Flagged in the list rather than only at the moment of
+                          // insertion, so somebody choosing between two snippets
+                          // can see which one costs them the phone editor.
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: spacing.xs,
+                              paddingTop: 2,
+                            }}
+                          >
+                            <Icon icon={TriangleAlert} size="sm" tone="safety" />
+                            <Text variant="caption" tone="muted">
+                              Adds formatting the phone cannot edit
+                            </Text>
+                          </View>
+                        ) : null}
+                      </Pressable>
+                    )}
+
+                    {renaming?.id === snippet.id ? null : (
+                      <IconButton
+                        icon={PenLine}
+                        surface={false}
+                        size="sm"
+                        accessibilityLabel={`Rename ${snippet.title}`}
+                        onPress={() => {
+                          setFormError(null);
+                          setRenaming({ id: snippet.id, title: snippet.title });
+                        }}
+                      />
+                    )}
+
                     <IconButton
                       icon={Trash2}
                       accessibilityLabel={`Delete ${snippet.title}`}

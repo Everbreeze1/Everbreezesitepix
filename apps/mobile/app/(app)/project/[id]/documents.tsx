@@ -4,21 +4,45 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { relativeTime, titleWithinProject } from "@everlumen/shared";
 import {
+  createDocumentFolder,
   createPage,
+  deleteDocumentFolder,
   deletePage,
-  listDocumentTree,
-  type DocumentPage,
   duplicatePage,
+  listDocumentTree,
+  moveDocument,
+  renameDocumentFolder,
+  type DocumentFolder,
+  type DocumentPage,
 } from "@/api/pages";
 import { getProject } from "@/api/projects";
-import { duplicateNotice } from "@/api/folders-view";
+import {
+  deleteFolderWarning,
+  duplicateNotice,
+  folderNameError,
+  groupByFolder,
+  groupCount,
+  moveTargets,
+  type FolderGroup,
+} from "@/api/folders-view";
 import { spacing } from "@/theme";
-import { Copy, FileText, Paperclip, Plus, Trash2 } from "@/ui/icons";
+import {
+  Copy,
+  FileText,
+  FolderInput,
+  FolderPlus,
+  Paperclip,
+  PenLine,
+  Plus,
+  Trash2,
+} from "@/ui/icons";
 import {
   Badge,
   Button,
+  ButtonRow,
   EmptyState,
   ErrorState,
+  Field,
   IconButton,
   ListGroup,
   ListRow,
@@ -81,6 +105,137 @@ export default function ProjectDocumentsScreen() {
     for (const folder of query.data?.folders ?? []) map.set(folder.id, folder.name);
     return map;
   }, [query.data]);
+
+  const folders = tree?.folders ?? [];
+
+  /**
+   * Documents arranged under their folders.
+   *
+   * The rule lives in `folders-view.ts` and is tested there: the top level
+   * always exists, an empty folder is still shown, and a document whose folder
+   * has been deleted falls back to the top rather than vanishing from a screen
+   * that is the only place it could be filed again.
+   */
+  const groups = useMemo(() => groupByFolder(folders, pages, files), [folders, pages, files]);
+
+  const [newFolder, setNewFolder] = useState<string | null>(null);
+  const [editingFolder, setEditingFolder] = useState<{ id: string; name: string } | null>(null);
+
+  function refresh() {
+    void queryClient.invalidateQueries({ queryKey });
+  }
+
+  const addFolder = useMutation({
+    mutationFn: (name: string) => createDocumentFolder(id!, name),
+    onSuccess: () => {
+      setNewFolder(null);
+      setFailure(null);
+      refresh();
+    },
+    onError: (error: unknown) =>
+      setFailure(error instanceof Error ? error.message : "Could not make that folder."),
+  });
+
+  const renameFolder = useMutation({
+    mutationFn: (args: { folderId: string; name: string }) =>
+      renameDocumentFolder(args.folderId, args.name),
+    onSuccess: refresh,
+    onError: (error: unknown) =>
+      setFailure(error instanceof Error ? error.message : "Could not rename that folder."),
+  });
+
+  const removeFolder = useMutation({
+    mutationFn: (folderId: string) => deleteDocumentFolder(folderId),
+    onSuccess: refresh,
+    onError: (error: unknown) =>
+      setFailure(error instanceof Error ? error.message : "Could not delete that folder."),
+  });
+
+  const move = useMutation({
+    mutationFn: (args: { kind: "page" | "file"; id: string; folderId: string | null }) =>
+      moveDocument(args.kind, args.id, args.folderId),
+    onSuccess: refresh,
+    onError: (error: unknown) =>
+      setFailure(error instanceof Error ? error.message : "Could not move that document."),
+  });
+
+  const startNewFolder = useCallback(() => {
+    setFailure(null);
+    setNewFolder("");
+  }, []);
+
+  const saveNewFolder = useCallback(() => {
+    const name = newFolder ?? "";
+    // Duplicate names are refused here and not by the server: there is no
+    // unique constraint, so two folders called "Certificates" is legal and
+    // impossible to work with.
+    const bad = folderNameError(name, folders);
+    if (bad) {
+      setFailure(bad);
+      return;
+    }
+    addFolder.mutate(name);
+  }, [newFolder, folders, addFolder]);
+
+  /*
+   * Renaming is an inline field, not `Alert.prompt`.
+   *
+   * `Alert.prompt` is iOS-only: on Android it is undefined, so the optional
+   * call would silently do nothing and the button would look broken on the
+   * platform this app is mostly tested on. The repo already refuses native
+   * dialogs on the web for a related reason, and it applies harder here.
+   */
+  const startRename = useCallback((folderId: string, name: string) => {
+    setFailure(null);
+    setEditingFolder({ id: folderId, name });
+  }, []);
+
+  const saveRename = useCallback(() => {
+    if (!editingFolder) return;
+    const bad = folderNameError(
+      editingFolder.name,
+      folders.filter((f) => f.id !== editingFolder.id),
+    );
+    if (bad) {
+      setFailure(bad);
+      return;
+    }
+    renameFolder.mutate({ folderId: editingFolder.id, name: editingFolder.name });
+    setEditingFolder(null);
+  }, [editingFolder, folders, renameFolder]);
+
+  const confirmDeleteFolder = useCallback(
+    (group: FolderGroup) => {
+      Alert.alert("Delete folder", deleteFolderWarning(group), [
+        { text: "Keep", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => group.id && removeFolder.mutate(group.id),
+        },
+      ]);
+    },
+    [removeFolder],
+  );
+
+  /** Offer the folders this document is not already in, plus the top level. */
+  const promptMove = useCallback(
+    (kind: "page" | "file", docId: string, currentFolderId: string | null, title: string) => {
+      const targets = moveTargets(folders, currentFolderId);
+      if (targets.length === 0) {
+        setFailure("Make a folder first, then you can file documents into it.");
+        return;
+      }
+      Alert.alert(`Move "${title}"`, undefined, [
+        ...targets.map((target) => ({
+          text: target.name,
+          onPress: () => move.mutate({ kind, id: docId, folderId: target.id }),
+        })),
+        { text: "Cancel", style: "cancel" as const },
+      ]);
+    },
+    [folders, move],
+  );
 
   const create = useMutation({
     // Blank, deliberately. The seeded document templates produce HTML full of
@@ -183,45 +338,173 @@ export default function ProjectDocumentsScreen() {
               />
             ) : (
               <>
-                {pages.length > 0 ? (
-                  <ListGroup>
-                    {pages.map((page, index) => (
-                      <View key={page.id}>
-                        {index > 0 ? <RowDivider /> : null}
-                        <ListRow
-                          icon={FileText}
-                          title={titleWithinProject(page.title, projectQuery.data?.name)}
-                          subtitle={[
-                            page.folderId ? folderName.get(page.folderId) : null,
-                            relativeTime(page.updatedAt),
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                          right={
-                            <View style={{ flexDirection: "row", alignItems: "center" }}>
-                              <IconButton
-                                icon={Copy}
-                                surface={false}
-                                accessibilityLabel={`Copy ${page.title}`}
-                                onPress={() => confirmDuplicate(page)}
-                              />
-                              <IconButton
-                                icon={Trash2}
-                                tone="destructive"
-                                surface={false}
-                                accessibilityLabel={`Delete ${page.title}`}
-                                onPress={() => confirmDelete(page)}
-                              />
-                            </View>
-                          }
-                          onPress={() =>
-                            router.push({ pathname: "/page/[pageId]", params: { pageId: page.id } })
-                          }
-                        />
-                      </View>
-                    ))}
-                  </ListGroup>
-                ) : null}
+                {/*
+                  Grouped by folder rather than one flat list.
+
+                  `groupByFolder` decides the arrangement and is tested in
+                  `folders-view.ts`: the top level always exists, an empty
+                  folder still shows (otherwise making one looks like it
+                  failed), and a document whose folder was deleted falls back to
+                  the top rather than disappearing off the only screen it could
+                  be filed from again.
+                */}
+                {groups.map((group) => (
+                  <View key={group.id ?? "top"} style={{ gap: spacing.sm }}>
+                    {group.id ? (
+                      editingFolder?.id === group.id ? (
+                        <View style={{ gap: spacing.sm }}>
+                          <Field
+                            label="Folder name"
+                            value={editingFolder.name}
+                            onChangeText={(name) =>
+                              setEditingFolder((cur) => (cur ? { ...cur, name } : cur))
+                            }
+                          />
+                          <ButtonRow>
+                            <Button
+                              label="Cancel"
+                              variant="secondary"
+                              size="sm"
+                              onPress={() => setEditingFolder(null)}
+                            />
+                            <Button label="Save" size="sm" onPress={saveRename} />
+                          </ButtonRow>
+                        </View>
+                      ) : (
+                        <View
+                          style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}
+                        >
+                          <SectionHeader
+                            title={group.name}
+                            count={groupCount(group) || undefined}
+                          />
+                          <View style={{ flex: 1 }} />
+                          <IconButton
+                            icon={PenLine}
+                            surface={false}
+                            size="sm"
+                            accessibilityLabel={`Rename ${group.name}`}
+                            onPress={() => startRename(group.id!, group.name)}
+                          />
+                          <IconButton
+                            icon={Trash2}
+                            tone="destructive"
+                            surface={false}
+                            size="sm"
+                            accessibilityLabel={`Delete ${group.name}`}
+                            onPress={() => confirmDeleteFolder(group)}
+                          />
+                        </View>
+                      )
+                    ) : groups.length > 1 ? (
+                      <SectionHeader title={group.name} count={groupCount(group) || undefined} />
+                    ) : null}
+
+                    {group.pages.length === 0 && group.files.length === 0 ? (
+                      <Text variant="caption" tone="muted">
+                        Empty
+                      </Text>
+                    ) : (
+                      <ListGroup>
+                        {group.pages.map((page, index) => (
+                          <View key={page.id}>
+                            {index > 0 ? <RowDivider /> : null}
+                            <ListRow
+                              icon={FileText}
+                              title={titleWithinProject(page.title, projectQuery.data?.name)}
+                              subtitle={relativeTime(page.updatedAt)}
+                              right={
+                                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                                  <IconButton
+                                    icon={FolderInput}
+                                    surface={false}
+                                    accessibilityLabel={`Move ${page.title}`}
+                                    onPress={() =>
+                                      promptMove("page", page.id, page.folderId, page.title)
+                                    }
+                                  />
+                                  <IconButton
+                                    icon={Copy}
+                                    surface={false}
+                                    accessibilityLabel={`Copy ${page.title}`}
+                                    onPress={() => confirmDuplicate(page)}
+                                  />
+                                  <IconButton
+                                    icon={Trash2}
+                                    tone="destructive"
+                                    surface={false}
+                                    accessibilityLabel={`Delete ${page.title}`}
+                                    onPress={() => confirmDelete(page)}
+                                  />
+                                </View>
+                              }
+                              onPress={() =>
+                                router.push({
+                                  pathname: "/page/[pageId]",
+                                  params: { pageId: page.id },
+                                })
+                              }
+                            />
+                          </View>
+                        ))}
+
+                        {group.files.map((file, index) => (
+                          <View key={file.id}>
+                            {index > 0 || group.pages.length > 0 ? <RowDivider /> : null}
+                            <ListRow
+                              icon={Paperclip}
+                              title={file.fileName}
+                              subtitle={relativeTime(file.createdAt)}
+                              right={
+                                <IconButton
+                                  icon={FolderInput}
+                                  surface={false}
+                                  accessibilityLabel={`Move ${file.fileName}`}
+                                  onPress={() =>
+                                    promptMove("file", file.id, file.folderId, file.fileName)
+                                  }
+                                />
+                              }
+                            />
+                          </View>
+                        ))}
+                      </ListGroup>
+                    )}
+                  </View>
+                ))}
+
+                {newFolder !== null ? (
+                  <View style={{ gap: spacing.sm }}>
+                    <Field
+                      label="New folder"
+                      value={newFolder}
+                      onChangeText={setNewFolder}
+                      placeholder="Certificates"
+                    />
+                    <ButtonRow>
+                      <Button
+                        label="Cancel"
+                        variant="secondary"
+                        size="sm"
+                        onPress={() => setNewFolder(null)}
+                      />
+                      <Button
+                        label={addFolder.isPending ? "Making" : "Make folder"}
+                        size="sm"
+                        disabled={addFolder.isPending}
+                        onPress={saveNewFolder}
+                      />
+                    </ButtonRow>
+                  </View>
+                ) : (
+                  <Button
+                    label="New folder"
+                    icon={FolderPlus}
+                    variant="secondary"
+                    fullWidth
+                    onPress={startNewFolder}
+                  />
+                )}
 
                 <Button
                   label="New page"

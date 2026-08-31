@@ -851,11 +851,35 @@ export async function updateMemberRoleService(ctx: AuthedContext, data: any) {
     throw Object.assign(new Error("That role cannot be assigned."), { status: 400 });
   }
 
-  const { error } = await supabaseAdmin
+  /*
+   * `.select()` so the update has to prove it changed something.
+   *
+   * Without it this op could answer 200 having done nothing at all, and that is
+   * not hypothetical: driving the phone against the deployed API, a role change
+   * returned HTTP 200 with no error, wrote an audit row, and left the member's
+   * role exactly as it was. The roster then refetched and redrew the OLD role,
+   * so the screen looked like it had simply ignored the tap. An admin trying to
+   * restrict somebody's access would have every reason to believe they had.
+   *
+   * PostgREST does not treat "matched no rows" as an error on UPDATE, so a
+   * filter that finds nothing is indistinguishable from a write that worked.
+   * Asking for the row back is what makes the difference visible: `updated` is
+   * empty exactly when nothing was written, whatever the reason - a stale id, a
+   * row that moved team, or a client that is not the service role and is being
+   * filtered by RLS it cannot see.
+   */
+  const { data: updated, error } = await supabaseAdmin
     .from("team_members" as any)
     .update({ role: data.role })
-    .eq("id", data.memberId);
+    .eq("id", data.memberId)
+    .select("id, role");
   if (error) throw new Error(error.message);
+  if (!updated || (updated as unknown[]).length === 0) {
+    throw Object.assign(
+      new Error("That role change did not save. Reload the team and try again."),
+      { status: 409 },
+    );
+  }
 
   /*
    * The assignments are KEPT across a role change. This used to wipe them.

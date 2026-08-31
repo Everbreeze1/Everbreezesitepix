@@ -18,7 +18,7 @@ import {
   Text,
 } from "@/ui";
 import { listProjectSummaries } from "@/api/summaries";
-import { summarySubtitle } from "@/api/summary-view";
+import { markdownPreview, summarySubtitle } from "@/api/summary-view";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds || seconds < 1) return "";
@@ -92,7 +92,12 @@ export default function ProjectWalkthroughsScreen() {
                     <ListRow
                       key={summary.id}
                       title={summary.title}
-                      subtitle={summarySubtitle(summary)}
+                      /*
+                        The first line of the write-up itself when there is one,
+                        because that is what tells two summaries of the same job
+                        apart. The counts fall back for one still being written.
+                      */
+                      subtitle={markdownPreview(summary.markdown) || summarySubtitle(summary)}
                       onPress={() =>
                         router.push({
                           pathname: "/summary/[summaryId]",
