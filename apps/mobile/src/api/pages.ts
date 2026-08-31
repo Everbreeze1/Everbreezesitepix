@@ -216,3 +216,24 @@ export async function moveDocument(
 ): Promise<void> {
   await api.rpc("moveDocument", { kind, id, folderId });
 }
+
+/**
+ * Turn a document's public link on or off.
+ *
+ * The last of the shareable records to reach the phone, and the one that
+ * mattered most once the whole-job report landed: that report IS a page, so
+ * without this the hand-over document could be written from the van and not
+ * sent from it.
+ *
+ * The token is minted when the page is created and never changes. Switching
+ * sharing off stamps `revoked_at` rather than destroying it, so turning it back
+ * on restores the SAME URL - a link already sent to a client keeps working
+ * rather than silently becoming a 404 that nobody is told about.
+ */
+export async function setPageShare(pageId: string, enable: boolean): Promise<string | null> {
+  const result = await api.rpc<{ shareToken?: string | null }>("setProjectPageShare", {
+    pageId,
+    enable,
+  });
+  return result?.shareToken ?? null;
+}

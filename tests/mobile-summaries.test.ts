@@ -293,8 +293,15 @@ describe("the phone and the server agree", () => {
     expect(client()).toContain("idempotencyKey");
   });
 
-  it("points the share link at the route the web actually serves", () => {
-    // A link mailed to a client that lands on a 404 is worse than no link.
-    expect(client()).toContain("/share/summaries/");
+  it("builds its share link through the shared route map", () => {
+    /*
+     * Not by assembling the path itself, which is what the first version did -
+     * a seventh copy of a route prefix that `share-links.ts` exists to hold
+     * once. That the map's entry points at a route the web actually serves is
+     * checked in `mobile-page-share.test.ts`, against the routes directory.
+     */
+    const c = client();
+    expect(c).toContain('publicUrl("summaries"');
+    expect(c).not.toContain("`${webAppUrl}/share/");
   });
 });

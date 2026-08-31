@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getPage, savePage } from "@/api/pages";
+import { getPage, savePage, setPageShare } from "@/api/pages";
+import { isShareLive, openShareSheet, publicUrl } from "@/api/sharing";
 import {
   appendBlocks,
   appendHtml,
@@ -22,7 +23,7 @@ import {
   type BlockKind,
 } from "@/api/doc-blocks";
 import { spacing } from "@/theme";
-import { ChevronDown, ChevronUp, Library, Plus, TriangleAlert, Trash2 } from "@/ui/icons";
+import { ChevronDown, ChevronUp, Library, Link2, Plus, TriangleAlert, Trash2 } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -149,6 +150,31 @@ export default function PageScreen() {
     [page, save],
   );
 
+  /**
+   * Turn this document's public link on or off.
+   *
+   * The token is minted once and kept, so switching sharing back on restores the
+   * SAME URL rather than invalidating one already sent to a client. That is why
+   * this toggles rather than mints, and why turning it off says the link stops
+   * working rather than that it has been deleted.
+   */
+  const share = useMutation({
+    mutationFn: (enable: boolean) => setPageShare(pageId!, enable),
+    onSuccess: async (token, enable) => {
+      void queryClient.invalidateQueries({ queryKey });
+      setFailure(null);
+      if (!enable) return;
+      const url = publicUrl("pages", token);
+      if (!url) {
+        setFailure("Sharing is not set up for this workspace, so there is no link to send.");
+        return;
+      }
+      await openShareSheet(url, title || "Document");
+    },
+    onError: (error: unknown) =>
+      setFailure(error instanceof Error ? error.message : "Could not change the link."),
+  });
+
   if (query.isLoading) {
     return (
       <>
@@ -273,6 +299,61 @@ export default function PageScreen() {
           never reads the existing content, so it cannot lose any of it, and it
           is the thing a phone is actually for.
         */}
+        {/*
+          Sharing sits above the composer because it is about the document as it
+          stands, not about what is being added to it. A live link is stated
+          plainly: the page is on the open internet with no login in front of it.
+        */}
+        <SectionHeader title="Share" />
+        <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
+          {isShareLive(page.share_token, page.revoked_at) ? (
+            <>
+              <Badge label="Link is live" tone="warning" icon={Link2} variant="soft" />
+              <Text variant="caption" tone="muted">
+                Anyone holding the link can read this document without signing in.
+              </Text>
+              <ButtonRow>
+                <Button
+                  label="Send the link"
+                  icon={Link2}
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => {
+                    const url = publicUrl("pages", page.share_token);
+                    if (url) void openShareSheet(url, title || "Document");
+                  }}
+                />
+                <Button
+                  label="Stop sharing"
+                  variant="secondary"
+                  size="sm"
+                  disabled={share.isPending}
+                  onPress={() => share.mutate(false)}
+                />
+              </ButtonRow>
+            </>
+          ) : (
+            <>
+              <Text variant="caption" tone="muted">
+                {/*
+                  Said before the tap. The same token comes back if sharing is
+                  turned on again later, which is why stopping is safe but is
+                  not the same as never having shared.
+                */}
+                Creating a link puts this document on the open internet for anyone holding it.
+              </Text>
+              <Button
+                label={share.isPending ? "Creating" : "Share a link"}
+                icon={Link2}
+                variant="secondary"
+                fullWidth
+                disabled={share.isPending}
+                onPress={() => share.mutate(true)}
+              />
+            </>
+          )}
+        </View>
+
         <SectionHeader title="Add to the end" />
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
           {draft.length === 0 ? (

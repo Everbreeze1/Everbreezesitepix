@@ -2,8 +2,9 @@ import { useCallback, useMemo, useState } from "react";
 import { Alert, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { relativeTime } from "@everlumen/shared";
+import { relativeTime, titleWithinProject } from "@everlumen/shared";
 import { createPage, deletePage, listDocumentTree, type DocumentPage } from "@/api/pages";
+import { getProject } from "@/api/projects";
 import { spacing } from "@/theme";
 import { FileText, Paperclip, Plus, Trash2 } from "@/ui/icons";
 import {
@@ -40,6 +41,20 @@ export default function ProjectDocumentsScreen() {
   const query = useQuery({
     queryKey,
     queryFn: () => listDocumentTree(id!),
+    enabled: Boolean(id),
+  });
+
+  /*
+   * The job's name, only so the rows can stop repeating it.
+   *
+   * Pages here are auto-named after the project, so the list rendered as five
+   * identical "20 Charlcote Crescent - Site visit ..." rows with the part that
+   * tells them apart truncated away. Cheap: the project screen has already
+   * fetched this, so it is a cache read rather than a request.
+   */
+  const projectQuery = useQuery({
+    queryKey: ["project", id],
+    queryFn: () => getProject(id!),
     enabled: Boolean(id),
   });
 
@@ -134,7 +149,7 @@ export default function ProjectDocumentsScreen() {
                         {index > 0 ? <RowDivider /> : null}
                         <ListRow
                           icon={FileText}
-                          title={page.title}
+                          title={titleWithinProject(page.title, projectQuery.data?.name)}
                           subtitle={[
                             page.folderId ? folderName.get(page.folderId) : null,
                             relativeTime(page.updatedAt),

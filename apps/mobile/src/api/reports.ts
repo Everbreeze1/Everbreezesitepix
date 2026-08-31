@@ -111,3 +111,57 @@ export async function draftReportSummary(
   const markdown = result?.markdown?.trim();
   return markdown ? markdown : null;
 }
+
+/**
+ * The whole-job report: a different artefact from the rows above.
+ *
+ * `project_reports` is the report a person BUILDS - create it empty, pick the
+ * photographs, write the summary. This one is written for them: the service
+ * reads every photo still on the job, every walkthrough write-up, and the
+ * project's own details, and files the result as a `project_pages` row with
+ * `source_template: "report"`, which is what puts it in the Reports tab.
+ *
+ * So it lands somewhere the phone's report LIST does not look - that list reads
+ * `project_reports` - and the screen navigates straight to the page instead.
+ *
+ * Idempotent server-side, and it has to be: it spends several LLM calls, and a
+ * retry after a dropped response would bill for a second copy of a document
+ * nobody asked for twice.
+ */
+export type ComprehensiveReportResult = {
+  page: { id: string; title: string; updated_at: string } | null;
+  /**
+   * Non-null when the model was unreachable.
+   *
+   * The report is still produced and still worth having: it carries the client
+   * details, the figures and the photographic record. What it loses is the
+   * three written sections, which the service omits rather than printing empty
+   * headings - "a heading with nothing under it is worse than no heading".
+   */
+  aiFailed: string | null;
+  photoCount: number;
+  summaryCount: number;
+};
+
+export async function generateComprehensiveReport(input: {
+  projectId: string;
+  title?: string;
+  photosPerPage?: number;
+  idempotencyKey: string;
+}): Promise<ComprehensiveReportResult> {
+  const result = await api.rpc<Partial<ComprehensiveReportResult>>(
+    "generateComprehensiveReport",
+    {
+      projectId: input.projectId,
+      ...(input.title ? { title: input.title } : {}),
+      ...(input.photosPerPage ? { photosPerPage: input.photosPerPage } : {}),
+    },
+    { idempotencyKey: input.idempotencyKey },
+  );
+  return {
+    page: result?.page ?? null,
+    aiFailed: result?.aiFailed ?? null,
+    photoCount: result?.photoCount ?? 0,
+    summaryCount: result?.summaryCount ?? 0,
+  };
+}

@@ -1,4 +1,5 @@
-import { api, webAppUrl } from "@/lib/api";
+import { api } from "@/lib/api";
+import { publicUrl } from "./sharing";
 import type { SummaryPhotoNote, WalkthroughSummary } from "./summary-view";
 
 /**
@@ -130,8 +131,14 @@ export async function setSummaryShare(summaryId: string, enable: boolean): Promi
   return result?.token ?? result?.shareToken ?? null;
 }
 
-/** The public URL for a shared summary, or null when sharing is not set up. */
+/**
+ * The public URL for a shared summary, or null when sharing is not set up.
+ *
+ * Through `publicUrl` rather than assembling the path here. The first version
+ * of this built the string itself and so kept a seventh copy of a route prefix
+ * that `share-links.ts` exists to hold once - the exact duplication that module
+ * was written to end.
+ */
 export function summaryShareUrl(token: string | null): string | null {
-  if (!token || !webAppUrl) return null;
-  return `${webAppUrl}/share/summaries/${token}`;
+  return publicUrl("summaries", token);
 }

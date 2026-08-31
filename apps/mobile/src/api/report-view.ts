@@ -62,10 +62,15 @@ export function shareStatusLabel(report: Pick<ReportRow, "share_token" | "revoke
     : "Not shared. Turn it on to get a link.";
 }
 
+/** The column's ceiling, shared by both kinds of report. */
+export const MAX_REPORT_TITLE = 200;
+
 export function reportTitleError(title: string): string | null {
   const value = title.trim();
   if (!value) return "Give the report a title.";
-  if (value.length > 200) return "Keep the title under 200 characters.";
+  if (value.length > MAX_REPORT_TITLE) {
+    return `Keep the title under ${MAX_REPORT_TITLE} characters.`;
+  }
   return null;
 }
 
@@ -102,4 +107,82 @@ export function reportSummaryLine(report: ReportRow): string {
  */
 export function isReportEmpty(report: ReportRow): boolean {
   return reportPhotoIds(report).length === 0 && !report.summary?.trim();
+}
+
+/* ----------------------------------------------- the whole-job report ----- */
+
+/**
+ * How many photographs go on each page of evidence.
+ *
+ * The server's bound is 1 to 4 and it rejects anything else, so these are the
+ * only four values worth offering. One per page is a document somebody reads;
+ * four is a contact sheet with a caption. Two is the default because it is the
+ * one that survives being printed.
+ */
+export const PHOTOS_PER_PAGE_CHOICES = [1, 2, 3, 4] as const;
+export const DEFAULT_PHOTOS_PER_PAGE = 2;
+
+/**
+ * The whole-job report's title rule, which is NOT `reportTitleError`.
+ *
+ * Deliberately a second function rather than a shared one: a built report needs
+ * a title because a person is naming it, and `comprehensiveReportInputSchema`
+ * marks it `.optional()` because the service writes its own when none is given.
+ * Folding them together would either force a title the server does not want or
+ * stop asking for one the builder does.
+ */
+export function comprehensiveTitleError(title: string): string | null {
+  const trimmed = title.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > MAX_REPORT_TITLE) {
+    return `That title is ${trimmed.length - MAX_REPORT_TITLE} characters too long.`;
+  }
+  return null;
+}
+
+export function photosPerPageError(value: number): string | null {
+  if (!Number.isInteger(value) || value < 1 || value > 4) {
+    return "Pick between one and four photos a page.";
+  }
+  return null;
+}
+
+/**
+ * What the report came out as, in one line.
+ *
+ * Counts rather than adjectives, because the number is the thing somebody
+ * checks: a whole-job report built from four photographs means somebody is
+ * about to send a client a document with four photographs in it.
+ */
+export function reportBuiltSummary(result: { photoCount: number; summaryCount: number }): string {
+  const photos = `${result.photoCount} photo${result.photoCount === 1 ? "" : "s"}`;
+  if (result.summaryCount === 0) return `Built from ${photos}.`;
+  const walks = `${result.summaryCount} walkthrough write-up${result.summaryCount === 1 ? "" : "s"}`;
+  return `Built from ${photos} and ${walks}.`;
+}
+
+/**
+ * What to warn about after a report is generated, or null.
+ *
+ * `aiFailed` is not a failure of the report - it is still produced, and still
+ * carries the client details, the figures and the photographic record. What it
+ * loses is the three WRITTEN sections, which the service omits rather than
+ * printing empty headings. Somebody about to send this to a client needs to
+ * know which half is missing, in those words.
+ */
+export function reportAiWarning(result: { aiFailed: string | null }): string | null {
+  if (!result.aiFailed) return null;
+  return "The written sections could not be generated, so this report has the photos, figures and client details but no summary text. Generate it again when the AI service is reachable.";
+}
+
+/**
+ * Whether a generated report is worth opening at all.
+ *
+ * A report over a job with no photographs is a cover page and a set of client
+ * details. The service will produce one and it is not an error, but saying so
+ * beforehand is kinder than letting somebody find out by sending it.
+ */
+export function emptyJobWarning(photoCount: number): string | null {
+  if (photoCount > 0) return null;
+  return "There are no photos on this job yet, so the report will have no photographic record in it.";
 }

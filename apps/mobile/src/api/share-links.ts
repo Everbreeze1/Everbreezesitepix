@@ -16,6 +16,15 @@ export type ShareKind =
   | "walkthroughs"
   | "reports"
   /*
+   * Documents. `project_pages` carries the same `share_token` plus `revoked_at`
+   * pair as checklists and workflows, so `isShareLive` already reads it
+   * correctly - it simply had no route prefix and no caller until the phone
+   * could share one.
+   */
+  | "pages"
+  /* Walkthrough write-ups, which share independently of the video itself. */
+  | "summaries"
+  /*
    * The Portfolio's public pages. The kind keeps the old `showcases` name
    * because the route does: `apps/web/src/routes/share.showcases.$token.tsx`.
    * That is an identifier, and identifiers may say showcase. Nothing a person
@@ -37,6 +46,8 @@ const SHARE_PATHS: Record<ShareKind, string> = {
   workflows: "/share/workflows",
   walkthroughs: "/share/walkthroughs",
   reports: "/share/reports",
+  pages: "/share/pages",
+  summaries: "/share/summaries",
   showcases: "/share/showcases",
 };
 

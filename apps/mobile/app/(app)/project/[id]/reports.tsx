@@ -2,17 +2,26 @@ import { useCallback, useMemo, useState } from "react";
 import { Alert, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { relativeTime } from "@everlumen/shared";
+import { relativeTime, titleWithinProject } from "@everlumen/shared";
 import { getProject } from "@/api/projects";
-import { createReport, deleteReport, listProjectReports } from "@/api/reports";
+import { randomUUID } from "expo-crypto";
+import {
+  createReport,
+  deleteReport,
+  generateComprehensiveReport,
+  listProjectReports,
+} from "@/api/reports";
 import {
   defaultReportTitle,
+  emptyJobWarning,
   isReportShared,
+  reportAiWarning,
+  reportBuiltSummary,
   reportSummaryLine,
   type ReportRow,
 } from "@/api/report-view";
 import { spacing } from "@/theme";
-import { FileText, Plus, Trash2 } from "@/ui/icons";
+import { FileText, Plus, Sparkles, Trash2 } from "@/ui/icons";
 import {
   Button,
   EmptyState,
@@ -57,6 +66,58 @@ export default function ProjectReportsScreen() {
   });
 
   const reports = reportsQuery.data ?? [];
+
+  /**
+   * The whole-job report, written rather than built.
+   *
+   * A different artefact from the rows above: the service reads every photo on
+   * the job and every walkthrough write-up and files the result as a page under
+   * the Reports tab, not as a `project_reports` row. So this list will not show
+   * it, and the screen opens the page directly instead.
+   *
+   * A fresh idempotency key per tap. Asking for a second whole-job report is
+   * legitimate - the job has moved on - but a retry after a dropped response
+   * must not bill for several LLM calls twice.
+   */
+  const generate = useMutation({
+    mutationFn: () =>
+      generateComprehensiveReport({
+        projectId: id!,
+        idempotencyKey: randomUUID(),
+      }),
+    onSuccess: (result) => {
+      setFailure(null);
+      /*
+       * Both warnings come from the RESULT, not from a guess beforehand.
+       *
+       * An earlier version of this tried to warn about an empty job before the
+       * call, by passing the number of existing reports as if it were a photo
+       * count. Two different things, and this screen has no photo count to
+       * hand. The result carries a real one, so it says so afterwards instead.
+       */
+      const warning = reportAiWarning(result);
+      const empty = emptyJobWarning(result.photoCount);
+      // Blank lines between: the counts are reassurance, the warnings are the
+      // thing to read, and running them together buries the second.
+      const detail = [reportBuiltSummary(result), empty, warning].filter(Boolean).join("\n\n");
+      Alert.alert(result.page?.title ?? "Report written", detail, [
+        { text: "Later", style: "cancel" },
+        {
+          text: "Open it",
+          onPress: () => {
+            if (result.page) {
+              router.push({
+                pathname: "/page/[pageId]",
+                params: { pageId: result.page.id },
+              });
+            }
+          },
+        },
+      ]);
+    },
+    onError: (error: unknown) =>
+      setFailure(error instanceof Error ? error.message : "Could not write the report."),
+  });
 
   const create = useMutation({
     mutationFn: () =>
@@ -142,7 +203,16 @@ export default function ProjectReportsScreen() {
                       {index > 0 ? <RowDivider /> : null}
                       <ListRow
                         icon={FileText}
-                        title={report.title}
+                        /*
+                          The job's own name is the screen heading already, and
+                          every report is auto-named after it, so repeating it
+                          per row pushed the only distinguishing part - the date
+                          - past the two-line truncation. Five reports rendered
+                          as five identical "20 Charlcote Crescent - Site visit
+                          ..." rows. The stored title is untouched; this is the
+                          in-project reading of it.
+                        */
+                        title={titleWithinProject(report.title, projectQuery.data?.name)}
                         subtitle={`${reportSummaryLine(report)} · ${relativeTime(report.updated_at)}`}
                         /*
                           Shared state reads on the subtitle line only.
@@ -185,6 +255,20 @@ export default function ProjectReportsScreen() {
                   fullWidth
                   disabled={create.isPending}
                   onPress={() => create.mutate()}
+                />
+
+                {/*
+                  The other kind: written for you rather than by you. Second,
+                  because building one by hand is the deliberate act and this is
+                  the shortcut - and because it spends several LLM calls.
+                */}
+                <Button
+                  label={generate.isPending ? "Writing the report" : "Write a whole-job report"}
+                  icon={Sparkles}
+                  variant="secondary"
+                  fullWidth
+                  disabled={generate.isPending}
+                  onPress={() => generate.mutate()}
                 />
               </>
             )}
