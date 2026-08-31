@@ -61,6 +61,7 @@ import {
   publicProjectReportInputSchema,
 } from "../reports/public-get";
 import { generateSiteLogPdfInputSchema, generateSiteLogPdfService } from "../reports/site-log-pdf";
+import { deleteMyAccountInputSchema, deleteMyAccountService } from "../account/delete-account";
 import {
   analyzePhotoService,
   chatWithAssistantService,
@@ -236,10 +237,7 @@ import {
   setUserTeamRoleInputSchema,
   setUserTeamRoleService,
 } from "../admin/user-directory";
-import {
-  createPlatformUserInputSchema,
-  createPlatformUserService,
-} from "../admin/create-user";
+import { createPlatformUserInputSchema, createPlatformUserService } from "../admin/create-user";
 import {
   getContentLibraryService,
   getPlatformUsageInputSchema,
@@ -803,6 +801,14 @@ export const rpcRegistry: Record<string, RpcEntry> = {
         })
         .parse(d),
     setProjectAssigneesService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  /*
+   * Closing your own account. Required by Google Play, which has rejected a
+   * support email address as the only route since 2024.
+   */
+  deleteMyAccount: authed(
+    (d) => deleteMyAccountInputSchema.parse(d),
+    deleteMyAccountService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   leaveTeam: {
     handle: async (ctx) => {

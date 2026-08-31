@@ -73,8 +73,22 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
         })}
       >
         {options.tabBarIcon?.({ focused, color: tint, size: 22 })}
-        <Text variant="overline" style={{ color: tint }} numberOfLines={1}>
-          {label.toUpperCase()}
+        {/*
+          Sentence case, not caps.
+         
+          `overline` is the right size and weight for a tab label and the wrong
+          casing: it exists for section headings like TODAY and WORKSPACE, where
+          caps mark a divider between blocks of content. Applied to the five
+          words a person reads most often it does two things, both bad. It dates
+          the app - full-caps navigation is a 2014 look. And it is measurably
+          slower to read, because capitals strip the ascender and descender
+          shapes the eye uses to recognise a word without spelling it out, which
+          is exactly the recognition a tab bar depends on.
+         
+          `caption` keeps the size and drops the caps and the letter-spacing.
+        */}
+        <Text variant="caption" style={{ color: tint }} numberOfLines={1}>
+          {label}
         </Text>
       </Pressable>
     );

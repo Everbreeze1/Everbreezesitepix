@@ -31,6 +31,15 @@ export type PhotoThumbProps = {
   contentFit?: "cover" | "contain";
   /** Says what is missing, when it is worth saying. Off in dense grids. */
   showLabel?: boolean;
+  /**
+   * On a lightbox scrim rather than on the app's ground.
+   *
+   * The tile treatment is a tinted panel with a dashed edge, which reads as an
+   * empty slot in a grid. Dropped onto a full-screen black scrim it reads as a
+   * pale rectangle somebody forgot to fill, so on dark the frame disappears
+   * entirely and only the glyph and the words remain.
+   */
+  onDark?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -42,6 +51,7 @@ export function PhotoThumb({
   rounded = radius.sm,
   contentFit = "cover",
   showLabel = false,
+  onDark = false,
   style,
 }: PhotoThumbProps) {
   const theme = useTheme();
@@ -52,7 +62,7 @@ export function PhotoThumb({
     ...(aspectRatio !== undefined ? { aspectRatio } : {}),
     borderRadius: rounded,
     overflow: "hidden",
-    backgroundColor: theme.colors.secondary,
+    backgroundColor: onDark ? "transparent" : theme.colors.secondary,
   };
 
   if (uri) {
@@ -81,19 +91,19 @@ export function PhotoThumb({
            * than "something here that is grey". A solid panel the same colour
            * as a loading skeleton would be read as still loading, forever.
            */
-          borderWidth: 1,
-          borderStyle: "dashed",
-          borderColor: theme.colors.border,
+          ...(onDark
+            ? {}
+            : { borderWidth: 1, borderStyle: "dashed" as const, borderColor: theme.colors.border }),
         },
         style,
       ]}
       accessible
       accessibilityLabel="Photo unavailable"
     >
-      <Icon icon={ImageOff} size="md" tone="muted" />
+      <Icon icon={ImageOff} size={onDark ? "lg" : "md"} tone={onDark ? "inverse" : "muted"} />
       {showLabel ? (
-        <Text variant="caption" tone="muted" align="center">
-          Not available
+        <Text variant="caption" tone={onDark ? "inverse" : "muted"} align="center">
+          {onDark ? "This photo is not available" : "Not available"}
         </Text>
       ) : null}
     </View>

@@ -9,9 +9,10 @@ import {
   projectDisplayName,
   relativeTime,
 } from "@everlumen/shared";
+import { listProjectCovers } from "@/api/photos";
 import { formatAddress, listProjects, type ProjectListItem } from "@/api/projects";
 import { QueueBanner } from "@/components/QueueBanner";
-import { spacing, useTheme } from "@/theme";
+import { radius, spacing, useTheme } from "@/theme";
 import {
   Badge,
   Card,
@@ -21,12 +22,16 @@ import {
   Icon,
   IconButton,
   PageHeader,
+  PhotoThumb,
   SearchField,
   SkeletonList,
   Text,
   type BadgeTone,
   type ChipOption,
 } from "@/ui";
+
+/** The cover thumb. Square, and big enough to recognise a job from. */
+const COVER = 88;
 
 type StatusFilter = "all" | "active" | "on_hold" | "completed";
 
@@ -54,6 +59,22 @@ export default function ProjectsScreen() {
   });
 
   const all = useMemo(() => data ?? [], [data]);
+
+  /*
+   * Covers for the whole list in one round trip, not one request per card.
+   *
+   * Keyed on the ids rather than on the query object, so a rename or a status
+   * change does not re-sign every URL. Signed URLs last an hour and re-signing
+   * sooner only spends requests.
+   */
+  const projectIds = useMemo(() => all.map((project) => project.id), [all]);
+  const coversQuery = useQuery({
+    queryKey: ["project-covers", projectIds.join(",")],
+    queryFn: () => listProjectCovers(projectIds),
+    enabled: projectIds.length > 0,
+    staleTime: 45 * 60 * 1000,
+  });
+  const covers = coversQuery.data ?? {};
 
   /*
    * Counts come off the unfiltered list, so a chip reading "On hold 3" keeps
@@ -171,14 +192,14 @@ export default function ProjectsScreen() {
               />
             )
           }
-          renderItem={({ item }) => <ProjectCard project={item} />}
+          renderItem={({ item }) => <ProjectCard project={item} coverUrl={covers[item.id]} />}
         />
       )}
     </View>
   );
 }
 
-function ProjectCard({ project }: { project: ProjectListItem }) {
+function ProjectCard({ project, coverUrl }: { project: ProjectListItem; coverUrl?: string }) {
   const address = formatAddress(project);
   const tone = isProjectStatus(project.status) ? STATUS_TONE[project.status] : "neutral";
   const label = isProjectStatus(project.status)
@@ -190,7 +211,20 @@ function ProjectCard({ project }: { project: ProjectListItem }) {
       onPress={() => router.push(`/project/${project.id}`)}
       accessibilityLabel={`${projectDisplayName(project)}${address ? `, ${address}` : ""}, ${label}`}
     >
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.md }}>
+      {/*
+        Photo first, and on the left rather than as a hero.
+       
+        This is a documentation app whose project list showed no photography at
+        all: a title, a pin and a date, in a card tall enough to hold three of
+        the job's own photos. A full-bleed hero was the other option and is
+        wrong for this list - most jobs have a cover, some do not, and a hero
+        turns "no cover yet" into half a screen of nothing. A square thumb shows
+        the work, degrades to a small honest placeholder, and fits three times
+        as many jobs on a screen.
+      */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+        <PhotoThumb uri={coverUrl} width={COVER} height={COVER} rounded={radius.md} />
+
         {/*
           `minWidth: 0` and two lines, for the reason `ListRow` needed the same:
           a flex child defaults to its content width as its minimum, so a long
@@ -198,8 +232,8 @@ function ProjectCard({ project }: { project: ProjectListItem }) {
           has, and `numberOfLines={1}` then cuts far too early. Seen on device
           as "20 Charlcote Crescent - ..." with most of the card still empty.
         */}
-        <View style={{ flex: 1, minWidth: 0, gap: spacing.xs }}>
-          <Text variant="heading" numberOfLines={2}>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text variant="bodyStrong" numberOfLines={2}>
             {projectDisplayName(project)}
           </Text>
           {address ? (
@@ -210,13 +244,19 @@ function ProjectCard({ project }: { project: ProjectListItem }) {
               </Text>
             </View>
           ) : null}
+          {/*
+            Status and date on one line, under the address. They were a badge in
+            the top-right and a line of their own at the bottom, which is two
+            rows of card spent on six words.
+          */}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
+            <Badge label={label} tone={tone} />
+            <Text variant="caption" tone="muted" numberOfLines={1}>
+              {relativeTime(project.updated_at)}
+            </Text>
+          </View>
         </View>
-        <Badge label={label} tone={tone} />
       </View>
-
-      <Text variant="caption" tone="muted" style={{ marginTop: spacing.sm }}>
-        {`Updated ${relativeTime(project.updated_at)}`}
-      </Text>
     </Card>
   );
 }

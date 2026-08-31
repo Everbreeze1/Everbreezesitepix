@@ -14,6 +14,7 @@ import {
   CloudUpload,
   UserPlus,
   Users,
+  UserX,
 } from "@/ui/icons";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -318,6 +319,24 @@ export default function AccountScreen() {
                 <Badge label={healthy ? "OK" : "Down"} tone={healthy ? "success" : "danger"} />
               )
             }
+          />
+        </ListGroup>
+      </View>
+
+      {/*
+        Below sign-out, and visually quieter than it. Google requires this route
+        to exist and be reachable; it does not require it to be the first thing
+        somebody meets on the account screen.
+      */}
+      <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl }}>
+        <ListGroup>
+          <ListRow
+            icon={UserX}
+            iconTone="destructive"
+            title="Close my account"
+            subtitle="Deletes your account and the work you made"
+            destructive
+            onPress={() => router.push("/close-account")}
           />
         </ListGroup>
       </View>

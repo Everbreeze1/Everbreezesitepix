@@ -609,3 +609,75 @@ export async function listGalleryPhotoPage(
     nextCursor: photos.length === limit ? (photos[photos.length - 1]?.created_at ?? null) : null,
   };
 }
+
+/**
+ * Same ceiling every `.in()` in this file uses. PostgREST echoes the ids back
+ * in a Content-Location header, which overflows Node's 16KB header limit
+ * somewhere around 400.
+ */
+const IN_CHUNK = 200;
+
+/**
+ * One cover photo per project, signed.
+ *
+ * The project list is the first screen anybody opens and it showed no
+ * photography at all: a title, a pin and a date, in a card tall enough to fit
+ * three of a job's photos. This is a documentation app, and a list of jobs with
+ * no pictures in it reads as a database rather than a tool.
+ *
+ * Newest photo per project, matching what the web dashboard picks for its
+ * cards, so the same job shows the same cover on both. Returns a map keyed by
+ * project id, with the id simply absent when the project has no photo or its
+ * file is missing - `PhotoThumb` draws that case rather than leaving a hole.
+ */
+export async function listProjectCovers(projectIds: string[]): Promise<Record<string, string>> {
+  if (projectIds.length === 0) return {};
+
+  const rows: {
+    project_id: string;
+    storage_path: string;
+    thumb_path: string | null;
+    image_url: string | null;
+    id: string;
+  }[] = [];
+
+  // Chunked at the ceiling every `.in()` here uses: PostgREST echoes the ids in
+  // a Content-Location header, which overflows Node's 16KB limit near 400.
+  for (let i = 0; i < projectIds.length; i += IN_CHUNK) {
+    const slice = projectIds.slice(i, i + IN_CHUNK);
+    const { data, error } = await supabase
+      .from("photos")
+      .select("id, project_id, storage_path, thumb_path, image_url, created_at")
+      .in("project_id", slice)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    rows.push(...((data as typeof rows) ?? []));
+  }
+
+  // First row per project wins: the query is already newest-first.
+  const cover = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    if (!cover.has(row.project_id)) cover.set(row.project_id, row);
+  }
+
+  const picked = Array.from(cover.values());
+  const signed = await signPhotoUrls(
+    picked.map((row) => ({
+      id: row.id,
+      caption: null,
+      storage_path: row.storage_path,
+      thumb_path: row.thumb_path,
+      image_url: row.image_url,
+      created_at: "",
+      taken_at: null,
+    })) as PhotoListItem[],
+  );
+
+  const out: Record<string, string> = {};
+  for (const row of picked) {
+    const url = signed[row.id];
+    if (url) out[row.project_id] = url;
+  }
+  return out;
+}

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -82,6 +82,8 @@ describe("photo grids use it", () => {
     "apps/mobile/app/(app)/(tabs)/gallery.tsx",
     "apps/mobile/app/(app)/project/[id]/index.tsx",
     "apps/mobile/app/(app)/project/[id]/trash.tsx",
+    "apps/mobile/app/(app)/report/[reportId].tsx",
+    "apps/mobile/app/(app)/site-log/[logId].tsx",
   ];
 
   it("every converted grid renders through PhotoThumb", () => {
@@ -100,5 +102,65 @@ describe("photo grids use it", () => {
         /source=\{urls\[photo\.id\] \? \{ uri: urls\[photo\.id\] \} : undefined\}/,
       );
     }
+  });
+});
+
+describe("lightboxes too", () => {
+  /*
+   * A lightbox with no source was the same bug at full screen: tapping a photo
+   * whose file is missing opened a black rectangle with a caption under it and
+   * nothing to say why.
+   */
+  const LIGHTBOXES = [
+    "apps/mobile/app/(app)/(tabs)/gallery.tsx",
+    "apps/mobile/app/(app)/project/[id]/index.tsx",
+  ];
+
+  it("render the missing case on the scrim", () => {
+    for (const path of LIGHTBOXES) {
+      const s = read(path);
+      expect(s, `${path} lightbox should use PhotoThumb`).toMatch(/onDark/);
+      expect(s, `${path} still has a bare lightbox Image`).not.toMatch(
+        /source=\{urls\[lightboxPhoto\.id\]/,
+      );
+    }
+  });
+
+  it("PhotoThumb drops its panel on dark rather than showing a pale rectangle", () => {
+    const s = read("apps/mobile/src/ui/PhotoThumb.tsx");
+    expect(s).toMatch(/onDark \? "transparent"/);
+  });
+});
+
+describe("no bare photo grid survives anywhere", () => {
+  it("nothing in app/ still hands an Image an undefined source", () => {
+    /*
+     * The broadest form of the guard, and the one that matters: any new screen
+     * writing `source={urls[x] ? {uri: urls[x]} : undefined}` reintroduces a
+     * grid that renders as blank space the moment a file is missing. There is
+     * no reason to write it now that `PhotoThumb` exists.
+     *
+     * Walked in Node rather than shelled out to grep. The first version of this
+     * did shell out, the pattern needed four levels of escaping, grep rejected
+     * it as an invalid expression, and the test passed on the empty output -
+     * green, and checking nothing.
+     */
+    const offenders: string[] = [];
+
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (
+          entry.name.endsWith(".tsx") &&
+          /source=\{urls\[/.test(readFileSync(full, "utf8"))
+        ) {
+          offenders.push(full);
+        }
+      }
+    };
+    walk(join(ROOT, "apps/mobile/app"));
+
+    expect(offenders).toEqual([]);
   });
 });

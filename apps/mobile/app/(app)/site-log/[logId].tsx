@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
-import { Image } from "expo-image";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { displayCaption } from "@everlumen/shared";
@@ -26,6 +25,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  PhotoThumb,
   IconButton,
   Screen,
   SectionHeader,
@@ -49,7 +49,6 @@ import {
  */
 export default function SiteLogScreen() {
   const { logId, projectId } = useLocalSearchParams<{ logId: string; projectId?: string }>();
-  const theme = useTheme();
   const queryClient = useQueryClient();
 
   const [title, setTitle] = useState("");
@@ -257,15 +256,12 @@ export default function SiteLogScreen() {
               <View key={photo.id}>
                 <SectionHeader title={`${index + 1}. ${displayCaption(photo.caption, "Photo")}`} />
                 <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
-                  <Image
-                    source={urls[photo.id] ? { uri: urls[photo.id] } : undefined}
-                    style={{
-                      width: "100%",
-                      aspectRatio: 4 / 3,
-                      borderRadius: radius.md,
-                      backgroundColor: theme.colors.secondary,
-                    }}
-                    contentFit="cover"
+                  <PhotoThumb
+                    uri={urls[photo.id]}
+                    width="100%"
+                    aspectRatio={4 / 3}
+                    rounded={radius.md}
+                    showLabel
                   />
 
                   <Field
@@ -431,22 +427,16 @@ function PhotoPicker({
                 onPress={() => toggle(photo.id)}
                 style={{ width: "31.5%", aspectRatio: 1 }}
               >
-                <Image
-                  source={urls[photo.id] ? { uri: urls[photo.id] } : undefined}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    borderRadius: radius.sm,
-                    backgroundColor: theme.colors.secondary,
-                    /*
-                      The selected state is a ring, not a tint. A tint over a
-                      photograph is invisible against roughly half of them, and
-                      a jobsite gallery is mostly grey concrete and bright sky.
-                    */
-                    borderWidth: on ? 3 : 0,
-                    borderColor: theme.colors.primary,
-                  }}
-                  contentFit="cover"
+                <PhotoThumb
+                  uri={urls[photo.id]}
+                  width="100%"
+                  height="100%"
+                  /*
+                    The selected state is a ring, not a tint. A tint over a
+                    photograph is invisible against roughly half of them, and
+                    a jobsite gallery is mostly grey concrete and bright sky.
+                  */
+                  style={on ? { borderWidth: 3, borderColor: theme.colors.primary } : undefined}
                 />
                 {on ? (
                   <View style={{ position: "absolute", right: 4, bottom: 4 }}>

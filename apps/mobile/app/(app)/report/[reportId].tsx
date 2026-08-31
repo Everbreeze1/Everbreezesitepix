@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
-import { Image } from "expo-image";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { displayCaption } from "@everlumen/shared";
@@ -14,7 +13,7 @@ import {
   shareTogglePatch,
 } from "@/api/report-view";
 import { openShareSheet, publicUrl } from "@/api/sharing";
-import { radius, spacing, useTheme } from "@/theme";
+import { spacing, useTheme } from "@/theme";
 import { Images, Send, Share2, Sparkles } from "@/ui/icons";
 import {
   Badge,
@@ -25,6 +24,7 @@ import {
   Field,
   ListGroup,
   ListRow,
+  PhotoThumb,
   RowDivider,
   Screen,
   SectionHeader,
@@ -52,7 +52,6 @@ export default function ReportScreen() {
     reportId: string;
     projectId?: string;
   }>();
-  const theme = useTheme();
   const queryClient = useQueryClient();
 
   const [title, setTitle] = useState("");
@@ -252,17 +251,7 @@ export default function ReportScreen() {
           ) : (
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
               {chosen.map((photo) => (
-                <Image
-                  key={photo.id}
-                  source={urls[photo.id] ? { uri: urls[photo.id] } : undefined}
-                  style={{
-                    width: "31.5%",
-                    aspectRatio: 1,
-                    borderRadius: radius.sm,
-                    backgroundColor: theme.colors.secondary,
-                  }}
-                  contentFit="cover"
-                />
+                <PhotoThumb key={photo.id} uri={urls[photo.id]} width="31.5%" aspectRatio={1} />
               ))}
             </View>
           )}
@@ -418,19 +407,13 @@ function PhotoPicker({
                 }
                 style={{ width: "31.5%", aspectRatio: 1 }}
               >
-                <Image
-                  source={urls[photo.id] ? { uri: urls[photo.id] } : undefined}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    borderRadius: radius.sm,
-                    backgroundColor: theme.colors.secondary,
-                    // A ring, not a tint. A tint over a photograph is invisible
-                    // against roughly half of them.
-                    borderWidth: on ? 3 : 0,
-                    borderColor: theme.colors.primary,
-                  }}
-                  contentFit="cover"
+                <PhotoThumb
+                  uri={urls[photo.id]}
+                  width="100%"
+                  height="100%"
+                  // A ring, not a tint. A tint over a photograph is invisible
+                  // against roughly half of them.
+                  style={on ? { borderWidth: 3, borderColor: theme.colors.primary } : undefined}
                 />
                 {on ? (
                   <View style={{ position: "absolute", right: 4, bottom: 4 }}>

@@ -29,7 +29,6 @@ import {
   Workflow,
 } from "@/ui/icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { Image } from "expo-image";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { displayCaption, formatPhotoDateGroup } from "@everlumen/shared";
 import {
@@ -758,10 +757,14 @@ export default function ProjectDetailScreen() {
         >
           {lightboxPhoto ? (
             <>
-              <Image
-                source={urls[lightboxPhoto.id] ? { uri: urls[lightboxPhoto.id] } : undefined}
-                style={styles.lightboxImage}
+              <PhotoThumb
+                uri={urls[lightboxPhoto.id]}
+                width="100%"
+                height="70%"
                 contentFit="contain"
+                rounded={0}
+                showLabel
+                onDark
               />
               <View style={styles.lightboxActions}>
                 <Pressable

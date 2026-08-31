@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { View } from "react-native";
+import { Dimensions, Pressable, View } from "react-native";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { listMyOpenTasks, listRecentCaptureTimes } from "@/api/dashboard";
@@ -17,7 +17,7 @@ import { listProjects } from "@/api/projects";
 import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
 import { useQueue } from "@/offline/use-queue";
-import { spacing } from "@/theme";
+import { radius, spacing, useTheme } from "@/theme";
 import {
   Activity,
   Bell,
@@ -35,10 +35,12 @@ import {
   Button,
   CountBadge,
   ListGroup,
+  Icon,
   ListRow,
   RowDivider,
   Screen,
   SectionHeader,
+  type LucideIcon,
   SkeletonList,
   Text,
 } from "@/ui";
@@ -62,6 +64,33 @@ import {
  * job the first thing the app is for, and it is not: knowing whether anything
  * needs you is.
  */
+/**
+ * The browse destinations, in the order somebody reaches for them.
+ *
+ * Map first because it is the only one that answers a question you have while
+ * standing outside: which of these am I at.
+ */
+/**
+ * Tile width, measured rather than expressed as a percentage.
+ *
+ * `width: "32%"` with a gap between them overflows: three tiles plus two gaps
+ * came to a few points more than the row, so the third wrapped and the grid
+ * silently became two columns. Percentages cannot see the gap; arithmetic can.
+ * Same approach the photo grids use.
+ */
+const BROWSE_COLUMNS = 3;
+const BROWSE_TILE =
+  (Dimensions.get("window").width - spacing.lg * 2 - spacing.sm * (BROWSE_COLUMNS - 1)) /
+  BROWSE_COLUMNS;
+
+const BROWSE: { icon: LucideIcon; label: string; href: string }[] = [
+  { icon: MapPin, label: "Map", href: "/map" },
+  { icon: FolderKanban, label: "Pipelines", href: "/pipelines" },
+  { icon: Calendar, label: "Timeline", href: "/timeline" },
+  { icon: FolderPlus, label: "Groups", href: "/groups" },
+  { icon: Activity, label: "Team", href: "/activity" },
+];
+
 export default function HomeScreen() {
   const { user } = useAuth();
   const queue = useQueue();
@@ -139,9 +168,19 @@ export default function HomeScreen() {
         The queue first, always. It is the only thing on this screen that can
         actually be lost, and it is the one piece of state no server knows about.
       */}
-      <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
-        <QueueBanner />
-      </View>
+      {/*
+        The wrapper is conditional, not just the banner.
+       
+        `QueueBanner` returns null when the queue is clear, but its padding did
+        not: an empty view kept `paddingTop: lg` plus the gap either side, which
+        on a clear queue - the normal state - left a band of nothing between the
+        greeting and the first thing to read.
+      */}
+      {queue.outstanding > 0 ? (
+        <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
+          <QueueBanner />
+        </View>
+      ) : null}
 
       {loading ? (
         <SkeletonList rows={5} />
@@ -193,6 +232,12 @@ export default function HomeScreen() {
             </>
           ) : null}
 
+          {/*
+            "Today" used to carry seven identical rows, five of which were not
+            today at all: Map, Groups, Pipelines, Timeline and the activity feed
+            are the app's menu, and calling them Today made the heading a lie
+            and the screen a wall. Split by what the thing actually is.
+          */}
           <SectionHeader title="Today" />
           <View style={{ paddingHorizontal: spacing.lg }}>
             <ListGroup>
@@ -211,48 +256,35 @@ export default function HomeScreen() {
                 unread={unread > 0}
                 onPress={() => router.push("/notifications")}
               />
-              <RowDivider />
-              <ListRow
-                icon={MapPin}
-                title="Map"
-                subtitle="Every job with a location, nearest first"
-                onPress={() => router.push("/map")}
-              />
-              <RowDivider />
-              <ListRow
-                icon={FolderPlus}
-                title="Groups"
-                subtitle="Your own filing of jobs"
-                onPress={() => router.push("/groups")}
-              />
-              <RowDivider />
-              <ListRow
-                icon={FolderKanban}
-                title="Pipelines"
-                subtitle="Which stage each job is standing in"
-                onPress={() => router.push("/pipelines")}
-              />
-              <RowDivider />
-              <ListRow
-                icon={Calendar}
-                title="Timeline"
-                subtitle="A month of site work at a glance"
-                onPress={() => router.push("/timeline")}
-              />
-              <RowDivider />
-              <ListRow
-                icon={Activity}
-                title="What the team did"
-                subtitle="Photos, tasks and reports across the crew"
-                /*
-                  Activity used to be a tab of its own. It moved here because it
-                  is a browse surface: it answers what everyone else has been
-                  doing, which nobody opens the app at seven in the morning to
-                  find out. Losing the tab kept the camera centred between four.
-                */
-                onPress={() => router.push("/activity")}
-              />
             </ListGroup>
+          </View>
+
+          {/*
+            The menu, as a grid rather than a seventh identical row.
+           
+            These five are browse surfaces: nobody opens the app at seven in the
+            morning to read the activity feed. A grid says "pick one" where a
+            stack of rows says "work through these", and it costs a third of the
+            height, which is the difference between Home ending above the fold
+            and running off it.
+          */}
+          <SectionHeader title="Browse" />
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: spacing.sm,
+              paddingHorizontal: spacing.lg,
+            }}
+          >
+            {BROWSE.map((item) => (
+              <QuickTile
+                key={item.href}
+                icon={item.icon}
+                label={item.label}
+                onPress={() => router.push(item.href as never)}
+              />
+            ))}
           </View>
 
           {recent.length > 0 ? (
@@ -311,5 +343,49 @@ export default function HomeScreen() {
         </>
       )}
     </Screen>
+  );
+}
+
+/**
+ * One destination in the Browse grid.
+ *
+ * Deliberately a different shape from `ListRow`: an icon over a short label, no
+ * subtitle, no chevron. A row and a tile mean different things - a row is a
+ * thing to read, a tile is a place to go - and the app had drawn every one of
+ * them as a row, which is what made eight screens look like the same settings
+ * page.
+ */
+function QuickTile({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        width: BROWSE_TILE,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: spacing.xs,
+        paddingVertical: spacing.md,
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: pressed ? theme.colors.secondary : theme.colors.card,
+      })}
+    >
+      <Icon icon={icon} size="lg" tone="primary" />
+      <Text variant="caption" numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }

@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from "react";
 import { Images } from "@/ui/icons";
 import { Dimensions, FlatList, Modal, Pressable, RefreshControl, View } from "react-native";
 import { router } from "expo-router";
-import { Image } from "expo-image";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { displayCaption, formatPhotoDateGroup } from "@everlumen/shared";
 import { listGalleryPhotoPage, type GalleryPhotoItem } from "@/api/photos";
@@ -233,10 +232,14 @@ export default function GalleryScreen() {
         >
           {lightboxPhoto ? (
             <>
-              <Image
-                source={urls[lightboxPhoto.id] ? { uri: urls[lightboxPhoto.id] } : undefined}
-                style={{ width: "100%", height: "70%" }}
+              <PhotoThumb
+                uri={urls[lightboxPhoto.id]}
+                width="100%"
+                height="70%"
                 contentFit="contain"
+                rounded={0}
+                showLabel
+                onDark
               />
               <View
                 style={{
