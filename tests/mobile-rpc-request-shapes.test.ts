@@ -86,8 +86,22 @@ function topEntries(literal: string): string[] {
   return out.map((e) => e.trim()).filter(Boolean);
 }
 
+/** The keys a `z.object({...})` literal demands, ignoring the optional ones. */
+function requiredOf(literal: string): string[] {
+  const required: string[] = [];
+  for (const entry of topEntries(literal)) {
+    const key = /^([A-Za-z_]\w*)\s*:/.exec(entry);
+    if (!key) continue;
+    const value = entry.slice(key[0].length);
+    // A field with a default or marked optional does not have to be sent.
+    if (/\.optional\(\)|\.default\(|\.nullish\(\)/.test(value)) continue;
+    required.push(key[1]);
+  }
+  return required;
+}
+
 /** Every `*InputSchema` and the top-level keys it demands. */
-function requiredFields(): Map<string, string[]> {
+function namedSchemas(): Map<string, string[]> {
   const map = new Map<string, string[]>();
   for (const file of walk(join(ROOT, "apps/api/src"))) {
     const src = stripComments(readFileSync(file, "utf8"));
@@ -95,31 +109,52 @@ function requiredFields(): Map<string, string[]> {
     let m: RegExpExecArray | null;
     while ((m = re.exec(src)) !== null) {
       const literal = balanced(src, m.index + m[0].length - 1);
-      if (!literal) continue;
-      const required: string[] = [];
-      for (const entry of topEntries(literal)) {
-        const key = /^([A-Za-z_]\w*)\s*:/.exec(entry);
-        if (!key) continue;
-        const value = entry.slice(key[0].length);
-        // A field with a default or marked optional does not have to be sent.
-        if (/\.optional\(\)|\.default\(|\.nullish\(\)/.test(value)) continue;
-        required.push(key[1]);
-      }
-      map.set(m[1], required);
+      if (literal) map.set(m[1], requiredOf(literal));
     }
   }
   return map;
 }
 
-/** Op name to schema name, read from the registry's own `.parse()` wiring. */
-function opSchemas(): Map<string, string> {
+/**
+ * Every registered op and the fields it requires.
+ *
+ * Two wirings, because the registry uses both and reading only the first left a
+ * quarter of the surface unguarded. Most ops name a `*InputSchema` and parse
+ * it; forty-six declare `z.object({...})` INLINE in the registry, and those
+ * include several the phone calls - `setProjectAssignees`, `inviteMember`,
+ * `updateMemberRole`, `chatWithAssistant`.
+ *
+ * The first version of this test saw none of them. That was noticed by hand
+ * while building the assistant screen, not by the test reporting its own blind
+ * spot, which is the argument for the coverage assertions below.
+ */
+function opRequirements(): Map<string, string[]> {
+  const schemas = namedSchemas();
   const src = stripComments(
     readFileSync(join(ROOT, "apps/api/src/domains/rpc/registry.ts"), "utf8"),
   );
-  const map = new Map<string, string>();
-  const re = /^ {2}(\w+):\s*(?:authed|pub\w*)\(\s*\n?\s*\(d\)\s*=>\s*(\w+InputSchema)\.parse/gm;
+  const map = new Map<string, string[]>();
+
+  const named = /^ {2}(\w+):\s*(?:authed|pub\w*)\(\s*\n?\s*\(d\)\s*=>\s*(\w+InputSchema)\.parse/gm;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(src)) !== null) map.set(m[1], m[2]);
+  while ((m = named.exec(src)) !== null) map.set(m[1], schemas.get(m[2]) ?? []);
+
+  // Inline: take each op's own block and read the first `z.object(` inside it.
+  const entry = /^ {2}(\w+):\s*(?:authed|pub\w*)\(/gm;
+  while ((m = entry.exec(src)) !== null) {
+    const op = m[1];
+    if (map.has(op)) continue;
+    const rest = src.slice(m.index + m[0].length);
+    const next = /^ {2}\w+:\s*(?:authed|pub\w*)\(/m.exec(rest);
+    const block = rest.slice(0, next ? next.index : 2000);
+    // Prettier splits `z.object(` across lines when the call is long enough,
+    // so the search has to tolerate both formattings.
+    const at = block.search(/z\s*\.?\s*\n?\s*\.?object\(/);
+    if (at === -1) continue;
+    const literal = balanced(block, at);
+    if (literal) map.set(op, requiredOf(literal));
+  }
+
   return map;
 }
 
@@ -157,26 +192,27 @@ function callSites(): { sites: Site[]; skipped: number } {
 }
 
 describe("every mobile request carries the fields its schema requires", () => {
-  const required = requiredFields();
-  const schemaFor = opSchemas();
+  const required = opRequirements();
   const { sites, skipped } = callSites();
 
   it("read enough of both sides to be meaningful", () => {
     /*
      * The vacuity guard. Every assertion below is "no offenders found", which
      * is exactly what a parser that silently matched nothing would also report.
+     *
+     * The op floor is deliberately close to the real total (178 at the time of
+     * writing). It was 100 while a quarter of the registry went unread, and a
+     * loose floor is precisely what let that pass unnoticed: the test was
+     * green, the number was "over 100", and forty-six ops were invisible.
      */
-    expect(required.size).toBeGreaterThan(100);
-    expect(schemaFor.size).toBeGreaterThan(100);
-    expect(sites.length).toBeGreaterThan(15);
+    expect(required.size).toBeGreaterThan(170);
+    expect(sites.length).toBeGreaterThan(40);
   });
 
   it("sends every required field", () => {
     const offenders: string[] = [];
     for (const site of sites) {
-      const schema = schemaFor.get(site.op);
-      if (!schema) continue;
-      const fields = required.get(schema);
+      const fields = required.get(site.op);
       if (!fields?.length) continue;
       const missing = fields.filter((f) => !site.sent.has(f));
       if (missing.length) {
@@ -189,7 +225,7 @@ describe("every mobile request carries the fields its schema requires", () => {
   it("calls ops that are actually registered", () => {
     // Cheap, and the same class of bug one step earlier: an op name that does
     // not resolve is a 404 the client reports as "Request failed".
-    const known = new Set(schemaFor.keys());
+    const known = new Set(required.keys());
     const registry = stripComments(
       readFileSync(join(ROOT, "apps/api/src/domains/rpc/registry.ts"), "utf8"),
     );

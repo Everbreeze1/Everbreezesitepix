@@ -15,6 +15,7 @@ import {
   orderedStages,
   projectsInStage,
   readableOn,
+  stageCountLabel,
   stageCounts,
   unstaged,
 } from "@/api/pipeline-view";
@@ -236,7 +237,7 @@ export default function PipelinesScreen() {
                 key={candidate.id}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: on }}
-                accessibilityLabel={`${candidate.name}, ${counts.get(candidate.id) ?? 0} jobs`}
+                accessibilityLabel={stageCountLabel(candidate.name, counts.get(candidate.id) ?? 0)}
                 onPress={() => setStageId(candidate.id)}
                 style={{
                   borderRadius: radius.pill,

@@ -29,6 +29,7 @@ import {
   FolderPlus,
   Images,
   MapPin,
+  Sparkles,
 } from "@/ui/icons";
 import {
   Badge,
@@ -106,6 +107,9 @@ const BROWSE: { icon: LucideIcon; label: string; href: string }[] = [
   { icon: Calendar, label: "Timeline", href: "/timeline" },
   { icon: FolderPlus, label: "Groups", href: "/groups" },
   { icon: Activity, label: "Team", href: "/activity" },
+  // Sixth, which the responsive grid absorbs: at a 110pt target a phone still
+  // draws three across and a tablet fits all six on one row.
+  { icon: Sparkles, label: "Assistant", href: "/assistant" },
 ];
 
 export default function HomeScreen() {

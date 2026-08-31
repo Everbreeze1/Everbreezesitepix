@@ -136,8 +136,8 @@ export default function ProjectDocumentsScreen() {
                           icon={FileText}
                           title={page.title}
                           subtitle={[
-                            page.folder_id ? folderName.get(page.folder_id) : null,
-                            relativeTime(page.updated_at),
+                            page.folderId ? folderName.get(page.folderId) : null,
+                            relativeTime(page.updatedAt),
                           ]
                             .filter(Boolean)
                             .join(" · ")}
@@ -185,8 +185,8 @@ export default function ProjectDocumentsScreen() {
                       <ListRow
                         icon={Paperclip}
                         iconTone="muted"
-                        title={file.file_name}
-                        subtitle={relativeTime(file.created_at)}
+                        title={file.fileName}
+                        subtitle={relativeTime(file.createdAt)}
                         right={<Badge label="Web" tone="neutral" variant="outline" />}
                       />
                     </View>

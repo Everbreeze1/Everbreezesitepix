@@ -164,3 +164,18 @@ export function readableOn(hex: string): "#ffffff" | "#111827" {
   const luminance = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
   return luminance > TEXT_CROSSOVER ? "#111827" : "#ffffff";
 }
+
+/**
+ * The stage chip's spoken label.
+ *
+ * Read aloud, the chip was "Scheduled, 1 jobs". The count is almost always
+ * small on a pipeline column, so the singular is the common case rather than
+ * the edge one, and it is the case that reads wrong.
+ *
+ * Here rather than inline in the screen so it is covered by a test: the number
+ * only says "1" on a workspace that happens to have exactly one job at that
+ * stage, which is precisely the state nobody has open when they read the diff.
+ */
+export function stageCountLabel(stageName: string, count: number): string {
+  return `${stageName}, ${count} ${count === 1 ? "job" : "jobs"}`;
+}

@@ -5,6 +5,7 @@ import {
   orderedStages,
   projectsInStage,
   readableOn,
+  stageCountLabel,
   stageCounts,
   stageOnBoard,
   unstaged,
@@ -180,5 +181,26 @@ describe("readableOn", () => {
 
   it("accepts a colour with or without the hash", () => {
     expect(readableOn("f59e0b")).toBe(readableOn("#f59e0b"));
+  });
+});
+
+describe("stageCountLabel", () => {
+  /*
+   * Read aloud, the stage chip said "Scheduled, 1 jobs". Found on the device,
+   * on the one workspace that happened to have exactly one job at that stage.
+   *
+   * A pipeline column usually holds a handful of jobs, so the singular is the
+   * common case, not the edge case - which is why it is worth a test rather
+   * than an inline ternary nobody exercises.
+   */
+  it("says job for one and jobs for the rest", () => {
+    expect(stageCountLabel("Scheduled", 1)).toBe("Scheduled, 1 job");
+    expect(stageCountLabel("Scheduled", 0)).toBe("Scheduled, 0 jobs");
+    expect(stageCountLabel("Scheduled", 2)).toBe("Scheduled, 2 jobs");
+  });
+
+  it("keeps the stage name exactly as the customer wrote it", () => {
+    // Stage names are free text and often carry a slash or an ampersand.
+    expect(stageCountLabel("Lead/Quoted", 3)).toBe("Lead/Quoted, 3 jobs");
   });
 });
