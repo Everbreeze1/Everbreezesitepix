@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Dimensions, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
-import { Image } from "expo-image";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { displayCaption, relativeTime } from "@everlumen/shared";
 import {
@@ -16,7 +15,17 @@ import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { radius, spacing, useTheme } from "@/theme";
 import { CheckCheck, CircleCheck, RotateCcw, Trash2 } from "@/ui/icons";
-import { Badge, Button, EmptyState, ErrorState, Icon, IconButton, SkeletonList, Text } from "@/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  Icon,
+  IconButton,
+  PhotoThumb,
+  SkeletonList,
+  Text,
+} from "@/ui";
 
 const COLUMNS = 3;
 const GAP = spacing.xs;
@@ -168,17 +177,7 @@ export default function ProjectTrashScreen() {
                     onPress={() => toggle(photo.id)}
                     style={{ width: tile, height: tile }}
                   >
-                    <Image
-                      source={urls[photo.id] ? { uri: urls[photo.id] } : undefined}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        borderRadius: radius.sm,
-                        backgroundColor: theme.colors.muted,
-                      }}
-                      contentFit="cover"
-                      transition={120}
-                    />
+                    <PhotoThumb uri={urls[photo.id]} width="100%" height="100%" />
                     <View
                       style={{
                         position: "absolute",

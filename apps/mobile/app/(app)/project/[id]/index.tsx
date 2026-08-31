@@ -77,6 +77,7 @@ import {
   ErrorState,
   ListGroup,
   ListRow,
+  PhotoThumb,
   RowDivider,
   SkeletonList,
   Text as UIText,
@@ -636,12 +637,7 @@ export default function ProjectDetailScreen() {
                       accessibilityState={{ selected: picked }}
                       style={{ width: tileSize, height: tileSize }}
                     >
-                      <Image
-                        source={urls[photo.id] ? { uri: urls[photo.id] } : undefined}
-                        style={[styles.tile, { backgroundColor: theme.colors.muted }]}
-                        contentFit="cover"
-                        transition={120}
-                      />
+                      <PhotoThumb uri={urls[photo.id]} width="100%" height="100%" />
                       {selecting ? (
                         <View
                           style={[

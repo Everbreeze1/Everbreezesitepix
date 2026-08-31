@@ -20,6 +20,7 @@ import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useQuery } from "@tanstack/react-query";
 import { ApiClientError } from "@everlumen/api-client";
+import { checkIsPlatformAdmin } from "@/api/admin";
 import { getUnreadNotificationCount } from "@/api/notifications";
 import { pushStatusLabel } from "@/api/push-view";
 import { usePush } from "@/push/use-push";
@@ -84,6 +85,21 @@ export default function AccountScreen() {
     staleTime: 60_000,
   });
   const unread = unreadQuery.data ?? 0;
+
+  /*
+   * The staff console row, which a customer must never see.
+   *
+   * `platform_admins` has no client access by design, so this asks the server
+   * and believes the answer. `checkIsPlatformAdmin` returns false on any
+   * failure, which is the right direction: hiding the row from a staff member
+   * costs them a trip to the web console, and showing it to a customer exposes
+   * other customers' reports.
+   */
+  const adminQuery = useQuery({
+    queryKey: ["is-platform-admin"],
+    queryFn: checkIsPlatformAdmin,
+    staleTime: 10 * 60 * 1000,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -254,6 +270,22 @@ export default function AccountScreen() {
         </ListGroup>
       </View>
 
+      {adminQuery.data === true ? (
+        <>
+          <SectionHeader title="Everlumen staff" />
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <ListGroup>
+              <ListRow
+                icon={LifeBuoy}
+                title="Feedback queue"
+                subtitle="Read, answer and move customer reports"
+                onPress={() => router.push("/admin")}
+              />
+            </ListGroup>
+          </View>
+        </>
+      ) : null}
+
       <SectionHeader title="Help" />
       <View style={{ paddingHorizontal: spacing.lg }}>
         <ListGroup>
@@ -268,9 +300,8 @@ export default function AccountScreen() {
           <ListRow
             icon={LifeBuoy}
             title="Report a problem"
-            right={<ExternalLinkMark />}
-            disabled={!canOpenWeb}
-            onPress={() => void openOnWeb("/report-issue")}
+            subtitle="Send it from here, with the recent errors attached"
+            onPress={() => router.push("/report-issue")}
           />
           <RowDivider />
           {/*

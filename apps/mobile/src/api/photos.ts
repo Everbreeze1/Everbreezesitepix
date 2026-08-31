@@ -406,12 +406,49 @@ export async function listProjectPhotos(projectId: string, limit = 60): Promise<
  * the original for rows written before thumbnails existed, and for any upload
  * where thumbnail generation failed.
  */
+/**
+ * Sign a batch of storage paths, positionally.
+ *
+ * Returns an array the same length as `paths`, holding the signed URL or null
+ * for each. Positional because `createSignedUrls` answers in request order and
+ * the caller has to know *which* path failed, not just how many.
+ *
+ * A whole-request failure and a per-path failure are reported differently on
+ * purpose. The first means the batch never reached storage (no session, no
+ * network) and every photo on screen will be blank; the second means those
+ * particular objects are missing, which on this workspace is most of them: the
+ * `photos` table holds rows whose files were never uploaded, and the only
+ * honest thing the UI can do is say so per tile.
+ */
+async function signBatch(paths: string[]): Promise<(string | null)[]> {
+  if (paths.length === 0) return [];
+
+  const { data, error } = await supabase.storage
+    .from("site-photos")
+    .createSignedUrls(paths, 60 * 60);
+
+  if (error) {
+    console.warn(`[signPhotoUrls] the whole batch of ${paths.length} failed: ${error.message}`);
+    return paths.map(() => null);
+  }
+
+  const out = paths.map((_, index) => data?.[index]?.signedUrl ?? null);
+  const missing = out.filter((url) => url === null).length;
+  if (missing > 0) {
+    // Counted rather than listed: a gallery page can be thirty photos and a
+    // line each would bury everything else in the log.
+    console.warn(`[signPhotoUrls] ${missing} of ${paths.length} objects could not be signed`);
+  }
+  return out;
+}
+
 export async function signPhotoUrls(
   photos: PhotoListItem[],
   preferThumbnail = true,
 ): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
-  const needSign: { id: string; path: string }[] = [];
+  /** `fallback` is the original, tried when the preferred path will not sign. */
+  const needSign: { id: string; path: string; fallback: string }[] = [];
 
   for (const photo of photos) {
     if (photo.image_url) {
@@ -419,19 +456,48 @@ export async function signPhotoUrls(
       continue;
     }
     const path = preferThumbnail && photo.thumb_path ? photo.thumb_path : photo.storage_path;
-    needSign.push({ id: photo.id, path });
+    needSign.push({ id: photo.id, path, fallback: photo.storage_path });
   }
 
   if (!needSign.length) return out;
 
-  const { data } = await supabase.storage.from("site-photos").createSignedUrls(
-    needSign.map((n) => n.path),
-    60 * 60,
-  );
+  /*
+   * The error was discarded here, and that is why a gallery full of photos
+   * could render as an empty grid with nothing wrong anywhere.
+   *
+   * `createSignedUrls` answers per path: a missing object comes back as
+   * `{ error: "Either the object does not exist or you do not have access to
+   * it", signedUrl: null }` while its neighbours sign fine. Dropping those
+   * silently produced a tile with no `source`, which draws nothing at all - so
+   * the screen looked broken and no log said a word.
+   */
+  const signed = await signBatch(needSign.map((n) => n.path));
 
-  data?.forEach((signed, index) => {
-    if (signed?.signedUrl) out[needSign[index].id] = signed.signedUrl;
+  /*
+   * A thumbnail that will not sign is retried against the original.
+   *
+   * `photo-thumbnails.ts` on the web writes a downscaled copy beside each
+   * upload, and mobile captures never had one, so `thumb_path` can point at a
+   * file that was never written. Falling back costs one extra request for the
+   * affected photos and turns a blank tile into the real picture.
+   */
+  const retry: { id: string; path: string }[] = [];
+  needSign.forEach((need, index) => {
+    const url = signed[index];
+    if (url) {
+      out[need.id] = url;
+    } else if (need.fallback && need.fallback !== need.path) {
+      retry.push({ id: need.id, path: need.fallback });
+    }
   });
+
+  if (retry.length) {
+    const second = await signBatch(retry.map((r) => r.path));
+    retry.forEach((need, index) => {
+      const url = second[index];
+      if (url) out[need.id] = url;
+    });
+  }
 
   return out;
 }

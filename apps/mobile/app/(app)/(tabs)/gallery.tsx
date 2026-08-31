@@ -13,6 +13,7 @@ import {
   EmptyState,
   ErrorState,
   PageHeader,
+  PhotoThumb,
   SearchField,
   Skeleton,
   Text,
@@ -145,6 +146,22 @@ export default function GalleryScreen() {
           }
           onEndReached={loadMore}
           onEndReachedThreshold={0.6}
+          /*
+           * Windowing, which this list had none of.
+           *
+           * It is the largest list in the app: every photo across every project,
+           * grouped by day, and it paginates without a ceiling. The project
+           * grid next door already carries these props; this one was missed,
+           * and it is the one that grows fastest.
+           *
+           * Each row is a whole day of photos, so the counts are lower than a
+           * flat list would want: rendering four days ahead is already a
+           * screenful of images being decoded.
+           */
+          initialNumToRender={4}
+          maxToRenderPerBatch={4}
+          windowSize={5}
+          removeClippedSubviews
           ListEmptyComponent={
             search.trim() || phase !== "all" ? (
               <EmptyState
@@ -193,12 +210,7 @@ export default function GalleryScreen() {
                     onPress={() => setLightboxId(photo.id)}
                     style={{ width: tile, height: tile }}
                   >
-                    <Image
-                      source={urls[photo.id] ? { uri: urls[photo.id] } : undefined}
-                      style={{ width: "100%", height: "100%", borderRadius: radius.sm }}
-                      contentFit="cover"
-                      transition={120}
-                    />
+                    <PhotoThumb uri={urls[photo.id]} width="100%" height="100%" />
                   </Pressable>
                 ))}
               </View>

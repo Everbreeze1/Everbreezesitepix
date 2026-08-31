@@ -44,3 +44,4 @@ export { Field, type FieldProps } from "./Field";
 export { ActionSheet, Sheet, type SheetAction } from "./Sheet";
 export { ProgressBar, StepProgress } from "./Progress";
 export { Avatar, AvatarStack, type AvatarSize } from "./Avatar";
+export { PhotoThumb, type PhotoThumbProps } from "./PhotoThumb";

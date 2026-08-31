@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
+import { FlatList, RefreshControl, View } from "react-native";
 import { router, Stack } from "expo-router";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { relativeTime } from "@everlumen/shared";
@@ -35,7 +35,6 @@ import {
   Button,
   EmptyState,
   ErrorState,
-  ListGroup,
   ListRow,
   RowDivider,
   Screen,
@@ -201,11 +200,25 @@ export default function NotificationsScreen() {
             body="Assignments, mentions and completions land here. You will see them on this phone as soon as somebody raises one."
           />
         ) : (
-          <ScrollView
+          /*
+           * A FlatList, not a ScrollView.
+           *
+           * This paginates: twenty rows a page, and somebody working through a
+           * backlog loads ten. Inside a ScrollView every one of those two
+           * hundred rows stays mounted, because a ScrollView renders all of its
+           * children and virtualises nothing. It scrolls fine on the emulator
+           * and it is exactly the thing that makes a low-end Android stutter.
+           *
+           * `onEndReached` also replaces a hand-rolled scroll calculation that
+           * was doing the same job worse: it only fired at the end of a
+           * momentum scroll, so a slow drag to the bottom loaded nothing.
+           */
+          <FlatList
+            data={items}
+            keyExtractor={(n) => n.id}
             contentContainerStyle={{
               padding: spacing.lg,
               paddingBottom: spacing.xxl,
-              gap: spacing.md,
             }}
             refreshControl={
               <RefreshControl
@@ -213,60 +226,63 @@ export default function NotificationsScreen() {
                 onRefresh={() => void query.refetch()}
               />
             }
-            onMomentumScrollEnd={({ nativeEvent }) => {
-              // Load the next page a screenful early, so scrolling never stops
-              // at a spinner on a connection that is merely slow.
-              const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
-              const remaining = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-              if (
-                remaining < layoutMeasurement.height &&
-                query.hasNextPage &&
-                !query.isFetchingNextPage
-              ) {
-                void query.fetchNextPage();
-              }
+            // A screenful early, so scrolling never stops at a spinner on a
+            // connection that is merely slow.
+            onEndReached={() => {
+              if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
             }}
-          >
-            <Text variant="caption" tone="muted">
-              {inboxSummary(items.length, unread)}
-            </Text>
-
-            <ListGroup>
-              {items.map((n, index) => (
-                <View key={n.id}>
-                  {index > 0 ? <RowDivider /> : null}
-                  <ListRow
-                    icon={GLYPHS[notificationGlyph(n.type)]}
-                    iconTone={notificationTone(n.type)}
-                    title={n.title}
-                    /*
-                     * Body and age share one line. A notification body is a
-                     * sentence ("Assigned by Sam"), and stacking a third line
-                     * under it for a timestamp turns a scannable list into a
-                     * wall.
-                     */
-                    subtitle={
-                      n.body
-                        ? `${n.body} · ${relativeTime(n.createdAt)}`
-                        : relativeTime(n.createdAt)
-                    }
-                    unread={!n.readAt}
-                    onPress={() => open(n)}
-                  />
-                </View>
-              ))}
-            </ListGroup>
-
-            {query.hasNextPage ? (
-              <Button
-                label={query.isFetchingNextPage ? "Loading" : "Load older"}
-                variant="secondary"
-                fullWidth
-                disabled={query.isFetchingNextPage}
-                onPress={() => void query.fetchNextPage()}
-              />
-            ) : null}
-          </ScrollView>
+            onEndReachedThreshold={0.6}
+            // A notification row is a fixed two lines, so the defaults are
+            // wrong in the cheap direction: render fewer, keep fewer.
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={7}
+            removeClippedSubviews
+            ListHeaderComponent={
+              <Text variant="caption" tone="muted" style={{ paddingBottom: spacing.md }}>
+                {inboxSummary(items.length, unread)}
+              </Text>
+            }
+            renderItem={({ item: n, index }) => (
+              /*
+               * `ListGroup` cannot wrap the rows any more: it draws one bordered
+               * block around its children, and a virtualised list has no single
+               * parent to draw around. The divider moves onto the row instead,
+               * which is the same result without the container.
+               */
+              <View>
+                {index > 0 ? <RowDivider /> : null}
+                <ListRow
+                  icon={GLYPHS[notificationGlyph(n.type)]}
+                  iconTone={notificationTone(n.type)}
+                  title={n.title}
+                  /*
+                   * Body and age share one line. A notification body is a
+                   * sentence ("Assigned by Sam"), and stacking a third line
+                   * under it for a timestamp turns a scannable list into a
+                   * wall.
+                   */
+                  subtitle={
+                    n.body ? `${n.body} · ${relativeTime(n.createdAt)}` : relativeTime(n.createdAt)
+                  }
+                  unread={!n.readAt}
+                  onPress={() => open(n)}
+                />
+              </View>
+            )}
+            ListFooterComponent={
+              query.hasNextPage ? (
+                <Button
+                  label={query.isFetchingNextPage ? "Loading" : "Load older"}
+                  variant="secondary"
+                  fullWidth
+                  disabled={query.isFetchingNextPage}
+                  onPress={() => void query.fetchNextPage()}
+                  style={{ marginTop: spacing.md }}
+                />
+              ) : null
+            }
+          />
         )}
       </Screen>
     </>
