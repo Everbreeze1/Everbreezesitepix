@@ -6,7 +6,19 @@ import { listProjectWalkthroughs } from "@/api/walkthroughs";
 import { QueueBanner } from "@/components/QueueBanner";
 import { radius, spacing, useTheme } from "@/theme";
 import { Video } from "@/ui/icons";
-import { Badge, Button, Card, EmptyState, ErrorState, SkeletonList, Text } from "@/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  ListRow,
+  SectionHeader,
+  SkeletonList,
+  Text,
+} from "@/ui";
+import { listProjectSummaries } from "@/api/summaries";
+import { summarySubtitle } from "@/api/summary-view";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds || seconds < 1) return "";
@@ -26,6 +38,19 @@ export default function ProjectWalkthroughsScreen() {
   });
 
   const walkthroughs = data ?? [];
+
+  /*
+   * What has been WRITTEN UP, which is a different question from what was
+   * recorded. The service keeps the two lists apart deliberately - conflating
+   * them once produced a feed of mixed row types - and a summary can exist with
+   * no recording behind it at all, written from photographs.
+   */
+  const summariesQuery = useQuery({
+    queryKey: ["project-summaries", id],
+    queryFn: () => listProjectSummaries(id!),
+    enabled: Boolean(id),
+  });
+  const summaries = summariesQuery.data ?? [];
 
   return (
     <>
@@ -58,6 +83,27 @@ export default function ProjectWalkthroughsScreen() {
                 tintColor={theme.colors.mutedForeground}
                 colors={[theme.colors.primary]}
               />
+            }
+            ListHeaderComponent={
+              summaries.length > 0 ? (
+                <View style={{ gap: spacing.sm, marginBottom: spacing.md }}>
+                  <SectionHeader title="Written up" count={summaries.length} />
+                  {summaries.map((summary) => (
+                    <ListRow
+                      key={summary.id}
+                      title={summary.title}
+                      subtitle={summarySubtitle(summary)}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/summary/[summaryId]",
+                          params: { summaryId: summary.id },
+                        })
+                      }
+                    />
+                  ))}
+                  <SectionHeader title="Recorded" count={walkthroughs.length || undefined} />
+                </View>
+              ) : null
             }
             ListEmptyComponent={
               <EmptyState

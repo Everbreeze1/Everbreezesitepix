@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -22,11 +23,13 @@ import {
   listTaskCollaboration,
   type TaskComment,
   addTaskWatchers,
+  deleteTaskComment,
   removeTaskWatcher,
   type TaskWatcher,
 } from "@/api/task-comments";
 import {
   addableWatchers,
+  canDeleteTaskComment,
   commentAuthor,
   sortedWatchers,
   watcherName,
@@ -53,7 +56,16 @@ import { taskEditRowId, type TaskEditPayload } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
-import { Calendar, CircleCheck, MessageSquare, PenLine, Plus, Send, User } from "@/ui/icons";
+import {
+  Calendar,
+  CircleCheck,
+  MessageSquare,
+  PenLine,
+  Plus,
+  Send,
+  Trash2,
+  User,
+} from "@/ui/icons";
 import {
   Avatar,
   Badge,
@@ -240,6 +252,45 @@ export default function TaskDetailScreen() {
    * One mutation for both directions so the list cannot be mid-add and
    * mid-remove at once, which on a phone is a double tap away.
    */
+  /**
+   * Remove one of your own comments.
+   *
+   * Optimistic, and rolled back on failure. A comment that disappears and stays
+   * gone after a failed delete reads as deleted, and the author never tries
+   * again.
+   */
+  const removeComment = useMutation({
+    mutationFn: (commentId: string) => deleteTaskComment(commentId),
+    onMutate: async (commentId: string) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<{
+        comments: TaskComment[];
+        watchers: TaskWatcher[];
+      }>(queryKey);
+      queryClient.setQueryData<{ comments: TaskComment[]; watchers: TaskWatcher[] }>(
+        queryKey,
+        (current) =>
+          current
+            ? { ...current, comments: current.comments.filter((c) => c.id !== commentId) }
+            : current,
+      );
+      return { previous };
+    },
+    onError: (_error, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
+    },
+  });
+
+  const confirmDeleteComment = useCallback(
+    (comment: TaskComment) => {
+      Alert.alert("Delete this comment?", "It will be removed for everybody on the task.", [
+        { text: "Keep", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => removeComment.mutate(comment.id) },
+      ]);
+    },
+    [removeComment],
+  );
+
   const changeWatcher = useMutation({
     mutationFn: async (change: { kind: "add" | "remove"; userId: string }) => {
       if (change.kind === "add") await addTaskWatchers(String(id), [change.userId]);
@@ -501,6 +552,21 @@ export default function TaskDetailScreen() {
                   <Text variant="caption" tone="muted">
                     {relativeTime(comment.createdAt)}
                   </Text>
+                  {/*
+                    Author only, matching the RLS policy. Offered to nobody else
+                    because a delete matching no row is a no-op, so the button
+                    would appear to work and change nothing.
+                  */}
+                  {canDeleteTaskComment(comment, user?.id ?? null) ? (
+                    <IconButton
+                      icon={Trash2}
+                      accessibilityLabel="Delete your comment"
+                      tone="destructive"
+                      surface={false}
+                      size="sm"
+                      onPress={() => confirmDeleteComment(comment)}
+                    />
+                  ) : null}
                 </View>
                 <Text variant="body">{comment.body}</Text>
                 {comment.mentions.length > 0 ? (

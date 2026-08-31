@@ -68,6 +68,7 @@ export { default as MessageSquare } from "lucide-react-native/dist/esm/icons/mes
 export { default as Paperclip } from "lucide-react-native/dist/esm/icons/paperclip";
 export { default as PenLine } from "lucide-react-native/dist/esm/icons/pen-line";
 export { default as Plus } from "lucide-react-native/dist/esm/icons/plus";
+export { default as Quote } from "lucide-react-native/dist/esm/icons/quote";
 export { default as RefreshCw } from "lucide-react-native/dist/esm/icons/refresh-cw";
 export { default as RotateCcw } from "lucide-react-native/dist/esm/icons/rotate-ccw";
 export { default as Search } from "lucide-react-native/dist/esm/icons/search";

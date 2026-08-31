@@ -4,12 +4,14 @@ import { describe, expect, it } from "vitest";
 import {
   addableWatchers,
   addWarning,
+  canDeleteTaskComment,
   commentAuthor,
   sortedWatchers,
   watcherName,
   watcherSummary,
   type WatcherLike,
 } from "../apps/mobile/src/api/task-watchers-view";
+import { canDeleteComment as canDeletePhotoComment } from "../apps/mobile/src/api/photo-comments-view";
 
 /*
  * Who else is told about a task.
@@ -58,6 +60,43 @@ describe("commentAuthor", () => {
     expect(commentAuthor({ authorName: "Sam", authorEmail: "s@x.test" })).toBe("Sam");
     expect(commentAuthor({ authorName: null, authorEmail: "s@x.test" })).toBe("s@x.test");
     expect(commentAuthor({ authorName: null, authorEmail: null })).toBe("Someone");
+  });
+});
+
+describe("canDeleteTaskComment", () => {
+  it("offers a delete to the author only", () => {
+    /*
+     * The database's answer, not a guess: "Authors delete their own comments"
+     * with `author_id = auth.uid()`. The same rule photo comments follow - and
+     * the phone could already delete one of THOSE, so being able to post a task
+     * comment and never take it back was an asymmetry rather than a decision.
+     */
+    expect(canDeleteTaskComment({ authorId: "u-sam" }, "u-sam")).toBe(true);
+    expect(canDeleteTaskComment({ authorId: "u-sam" }, "u-boss")).toBe(false);
+  });
+
+  it("offers nothing when nobody is signed in", () => {
+    expect(canDeleteTaskComment({ authorId: "u-sam" }, null)).toBe(false);
+  });
+
+  it("agrees with the photo-comment rule, which is the same policy", () => {
+    /*
+     * Two surfaces, two RLS policies, both `author_id = auth.uid()`. Compared
+     * against the OTHER implementation rather than against itself: the first
+     * version of this test asserted `f(x) === f(x)`, which is true of every
+     * function ever written and proves nothing about either.
+     */
+    const cases: [string, string | null][] = [
+      ["u-sam", "u-sam"],
+      ["u-sam", "u-boss"],
+      ["u-sam", null],
+      ["u-sam", ""],
+    ];
+    for (const [authorId, userId] of cases) {
+      expect(canDeleteTaskComment({ authorId }, userId), `${authorId}/${userId}`).toBe(
+        canDeletePhotoComment({ authorId }, userId),
+      );
+    }
   });
 });
 
@@ -184,6 +223,22 @@ describe("the phone reads the field names the service sends", () => {
     const s = screen();
     expect(s).toContain("commentAuthor(comment)");
     expect(s).not.toContain("byId.get(comment.author");
+  });
+
+  it("deletes a comment through the op, and only the author's own", () => {
+    /*
+     * The service leaves the rule to RLS and a delete matching no row is a
+     * no-op, so the SCREEN has to decide whether to offer the control. A button
+     * shown on somebody else's comment would appear to work and change nothing.
+     */
+    const migration = readFileSync(
+      join(process.cwd(), "supabase/migrations/20260915000000_task_collaboration.sql"),
+      "utf8",
+    );
+    expect(migration).toContain("Authors delete their own comments");
+    expect(migration).toContain("author_id = auth.uid()");
+    expect(client()).toContain('rpc("deleteTaskComment"');
+    expect(screen()).toContain("canDeleteTaskComment(comment, user?.id ?? null)");
   });
 
   it("sends the web origin for the emails, not the API host", () => {

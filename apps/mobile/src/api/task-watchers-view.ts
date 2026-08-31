@@ -107,3 +107,18 @@ export function addWarning(names: string[]): string {
 export function sortedWatchers<T extends WatcherLike>(watching: T[]): T[] {
   return [...watching].sort((a, b) => watcherName(a).localeCompare(watcherName(b)));
 }
+
+/**
+ * Whether to offer a delete on this task comment.
+ *
+ * Author only, matching the RLS policy exactly. An admin sees no delete because
+ * an admin pressing it would get a silent no-op: a delete that matches no row
+ * is not an error, so a button offered on somebody else's comment would appear
+ * to work and change nothing.
+ */
+export function canDeleteTaskComment(
+  comment: { authorId: string },
+  userId: string | null,
+): boolean {
+  return Boolean(userId) && comment.authorId === userId;
+}

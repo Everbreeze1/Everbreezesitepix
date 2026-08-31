@@ -88,6 +88,23 @@ export async function createTaskComment(input: {
   return result?.comment ?? null;
 }
 
+/**
+ * Remove one of your own comments.
+ *
+ * Author-only, and that is the database's answer rather than a guess: the
+ * policy is "Authors delete their own comments" with `author_id = auth.uid()`
+ * (`supabase/migrations/20260915000000_task_collaboration.sql`). The same rule
+ * photo comments follow, and the phone could already delete one of those - so
+ * being able to post a task comment and never take it back was an asymmetry
+ * rather than a decision.
+ *
+ * A delete matching no row is a no-op rather than an error, which is why the
+ * screen decides whether to OFFER the control instead of relying on a refusal.
+ */
+export async function deleteTaskComment(commentId: string): Promise<void> {
+  await api.rpc("deleteTaskComment", { commentId });
+}
+
 /** Teammates on this project, used for the mention picker. */
 export async function getProjectContributors(projectId: string): Promise<MentionMember[]> {
   const result = await api.rpc<{ contributors?: MentionMember[] } | MentionMember[]>(

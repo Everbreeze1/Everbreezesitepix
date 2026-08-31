@@ -166,7 +166,27 @@ function callSites(): { sites: Site[]; skipped: number } {
   let skipped = 0;
   for (const file of walk(join(ROOT, "apps/mobile"))) {
     const src = stripComments(readFileSync(file, "utf8"));
-    const re = /rpc(?:<[^>]*>)?\(\s*"(\w+)"\s*,/g;
+    /*
+     * The type argument is `[^()]*`, not `[^>]*` and not a lazy `[\s\S]*?`.
+     *
+     * `<[^>]*>` cannot see a NESTED generic: in
+     * `rpc<Partial<ApplyResult>>("applyProjectBlueprint", ...)` it stops at the
+     * first `>` and never reaches the paren. Eleven ops were invisible that
+     * way - `applyProjectBlueprint`, `chatWithAssistant`,
+     * `listProjectDocumentTree`, `listTaskCollaboration` among them - and they
+     * were not counted as skipped either, so the guard reported full health
+     * while quietly reading less than it looked like it was.
+     *
+     * A lazy `[\s\S]*?` fixes the nesting and introduces a worse fault: it
+     * happily spans the gap between one `rpc` and a LATER call's paren,
+     * swallowing whole call sites. It found fewer than the original.
+     *
+     * Forbidding parens inside the type argument settles both. A generic never
+     * contains one, and a call boundary always does, so the match cannot cross
+     * from one call into the next. 78 sites against the original's 67, with
+     * none of the original's lost.
+     */
+    const re = /\brpc\s*(?:<[^()]*>)?\s*\(\s*"(\w+)"\s*,/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(src)) !== null) {
       const literal = balanced(src, m.index + m[0].length - 1);
@@ -206,7 +226,16 @@ describe("every mobile request carries the fields its schema requires", () => {
      * green, the number was "over 100", and forty-six ops were invisible.
      */
     expect(required.size).toBeGreaterThan(170);
-    expect(sites.length).toBeGreaterThan(40);
+    /*
+     * 65 checked and 13 skipped at the time of writing, from 78 matched.
+     *
+     * Set close to the real number on purpose: a loose floor is what let a
+     * broken type-argument pattern hide eleven call sites while this same
+     * assertion stayed green. The floor is on what is CHECKED, not on what is
+     * matched, so a change that pushed everything through a spread would trip
+     * it rather than passing on a healthy-looking match count.
+     */
+    expect(sites.length).toBeGreaterThan(60);
   });
 
   it("sends every required field", () => {
