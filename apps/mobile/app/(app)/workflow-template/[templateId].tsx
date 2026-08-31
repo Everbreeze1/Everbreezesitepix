@@ -343,11 +343,23 @@ export default function WorkflowTemplateScreen() {
                               {itemIndex > 0 ? <RowDivider inset={false} /> : null}
                               <ListRow
                                 title={templateItem.label}
-                                subtitle={
+                                /*
+                                 * On the subtitle line, not as a badge on the
+                                 * right, for the reason the checklist editor
+                                 * carries the same note: `ListRow` never
+                                 * shrinks its right slot, so a badge sitting
+                                 * beside three icon buttons leaves the title
+                                 * about 40dp and it wraps a character at a
+                                 * time.
+                                 */
+                                subtitle={[
                                   ITEM_KINDS.find(
                                     (kind) => kind.id === normaliseKind(templateItem.kind),
-                                  )?.label
-                                }
+                                  )?.label,
+                                  templateItem.required ? "Required" : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
                                 right={
                                   <View
                                     style={{
@@ -356,9 +368,6 @@ export default function WorkflowTemplateScreen() {
                                       gap: spacing.xs,
                                     }}
                                   >
-                                    {templateItem.required ? (
-                                      <Badge label="Required" tone="primary" variant="outline" />
-                                    ) : null}
                                     <IconButton
                                       icon={ChevronLeft}
                                       tone="muted"

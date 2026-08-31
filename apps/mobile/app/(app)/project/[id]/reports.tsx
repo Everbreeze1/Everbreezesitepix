@@ -12,9 +12,8 @@ import {
   type ReportRow,
 } from "@/api/report-view";
 import { spacing } from "@/theme";
-import { FileText, Plus, Share2, Trash2 } from "@/ui/icons";
+import { FileText, Plus, Trash2 } from "@/ui/icons";
 import {
-  Badge,
   Button,
   EmptyState,
   ErrorState,
@@ -145,19 +144,20 @@ export default function ProjectReportsScreen() {
                         icon={FileText}
                         title={report.title}
                         subtitle={`${reportSummaryLine(report)} · ${relativeTime(report.updated_at)}`}
+                        /*
+                          Shared state reads on the subtitle line only.
+                          `reportSummaryLine` already appends "shared" from the
+                          same predicate, so the badge said it twice - and it
+                          cost about 150px of a 360dp row, on top of the leading
+                          glyph, the delete button and the chevron. Every title
+                          truncated to "20 Charlco...", which on a list of site
+                          reports named after the address left five rows that
+                          looked identical and no way to tell which was which.
+                        */
                         right={
                           <View
                             style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}
                           >
-                            {/*
-                              Shared state on the row, because it is the one
-                              thing about a report that is true outside this
-                              workspace and the one thing somebody needs to know
-                              before deleting it.
-                            */}
-                            {isReportShared(report) ? (
-                              <Badge label="Shared" tone="success" icon={Share2} />
-                            ) : null}
                             <IconButton
                               icon={Trash2}
                               tone="destructive"

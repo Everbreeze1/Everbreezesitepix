@@ -278,12 +278,30 @@ export default function TemplateEditorScreen() {
                   {index > 0 ? <RowDivider inset={false} /> : null}
                   <ListRow
                     title={item.label}
-                    subtitle={
-                      item.description ?? CHECKLIST_TYPE_LABELS[normaliseItemType(item.item_type)]
-                    }
+                    /*
+                     * "Required" reads on the subtitle line, not as a badge on
+                     * the right.
+                     *
+                     * `ListRow` gives its right slot `flexShrink: 0`, on the
+                     * sound reasoning that a badge squeezed to a sliver is
+                     * worse than a wrapped title. That holds for a badge. It
+                     * does not hold for a badge plus three icon buttons: the
+                     * cluster took about 260 of a 360dp row and the title got
+                     * the remainder, so every required item rendered as
+                     * "Ov / e... / Rat / ing" - one or two characters a line,
+                     * while the optional items beside them read normally.
+                     *
+                     * The row's own type label already shares this line, so the
+                     * separator is the pattern the inbox uses.
+                     */
+                    subtitle={[
+                      item.description ?? CHECKLIST_TYPE_LABELS[normaliseItemType(item.item_type)],
+                      item.required ? "Required" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                     right={
                       <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
-                        {item.required ? <Badge label="Required" tone="primary" /> : null}
                         {canManage ? (
                           <>
                             {/*
