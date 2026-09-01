@@ -185,6 +185,10 @@ export default function AnnotateScreen() {
         projectId,
         caption: annotatedCaption(caption),
         phase: phase ?? "untagged",
+        // The route already carries the source photograph's pixel size, so the
+        // queued row records the real dimensions rather than nothing.
+        width: width ? Number(width) : null,
+        height: height ? Number(height) : null,
       });
       await queryClient.invalidateQueries({ queryKey: ["project-photos", projectId] });
       router.back();

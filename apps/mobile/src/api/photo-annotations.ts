@@ -1,9 +1,11 @@
-import { photoObjectPaths, thumbPathFor } from "@everlumen/shared";
 import { randomUUID } from "expo-crypto";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { File, Paths } from "expo-file-system";
 import type Svg from "react-native-svg";
-import { supabase } from "@/lib/supabase";
+import { enqueue, newOutboxId } from "@/offline/outbox";
+import { persistCapture } from "@/offline/media";
+import { requestSync } from "@/offline/sync";
+import type { PhotoUploadPayload } from "@/offline/handlers";
 
 /**
  * Flatten a marked-up photo and store it as a new one.
@@ -52,7 +54,10 @@ export async function saveAnnotatedPhoto(options: {
   projectId: string;
   caption: string;
   phase: string;
-}): Promise<{ id: string }> {
+  /** Carried through so the queued row records the real pixel size. */
+  width?: number | null;
+  height?: number | null;
+}): Promise<{ queued: true }> {
   const base64 = await rasterise(options.canvas);
 
   /*
@@ -75,63 +80,51 @@ export async function saveAnnotatedPhoto(options: {
   const rendered = await ImageManipulator.manipulate(scratch.uri).renderAsync();
   const encoded = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: JPEG_QUALITY });
 
-  const path = `${options.userId}/${options.projectId}/${randomUUID()}.jpg`;
-  const bytes = await new File(encoded.uri).arrayBuffer();
+  /*
+   * From here the outbox owns it, exactly as a camera capture does.
+   *
+   * This used to upload the file, upload a thumbnail and insert the row inline,
+   * which meant a marked-up defect photo could only be saved with signal - and
+   * marking up a defect is done standing in front of it. The rasterising and
+   * the JPEG encode still happen here because they need the live canvas; what
+   * follows is the same `photo_upload` the camera queues, so the annotated copy
+   * travels the same tested path and behaves like any other photo on arrival.
+   */
+  const outboxId = newOutboxId();
+  const localUri = persistCapture(encoded.uri, outboxId);
 
-  const { error: upErr } = await supabase.storage
-    .from("site-photos")
-    .upload(path, bytes, { contentType: "image/jpeg", upsert: false });
-  if (upErr) throw new Error(upErr.message);
+  const payload: PhotoUploadPayload = {
+    userId: options.userId,
+    projectId: options.projectId,
+    caption: options.caption,
+    phase: options.phase as PhotoUploadPayload["phase"],
+    tags: [],
+    width: options.width ?? null,
+    height: options.height ?? null,
+  };
 
-  // Same thumbnail rules as any other capture, so the annotated copy behaves
-  // like a normal photo everywhere it appears.
-  let thumbPath: string | null = null;
-  try {
-    const thumbSource = ImageManipulator.manipulate(encoded.uri);
-    thumbSource.resize({ width: 1400 });
-    const thumb = await (
-      await thumbSource.renderAsync()
-    ).saveAsync({
-      format: SaveFormat.JPEG,
-      compress: 0.7,
-    });
-    const thumbBytes = await new File(thumb.uri).arrayBuffer();
-    const candidate = thumbPathFor(path);
-    const { error } = await supabase.storage
-      .from("site-photos")
-      .upload(candidate, thumbBytes, { contentType: "image/jpeg", upsert: true });
-    if (!error) thumbPath = candidate;
-  } catch {
-    // An optimisation. A photo without one still reads correctly.
-  }
-
-  const { data, error: insErr } = await supabase
-    .from("photos")
-    .insert({
-      project_id: options.projectId,
-      uploaded_by: options.userId,
-      storage_path: path,
-      thumb_path: thumbPath,
-      size_bytes: bytes.byteLength,
-      caption: options.caption,
-      phase: options.phase,
-    })
-    .select("id")
-    .single();
-
-  if (insErr || !data) {
-    await supabase.storage
-      .from("site-photos")
-      .remove(photoObjectPaths(path, thumbPath))
-      .catch(() => {});
-    throw new Error(insErr?.message ?? "Could not save the annotated photo");
-  }
+  await enqueue({
+    id: outboxId,
+    kind: "photo_upload",
+    projectId: options.projectId,
+    localUri,
+    payload,
+  });
+  requestSync();
 
   try {
+    // The PNG the rasteriser produced. The durable copy above is a JPEG, so
+    // this one has no further use.
     scratch.delete();
   } catch {
     // Cache directory; the OS reclaims it.
   }
 
-  return { id: data.id };
+  /*
+   * No id to return: the row does not exist until the queue delivers it. The
+   * one caller ignored the id anyway - it invalidates the grid and goes back -
+   * so this reports that the work is safely on the device rather than
+   * pretending to know what the server will call it.
+   */
+  return { queued: true as const };
 }

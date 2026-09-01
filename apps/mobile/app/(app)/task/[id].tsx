@@ -16,7 +16,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { calendarDueLabel, photoIsDone, relativeTime, taskPhotoProgress } from "@everlumen/shared";
 import { Image } from "expo-image";
 import { listProjectTasks, type TaskDraft, type TaskRow } from "@/api/tasks";
-import { getTaskPhotoState, setTaskPhotoStatus } from "@/api/task-photos";
+import { getTaskPhotoState } from "@/api/task-photos";
 import {
   createTaskComment,
   getProjectContributors,
@@ -52,7 +52,12 @@ import {
 } from "@/api/task-status";
 import { TaskEditorSheet } from "@/components/TaskEditorSheet";
 import { useAuth } from "@/lib/auth";
-import { taskEditRowId, type TaskEditPayload } from "@/offline/handlers";
+import {
+  taskEditRowId,
+  taskPhotoRowId,
+  type TaskEditPayload,
+  type TaskPhotoPatchPayload,
+} from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
@@ -142,15 +147,36 @@ export default function TaskDetailScreen() {
     [photoState, task?.photo_ids],
   );
 
+  /**
+   * Tick or untick one photograph, through the queue.
+   *
+   * This is the most on-site act in the app after taking the photograph:
+   * somebody is standing in front of the thing deciding it is done. It used to
+   * go straight to the server, so with the radio off the tile simply did not
+   * change and the crew had no way to record what they had just checked.
+   *
+   * The parent task's status is rolled up by a trigger, so the refetch below
+   * only tells the truth once the row has actually landed. Offline it will
+   * report the old state until the queue drains, which is honest: the server
+   * has not been told yet.
+   */
   const togglePhoto = useMutation({
     mutationFn: async (photoId: string) => {
       const done = photoIsDone(photoState?.items, photoId);
-      await setTaskPhotoStatus(id!, photoId, done ? "open" : "done");
+      await enqueue({
+        id: taskPhotoRowId(id!, photoId),
+        kind: "task_photo_patch",
+        projectId: projectId ?? null,
+        payload: {
+          taskId: id!,
+          photoId,
+          status: done ? "open" : "done",
+        } satisfies TaskPhotoPatchPayload,
+      });
+      requestSync();
     },
     onSuccess: () => {
       void photosQuery.refetch();
-      // The parent task's status is rolled up by a trigger, so the list has to
-      // be re-read rather than patched from here.
       void queryClient.invalidateQueries({ queryKey: tasksKey });
     },
   });

@@ -4,6 +4,7 @@ import type { Coords } from "@/api/photo-meta";
 import { applyPhotoPatch, type PhotoPatch } from "@/api/photo-edit";
 import { applyProjectPatch } from "@/api/projects";
 import { saveSiteLog } from "@/api/site-logs";
+import { setTaskPhotoStatus } from "@/api/task-photos";
 import type { ProjectPatch } from "@/api/project-patch";
 import {
   applyTaskEdit,
@@ -165,6 +166,35 @@ export function siteLogPatchRowId(field: string, logId: string): string {
   return `site-log-patch:${field}:${logId}`;
 }
 
+/**
+ * Ticking one photograph off a task, queued.
+ *
+ * Naturally idempotent rather than made so: the write is an upsert on
+ * `(task_id, photo_id)` carrying the whole row, so replaying it lands on the
+ * same state. `completed_at` and `completed_by` are stamped by a trigger and
+ * never sent, which is also what makes a late replay honest - the timestamp is
+ * when the server recorded it, not when the phone guessed.
+ *
+ * Queued because this is the most on-site act in the app after taking the
+ * photograph: somebody is standing in front of the thing, deciding it is done.
+ */
+export type TaskPhotoPatchPayload = {
+  taskId: string;
+  photoId: string;
+  status: "open" | "done";
+};
+
+/**
+ * One queue row per photograph per task.
+ *
+ * Ticking and unticking the same photo replaces its own row, so the last state
+ * the person chose is the one that lands - rather than a tick and an untick
+ * both queueing and racing.
+ */
+export function taskPhotoRowId(taskId: string, photoId: string): string {
+  return `task-photo:${taskId}:${photoId}`;
+}
+
 export type PhotoPatchPayload = {
   photoIds: string[];
   patch: PhotoPatch;
@@ -311,6 +341,11 @@ const handlers: Record<OutboxKind, Handler> = {
   workflow_phase_patch: async (row) => {
     const payload = JSON.parse(row.payload) as WorkflowPhasePatchPayload;
     await applyPhasePatch(payload.phaseId, payload.patch);
+  },
+
+  task_photo_patch: async (row) => {
+    const payload = JSON.parse(row.payload) as TaskPhotoPatchPayload;
+    await setTaskPhotoStatus(payload.taskId, payload.photoId, payload.status);
   },
 
   site_log_patch: async (row) => {

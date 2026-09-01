@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -63,6 +63,16 @@ export default function SiteLogScreen() {
   const [failure, setFailure] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
+  /*
+   * The title as it stands right now, and the last value actually written.
+   *
+   * Read by the unmount effect below, which cannot see state through its own
+   * closure. Refs rather than state because nothing renders from them.
+   */
+  const titleRef = useRef("");
+  const savedTitleRef = useRef("");
+  const saveRef = useRef<((field: string, patch: { title?: string }) => void) | null>(null);
+
   const queryKey = useMemo(() => ["site-log", logId], [logId]);
 
   const query = useQuery({
@@ -81,6 +91,8 @@ export default function SiteLogScreen() {
   useEffect(() => {
     if (loaded || !query.data) return;
     setTitle(query.data.title);
+    titleRef.current = query.data.title;
+    savedTitleRef.current = query.data.title;
     setPhotoIds(photoIdsOf(query.data));
     setNotes(query.data.notes ?? {});
     setLoaded(true);
@@ -170,6 +182,35 @@ export default function SiteLogScreen() {
     [logId, projectId, queryClient],
   );
 
+  /*
+   * Commit a half-typed title when the screen goes away.
+   *
+   * The field writes `onBlur`, which is right - a write per keystroke is a
+   * write per keystroke on a connection that may be one bar. But the header
+   * back button unmounts this screen without ever blurring the input, so
+   * somebody who renamed a log and tapped back lost the rename, silently and
+   * with no way to tell it had happened.
+   *
+   * That is a bad way to lose it. The edit is queued through the outbox
+   * precisely so it survives having no signal on site, and it was being thrown
+   * away by a back tap instead.
+   *
+   * Guarded on the value actually differing from the last one written, so
+   * leaving a screen nobody typed on queues nothing.
+   */
+  useEffect(() => {
+    saveRef.current = save as (field: string, patch: { title?: string }) => void;
+  }, [save]);
+
+  useEffect(() => {
+    return () => {
+      const pending = titleRef.current.trim() || "Site log";
+      if (pending === savedTitleRef.current) return;
+      savedTitleRef.current = pending;
+      saveRef.current?.("title", { title: pending });
+    };
+  }, []);
+
   const commitNotes = useCallback(
     (next: Record<string, PhotoNote>) => {
       setNotes(next);
@@ -242,10 +283,17 @@ export default function SiteLogScreen() {
           <Field
             label="Title"
             value={title}
-            onChangeText={setTitle}
+            onChangeText={(next) => {
+              setTitle(next);
+              titleRef.current = next;
+            }}
             // On blur, not per keystroke. A write per character is a write per
             // character on a connection that may be one bar.
-            onBlur={() => void save("title", { title: title.trim() || "Site log" })}
+            onBlur={() => {
+              const next = title.trim() || "Site log";
+              savedTitleRef.current = next;
+              void save("title", { title: next });
+            }}
             returnKeyType="done"
           />
 
