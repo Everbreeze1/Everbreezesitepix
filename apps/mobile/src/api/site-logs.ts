@@ -2,6 +2,7 @@ import { randomUUID } from "expo-crypto";
 import { AI_TIMEOUT_MS } from "@everlumen/api-client";
 import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
+import { fileGeneratedPdf } from "./pdf-export";
 import type { PhotoNote, SiteLogRow } from "./site-log-notes";
 
 /**
@@ -92,4 +93,36 @@ export async function describeSiteLogPhotos(
     { idempotencyKey: randomUUID(), timeoutMs: AI_TIMEOUT_MS },
   );
   return { notes: result?.notes ?? {} };
+}
+
+/**
+ * Render the log to a PDF and file it under the project's documents.
+ *
+ * The filing, and why it is filing rather than a download, is in
+ * `pdf-export.ts` - shared with the document exporter, so there is one answer
+ * to "where does a PDF go on a phone" rather than two that drift.
+ */
+export async function exportSiteLogPdf(args: {
+  projectId: string;
+  title: string;
+  items: { photoId: string; notes: string; todos: { text: string; done: boolean }[] }[];
+}): Promise<{ url: string; filename: string }> {
+  const rendered = await api.rpc<{ pdfBase64?: string; filename?: string }>(
+    "generateSiteLogPdf",
+    { title: args.title, items: args.items },
+    /*
+     * The long timeout, and a key. The render fetches every photo on the log
+     * server-side before it embeds them, so a forty-photo log does not finish
+     * inside the 30s default - and the op is registered idempotent, which does
+     * nothing at all unless the key is actually sent.
+     */
+    { idempotencyKey: randomUUID(), timeoutMs: AI_TIMEOUT_MS },
+  );
+  if (!rendered?.pdfBase64) throw new Error("The PDF came back empty");
+
+  return fileGeneratedPdf({
+    projectId: args.projectId,
+    pdfBase64: rendered.pdfBase64,
+    filename: rendered.filename || "site-log.pdf",
+  });
 }

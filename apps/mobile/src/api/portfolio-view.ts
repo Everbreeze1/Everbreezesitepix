@@ -80,14 +80,24 @@ export function publishedCount(projects: PortfolioProject[]): number {
  * the response order is both correct and the only thing that can be correct.
  */
 
-/** The line under a portfolio project's title. */
+/**
+ * The line under a portfolio project's title.
+ *
+ * Deliberately does NOT say live or draft, though it used to. The card renders
+ * a `Badge` reading "Live" or "Draft" immediately to the right of this line, so
+ * the row said it twice, in two type sizes, a few points apart. Worse for
+ * anybody using a screen reader, which read the sentence and then the badge:
+ * "1 photo, Crewe England, live. Live."
+ *
+ * The badge is the better of the two. It carries the state in colour as well as
+ * in words, and it stays put while this line grows with the place name.
+ */
 export function portfolioSummary(project: PortfolioProject): string {
   const photos = project.item_count ?? 0;
   const parts = [`${photos} photo${photos === 1 ? "" : "s"}`];
 
   const place = [project.city, project.state].filter(Boolean).join(", ");
   if (place) parts.push(place);
-  parts.push(isPublished(project) ? "live" : "draft");
 
   return parts.join(" · ");
 }

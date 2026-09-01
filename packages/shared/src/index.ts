@@ -1,4 +1,5 @@
 export { relativeTime } from "./relative-time";
+export { emailHandle, personName } from "./person-name";
 export {
   parseCalendarDate,
   todayCalendarDate,
@@ -180,5 +181,5 @@ export {
   photoCommentDeleteErrorMessage,
   photoCommentListErrorMessage,
 } from "./photo-comment-errors";
-export { readsAsDatabaseInternals } from "./db-internals";
+export { readsAsDatabaseInternals, readableErrorMessage } from "./db-internals";
 export { titleWithinProject } from "./title-within-project";

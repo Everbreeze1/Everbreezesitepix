@@ -212,7 +212,21 @@ export default function SummaryScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: summary.title || "Write-up" }} />
+      {/*
+        Constant, not the write-up's own title.
+
+        This was `summary.title`, which the body renders again a few lines
+        below - so the name appeared twice, once truncated into the nav bar and
+        once in full. It also meant the header flickered: the loading and error
+        branches above both say "Write-up", so the bar changed word as the data
+        arrived.
+
+        The body is the better of the two places to keep it. A generated title
+        like "HVAC Installation & Start-Up Report" is longer than a nav bar,
+        which truncates in the middle of the useful part, while the body can
+        wrap it and doubles as the tap target for renaming.
+      */}
+      <Stack.Screen options={{ title: "Write-up" }} />
 
       <Screen
         scroll

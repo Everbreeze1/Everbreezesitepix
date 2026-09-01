@@ -186,3 +186,46 @@ export function emptyJobWarning(photoCount: number): string | null {
   if (photoCount > 0) return null;
   return "There are no photos on this job yet, so the report will have no photographic record in it.";
 }
+
+/**
+ * The clock time on a report, for telling two of them apart.
+ *
+ * Reports are titled from their date, so two written on the same day carry the
+ * same name. On the phone their subtitles match too - same photo count, same
+ * "no write-up yet", same "2w ago" - which leaves two rows that are identical
+ * in every visible respect, each with its own delete button.
+ *
+ * That is not a theoretical hazard. Two reports on this workspace were created
+ * 32 minutes apart on 29 July and render as the same row twice.
+ *
+ * Local time, because the person reading it is standing where the work
+ * happened, and 24-hour because "00:33" is unambiguous where "12:33 AM" invites
+ * a second look.
+ */
+export function reportClockTime(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+}
+
+/**
+ * Which reports in a list need their time shown.
+ *
+ * Only the ones that would otherwise be indistinguishable. Stamping a time on
+ * every row would be noise on the common case, where the title already says
+ * which report this is.
+ */
+export function ambiguousReportIds(
+  reports: ReadonlyArray<{ id: string; title: string }>,
+): Set<string> {
+  const byTitle = new Map<string, string[]>();
+  for (const report of reports) {
+    const key = report.title.trim();
+    byTitle.set(key, [...(byTitle.get(key) ?? []), report.id]);
+  }
+  const ambiguous = new Set<string>();
+  for (const ids of byTitle.values()) {
+    if (ids.length > 1) for (const id of ids) ambiguous.add(id);
+  }
+  return ambiguous;
+}

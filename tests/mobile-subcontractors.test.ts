@@ -125,10 +125,30 @@ describe("stateOf", () => {
 });
 
 describe("subcontractorName", () => {
-  it("prefers the company, falls back to the address", () => {
+  it("prefers the company, falls back to the handle in the address", () => {
+    /*
+     * The handle rather than the whole address, which is a change. A row title
+     * is one line at heading weight and an address is usually longer than one:
+     * on the team roster the same fallback rendered the workspace owner as
+     * "marklagura223@gmail" above ".com".
+     *
+     * Here it was doubly odd, because `subcontractorSummary` below already
+     * begins with the full address - so an unnamed firm was listed as its own
+     * email twice, once broken in half.
+     */
     expect(subcontractorName(sub())).toBe("Sparks Electrical");
-    expect(subcontractorName(sub({ company_name: null }))).toBe("office@sparks.test");
-    expect(subcontractorName(sub({ company_name: "   " }))).toBe("office@sparks.test");
+    expect(subcontractorName(sub({ company_name: null }))).toBe("office");
+    expect(subcontractorName(sub({ company_name: "   " }))).toBe("office");
+  });
+
+  it("says something rather than nothing when there is no address either", () => {
+    expect(subcontractorName(sub({ company_name: null, email: "" }))).toBe("Outside firm");
+  });
+
+  it("the address is still shown in full, underneath", () => {
+    // The half that moved, not the half that was dropped. A subcontractor's
+    // address is who actually holds the login, so it must stay on the row.
+    expect(subcontractorSummary(sub({ company_name: null }), 1)).toContain("office@sparks.test");
   });
 });
 

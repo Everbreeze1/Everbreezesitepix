@@ -82,16 +82,37 @@ describe("the response order is preserved", () => {
 });
 
 describe("portfolioSummary", () => {
-  it("says photos, place and whether it is live", () => {
-    expect(portfolioSummary(page())).toBe("12 photos · Manchester · live");
+  it("says photos and place", () => {
+    expect(portfolioSummary(page())).toBe("12 photos · Manchester");
   });
 
-  it("marks an unpublished page a draft", () => {
-    expect(portfolioSummary(page({ revoked_at: "2026-08-02T00:00:00.000Z" }))).toContain("draft");
+  it("leaves live and draft to the badge beside it", () => {
+    /*
+     * The state used to be appended here as well. The card renders a `Badge`
+     * reading "Live" or "Draft" immediately to the right of this line, so the
+     * row said it twice, in two type sizes, a few points apart - and read
+     * aloud as "1 photo, Crewe England, live. Live."
+     */
+    expect(portfolioSummary(page({ revoked_at: "2026-08-02T00:00:00.000Z" }))).not.toContain(
+      "draft",
+    );
+    expect(portfolioSummary(page())).not.toContain("live");
+  });
+
+  it("but the card still shows the state, so it was moved and not dropped", () => {
+    /*
+     * The other half of the change, read from the screen. Removing the word
+     * from the summary is only right while the badge is there; without this
+     * assertion the two edits could drift and the state would vanish.
+     */
+    const { readFileSync } = require("node:fs") as typeof import("node:fs");
+    const { join } = require("node:path") as typeof import("node:path");
+    const card = readFileSync(join(process.cwd(), "apps/mobile/app/(app)/portfolio.tsx"), "utf8");
+    expect(card).toContain('label={isPublished(project) ? "Live" : "Draft"}');
   });
 
   it("omits the place when there is none", () => {
-    expect(portfolioSummary(page({ city: null, state: null }))).toBe("12 photos · live");
+    expect(portfolioSummary(page({ city: null, state: null }))).toBe("12 photos");
   });
 
   it("reads item_count, the field the service actually sends", () => {
@@ -101,15 +122,15 @@ describe("portfolioSummary", () => {
      * `isPortfolioProjectEmpty` called every page empty. Both only visible on
      * the device.
      */
-    expect(portfolioSummary(page({ item_count: 5, city: null }))).toBe("5 photos · live");
+    expect(portfolioSummary(page({ item_count: 5, city: null }))).toBe("5 photos");
   });
 
   it("copes with a response that carried no count", () => {
-    expect(portfolioSummary(page({ item_count: undefined, city: null }))).toBe("0 photos · live");
+    expect(portfolioSummary(page({ item_count: undefined, city: null }))).toBe("0 photos");
   });
 
   it("gets the singular right", () => {
-    expect(portfolioSummary(page({ item_count: 1, city: null }))).toBe("1 photo · live");
+    expect(portfolioSummary(page({ item_count: 1, city: null }))).toBe("1 photo");
   });
 });
 

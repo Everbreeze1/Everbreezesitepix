@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { displayCaption } from "@everlumen/shared";
+import { displayCaption, readableErrorMessage } from "@everlumen/shared";
 import { listProjectPhotoPage, signPhotoUrls, type PhotoListItem } from "@/api/photos";
-import { describeSiteLogPhotos, getSiteLog } from "@/api/site-logs";
+import { describeSiteLogPhotos, exportSiteLogPdf, getSiteLog } from "@/api/site-logs";
 import type { SiteLogRow } from "@/api/site-log-notes";
 import { enqueue } from "@/offline/outbox";
 import { requestSync } from "@/offline/sync";
@@ -21,7 +22,7 @@ import {
   type PhotoNote,
 } from "@/api/site-log-notes";
 import { radius, spacing, useTheme } from "@/theme";
-import { CircleCheck, Images, Plus, Sparkles, X } from "@/ui/icons";
+import { CircleCheck, FileText, Images, Plus, Sparkles, X } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -252,6 +253,44 @@ export default function SiteLogScreen() {
       ),
   });
 
+  const exportPdf = useMutation({
+    mutationFn: async () => {
+      /*
+       * Built from the notes in local state rather than from the query cache.
+       * Notes commit on blur, so the line somebody is typing right now has not
+       * reached the server yet - and exporting a PDF that is missing the
+       * sentence still under the cursor is exactly the kind of quiet wrongness
+       * nobody reports as a bug, they just stop trusting the export.
+       */
+      const items = photoIds.map((photoId) => {
+        const note = noteFor(notes, photoId);
+        return {
+          photoId,
+          notes: note.notes,
+          todos: note.todos.map((t) => ({ text: t.text, done: t.done })),
+        };
+      });
+      return exportSiteLogPdf({
+        projectId: projectId ?? query.data!.project_id,
+        title: title.trim() || "Site log",
+        items,
+      });
+    },
+    onSuccess: async (result) => {
+      /*
+       * The Documents tab is keyed `["document-tree", projectId]`, not
+       * `["project-documents"]` - invalidating the wrong key is a silent no-op,
+       * and the export would look like it had not filed anything until the
+       * person left the project and came back.
+       */
+      const project = projectId ?? query.data?.project_id;
+      if (project) await queryClient.invalidateQueries({ queryKey: ["document-tree", project] });
+      await WebBrowser.openBrowserAsync(result.url);
+    },
+    onError: (error: unknown) =>
+      setFailure(readableErrorMessage(error, "Could not export this log as a PDF.")),
+  });
+
   if (query.isLoading) {
     return (
       <>
@@ -315,6 +354,20 @@ export default function SiteLogScreen() {
               onPress={() => describe.mutate()}
             />
           </ButtonRow>
+
+          <Button
+            label={exportPdf.isPending ? "Building the PDF" : "Export as PDF"}
+            icon={FileText}
+            variant="secondary"
+            disabled={exportPdf.isPending || photoIds.length === 0}
+            onPress={() => exportPdf.mutate()}
+          />
+          {photoIds.length ? (
+            <Text variant="caption" tone="muted">
+              Saved to this job's Documents, then opened. A phone has no downloads folder, so filing
+              it is what makes it findable tomorrow.
+            </Text>
+          ) : null}
 
           {failure ? (
             <Text variant="caption" tone="destructive">

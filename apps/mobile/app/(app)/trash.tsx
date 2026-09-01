@@ -24,7 +24,7 @@ import {
   Card,
   EmptyState,
   ErrorState,
-  PageHeader,
+  ScreenNote,
   Screen,
   SkeletonList,
   Text,
@@ -114,9 +114,19 @@ export default function TrashScreen() {
         refreshing={query.isRefetching}
         onRefresh={() => void query.refetch()}
       >
-        <PageHeader
-          title="Trash"
-          subtitle={query.isLoading ? undefined : trashSummary(query.data ?? [])}
+        {/*
+          Nothing while the list is empty. `trashSummary([])` is "Nothing
+          deleted" and the empty state below is titled "Nothing deleted", so the
+          screen said it twice, once small and once large. The empty state is
+          the better of the two: it says the same thing and then explains the
+          sixty days.
+        */}
+        <ScreenNote
+          text={
+            query.isLoading || (query.data ?? []).length === 0
+              ? undefined
+              : trashSummary(query.data ?? [])
+          }
         />
 
         {query.isLoading ? (

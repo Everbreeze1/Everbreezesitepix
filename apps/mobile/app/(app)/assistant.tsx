@@ -14,7 +14,7 @@ import {
 } from "@/api/assistant-view";
 import { radius, spacing, useTheme } from "@/theme";
 import { Send, Sparkles } from "@/ui/icons";
-import { Button, EmptyState, Field, Icon, IconButton, PageHeader, SkeletonList, Text } from "@/ui";
+import { Button, EmptyState, Field, Icon, IconButton, ScreenNote, SkeletonList, Text } from "@/ui";
 
 /**
  * The assistant, on the phone.
@@ -132,10 +132,7 @@ export default function AssistantScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 96 : 0}
       >
-        <PageHeader
-          title="Assistant"
-          subtitle={loading ? undefined : threadSummary(messagesQuery.data ?? [])}
-        />
+        <ScreenNote text={loading ? undefined : threadSummary(messagesQuery.data ?? [])} />
 
         {loading ? (
           <SkeletonList rows={3} />

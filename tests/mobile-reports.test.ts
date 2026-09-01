@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   defaultReportTitle,
@@ -9,6 +11,8 @@ import {
   shareStatusLabel,
   shareTogglePatch,
   type ReportRow,
+  ambiguousReportIds,
+  reportClockTime,
 } from "../apps/mobile/src/api/report-view";
 
 /*
@@ -159,5 +163,68 @@ describe("isReportEmpty", () => {
   it("is false as soon as either half says something", () => {
     expect(isReportEmpty(report({ photo_ids: [], summary: "Panel replaced." }))).toBe(false);
     expect(isReportEmpty(report({ photo_ids: ["a"], summary: null }))).toBe(false);
+  });
+});
+
+describe("two reports written on the same day", () => {
+  /*
+   * Found with a duplicate-text check against the running app, then confirmed
+   * against the database: two reports on this workspace, distinct ids, created
+   * 32 minutes apart on 29 July, both titled "report - 7/29/2026". Their
+   * subtitles matched too - same photo count, same "no write-up yet", same
+   * "shared", same "2w ago" - so the list showed one row twice, and each copy
+   * carried its own delete button.
+   *
+   * I trashed the wrong photo earlier in exactly this way: rows I could not
+   * tell apart and a destructive action on each.
+   */
+  it("are found by title, not by date arithmetic", () => {
+    const ids = ambiguousReportIds([
+      { id: "a", title: "report - 7/29/2026" },
+      { id: "b", title: "report - 7/29/2026" },
+      { id: "c", title: "report - 7/30/2026" },
+    ]);
+    expect([...ids].sort()).toEqual(["a", "b"]);
+  });
+
+  it("leaves a list with no collisions alone", () => {
+    /*
+     * The half that keeps the common case quiet. Stamping a clock time on every
+     * row would be noise on a list where the title already says which is which.
+     */
+    const ids = ambiguousReportIds([
+      { id: "a", title: "report - 7/29/2026" },
+      { id: "b", title: "report - 7/30/2026" },
+    ]);
+    expect(ids.size).toBe(0);
+  });
+
+  it("ignores surrounding whitespace when comparing", () => {
+    const ids = ambiguousReportIds([
+      { id: "a", title: "report - 7/29/2026" },
+      { id: "b", title: "  report - 7/29/2026  " },
+    ]);
+    expect(ids.size).toBe(2);
+  });
+
+  it("renders a 24-hour clock, which needs no second look", () => {
+    // "00:33" rather than "12:33 AM": the two reports that prompted this were
+    // half an hour past midnight.
+    expect(reportClockTime("2026-07-29T00:33:58.000Z")).toMatch(/^\d{2}:\d{2}$/);
+  });
+
+  it("says nothing rather than NaN for an unreadable date", () => {
+    expect(reportClockTime("not a date")).toBe("");
+    expect(reportClockTime("")).toBe("");
+  });
+
+  it("the screen shows the time only on the colliding rows", () => {
+    const screen = readFileSync(
+      join(process.cwd(), "apps/mobile/app/(app)/project/[id]/reports.tsx"),
+      "utf8",
+    );
+    expect(screen).toContain("ambiguous.has(report.id)");
+    // And still shows the relative time on every other row.
+    expect(screen).toContain("relativeTime(report.updated_at)");
   });
 });

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Pressable, useWindowDimensions, View } from "react-native";
+import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { listMyOpenTasks, listRecentCaptureTimes } from "@/api/dashboard";
@@ -13,6 +13,7 @@ import {
   needsYou,
 } from "@/api/dashboard-view";
 import { getUnreadNotificationCount } from "@/api/notifications";
+import { listGalleryPhotoPage, type GalleryPhotoItem } from "@/api/photos";
 import { listProjects } from "@/api/projects";
 import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
@@ -39,6 +40,7 @@ import {
   Icon,
   ListRow,
   RowDivider,
+  PhotoThumb,
   Screen,
   SectionHeader,
   type LucideIcon,
@@ -94,6 +96,19 @@ import {
  */
 const BROWSE_TARGET_TILE = 110;
 
+/**
+ * How many photographs the home strip asks for.
+ *
+ * Twelve rather than a screenful: the strip scrolls, and the point is to show
+ * that the work exists and give a way in, not to be a second gallery. It is
+ * also a page small enough that the request costs nothing on a van's worth of
+ * signal, which is the connection this screen usually loads on.
+ */
+const STRIP_PHOTOS = 12;
+
+/** Edge of one photograph in the strip. Two and a bit visible on a phone. */
+const STRIP_TILE = 104;
+
 function useBrowseTile(): number {
   const { width } = useWindowDimensions();
   const usable = contentWidth(width) - spacing.lg * 2;
@@ -136,6 +151,22 @@ export default function HomeScreen() {
     staleTime: 5 * 60 * 1000,
   });
 
+  /*
+   * The photographs themselves, which is what this product is.
+   *
+   * Home answered "what needs you" entirely in words: counts, task titles and
+   * a menu. Everything the app is actually for was one tap away and invisible,
+   * and a field app whose home screen shows no field is a filing cabinet. One
+   * page of the gallery, newest first across every job, is the cheapest way to
+   * put the work back on the first screen - it is the same query the Gallery
+   * tab already runs, so it is warm by the time somebody gets there.
+   */
+  const recentPhotosQuery = useQuery({
+    queryKey: ["home-recent-photos"],
+    queryFn: () => listGalleryPhotoPage(null, STRIP_PHOTOS),
+    staleTime: 60_000,
+  });
+
   const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const urgent = useMemo(() => needsYou(tasks), [tasks]);
   const overdue = urgent.filter((task) => bucketOf(task) === "overdue").length;
@@ -158,18 +189,25 @@ export default function HomeScreen() {
     [projects],
   );
 
+  const stripPhotos = recentPhotosQuery.data?.photos ?? [];
+  const stripUrls = recentPhotosQuery.data?.urls ?? {};
+
   const unread = unreadQuery.data ?? 0;
   const capturedToday = countToday(capturesQuery.data ?? []);
   const loading = tasksQuery.isLoading || projectsQuery.isLoading;
 
   const refreshing =
-    tasksQuery.isRefetching || projectsQuery.isRefetching || capturesQuery.isRefetching;
+    tasksQuery.isRefetching ||
+    projectsQuery.isRefetching ||
+    capturesQuery.isRefetching ||
+    recentPhotosQuery.isRefetching;
 
   const refresh = () => {
     void tasksQuery.refetch();
     void projectsQuery.refetch();
     void unreadQuery.refetch();
     void capturesQuery.refetch();
+    void recentPhotosQuery.refetch();
   };
 
   return (
@@ -250,6 +288,38 @@ export default function HomeScreen() {
                   </Text>
                 ) : null}
               </View>
+            </>
+          ) : null}
+
+          {/*
+            The photographs, below the two things that can actually be lost and
+            above everything that is only a shortcut.
+
+            Deliberately not at the very top. The order on this screen is by
+            urgency and that is a decision worth keeping: the queue can lose
+            work and an overdue task can lose a day, whereas a photograph taken
+            yesterday is not going anywhere. But it sits above the menu, because
+            between "here is the work" and "here is a list of screens", the work
+            wins.
+          */}
+          {stripPhotos.length > 0 ? (
+            <>
+              <SectionHeader
+                title="Latest photos"
+                action={{ label: "See all", onPress: () => router.push("/gallery") }}
+              />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{
+                  paddingHorizontal: spacing.lg,
+                  gap: spacing.sm,
+                }}
+              >
+                {stripPhotos.map((photo) => (
+                  <RecentPhoto key={photo.id} photo={photo} uri={stripUrls[photo.id]} />
+                ))}
+              </ScrollView>
             </>
           ) : null}
 
@@ -407,6 +477,33 @@ function QuickTile({
       <Icon icon={icon} size="lg" tone="primary" />
       <Text variant="caption" numberOfLines={1}>
         {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/**
+ * One photograph in the home strip.
+ *
+ * `PhotoThumb` rather than an `<Image>`, for the reason that component exists:
+ * a tile whose signed URL could not be produced draws nothing at all, and a
+ * strip of invisible tiles reads as a layout bug rather than as missing files.
+ *
+ * Tapping opens the job rather than the picture. Somebody glancing at home has
+ * recognised the site, not the photograph, and the job is where everything
+ * else about it is.
+ */
+function RecentPhoto({ photo, uri }: { photo: GalleryPhotoItem; uri?: string }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={photo.caption || photo.project_name || "Photo"}
+      onPress={() => router.push({ pathname: "/project/[id]", params: { id: photo.project_id } })}
+      style={{ width: STRIP_TILE, gap: spacing.xs }}
+    >
+      <PhotoThumb uri={uri} width={STRIP_TILE} height={STRIP_TILE} rounded={radius.md} />
+      <Text variant="caption" tone="muted" numberOfLines={1}>
+        {photo.project_name ?? "A project"}
       </Text>
     </Pressable>
   );

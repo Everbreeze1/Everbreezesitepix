@@ -1,3 +1,4 @@
+import { personName } from "@everlumen/shared";
 import {
   normaliseRole,
   type BillingTier,
@@ -129,7 +130,14 @@ export function subcontractorSummary(sub: Subcontractor): string {
 
 /** What to call a firm: its company name, or the address it was invited at. */
 export function subcontractorName(sub: Pick<Subcontractor, "company_name" | "email">): string {
-  return sub.company_name?.trim() || sub.email;
+  /*
+   * The handle when there is no company name, for the same reason the team
+   * roster uses one: the address is longer than a title line and breaks across
+   * its own domain. Here it was doubly odd, because `subcontractorSubtitle`
+   * already begins with the full address - so an unnamed firm was listed as
+   * its email twice, once broken in half.
+   */
+  return personName(sub.company_name, sub.email, "Outside firm");
 }
 
 /**

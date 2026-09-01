@@ -39,7 +39,7 @@ export { Card, CardHeader, SectionHeader } from "./Card";
 export { ListGroup, ListRow, RowDivider, type ListRowProps } from "./ListRow";
 export { EmptyState, ErrorState, Skeleton, SkeletonList } from "./State";
 export { Screen, ScreenFooter, type ScreenProps } from "./Screen";
-export { PageHeader, SearchField } from "./PageHeader";
+export { PageHeader, SearchField, ScreenNote } from "./PageHeader";
 export { Field, type FieldProps } from "./Field";
 export { ActionSheet, Sheet, type SheetAction } from "./Sheet";
 export { ProgressBar, StepProgress } from "./Progress";

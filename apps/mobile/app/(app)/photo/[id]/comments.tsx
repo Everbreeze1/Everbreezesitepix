@@ -35,7 +35,7 @@ import {
   Field,
   Icon,
   IconButton,
-  PageHeader,
+  ScreenNote,
   PhotoThumb,
   SkeletonList,
   Text,
@@ -212,9 +212,16 @@ export default function PhotoCommentsScreen() {
         // bar takes. Without it the composer sits under the keyboard on iOS.
         keyboardVerticalOffset={Platform.OS === "ios" ? 96 : 0}
       >
-        <PageHeader
-          title="Comments"
-          subtitle={commentsQuery.isLoading ? undefined : commentsSummary(comments.length)}
+        {/*
+          Nothing while there are none: `commentsSummary(0)` and the empty
+          state's title are both "No comments yet".
+        */}
+        <ScreenNote
+          text={
+            commentsQuery.isLoading || comments.length === 0
+              ? undefined
+              : commentsSummary(comments.length)
+          }
         />
 
         {uri ? (

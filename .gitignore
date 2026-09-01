@@ -70,3 +70,4 @@ AuthKey_*.p8
 
 # Screenshots taken while checking the mobile app on a device.
 .mobile-shots/
+/docs

@@ -19,6 +19,8 @@ import {
   reportBuiltSummary,
   reportSummaryLine,
   type ReportRow,
+  ambiguousReportIds,
+  reportClockTime,
 } from "@/api/report-view";
 import { spacing } from "@/theme";
 import { FileText, Plus, Sparkles, Trash2 } from "@/ui/icons";
@@ -145,6 +147,12 @@ export default function ProjectReportsScreen() {
       setFailure(error instanceof Error ? error.message : "Could not delete that report."),
   });
 
+  /*
+   * Which rows would otherwise be indistinguishable. Computed over the loaded
+   * list rather than per row, because ambiguity is a property of the list.
+   */
+  const ambiguous = useMemo(() => ambiguousReportIds(reports), [reports]);
+
   const confirmDelete = useCallback(
     (report: ReportRow) => {
       Alert.alert(
@@ -213,7 +221,19 @@ export default function ProjectReportsScreen() {
                           in-project reading of it.
                         */
                         title={titleWithinProject(report.title, projectQuery.data?.name)}
-                        subtitle={`${reportSummaryLine(report)} · ${relativeTime(report.updated_at)}`}
+                        /*
+                          The clock time joins the line only when another
+                          report shares this one's title. Reports are named
+                          from their date, so two written on the same day are
+                          called the same thing - and with the same photo
+                          count and the same "2w ago" the two rows become
+                          identical, each with its own delete button.
+                        */
+                        subtitle={`${reportSummaryLine(report)} · ${
+                          ambiguous.has(report.id)
+                            ? reportClockTime(report.created_at)
+                            : relativeTime(report.updated_at)
+                        }`}
                         /*
                           Shared state reads on the subtitle line only.
                           `reportSummaryLine` already appends "shared" from the

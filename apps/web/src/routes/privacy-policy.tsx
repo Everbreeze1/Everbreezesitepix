@@ -129,6 +129,41 @@ function PrivacyPolicyPage() {
                   to Google Cloud Text-to-Speech. See section 4 for the full list of processors.
                 </p>
               </div>
+              <div>
+                <h3 className="font-medium text-foreground">
+                  Push notifications and device tokens
+                </h3>
+                <p>
+                  If you allow notifications, the mobile app registers with Apple or Google and
+                  receives a push token, which we store against your account so we can deliver
+                  alerts about your projects. The token identifies a device, not a person, and it is
+                  used only to send you notifications. Turning notifications off in your device
+                  settings stops delivery, and closing your account removes the stored tokens.
+                </p>
+              </div>
+              <div>
+                <h3 className="font-medium text-foreground">Permissions the mobile app asks for</h3>
+                <p>
+                  The app requests the camera and microphone to take job-site photographs and record
+                  walkthroughs, your photo library so you can attach existing pictures, your
+                  location so photographs can be placed on the project map, and notifications. Every
+                  one is optional and requested at the point it is first needed. You can withdraw
+                  any of them at any time in your device settings, and the rest of the app keeps
+                  working. The app never requests background location.
+                </p>
+              </div>
+              <div>
+                <h3 className="font-medium text-foreground">Data stored on your device</h3>
+                <p>
+                  The mobile app is built to work with no signal, so some data is kept on the phone
+                  itself. Photographs you take, and edits you make while offline, are written to a
+                  queue in the app's private storage and sent when a connection returns, then
+                  removed. Your sign-in session is held in the operating system's secure keystore.
+                  Recently viewed project data is cached so screens open without waiting. All of it
+                  lives in the app's private sandbox, is not readable by other apps, and is deleted
+                  when you sign out or uninstall.
+                </p>
+              </div>
             </div>
           </section>
 
@@ -143,7 +178,7 @@ function PrivacyPolicyPage() {
               <li>Process and store your job site photos and project data</li>
               <li>Generate AI-powered analysis, site logs, and reports</li>
               <li>Send transactional emails, notifications, and support communications</li>
-              <li>Analyze usage trends to improve features and performance</li>
+              <li>Keep the Services running, diagnose faults, and investigate abuse</li>
               <li>Detect and prevent fraud, abuse, and security incidents</li>
             </ul>
           </section>
@@ -252,8 +287,10 @@ function PrivacyPolicyPage() {
               </li>
               <li>
                 <strong className="text-foreground">Deletion</strong> - Request deletion of your
-                account and associated data. You can delete your account at any time from the
-                Settings page.
+                account and associated data. You do not have to ask us: you can close your account
+                yourself, in the mobile app under Account, and on the web under Account settings.
+                The option is called <em>Close my account</em>, it asks you to type your email
+                address to confirm, and it deletes your account and the data attached to it.
               </li>
               <li>
                 <strong className="text-foreground">Portability</strong> - Request your data in a
@@ -277,14 +314,24 @@ function PrivacyPolicyPage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">7. Cookies and Analytics</h2>
             <p className="text-muted-foreground">
-              We use cookies and similar technologies to remember your preferences (such as
-              dark/light theme), keep you signed in, and analyze app usage. You can control cookies
-              through your browser settings, though disabling certain cookies may affect
-              functionality.
+              On the website, we use cookies and similar technologies to remember your preferences
+              (such as dark or light theme) and to keep you signed in. You can control cookies
+              through your browser settings, though disabling them may affect functionality.
             </p>
             <p className="text-muted-foreground mt-2">
-              We use analytics tools to collect aggregated, non-identifying usage data to help us
-              understand how users interact with our Services and identify areas for improvement.
+              <strong className="text-foreground">
+                We do not use third-party analytics or advertising trackers, and the mobile app
+                contains no analytics or crash-reporting software.
+              </strong>{" "}
+              We are not tracking you across other apps or websites, and we do not sell or share
+              your data with data brokers or advertisers.
+            </p>
+            <p className="text-muted-foreground mt-2">
+              Our servers keep ordinary operational logs of requests made to the Services, which
+              include an IP address, a timestamp and which feature was called. These are used to
+              keep the Services running and secure, and to investigate faults and abuse. If we ever
+              add analytics or crash reporting, we will update this section and the store privacy
+              declarations before it is switched on.
             </p>
           </section>
 

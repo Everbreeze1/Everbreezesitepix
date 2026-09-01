@@ -1,4 +1,7 @@
+import { randomUUID } from "expo-crypto";
+import { AI_TIMEOUT_MS } from "@everlumen/api-client";
 import { api } from "@/lib/api";
+import { fileGeneratedPdf } from "./pdf-export";
 
 /**
  * Project pages: the documents on a job.
@@ -271,3 +274,39 @@ export async function duplicatePage(pageId: string): Promise<DocumentPageSummary
 
 /** The three fields `duplicateProjectPage` answers with. */
 export type DocumentPageSummary = { id: string; title: string; updatedAt: string };
+
+/**
+ * Render a document to a PDF and file it under the project's documents.
+ *
+ * The one export a phone genuinely needs: a signed-off method statement or a
+ * handover certificate is something a technician has to hand somebody on site,
+ * and until now that meant "open a laptop". The filing rules, and why an export
+ * is filed rather than downloaded, live in `pdf-export.ts`.
+ *
+ * Works on read-only pages too, which is the point. A page built from a rich
+ * template cannot be restructured on the phone, but it can be appended to,
+ * shared, and now handed over as a PDF - so the phone covers the whole of what
+ * the document is actually for, even where it cannot edit the body.
+ */
+export async function exportPagePdf(args: {
+  pageId: string;
+  projectId: string;
+}): Promise<{ url: string; filename: string }> {
+  const rendered = await api.rpc<{ pdfBase64?: string; filename?: string }>(
+    "generatePagePdf",
+    { pageId: args.pageId },
+    /*
+     * Long timeout and a key, for the same two reasons as the site log export:
+     * the server embeds the page's images before it answers, and the op is
+     * registered idempotent, which does nothing unless the key is sent.
+     */
+    { idempotencyKey: randomUUID(), timeoutMs: AI_TIMEOUT_MS },
+  );
+  if (!rendered?.pdfBase64) throw new Error("The PDF came back empty");
+
+  return fileGeneratedPdf({
+    projectId: args.projectId,
+    pdfBase64: rendered.pdfBase64,
+    filename: rendered.filename || "document.pdf",
+  });
+}

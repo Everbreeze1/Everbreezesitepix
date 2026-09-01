@@ -21,7 +21,7 @@ import {
   Icon,
   ListGroup,
   ListRow,
-  PageHeader,
+  ScreenNote,
   RowDivider,
   SectionHeader,
   SkeletonList,
@@ -36,10 +36,12 @@ import {
  * list, busiest first, because a table sorted by name buries whoever actually
  * did the work this week) and what happened most recently.
  *
- * This screen is a tab, and tabs run with the navigator header switched off so
- * each one can own its top area. It therefore has to draw `PageHeader` itself:
- * the `Stack.Screen` title it used to carry is inert now, and without a header
- * the first row would sit under the status bar.
+ * This screen is NOT a tab, which an earlier version of this comment claimed.
+ * It is pushed from the Browse grid on Home, so the navigator draws a header
+ * for it - `_layout.tsx` registers it as "Team activity" - and it was drawing
+ * `PageHeader` underneath that. The result was the screen named twice, with two
+ * different names, and the safe-area inset added on top of the nav bar's own.
+ * `ScreenNote` keeps the one part the nav bar cannot say.
  */
 
 /**
@@ -66,16 +68,13 @@ export default function ActivityScreen() {
 
   const recent = data?.recent ?? [];
   const members = useMemo(
-    () =>
-      (data?.members ?? [])
-        .slice()
-        .sort((a, b) => b.photos + b.tasks - (a.photos + a.tasks)),
+    () => (data?.members ?? []).slice().sort((a, b) => b.photos + b.tasks - (a.photos + a.tasks)),
     [data?.members],
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <PageHeader title="Activity" subtitle="Your team, most recent first" />
+      <ScreenNote text="Your team, most recent first" />
       <QueueBanner />
 
       {isLoading ? (

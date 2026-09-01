@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readsAsDatabaseInternals } from "../apps/api/src/lib/errors";
+import { readableErrorMessage } from "../packages/shared/src/db-internals";
 
 /*
  * The floor under raw database messages reaching customers.
@@ -104,5 +105,50 @@ describe("the phone applies the same rule as the server", () => {
     expect(readFileSync(join(process.cwd(), "apps/api/src/lib/errors.ts"), "utf8")).toContain(
       'from "@everlumen/shared"',
     );
+  });
+});
+
+describe("readableErrorMessage", () => {
+  /*
+   * The gap the other two fixes leave.
+   *
+   * `jsonFromUnknownError` cleans what the API returns and `ErrorState` cleans
+   * what it renders, but a mutation failure shown in a badge or a toast goes
+   * through neither. The PDF export is exactly that shape: it inserts a
+   * `project_documents` row from the phone and puts `error.message` on screen,
+   * so an RLS refusal would have arrived as schema text in a red pill.
+   */
+  it("swaps schema text for the caller's own wording", () => {
+    const out = readableErrorMessage(
+      new Error('new row violates row-level security policy for table "project_documents"'),
+      "Could not export this page as a PDF.",
+    );
+    expect(out).toBe("Could not export this page as a PDF.");
+  });
+
+  it("passes a message written for a person straight through", () => {
+    /*
+     * The half that matters. Collapsing every failure to the fallback is the
+     * behaviour `ErrorState` argues against: it leaves the person holding the
+     * phone nothing to act on.
+     */
+    expect(readableErrorMessage(new Error("Network request failed"), "fallback")).toBe(
+      "Network request failed",
+    );
+    expect(readableErrorMessage(new Error("This workspace is on the Free plan."), "fallback")).toBe(
+      "This workspace is on the Free plan.",
+    );
+  });
+
+  it("falls back for anything that is not an Error, or is empty", () => {
+    expect(readableErrorMessage("a string", "fallback")).toBe("fallback");
+    expect(readableErrorMessage(null, "fallback")).toBe("fallback");
+    expect(readableErrorMessage(new Error("   "), "fallback")).toBe("fallback");
+  });
+
+  it("is used by the two export paths that surface failures outside ErrorState", () => {
+    const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
+    expect(read("apps/mobile/app/(app)/site-log/[logId].tsx")).toContain("readableErrorMessage");
+    expect(read("apps/mobile/app/(app)/page/[pageId].tsx")).toContain("readableErrorMessage");
   });
 });

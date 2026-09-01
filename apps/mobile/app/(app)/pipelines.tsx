@@ -274,8 +274,25 @@ export default function PipelinesScreen() {
           </View>
         ) : null}
 
-        <SectionHeader title={stage ? `${stage.name} (${inStage.length})` : "Stages"} />
-        <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
+        {/*
+          Only when there is nothing selected.
+
+          This used to read `${stage.name} (${inStage.length})`, which is the
+          same string the selected chip directly above it already shows - so
+          "Lead/Quoted 0" sat immediately under "LEAD/QUOTED (0)", saying one
+          thing twice and costing a section header's worth of height to do it.
+          The chip row IS the section header on this screen.
+        */}
+        {stage ? null : <SectionHeader title="Stages" />}
+        <View
+          style={{
+            paddingHorizontal: spacing.lg,
+            // The header carried the top margin. Without it the first row
+            // would sit against the chips.
+            paddingTop: stage ? spacing.lg : 0,
+            gap: spacing.md,
+          }}
+        >
           {stages.length === 0 ? (
             <Text variant="caption" tone="muted">
               This pipeline has no stages yet. Add them on the web and they appear here.

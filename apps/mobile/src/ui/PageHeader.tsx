@@ -130,3 +130,27 @@ export function SearchField({
     </View>
   );
 }
+
+/**
+ * The line under a screen's name, for screens that already HAVE a name.
+ *
+ * `PageHeader` draws a large title and pads for the status bar, which is right
+ * for a tab screen that has no navigation bar above it. Three screens were
+ * using it underneath a `Stack.Screen` that already showed the same word, so
+ * the title appeared twice - once in the nav bar and again in 32pt directly
+ * below it - and the safe-area padding was added a second time on top of the
+ * nav bar's own, which is where the band of empty space came from.
+ *
+ * The subtitle was the only part worth keeping: "2 questions in this thread"
+ * says something the nav bar cannot.
+ */
+export function ScreenNote({ text }: { text?: string }) {
+  if (!text) return null;
+  return (
+    <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
+      <Text variant="caption" tone="muted">
+        {text}
+      </Text>
+    </View>
+  );
+}

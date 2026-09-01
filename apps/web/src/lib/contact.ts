@@ -92,7 +92,7 @@ export const GOVERNING_LAW = "the State of California, United States";
  * files, so filling in this one file is genuinely enough to clear every
  * placeholder the site publishes. Set them to the day the pages go live.
  */
-export const POLICY_LAST_UPDATED = "August 18, 2026";
+export const POLICY_LAST_UPDATED = "September 1, 2026";
 export const TERMS_EFFECTIVE_DATE = "August 18, 2026";
 
 /** True while a constant above is still an unfilled `[[PLACEHOLDER]]`. */

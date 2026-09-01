@@ -37,11 +37,33 @@ const member = (over: Partial<TeamMember> = {}): TeamMember => ({
 });
 
 describe("memberName", () => {
-  it("prefers the name, falls back to the address", () => {
+  it("prefers the name, falls back to the handle in the address", () => {
+    /*
+     * The handle rather than the whole address, which is a change: a row title
+     * is one line at heading weight and an address does not fit one.
+     * "marklagura223@gmail.com" broke after the "@gmail", listing the owner of
+     * the workspace as "marklagura223@gmail" above ".com" - which reads as a
+     * rendering fault, not a person. The address moves to the subtitle.
+     */
     expect(memberName(member())).toBe("Sam Reyes");
     expect(
       memberName(member({ profile: { email: "a@b.test", full_name: null, avatar_url: null } })),
-    ).toBe("a@b.test");
+    ).toBe("a");
+    expect(
+      memberName(
+        member({
+          profile: { email: "marklagura223@gmail.com", full_name: null, avatar_url: null },
+        }),
+      ),
+    ).toBe("marklagura223");
+  });
+
+  it("never returns something with an @ in it", () => {
+    // The whole point: whatever comes back has to fit a single title line.
+    for (const email of ["a@b.test", "very.long.name@some-company.co.uk", "x@y"]) {
+      const shown = memberName(member({ profile: { email, full_name: null, avatar_url: null } }));
+      expect(shown, email).not.toContain("@");
+    }
   });
 
   it("never renders a uuid", () => {
@@ -59,9 +81,25 @@ describe("memberSubtitle", () => {
     expect(memberSubtitle(member())).toBe("sam@site.test");
   });
 
-  it("does not repeat the address when it is already the title", () => {
+  it("still shows the address when the title was derived from it", () => {
+    /*
+     * This used to be suppressed, which was right when the title WAS the
+     * address. Now that the title is only its first half, suppressing it would
+     * hide the domain - and on a roster the domain is often the thing being
+     * checked, because it is how you tell a colleague from a subcontractor.
+     */
     expect(
       memberSubtitle(member({ profile: { email: "a@b.test", full_name: null, avatar_url: null } })),
+    ).toBe("a@b.test");
+  });
+
+  it("does not print the same string twice", () => {
+    // A profile whose name is literally the address: title and subtitle would
+    // otherwise be identical.
+    expect(
+      memberSubtitle(
+        member({ profile: { email: "a@b.test", full_name: "a@b.test", avatar_url: null } }),
+      ),
     ).toBeUndefined();
   });
 });

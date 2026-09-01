@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Redirect, router } from "expo-router";
 import { SocialSignIn } from "@/components/SocialSignIn";
+import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth";
 import { type SocialProvider } from "@/lib/auth-providers";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
@@ -118,7 +119,26 @@ export default function SignUpScreen() {
       style={{ flex: 1, backgroundColor: theme.colors.background }}
     >
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={[typography.display, { color: theme.colors.foreground }]}>Create account</Text>
+        {/*
+          The mark, not just the wordmark.
+
+          This is the first screen anybody sees of the product, and it carried
+          the name in text and nothing else - so the amber aperture people tap
+          on their home screen did not appear anywhere in the app they landed
+          in. `BrandMark` is the same vector the launch screen uses, so it
+          costs no asset and cannot drift from the web logo.
+
+          `gapColor` is a BACKDROP colour rather than an outline: the seams are
+          drawn over the shared blade edges, so the only hairline anyone sees is
+          on the rim and around the aperture, where the background shows
+          through. Anything darker than the ground puts a keyline round the mark.
+        */}
+        <BrandMark size={56} gapColor={theme.colors.background} />
+        <Text
+          style={[typography.display, { color: theme.colors.foreground, marginTop: spacing.lg }]}
+        >
+          Create account
+        </Text>
         <Text
           style={[typography.body, { color: theme.colors.mutedForeground, marginTop: spacing.xs }]}
         >
@@ -191,7 +211,11 @@ export default function SignUpScreen() {
           <Text style={[typography.body, { color: theme.colors.mutedForeground }]}>
             Already have one?{" "}
           </Text>
-          <Pressable accessibilityRole="button" onPress={() => router.replace("/login")} hitSlop={8}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.replace("/login")}
+            hitSlop={8}
+          >
             <Text style={[typography.bodyStrong, { color: theme.colors.primary }]}>Sign in</Text>
           </Pressable>
         </View>

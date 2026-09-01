@@ -218,7 +218,7 @@ export default function ProjectDetailScreen() {
       // uploading. A photo shot offline yesterday and synced today belongs to
       // yesterday.
       const when = photo.taken_at ?? photo.created_at;
-      const label = formatPhotoDateGroup(when) || "Earlier";
+      const label = formatPhotoDateGroup(when);
       const bucket = buckets.get(label);
       if (bucket) bucket.push(photo);
       else buckets.set(label, [photo]);

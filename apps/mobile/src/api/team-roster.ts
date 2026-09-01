@@ -1,3 +1,4 @@
+import { personName } from "@everlumen/shared";
 import {
   canManageMember,
   normaliseRole,
@@ -54,19 +55,33 @@ export type TeamInvite = {
  * reading "8f3c1a2e-..." is the "unfriendly info" complaint in its purest form.
  */
 export function memberName(member: Pick<TeamMember, "profile">): string {
-  const name = member.profile?.full_name?.trim();
-  if (name) return name;
-  const email = member.profile?.email?.trim();
-  if (email) return email;
-  return "Pending member";
+  /*
+   * The handle, not the whole address.
+   *
+   * A row title is one line at heading weight, and a full address does not fit
+   * one: "marklagura223@gmail.com" wrapped and broke after the "@gmail", so the
+   * owner of the workspace was listed as "marklagura223@gmail" over ".com".
+   * That reads as a rendering fault rather than as a person.
+   *
+   * The address is not lost - `memberSubtitle` now always shows it, so the row
+   * says the same two things it did, in the order that fits.
+   */
+  return personName(member.profile?.full_name, member.profile?.email);
 }
 
-/** The line under the name: the email, when the name is not already it. */
+/**
+ * The line under the name: the full address.
+ *
+ * Shown whenever there is one, including when the title was derived from it.
+ * It used to be suppressed in that case to avoid saying the same thing twice,
+ * which was right when the title WAS the address and is wrong now that the
+ * title is only its first half - suppressing it would hide which domain, and
+ * on a roster that is often the thing being checked.
+ */
 export function memberSubtitle(member: Pick<TeamMember, "profile">): string | undefined {
-  const name = member.profile?.full_name?.trim();
   const email = member.profile?.email?.trim();
   if (!email) return undefined;
-  return name ? email : undefined;
+  return email === memberName(member) ? undefined : email;
 }
 
 /**

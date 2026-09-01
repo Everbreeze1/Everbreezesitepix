@@ -85,7 +85,21 @@ export function formatPhotoDate(iso?: string | null): string {
  */
 export function formatPhotoDateGroup(iso: string): string {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
+  /*
+   * An answer, not a gap.
+   *
+   * This returned "" for a date it could not read, and the callers render it
+   * straight into a group heading. An empty heading is not "no heading": the
+   * row still takes its gap, so the gallery draws a band of tiles floating
+   * above the first labelled day with nothing to say what they are. Same
+   * failure the photo tiles had before `PhotoThumb` existed, and the same fix.
+   *
+   * The project grid had already worked around it locally with
+   * `formatPhotoDateGroup(when) || "Earlier"`. Putting the fallback here means
+   * the gallery and both lightboxes get it too, rather than three call sites
+   * each having to remember.
+   */
+  if (Number.isNaN(d.getTime())) return "Undated";
   const now = new Date();
   const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);

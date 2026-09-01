@@ -29,12 +29,26 @@ export type TaskPhoto = {
 
 export type TaskPhotoState = {
   photos: TaskPhoto[];
-  items: Map<string, TaskPhotoItem>;
+  /*
+   * A plain object, not a Map, because this value is persisted.
+   *
+   * The app caches query results to AsyncStorage as JSON, and
+   * `JSON.stringify(new Map())` is `{}` - a Map is emptied by the round trip.
+   * This was declared as a Map, which was true of a fresh fetch and false of
+   * everything that came back after a restart, and calling `.get` on what came
+   * back threw `undefined is not a function` and put a red error box where the
+   * task detail screen should have been.
+   *
+   * The shared readers cope with either shape now, so nothing breaks either
+   * way. This declaration is the half that stops it happening again: what is
+   * written here is what comes back.
+   */
+  items: Record<string, TaskPhotoItem>;
   /** True when this workspace predates the table, so the UI can stay quiet. */
   unavailable: boolean;
 };
 
-const EMPTY: TaskPhotoState = { photos: [], items: new Map(), unavailable: false };
+const EMPTY: TaskPhotoState = { photos: [], items: {}, unavailable: false };
 
 export async function getTaskPhotoState(
   taskId: string,
@@ -85,12 +99,20 @@ export async function getTaskPhotoState(
      * exist". That is not a failure worth showing a crew: the task still works,
      * it just has no per-photo state, so the panel hides itself.
      */
-    if (isMissingTaskPhotoItems(itemError)) return { photos, items: new Map(), unavailable: true };
+    if (isMissingTaskPhotoItems(itemError)) return { photos, items: {}, unavailable: true };
     throw new Error(itemError.message);
   }
 
   const index = indexTaskPhotoItems((itemRows as TaskPhotoItem[]) ?? []);
-  return { photos, items: index.get(taskId) ?? new Map(), unavailable: false };
+  /*
+   * Flattened out of the Map the indexer builds. The indexer is shared with the
+   * web, which keeps its Map; only what this app stores has to be JSON-safe.
+   */
+  return {
+    photos,
+    items: Object.fromEntries(index.get(taskId) ?? new Map()),
+    unavailable: false,
+  };
 }
 
 /**

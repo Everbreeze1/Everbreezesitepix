@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { readableErrorMessage } from "@everlumen/shared";
 import { View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getPage, savePage, setPageShare } from "@/api/pages";
+import { exportPagePdf, getPage, savePage, setPageShare } from "@/api/pages";
 import { isShareLive, openShareSheet, publicUrl } from "@/api/sharing";
 import {
   appendBlocks,
@@ -23,7 +25,16 @@ import {
   type BlockKind,
 } from "@/api/doc-blocks";
 import { spacing } from "@/theme";
-import { ChevronDown, ChevronUp, Library, Link2, Plus, TriangleAlert, Trash2 } from "@/ui/icons";
+import {
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Library,
+  Link2,
+  Plus,
+  TriangleAlert,
+  Trash2,
+} from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -158,6 +169,22 @@ export default function PageScreen() {
    * this toggles rather than mints, and why turning it off says the link stops
    * working rather than that it has been deleted.
    */
+  const exportPdf = useMutation({
+    mutationFn: async () => {
+      const page = query.data;
+      if (!page) throw new Error("The document is still loading");
+      return exportPagePdf({ pageId: page.id, projectId: page.project_id });
+    },
+    onSuccess: async (result) => {
+      // The export files itself into this project's Documents, so the tree has
+      // to be refetched or the new file is not there until the person leaves
+      // the project and comes back.
+      const project = query.data?.project_id;
+      if (project) await queryClient.invalidateQueries({ queryKey: ["document-tree", project] });
+      await WebBrowser.openBrowserAsync(result.url);
+    },
+  });
+
   const share = useMutation({
     mutationFn: (enable: boolean) => setPageShare(pageId!, enable),
     onSuccess: async (token, enable) => {
@@ -304,6 +331,34 @@ export default function PageScreen() {
           stands, not about what is being added to it. A live link is stated
           plainly: the page is on the open internet with no login in front of it.
         */}
+        <SectionHeader title="Export" />
+        <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
+          <Button
+            label={exportPdf.isPending ? "Building the PDF" : "Export as PDF"}
+            icon={FileText}
+            variant="secondary"
+            fullWidth
+            disabled={exportPdf.isPending}
+            onPress={() => exportPdf.mutate()}
+          />
+          <Text variant="caption" tone="muted">
+            {/*
+              Offered on read-only pages too, and that is the point: a document
+              the phone cannot restructure is still one a technician has to hand
+              somebody on site.
+            */}
+            Saved into this job's Documents, then opened. A phone has no downloads folder, so filing
+            it is what makes it findable later.
+          </Text>
+          {exportPdf.error ? (
+            <Text variant="caption" tone="destructive">
+              {exportPdf.error instanceof Error
+                ? readableErrorMessage(exportPdf.error, "Could not export this page as a PDF.")
+                : "Could not export this document."}
+            </Text>
+          ) : null}
+        </View>
+
         <SectionHeader title="Share" />
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
           {isShareLive(page.share_token, page.revoked_at) ? (
