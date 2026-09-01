@@ -1,3 +1,4 @@
+import { randomUUID } from "expo-crypto";
 import { AI_TIMEOUT_MS } from "@everlumen/api-client";
 import { api } from "@/lib/api";
 import { publicUrl } from "./sharing";
@@ -95,7 +96,11 @@ export async function generateSummaryFromPhotos(input: {
 
 /** Write it again from the same source. Spends another LLM call. */
 export async function regenerateSummary(walkthroughId: string): Promise<void> {
-  await api.rpc("regenerateWalkthroughSummary", { walkthroughId });
+  await api.rpc(
+    "regenerateWalkthroughSummary",
+    { walkthroughId },
+    { idempotencyKey: randomUUID() },
+  );
 }
 
 /** Edit the title or the body by hand. */

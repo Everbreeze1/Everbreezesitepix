@@ -1,3 +1,4 @@
+import { randomUUID } from "expo-crypto";
 import { api } from "@/lib/api";
 import type { FeedbackReport, FeedbackStatus } from "./admin-view";
 
@@ -86,9 +87,14 @@ export async function replyToFeedback(args: {
   message: string;
   status?: FeedbackStatus;
 }): Promise<void> {
-  await api.rpc("replyToFeedback", {
-    reportId: args.reportId,
-    message: args.message,
-    ...(args.status ? { status: args.status } : {}),
-  });
+  await api.rpc(
+    "replyToFeedback",
+    {
+      reportId: args.reportId,
+      message: args.message,
+      ...(args.status ? { status: args.status } : {}),
+    },
+    // Reaches the person who reported the problem. Twice is worse than once.
+    { idempotencyKey: randomUUID() },
+  );
 }

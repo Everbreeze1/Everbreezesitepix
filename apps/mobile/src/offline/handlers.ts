@@ -3,6 +3,7 @@ import { uploadProjectPhoto, type PhotoPhase } from "@/api/photos";
 import type { Coords } from "@/api/photo-meta";
 import { applyPhotoPatch, type PhotoPatch } from "@/api/photo-edit";
 import { applyProjectPatch } from "@/api/projects";
+import { saveSiteLog } from "@/api/site-logs";
 import type { ProjectPatch } from "@/api/project-patch";
 import {
   applyTaskEdit,
@@ -134,6 +135,34 @@ export type ProjectPatchPayload = {
  */
 export function projectPatchRowId(field: string, projectId: string): string {
   return `project-patch:${field}:${projectId}`;
+}
+
+/**
+ * A site log edit, queued.
+ *
+ * Idempotent for the same reason `project_patch` is: the patch carries the
+ * WHOLE value of every field it writes - the notes object entire, not a
+ * delta - so replaying it lands on the same row content rather than compounding.
+ *
+ * This one matters more than most. A site log is the technician's own record of
+ * a day, written on the job, and the job is where there is no signal. It went
+ * unqueued only because the module mirrored what the web does, where an
+ * unreachable server is a broken page rather than a normal Tuesday.
+ */
+export type SiteLogPatchPayload = {
+  logId: string;
+  patch: { title?: string; photo_ids?: string[]; notes?: Record<string, unknown> };
+};
+
+/**
+ * One queue row per log per field.
+ *
+ * Keyed like the project patch: retyping a title replaces its own row instead
+ * of stacking, while a note added to a photograph queues separately and both
+ * still land.
+ */
+export function siteLogPatchRowId(field: string, logId: string): string {
+  return `site-log-patch:${field}:${logId}`;
 }
 
 export type PhotoPatchPayload = {
@@ -282,6 +311,12 @@ const handlers: Record<OutboxKind, Handler> = {
   workflow_phase_patch: async (row) => {
     const payload = JSON.parse(row.payload) as WorkflowPhasePatchPayload;
     await applyPhasePatch(payload.phaseId, payload.patch);
+  },
+
+  site_log_patch: async (row) => {
+    const payload = JSON.parse(row.payload) as SiteLogPatchPayload;
+    // Idempotent: the patch carries the whole value for every column it sets.
+    await saveSiteLog(payload.logId, payload.patch as never);
   },
 
   project_patch: async (row) => {

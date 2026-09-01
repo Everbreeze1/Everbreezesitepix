@@ -22,7 +22,8 @@ export type OutboxKind =
   | "photo_patch"
   | "project_patch"
   | "workflow_item_patch"
-  | "workflow_phase_patch";
+  | "workflow_phase_patch"
+  | "site_log_patch";
 
 export type OutboxState = "pending" | "sending" | "failed" | "done";
 

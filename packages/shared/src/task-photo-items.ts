@@ -185,9 +185,37 @@ export interface TaskPhotoProgress {
   shortLabel: string;
 }
 
+/**
+ * Reading one item, whether it arrived as a Map or as a plain object.
+ *
+ * THIS IS NOT DEFENSIVE PADDING. The mobile app persists its React Query cache
+ * to AsyncStorage as JSON, and `JSON.stringify(new Map())` is `{}` - a Map does
+ * not survive the round trip. So on a fresh fetch `itemsForTask` is a real Map,
+ * and after the app is restarted the very same query hands back a plain object
+ * with the same contents and no `.get`.
+ *
+ * Calling `.get` on that threw `undefined is not a function` and the task
+ * detail screen rendered a red error box instead of the task. It passed every
+ * type check, because the type says Map and is right about what the fetch
+ * returns; it is only wrong about what comes back out of storage. And it never
+ * showed up in development until the app was restarted with a warm cache.
+ *
+ * Both shapes are read here rather than at each call site, because the call
+ * sites cannot see which one they were handed.
+ */
+type ItemLookup = Map<string, TaskPhotoItem> | Record<string, TaskPhotoItem> | null | undefined;
+
+function itemFor(itemsForTask: ItemLookup, photoId: string): TaskPhotoItem | undefined {
+  if (!itemsForTask) return undefined;
+  if (typeof (itemsForTask as Map<string, TaskPhotoItem>).get === "function") {
+    return (itemsForTask as Map<string, TaskPhotoItem>).get(photoId);
+  }
+  return (itemsForTask as Record<string, TaskPhotoItem>)[photoId];
+}
+
 export function taskPhotoProgress(
   photoIds: string[] | null | undefined,
-  itemsForTask?: Map<string, TaskPhotoItem> | null,
+  itemsForTask?: ItemLookup,
 ): TaskPhotoProgress {
   /*
    * Deduplicated, matching `task_photo_rollup_status`.
@@ -207,7 +235,7 @@ export function taskPhotoProgress(
    * An item left behind by a photo since dropped from the task must not count,
    * or a task reads "12 of 11" and can never be finished.
    */
-  const done = ids.reduce((n, id) => n + (itemsForTask?.get(id)?.status === "done" ? 1 : 0), 0);
+  const done = ids.reduce((n, id) => n + (itemFor(itemsForTask, id)?.status === "done" ? 1 : 0), 0);
   const remaining = total - done;
   const percent = total === 0 ? 0 : Math.round((done / total) * 100);
 
@@ -237,7 +265,7 @@ export function taskPhotoProgress(
  */
 export function taskStatusFromPhotos(
   photoIds: string[] | null | undefined,
-  itemsForTask: Map<string, TaskPhotoItem> | null | undefined,
+  itemsForTask: ItemLookup,
   current: TaskStatus,
 ): TaskStatus {
   const { total, done } = taskPhotoProgress(photoIds, itemsForTask);
@@ -249,11 +277,8 @@ export function taskStatusFromPhotos(
 }
 
 /** Whether this one photo is outstanding on this one task. */
-export function photoIsDone(
-  itemsForTask: Map<string, TaskPhotoItem> | null | undefined,
-  photoId: string,
-): boolean {
-  return itemsForTask?.get(photoId)?.status === "done";
+export function photoIsDone(itemsForTask: ItemLookup, photoId: string): boolean {
+  return itemFor(itemsForTask, photoId)?.status === "done";
 }
 
 /**
@@ -267,7 +292,7 @@ export function photoIsDone(
 export function photoPositionInTask(
   photoIds: string[] | null | undefined,
   photoId: string,
-  itemsForTask?: Map<string, TaskPhotoItem> | null,
+  itemsForTask?: ItemLookup,
 ): string | null {
   // Deduplicated for the same reason `taskPhotoProgress` is: the position and
   // the total both have to be counted in photos, or "Photo 3 of 2" is reachable.
@@ -294,7 +319,7 @@ export interface TaskWorkSummary {
  */
 export function taskWorkSummary(
   photoIds: string[] | null | undefined,
-  itemsForTask?: Map<string, TaskPhotoItem> | null,
+  itemsForTask?: ItemLookup,
 ): TaskWorkSummary {
   // Deduplicated, so a photo listed twice is not reported as two outstanding
   // jobs or its note read out twice. Same rule as `taskPhotoProgress`.
@@ -304,7 +329,7 @@ export function taskWorkSummary(
   let remaining = 0;
 
   ids.forEach((id) => {
-    const item = itemsForTask?.get(id);
+    const item = itemFor(itemsForTask, id);
     if (item?.status === "done") {
       const note = item.note?.trim();
       if (note) notes.push(note);

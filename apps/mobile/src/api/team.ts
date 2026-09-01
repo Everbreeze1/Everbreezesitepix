@@ -1,3 +1,4 @@
+import { randomUUID } from "expo-crypto";
 import { api } from "@/lib/api";
 import type { BillingTier } from "@everlumen/shared/team-permissions";
 import type { TeamInvite, TeamMember } from "./team-roster";
@@ -61,7 +62,7 @@ export async function getMyTeam(): Promise<MyTeam> {
 }
 
 export async function inviteMember(email: string, role: "admin" | "member"): Promise<void> {
-  await api.rpc("inviteMember", { email, role });
+  await api.rpc("inviteMember", { email, role }, { idempotencyKey: randomUUID() });
 }
 
 export async function revokeInvite(inviteId: string): Promise<void> {
@@ -69,11 +70,11 @@ export async function revokeInvite(inviteId: string): Promise<void> {
 }
 
 export async function resendInvite(inviteId: string): Promise<void> {
-  await api.rpc("resendInvite", { inviteId });
+  await api.rpc("resendInvite", { inviteId }, { idempotencyKey: randomUUID() });
 }
 
 export async function resendMemberConfirmation(memberId: string): Promise<void> {
-  await api.rpc("resendMemberConfirmation", { memberId });
+  await api.rpc("resendMemberConfirmation", { memberId }, { idempotencyKey: randomUUID() });
 }
 
 export async function removeMember(memberId: string): Promise<void> {

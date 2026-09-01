@@ -1,3 +1,4 @@
+import { randomUUID } from "expo-crypto";
 import { AI_TIMEOUT_MS } from "@everlumen/api-client";
 import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
@@ -88,7 +89,7 @@ export async function describeSiteLogPhotos(
      * so it is among the slowest AI ops here - and the one most likely to be
      * run on a phone at the end of a shift, on a van's worth of signal.
      */
-    { timeoutMs: AI_TIMEOUT_MS },
+    { idempotencyKey: randomUUID(), timeoutMs: AI_TIMEOUT_MS },
   );
   return { notes: result?.notes ?? {} };
 }

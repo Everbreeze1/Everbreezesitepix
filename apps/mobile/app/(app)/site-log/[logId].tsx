@@ -4,7 +4,11 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { displayCaption } from "@everlumen/shared";
 import { listProjectPhotoPage, signPhotoUrls, type PhotoListItem } from "@/api/photos";
-import { describeSiteLogPhotos, getSiteLog, saveSiteLog } from "@/api/site-logs";
+import { describeSiteLogPhotos, getSiteLog } from "@/api/site-logs";
+import type { SiteLogRow } from "@/api/site-log-notes";
+import { enqueue } from "@/offline/outbox";
+import { requestSync } from "@/offline/sync";
+import { siteLogPatchRowId, type SiteLogPatchPayload } from "@/offline/handlers";
 import {
   mergeDescriptions,
   noteFor,
@@ -123,24 +127,53 @@ export default function SiteLogScreen() {
   });
   const urls = { ...(photosQuery.data?.urls ?? {}), ...(urlsQuery.data ?? {}) };
 
-  const save = useMutation({
-    mutationFn: (patch: {
-      title?: string;
-      photo_ids?: string[];
-      notes?: Record<string, PhotoNote>;
-    }) => saveSiteLog(logId!, patch),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["site-logs", projectId] });
+  /**
+   * Save through the outbox rather than straight to the server.
+   *
+   * A site log is written on the job, and the job is where there is no signal.
+   * This used to be a direct RLS write: with the radio off it failed, said "that
+   * did not save", and the day's notes lived only in the screen's own state
+   * until somebody navigated away.
+   *
+   * `field` keys the queue row, exactly as the project patch does, so retyping
+   * a title replaces its own row while a note added to a photograph queues
+   * separately and both still land.
+   */
+  const save = useCallback(
+    async (
+      field: string,
+      patch: { title?: string; photo_ids?: string[]; notes?: Record<string, PhotoNote> },
+    ) => {
+      if (!logId) return;
       setFailure(null);
+
+      // Optimistic, so the list behind this screen agrees with what is on it
+      // before the queue drains.
+      queryClient.setQueryData<SiteLogRow[]>(["site-logs", projectId], (current) =>
+        (current ?? []).map((row) => (row.id === logId ? { ...row, ...patch } : row)),
+      );
+
+      try {
+        await enqueue({
+          id: siteLogPatchRowId(field, logId),
+          kind: "site_log_patch",
+          projectId: projectId ?? null,
+          payload: { logId, patch } satisfies SiteLogPatchPayload,
+        });
+        requestSync();
+      } catch (error) {
+        // Failing to QUEUE is the only failure worth reporting now: it means
+        // the local database is unavailable, and the note really is not kept.
+        setFailure(error instanceof Error ? error.message : "That could not be saved.");
+      }
     },
-    onError: (error: unknown) =>
-      setFailure(error instanceof Error ? error.message : "That did not save."),
-  });
+    [logId, projectId, queryClient],
+  );
 
   const commitNotes = useCallback(
     (next: Record<string, PhotoNote>) => {
       setNotes(next);
-      save.mutate({ notes: next });
+      void save("notes", { notes: next });
     },
     [save],
   );
@@ -152,7 +185,7 @@ export default function SiteLogScreen() {
       // deleted note if the photo is added back, and grows the jsonb forever.
       const pruned = pruneNotes(notes, next);
       setNotes(pruned);
-      save.mutate({ photo_ids: next, notes: pruned });
+      void save("photos", { photo_ids: next, notes: pruned });
     },
     [notes, save],
   );
@@ -212,7 +245,7 @@ export default function SiteLogScreen() {
             onChangeText={setTitle}
             // On blur, not per keystroke. A write per character is a write per
             // character on a connection that may be one bar.
-            onBlur={() => save.mutate({ title: title.trim() || "Site log" })}
+            onBlur={() => void save("title", { title: title.trim() || "Site log" })}
             returnKeyType="done"
           />
 
@@ -267,7 +300,7 @@ export default function SiteLogScreen() {
                   <Field
                     value={note.notes}
                     onChangeText={(text) => setNotes((cur) => withNoteText(cur, photo.id, text))}
-                    onBlur={() => save.mutate({ notes })}
+                    onBlur={() => void save("notes", { notes })}
                     placeholder="What this photo shows"
                     multiline
                     rows={3}

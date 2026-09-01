@@ -1,3 +1,4 @@
+import { randomUUID } from "expo-crypto";
 import { AI_TIMEOUT_MS } from "@everlumen/api-client";
 import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
@@ -29,18 +30,31 @@ const COLUMNS =
  * Without it the client gives up on its default while the model is still
  * working. The screen says the analysis failed, the person taps again, and the
  * second run pays for a second analysis of a photograph the first one had
- * already finished - which is exactly what the upstream idempotency marking
- * exists to prevent, defeated by a client that hung up too early.
+ * already finished.
+ *
+ * Both halves are needed and they do different jobs. The timeout stops the
+ * phone hanging up on work the server is still doing. The key makes the retry
+ * free when it hangs up anyway - and it was missing: the ops are registered
+ * `{ idempotent: true }`, but `beginIdempotency` returns `skip` when no
+ * `Idempotency-Key` header arrives, so the marking bought nothing at all.
  */
 
 /** Kick off a full analysis. Resolves when the model has answered. */
 export async function analyzePhoto(photoId: string): Promise<void> {
-  await api.rpc("analyzePhoto", { photoId }, { timeoutMs: AI_TIMEOUT_MS });
+  await api.rpc(
+    "analyzePhoto",
+    { photoId },
+    { idempotencyKey: randomUUID(), timeoutMs: AI_TIMEOUT_MS },
+  );
 }
 
 /** OCR only: read what is printed on the plate, and nothing else. */
 export async function extractPhotoText(photoId: string): Promise<void> {
-  await api.rpc("extractPhotoText", { photoId }, { timeoutMs: AI_TIMEOUT_MS });
+  await api.rpc(
+    "extractPhotoText",
+    { photoId },
+    { idempotencyKey: randomUUID(), timeoutMs: AI_TIMEOUT_MS },
+  );
 }
 
 /**

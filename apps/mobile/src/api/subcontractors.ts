@@ -1,3 +1,4 @@
+import { randomUUID } from "expo-crypto";
 import { api } from "@/lib/api";
 import type { Subcontractor } from "./subcontractor-view";
 
@@ -35,11 +36,16 @@ export async function inviteSubcontractor(args: {
   companyName?: string;
   projectIds: string[];
 }): Promise<void> {
-  await api.rpc("inviteSubcontractor", {
-    email: args.email,
-    ...(args.companyName ? { companyName: args.companyName } : {}),
-    projectIds: args.projectIds,
-  });
+  await api.rpc(
+    "inviteSubcontractor",
+    {
+      email: args.email,
+      ...(args.companyName ? { companyName: args.companyName } : {}),
+      projectIds: args.projectIds,
+    },
+    // Sends mail. A retry after a dropped response invites the firm twice.
+    { idempotencyKey: randomUUID() },
+  );
 }
 
 /**
