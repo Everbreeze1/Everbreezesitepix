@@ -238,3 +238,40 @@ export function annotatedCaption(original: string | null | undefined): string {
   const base = original?.trim() || "Photo";
   return base.startsWith("Annotated:") ? base : `Annotated: ${base}`;
 }
+
+/**
+ * How big the drawing surface is, given the screen and the photograph.
+ *
+ * The surface must match the photograph's aspect EXACTLY, and that is not a
+ * nicety. `AnnotationCanvas` renders the photo into an `<Svg>` and the save
+ * rasterises that same surface, so whatever the canvas does to the picture is
+ * what gets written to the new file.
+ *
+ * The old sizing took the full screen width and then clamped the height:
+ *
+ *     const canvasWidth = window.width;
+ *     const canvasHeight = Math.min(window.height * 0.62, canvasWidth / aspect);
+ *
+ * For a landscape photo those agree. For a PORTRAIT one they do not: the clamp
+ * shortens the box without narrowing it, so the surface ends up wider than the
+ * photograph's aspect, and `preserveAspectRatio="... slice"` fills that box by
+ * cropping the top and bottom away. On a 9:16 photograph roughly a quarter of
+ * the height disappeared - out of the editor, so it could not be marked up, and
+ * out of the saved copy, permanently.
+ *
+ * So the height leads and the width follows. The surface is then letterboxed by
+ * the screen's own dark ground, which is the right thing to letterbox with.
+ */
+export function annotationCanvasSize(
+  screen: { width: number; height: number },
+  aspect: number,
+  /** Share of the screen height the surface may take, leaving room for tools. */
+  heightShare = 0.62,
+): { width: number; height: number } {
+  // A nonsense aspect (a zero dimension, a missing one) must not produce a
+  // zero-sized canvas: the photo would be invisible and unmarkable.
+  const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 4 / 3;
+  const maxHeight = screen.height * heightShare;
+  const width = Math.min(screen.width, maxHeight * safeAspect);
+  return { width, height: width / safeAspect };
+}

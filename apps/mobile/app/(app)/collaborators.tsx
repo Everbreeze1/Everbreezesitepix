@@ -31,6 +31,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  IconButton,
   ListGroup,
   ListRow,
   RowDivider,
@@ -178,7 +179,27 @@ export default function CollaboratorsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Collaborators" }} />
+      <Stack.Screen
+        options={{
+          title: "Collaborators",
+          /*
+           * In the header, not under the list. The action's reach must not
+           * shrink as the list grows: below the rows, the cost of creating one
+           * more rises with how many you already have.
+           */
+          headerRight: () =>
+            blocked === null ? (
+              <IconButton
+                icon={UserPlus}
+                accessibilityLabel="Invite a firm"
+                surface={false}
+                tone="primary"
+                disabled={run.isPending}
+                onPress={openInvite}
+              />
+            ) : null,
+        }}
+      />
 
       <Screen
         scroll
@@ -281,17 +302,6 @@ export default function CollaboratorsScreen() {
                 );
               })
             )}
-
-            {blocked === null && subs.length > 0 ? (
-              <Button
-                label="Invite a firm"
-                icon={UserPlus}
-                variant="secondary"
-                fullWidth
-                disabled={run.isPending}
-                onPress={openInvite}
-              />
-            ) : null}
 
             {/*
               The reason, always. On this screen the explanation is the point:

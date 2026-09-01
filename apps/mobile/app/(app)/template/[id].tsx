@@ -219,7 +219,26 @@ export default function TemplateEditorScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: template?.name ?? "Template" }} />
+      <Stack.Screen
+        options={{
+          title: template?.name ?? "Template",
+          /*
+           * In the header, not under the list of items. Archive stays below:
+           * it is a once-per-template decision, not something you reach for
+           * while adding checks.
+           */
+          headerRight: () =>
+            canManage ? (
+              <IconButton
+                icon={Plus}
+                accessibilityLabel="Add an item"
+                surface={false}
+                tone="primary"
+                onPress={openNew}
+              />
+            ) : null,
+        }}
+      />
 
       <Screen
         scroll
@@ -337,6 +356,13 @@ export default function TemplateEditorScreen() {
                       </View>
                     }
                     onPress={canManage ? () => openEdit(item) : undefined}
+                    /*
+                     * No chevron: the row already shows three controls, and a
+                     * fourth glyph was taking width from the title until items
+                     * read "Overall structural c..." - which is no way to tell
+                     * one check from another. The row is still tappable.
+                     */
+                    chevron={false}
                   />
                 </View>
               ))}
@@ -345,7 +371,6 @@ export default function TemplateEditorScreen() {
 
           {canManage ? (
             <ButtonRow>
-              <Button label="Add an item" icon={Plus} onPress={openNew} />
               <Button
                 label={template?.archived ? "Restore" : "Archive"}
                 icon={Archive}

@@ -1,3 +1,4 @@
+import { personName } from "@everlumen/shared";
 /**
  * Talking about one photograph.
  *
@@ -85,12 +86,26 @@ export function mentionHandle(person: Mentionable): string {
   return "teammate";
 }
 
-/** How a comment signs itself. Falls back the way the server's own copy does. */
+/**
+ * How a comment signs itself.
+ *
+ * Same fallback ORDER the server uses - a typed name, then the address, then
+ * "Someone" - but the address is reduced to its handle, which the server's own
+ * copy does not do. That is deliberate and the shapes are different: the server
+ * builds notification prose ("marklagura223@gmail.com commented on your
+ * photo"), which has room, while this is a byline on a card next to a timestamp
+ * and a delete button. At that width the full address truncated to
+ * "marklagura223@gmail..." - long enough to fill the row and too short to say
+ * who wrote it.
+ *
+ * Same reasoning, and the same helper, as the team roster and the
+ * subcontractor list.
+ */
 export function authorLabel(comment: {
   authorName: string | null;
   authorEmail: string | null;
 }): string {
-  return comment.authorName?.trim() || comment.authorEmail?.trim() || "Someone";
+  return personName(comment.authorName, comment.authorEmail, "Someone");
 }
 
 /**

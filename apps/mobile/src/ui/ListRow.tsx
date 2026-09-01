@@ -8,6 +8,9 @@ import { Text } from "./Text";
 /**
  * The navigation row: icon, label, optional value, chevron.
  *
+ * The chevron can be turned off for a row that already carries its own trailing
+ * controls, where it is a fourth thing competing with the title for the line.
+ *
  * This is the single most repeated shape in the app. The project screen stacks
  * six of them (Checklists, Tasks, Workflows, Walkthroughs and the rest) and the
  * account screen has four more, and until now each screen drew its own at a
@@ -41,6 +44,17 @@ export type ListRowProps = {
    * `bodyStrong` is already what a row title uses.
    */
   unread?: boolean;
+  /**
+   * Draw the trailing chevron. On by default, because a tappable row should
+   * look tappable.
+   *
+   * Turned off where the row already carries its own explicit controls. The
+   * checklist-template item row had three icon buttons plus this chevron, four
+   * things competing with the title for one line, and the title lost: items
+   * read "Overall structural c..." with no way to tell them apart. A chevron
+   * next to three buttons is the least informative of the four.
+   */
+  chevron?: boolean;
   accessibilityHint?: string;
 };
 
@@ -55,6 +69,7 @@ export function ListRow({
   disabled = false,
   destructive = false,
   unread = false,
+  chevron = true,
   accessibilityHint,
 }: ListRowProps) {
   const theme = useTheme();
@@ -116,7 +131,7 @@ export function ListRow({
           }}
         />
       ) : null}
-      {onPress ? <Icon icon={ChevronRight} size="md" tone="muted" /> : null}
+      {onPress && chevron ? <Icon icon={ChevronRight} size="md" tone="muted" /> : null}
     </>
   );
 

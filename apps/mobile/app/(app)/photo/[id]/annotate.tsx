@@ -16,6 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ANNOTATION_COLORS,
   annotatedCaption,
+  annotationCanvasSize,
   beginShape,
   clear,
   commitShape,
@@ -105,8 +106,13 @@ export default function AnnotateScreen() {
     return w / h;
   }, [width, height]);
 
-  const canvasWidth = window.width;
-  const canvasHeight = Math.min(window.height * 0.62, canvasWidth / aspect);
+  /*
+   * Height leads, width follows. See `annotationCanvasSize`: clamping the
+   * height while keeping the full screen width made the surface wider than the
+   * photograph, and the canvas fills by cropping - so a portrait photo lost its
+   * top and bottom, both in the editor and in the saved copy.
+   */
+  const { width: canvasWidth, height: canvasHeight } = annotationCanvasSize(window, aspect);
 
   /*
    * Held in refs as well as state. PanResponder captures its handlers once, so
@@ -301,7 +307,18 @@ export default function AnnotateScreen() {
               ]}
             />
           ))}
+        </View>
 
+        {/*
+          Undo, Redo and Clear on their own row.
+
+          They shared the colour row, and the row wraps: on a phone that put
+          four swatches and Undo on one line and Redo and Clear on the next, so
+          the three history actions were split across a wrap with a colour
+          picker between them. They are one group and they undo each other, so
+          they have to sit together whatever the width is.
+        */}
+        <View style={styles.row}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Undo"

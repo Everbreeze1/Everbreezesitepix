@@ -295,7 +295,20 @@ describe("canDeleteComment", () => {
 describe("authorLabel", () => {
   it("prefers a name, falls back to an email, then says Someone", () => {
     expect(authorLabel({ authorName: "Sam", authorEmail: "s@x.test" })).toBe("Sam");
-    expect(authorLabel({ authorName: null, authorEmail: "s@x.test" })).toBe("s@x.test");
+    /*
+     * The handle, not the whole address. A byline sits on a card beside a
+     * timestamp and a delete button, and at that width a full address truncated
+     * to "marklagura223@gmail..." - long enough to fill the row and too short
+     * to say who wrote it.
+     *
+     * The fallback ORDER still matches the server's. Only the rendering of the
+     * address differs, because the server's copy builds notification prose,
+     * which has room for it.
+     */
+    expect(authorLabel({ authorName: null, authorEmail: "s@x.test" })).toBe("s");
+    expect(authorLabel({ authorName: null, authorEmail: "marklagura223@gmail.com" })).toBe(
+      "marklagura223",
+    );
     expect(authorLabel({ authorName: "  ", authorEmail: null })).toBe("Someone");
   });
 });

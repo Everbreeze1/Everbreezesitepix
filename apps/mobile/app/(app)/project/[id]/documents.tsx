@@ -304,7 +304,30 @@ export default function ProjectDocumentsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Documents" }} />
+      <Stack.Screen
+        options={{
+          title: "Documents",
+          /*
+           * In the header, not under the list. The action's reach must not
+           * shrink as the list grows: below the rows, the cost of creating one
+           * more rises with how many you already have.
+           *
+           * "New page" is the frequent one and takes the header. "New folder"
+           * stays below, because filing is something you do once a job rather
+           * than every visit, and it opens an inline field that needs the room.
+           */
+          headerRight: () => (
+            <IconButton
+              icon={Plus}
+              accessibilityLabel="New page"
+              surface={false}
+              tone="primary"
+              disabled={create.isPending}
+              onPress={() => create.mutate()}
+            />
+          ),
+        }}
+      />
 
       <Screen
         scroll
@@ -444,6 +467,14 @@ export default function ProjectDocumentsScreen() {
                                   params: { pageId: page.id },
                                 })
                               }
+                              /*
+                               * No chevron: the row already shows duplicate and
+                               * delete, and the title is the part that was
+                               * losing the argument for width. Document names
+                               * share a long project prefix, so the half that
+                               * gets truncated is the half that identifies them.
+                               */
+                              chevron={false}
                             />
                           </View>
                         ))}
@@ -505,15 +536,6 @@ export default function ProjectDocumentsScreen() {
                     onPress={startNewFolder}
                   />
                 )}
-
-                <Button
-                  label="New page"
-                  icon={Plus}
-                  variant="secondary"
-                  fullWidth
-                  disabled={create.isPending}
-                  onPress={() => create.mutate()}
-                />
               </>
             )}
 

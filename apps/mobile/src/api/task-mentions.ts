@@ -1,3 +1,4 @@
+import { emailHandle, personName } from "@everlumen/shared";
 /**
  * Who a comment actually mentions.
  *
@@ -27,7 +28,14 @@ export type MentionMember = {
  * is worse than notifying one teammate too many.
  */
 export function mentionHandle(member: Pick<MentionMember, "full_name" | "email">): string {
-  const name = member.full_name?.trim() || member.email?.split("@")[0] || "teammate";
+  /*
+   * `emailHandle` rather than a local `split("@")`, which is what this did.
+   * The behaviour is identical - it was already the pattern the rest of the app
+   * has since adopted - but having one implementation means the roster, the
+   * crew list, the comment bylines and this handle cannot drift into disagreeing
+   * about what somebody is called.
+   */
+  const name = member.full_name?.trim() || emailHandle(member.email) || "teammate";
   return name.split(/\s+/)[0];
 }
 
@@ -88,8 +96,14 @@ export function resolveMentions(
   });
 }
 
-/** Display name for a teammate, for the picker and the comment header. */
+/**
+ * Display name for a teammate, for the picker and the comment header.
+ *
+ * The handle rather than the whole address. `mentionHandle` above already took
+ * the local part for exactly this reason; this one had been left showing the
+ * full address, so the same person appeared two different ways on one screen.
+ */
 export function memberLabel(member: MentionMember | undefined | null): string {
   if (!member) return "Someone";
-  return member.full_name?.trim() || member.email || "Someone";
+  return personName(member.full_name, member.email, "Someone");
 }

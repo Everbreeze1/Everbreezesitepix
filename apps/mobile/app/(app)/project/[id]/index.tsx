@@ -21,6 +21,7 @@ import {
   ImageOff,
   ListTodo,
   MapPin,
+  NotebookPen,
   PenLine,
   Send,
   Share2,
@@ -663,7 +664,11 @@ export default function ProjectDetailScreen() {
                     />
                     <RowDivider />
                     <ListRow
-                      icon={FileText}
+                      // Not `FileText`: that is the Documents row above, and two
+                      // rows in one list drawing the same glyph is the same as
+                      // neither having one. `NotebookPen` is what `DailyLogCard`
+                      // already uses for the same idea, a day written up.
+                      icon={NotebookPen}
                       title="Site logs"
                       subtitle="The day's photos, written up"
                       onPress={() => router.push(`/project/${id}/site-logs`)}
@@ -929,6 +934,13 @@ export default function ProjectDetailScreen() {
       >
         <Pressable
           accessibilityRole="button"
+          /*
+           * Labelled, like the gallery's lightbox. Without this the scrim takes
+           * its accessible name from the caption text inside it, so a screen
+           * reader announces the photograph's caption as a button - which says
+           * nothing about what tapping does, and tapping closes the photo.
+           */
+          accessibilityLabel="Close photo"
           style={styles.lightbox}
           onPress={() => setLightboxId(null)}
         >

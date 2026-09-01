@@ -1,3 +1,4 @@
+import { personName } from "@everlumen/shared";
 /**
  * Scoping a Restricted member to particular jobs.
  *
@@ -93,7 +94,12 @@ export function sortedProjects(projects: ScopableProject[], selected: string[]):
   });
 }
 
-/** How a member is named in the scoping sheet. */
+/**
+ * How a member is named in the scoping sheet.
+ *
+ * The handle rather than the whole address, matching the roster: this is a row
+ * title, and an address is wider than one.
+ */
 export function memberLabel(member: Pick<ScopableMember, "fullName" | "email">): string {
-  return member.fullName?.trim() || member.email?.trim() || "Teammate";
+  return personName(member.fullName, member.email, "Teammate");
 }

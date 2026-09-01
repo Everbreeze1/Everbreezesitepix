@@ -40,6 +40,11 @@ export type CandidateLike = {
  * Falls back to the email rather than to "Teammate" where it can, because the
  * question being answered is "who is getting mailed about this", and an address
  * answers it where a placeholder does not.
+ *
+ * Deliberately the WHOLE address, unlike every other name in the app, which now
+ * shows only the handle so it fits a row title. Here the domain is the
+ * informative half: it is how you tell a colleague from a subcontractor you are
+ * about to copy in. Do not "make this consistent".
  */
 export function watcherName(watcher: WatcherLike): string {
   return watcher.fullName?.trim() || watcher.email?.trim() || "Teammate";

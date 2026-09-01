@@ -122,9 +122,35 @@ export default function GroupsScreen() {
     [run],
   );
 
+  // Named because the header calls it. The list no longer has its own copy.
+  const startNewGroup = useCallback(() => {
+    setDraftName("");
+    setDraftDescription("");
+    setNameError(null);
+    setEditing("new");
+  }, []);
+
   return (
     <>
-      <Stack.Screen options={{ title: "Groups" }} />
+      <Stack.Screen
+        options={{
+          title: "Groups",
+          /*
+           * In the header, not under the list. The action's reach must not
+           * shrink as the list grows: below the rows, the cost of creating one
+           * more rises with how many you already have.
+           */
+          headerRight: () => (
+            <IconButton
+              icon={Plus}
+              accessibilityLabel="New group"
+              surface={false}
+              tone="primary"
+              onPress={startNewGroup}
+            />
+          ),
+        }}
+      />
 
       <Screen
         scroll
@@ -251,19 +277,6 @@ export default function GroupsScreen() {
                     </Card>
                   );
                 })}
-
-                <Button
-                  label="New group"
-                  icon={Plus}
-                  variant="secondary"
-                  fullWidth
-                  onPress={() => {
-                    setDraftName("");
-                    setDraftDescription("");
-                    setNameError(null);
-                    setEditing("new");
-                  }}
-                />
               </>
             )}
           </View>

@@ -133,9 +133,24 @@ describe("resolveMentions", () => {
 });
 
 describe("memberLabel", () => {
-  it("prefers the name, falls back to the email", () => {
+  it("prefers the name, falls back to the handle", () => {
     expect(memberLabel(dana)).toBe("Dana Reyes");
-    expect(memberLabel(noName)).toBe("jordan.k@example.com");
+    /*
+     * The handle, not the whole address. A row title is one line at heading
+     * weight and an address is wider than one: on the team roster the same
+     * fallback rendered the workspace owner as "marklagura223@gmail" above
+     * ".com". Every name in the app now goes through `personName`.
+     *
+     * The one exception is `watcherName`, which keeps the full address on
+     * purpose, because the watcher list answers "who is getting mailed about
+     * this" and the domain is the informative half there.
+     */
+    /*
+     * Also makes this screen self-consistent: `mentionHandle` already took the
+     * local part, so the same person was appearing two ways at once - as
+     * "@jordan.k" in the composer and "jordan.k@example.com" in the header.
+     */
+    expect(memberLabel(noName)).toBe("jordan.k");
     expect(memberLabel(undefined)).toBe("Someone");
   });
 });

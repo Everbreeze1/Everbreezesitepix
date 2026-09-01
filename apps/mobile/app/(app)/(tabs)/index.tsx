@@ -35,7 +35,6 @@ import {
 import {
   Badge,
   Button,
-  CountBadge,
   ListGroup,
   Icon,
   ListRow,
@@ -339,11 +338,20 @@ export default function HomeScreen() {
                 onPress={() => router.push("/capture-start")}
               />
               <RowDivider />
+              {/*
+                No count badge here, deliberately.
+
+                The row carried the same number three times: "9 unread" in the
+                subtitle, a "9" badge on the right, and the dot that `unread`
+                draws. The dot and its tinted ground are a documented pair and
+                stay - `ListRow` explains why neither works alone outdoors -
+                but the badge was a third copy of a number the subtitle already
+                says in words.
+              */}
               <ListRow
                 icon={Bell}
                 title="Notifications"
                 subtitle={unread === 0 ? "Nothing unread" : `${unread} unread`}
-                right={unread > 0 ? <CountBadge count={unread} tone="primary" /> : undefined}
                 unread={unread > 0}
                 onPress={() => router.push("/notifications")}
               />

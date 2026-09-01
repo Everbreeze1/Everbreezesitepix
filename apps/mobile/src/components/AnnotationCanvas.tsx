@@ -153,7 +153,17 @@ export const AnnotationCanvas = forwardRef<Svg, AnnotationCanvasProps>(function 
         y={0}
         width={width}
         height={height}
-        preserveAspectRatio="xMidYMid slice"
+        /*
+         * `meet`, not `slice`. The surface is sized to the photograph's aspect
+         * by `annotationCanvasSize`, so the two agree and neither crops - but
+         * if a rounding error or a future change makes them disagree, `meet`
+         * letterboxes where `slice` would silently cut the picture down and
+         * write the cropped version to the saved copy.
+         *
+         * Losing a band of a defect photograph is worse than a hairline of
+         * background at its edge.
+         */
+        preserveAspectRatio="xMidYMid meet"
       />
       {shapes.map((shape) => renderShape(shape, width, height))}
       {draft ? renderShape(draft, width, height) : null}

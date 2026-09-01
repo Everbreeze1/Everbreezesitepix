@@ -1,3 +1,4 @@
+import { personName } from "@everlumen/shared";
 /**
  * Who is on a job.
  *
@@ -23,9 +24,14 @@ export type CrewCandidate = {
 /** What the server returns for a set of projects. */
 export type AssigneeMap = Record<string, string[]>;
 
-/** How somebody is named in a crew list. */
+/**
+ * How somebody is named in a crew list.
+ *
+ * The handle rather than the whole address, matching the roster: a crew row is
+ * narrow and a truncated address names nobody.
+ */
 export function crewName(person: { fullName: string | null; email: string | null }): string {
-  return person.fullName?.trim() || person.email?.trim() || "Teammate";
+  return personName(person.fullName, person.email, "Teammate");
 }
 
 /**

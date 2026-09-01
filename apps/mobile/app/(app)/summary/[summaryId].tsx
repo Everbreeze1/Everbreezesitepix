@@ -26,7 +26,16 @@ import {
 } from "@/api/summary-view";
 import { openShareSheet } from "@/api/sharing";
 import { radius, spacing, useTheme } from "@/theme";
-import { Link2, PenLine, Quote, RefreshCw, Sparkles, Trash2, TriangleAlert } from "@/ui/icons";
+import {
+  Link2,
+  NotebookPen,
+  PenLine,
+  Quote,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+  TriangleAlert,
+} from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -399,14 +408,31 @@ export default function SummaryScreen() {
 
         <SectionHeader title="Actions" />
         <View style={{ gap: spacing.sm }}>
+          {/*
+            The only action here that had no icon, which made it read as the odd
+            one out in a stack of four.
+
+            `PenLine` rather than something new: it is already what Rename uses
+            on a document folder and on a snippet, so the app has one rename
+            icon rather than three. That means the write-up's own body editor
+            below gives up `PenLine` and takes `NotebookPen`, which is closer to
+            what it does anyway - the Daily Log card already uses that glyph to
+            mean "something written up".
+          */}
           {!editingTitle ? (
-            <Button label="Rename" variant="secondary" fullWidth onPress={startRename} />
+            <Button
+              label="Rename"
+              icon={PenLine}
+              variant="secondary"
+              fullWidth
+              onPress={startRename}
+            />
           ) : null}
 
           {editingBody === null ? (
             <Button
               label="Edit the write-up"
-              icon={PenLine}
+              icon={NotebookPen}
               variant="secondary"
               fullWidth
               onPress={() => {

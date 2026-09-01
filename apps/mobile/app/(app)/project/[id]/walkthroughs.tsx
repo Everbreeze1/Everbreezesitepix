@@ -160,16 +160,31 @@ export default function ProjectWalkthroughsScreen() {
           />
         )}
 
-        <View style={styles.fab}>
-          <Button
-            label="Record"
-            icon={Video}
-            size="lg"
-            onPress={() => router.push(`/project/${id}/walkthrough-record`)}
-            accessibilityHint="Starts recording a walkthrough of this site"
-            style={{ borderRadius: radius.pill }}
-          />
-        </View>
+        {/*
+          Not while the empty state is up, and not while the list is loading.
+
+          `ListEmptyComponent` offers "Record one" as its own action, so with no
+          walkthroughs recorded the screen drew two identical blue buttons
+          touching each other at the bottom of the screen - the same
+          destination, twice, competing. The project photo grid already hides
+          its FAB on the same condition; this screen had not followed it.
+
+          Hidden while loading too: a floating action over four skeleton rows
+          invites a tap before the screen can say whether there is anything
+          there.
+        */}
+        {isLoading || walkthroughs.length === 0 ? null : (
+          <View style={styles.fab}>
+            <Button
+              label="Record"
+              icon={Video}
+              size="lg"
+              onPress={() => router.push(`/project/${id}/walkthrough-record`)}
+              accessibilityHint="Starts recording a walkthrough of this site"
+              style={{ borderRadius: radius.pill }}
+            />
+          </View>
+        )}
       </View>
     </>
   );

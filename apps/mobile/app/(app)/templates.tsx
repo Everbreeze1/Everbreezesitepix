@@ -17,6 +17,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  IconButton,
   ListGroup,
   ListRow,
   RowDivider,
@@ -112,7 +113,27 @@ export default function TemplatesScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Templates" }} />
+      <Stack.Screen
+        options={{
+          title: "Templates",
+          /*
+           * In the header, not under the list. The action's reach must not
+           * shrink as the list grows: below the rows, the cost of creating one
+           * more rises with how many you already have.
+           */
+          headerRight: () =>
+            canManage ? (
+              <IconButton
+                icon={Plus}
+                accessibilityLabel="New template"
+                surface={false}
+                tone="primary"
+                disabled={create.isPending}
+                onPress={() => setCreating(true)}
+              />
+            ) : null,
+        }}
+      />
 
       <Screen
         scroll
@@ -177,17 +198,6 @@ export default function TemplatesScreen() {
                   ))}
                 </ListGroup>
               )}
-
-              {canManage && visible.length > 0 ? (
-                <Button
-                  label="New template"
-                  icon={Plus}
-                  variant="secondary"
-                  fullWidth
-                  disabled={create.isPending}
-                  onPress={() => setCreating(true)}
-                />
-              ) : null}
 
               {archivedCount > 0 ? (
                 <Button

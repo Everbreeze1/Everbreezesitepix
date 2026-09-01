@@ -140,7 +140,26 @@ export default function LabelsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Labels" }} />
+      <Stack.Screen
+        options={{
+          title: "Labels",
+          /*
+           * In the header, not under the list. The action's reach must not
+           * shrink as the list grows: below the rows, the cost of creating one
+           * more rises with how many you already have.
+           */
+          headerRight: () =>
+            canManage ? (
+              <IconButton
+                icon={Plus}
+                accessibilityLabel="New label"
+                surface={false}
+                tone="primary"
+                onPress={openNew}
+              />
+            ) : null,
+        }}
+      />
 
       <Screen
         scroll
@@ -208,15 +227,11 @@ export default function LabelsScreen() {
                   ))}
                 </ListGroup>
 
-                {canManage ? (
-                  <Button
-                    label="New label"
-                    icon={Plus}
-                    variant="secondary"
-                    fullWidth
-                    onPress={openNew}
-                  />
-                ) : (
+                {/*
+                  The refusal stays; the button moved to the header. Saying why
+                  the action is missing is the whole point of this branch.
+                */}
+                {canManage ? null : (
                   <Text variant="caption" tone="muted">
                     Only an owner or admin can change the shared label set.
                   </Text>

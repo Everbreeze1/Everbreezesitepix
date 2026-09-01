@@ -138,9 +138,19 @@ describe("sortedProjects", () => {
 });
 
 describe("memberLabel", () => {
-  it("prefers a name, then an email, then a placeholder", () => {
+  it("prefers a name, then the handle in the email, then a placeholder", () => {
     expect(memberLabel({ fullName: "Sam", email: "s@x.test" })).toBe("Sam");
-    expect(memberLabel({ fullName: null, email: "s@x.test" })).toBe("s@x.test");
+    /*
+     * The handle, not the whole address. A row title is one line at heading
+     * weight and an address is wider than one: on the team roster the same
+     * fallback rendered the workspace owner as "marklagura223@gmail" above
+     * ".com". Every name in the app now goes through `personName`.
+     *
+     * The one exception is `watcherName`, which keeps the full address on
+     * purpose, because the watcher list answers "who is getting mailed about
+     * this" and the domain is the informative half there.
+     */
+    expect(memberLabel({ fullName: null, email: "s@x.test" })).toBe("s");
     expect(memberLabel({ fullName: "  ", email: null })).toBe("Teammate");
   });
 });

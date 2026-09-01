@@ -94,7 +94,26 @@ export default function ProjectSiteLogsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Site logs" }} />
+      <Stack.Screen
+        options={{
+          title: "Site logs",
+          /*
+           * In the header, not under the list. The action's reach must not
+           * shrink as the list grows: below the rows, the cost of creating one
+           * more rises with how many you already have.
+           */
+          headerRight: () => (
+            <IconButton
+              icon={Plus}
+              accessibilityLabel="Start a log"
+              surface={false}
+              tone="primary"
+              disabled={create.isPending}
+              onPress={() => create.mutate()}
+            />
+          ),
+        }}
+      />
 
       <Screen
         scroll
@@ -177,15 +196,6 @@ export default function ProjectSiteLogsScreen() {
                     );
                   })}
                 </ListGroup>
-
-                <Button
-                  label="Start a log"
-                  icon={Plus}
-                  variant="secondary"
-                  fullWidth
-                  disabled={create.isPending}
-                  onPress={() => create.mutate()}
-                />
               </>
             )}
           </View>

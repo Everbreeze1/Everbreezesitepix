@@ -66,6 +66,7 @@ import {
   ErrorState,
   Field,
   Icon,
+  IconButton,
   ListGroup,
   ListRow,
   RowDivider,
@@ -274,6 +275,12 @@ export default function TeamScreen() {
     [myRole, user?.id, run, confirmRemove],
   );
 
+  // Named because the header calls it; the roster no longer has its own copy.
+  const openInvite = useCallback(() => {
+    setInviteError(null);
+    setInviteOpen(true);
+  }, []);
+
   if (query.isLoading) {
     return (
       <>
@@ -316,7 +323,27 @@ export default function TeamScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: data.team.name?.trim() || "Team" }} />
+      <Stack.Screen
+        options={{
+          title: data.team.name?.trim() || "Team",
+          /*
+           * In the header, not under the list. The action's reach must not
+           * shrink as the list grows: below the rows, the cost of creating one
+           * more rises with how many you already have.
+           */
+          headerRight: () =>
+            blocked === null ? (
+              <IconButton
+                icon={UserPlus}
+                accessibilityLabel="Invite somebody"
+                surface={false}
+                tone="primary"
+                disabled={run.isPending}
+                onPress={openInvite}
+              />
+            ) : null,
+        }}
+      />
 
       <Screen
         scroll
@@ -408,16 +435,6 @@ export default function TeamScreen() {
         ) : null}
 
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl, gap: spacing.sm }}>
-          <Button
-            label="Invite somebody"
-            icon={UserPlus}
-            fullWidth
-            disabled={blocked !== null || run.isPending}
-            onPress={() => {
-              setInviteError(null);
-              setInviteOpen(true);
-            }}
-          />
           {/*
             The reason, always, when the button is dead. This is the difference
             between a plan gate and a bug as far as anybody looking at it is

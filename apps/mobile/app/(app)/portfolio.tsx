@@ -35,6 +35,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  IconButton,
   ListGroup,
   ListRow,
   RowDivider,
@@ -207,9 +208,37 @@ export default function PortfolioScreen() {
     }
   }, [editing, draftTitle, draftTagline, run]);
 
+  // Named because the header calls it; the list no longer has its own copy.
+  const startEmptyPage = useCallback(() => {
+    setDraftTitle("");
+    setDraftTagline("");
+    setTitleError(null);
+    setEditing(null);
+    setCreating(true);
+  }, []);
+
   return (
     <>
-      <Stack.Screen options={{ title: "Portfolio" }} />
+      <Stack.Screen
+        options={{
+          title: "Portfolio",
+          /*
+           * In the header, not under the list. The action's reach must not
+           * shrink as the list grows: below the rows, the cost of creating one
+           * more rises with how many you already have.
+           */
+          headerRight: () =>
+            canManage ? (
+              <IconButton
+                icon={Plus}
+                accessibilityLabel="Start an empty page"
+                surface={false}
+                tone="primary"
+                onPress={startEmptyPage}
+              />
+            ) : null,
+        }}
+      />
 
       <Screen
         scroll
@@ -338,19 +367,6 @@ export default function PortfolioScreen() {
                   fullWidth
                   disabled={run.isPending}
                   onPress={() => setPicking(true)}
-                />
-                <Button
-                  label="Start an empty page"
-                  icon={Plus}
-                  variant="ghost"
-                  fullWidth
-                  onPress={() => {
-                    setDraftTitle("");
-                    setDraftTagline("");
-                    setTitleError(null);
-                    setEditing(null);
-                    setCreating(true);
-                  }}
                 />
               </>
             ) : null}

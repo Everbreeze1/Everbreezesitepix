@@ -171,7 +171,33 @@ export default function ProjectReportsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Reports" }} />
+      <Stack.Screen
+        options={{
+          title: "Reports",
+          /*
+           * In the header, not under the list.
+           *
+           * "Start a report" sat below every report on the job, so the cost of
+           * making one grew with how many you already had - on a busy job you
+           * scrolled past twenty to reach it. The header is the one place that
+           * cannot be pushed off the screen by data.
+           *
+           * The whole-job report stays at the bottom on purpose: it is a rare,
+           * expensive, once-per-job action, and it needs room to say "Writing
+           * the report" while it runs, which an icon cannot.
+           */
+          headerRight: () => (
+            <IconButton
+              icon={Plus}
+              accessibilityLabel="Start a report"
+              surface={false}
+              tone="primary"
+              disabled={create.isPending}
+              onPress={() => create.mutate()}
+            />
+          ),
+        }}
+      />
 
       <Screen
         scroll
@@ -267,15 +293,6 @@ export default function ProjectReportsScreen() {
                     </View>
                   ))}
                 </ListGroup>
-
-                <Button
-                  label="Start a report"
-                  icon={Plus}
-                  variant="secondary"
-                  fullWidth
-                  disabled={create.isPending}
-                  onPress={() => create.mutate()}
-                />
 
                 {/*
                   The other kind: written for you rather than by you. Second,

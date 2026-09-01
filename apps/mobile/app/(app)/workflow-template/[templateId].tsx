@@ -216,6 +216,14 @@ export default function WorkflowTemplateScreen() {
     }
   }, [itemSheet, draftLabel, draftKind, draftRequired, items, run]);
 
+  // Named because the header calls it; the list no longer has its own copy.
+  const startNewPhase = useCallback(() => {
+    setDraftName("");
+    setDraftDescription("");
+    setNameError(null);
+    setPhaseSheet("new");
+  }, []);
+
   if (phasesQuery.isLoading) {
     return (
       <>
@@ -240,7 +248,26 @@ export default function WorkflowTemplateScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: name || "Workflow template" }} />
+      <Stack.Screen
+        options={{
+          title: name || "Workflow template",
+          /*
+           * In the header, not under the phases. "Add a step" stays inside each
+           * phase because it is scoped to that phase and a single header button
+           * could not know which one was meant; adding a PHASE is the screen's
+           * own action and belongs where the list cannot push it away.
+           */
+          headerRight: () => (
+            <IconButton
+              icon={Plus}
+              accessibilityLabel="Add a phase"
+              surface={false}
+              tone="primary"
+              onPress={startNewPhase}
+            />
+          ),
+        }}
+      />
 
       <Screen
         scroll
@@ -400,6 +427,13 @@ export default function WorkflowTemplateScreen() {
                                   setNameError(null);
                                   setItemSheet({ phaseId: phase.id, item: templateItem });
                                 }}
+                                /*
+                                 * No chevron: this row already carries three
+                                 * controls, and a fourth glyph takes width from
+                                 * the title until items cannot be told apart.
+                                 * The row is still tappable.
+                                 */
+                                chevron={false}
                               />
                             </View>
                           ))}
@@ -453,20 +487,7 @@ export default function WorkflowTemplateScreen() {
         )}
 
         {phases.length > 0 ? (
-          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
-            <Button
-              label="Add a phase"
-              icon={Plus}
-              variant="secondary"
-              fullWidth
-              onPress={() => {
-                setDraftName("");
-                setDraftDescription("");
-                setNameError(null);
-                setPhaseSheet("new");
-              }}
-            />
-          </View>
+          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}></View>
         ) : null}
       </Screen>
 
