@@ -214,6 +214,22 @@ export function plainBody(markdown: string | null): string {
       .replace(/^#{1,6}\s+/gm, "")
       .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
       .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      /*
+       * List markers become real bullets BEFORE emphasis is stripped.
+       *
+       * Order matters and this is the only order that works. The next line
+       * removes `*` as emphasis, and it cannot tell emphasis from a bullet, so
+       * a list written `* Single site photograph recorded on July 17` came out
+       * as " Single site photograph recorded on July 17" - the marker gone and
+       * its space left behind, which reads as a stray indent rather than a
+       * list. A list written with `-` kept a bare dash instead, so the same
+       * document rendered two ways depending on which character the model
+       * happened to choose.
+       *
+       * These summaries carry a public share link, so this is what a client
+       * sees.
+       */
+      .replace(/^[ 	]*[-*+][ 	]+/gm, "• ")
       .replace(/[*_`]/g, "")
       // Three or more blank lines collapse to one. Markdown uses them for
       // spacing a renderer would absorb; as plain text they read as the document

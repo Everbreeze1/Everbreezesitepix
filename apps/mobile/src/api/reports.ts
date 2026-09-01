@@ -1,3 +1,4 @@
+import { AI_TIMEOUT_MS } from "@everlumen/api-client";
 import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import type { ReportRow } from "./report-view";
@@ -104,10 +105,20 @@ export async function draftReportSummary(
   // `{ markdown, photoCount }`. Not `summary`, and not `text`: reading either
   // returned null every time, so the Draft button always reported that the
   // model had said nothing.
-  const result = await api.rpc<{ markdown?: string }>("summarizePhotosReport", {
-    photoIds,
-    ...(title ? { title } : {}),
-  });
+  const result = await api.rpc<{ markdown?: string }>(
+    "summarizePhotosReport",
+    {
+      photoIds,
+      ...(title ? { title } : {}),
+    },
+    /*
+     * The long timeout, like every other Gemini-spending call. Missed when the
+     * rest of this file got it: the whole-job report below was covered and the
+     * Draft button was not, which is the one somebody presses while standing
+     * in a van waiting for it.
+     */
+    { timeoutMs: AI_TIMEOUT_MS },
+  );
   const markdown = result?.markdown?.trim();
   return markdown ? markdown : null;
 }
@@ -156,7 +167,7 @@ export async function generateComprehensiveReport(input: {
       ...(input.title ? { title: input.title } : {}),
       ...(input.photosPerPage ? { photosPerPage: input.photosPerPage } : {}),
     },
-    { idempotencyKey: input.idempotencyKey },
+    { idempotencyKey: input.idempotencyKey, timeoutMs: AI_TIMEOUT_MS },
   );
   return {
     page: result?.page ?? null,

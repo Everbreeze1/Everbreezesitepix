@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
+  Alert,
   ActivityIndicator,
   Modal,
   Pressable,
@@ -27,9 +28,10 @@ import {
   Trash2,
   Video,
   Workflow,
+  Link2,
 } from "@/ui/icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { displayCaption, formatPhotoDateGroup } from "@everlumen/shared";
 import {
   listProjectPhotoPage,
@@ -47,7 +49,14 @@ import {
   type ProjectDraft,
   type ProjectPatch,
 } from "@/api/project-patch";
-import { ensureProjectShareToken, openShareSheet, publicUrl } from "@/api/sharing";
+import {
+  ensureProjectShareToken,
+  openShareSheet,
+  publicUrl,
+  getProjectShareState,
+  setProjectShareEnabled,
+  isShareLive,
+} from "@/api/sharing";
 import { QueueBanner } from "@/components/QueueBanner";
 import { PhotoBulkBar, type PhotoBulkAction } from "@/components/PhotoBulkBar";
 import { generateSummaryFromPhotos } from "@/api/summaries";
@@ -288,6 +297,45 @@ export default function ProjectDetailScreen() {
    * someone else can open it, so an offline share would produce a URL that
    * resolves to nothing. The failure is surfaced rather than swallowed.
    */
+  /*
+   * Whether this job's public link is live right now.
+   *
+   * Its own read rather than a column on the project row: widening that select
+   * would put a share token on every project in the list, which is a page of
+   * live URLs held in memory for a screen that shows none of them.
+   */
+  const shareState = useQuery({
+    queryKey: ["project-share", id],
+    queryFn: () => getProjectShareState(String(id)),
+    enabled: Boolean(id),
+  });
+  const shareLive = isShareLive(
+    shareState.data?.shareToken ?? null,
+    shareState.data?.revokedAt ?? null,
+  );
+
+  /**
+   * Switch the job's link off.
+   *
+   * The half the phone was missing. It could mint a link to a whole job - every
+   * photograph on it, readable by anyone holding the URL - and had no way to
+   * take it back. The token survives, so turning it on again later restores the
+   * same address rather than stranding a link already sent to a client.
+   */
+  const stopSharing = useMutation({
+    mutationFn: () => setProjectShareEnabled(String(id), false),
+    onSuccess: () => {
+      setShareError(null);
+      void queryClient.invalidateQueries({ queryKey: ["project-share", id] });
+    },
+    onError: (error: unknown) =>
+      setShareError(
+        error instanceof Error
+          ? error.message
+          : "The link is still live. It could not be switched off.",
+      ),
+  });
+
   const shareProject = useCallback(async () => {
     if (!id) return;
     setActionsOpen(false);
@@ -819,6 +867,33 @@ export default function ProjectDetailScreen() {
         actions={[
           { label: "Edit details", icon: PenLine, onPress: () => setEditing(true) },
           { label: "Share project", icon: Share2, onPress: () => void shareProject() },
+          /*
+            Only when there is something to switch off. Offering "Stop sharing"
+            on a job that was never shared invites somebody to press it and
+            wonder what they just did.
+          */
+          ...(shareLive
+            ? [
+                {
+                  label: "Stop sharing this job",
+                  icon: Link2,
+                  destructive: true,
+                  onPress: () =>
+                    Alert.alert(
+                      "Stop sharing this job?",
+                      "Anyone holding the link loses access to every photo on it. Turning it back on later gives out the same link again.",
+                      [
+                        { text: "Keep it live", style: "cancel" as const },
+                        {
+                          text: "Stop sharing",
+                          style: "destructive" as const,
+                          onPress: () => stopSharing.mutate(),
+                        },
+                      ],
+                    ),
+                },
+              ]
+            : []),
           {
             label: project?.starred ? "Remove star" : "Star this project",
             icon: Star,

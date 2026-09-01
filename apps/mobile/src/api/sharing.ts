@@ -44,7 +44,37 @@ export async function ensureProjectShareToken(projectId: string): Promise<string
   return result?.shareToken ?? null;
 }
 
-/** Turn a project's link on or off without destroying the token. */
+/**
+ * Whether a project's public link is currently live.
+ *
+ * Read separately rather than added to the project row, because the two columns
+ * (`share_token`, `share_revoked_at`) are not on the mobile row's select and
+ * widening that select would put a token on every project in the list - a page
+ * of jobs would then carry a page of live URLs in memory for a screen that
+ * shows none of them.
+ */
+export type ProjectShareState = { shareToken: string | null; revokedAt: string | null };
+
+export async function getProjectShareState(projectId: string): Promise<ProjectShareState> {
+  const result = await api.rpc<Partial<ProjectShareState>>("getProjectShare", { projectId });
+  return {
+    shareToken: result?.shareToken ?? null,
+    revokedAt: result?.revokedAt ?? null,
+  };
+}
+
+/**
+ * Turn a project's link on or off without destroying the token.
+ *
+ * The half the phone was missing, and the one that matters more: it could mint
+ * a link to a whole job - every photograph on it, readable by anyone holding
+ * the URL with no login - and had no way to switch it off again. Documents and
+ * walkthrough write-ups both had a "Stop sharing"; the project itself, which is
+ * the largest thing that can be exposed, did not.
+ *
+ * Switching off stamps `share_revoked_at` and keeps the token, so turning it
+ * back on restores the SAME url rather than stranding a link already sent.
+ */
 export async function setProjectShareEnabled(projectId: string, enable: boolean): Promise<void> {
   await api.rpc("setProjectShare", { projectId, enable });
 }

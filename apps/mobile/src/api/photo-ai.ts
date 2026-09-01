@@ -1,3 +1,4 @@
+import { AI_TIMEOUT_MS } from "@everlumen/api-client";
 import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import type { PhotoAnalysis } from "./photo-ai-view";
@@ -22,14 +23,24 @@ import type { PhotoAnalysis } from "./photo-ai-view";
 const COLUMNS =
   "id, photo_id, status, ocr_text, labels, defects, report_text, recommendations, created_at";
 
+/*
+ * Both of these wait on Gemini, so both carry the long timeout.
+ *
+ * Without it the client gives up on its default while the model is still
+ * working. The screen says the analysis failed, the person taps again, and the
+ * second run pays for a second analysis of a photograph the first one had
+ * already finished - which is exactly what the upstream idempotency marking
+ * exists to prevent, defeated by a client that hung up too early.
+ */
+
 /** Kick off a full analysis. Resolves when the model has answered. */
 export async function analyzePhoto(photoId: string): Promise<void> {
-  await api.rpc("analyzePhoto", { photoId });
+  await api.rpc("analyzePhoto", { photoId }, { timeoutMs: AI_TIMEOUT_MS });
 }
 
 /** OCR only: read what is printed on the plate, and nothing else. */
 export async function extractPhotoText(photoId: string): Promise<void> {
-  await api.rpc("extractPhotoText", { photoId });
+  await api.rpc("extractPhotoText", { photoId }, { timeoutMs: AI_TIMEOUT_MS });
 }
 
 /**

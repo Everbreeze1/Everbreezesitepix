@@ -315,11 +315,33 @@ export async function revokeSubcontractorService(ctx: AuthedContext, data: any) 
     .maybeSingle();
   if (!sub || (sub as any).team_id !== teamId) throw forbidden("Subcontractor not found.");
 
-  const { error } = await supabaseAdmin
+  /*
+   * `.select()` so the revoke has to prove it landed.
+   *
+   * PostgREST does not treat "matched no rows" as an error on UPDATE, so
+   * `const { error } = await ...update().eq()` cannot tell a write that worked
+   * from one that touched nothing. On most paths that is a cosmetic risk. Not
+   * here: this is what withdraws an outside firm's login to a customer's
+   * jobsite photographs, and answering `{ ok: true }` when the row was not
+   * stamped tells an admin the access is gone while the link still opens.
+   *
+   * Precautionary rather than a known failure - the row is read directly above,
+   * so it should always match. `updateMemberRole` also read its row first and
+   * still managed to return 200 having changed nothing, which is the reason
+   * this path no longer takes that on trust.
+   */
+  const { data: revoked, error } = await supabaseAdmin
     .from("subcontractors" as any)
     .update({ revoked_at: new Date().toISOString() })
-    .eq("id", (sub as any).id);
+    .eq("id", (sub as any).id)
+    .select("id");
   if (error) throw new Error(error.message);
+  if (!revoked || (revoked as unknown[]).length === 0) {
+    throw Object.assign(
+      new Error("That access was not withdrawn. Reload the list and try again."),
+      { status: 409 },
+    );
+  }
   return { ok: true };
 }
 

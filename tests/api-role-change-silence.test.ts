@@ -58,3 +58,35 @@ describe("changing a member's role", () => {
     expect(updateMemberRoleBody(service())).toContain("if (error) throw new Error(error.message)");
   });
 });
+
+describe("withdrawing an outside firm's access", () => {
+  /*
+   * The same shape, on the path where silence costs the most. `revokeSubcontractor`
+   * is what takes away a login to a customer's jobsite photographs; reporting
+   * `{ ok: true }` for an update that stamped nothing tells an admin the access
+   * is gone while the link still opens.
+   *
+   * Precautionary: the row is read immediately above the update, so it should
+   * always match. `updateMemberRole` read its row first too.
+   */
+  const subs = () =>
+    readFileSync(join(process.cwd(), "apps/api/src/domains/subcontractors/service.ts"), "utf8");
+
+  it("confirms the revoke stamped a row", () => {
+    const s = subs();
+    expect(s).toContain('.select("id")');
+    expect(s).toContain("was not withdrawn");
+  });
+
+  it("does not answer ok when nothing was written", () => {
+    /*
+     * The `{ ok: true }` has to sit AFTER the emptiness check, or the guard is
+     * decorative: the caller reads success either way.
+     */
+    const s = subs();
+    const okAt = s.indexOf("return { ok: true };", s.indexOf("revoked_at"));
+    const guardAt = s.indexOf("was not withdrawn");
+    expect(guardAt).toBeGreaterThan(-1);
+    expect(okAt).toBeGreaterThan(guardAt);
+  });
+});

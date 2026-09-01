@@ -1,3 +1,4 @@
+import { AI_TIMEOUT_MS } from "@everlumen/api-client";
 import { randomUUID } from "expo-crypto";
 import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
@@ -43,7 +44,7 @@ export async function askAssistant(input: {
      * asked twice. Fresh rather than derived from the text, because asking the
      * same question twice on purpose is a legitimate thing to do.
      */
-    { idempotencyKey: randomUUID() },
+    { idempotencyKey: randomUUID(), timeoutMs: AI_TIMEOUT_MS },
   );
 
   if (!result.conversationId || typeof result.reply !== "string") {

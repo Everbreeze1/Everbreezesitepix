@@ -1,3 +1,4 @@
+import { AI_TIMEOUT_MS } from "@everlumen/api-client";
 import { api } from "@/lib/api";
 import { publicUrl } from "./sharing";
 import type { SummaryPhotoNote, WalkthroughSummary } from "./summary-view";
@@ -87,7 +88,7 @@ export async function generateSummaryFromPhotos(input: {
       photoIds: input.photoIds,
       ...(input.title ? { title: input.title } : {}),
     },
-    { idempotencyKey: input.idempotencyKey },
+    { idempotencyKey: input.idempotencyKey, timeoutMs: AI_TIMEOUT_MS },
   );
   return { summaryId: result?.summary?.id ?? result?.summaryId ?? null };
 }

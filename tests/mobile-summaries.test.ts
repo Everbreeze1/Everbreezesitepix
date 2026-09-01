@@ -368,3 +368,60 @@ describe("bodyError", () => {
     expect(bodyError(body)).toContain("10 characters");
   });
 });
+
+describe("lists survive the markdown stripper", () => {
+  /*
+   * Found by reading a real summary on the phone. The stored markdown was
+   *
+   *     ## Key Points
+   *     * Single site photograph recorded on July 17, 2026
+   *
+   * and the screen showed
+   *
+   *      Single site photograph recorded on July 17, 2026
+   *
+   * with a leading space and no marker at all. `plainBody` strips `*` as
+   * emphasis and cannot tell emphasis from a bullet, so it removed the marker
+   * and left the space that followed it - which reads as a stray indent.
+   *
+   * Worse, it was inconsistent: another summary used `-` and kept a bare dash,
+   * so the same document rendered two different ways depending on which
+   * character the model chose. These summaries carry a public share link, so
+   * this is the version a client reads.
+   */
+  it("turns an asterisk list into bullets rather than eating the marker", () => {
+    const out = plainBody("## Key Points\n* First point\n* Second point");
+    expect(out).toContain("\u2022 First point");
+    expect(out).toContain("\u2022 Second point");
+    expect(out).not.toMatch(/^\s+First point/m);
+  });
+
+  it("treats dash and plus lists the same way", () => {
+    // One document, one appearance, whichever character the model picked.
+    expect(plainBody("- Dash item")).toContain("\u2022 Dash item");
+    expect(plainBody("+ Plus item")).toContain("\u2022 Plus item");
+    expect(plainBody("* Star item")).toContain("\u2022 Star item");
+  });
+
+  it("still strips emphasis inside a line", () => {
+    /*
+     * The rule it has to coexist with. Converting bullets must not stop
+     * `*emphasis*` mid-sentence from being removed, or the fix trades one
+     * artefact for another.
+     */
+    const out = plainBody("A *very* important note");
+    expect(out).toBe("A very important note");
+  });
+
+  it("leaves an indented continuation alone", () => {
+    // Only a marker at the start of a line is a bullet. A wrapped line that
+    // merely begins with a space is not, and must not gain one.
+    const out = plainBody("## Overview\n  continued text");
+    expect(out).not.toContain("\u2022");
+  });
+
+  it("does not invent a bullet for a minus sign in prose", () => {
+    // "-5 degrees" is not a list item.
+    expect(plainBody("Temperature was -5 degrees")).not.toContain("\u2022");
+  });
+});

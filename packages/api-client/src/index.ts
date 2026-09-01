@@ -39,7 +39,39 @@ export type RequestOptions = {
   idempotencyKey?: string;
   /** Correlates logs; echoed as `X-Request-Id`. */
   requestId?: string;
+  /**
+   * How long to wait before giving up. Defaults to `DEFAULT_TIMEOUT_MS`.
+   *
+   * Raise it for the handful of ops that are legitimately slow - anything that
+   * waits on the AI provider - and leave it alone everywhere else.
+   */
+  timeoutMs?: number;
 };
+
+/**
+ * The request budget, and why there is one at all.
+ *
+ * There was no timeout here. `fetch` in React Native has no default, so a
+ * request that never gets a response never settles: the promise stays pending,
+ * TanStack Query keeps `isLoading` true, and the screen shows its loading
+ * skeleton forever. No error, no retry button, nothing to tap. It reads exactly
+ * like a feature that does not work.
+ *
+ * That is not a rare condition for this app. Crews use it in basements, plant
+ * rooms and rural sites, and a phone handing over between towers routinely
+ * leaves a half-open socket: the connection is up as far as the client is
+ * concerned, and no bytes are ever coming back. Without a deadline the app has
+ * no way to notice.
+ *
+ * Thirty seconds is long enough that a slow site connection still completes and
+ * short enough that somebody is not left staring at a skeleton. What matters is
+ * far less the number than that a hung request now ends in a message with a
+ * "Try again" under it.
+ */
+export const DEFAULT_TIMEOUT_MS = 30_000;
+
+/** The AI ops wait on a provider, and 30s is not enough for them. */
+export const AI_TIMEOUT_MS = 120_000;
 
 export type CreateApiClientOptions = {
   /** Base URL including origin, e.g. https://api.example.com or "" for same-origin. */
@@ -92,7 +124,39 @@ export function createApiClient(options: CreateApiClientOptions) {
       headers.set("X-Request-Id", reqOpts.requestId);
     }
 
-    const res = await doFetch(`${baseUrl}${path}`, { ...init, headers });
+    /*
+     * An existing signal wins: a caller that brought its own cancellation
+     * (a screen unmounting, say) means it, and layering a second abort on top
+     * would fight it.
+     */
+    const timeoutMs = reqOpts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const controller = init.signal ? null : new AbortController();
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
+    let res: Response;
+    try {
+      res = await doFetch(`${baseUrl}${path}`, {
+        ...init,
+        headers,
+        ...(controller ? { signal: controller.signal } : {}),
+      });
+    } catch (cause) {
+      /*
+       * An abort we raised ourselves is a timeout, and has to say so. Left as
+       * the raw `AbortError` it reaches the screen as "Aborted", which tells
+       * somebody standing in a plant room nothing about what to do next.
+       */
+      if (controller?.signal.aborted) {
+        throw new ApiClientError(408, {
+          code: "timeout",
+          message: "The server did not answer in time. Check your signal and try again.",
+        });
+      }
+      throw cause;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+
     if (!res.ok) throw await parseError(res);
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;

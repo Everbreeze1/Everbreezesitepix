@@ -1,3 +1,4 @@
+import { AI_TIMEOUT_MS } from "@everlumen/api-client";
 import { randomUUID } from "expo-crypto";
 import { File } from "expo-file-system";
 import { api } from "@/lib/api";
@@ -209,9 +210,18 @@ export async function transcribeWalkthrough(
         bucket: WALKTHROUGH_VIDEO_BUCKET,
         mimeType,
       },
-      // AI work, and charged for. A retry after a dropped response would pay
-      // for the same transcription twice without this.
-      { idempotencyKey: randomUUID() },
+      /*
+       * AI work, and charged for. A retry after a dropped response would pay
+       * for the same transcription twice without the key.
+       *
+       * The timeout is the other half of that, and it is what stops the dropped
+       * response happening in the first place: transcribing a whole recording
+       * takes well over the client default, so without it the phone hangs up on
+       * work the server is still doing and reports a failure that is not one.
+       * The key then rescues the retry - but the person has already been told
+       * their recording failed to transcribe.
+       */
+      { idempotencyKey: randomUUID(), timeoutMs: AI_TIMEOUT_MS },
     );
     return { ok: true, message: null };
   } catch (e) {
@@ -227,8 +237,9 @@ export async function generateWalkthroughReport(walkthroughId: string): Promise<
     "generateWalkthroughReport",
     { walkthroughId },
     // Report generation is AI work and charged for. Without a key, a retry
-    // after a dropped response pays for the same report twice.
-    { idempotencyKey: randomUUID() },
+    // after a dropped response pays for the same report twice; without the
+    // timeout, the dropped response is one the client caused by hanging up.
+    { idempotencyKey: randomUUID(), timeoutMs: AI_TIMEOUT_MS },
   );
 }
 
@@ -375,6 +386,16 @@ export async function createReportFromWalkthrough(
       walkthroughId,
       ...(photosPerPage ? { photosPerPage } : {}),
     },
+    /*
+     * The long timeout, like every other op that spends Gemini calls.
+     *
+     * Without it the client gives up on its default while the server is still
+     * writing, and the person is told the report failed - so they tap again,
+     * and the second call finds the report the first one did in fact create.
+     * The op is idempotent by lookup, so nothing is duplicated; what is lost is
+     * their trust in the button.
+     */
+    { timeoutMs: AI_TIMEOUT_MS },
   );
   return {
     reportId: result?.reportId ?? null,

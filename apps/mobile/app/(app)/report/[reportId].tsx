@@ -8,6 +8,7 @@ import { draftReportSummary, getReport, saveReport } from "@/api/reports";
 import {
   isReportEmpty,
   isReportShared,
+  reportTitleError,
   reportPhotoIds,
   shareStatusLabel,
   shareTogglePatch,
@@ -55,6 +56,7 @@ export default function ReportScreen() {
   const queryClient = useQueryClient();
 
   const [title, setTitle] = useState("");
+  const [titleError, setTitleError] = useState<string | null>(null);
   const [summary, setSummary] = useState("");
   const [photoIds, setPhotoIds] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
@@ -183,12 +185,30 @@ export default function ReportScreen() {
           <Field
             label="Title"
             value={title}
-            onChangeText={setTitle}
+            onChangeText={(next) => {
+              setTitle(next);
+              if (titleError) setTitleError(null);
+            }}
+            error={titleError ?? undefined}
             // On blur, like every other long-lived field in this app. A write
             // per keystroke is a write per keystroke on one bar of signal.
             onBlur={() => {
+              /*
+               * Said rather than swallowed.
+               *
+               * This used to `return` on an empty title, so clearing the field
+               * left the box blank, the stored title unchanged, and nothing on
+               * screen to explain why. `reportTitleError` is the rule that was
+               * written for this and never called: a report needs a name, and
+               * the column stops at 200.
+               */
+              const bad = reportTitleError(title);
+              if (bad) {
+                setTitleError(bad);
+                return;
+              }
               const trimmed = title.trim();
-              if (!trimmed || trimmed === report.title) return;
+              if (trimmed === report.title) return;
               save.mutate({ title: trimmed });
             }}
             returnKeyType="done"

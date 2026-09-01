@@ -1,3 +1,4 @@
+import { AI_TIMEOUT_MS } from "@everlumen/api-client";
 import { api } from "@/lib/api";
 
 /**
@@ -69,7 +70,10 @@ export async function autoDailyLog(input: {
       source: input.source,
       tzOffsetMinutes: input.tzOffsetMinutes,
     },
-    input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined,
+    {
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+      timeoutMs: AI_TIMEOUT_MS,
+    },
   );
 }
 
