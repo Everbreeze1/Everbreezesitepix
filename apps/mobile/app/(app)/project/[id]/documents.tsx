@@ -25,12 +25,14 @@ import {
   moveTargets,
   type FolderGroup,
 } from "@/api/folders-view";
+import { TemplatePickerSheet } from "@/ui/TemplatePickerSheet";
 import { spacing } from "@/theme";
 import {
   Copy,
   FileText,
   FolderInput,
   FolderPlus,
+  LayoutTemplate,
   Paperclip,
   PenLine,
   Plus,
@@ -68,6 +70,7 @@ export default function ProjectDocumentsScreen() {
   const [failure, setFailure] = useState<string | null>(null);
 
   const queryKey = useMemo(() => ["document-tree", id], [id]);
+  const [templatePicker, setTemplatePicker] = useState(false);
 
   const query = useQuery({
     queryKey,
@@ -317,14 +320,30 @@ export default function ProjectDocumentsScreen() {
            * than every visit, and it opens an inline field that needs the room.
            */
           headerRight: () => (
-            <IconButton
-              icon={Plus}
-              accessibilityLabel="New page"
-              surface={false}
-              tone="primary"
-              disabled={create.isPending}
-              onPress={() => create.mutate()}
-            />
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              {/*
+                Two actions rather than one that opens a chooser. Starting a
+                blank page is the frequent one and must stay a single tap;
+                starting from a template is the deliberate one, and it is what
+                somebody standing on site reaches for when the job needs a
+                handover certificate rather than a note.
+              */}
+              <IconButton
+                icon={LayoutTemplate}
+                accessibilityLabel="Start from a template"
+                surface={false}
+                tone="primary"
+                onPress={() => setTemplatePicker(true)}
+              />
+              <IconButton
+                icon={Plus}
+                accessibilityLabel="New page"
+                surface={false}
+                tone="primary"
+                disabled={create.isPending}
+                onPress={() => create.mutate()}
+              />
+            </View>
           ),
         }}
       />
@@ -569,6 +588,19 @@ export default function ProjectDocumentsScreen() {
           </View>
         )}
       </Screen>
+
+      <TemplatePickerSheet
+        visible={templatePicker}
+        projectId={id!}
+        onClose={() => setTemplatePicker(false)}
+        onCreated={(page) => {
+          setTemplatePicker(false);
+          // The tree has a new row in it, and the person expects to land on the
+          // document they just made rather than back at the list.
+          void queryClient.invalidateQueries({ queryKey });
+          router.push({ pathname: "/page/[pageId]", params: { pageId: page.id } });
+        }}
+      />
     </>
   );
 }

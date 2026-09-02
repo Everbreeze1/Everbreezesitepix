@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MAX_RECORDING_BYTES,
@@ -118,5 +120,65 @@ describe("the ceiling itself", () => {
      */
     const onTheWire = (MAX_RECORDING_BYTES * 4) / 3;
     expect(onTheWire).toBeLessThan(20 * 1024 * 1024);
+  });
+});
+
+describe("controls over the camera preview stay legible", () => {
+  /*
+   * "Snap photo" was white text painted straight onto the live preview, while
+   * Close, the elapsed timer and the photo count all sat on `chip` - a dark
+   * translucent pill. Three of the four controls were readable over anything;
+   * the fourth was readable over whatever happened to be dark.
+   *
+   * On a jobsite the bright subject is the normal case: a sunlit wall, a white
+   * ceiling, a snow-covered roof, a lit ceiling void. White on white is nothing
+   * at all, and this is the control that captures the still somebody walked
+   * across a site to take.
+   *
+   * Seen on a device. It cannot be seen anywhere else: the accessibility tree
+   * reports the label whatever colour it is drawn in, and every type and test
+   * was green.
+   */
+  const screen = () =>
+    readFileSync(
+      join(process.cwd(), "apps/mobile/app/(app)/project/[id]/walkthrough-record.tsx"),
+      "utf8",
+    );
+
+  it("the snap control sits on the same pill as the others", () => {
+    expect(screen()).toContain("style={[styles.chip, styles.sideAction]}");
+  });
+
+  it("the pill is actually opaque enough to read on", () => {
+    /*
+     * Tied to the value rather than the name: a `chip` that became transparent
+     * would leave the control exactly as unreadable while this test still
+     * passed on the style reference alone.
+     */
+    /*
+     * Sliced forward from the style's definition, not between two names:
+     * `recordingChip` is referenced in the JSX long before the style block, so
+     * slicing to its first mention ran backwards and searched an empty string -
+     * which reported the background missing while it was there.
+     */
+    const s = screen();
+    const at = s.indexOf("  chip: {");
+    const chip = at === -1 ? "" : s.slice(at, at + 200);
+    const alpha = chip.match(/rgba\(0,0,0,([\d.]+)\)/);
+    expect(alpha, "chip should keep a solid dark background").not.toBeNull();
+    expect(Number(alpha![1])).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it("no tappable control over the preview is left with bare text", () => {
+    /*
+     * Pressables only. `sideAction` is also used on its own for an empty spacer
+     * that balances the row so the record button stays centred - that one draws
+     * nothing and needs no backing, and an earlier version of this test flagged
+     * it.
+     */
+    const s = screen();
+    const pressables = [...s.matchAll(/<Pressable[\s\S]*?>/g)].map((m) => m[0]);
+    const bare = pressables.filter((p) => /style=\{styles\.sideAction\}/.test(p));
+    expect(bare).toEqual([]);
   });
 });

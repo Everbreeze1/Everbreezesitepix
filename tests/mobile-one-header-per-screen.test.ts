@@ -174,3 +174,50 @@ describe("a screen does not say the same thing twice", () => {
     expect(read("(app)/photo/[id]/comments.tsx")).toContain("commentsSummary(comments.length)");
   });
 });
+
+describe("a detail screen is named for what it is, not for its record", () => {
+  /*
+   * The report screen registered as "Report" in `_layout.tsx`, and said
+   * "Report" while loading and while failing, and then - once loaded - retitled
+   * itself to the report's own name, which the Title field directly below it
+   * already showed.
+   *
+   * The nav bar fits about thirty characters, and every report on a job begins
+   * with the job's name, so it rendered "20 Charlcote Crescent - Site..." - the
+   * one part of the title that identifies nothing. It named the screen twice
+   * and disambiguated it zero times.
+   *
+   * It also read the live field state rather than the saved row, so the nav bar
+   * retitled itself on every keystroke while somebody renamed the report.
+   */
+  const read = (p: string) => readFileSync(join(APP, p), "utf8");
+
+  it("the report screen keeps the title its own layout registers", () => {
+    const s = read("(app)/report/[reportId].tsx");
+    expect(s).not.toMatch(/title:\s*title\s*\|\|/);
+    expect(s).toContain('options={{ title: "Report" }}');
+  });
+
+  it("and the layout still registers it that way", () => {
+    // If the layout is renamed, the screen should follow rather than drift.
+    expect(read("(app)/_layout.tsx")).toContain(
+      '<Stack.Screen name="report/[reportId]" options={{ title: "Report" }} />',
+    );
+  });
+
+  it("no screen titles itself from a live text field", () => {
+    /*
+     * The general form. A `Stack.Screen` title reading editable state renames
+     * the screen while somebody types in it, which is the shape this was.
+     */
+    const offenders: string[] = [];
+    for (const file of walk(APP)) {
+      // `walk` yields absolute paths; `read` above joins onto APP.
+      const source = readFileSync(file, "utf8");
+      if (/options=\{\{\s*title:\s*title\s*(\|\||\})/.test(source)) {
+        offenders.push(relative(APP, file).split(sep).join("/"));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

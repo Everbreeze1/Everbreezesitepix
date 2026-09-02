@@ -315,7 +315,14 @@ export default function SiteLogScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: title || "Site log" }} />
+      {/*
+        "Site log", not the record's own name: it is already in the Title field
+        below, the nav bar truncates it to a prefix that identifies nothing, and
+        reading the live field state renamed the screen on every keystroke. The
+        loading and error states above always said "Site log"; only this one
+        disagreed.
+      */}
+      <Stack.Screen options={{ title: "Site log" }} />
 
       <Screen scroll padded={false} bottomInset={spacing.xxl}>
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md }}>

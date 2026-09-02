@@ -35,6 +35,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  Icon,
   IconButton,
   ListGroup,
   ListRow,
@@ -288,7 +289,27 @@ export default function WorkflowTemplateScreen() {
             with nothing in it.
           */}
           {warning ? (
-            <Badge label={warning} tone="warning" variant="soft" icon={TriangleAlert} />
+            /*
+              A row that wraps, not a Badge.
+    
+              `Badge` renders its label with `numberOfLines={1}` and in
+              `overline`, which is right for the short states it is for - "3
+              required left", "All required answered". This is a sentence, so it
+              was cut off exactly where it started to be useful:
+    
+                  NO PHASE HAS ANY STEPS YET, SO THERE WOULD BE ...
+    
+              leaving a warning that says something is wrong and not what. The
+              blueprint sheet already pairs a short badge with a wrapping Text
+              for this reason; here the sentence is the whole message, so it is
+              the icon and the text.
+            */
+            <View style={{ flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" }}>
+              <Icon icon={TriangleAlert} size="sm" tone="safety" />
+              <Text variant="caption" tone="muted" style={{ flex: 1 }}>
+                {warning}
+              </Text>
+            </View>
           ) : null}
         </View>
 
@@ -455,7 +476,14 @@ export default function WorkflowTemplateScreen() {
                           }}
                         />
                         <Button
-                          label={phase.requires_signoff ? "Sign-off on" : "Sign-off off"}
+                          /*
+                            "Needs sign-off" / "No sign-off", not "Sign-off on"
+                            / "Sign-off off". The second reads as a stutter on
+                            screen, and neither form says what the setting does:
+                            whether the phase has to be signed off before the
+                            job moves past it.
+                          */
+                          label={phase.requires_signoff ? "Needs sign-off" : "No sign-off"}
                           size="sm"
                           variant="ghost"
                           onPress={() =>

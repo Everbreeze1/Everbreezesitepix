@@ -310,3 +310,103 @@ export async function exportPagePdf(args: {
     filename: rendered.filename || "document.pdf",
   });
 }
+
+/**
+ * The seeded document templates: a handover certificate, a method statement, a
+ * daily record, and whatever the team has saved of its own.
+ *
+ * Worth having on the phone even though authoring templates is desk work,
+ * because the thing a technician needs on site is the finished document. Until
+ * now, starting one from the company template meant opening a laptop.
+ */
+export type DocumentTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  /** Trade grouping. Team-saved templates have none. */
+  category: string | null;
+  /** A built-in shared across every team, rather than one this team wrote. */
+  isExample: boolean;
+  /** The merge tokens the body carries, before any are resolved. */
+  fields: string[];
+  updatedAt: string;
+};
+
+export async function listDocumentTemplates(): Promise<DocumentTemplate[]> {
+  const result = await api.rpc<{ templates?: DocumentTemplate[] }>("listDocumentTemplates", {});
+  return result?.templates ?? [];
+}
+
+/** One merge token, and what this project resolves it to. */
+export type TemplateField = {
+  token: string;
+  label: string;
+  /** null means nothing stored can fill it: weather, a client's own reference. */
+  value: string | null;
+};
+
+export type TemplatePreview = {
+  id: string;
+  name: string;
+  html: string;
+  fields: TemplateField[];
+  suggestedTitle: string;
+};
+
+/**
+ * The finished document, before one exists.
+ *
+ * Two things come back that the phone cannot work out for itself. The resolved
+ * field values, so somebody can see what the project filled in and type the
+ * rest; and the body HTML, which is what lets this screen tell the truth about
+ * whether the result will be editable here - see `templateEditability`.
+ *
+ * Resolution is deliberately the server's job. The web app kept its own list of
+ * placeholders that matched the resolver's only by coincidence, and the
+ * coincidence is what put wrong values in documents.
+ */
+export async function previewDocumentTemplate(args: {
+  templateId: string;
+  projectId: string;
+}): Promise<TemplatePreview> {
+  /*
+   * Fields written out rather than spreading `args`. `tests/mobile-rpc-request-shapes`
+   * reads this call site against the service's own zod schema, and a spread is
+   * opaque to it - which is exactly how a required field went missing once
+   * before and rejected every photo share.
+   */
+  const result = await api.rpc<TemplatePreview>("previewDocumentTemplate", {
+    templateId: args.templateId,
+    projectId: args.projectId,
+  });
+  if (!result?.id) throw new Error("The server answered, but with no template in it.");
+  return result;
+}
+
+/*
+ * No idempotency key, deliberately, and this is checked rather than assumed:
+ * `createPageFromTemplate` is registered with plain `authed(...)` and no
+ * `{ idempotent: true }`, so the server does not dedupe it. Sending a key would
+ * be inert - `beginIdempotency` returns `{ kind: "skip" }` for an op that never
+ * opted in - and a comment saying otherwise would be worse than none.
+ *
+ * A double tap is therefore prevented where it actually can be: the button is
+ * disabled while the mutation is in flight.
+ */
+export async function createPageFromTemplate(args: {
+  projectId: string;
+  templateId: string;
+  title?: string;
+  /** Typed answers for the tokens the project could not resolve. */
+  values?: Record<string, string>;
+}): Promise<DocumentPageSummary> {
+  const result = await api.rpc<{ page?: DocumentPageSummary }>("createPageFromTemplate", {
+    projectId: args.projectId,
+    templateId: args.templateId,
+    ...(args.title ? { title: args.title } : {}),
+    values: args.values ?? {},
+  });
+  const page = result?.page;
+  if (!page?.id) throw new Error("The document was not created.");
+  return page;
+}

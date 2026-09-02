@@ -323,7 +323,17 @@ export default function WalkthroughRecordScreen() {
       <View style={styles.bottomBar}>
         <Pressable
           accessibilityRole="button"
-          style={styles.sideAction}
+          /*
+            On the same dark pill the other controls sit on.
+    
+            This was white text straight onto the camera preview while Close,
+            the timer and the photo count all had `chip` behind them. Against a
+            bright subject - a sunlit wall, a white ceiling, a snow-covered
+            roof, all of them ordinary on a jobsite - white on the scene is
+            invisible, and this is the control that captures the still somebody
+            walked over to take.
+          */
+          style={[styles.chip, styles.sideAction]}
           disabled={stage !== "recording"}
           onPress={() => void snap()}
         >
@@ -403,7 +413,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: spacing.xl,
   },
-  sideAction: { minWidth: 96, minHeight: HIT_TARGET, justifyContent: "center" },
+  sideAction: {
+    minWidth: 96,
+    minHeight: HIT_TARGET,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   recordButton: {
     width: 78,
     height: 78,

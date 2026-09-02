@@ -226,7 +226,14 @@ export default function PageScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: title || "Page" }} />
+      {/*
+        "Page", not the record's own name: it is already in the Title field
+        below, the nav bar truncates it to a prefix that identifies nothing, and
+        reading the live field state renamed the screen on every keystroke. The
+        loading and error states above always said "Page"; only this one
+        disagreed.
+      */}
+      <Stack.Screen options={{ title: "Page" }} />
 
       <Screen
         scroll

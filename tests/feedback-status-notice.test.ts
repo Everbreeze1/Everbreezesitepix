@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   STATUS_NOTICE,
   quoteReport,
+  reportReference,
   reportsNeedingNotice,
 } from "../apps/api/src/domains/admin/feedback";
 
@@ -137,5 +140,90 @@ describe("who actually gets told", () => {
     expect(reportsNeedingNotice(null, "resolved")).toEqual([]);
     expect(reportsNeedingNotice(undefined, "resolved")).toEqual([]);
     expect(reportsNeedingNotice([], "resolved")).toEqual([]);
+  });
+});
+
+describe("a notice names the report it is about", () => {
+  /*
+   * Found in this workspace's own inbox: two notifications, identical title and
+   * identical body -
+   *
+   *     Your report was resolved
+   *     This has been fixed or answered.
+   *
+   * - for two different reports. `quoteReport` returns "" when there is no
+   * description to quote, and 5 of the 42 reports on file have none, so the
+   * body collapsed to the same sentence every time. Nothing on the row said
+   * which report had moved, and the notification carries no entity id to follow
+   * either.
+   */
+  it("quotes the report when there is something to quote", () => {
+    const out = reportReference({
+      description: "The templates tab is not user friendly.",
+      kind: "bug",
+      created_at: "2026-08-30T03:46:02.000Z",
+    });
+    expect(out).toContain("The templates tab is not user friendly.");
+    // The quote is enough on its own; no need to also stamp the date on it.
+    expect(out).not.toContain("30 Aug");
+  });
+
+  it("names it by kind and date when there is not", () => {
+    const out = reportReference({
+      description: "",
+      kind: "bug",
+      created_at: "2026-08-30T03:46:02.000Z",
+    });
+    expect(out).toContain("bug");
+    expect(out).toContain("Aug");
+  });
+
+  it("tells two description-less reports apart", () => {
+    /*
+     * The actual point. Two reports filed on different days must not produce
+     * the same sentence.
+     */
+    const first = reportReference({
+      description: null,
+      kind: "bug",
+      created_at: "2026-08-30T00:00:00.000Z",
+    });
+    const second = reportReference({
+      description: null,
+      kind: "bug",
+      created_at: "2026-07-12T00:00:00.000Z",
+    });
+    expect(first).not.toBe(second);
+  });
+
+  it("says nothing rather than something broken when it has nothing to work with", () => {
+    expect(reportReference({})).toBe("");
+    expect(reportReference({ description: null, kind: null, created_at: null })).toBe("");
+    expect(reportReference({ description: "", kind: "", created_at: "not a date" })).toBe("");
+  });
+
+  it("is what the service actually sends", () => {
+    /*
+     * Caught by mutation: with only the cases above, reverting the call site to
+     * `quoteReport(row.description)` left every test green while the notices
+     * went back to being identical. The function was proved and its use was
+     * not.
+     *
+     * The select matters as much as the call - `kind` and `created_at` are the
+     * fallback's only inputs, and without them it silently returns "".
+     */
+    const service = readFileSync(
+      join(process.cwd(), "apps/api/src/domains/admin/feedback.ts"),
+      "utf8",
+    );
+    expect(service).toContain("${notice.lead}${reportReference(row)}");
+    expect(service).toContain('.select("id, user_id, status, description, kind, created_at")');
+  });
+
+  it("still reads as one sentence", () => {
+    // Appended straight onto the lead, so it has to carry its own leading space.
+    const notice = STATUS_NOTICE.resolved!;
+    const body = `${notice.lead}${reportReference({ kind: "bug", created_at: "2026-08-30T00:00:00.000Z" })}`;
+    expect(body).toBe("This has been fixed or answered. (bug, 30 Aug)");
   });
 });

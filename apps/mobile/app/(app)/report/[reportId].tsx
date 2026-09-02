@@ -178,7 +178,21 @@ export default function ReportScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: title || "Report" }} />
+      {/*
+        "Report", not the report's own name.
+    
+        The name lives in the Title field directly below, so putting it here too
+        printed it twice - and the nav bar has room for about thirty characters,
+        so it showed "20 Charlcote Crescent - Site..." which is the prefix every
+        report on the job shares. It named nothing while repeating everything.
+    
+        It also re-titled the screen on every keystroke, because this read the
+        live field state rather than the saved row.
+    
+        The layout registers this route as "Report" and the loading and error
+        states above both say "Report"; only the loaded state disagreed.
+      */}
+      <Stack.Screen options={{ title: "Report" }} />
 
       <Screen scroll padded={false} bottomInset={spacing.xxl}>
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md }}>
