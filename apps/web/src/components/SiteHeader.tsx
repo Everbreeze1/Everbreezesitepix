@@ -1,11 +1,19 @@
 ﻿import { Link, useRouterState } from "@tanstack/react-router";
-import { Moon, Sun } from "lucide-react";
+import { Menu, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { BrandLogo } from "@/components/BrandLogo";
 import { cn } from "@/lib/utils";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 const navLinks = [
   { label: "Home", url: "/" },
@@ -113,11 +121,87 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
             {mounted &&
               (theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />)}
           </Button>
+          {/* Mobile menu — visible below md where the inline nav is hidden */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <button
+                type="button"
+                aria-label="Open menu"
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-full transition-colors md:hidden",
+                  scrolled
+                    ? "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    : "text-white/85 hover:bg-white/10 hover:text-white",
+                )}
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[280px] sm:w-[320px]">
+              <SheetHeader>
+                <SheetTitle className="font-manrope text-left">Menu</SheetTitle>
+                <SheetDescription className="sr-only">
+                  Site navigation and account actions
+                </SheetDescription>
+              </SheetHeader>
+              <nav className="mt-6 flex flex-col gap-1">
+                {navLinks.map((link) => {
+                  const active = pathname === link.url;
+                  return (
+                    <Link
+                      key={link.label}
+                      to={link.url}
+                      className={cn(
+                        "font-manrope rounded-lg px-3 py-2.5 text-sm font-bold transition-colors",
+                        active
+                          ? "bg-accent text-foreground"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                      )}
+                    >
+                      {link.label}
+                    </Link>
+                  );
+                })}
+              </nav>
+              <div className="mt-6 flex flex-col gap-2 border-t border-border pt-6">
+                <Link
+                  to="/demo"
+                  className="font-manrope flex items-center justify-center rounded-full border border-border px-5 py-2.5 text-sm font-bold text-foreground transition-colors hover:bg-accent"
+                >
+                  Demo
+                </Link>
+                {user ? (
+                  <Link
+                    to="/dashboard"
+                    className="font-manrope flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+                  >
+                    Dashboard
+                  </Link>
+                ) : (
+                  <>
+                    <Link
+                      to="/login"
+                      className="font-manrope flex items-center justify-center rounded-full border border-border px-5 py-2.5 text-sm font-bold text-foreground transition-colors hover:bg-accent"
+                    >
+                      Log in
+                    </Link>
+                    <Link
+                      to="/signup"
+                      className="font-manrope flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      Sign up
+                    </Link>
+                  </>
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
+
           {user ? (
             <Button
               asChild
               size="sm"
-              className="font-manrope rounded-full bg-primary px-5 font-bold text-primary-foreground shadow-none hover:bg-primary/90"
+              className="font-manrope hidden rounded-full bg-primary px-5 font-bold text-primary-foreground shadow-none hover:bg-primary/90 md:inline-flex"
             >
               <Link to="/dashboard">Dashboard</Link>
             </Button>
@@ -126,7 +210,7 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
               <Link
                 to="/demo"
                 className={cn(
-                  "font-manrope hidden rounded-full border px-5 py-2 text-sm font-bold transition-colors sm:inline-flex",
+                  "font-manrope hidden rounded-full border px-5 py-2 text-sm font-bold transition-colors sm:inline-flex md:inline-flex",
                   scrolled
                     ? "border-border text-foreground hover:bg-accent"
                     : "border-white/30 text-white hover:bg-white/10",
@@ -137,7 +221,7 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
               <Link
                 to="/login"
                 className={cn(
-                  "font-manrope hidden rounded-lg px-3 py-2 text-sm font-bold transition-colors sm:inline-flex",
+                  "font-manrope hidden rounded-lg px-3 py-2 text-sm font-bold transition-colors sm:inline-flex md:inline-flex",
                   scrolled ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10",
                 )}
               >
@@ -146,7 +230,7 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
               <Button
                 asChild
                 size="sm"
-                className="font-manrope rounded-full bg-primary px-5 font-bold text-primary-foreground shadow-none hover:bg-primary/90"
+                className="font-manrope hidden rounded-full bg-primary px-5 font-bold text-primary-foreground shadow-none hover:bg-primary/90 md:inline-flex"
               >
                 <Link to="/signup">Sign up</Link>
               </Button>
