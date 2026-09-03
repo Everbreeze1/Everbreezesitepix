@@ -72,7 +72,7 @@ function SignupPage() {
   const cleanEmail = email.trim().toLowerCase();
 
   useEffect(() => {
-    if (user) navigate({ to: "/_app/dashboard", replace: true });
+    if (user) navigate({ to: "/dashboard", replace: true });
   }, [user, navigate]);
 
   useEffect(() => {

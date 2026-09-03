@@ -20,6 +20,7 @@ import { Route as HowItWorksRouteImport } from './routes/how-it-works'
 import { Route as FeaturesRouteImport } from './routes/features'
 import { Route as FaqRouteImport } from './routes/faq'
 import { Route as EmbedDotjsRouteImport } from './routes/embed[.]js'
+import { Route as DemoRouteImport } from './routes/demo'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
@@ -132,6 +133,11 @@ const FaqRoute = FaqRouteImport.update({
 const EmbedDotjsRoute = EmbedDotjsRouteImport.update({
   id: '/embed.js',
   path: '/embed.js',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoRoute = DemoRouteImport.update({
+  id: '/demo',
+  path: '/demo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContactRoute = ContactRouteImport.update({
@@ -433,6 +439,7 @@ const AppProjectsProjectIdChecklistsChecklistIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/contact': typeof ContactRoute
+  '/demo': typeof DemoRoute
   '/embed.js': typeof EmbedDotjsRoute
   '/faq': typeof FaqRoute
   '/features': typeof FeaturesRoute
@@ -503,6 +510,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/contact': typeof ContactRoute
+  '/demo': typeof DemoRoute
   '/embed.js': typeof EmbedDotjsRoute
   '/faq': typeof FaqRoute
   '/features': typeof FeaturesRoute
@@ -574,6 +582,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/contact': typeof ContactRoute
+  '/demo': typeof DemoRoute
   '/embed.js': typeof EmbedDotjsRoute
   '/faq': typeof FaqRoute
   '/features': typeof FeaturesRoute
@@ -646,6 +655,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/contact'
+    | '/demo'
     | '/embed.js'
     | '/faq'
     | '/features'
@@ -716,6 +726,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/contact'
+    | '/demo'
     | '/embed.js'
     | '/faq'
     | '/features'
@@ -786,6 +797,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_app'
     | '/contact'
+    | '/demo'
     | '/embed.js'
     | '/faq'
     | '/features'
@@ -858,6 +870,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   ContactRoute: typeof ContactRoute
+  DemoRoute: typeof DemoRoute
   EmbedDotjsRoute: typeof EmbedDotjsRoute
   FaqRoute: typeof FaqRoute
   FeaturesRoute: typeof FeaturesRoute
@@ -964,6 +977,13 @@ declare module '@tanstack/react-router' {
       path: '/embed.js'
       fullPath: '/embed.js'
       preLoaderRoute: typeof EmbedDotjsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo': {
+      id: '/demo'
+      path: '/demo'
+      fullPath: '/demo'
+      preLoaderRoute: typeof DemoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/contact': {
@@ -1478,6 +1498,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   ContactRoute: ContactRoute,
+  DemoRoute: DemoRoute,
   EmbedDotjsRoute: EmbedDotjsRoute,
   FaqRoute: FaqRoute,
   FeaturesRoute: FeaturesRoute,

@@ -124,6 +124,17 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
           ) : (
             <>
               <Link
+                to="/demo"
+                className={cn(
+                  "font-manrope hidden rounded-full border px-5 py-2 text-sm font-bold transition-colors sm:inline-flex",
+                  scrolled
+                    ? "border-border text-foreground hover:bg-accent"
+                    : "border-white/30 text-white hover:bg-white/10",
+                )}
+              >
+                Demo
+              </Link>
+              <Link
                 to="/login"
                 className={cn(
                   "font-manrope hidden rounded-lg px-3 py-2 text-sm font-bold transition-colors sm:inline-flex",
@@ -146,5 +157,3 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
     </header>
   );
 }
-
-

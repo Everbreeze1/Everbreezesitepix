@@ -76,7 +76,7 @@ function LoginPage() {
   const social = useAuthProviders();
 
   useEffect(() => {
-    if (user) navigate({ to: (redirect || "/_app/dashboard") as "/_app/dashboard", replace: true });
+    if (user) navigate({ to: (redirect || "/dashboard") as "/dashboard", replace: true });
   }, [user, navigate, redirect]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -198,9 +198,7 @@ function LoginPage() {
 
       {/* RIGHT - form */}
       <div className="flex min-h-screen flex-col px-5 py-8 sm:px-8 lg:justify-center lg:px-12 lg:py-12">
-        <div className="mb-6 flex items-center justify-between lg:hidden">
-          
-        </div>
+        <div className="mb-6 flex items-center justify-between lg:hidden"></div>
 
         <div className="mx-auto flex w-full max-w-[448px] flex-1 flex-col justify-center lg:flex-none">
           <MobileAppBanner />
@@ -311,8 +309,6 @@ function LoginPage() {
             </Button>
           </form>
 
-          
-
           {needsVerification && (
             <div className="mt-4 rounded-md border-[0.8px] border-border bg-card/60 p-3 text-sm">
               <p className="font-manrope text-muted-foreground">
@@ -380,6 +376,13 @@ function LoginPage() {
               Sign up
             </Link>
           </p>
+          <p className="font-manrope mt-3 text-center text-sm text-muted-foreground">
+            Just exploring?{" "}
+            <Link to="/demo" className="font-bold text-primary hover:underline">
+              Tour the interactive demo
+            </Link>{" "}
+            — no account needed.
+          </p>
           <p className="font-manrope mt-4 text-center text-xs leading-5 text-muted-foreground">
             By continuing, you agree to our{" "}
             <Link to="/terms-of-service" className="hover:underline">
@@ -431,7 +434,3 @@ function AppleIcon() {
     </svg>
   );
 }
-
-
-
-
