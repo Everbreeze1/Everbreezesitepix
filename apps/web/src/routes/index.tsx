@@ -538,7 +538,7 @@ function Landing() {
           </div>
         </div>
       </section>
-      {/* How It Works - more visual */}
+      {/* How It Works - visual journey with product screenshots */}
       <section className="bg-background py-20 md:py-32">
         <div className="mx-auto max-w-[1280px] px-4 sm:px-8">
           <div className="text-center">
@@ -548,28 +548,151 @@ function Landing() {
             <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
               Capture. Organize. Report.
             </h2>
+            <p className="font-manrope mx-auto mt-6 max-w-2xl text-lg leading-[29px] text-muted-foreground">
+              Three steps to a complete job site record. No learning curve, no extra work.
+            </p>
           </div>
 
-          <div className="mt-14 grid gap-6 md:grid-cols-3">
-            {howItWorks.map((s) => (
-              <div
-                key={s.step}
-                className="rounded-[28px] border-[0.8px] border-border bg-card/50 p-8"
-              >
-                <span className="font-display text-6xl font-bold leading-none tracking-[-2.1px] text-primary/20">
-                  {s.step}
-                </span>
-                <h3 className="font-display mt-5 text-2xl font-semibold tracking-[-0.63px] text-foreground">
-                  {s.title}
+          <div className="mt-14 grid gap-8 md:grid-cols-3">
+            {/* Step 1: Capture */}
+            <div className="flex flex-col">
+              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[24px] border-[0.8px] border-border bg-card">
+                <div className="absolute inset-0 bg-gradient-to-br from-slate-900 to-slate-800">
+                  <div className="flex h-full flex-col items-center justify-center p-6">
+                    <div className="relative aspect-[4/3] w-full max-w-[240px] rounded-xl border-2 border-white/20 bg-slate-700/50">
+                      <div className="absolute inset-2 rounded-lg bg-slate-600/50 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="mx-auto h-10 w-10 rounded-full border-2 border-white/40 flex items-center justify-center">
+                            <div className="h-6 w-6 rounded-full bg-white/20" />
+                          </div>
+                          <p className="mt-2 text-[10px] font-medium text-white/50">Tap to capture</p>
+                        </div>
+                      </div>
+                      <div className="absolute top-1 left-1 rounded bg-black/50 px-1.5 py-0.5 text-[8px] font-medium text-white/70">
+                        GPS tagged
+                      </div>
+                      <div className="absolute bottom-1 right-1 rounded bg-black/50 px-1.5 py-0.5 text-[8px] font-medium text-white/70">
+                        10:23 AM
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="absolute top-3 left-3 flex h-8 w-8 items-center justify-center rounded-full bg-primary font-manrope text-sm font-bold text-primary-foreground">
+                  1
+                </div>
+              </div>
+              <div className="mt-5">
+                <h3 className="font-display text-xl font-semibold tracking-[-0.63px] text-foreground">
+                  Capture
                 </h3>
-                <p className="font-manrope mt-3 text-sm leading-[22px] text-muted-foreground">
-                  {s.desc}
+                <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
+                  Snap a photo or record a walkthrough. It is stamped with time, date, and location automatically.
                 </p>
               </div>
-            ))}
+            </div>
+
+            {/* Step 2: Organize */}
+            <div className="flex flex-col">
+              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[24px] border-[0.8px] border-border bg-card">
+                <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-700">
+                  <div className="flex h-full flex-col p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="rounded bg-slate-600 px-2 py-1 text-[8px] font-medium text-white/60">
+                        Riverside Project
+                      </div>
+                      <div className="flex gap-1">
+                        <div className="h-2 w-2 rounded-full bg-emerald-400/60" />
+                        <div className="h-2 w-2 rounded-full bg-amber-400/60" />
+                        <div className="h-2 w-2 rounded-full bg-blue-400/60" />
+                      </div>
+                    </div>
+                    <div className="grid flex-1 grid-cols-3 gap-1.5">
+                      <div className="rounded-md bg-slate-600/60" />
+                      <div className="rounded-md bg-slate-500/60" />
+                      <div className="rounded-md bg-slate-600/60" />
+                      <div className="rounded-md bg-slate-500/60" />
+                      <div className="rounded-md bg-slate-600/60" />
+                      <div className="rounded-md bg-slate-500/60" />
+                      <div className="rounded-md bg-slate-600/60" />
+                      <div className="rounded-md bg-slate-500/60" />
+                      <div className="rounded-md bg-slate-600/60" />
+                    </div>
+                  </div>
+                </div>
+                <div className="absolute top-3 left-3 flex h-8 w-8 items-center justify-center rounded-full bg-primary font-manrope text-sm font-bold text-primary-foreground">
+                  2
+                </div>
+              </div>
+              <div className="mt-5">
+                <h3 className="font-display text-xl font-semibold tracking-[-0.63px] text-foreground">
+                  Organize
+                </h3>
+                <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
+                  Every photo lands on the right project automatically - sorted, searchable, and mapped.
+                </p>
+              </div>
+            </div>
+
+            {/* Step 3: Report */}
+            <div className="flex flex-col">
+              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[24px] border-[0.8px] border-border bg-card">
+                <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-600">
+                  <div className="flex h-full flex-col p-4">
+                    <div className="mb-3 rounded bg-white/10 p-2">
+                      <div className="h-2 w-24 rounded bg-white/40" />
+                      <div className="mt-1 h-1.5 w-16 rounded bg-white/20" />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 rounded-sm bg-emerald-400/60" />
+                        <div className="h-1.5 flex-1 rounded bg-white/20">
+                          <div className="h-1.5 w-[85%] rounded bg-emerald-400/60" />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 rounded-sm bg-amber-400/60" />
+                        <div className="h-1.5 flex-1 rounded bg-white/20">
+                          <div className="h-1.5 w-[60%] rounded bg-amber-400/60" />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 rounded-sm bg-blue-400/60" />
+                        <div className="h-1.5 flex-1 rounded bg-white/20">
+                          <div className="h-1.5 w-[40%] rounded bg-blue-400/60" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-auto flex items-center justify-center pt-3">
+                      <div className="rounded-full bg-purple-500/30 px-2 py-1 text-[8px] font-medium text-purple-200">
+                        AI Generated
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="absolute top-3 left-3 flex h-8 w-8 items-center justify-center rounded-full bg-primary font-manrope text-sm font-bold text-primary-foreground">
+                  3
+                </div>
+              </div>
+              <div className="mt-5">
+                <h3 className="font-display text-xl font-semibold tracking-[-0.63px] text-foreground">
+                  Report
+                </h3>
+                <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
+                  AI drafts your progress report. Review, edit, and share with one tap.
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div className="mt-10 flex justify-center">
+          {/* Visual connector */}
+          <div className="mt-8 flex items-center justify-center gap-2">
+            <div className="h-0.5 w-12 rounded bg-primary/30" />
+            <div className="h-0.5 w-12 rounded bg-primary/50" />
+            <div className="h-0.5 w-12 rounded bg-primary/70" />
+            <ArrowRight className="h-4 w-4 text-primary" />
+          </div>
+
+          <div className="mt-8 flex justify-center">
             <Button asChild variant="outline" className="font-manrope rounded-full">
               <Link to="/how-it-works">
                 See the full walkthrough <ArrowRight className="ml-1 h-4 w-4" />
@@ -760,3 +883,4 @@ function Landing() {
     </div>
   );
 }
+
