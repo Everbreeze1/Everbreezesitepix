@@ -264,7 +264,7 @@ function Landing() {
               className="font-manrope w-full rounded-lg bg-sidebar-foreground px-6 py-3.5 text-sm font-bold text-sidebar shadow-elegant hover:bg-sidebar-foreground/90 sm:w-auto"
             >
               <Link to="/signup">
-                Start documenting your jobs <ArrowRight className="ml-1 h-4 w-4" />
+                Start Your Job Journey <ArrowRight className="ml-1 h-4 w-4" />
               </Link>
             </Button>
             <Button

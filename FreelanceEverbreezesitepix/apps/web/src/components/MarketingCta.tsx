@@ -3,7 +3,7 @@
     to="/signup"
     className="font-manrope inline-flex h-12 w-full items-center justify-center gap-2 rounded-3xl bg-sidebar px-6 text-sm font-bold leading-5 text-sidebar-foreground hover:bg-sidebar/90"
   >
-    Start documenting your jobs
+    Start Your Job Journey
     <ArrowRight className="h-4 w-4" />
   </Link>
   <Link
