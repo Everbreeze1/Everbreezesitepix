@@ -1,0 +1,7 @@
+[31m✗[39m Build failed in 31ms
+[31merror during build:
+[31mCould not resolve entry module "apps/web/index.html".[31m
+    at getRollupError (file:///C:/Freelance/Everbreezesitepix/node_modules/rollup/dist/es/shared/parseAst.js:317:41)
+    at error (file:///C:/Freelance/Everbreezesitepix/node_modules/rollup/dist/es/shared/parseAst.js:313:42)
+    at ModuleLoader.loadEntryModule (file:///C:/Freelance/Everbreezesitepix/node_modules/rollup/dist/es/shared/node-entry.js:22165:20)
+    at async Promise.all (index 0)[39m
