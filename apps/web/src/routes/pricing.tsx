@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Crown, Loader2, Minus, Plus, Users } from "lucide-react";
@@ -530,7 +530,7 @@ function CreateTeamPrompt({ onCreated }: { onCreated: () => void }) {
           onClick={() => m.mutate()}
           className="bg-sidebar-ring font-manrope font-bold text-sidebar-foreground hover:bg-sidebar-ring/90"
         >
-          {m.isPending ? "Creating…" : "Continue"}
+          {m.isPending ? "Creatingâ€¦" : "Continue"}
         </Button>
       </div>
     </div>
@@ -580,7 +580,7 @@ function CurrentPlanPanel({
             {/* Same rule as the public cards: name Starter's ceiling, because
                 it is the reason to move up, and stay quiet about Pro's and
                 Team's, which are enforcement rather than an offer. */}
-            {plan.advertiseSeatCap ? ` · up to ${plan.maxSeats}` : ""}
+            {plan.advertiseSeatCap ? ` Â· up to ${plan.maxSeats}` : ""}
           </p>
           <Button
             asChild
@@ -704,3 +704,4 @@ function PlanCard({
     </div>
   );
 }
+

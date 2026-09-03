@@ -1,4 +1,5 @@
 ﻿import { createFileRoute } from "@tanstack/react-router";
+import { usePwaGuard } from "@/lib/pwa-guard";
 import { Users, ShieldCheck, Bell } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -292,4 +293,5 @@ function HowItWorksPage() {
     </div>
   );
 }
+
 

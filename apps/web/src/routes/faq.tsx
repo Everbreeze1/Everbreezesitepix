@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
+import { usePwaGuard } from "@/lib/pwa-guard";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
 import { Plus } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -132,3 +133,4 @@ function FAQPage() {
     </div>
   );
 }
+

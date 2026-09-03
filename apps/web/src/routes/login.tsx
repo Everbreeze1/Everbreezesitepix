@@ -199,13 +199,7 @@ function LoginPage() {
       {/* RIGHT - form */}
       <div className="flex min-h-screen flex-col px-5 py-8 sm:px-8 lg:justify-center lg:px-12 lg:py-12">
         <div className="mb-6 flex items-center justify-between lg:hidden">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to home
-          </Link>
+          
         </div>
 
         <div className="mx-auto flex w-full max-w-[448px] flex-1 flex-col justify-center lg:flex-none">
@@ -437,6 +431,7 @@ function AppleIcon() {
     </svg>
   );
 }
+
 
 
 

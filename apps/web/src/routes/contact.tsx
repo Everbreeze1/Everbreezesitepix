@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+﻿import { createFileRoute, Link } from "@tanstack/react-router";
 import { BrandLogo } from "@/components/BrandLogo";
 import { SiteFooter } from "@/components/SiteFooter";
 import { PRIVACY_EMAIL, SUPPORT_EMAIL, isPlaceholder, mailtoHref } from "@/lib/contact";
@@ -185,3 +185,4 @@ function ContactPage() {
     </div>
   );
 }
+

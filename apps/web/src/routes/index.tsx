@@ -23,6 +23,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { MarketingCta } from "@/components/MarketingCta";
 import { MobileAppBanner } from "@/components/MobileAppBanner";
 import { HIDE_PUBLIC_PRICING, TRIAL_DAYS } from "@/lib/pricing";
+import { usePwaGuard } from "@/lib/pwa-guard";
 import heroImg from "@/assets/hero-construction.png";
 import problemImg from "@/assets/problem-image.png";
 import valueImg from "@/assets/value-construction.png";
@@ -220,6 +221,8 @@ const targetAudiences = [
   },
 ];
 function Landing() {
+  usePwaGuard();
+
   return (
     <div className="min-h-screen bg-background">
       <MobileAppBanner />
@@ -883,4 +886,5 @@ function Landing() {
     </div>
   );
 }
+
 

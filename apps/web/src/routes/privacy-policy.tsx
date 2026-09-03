@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+﻿import { createFileRoute, Link } from "@tanstack/react-router";
 import { BrandLogo } from "@/components/BrandLogo";
 import { SiteFooter } from "@/components/SiteFooter";
 import { POLICY_LAST_UPDATED, PRIVACY_EMAIL, mailtoHref } from "@/lib/contact";
@@ -432,3 +432,4 @@ function PrivacyPolicyPage() {
     </div>
   );
 }
+

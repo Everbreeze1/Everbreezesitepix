@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
+import { usePwaGuard } from "@/lib/pwa-guard";
 import { Camera, FolderTree, Users, ShieldCheck, FileText, ClipboardCheck } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -110,3 +111,4 @@ function FeaturesPage() {
     </div>
   );
 }
+
