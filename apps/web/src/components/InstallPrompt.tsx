@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Download, X, Share } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -174,3 +174,5 @@ export function InstallPrompt() {
     </div>
   );
 }
+
+

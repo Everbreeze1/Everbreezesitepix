@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Search, Bell, ChevronDown, Plus, CheckCheck, Moon, Sun } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -86,11 +86,11 @@ export function AppHeader() {
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search projects, photos, reports…"
+          placeholder="Search projects, photos, reportsâ€¦"
           className="font-manrope w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
         />
         <kbd className="font-manrope hidden shrink-0 rounded-md bg-muted px-1.5 py-1 text-[10px] font-bold text-muted-foreground lg:inline-block">
-          ⌘K
+          âŒ˜K
         </kbd>
       </form>
 
@@ -233,3 +233,5 @@ export function AppHeader() {
     </header>
   );
 }
+
+

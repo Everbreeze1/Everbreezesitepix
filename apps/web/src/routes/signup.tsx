@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+﻿import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CircleCheck, ArrowRight, MailCheck, Loader2 } from "lucide-react";
 import { authErrorMessage } from "@/lib/auth-errors";
@@ -72,7 +72,7 @@ function SignupPage() {
   const cleanEmail = email.trim().toLowerCase();
 
   useEffect(() => {
-    if (user) navigate({ to: "/dashboard", replace: true });
+    if (user) navigate({ to: "/_app/dashboard", replace: true });
   }, [user, navigate]);
 
   useEffect(() => {
@@ -114,7 +114,7 @@ function SignupPage() {
       setCooldown(RESEND_COOLDOWN_SECONDS);
       return;
     }
-    toast.success("Account created! Redirecting…");
+    toast.success("Account created! Redirectingâ€¦");
   };
 
   const handleResend = async () => {
@@ -138,7 +138,7 @@ function SignupPage() {
       toast.success("Sent again - check your inbox.");
     } catch (e) {
       // Without this a thrown request (offline, DNS) left `resending` true and
-      // the button stuck on "Sending…" with no explanation.
+      // the button stuck on "Sendingâ€¦" with no explanation.
       console.error("[signup] resend threw", e);
       toast.error(authErrorMessage(e));
     } finally {
@@ -209,7 +209,7 @@ function SignupPage() {
           </div>
 
           <p className="font-manrope text-xs text-sidebar-foreground/45">
-            © {new Date().getFullYear()} Everlumen
+            Â© {new Date().getFullYear()} Everlumen
           </p>
         </div>
       </aside>
@@ -280,7 +280,7 @@ function SignupPage() {
                   {resending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Sending…
+                      Sendingâ€¦
                     </>
                   ) : cooldown > 0 ? (
                     `Resend confirmation email (${cooldown}s)`
@@ -384,7 +384,7 @@ function SignupPage() {
                   disabled={loading}
                   className="h-12 w-full gap-2 rounded-lg bg-primary font-manrope text-sm font-bold text-primary-foreground hover:bg-primary/90"
                 >
-                  {loading ? "Creating account…" : "Create account"}
+                  {loading ? "Creating accountâ€¦" : "Create account"}
                   {!loading && <ArrowRight className="h-4 w-4" />}
                 </Button>
               </form>
@@ -500,3 +500,4 @@ function AppleIcon() {
     </svg>
   );
 }
+

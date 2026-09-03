@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+﻿import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CheckCircle2, ArrowRight, ArrowLeft, Link2 as LinkIcon, Loader2 } from "lucide-react";
 import { authErrorMessage, isUnconfirmedEmail } from "@/lib/auth-errors";
@@ -76,7 +76,7 @@ function LoginPage() {
   const social = useAuthProviders();
 
   useEffect(() => {
-    if (user) navigate({ to: (redirect || "/dashboard") as "/dashboard", replace: true });
+    if (user) navigate({ to: (redirect || "/_app/dashboard") as "/_app/dashboard", replace: true });
   }, [user, navigate, redirect]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -191,7 +191,7 @@ function LoginPage() {
           </div>
 
           <p className="font-manrope text-xs text-sidebar-foreground/45">
-            © {new Date().getFullYear()} Everlumen
+            Â© {new Date().getFullYear()} Everlumen
           </p>
         </div>
       </aside>
@@ -308,7 +308,7 @@ function LoginPage() {
               className="font-manrope h-12 w-full rounded-lg bg-primary text-sm font-bold text-primary-foreground hover:bg-primary/90"
             >
               {loading ? (
-                "Logging in…"
+                "Logging inâ€¦"
               ) : (
                 <>
                   Log in to Everlumen <ArrowRight className="h-4 w-4" />
@@ -316,6 +316,8 @@ function LoginPage() {
               )}
             </Button>
           </form>
+
+          
 
           {needsVerification && (
             <div className="mt-4 rounded-md border-[0.8px] border-border bg-card/60 p-3 text-sm">
@@ -330,7 +332,7 @@ function LoginPage() {
                 onClick={handleResend}
                 disabled={resending}
               >
-                {resending ? "Sending…" : "Resend verification email"}
+                {resending ? "Sendingâ€¦" : "Resend verification email"}
               </Button>
             </div>
           )}
@@ -398,7 +400,7 @@ function LoginPage() {
         </div>
 
         <div className="mt-8 text-center text-xs text-muted-foreground lg:hidden">
-          © {new Date().getFullYear()} Everlumen
+          Â© {new Date().getFullYear()} Everlumen
         </div>
       </div>
     </div>
@@ -435,3 +437,6 @@ function AppleIcon() {
     </svg>
   );
 }
+
+
+

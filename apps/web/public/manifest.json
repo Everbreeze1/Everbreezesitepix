@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "Everlumen",
   "short_name": "Everlumen",
   "description": "Capture, organize, and share construction job site photos. Built for contractors and field teams.",
@@ -44,3 +44,5 @@
     }
   ]
 }
+
+
