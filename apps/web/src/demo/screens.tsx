@@ -813,83 +813,160 @@ function MetaTile({
 
 export function MapScreen({ onOpenProject }: { onOpenProject: (id: string) => void }) {
   const activeCount = demoProjects.filter((p) => p.status === "active").length;
+  const [selectedId, setSelectedId] = useState(demoProjects[0].id);
+  const selected = demoProjectById(selectedId);
+
   return (
     <div className="mx-auto max-w-[1080px] px-4 py-6 sm:px-8">
       <ScreenHeading
         eyebrow={DEMO_COMPANY}
         title="Maps"
-        subtitle="Every job pinned in one view. The demo draws a stylised map — the live app renders real tiles."
+        subtitle="Every job pinned in one view, with project context beside the map."
         actions={<InertButton icon={Filter}>Filter</InertButton>}
       />
 
-      <div className="relative mt-5 h-[380px] overflow-hidden rounded-2xl border border-border sm:h-[480px]">
-        {/* Map base: palette + faux tiles, roads, park blocks, river */}
-        <div className="absolute inset-0 bg-[#E3EBDD]" />
-        <div
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            backgroundImage:
-              "repeating-linear-gradient(0deg, transparent 0 84px, #FFFFFF 84px 88px), repeating-linear-gradient(90deg, transparent 0 112px, #FFFFFF 112px 116px)",
-            opacity: 0.6,
-          }}
-        />
-        <div aria-hidden className="absolute inset-x-0 top-[28%] h-3 bg-white/90" />
-        <div aria-hidden className="absolute inset-y-0 left-[64%] w-3 bg-white/90" />
-        <div aria-hidden className="absolute inset-x-[8%] top-[72%] h-2 bg-white/80" />
-        <div
-          aria-hidden
-          className="absolute left-[10%] top-[12%] h-24 w-40 rotate-[-14deg] rounded-[40%] bg-[#BFDCC2]"
-        />
-        <div
-          aria-hidden
-          className="absolute bottom-[6%] right-[4%] h-28 w-52 rotate-[8deg] rounded-[40%] bg-[#C4E0C7]"
-        />
-        <div
-          aria-hidden
-          className="absolute -right-6 top-[40%] h-56 w-16 rotate-[24deg] rounded-full bg-[#A8CAE8]/90"
-        />
+      <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_320px]">
+        <div className="relative h-[420px] overflow-hidden rounded-2xl border border-border sm:h-[520px]">
+          {/* Map base: stylised tiles for the public demo. */}
+          <div className="absolute inset-0 bg-[#E3EBDD]" />
+          <div
+            aria-hidden
+            className="absolute inset-0"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(0deg, transparent 0 84px, #FFFFFF 84px 88px), repeating-linear-gradient(90deg, transparent 0 112px, #FFFFFF 112px 116px)",
+              opacity: 0.6,
+            }}
+          />
+          <div aria-hidden className="absolute inset-x-0 top-[28%] h-3 bg-white/90" />
+          <div aria-hidden className="absolute inset-y-0 left-[64%] w-3 bg-white/90" />
+          <div aria-hidden className="absolute inset-x-[8%] top-[72%] h-2 bg-white/80" />
+          <div
+            aria-hidden
+            className="absolute left-[10%] top-[12%] h-24 w-40 rotate-[-14deg] rounded-[40%] bg-[#BFDCC2]"
+          />
+          <div
+            aria-hidden
+            className="absolute bottom-[6%] right-[4%] h-28 w-52 rotate-[8deg] rounded-[40%] bg-[#C4E0C7]"
+          />
+          <div
+            aria-hidden
+            className="absolute -right-6 top-[40%] h-56 w-16 rotate-[24deg] rounded-full bg-[#A8CAE8]/90"
+          />
 
-        {/* Project pins — click to open the demo project */}
-        {demoProjects.map((p) => (
-          <MapPinMarker key={p.id} project={p} onClick={() => onOpenProject(p.id)} />
-        ))}
+          {demoProjects.map((p) => (
+            <MapPinMarker
+              key={p.id}
+              project={p}
+              selected={selectedId === p.id}
+              onClick={() => setSelectedId(p.id)}
+            />
+          ))}
 
-        <div className="absolute left-3 top-3 rounded-xl border border-border bg-card/95 px-3 py-2 shadow-md">
-          <p className="font-manrope text-xs font-bold text-foreground">
-            {activeCount} active sites
-          </p>
-          <p className="font-manrope text-[10px] text-muted-foreground">Updated just now</p>
+          <div className="absolute left-3 top-3 rounded-xl border border-border bg-card/95 px-3 py-2 shadow-md">
+            <p className="font-manrope text-xs font-bold text-foreground">{activeCount} active sites</p>
+            <p className="font-manrope text-[10px] text-muted-foreground">Updated just now</p>
+          </div>
+          <div className="absolute right-3 top-3 hidden rounded-xl border border-border bg-card/95 px-3 py-2 shadow-md sm:block">
+            <p className="font-manrope text-[10px] font-bold text-muted-foreground">
+              <span className="text-[#2584F4]">●</span> Active&ensp;
+              <span className="text-amber-500">●</span> On hold&ensp;
+              <span className="text-slate-500">●</span> Completed
+            </p>
+          </div>
+
+          <div className="absolute bottom-3 left-3 right-3 max-w-[330px] overflow-hidden rounded-2xl border border-border bg-card/95 shadow-xl backdrop-blur sm:right-auto">
+            <img src={selected.cover} alt="" className="h-24 w-full object-cover" />
+            <div className="p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-manrope truncate text-sm font-extrabold text-foreground">{selected.name}</p>
+                  <p className="font-manrope mt-0.5 text-[11px] text-muted-foreground">{projectLocation(selected)}</p>
+                </div>
+                <StatusBadge status={selected.status} />
+              </div>
+              <div className="font-manrope mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>{selected.photoCount.toLocaleString()} photos</span>
+                <span>Updated {selected.updatedAgo}</span>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => onOpenProject(selected.id)}
+                className="font-manrope mt-3 h-8 w-full rounded-lg text-xs font-bold"
+              >
+                View project <ArrowUpRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
         </div>
-        <div className="absolute right-3 top-3 rounded-xl border border-border bg-card/95 px-3 py-2 shadow-md">
-          <p className="font-manrope text-[10px] font-bold text-muted-foreground">
-            <span className="text-[#2584F4]">●</span> Active&ensp;
-            <span className="text-amber-500">●</span> On hold&ensp;
-            <span className="text-slate-500">●</span> Completed
-          </p>
-        </div>
+
+        <aside className={cn(panelClass, "overflow-hidden")}>
+          <div className="border-b border-border px-4 py-3">
+            <p className={sectionLabel}>Projects on map</p>
+            <p className="font-manrope mt-1 text-xs text-muted-foreground">Select a project to preview it.</p>
+          </div>
+          <div className="max-h-[520px] space-y-1 overflow-y-auto p-2">
+            {demoProjects.map((project) => (
+              <button
+                key={project.id}
+                type="button"
+                onClick={() => setSelectedId(project.id)}
+                className={cn(
+                  "flex w-full gap-3 rounded-xl p-2.5 text-left transition",
+                  selectedId === project.id ? "bg-primary/10 ring-1 ring-primary/20" : "hover:bg-accent/60",
+                )}
+              >
+                <img src={project.cover} alt="" className="h-14 w-16 shrink-0 rounded-lg object-cover" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-start justify-between gap-2">
+                    <span className="font-manrope block truncate text-xs font-extrabold text-foreground">{project.name}</span>
+                    <StatusBadge status={project.status} />
+                  </span>
+                  <span className="font-manrope mt-1 block truncate text-[10px] text-muted-foreground">{project.city}, {project.state} · {project.photoCount.toLocaleString()} photos</span>
+                  <span className="font-manrope mt-1 block text-[10px] font-bold text-primary">{project.phase}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </aside>
       </div>
 
       <p className="font-manrope mt-3 text-center text-xs text-muted-foreground">
-        Click a pin to open its project · Live Google Maps tiles render in the full app
+        Pins and the project list stay in sync. Live Google Maps tiles render in the full app.
       </p>
     </div>
   );
 }
 
-function MapPinMarker({ project, onClick }: { project: DemoProject; onClick: () => void }) {
+function MapPinMarker({
+  project,
+  selected,
+  onClick,
+}: {
+  project: DemoProject;
+  selected: boolean;
+  onClick: () => void;
+}) {
   const color =
     project.status === "active" ? "#2584F4" : project.status === "on_hold" ? "#F59E0B" : "#64748B";
   return (
     <button
       type="button"
       onClick={onClick}
-      title={`${project.name} — open in the demo`}
-      className="absolute z-10 -translate-x-1/2 -translate-y-full transition hover:scale-110"
+      title={`${project.name} — preview project`}
+      aria-pressed={selected}
+      className={cn(
+        "absolute z-10 -translate-x-1/2 -translate-y-full transition hover:scale-110",
+        selected && "z-20 scale-110",
+      )}
       style={{ left: `${project.mapLeft}%`, top: `${project.mapTop}%` }}
     >
       <span
-        className="flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold text-white shadow-md"
+        className={cn(
+          "flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold text-white shadow-md",
+          selected && "ring-2 ring-white ring-offset-2 ring-offset-transparent",
+        )}
         style={{ backgroundColor: color }}
       >
         <MapPin className="h-3 w-3" />
@@ -927,7 +1004,18 @@ export function GalleryScreen() {
         subtitle="Every photo from every job, searchable and filterable."
         actions={
           selected.length > 0 ? (
-            <InertButton>{selected.length} selected</InertButton>
+            <div className="flex items-center gap-2">
+              <span className="font-manrope text-xs font-extrabold text-primary">{selected.length} selected</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelected([])}
+                className="font-manrope h-8 rounded-lg text-xs font-bold"
+              >
+                Clear
+              </Button>
+            </div>
           ) : (
             <InertButton>Select</InertButton>
           )
@@ -953,6 +1041,25 @@ export function GalleryScreen() {
           {shown.length} photos
         </span>
       </div>
+
+      {selected.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-primary/20 bg-primary/5 p-3 shadow-sm">
+          <span className="font-manrope mr-1 text-[11px] font-extrabold uppercase tracking-wide text-primary">
+            Photo actions
+          </span>
+          <InertButton icon={Share2} title="Share selected photos in the full app">Share</InertButton>
+          <InertButton icon={Download} title="Download selected photos in the full app">Download</InertButton>
+          <InertButton icon={Sparkles} title="Generate a report from selected photos in the full app">
+            Generate report
+          </InertButton>
+          <InertButton icon={FileText} title="Add selected photos to an existing report in the full app">
+            Add to report
+          </InertButton>
+          <span className="font-manrope ml-auto hidden text-[10px] text-muted-foreground sm:block">
+            Demo preview of the full gallery action bar
+          </span>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {shown.map((photo) => {
@@ -999,7 +1106,8 @@ export function GalleryScreen() {
 export function ReportsScreen() {
   const [openId, setOpenId] = useState(demoReports[0].id);
   const open = demoReports.find((r) => r.id === openId) ?? demoReports[0];
-  const featured = demoReports[0];
+  const reportProject = demoProjectById(open.projectId);
+  const evidence = demoByProject(open.projectId);
 
   return (
     <div className="mx-auto max-w-[1080px] px-4 py-6 sm:px-8">
@@ -1060,6 +1168,12 @@ export function ReportsScreen() {
             <p className="font-manrope mt-2 text-sm leading-6 text-foreground">{open.summary}</p>
           </div>
 
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            <MetaTile icon={FolderKanban} label="Project" value={reportProject.name} />
+            <MetaTile icon={Camera} label="Photo evidence" value={`${evidence.length} selected shots`} />
+            <MetaTile icon={Sparkles} label="Draft source" value={open.kind === "AI" ? "Project record + AI" : "Field team"} />
+          </div>
+
           {/* Highlights */}
           {open.highlights.length > 0 && (
             <div className="mt-5">
@@ -1081,8 +1195,8 @@ export function ReportsScreen() {
           <div className="mt-6">
             <p className={sectionLabel}>Photo evidence</p>
             <div className="mt-2 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              {demoByProject("maple")
-                .slice(0, 4)
+              {evidence
+                .slice(0, 6)
                 .map((photo) => (
                   <div
                     key={photo.id}
@@ -1118,9 +1232,8 @@ export function ReportsScreen() {
           )}
 
           <p className="font-manrope mt-8 border-t border-border pt-4 text-center text-[11px] text-muted-foreground">
-            Sample report rendered for the demo —{" "}
-            {featured.kind === "AI" ? "generated by AI" : "written in the full app"} with the photos
-            above. {DEMO_COMPANY} · 2026
+            Representative report rendered from static demo data. The production app can generate,
+            edit, share, and export reports from the live project record. {DEMO_COMPANY} · 2026
           </p>
         </section>
       </div>

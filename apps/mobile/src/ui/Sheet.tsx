@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { X } from "@/ui/icons";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { Modal, Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { radius, spacing, useTheme } from "@/theme";
 import { IconButton } from "./Button";
@@ -43,6 +43,8 @@ export function Sheet({
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 700;
 
   return (
     <Modal
@@ -64,6 +66,9 @@ export function Sheet({
           style={[
             {
               maxHeight: `${Math.round(maxHeightRatio * 100)}%`,
+              width: "100%",
+              maxWidth: isWide ? 720 : undefined,
+              alignSelf: "center",
               backgroundColor: theme.colors.card,
               borderTopLeftRadius: radius.xl,
               borderTopRightRadius: radius.xl,
@@ -83,6 +88,12 @@ export function Sheet({
               }}
             />
           </View>
+
+          {!title ? (
+            <View style={{ alignItems: "flex-end", paddingHorizontal: spacing.md }}>
+              <IconButton icon={X} accessibilityLabel="Close" onPress={onClose} surface={false} />
+            </View>
+          ) : null}
 
           {title ? (
             <View

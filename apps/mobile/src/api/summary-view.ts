@@ -229,7 +229,7 @@ export function plainBody(markdown: string | null): string {
        * These summaries carry a public share link, so this is what a client
        * sees.
        */
-      .replace(/^[ 	]*[-*+][ 	]+/gm, "• ")
+      .replace(/^[^\S\n]*[-*+][^\S\n]+/gm, "• ")
       .replace(/[*_`]/g, "")
       // Three or more blank lines collapse to one. Markdown uses them for
       // spacing a renderer would absorb; as plain text they read as the document

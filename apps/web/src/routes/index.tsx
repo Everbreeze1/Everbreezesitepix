@@ -16,6 +16,11 @@ import {
   Building2,
   UserCheck,
   Briefcase,
+  Camera,
+  Grid3X3,
+  Image as ImageIcon,
+  SwitchCamera,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -132,9 +137,9 @@ const whatsNew = [
     icon: Sparkles,
     iconBg: "#A78BFA",
     ring: "#DDD6FE",
-    badge: undefined as string | undefined,
+    badge: "Ask, investigate, locate",
     title: "AI assistant",
-    desc: "Ask AI anything about a project. It answers questions from your photos and drafts professional reports in seconds.",
+    desc: "Use the assistant for ad hoc project questions: what changed, what is unresolved, and where the evidence is. Reports use the same project record to produce the formal document; workflows remain the structured process for assigned steps and sign-off.",
     span: "narrow",
   },
   {
@@ -559,12 +564,39 @@ function Landing() {
           <div className="mt-14 grid gap-8 md:grid-cols-3">
             {/* Step 1: Capture */}
             <div className="flex flex-col">
-              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[24px] border-[0.8px] border-border bg-card">
+              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[24px] border-[0.8px] border-border bg-black shadow-sm">
                 <img
                   src="/capture.png"
-                  alt="Capture a photo on site - automatically stamped with time, date and location"
-                  className="h-full w-full object-cover"
+                  alt="Everlumen camera view for capturing a job site photo"
+                  className="h-full w-full object-cover opacity-80"
                 />
+                <div className="absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent p-3 pb-8 text-white">
+                  <span className="rounded-full bg-black/45 p-2 backdrop-blur">
+                    <Camera className="h-4 w-4" />
+                  </span>
+                  <span className="flex gap-1.5">
+                    <span className="rounded-full bg-black/45 p-2 backdrop-blur"><Grid3X3 className="h-4 w-4" /></span>
+                    <span className="rounded-full bg-black/45 p-2 backdrop-blur"><Zap className="h-4 w-4" /></span>
+                    <span className="rounded-full bg-black/45 p-2 backdrop-blur"><SwitchCamera className="h-4 w-4" /></span>
+                  </span>
+                </div>
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-3 pb-3 pt-12 text-white">
+                  <div className="mx-auto mb-2 flex w-fit max-w-full items-center gap-1 overflow-hidden rounded-xl bg-black/55 p-1 text-[8px] font-bold uppercase tracking-wide ring-1 ring-white/15 backdrop-blur">
+                    <span className="rounded-lg bg-white px-2 py-1 text-black">Picture</span>
+                    <span className="px-1.5 py-1 text-white/75">Before/After</span>
+                    <span className="px-1.5 py-1 text-white/75">Scan</span>
+                    <span className="px-1.5 py-1 text-white/75">Video</span>
+                  </div>
+                  <div className="flex items-center justify-around">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
+                      <ImageIcon className="h-4 w-4" />
+                    </span>
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-white bg-white/10 ring-2 ring-black/30">
+                      <span className="h-9 w-9 rounded-full bg-white" />
+                    </span>
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-[8px] font-bold ring-1 ring-white/15">LVL</span>
+                  </div>
+                </div>
                 <div className="absolute top-3 left-3 flex h-8 w-8 items-center justify-center rounded-full bg-primary font-manrope text-sm font-bold text-primary-foreground">
                   1
                 </div>
@@ -574,7 +606,9 @@ function Landing() {
                   Capture
                 </h3>
                 <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
-                  Snap a photo or record a walkthrough. It is stamped with time, date, and location automatically.
+                  Use the field camera with grid, flash, camera switching, gallery import, level guidance,
+                  and capture modes for picture, before/after, scan, video, and walkthroughs. Photos are
+                  stamped with time, date, and location automatically.
                 </p>
               </div>
             </div>

@@ -51,6 +51,7 @@ export interface DemoProject {
 
 export interface DemoReport {
   id: string;
+  projectId: string;
   title: string;
   kind: "AI" | "Manual";
   /** Display string baked in. */
@@ -303,6 +304,7 @@ export const demoCrew: DemoCrewMember[] = [
 export const demoReports: DemoReport[] = [
   {
     id: "r1",
+    projectId: "maple",
     title: "Weekly progress report",
     kind: "AI",
     generatedAgo: "Generated 2h ago",
@@ -322,6 +324,7 @@ export const demoReports: DemoReport[] = [
   },
   {
     id: "r2",
+    projectId: "riverside",
     title: "Photos as-built — Phase 2 closeout",
     kind: "AI",
     generatedAgo: "Generated yesterday",
@@ -336,6 +339,7 @@ export const demoReports: DemoReport[] = [
   },
   {
     id: "r3",
+    projectId: "summit",
     title: "Asphalt & striping inspection",
     kind: "Manual",
     generatedAgo: "Saved 3 days ago",
@@ -350,6 +354,7 @@ export const demoReports: DemoReport[] = [
   },
   {
     id: "r4",
+    projectId: "maple",
     title: "Daily log — sidewalk pour",
     kind: "AI",
     generatedAgo: "Generated 5 days ago",

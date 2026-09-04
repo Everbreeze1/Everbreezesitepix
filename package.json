@@ -8,7 +8,7 @@
     "apps/web"
   ],
   "scripts": {
-    "dev": "npm run dev -w @everlumen/web --host",
+    "dev": "npm run dev -w @everlumen/web",
     "build": "npm run build -w @everlumen/web",
     "build:dev": "npm run build:dev -w @everlumen/web",
     "preview": "npm run preview -w @everlumen/web",
