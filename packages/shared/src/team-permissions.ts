@@ -86,11 +86,9 @@ const MATRIX: Record<TeamRole, ReadonlySet<Capability>> = {
   // crew only (no billing or company-wide user management)." So: crew, not
   // users. And "Limited" on destructive actions reads as no - a Manager who
   // can delete a project is not limited in any sense that matters.
-  // No `manage_templates`. Section 4 spells Manager's row out in full and the
-  // shared template library is not on it, so granting it here would widen a
-  // permission on the strength of nothing but a guess. Add it the day the spec
-  // does.
-  manager: new Set<Capability>(["manage_own_crew", "view_all_projects"]),
+  // Managers can author the shared template/checklist/workflow structure, but
+  // still cannot manage billing, admins, or destructive workspace actions.
+  manager: new Set<Capability>(["manage_own_crew", "view_all_projects", "manage_templates"]),
   standard: new Set<Capability>(["view_all_projects"]),
   restricted: new Set<Capability>(["assigned_projects_only"]),
 };

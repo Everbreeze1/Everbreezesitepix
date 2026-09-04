@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -108,6 +109,7 @@ function useAutoGrow(value: string) {
 export function ReportIssuePage() {
   const { user } = useAuth();
   const [kind, setKind] = useState<"bug" | "idea">("bug");
+  const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [projectId, setProjectId] = useState<string>(NO_PROJECT);
   const [files, setFiles] = useState<File[]>([]);
@@ -119,6 +121,7 @@ export function ReportIssuePage() {
   const [reportsError, setReportsError] = useState<string | null>(null);
 
   const fileInput = useRef<HTMLInputElement>(null);
+  const subjectRef = useRef<HTMLInputElement>(null);
   const textareaRef = useAutoGrow(message);
 
   const mode = MODES.find((m) => m.kind === kind)!;
@@ -207,6 +210,7 @@ export function ReportIssuePage() {
   };
 
   const resetForm = () => {
+    setSubject("");
     setMessage("");
     setProjectId(NO_PROJECT);
     setFiles([]);
@@ -214,6 +218,11 @@ export function ReportIssuePage() {
   };
 
   const submit = async () => {
+    if (kind === "bug" && !subject.trim()) {
+      toast.error("Please add a subject.");
+      subjectRef.current?.focus();
+      return;
+    }
     if (!message.trim()) {
       toast.error(kind === "bug" ? "Please describe the issue." : "Please describe your idea.");
       textareaRef.current?.focus();
@@ -234,6 +243,7 @@ export function ReportIssuePage() {
 
       await submitFeedback({
         kind,
+        subject: kind === "bug" ? subject : null,
         message,
         source: "page",
         userId: user?.id ?? null,
@@ -327,32 +337,49 @@ export function ReportIssuePage() {
 
               <div className="space-y-6 p-6">
                 {kind === "bug" && (
-                  <div>
-                    <label htmlFor="feedback-project" className={fieldLabel}>
-                      Which project?{" "}
-                      <span className="font-bold text-muted-foreground">(optional)</span>
-                    </label>
-                    <p className={fieldHint}>
-                      Only the project name is shared, so we can look in the right place. No photos,
-                      documents, or notes are sent.
-                    </p>
-                    <Select value={projectId} onValueChange={setProjectId}>
-                      <SelectTrigger
-                        id="feedback-project"
+                  <>
+                    <div>
+                      <label htmlFor="feedback-subject" className={fieldLabel}>
+                        Subject
+                      </label>
+                      <p className={fieldHint}>A short snapshot of what the problem is about.</p>
+                      <Input
+                        id="feedback-subject"
+                        ref={subjectRef}
+                        value={subject}
+                        onChange={(e) => setSubject(e.target.value)}
+                        maxLength={160}
+                        placeholder="Report generation fails after selecting photos"
                         className="mt-2 h-11 rounded-xl border-border bg-background text-sm"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NO_PROJECT}>Not about a specific project</SelectItem>
-                        {projects.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="feedback-project" className={fieldLabel}>
+                        Which project?{" "}
+                        <span className="font-bold text-muted-foreground">(optional)</span>
+                      </label>
+                      <p className={fieldHint}>
+                        Only the project name is shared, so we can look in the right place. No
+                        photos, documents, or notes are sent.
+                      </p>
+                      <Select value={projectId} onValueChange={setProjectId}>
+                        <SelectTrigger
+                          id="feedback-project"
+                          className="mt-2 h-11 rounded-xl border-border bg-background text-sm"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_PROJECT}>Not about a specific project</SelectItem>
+                          {projects.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
                 )}
 
                 <div>
@@ -399,7 +426,7 @@ export function ReportIssuePage() {
                   <Button
                     type="button"
                     onClick={() => void submit()}
-                    disabled={submitting || !message.trim()}
+                    disabled={submitting || !message.trim() || (kind === "bug" && !subject.trim())}
                     className="font-manrope h-10 gap-2 rounded-lg px-5 text-sm font-bold"
                   >
                     {submitting ? (
@@ -573,7 +600,15 @@ function ReportRow({ report }: { report: MyFeedbackReport }) {
         </span>
       </div>
 
-      <p className="font-manrope mt-2 line-clamp-3 whitespace-pre-wrap text-sm leading-6 text-foreground">
+      {report.subject && (
+        <p className="font-manrope mt-2 text-sm font-extrabold text-foreground">{report.subject}</p>
+      )}
+      <p
+        className={cn(
+          "font-manrope line-clamp-3 whitespace-pre-wrap text-sm leading-6 text-foreground",
+          report.subject ? "mt-1" : "mt-2",
+        )}
+      >
         {report.description}
       </p>
 

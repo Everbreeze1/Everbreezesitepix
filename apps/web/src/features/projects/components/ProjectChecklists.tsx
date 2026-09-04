@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { GENERAL_CATEGORY, makeCategoryRank } from "@/lib/template-categories";
 import { useCompanySetup } from "@/hooks/use-company-setup";
+import { useTemplateAuthoringAccess } from "@/hooks/use-template-authoring-access";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -127,6 +128,7 @@ export function ProjectChecklists({
   onChanged?: () => void;
 }) {
   const { user } = useAuth();
+  const { canAuthor } = useTemplateAuthoringAccess();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -288,7 +290,7 @@ export function ProjectChecklists({
    * nothing and the second applied whichever template you pressed before.
    */
   const applyTemplate = async (templateId: string) => {
-    if (!templateId || !user) return;
+    if (!templateId || !user || !canAuthor) return;
     lastLocalEdit.current = Date.now();
     setCreating(true);
     let createdId: string | null = null;
@@ -355,7 +357,7 @@ export function ProjectChecklists({
    * never renames it - the placeholder is a real name, not an empty row.
    */
   const createBlank = async () => {
-    if (!user) return;
+    if (!user || !canAuthor) return;
     lastLocalEdit.current = Date.now();
     setCreating(true);
     try {
@@ -443,7 +445,7 @@ export function ProjectChecklists({
               ? `All ${checklists.length} checklist${checklists.length === 1 ? "" : "s"} on this job are complete.`
               : `${activeCount} still open on this job.`
         }
-        actions={newMenu}
+        actions={canAuthor ? newMenu : undefined}
       />
 
       {/* Filter strip. Deliberately plain toggle buttons rather than

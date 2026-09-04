@@ -58,6 +58,7 @@ export interface FeedbackReport {
   sentiment: string | null;
   source: string;
   feature: string | null;
+  subject: string | null;
   description: string | null;
   url: string | null;
   userAgent: string | null;
@@ -193,7 +194,7 @@ export async function listFeedbackService(
   let query = (admin as any)
     .from("issue_reports")
     .select(
-      "id, status, kind, sentiment, source, feature, description, url, user_agent, " +
+      "id, status, kind, sentiment, source, feature, subject, description, url, user_agent, " +
         "attachments, created_at, project_id, user_id, email",
     )
     .order("created_at", { ascending: false })
@@ -208,7 +209,7 @@ export async function listFeedbackService(
   // for "crashes, then reloads" would split the filter. See escapeLikeValue.
   if (data.search) {
     const like = escapeLikeValue(data.search);
-    query = query.or(`description.ilike.${like},url.ilike.${like}`);
+    query = query.or(`subject.ilike.${like},description.ilike.${like},url.ilike.${like}`);
   }
 
   const { data: rows, error } = await query;
@@ -246,6 +247,7 @@ export async function listFeedbackService(
       sentiment: r.sentiment,
       source: r.source,
       feature: r.feature,
+      subject: r.subject,
       description: r.description,
       url: r.url,
       userAgent: r.user_agent,
