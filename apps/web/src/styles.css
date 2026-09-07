@@ -224,37 +224,38 @@
   );
   --gradient-subtle: linear-gradient(180deg, oklch(0.16 0.025 250) 0%, oklch(0.2 0.03 250) 100%);
 }
-
-
 /*
  * Landing page yellow theme.
  * Replaces the blue primary color with the gold/yellow from the lumen logo.
  */
 .landing-yellow {
-  --primary: oklch(0.55 0.14 60);
-  --primary-foreground: oklch(0.99 0.005 60);
-  --primary-glow: oklch(0.7 0.16 60);
-  --ring: oklch(0.55 0.14 60);
+  --primary: oklch(0.8 0.17 88);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-glow: oklch(0.86 0.15 88);
+  --ring: oklch(0.8 0.17 88);
   --gradient-hero: linear-gradient(
     135deg,
-    oklch(0.4 0.12 60) 0%,
-    oklch(0.55 0.14 60) 60%,
-    oklch(0.7 0.16 60) 100%
+    oklch(0.7 0.18 88) 0%,
+    oklch(0.8 0.17 88) 60%,
+    oklch(0.86 0.15 88) 100%
   );
 }
 .landing-yellow.dark,
 .landing-yellow .dark {
-  --primary: oklch(0.78 0.16 75);
-  --primary-foreground: oklch(0.16 0.025 60);
-  --primary-glow: oklch(0.85 0.14 75);
-  --ring: oklch(0.78 0.16 75);
+  --primary: oklch(0.86 0.15 88);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-glow: oklch(0.9 0.13 88);
+  --ring: oklch(0.86 0.15 88);
   --gradient-hero: linear-gradient(
     135deg,
-    oklch(0.78 0.16 75) 0%,
-    oklch(0.85 0.14 75) 60%,
-    oklch(0.92 0.1 75) 100%
+    oklch(0.86 0.15 88) 0%,
+    oklch(0.9 0.13 88) 60%,
+    oklch(0.93 0.11 88) 100%
   );
 }
+
+
+
 
 @layer base {
   * {
@@ -380,9 +381,6 @@
   }
 }
 
-
-/*
-}
 
 @layer base {
   html,

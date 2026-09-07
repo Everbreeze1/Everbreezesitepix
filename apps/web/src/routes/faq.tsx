@@ -78,7 +78,7 @@ const FAQS: { q: string; a: string }[] = [
 
 function FAQPage() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background landing-yellow">
       <SiteHeader />
 
       {/* Header */}

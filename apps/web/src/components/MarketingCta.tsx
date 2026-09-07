@@ -7,15 +7,15 @@ export function MarketingCta() {
   return (
     <section className="bg-background py-24">
       <div className="mx-auto max-w-[1280px] px-8">
-        <div className="relative isolate flex h-auto min-h-[328px] flex-col justify-center overflow-hidden rounded-[32px] bg-[#2584F4] px-8 py-16 sm:px-16 sm:py-20 lg:h-[328px] lg:py-0">
+        <div className="relative isolate flex h-auto min-h-[328px] flex-col justify-center overflow-hidden rounded-[32px] bg-brand-gold px-8 py-16 sm:px-16 sm:py-20 lg:h-[328px] lg:py-0">
           <img
             src={ctaImg}
             alt=""
             aria-hidden
             className="pointer-events-none absolute inset-0 h-full w-full object-cover brightness-125 contrast-110"
           />
-          <div className="pointer-events-none absolute inset-0 bg-[#2584F4] mix-blend-color" />
-          <div className="pointer-events-none absolute inset-0 bg-[#2584F4]/15" />
+          <div className="pointer-events-none absolute inset-0 bg-brand-gold mix-blend-color" />
+          <div className="pointer-events-none absolute inset-0 bg-brand-gold/15" />
           <div className="relative flex w-full flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-[681px]">
               <p className="font-manrope text-xs font-extrabold uppercase leading-4 tracking-[1.92px] text-white/75">

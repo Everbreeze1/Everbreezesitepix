@@ -242,7 +242,7 @@ function Landing() {
         />
         <div className="container relative mx-auto flex max-w-[875px] flex-col items-center px-4 pb-24 pt-[166px] text-center sm:pb-28 sm:pt-[182px] md:pb-36 md:pt-[214px]">
           <div className="inline-flex items-center gap-2 rounded-full bg-sidebar-foreground px-3 py-1.5 shadow-sm">
-            <span className="font-manrope rounded-full bg-sidebar-ring px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-sidebar-foreground">
+            <span className="font-manrope rounded-full bg-brand-gold px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#1E2B4D]">
               New
             </span>
             <span className="font-manrope text-xs font-extrabold text-sidebar">
@@ -253,7 +253,7 @@ function Landing() {
 
           <h1 className="font-display mt-8 max-w-4xl text-4xl font-black uppercase leading-[0.95] tracking-[-0.03em] text-sidebar-foreground sm:text-6xl md:text-7xl lg:text-[96px]">
             Every photo becomes a{" "}
-            <span className="text-sidebar-ring">record you can stand behind.</span>
+            <span className="text-brand-gold">record you can stand behind.</span>
           </h1>
 
           <p className="font-manrope mt-7 max-w-2xl text-base text-sidebar-foreground/80 md:text-lg">
@@ -284,15 +284,15 @@ function Landing() {
 
           <div className="font-manrope mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-bold text-sidebar-foreground/80">
             <div className="flex items-center gap-2">
-              <Check className="h-4 w-4 text-sidebar-ring" />
+              <Check className="h-4 w-4 text-brand-gold" />
               {HIDE_PUBLIC_PRICING ? `${TRIAL_DAYS}-day free trial` : "Plans from $24/mo"}
             </div>
             <div className="flex items-center gap-2">
-              <Check className="h-4 w-4 text-sidebar-ring" />
+              <Check className="h-4 w-4 text-brand-gold" />
               Set up in minutes
             </div>
             <div className="flex items-center gap-2">
-              <Check className="h-4 w-4 text-sidebar-ring" />
+              <Check className="h-4 w-4 text-brand-gold" />
               Cancel anytime
             </div>
           </div>

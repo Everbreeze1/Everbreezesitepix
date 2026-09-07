@@ -62,7 +62,7 @@ const features = [
 
 function FeaturesPage() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background landing-yellow">
       <SiteHeader />
 
       {/* Header */}
