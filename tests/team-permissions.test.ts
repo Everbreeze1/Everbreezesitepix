@@ -330,13 +330,15 @@ describe("family: no capability is declared without a call site", () => {
     expect(unused).toEqual(["view_all_projects", "assigned_projects_only", "destructive_actions"]);
   });
 
-  it("Manager holds only what section 4 lists", () => {
+  it("Manager can author templates without gaining billing, user admin, or destructive rights", () => {
     expect(can("manager", "manage_own_crew")).toBe(true);
     expect(can("manager", "view_all_projects")).toBe(true);
+    expect(can("manager", "manage_templates")).toBe(true);
     expect(can("manager", "billing")).toBe(false);
     expect(can("manager", "manage_users")).toBe(false);
     expect(can("manager", "destructive_actions")).toBe(false);
-    expect(can("manager", "manage_templates")).toBe(false);
+    expect(can("standard", "manage_templates")).toBe(false);
+    expect(can("restricted", "manage_templates")).toBe(false);
   });
 });
 

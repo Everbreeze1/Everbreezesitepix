@@ -546,6 +546,7 @@ export type Database = {
           sentiment: string | null;
           source: string;
           status: string;
+          subject: string | null;
           url: string | null;
           user_agent: string | null;
           user_id: string | null;
@@ -563,6 +564,7 @@ export type Database = {
           sentiment?: string | null;
           source?: string;
           status?: string;
+          subject?: string | null;
           url?: string | null;
           user_agent?: string | null;
           user_id?: string | null;
@@ -580,6 +582,7 @@ export type Database = {
           sentiment?: string | null;
           source?: string;
           status?: string;
+          subject?: string | null;
           url?: string | null;
           user_agent?: string | null;
           user_id?: string | null;

@@ -8,6 +8,8 @@ export type FeedbackSource = "page" | "prompt";
 
 export interface SubmitFeedbackInput {
   kind: FeedbackKind;
+  /** Short reporter-written summary. Required by the full bug form, optional for prompt signals. */
+  subject?: string | null;
   message?: string;
   /** Which surface this is about - the axis the whole thing gets grouped by. */
   feature?: string | null;
@@ -33,6 +35,7 @@ export interface SubmitFeedbackInput {
  */
 function contextAsText(input: SubmitFeedbackInput): string {
   const lines: string[] = [];
+  if (input.subject?.trim()) lines.push(`Subject: ${input.subject.trim()}`);
   if (input.projectId) lines.push(`Project: ${input.projectId}`);
   if (input.client) {
     lines.push(
@@ -71,6 +74,7 @@ export async function submitFeedback(input: SubmitFeedbackInput): Promise<void> 
 
   const { error } = await supabase.from("issue_reports").insert({
     ...baseRow(input, description),
+    subject: input.subject?.trim().slice(0, 160) || null,
     project_id: input.projectId ?? null,
     client_info: input.client ?? null,
     attachments: input.attachments?.length ? input.attachments : null,
@@ -105,6 +109,7 @@ export interface MyFeedbackReport {
   id: string;
   kind: FeedbackKind;
   status: FeedbackStatus;
+  subject: string | null;
   description: string;
   feature: string | null;
   createdAt: string;
@@ -127,14 +132,29 @@ export interface MyFeedbackReport {
  * with rows that say nothing and never change.
  */
 export async function listMyFeedback(userId: string): Promise<MyFeedbackReport[]> {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("issue_reports")
-    .select("id, kind, status, description, feature, created_at")
+    .select("id, kind, status, subject, description, feature, created_at")
     .eq("user_id", userId)
     .not("description", "is", null)
     .neq("description", "")
     .order("created_at", { ascending: false })
     .limit(50);
+
+  // Keep the reporter history usable during the short manual-migration window.
+  // New submissions already have the same compatibility behavior above.
+  if (error && isPendingMigrationError(error)) {
+    const legacy = await supabase
+      .from("issue_reports")
+      .select("id, kind, status, description, feature, created_at")
+      .eq("user_id", userId)
+      .not("description", "is", null)
+      .neq("description", "")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    data = (legacy.data as typeof data) ?? null;
+    error = legacy.error;
+  }
   if (error) throw new Error(error.message);
 
   return ((data as any[]) ?? []).map((row) => ({
@@ -146,6 +166,7 @@ export async function listMyFeedback(userId: string): Promise<MyFeedbackReport[]
      * "new" beats rendering an empty badge.
      */
     status: FEEDBACK_STATUSES.includes(row.status) ? (row.status as FeedbackStatus) : "new",
+    subject: (row.subject as string | null) ?? null,
     description: (row.description as string | null) ?? "",
     feature: (row.feature as string | null) ?? null,
     createdAt: row.created_at as string,

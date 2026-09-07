@@ -197,8 +197,15 @@ function ReportCard({ report, onChanged }: { report: FeedbackReport; onChanged: 
         </span>
       </div>
 
+      {report.subject && (
+        <p className="mt-2 text-sm font-extrabold text-foreground">{report.subject}</p>
+      )}
       {report.description ? (
-        <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{report.description}</p>
+        <p
+          className={`${report.subject ? "mt-1" : "mt-2"} whitespace-pre-wrap text-sm text-foreground`}
+        >
+          {report.description}
+        </p>
       ) : (
         // A thumbs signal carries no text. Saying so beats an empty gap that
         // reads as a rendering failure.
@@ -360,7 +367,7 @@ export function AdminFeedbackPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search message or page…"
+            placeholder="Search subject, message or page…"
             className="h-9 pl-8"
           />
         </div>

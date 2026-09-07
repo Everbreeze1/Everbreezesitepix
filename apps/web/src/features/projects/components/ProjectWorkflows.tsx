@@ -45,6 +45,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useProfile } from "@/hooks/use-profile";
 import { useTeamMembers } from "@/hooks/use-team-members";
+import { useTemplateAuthoringAccess } from "@/hooks/use-template-authoring-access";
 import {
   AssigneeField,
   AssignmentStatusPill,
@@ -370,6 +371,7 @@ export function ProjectWorkflows({
 }) {
   const { user } = useAuth();
   const { members, isManager } = useTeamMembers();
+  const { canAuthor } = useTemplateAuthoringAccess();
   const confirm = useConfirm();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -733,7 +735,7 @@ export function ProjectWorkflows({
    * one is a single click and this reads the id from that click.
    */
   const applyTemplate = async (templateId: string) => {
-    if (!templateId || !user) return;
+    if (!templateId || !user || !canAuthor) return;
     setApplying(true);
     let createdId: string | null = null;
     try {
@@ -1118,6 +1120,7 @@ export function ProjectWorkflows({
   };
 
   const deleteWorkflow = async (wf: Workflow) => {
+    if (!canAuthor) return;
     const st = states.get(wf.id);
     const parts = [
       `${st?.phases.length ?? 0} phase${st?.phases.length === 1 ? "" : "s"}`,
@@ -1162,7 +1165,7 @@ export function ProjectWorkflows({
    * open the modal, open the select, pick, confirm, close, find the card. The
    * menu is the select, so the confirm step and the modal both go away.
    */
-  const headerAction = (
+  const headerAction = canAuthor ? (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button className={cn(SURFACE_BUTTON, "bg-primary")} disabled={applying}>
@@ -1215,7 +1218,7 @@ export function ProjectWorkflows({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
+  ) : undefined;
 
   const summary = (() => {
     if (loading) return "Multi-phase processes with photo prompts, notes, and sign-off gates.";
@@ -1314,6 +1317,7 @@ export function ProjectWorkflows({
           onSetComplete={(c) => void setWorkflowComplete(open, c)}
           members={members}
           rights={workflowRights(open)}
+          canDelete={canAuthor}
           onAssign={(next) => assignWorkflow(open, next)}
           onDelete={() => void deleteWorkflow(open)}
           onNotesChange={(html) => setWorkflowNotes(open, html)}
@@ -1470,6 +1474,7 @@ function WorkflowRunner({
   onSetComplete,
   members,
   rights,
+  canDelete,
   onAssign,
   onDelete,
   onNotesChange,
@@ -1482,6 +1487,7 @@ function WorkflowRunner({
   members: Array<{ user_id: string; full_name: string | null; email: string | null }>;
   /** Whether this viewer may close the run, and why not if they may not. */
   rights: CompletionRights;
+  canDelete: boolean;
   onAssign: (next: string | null) => Promise<boolean>;
   onBack: () => void;
   onToggleItem: (it: Item) => void;
@@ -1673,14 +1679,18 @@ function WorkflowRunner({
                       {rights.isOverride ? "Complete for them" : "Mark complete"}
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuSeparator className="sm:hidden" />
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={onDelete}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete workflow
-                  </DropdownMenuItem>
+                  {canDelete && (
+                    <>
+                      <DropdownMenuSeparator className="sm:hidden" />
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={onDelete}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete workflow
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </>

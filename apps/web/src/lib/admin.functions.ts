@@ -203,6 +203,7 @@ export interface FeedbackReport {
   sentiment: string | null;
   source: string;
   feature: string | null;
+  subject: string | null;
   description: string | null;
   url: string | null;
   userAgent: string | null;

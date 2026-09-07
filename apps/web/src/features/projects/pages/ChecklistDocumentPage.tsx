@@ -47,6 +47,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { usePrompt } from "@/hooks/use-prompt";
 import { useProfile } from "@/hooks/use-profile";
 import { useTeamMembers } from "@/hooks/use-team-members";
+import { useTemplateAuthoringAccess } from "@/hooks/use-template-authoring-access";
 import { AssigneeField, AssignmentStatusPill } from "@/components/AssignmentControls";
 import {
   assignmentPatch,
@@ -129,6 +130,7 @@ export function ChecklistDocumentPage() {
   const promptFor = usePrompt();
   const { profile } = useProfile();
   const { members: teamMembers, isManager } = useTeamMembers();
+  const { canAuthor } = useTemplateAuthoringAccess();
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -378,14 +380,14 @@ export function ChecklistDocumentPage() {
   /*
    * Two different locks, deliberately kept apart.
    *
-   * `owned` is an authoring right - only the person who put the checklist on the
-   * project restructures it (add, reorder, delete, mark required). Any teammate
+   * Structure changes are an account-authoring right. Owners, Admins and
+   * Managers on Pro/Team can add, reorder, delete and mark required. Any teammate
    * with RLS access can still *fill it in*, which is the whole point of
    * assigning one. `sealed` overrides both: a completed checklist carries a
    * snapshot that is the compliance record, so nothing about it may move.
    */
   const owned = !!user && !!checklist && checklist.created_by === user.id;
-  const canStructure = owned && !sealed;
+  const canStructure = canAuthor && !sealed;
   const canFill = !sealed;
 
   /*
@@ -446,6 +448,7 @@ export function ChecklistDocumentPage() {
   };
 
   const renameChecklist = async (name: string) => {
+    if (!canStructure) return;
     const trimmed = name.trim();
     if (!checklist || !trimmed || trimmed === checklist.name) return;
     await patchChecklist({ name: trimmed });
@@ -516,6 +519,7 @@ export function ChecklistDocumentPage() {
    * holding the same number moves nothing at all.
    */
   const moveItem = async (item: ChecklistItem, dir: -1 | 1) => {
+    if (!canStructure) return;
     touch();
     const siblings = ordered;
     const idx = siblings.findIndex((x) => x.id === item.id);
@@ -559,6 +563,7 @@ export function ChecklistDocumentPage() {
   };
 
   const toggleRequired = async (item: ChecklistItem) => {
+    if (!canStructure) return;
     touch();
     const next = !item.required;
     setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, required: next } : x)));
@@ -579,6 +584,7 @@ export function ChecklistDocumentPage() {
   const nextPosition = () => ordered.reduce((max, i) => Math.max(max, i.position), -1) + 1;
 
   const addItem = async () => {
+    if (!canStructure) return;
     const label = draft.label.trim();
     if (!label || !checklist) return;
     touch();
@@ -606,6 +612,7 @@ export function ChecklistDocumentPage() {
   };
 
   const addItemsBulk = async (labels: string[], type: ItemType) => {
+    if (!canStructure) return;
     if (!labels.length || !checklist) return;
     touch();
     const start = nextPosition();
@@ -632,6 +639,7 @@ export function ChecklistDocumentPage() {
   };
 
   const deleteItem = async (itemId: string) => {
+    if (!canStructure) return;
     touch();
     const prev = items;
     setItems((xs) => xs.filter((x) => x.id !== itemId));
@@ -665,7 +673,7 @@ export function ChecklistDocumentPage() {
     });
 
   const deleteChecklist = async () => {
-    if (!checklist) return;
+    if (!checklist || !canAuthor) return;
     if (
       !(await confirm({
         title: "Delete this checklist?",
@@ -783,7 +791,7 @@ export function ChecklistDocumentPage() {
   };
 
   const saveAsTemplate = async () => {
-    if (!user || !checklist) return;
+    if (!user || !checklist || !canAuthor) return;
     // App-styled prompt, not `window.prompt` - the native dialog is unstyled,
     // unthemed, and blocks the whole tab.
     const name = await promptFor({
@@ -1002,7 +1010,7 @@ export function ChecklistDocumentPage() {
                 is done, and being told is only useful if they can send it back -
                 so the trigger appears for them too, while authoring actions
                 stay with whoever built the checklist. */}
-            {(owned || (sealed && mayReopen)) && (
+            {(canAuthor || (sealed && mayReopen)) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="More actions">
@@ -1010,7 +1018,7 @@ export function ChecklistDocumentPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52">
-                  {owned && (
+                  {canAuthor && (
                     <DropdownMenuItem onClick={() => void saveAsTemplate()}>
                       <BookmarkPlus className="mr-2 h-4 w-4" />
                       Save as template
@@ -1022,7 +1030,7 @@ export function ChecklistDocumentPage() {
                       Reopen checklist
                     </DropdownMenuItem>
                   )}
-                  {owned && (
+                  {canAuthor && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
@@ -1059,7 +1067,7 @@ export function ChecklistDocumentPage() {
               Complete - sealed record
             </span>
           ) : (
-            !owned && (
+            !canStructure && (
               <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
                 <Lock className="h-3 w-3" />
                 Fill only

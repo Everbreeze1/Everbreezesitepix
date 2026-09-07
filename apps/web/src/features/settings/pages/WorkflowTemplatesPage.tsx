@@ -19,6 +19,7 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   CircleDot,
+  Lock,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -88,6 +89,7 @@ import { KIND_META, KIND_ORDER, type ItemKind } from "@/lib/workflow-items";
 import { GENERAL_CATEGORY, categoryIcon, makeCategoryRank } from "@/lib/template-categories";
 import { TradeSelect } from "@/components/builder/TradeSelect";
 import { useCompanySetup } from "@/hooks/use-company-setup";
+import { useTemplateAuthoringAccess } from "@/hooks/use-template-authoring-access";
 import { tradeCategoryFor } from "@everlumen/shared";
 
 interface Template {
@@ -129,6 +131,39 @@ const TABLES = {
 } as const;
 
 export function WorkflowTemplatesPage({ embedded = false }: { embedded?: boolean } = {}) {
+  const access = useTemplateAuthoringAccess();
+
+  if (access.loading) {
+    return (
+      <div className="flex min-h-40 items-center justify-center text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!access.canAuthor) {
+    return (
+      <div className={embedded ? "py-2" : "px-5 py-8 md:px-10"}>
+        {!embedded && <PageHeader title="Workflow templates" />}
+        <Card className={cn(SURFACE_CARD, "mx-auto max-w-2xl p-8 text-center")}>
+          <Lock className="mx-auto h-6 w-6 text-muted-foreground" />
+          <p className="mt-3 text-sm font-extrabold text-foreground">
+            Workflow authoring is restricted
+          </p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {!access.isPaid
+              ? "Creating and editing workflow templates is available on Pro and Team plans."
+              : "Only account Owners, Admins, and Managers can create or edit workflow templates."}
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
+  return <WorkflowTemplatesBuilder embedded={embedded} />;
+}
+
+function WorkflowTemplatesBuilder({ embedded = false }: { embedded?: boolean } = {}) {
   const { user } = useAuth();
   const confirm = useConfirm();
   const [loading, setLoading] = useState(true);
