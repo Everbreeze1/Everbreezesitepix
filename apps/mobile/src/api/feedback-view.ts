@@ -41,6 +41,26 @@ export function cleanDescription(message: string): string {
   return message.trim().slice(0, MAX_DESCRIPTION);
 }
 
+/** The subject column's cap, from 20261008000000. The web slices to the same. */
+export const MAX_SUBJECT = 160;
+
+/**
+ * Bugs carry a one-line subject so the queue can be scanned; ideas and praise
+ * are filed without one, exactly as the web submits them.
+ */
+export function cleanSubject(kind: FeedbackKind, subject: string): string | null {
+  if (kind !== "bug") return null;
+  const trimmed = subject.trim();
+  return trimmed ? trimmed.slice(0, MAX_SUBJECT) : null;
+}
+
+/** Why Send is held back, said before the tap rather than after a failure. */
+export function subjectError(kind: FeedbackKind, subject: string): string | null {
+  if (kind !== "bug") return null;
+  if (!subject.trim()) return "Add a one-line subject, so the queue can be scanned.";
+  return null;
+}
+
 /**
  * What the phone knows about itself, for the report.
  *

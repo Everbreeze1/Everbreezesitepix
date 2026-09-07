@@ -24,6 +24,8 @@ import {
 
 export async function submitIssueReport(input: {
   kind: FeedbackKind;
+  /** Bugs carry a one-line subject; ideas and praise are filed without one. */
+  subject: string | null;
   description: string;
   projectId: string | null;
   screen: string | null;
@@ -43,6 +45,10 @@ export async function submitIssueReport(input: {
 
   const { error } = await (supabase as any).from("issue_reports").insert({
     ...base,
+    // Subject came with 20261008000000, so it rides the modern-columns insert
+    // and stays out of the legacy retry below, which exists to drop exactly
+    // these. `cleanSubject` has already trimmed and capped it.
+    ...(input.subject ? { subject: input.subject } : {}),
     ...feedbackExtras({ projectId: input.projectId, context: input.context }),
   });
   if (!error) return;

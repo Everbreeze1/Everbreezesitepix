@@ -1623,15 +1623,16 @@ describe("family: a rich-text toolbar button must not steal focus from its edito
   });
 });
 
-describe("family: a record's permission model must stay three separate questions", () => {
+describe("family: a record's permission model must stay separate questions", () => {
   /*
-   * `ChecklistDocumentPage` distinguishes three things that are easy to collapse
+   * `ChecklistDocumentPage` distinguishes four things that are easy to collapse
    * into one boolean, and collapsing them is how a teammate loses the ability to
    * do the job they were assigned:
    *
-   *   owned        - did I put this checklist on the project? (authoring right)
-   *   canStructure - owned AND not sealed  (add / reorder / delete / rename)
-   *   canFill      - not sealed            (tick, answer, attach a photo)
+   *   owned        - did I put this checklist on the project? (staffing right)
+   *   canAuthor    - template-authoring gate (Owner/Admin/Manager + Pro/Team)
+   *   canStructure - canAuthor AND not sealed (add / reorder / delete / rename)
+   *   canFill      - not sealed               (tick, answer, attach a photo)
    *
    * A teammate is deliberately NOT the owner but MUST still be able to fill the
    * record in - that is the entire point of assigning one. Gating the checkbox on
@@ -1645,12 +1646,16 @@ describe("family: a record's permission model must stay three separate questions
    */
   const REL = "apps/web/src/features/projects/pages/ChecklistDocumentPage.tsx";
 
-  it("the three flags are derived, not conflated", () => {
+  it("the flags are derived, not conflated", () => {
     const src = read(REL);
     expect(src).toMatch(
       /const owned\s*=\s*!!user && !!checklist && checklist\.created_by === user\.id/,
     );
-    expect(src).toMatch(/const canStructure\s*=\s*owned && !sealed/);
+    // 20261008000000 moved structuring onto the authoring gate: who may
+    // restructure a checklist is a plan/role question (Owner/Admin/Manager on
+    // Pro/Team), not a question of who created that one record - which stays
+    // the staffing right behind `canAssign`.
+    expect(src).toMatch(/const canStructure\s*=\s*canAuthor && !sealed/);
     expect(src).toMatch(/const canFill\s*=\s*!sealed/);
   });
 

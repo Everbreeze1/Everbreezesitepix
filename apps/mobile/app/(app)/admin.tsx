@@ -271,6 +271,17 @@ export default function AdminScreen() {
                     </Text>
                   </View>
 
+                  {/*
+                    The one-line summary the reporter typed, above the body - the
+                    same headline the web console gives it, so the queue can be
+                    scanned without opening every report.
+                  */}
+                  {report.subject ? (
+                    <Text variant="bodyStrong" numberOfLines={2}>
+                      {report.subject}
+                    </Text>
+                  ) : null}
+
                   <Text variant="body" numberOfLines={6}>
                     {report.description}
                   </Text>

@@ -8,8 +8,11 @@ import { submitIssueReport } from "@/api/feedback";
 import {
   appendErrorLog,
   cleanDescription,
+  cleanSubject,
   KINDS,
+  MAX_SUBJECT,
   messageError,
+  subjectError,
   type DeviceContext,
   type FeedbackKind,
 } from "@/api/feedback-view";
@@ -50,6 +53,7 @@ export default function ReportIssueScreen() {
   const { from, projectId } = useLocalSearchParams<{ from?: string; projectId?: string }>();
 
   const [kind, setKind] = useState<FeedbackKind>("bug");
+  const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [attachLog, setAttachLog] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
@@ -91,6 +95,7 @@ export default function ReportIssueScreen() {
     mutationFn: () =>
       submitIssueReport({
         kind,
+        subject: cleanSubject(kind, subject),
         description: appendErrorLog(cleanDescription(message), log, attaching),
         projectId: projectId ?? null,
         screen: from ?? null,
@@ -104,6 +109,11 @@ export default function ReportIssueScreen() {
   });
 
   const submit = useCallback(() => {
+    const noSubject = subjectError(kind, subject);
+    if (noSubject) {
+      setFormError(noSubject);
+      return;
+    }
     const bad = messageError(message);
     if (bad) {
       setFormError(bad);
@@ -111,7 +121,7 @@ export default function ReportIssueScreen() {
     }
     setFormError(null);
     send.mutate();
-  }, [message, send]);
+  }, [kind, subject, message, send]);
 
   if (sent) {
     return (
@@ -161,6 +171,22 @@ export default function ReportIssueScreen() {
 
         <SectionHeader title="What happened" />
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
+          {/*
+            Bugs only. The subject is the line the feedback queue is scanned by,
+            so it is asked for right where the bug is described. Ideas and praise
+            are filed without one, matching what the web submits.
+          */}
+          {kind === "bug" ? (
+            <Field
+              label="Subject"
+              value={subject}
+              onChangeText={(next) => {
+                setSubject(next.slice(0, MAX_SUBJECT));
+                if (formError) setFormError(null);
+              }}
+              placeholder="One line, e.g. Photos will not upload on site"
+            />
+          ) : null}
           <Field
             value={message}
             onChangeText={(next) => {

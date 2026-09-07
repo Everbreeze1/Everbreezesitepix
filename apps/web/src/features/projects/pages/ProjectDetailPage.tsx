@@ -2904,6 +2904,7 @@ export function ProjectDetailPage() {
                     canAssign={canAssign}
                     onAssign={() => setAssignOpen(true)}
                     variant="dark"
+                    labeled
                   />
                   <ContributorsChip contributors={contributorRows} variant="dark" />
                 </div>

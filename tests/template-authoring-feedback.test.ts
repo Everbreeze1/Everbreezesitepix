@@ -56,4 +56,25 @@ describe("bug report subject", () => {
     expect(admin).toContain("report.subject");
     expect(api).toContain("subject.ilike.${like}");
   });
+
+  it("carries the subject onto the phone: the queue shows it and the phone files one", () => {
+    const rules = read("apps/mobile/src/api/feedback-view.ts");
+    const submit = read("apps/mobile/src/api/feedback.ts");
+    const queueType = read("apps/mobile/src/api/admin-view.ts");
+    const queue = read("apps/mobile/app/(app)/admin.tsx");
+    const form = read("apps/mobile/app/(app)/report-issue.tsx");
+
+    expect(rules).toContain("MAX_SUBJECT = 160");
+    expect(rules).toContain("export function subjectError(");
+    expect(rules).toContain("export function cleanSubject(");
+    // The queue card leads with the subject, the way the web console does.
+    expect(queueType).toContain("subject: string | null;");
+    expect(queue).toContain("report.subject");
+    // Bugs require it; ideas and praise are filed without one.
+    expect(form).toContain("subjectError(kind, subject)");
+    expect(form).toContain("cleanSubject(kind, subject)");
+    // It rides the modern-columns insert and stays out of the legacy retry,
+    // which exists to drop exactly those columns.
+    expect(submit).toMatch(/\.\.\.\(input\.subject \? \{ subject: input\.subject \} : \{\}\)/);
+  });
 });

@@ -35,10 +35,10 @@ export function ProjectCrew({
   onAssign: () => void;
   /** `dark` for the project hero, which sits on the sidebar surface. */
   variant?: "light" | "dark";
+  /** Persistent "Crew · names" label (header); the grid keeps bare avatars. */
+  labeled?: boolean;
   max?: number;
   className?: string;
-  /** Persistent "Crew Â· names" label (header); the grid keeps bare avatars. */
-  labeled?: boolean;
 }) {
   const { members } = useTeamMembers();
   const { tier } = useSubscription();
@@ -63,8 +63,17 @@ export function ProjectCrew({
     <TooltipProvider delayDuration={150}>
       <div className={cn("flex items-center gap-2", className)}>
         {labeled && (
-          <span className="shrink-0 font-manrope text-[11px] font-bold text-muted-foreground">
-            Crew · {crew.map((m) => (m.full_name || m.email || "Teammate").split(" ")[0]).join(", ")}
+          <span
+            className={cn(
+              "shrink-0 font-manrope text-[11px] font-bold",
+              dark ? "text-sidebar-foreground/70" : "text-muted-foreground",
+            )}
+          >
+            {crew.length > 0
+              ? `Crew · ${crew
+                  .map((m) => (m.full_name || m.email || "Teammate").split(" ")[0])
+                  .join(", ")}`
+              : "Crew"}
           </span>
         )}
         {crew.length > 0 && (
@@ -161,7 +170,7 @@ export function ProjectCrew({
 
 function initials(name?: string | null, email?: string | null) {
   const src = (name || email || "?").trim();
-  const parts = src.split(/\s+/).filter(Boolean);
+  const parts = src.split(/\\s+/).filter(Boolean);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return src.slice(0, 2).toUpperCase();
 }

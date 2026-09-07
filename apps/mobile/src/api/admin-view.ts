@@ -31,6 +31,8 @@ export type FeedbackReport = {
   sentiment: string | null;
   source: string | null;
   feature: string | null;
+  /** What the reporter typed as the one-line summary; null on thumbs signals. */
+  subject: string | null;
   description: string;
   url: string | null;
   user_agent: string | null;

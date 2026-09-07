@@ -144,6 +144,21 @@ describe("family: 'contributor' says what it means now", () => {
     const crew = read("apps/web/src/features/projects/components/ProjectCrew.tsx");
     expect(crew).toMatch(/Deliberately a different thing from `ProjectContributors`/);
   });
+
+  it("the project header labels the crew persistently", () => {
+    /*
+     * Both header rows opened as bare initials, and the crew's initials read as
+     * an unexplained count. The header now says "Crew · Sam, Alex" without a
+     * hover; the projects grid keeps the bare stack, so the label is an opt-in
+     * the header takes and the cards do not.
+     */
+    const crew = read("apps/web/src/features/projects/components/ProjectCrew.tsx");
+    expect(crew).toContain("labeled = false");
+    expect(crew).toMatch(/`Crew /);
+    const detail = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
+    const usage = detail.slice(detail.indexOf("<ProjectCrew"));
+    expect(usage.slice(0, 300)).toContain("labeled");
+  });
 });
 
 describe("staffing a job is not the same permission as scoping a person", () => {
