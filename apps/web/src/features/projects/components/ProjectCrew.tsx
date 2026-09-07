@@ -26,6 +26,7 @@ export function ProjectCrew({
   canAssign,
   onAssign,
   variant = "light",
+  labeled = false,
   max = 4,
   className,
 }: {
@@ -36,6 +37,8 @@ export function ProjectCrew({
   variant?: "light" | "dark";
   max?: number;
   className?: string;
+  /** Persistent "Crew Â· names" label (header); the grid keeps bare avatars. */
+  labeled?: boolean;
 }) {
   const { members } = useTeamMembers();
   const { tier } = useSubscription();
@@ -59,6 +62,11 @@ export function ProjectCrew({
   return (
     <TooltipProvider delayDuration={150}>
       <div className={cn("flex items-center gap-2", className)}>
+        {labeled && (
+          <span className="shrink-0 font-manrope text-[11px] font-bold text-muted-foreground">
+            Crew · {crew.map((m) => (m.full_name || m.email || "Teammate").split(" ")[0]).join(", ")}
+          </span>
+        )}
         {crew.length > 0 && (
           <div className="flex -space-x-1.5">
             {shown.map((m) => {
