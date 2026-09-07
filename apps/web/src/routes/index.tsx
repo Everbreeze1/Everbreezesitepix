@@ -566,7 +566,7 @@ function Landing() {
             <div className="flex flex-col">
               <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[24px] border-[0.8px] border-border bg-black shadow-sm">
                 <img
-                  src="/capture.png"
+                  src="/capture-image.png"
                   alt="Everlumen camera view for capturing a job site photo"
                   className="h-full w-full object-cover opacity-80"
                 />
@@ -617,7 +617,7 @@ function Landing() {
             <div className="flex flex-col">
               <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[24px] border-[0.8px] border-border bg-card">
                 <img
-                  src="/organize.png"
+                  src="/organize-image.png"
                   alt="Photos organized automatically into the right project, sorted and searchable"
                   className="h-full w-full object-cover"
                 />
@@ -639,7 +639,7 @@ function Landing() {
             <div className="flex flex-col">
               <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[24px] border-[0.8px] border-border bg-card">
                 <img
-                  src="/report.png"
+                  src="/report-image.png"
                   alt="AI-generated progress report drafted from your site photos"
                   className="h-full w-full object-cover"
                 />
