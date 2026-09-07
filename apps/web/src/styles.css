@@ -225,6 +225,37 @@
   --gradient-subtle: linear-gradient(180deg, oklch(0.16 0.025 250) 0%, oklch(0.2 0.03 250) 100%);
 }
 
+
+/*
+ * Landing page yellow theme.
+ * Replaces the blue primary color with the gold/yellow from the lumen logo.
+ */
+.landing-yellow {
+  --primary: oklch(0.55 0.14 60);
+  --primary-foreground: oklch(0.99 0.005 60);
+  --primary-glow: oklch(0.7 0.16 60);
+  --ring: oklch(0.55 0.14 60);
+  --gradient-hero: linear-gradient(
+    135deg,
+    oklch(0.4 0.12 60) 0%,
+    oklch(0.55 0.14 60) 60%,
+    oklch(0.7 0.16 60) 100%
+  );
+}
+.landing-yellow.dark,
+.landing-yellow .dark {
+  --primary: oklch(0.78 0.16 75);
+  --primary-foreground: oklch(0.16 0.025 60);
+  --primary-glow: oklch(0.85 0.14 75);
+  --ring: oklch(0.78 0.16 75);
+  --gradient-hero: linear-gradient(
+    135deg,
+    oklch(0.78 0.16 75) 0%,
+    oklch(0.85 0.14 75) 60%,
+    oklch(0.92 0.1 75) 100%
+  );
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
@@ -347,6 +378,10 @@
   &::-webkit-scrollbar-thumb:hover {
     background-color: rgba(255, 255, 255, 0.3);
   }
+}
+
+
+/*
 }
 
 @layer base {

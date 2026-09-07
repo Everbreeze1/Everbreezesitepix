@@ -229,7 +229,7 @@ function Landing() {
   usePwaGuard();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background landing-yellow">
       <MobileAppBanner />
       <SiteHeader transparent />
 
