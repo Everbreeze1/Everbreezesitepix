@@ -12,7 +12,6 @@ import {
   Map as MapIcon,
   Plus,
   Search,
-  Trash2,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -45,7 +44,6 @@ const primaryNav: DemoNavItem[] = [
 const auxiliaryNav: Array<{ label: string; icon: LucideIcon }> = [
   { label: "Teams", icon: Users },
   { label: "Portfolio", icon: Layers },
-  { label: "Trash", icon: Trash2 },
   { label: "Knowledge Base", icon: HelpCircle },
   { label: "Feedback", icon: LifeBuoy },
 ];

@@ -133,7 +133,7 @@ const run = async () => {
   /* ------------------------------------------------- find a usable project */
   current = "projects";
   await page.goto(`${BASE}/projects`, { waitUntil: "domcontentloaded" });
-  // By href SHAPE, not prefix: the sidebar ships /projects/trash immediately,
+  // By href SHAPE, not prefix:the project list renders UUID-shaped links immediately,
   // so a prefix match is satisfied before the list has fetched anything.
   await page
     .waitForFunction(

@@ -2135,68 +2135,34 @@ describe("family: a link we email must land on our own domain", () => {
   });
 });
 
-describe("family: a recovery surface has to be reachable", () => {
+describe("family: a recovery surface has to be reachable without dominating the sidebar", () => {
   /*
    * Deleting is reversible for TRASH_RETENTION_DAYS (60), after which a nightly
-   * sweep purges for good. The whole trash feature existed and worked - route,
-   * page, restore, purge, retention, cron, eight RPC ops - and was reachable
-   * from exactly ONE place: a three-dot overflow menu on the Projects page.
-   * Not the sidebar, not the dashboard, not mobile.
+   * sweep purges for good. Trash is reachable from exactly one place:the
+   * three-dot overflow menu on the Projects page.
    *
-   * A recovery screen nobody can find is the same as no recovery screen, except
-   * it also costs storage: 37 photos and 6 projects were sitting in it,
-   * counting down, with no way for their owner to see or restore them.
+   * Stakeholder feedback:the Trash box must not sit prominently on the sidebar.
+   * Right now trashed projects are reachable from the Projects page three-dot
+   * overflow menu, which is the right weight for a recovery surface. These two
+   * guards pin that balance in both directions:the menu link must stay,and
+   * the sidebar must not regrow a row for it(or its badge machinery) again.
    */
+  const PROJECTS_PAGE = "apps/web/src/features/projects/pages/ProjectsPage.tsx";
   const SIDEBAR = "apps/web/src/components/AppSidebar.tsx";
 
-  it("the sidebar links to the trash", () => {
-    const src = stripComments(read(SIDEBAR));
-    expect(src).toMatch(/url:\s*"\/projects\/trash"/);
+  it("the Projects page overflow menu links to the trash", () => {
+    const src = stripComments(read(PROJECTS_PAGE));
+    expect(src).toMatch(/to="\/projects\/trash"/);
+    expect(src).toMatch(/Project trash/);
   });
 
-  it("the trash row is not gated behind a plan or role", () => {
-    /*
-     * Restoring your own deleted work is not a premium feature, and gating it
-     * would recreate the original problem for exactly the users least likely
-     * to have another route in.
-     */
+  it("the sidebar does not link to the trash", () => {
     const src = stripComments(read(SIDEBAR));
-    const start = src.indexOf("const toolItems");
-    expect(start, "toolItems not found").toBeGreaterThan(-1);
-    // Slice to the array's own terminator, not the first `]` - the spread
-    // `...(showOwnerNav ? [pricingItem] : [])` closes a bracket before it.
-    const block = src.slice(start, src.indexOf("];", start) + 2);
-    // A bare element: preceded by `[` or `,`, followed by `,` or `]`. Matched
-    // without anchoring to line starts so Prettier collapsing the array onto
-    // one line stays a formatting change, not a failure.
-    expect(block).toMatch(/[[,]\s*trashItem\s*[,\]]/);
-    // showOwnerNav guards Upgrade only; trashItem must not sit inside a ternary.
-    expect(block).not.toMatch(/\?\s*\[trashItem\]/);
-  });
-
-  it("the badge is driven by the real count, not hardcoded", () => {
-    const src = stripComments(read(SIDEBAR));
-    expect(src).toMatch(/getTrashCounts/);
-    expect(src).toMatch(/trashTotal/);
-  });
-
-  it("the count survives the collapsed rail", () => {
-    /*
-     * Collapsed to icons there is no room for a number. Without a fallback
-     * indicator the only signal that anything is recoverable disappears for
-     * anyone who works with the rail shut.
-     */
-    const src = stripComments(read(SIDEBAR));
-    expect(src).toMatch(/badge > 0 && collapsed/);
-  });
-
-  it("the count is announced to screen readers", () => {
-    const src = stripComments(read(SIDEBAR));
-    expect(src).toMatch(/items?["']?\s*\}?\s*in trash|in trash/);
-    expect(src).toMatch(/sr-only/);
+    expect(src).not.toMatch(/url:\s*"\/projects\/trash"/);
+    expect(src).not.toMatch(/trashItem/);
+    expect(src).not.toMatch(/getTrashCounts/);
   });
 });
-
 describe("family: a cron endpoint that cannot authenticate fails silently", () => {
   /*
    * verifyCronSecret resolves the expected secret through

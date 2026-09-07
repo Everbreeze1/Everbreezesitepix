@@ -13,7 +13,6 @@ import {
   ChevronRight,
   Layers,
   Lock,
-  Trash2,
   ShieldCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -36,7 +35,6 @@ import { useProfile } from "@/hooks/use-profile";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { getMyTeam } from "@/lib/teams.functions";
-import { getTrashCounts } from "@/lib/trash.functions";
 import { checkIsPlatformAdmin } from "@/lib/admin.functions";
 
 const baseItems = [
@@ -54,16 +52,6 @@ const templatesItem = { title: "Templates", url: "/templates", icon: LayoutTempl
 // project pages + website embeds), so "Portfolio" is what it actually is.
 const showcasesItem = { title: "Portfolio", url: "/showcases", icon: Layers } as const;
 const pricingItem = { title: "Upgrade", url: "/pricing", icon: Crown } as const;
-/*
- * Deleting is reversible for 60 days, but only if you can find where the
- * deleted things went. The trash screen has existed the whole time - route,
- * page, restore and purge, retention, a nightly sweep - reachable from exactly
- * one place: a three-dot overflow menu on the Projects page. Nothing in the
- * sidebar, nothing on the dashboard, nothing on mobile. Someone who deletes a
- * project by mistake has no path back to it that they could reasonably guess,
- * and the window closes on a timer they cannot see.
- */
-const trashItem = { title: "Trash", url: "/projects/trash", icon: Trash2 } as const;
 // "Knowledge Base" rather than "Help Center": this row is an article library,
 // and the path to a human is the separate Feedback row directly below it.
 const helpItem = { title: "Knowledge Base", url: "/help", icon: HelpCircle } as const;
@@ -194,27 +182,10 @@ export function AppSidebar() {
    */
   const toolItems = [
     ...(showOwnerNav && !hasTeamAccess ? [pricingItem] : []),
-    trashItem,
     helpItem,
     reportIssueItem,
     ...(adminCheck?.isAdmin ? [adminItem] : []),
   ];
-
-  /*
-   * The badge is the only signal that anything is recoverable at all. Without a
-   * number the row reads as an empty utility and gets ignored, which is the
-   * state the product was already in.
-   *
-   * Deliberately not gated on plan or role: restoring your own deleted work is
-   * not a premium feature, and `getTrashCounts` is already scoped to the caller.
-   */
-  const { data: trashCounts } = useQuery({
-    queryKey: ["trash-counts"],
-    queryFn: async () => (await getTrashCounts()) as { projects: number; photos: number },
-    enabled: !!user,
-    staleTime: 60_000,
-  });
-  const trashTotal = (trashCounts?.projects ?? 0) + (trashCounts?.photos ?? 0);
 
   const displayName = profile?.full_name || user?.email || "";
   const initials = getInitials(profile?.full_name, user?.email);
@@ -319,43 +290,15 @@ export function AppSidebar() {
             <SidebarMenu className={`${isMobile ? "gap-1.5" : "gap-(--rail-gap)"}`}>
               {toolItems.map((item) => {
                 const active = pathname === item.url || pathname.startsWith(item.url + "/");
-                const badge = item.url === trashItem.url && trashTotal > 0 ? trashTotal : 0;
                 return (
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton asChild isActive={active} className={navButtonClass(active)}>
                       <Link to={item.url}>
                         {active && !collapsed && <ActiveMarker />}
-                        <span className="relative flex shrink-0 items-center">
+                        <span className="flex shrink-0 items-center">
                           <item.icon className={navIconClass(active)} />
-                          {/*
-                            Collapsed to icons there is no room for a number, but
-                            "something is in here" still has to survive - so the
-                            count becomes a dot. Without this the badge simply
-                            vanishes for anyone who works with the rail closed.
-                          */}
-                          {badge > 0 && collapsed && (
-                            <span
-                              aria-hidden
-                              className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-sidebar-ring ring-2 ring-sidebar"
-                            />
-                          )}
                         </span>
                         {!collapsed && <span>{item.title}</span>}
-                        {!collapsed && badge > 0 && (
-                          <span className="ml-auto flex shrink-0 items-center">
-                            <span className="rounded-full bg-sidebar-foreground/12 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-sidebar-foreground/70">
-                              {badge > 99 ? "99+" : badge}
-                            </span>
-                          </span>
-                        )}
-                        {badge > 0 && (
-                          // One text node carries the meaning for a screen
-                          // reader in both states; the pill and the dot are
-                          // decoration.
-                          <span className="sr-only">
-                            {badge} {badge === 1 ? "item" : "items"} in trash
-                          </span>
-                        )}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -407,7 +350,7 @@ export function AppSidebar() {
           <LogOut className={isMobile ? "h-5 w-5" : "h-4 w-4"} />
           {/* Collapsed to icons the label had nowhere to go and ran out past
               the rail. The accessible name moves onto the button so the
-              icon-only state is still announced, and the tooltip says it to
+              icon-only state is still announced,and the tooltip says it to
               everyone else. */}
           {!collapsed && <span className="ml-2.5">Sign out</span>}
         </Button>

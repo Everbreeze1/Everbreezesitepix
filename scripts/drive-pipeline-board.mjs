@@ -288,8 +288,8 @@ const run = async () => {
   current = "project-page";
   await page.goto(`${BASE}/projects`, { waitUntil: "networkidle" });
   await page.waitForTimeout(2500);
-  // A UUID, not just any /projects/ href: /projects/trash is one too, and it is
-  // the first link on the page.
+  // A UUID, not just any /projects/ href:real project links are UUID-shaped,
+  // so filtering to UUID shape selects the first project rather than a utility row.
   const firstProject = page
     .locator('a[href^="/projects/"]')
     .filter({ hasNotText: /^$/ })

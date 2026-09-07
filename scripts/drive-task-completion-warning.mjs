@@ -117,10 +117,10 @@ const run = async () => {
   current = "projects";
   await page.goto(`${BASE}/projects`, { waitUntil: "domcontentloaded" });
   /*
-   * Waited for by href SHAPE, not by prefix. The sidebar ships /projects/trash
-   * straight away, so `a[href^="/projects/"]` is satisfied before the list has
-   * fetched anything and the run reports "no projects" against a page that is
-   * still loading.
+   * Waited for by href SHAPE, not by prefix. The project list renders UUID-shaped
+   * project links immediately, so `a[href^="/projects/"]` is satisfied before the
+   * list has fetched anything and the run reports "no projects" against a page
+   * that is still loading.
    */
   await page
     .waitForFunction(

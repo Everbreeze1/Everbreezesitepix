@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, RefreshCw, Trash2, Loader2, ImageOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,12 +32,6 @@ export function ProjectTrash({ projectId, onChanged }: Props) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const confirm = useConfirm();
-  // Keeps the sidebar's Trash badge honest - see ProjectTrashPage.
-  const queryClient = useQueryClient();
-  const refreshTrashBadge = useCallback(
-    () => void queryClient.invalidateQueries({ queryKey: ["trash-counts"] }),
-    [queryClient],
-  );
 
   const listFn = listTrashedPhotos;
   const restoreFn = restorePhotos;
@@ -79,7 +72,6 @@ export function ProjectTrash({ projectId, onChanged }: Props) {
       toast.success(`Restored ${ids.length} photo${ids.length === 1 ? "" : "s"}`);
       setItems((cur) => cur.filter((i) => !ids.includes(i.id)));
       clearSel();
-      refreshTrashBadge();
       onChanged?.();
     } catch (e: any) {
       toast.error(e?.message ?? "Restore failed");
@@ -103,7 +95,6 @@ export function ProjectTrash({ projectId, onChanged }: Props) {
       toast.success(`Deleted ${ids.length} photo${ids.length === 1 ? "" : "s"} permanently`);
       setItems((cur) => cur.filter((i) => !ids.includes(i.id)));
       clearSel();
-      refreshTrashBadge();
     } catch (e: any) {
       toast.error(e?.message ?? "Delete failed");
     } finally {
