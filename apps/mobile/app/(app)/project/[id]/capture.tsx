@@ -339,7 +339,19 @@ export default function CaptureScreen() {
       return;
     }
 
-    router.back();
+    /*
+     * Success. The batch is queued and the durable copies are in app storage,so
+     * there is nothing left on screen that has to be uploaded. Reset the form and
+     * flip back to the viewfinder so the next photo can be taken immediately
+     * without re-opening the camera. Phase is deliberately kept: a technician
+     * shooting a run of "before" (or "after") photos across several saves should
+     * not have to re-pick the segment every time; the per-batch caption and tags
+     * are cleared so one batch's notes don't leak into the next.
+     */
+    setShots([]);
+    setCaption("");
+    setTagText("");
+    setReviewing(false);
   }
 
   if (!permission) {
