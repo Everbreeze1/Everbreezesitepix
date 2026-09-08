@@ -65,7 +65,7 @@ const screenOptions: Array<{
     id: "projects",
     label: "Projects",
     icon: FolderKanban,
-    blurb: "Every job in one list — status, photos, latest update.",
+    blurb: "Every job in one list - status, photos, latest update.",
   },
   {
     id: "project",
@@ -96,7 +96,7 @@ const screenOptions: Array<{
 const featureTiles = [
   {
     title: "Photos that prove themselves",
-    body: "Every shot is timestamped and mapped to its job — no more scrolling camera rolls or digging through group chats.",
+    body: "Every shot is timestamped and mapped to its job - no more scrolling camera rolls or digging through group chats.",
   },
   {
     title: "AI that writes the report",
@@ -147,13 +147,13 @@ function DemoHero() {
             See the UI. No account, no sign-up.
           </h1>
           <p className="font-manrope mt-5 max-w-xl text-lg leading-[29px] text-muted-foreground">
-            Walk the Everlumen workspace yourself — the dashboard, project photo logs, site map,
-            gallery and AI reports — built with sample data that mirrors how crews use it on the
+            Walk the Everlumen workspace yourself - the dashboard, project photo logs, site map,
+            gallery and AI reports - built with sample data that mirrors how crews use it on the
             job.
           </p>
           <div className="mt-7 inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-4 py-2 text-xs font-bold text-muted-foreground">
             <Monitor className="h-4 w-4 text-primary" />
-            Everything on this page is a simulation — your data never leaves your browser.
+            Everything on this page is a simulation - your data never leaves your browser.
           </div>
         </div>
       </div>

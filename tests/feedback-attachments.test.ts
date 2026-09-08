@@ -7,6 +7,11 @@ import {
   attachmentName,
   indexSignedUrls,
 } from "../apps/api/src/domains/admin/feedback";
+import {
+  MAX_ATTACHMENT_BYTES,
+  attachmentRejection,
+  screenAttachments,
+} from "../apps/web/src/lib/feedback";
 
 const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
 
@@ -82,6 +87,50 @@ describe("deciding how to show an attachment", () => {
   it("falls back to a link for anything else", () => {
     expect(attachmentKind("uid/1758412800000-0-log.txt")).toBe("file");
     expect(attachmentKind("uid/1758412800000-0-noextension")).toBe("file");
+  });
+});
+
+describe("screening picked files on the web", () => {
+  const png = () => new File([new Uint8Array(4)], "shot.png", { type: "image/png" });
+  const pdf = () => new File([new Uint8Array(8)], "scan.pdf", { type: "application/pdf" });
+
+  it("keeps images and PDFs within the cap", () => {
+    const { accepted, rejected } = screenAttachments([png(), pdf()], [], 3);
+    expect(accepted).toHaveLength(2);
+    expect(rejected).toHaveLength(0);
+  });
+
+  it("rejects a type the picker let through but the bucket does not take", () => {
+    const doc = new File([new Uint8Array(8)], "notes.txt", { type: "text/plain" });
+    expect(attachmentRejection(doc, [])).toMatchObject({ reason: "type" });
+  });
+
+  it("rejects a file over the per-file cap before it is listed as attached", () => {
+    const huge = new File([new Uint8Array(4)], "huge.png", { type: "image/png" });
+    Object.defineProperty(huge, "size", { value: MAX_ATTACHMENT_BYTES + 1 });
+    expect(attachmentRejection(huge, [])).toMatchObject({ reason: "size" });
+  });
+
+  it("does not double-attach the same file in one batch or across picks", () => {
+    const a = png();
+    const b = png();
+    expect(attachmentRejection(b, [a])).toMatchObject({ reason: "duplicate" });
+    const { accepted } = screenAttachments([a, b], [], 3);
+    expect(accepted).toHaveLength(1);
+  });
+
+  it("fills the room left on the report, not the whole pick", () => {
+    // The third file is beyond the two slots left, so it is cut off by the
+    // page's own "only the first N could be added" toast, not reported here.
+    const { accepted } = screenAttachments([png(), pdf(), png()], [], 2);
+    expect(accepted).toHaveLength(2);
+  });
+
+  it("turns a cross-pick repeat away without unsetting the earlier list", () => {
+    const { accepted: first } = screenAttachments([png()], [], 3);
+    const { accepted: second, rejected } = screenAttachments([png()], first, 3);
+    expect(second).toHaveLength(0);
+    expect(rejected[0]).toMatchObject({ reason: "duplicate" });
   });
 });
 

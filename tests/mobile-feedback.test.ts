@@ -2,15 +2,23 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  acceptsAttachmentType,
   appendErrorLog,
+  attachmentIssue,
+  attachmentPath,
   cleanDescription,
   contextAsText,
   deviceUserAgent,
+  FEEDBACK_BUCKET,
   feedbackRow,
+  formatBytes,
   KINDS,
+  MAX_ATTACHMENTS,
+  MAX_ATTACHMENT_BYTES,
   MAX_DESCRIPTION,
   messageError,
   type DeviceContext,
+  type PickedAttachment,
 } from "../apps/mobile/src/api/feedback-view";
 
 /*
@@ -202,6 +210,114 @@ describe("KINDS", () => {
     // broken or missing.
     expect(KINDS.map((k) => k.id).sort()).toEqual(["bug", "idea", "praise"]);
     for (const kind of KINDS) expect(kind.hint.length).toBeGreaterThan(0);
+  });
+});
+
+describe("attachment paths, written the way the admin console reads them", () => {
+  it("uses the same shape the web uploader writes", () => {
+    // attachmentName in apps/api/src/domains/admin/feedback.ts strips a
+    // `{epoch_ms}-{n}-` prefix off paths of this shape to recover the
+    // reporter's filename, so the digits are what the admin captions are
+    // computed from. A mobile report's screenshot has to land in the same
+    // place a web one does.
+    expect(attachmentPath("u-123", 1758412800000, 2, "Scan-Report.PDF")).toBe(
+      "u-123/1758412800000-2-scan-report.pdf",
+    );
+  });
+
+  it("names the same bucket the web writes to", () => {
+    expect(FEEDBACK_BUCKET).toBe("feedback-attachments");
+  });
+
+  it("holds the same limits the web holds", () => {
+    expect(MAX_ATTACHMENTS).toBe(3);
+    expect(MAX_ATTACHMENT_BYTES).toBe(10 * 1024 * 1024);
+  });
+});
+
+describe("acceptsAttachmentType", () => {
+  it("accepts every type the bucket's MIME allow-list takes", () => {
+    for (const mime of ["image/png", "image/jpeg", "image/gif", "image/webp"]) {
+      expect(acceptsAttachmentType(mime, "shot")).toBe(true);
+    }
+  });
+
+  it("falls back to the extension when the MIME type is missing", () => {
+    for (const ext of ["png", "jpg", "jpeg", "gif", "webp"]) {
+      expect(acceptsAttachmentType("", `shot.${ext}`)).toBe(true);
+    }
+    // A camera roll is not case sensitive.
+    expect(acceptsAttachmentType("", "IMG_0042.PNG")).toBe(true);
+  });
+
+  it("rejects an image the picker can return but the bucket will not take", () => {
+    expect(acceptsAttachmentType("image/heic", "photo.heic")).toBe(false);
+  });
+});
+
+describe("attachmentIssue", () => {
+  const base: PickedAttachment = {
+    uri: "file:///tmp/shot.png",
+    name: "shot.png",
+    sizeBytes: 1024 * 1024,
+    mimeType: "image/png",
+  };
+
+  it("accepts a file that clears all three guards", () => {
+    expect(attachmentIssue(base, [])).toBeNull();
+  });
+
+  it("rejects a file over the per-file cap", () => {
+    expect(attachmentIssue({ ...base, sizeBytes: MAX_ATTACHMENT_BYTES + 1 }, [])).toMatchObject({
+      kind: "size",
+      name: "shot.png",
+    });
+  });
+
+  it("rejects a type the bucket does not take", () => {
+    expect(attachmentIssue({ ...base, mimeType: "image/heic" }, [])).toMatchObject({
+      kind: "type",
+      name: "shot.png",
+    });
+  });
+
+  it("rejects a duplicate within the same batch", () => {
+    expect(attachmentIssue(base, [base])).toMatchObject({ kind: "duplicate", name: "shot.png" });
+  });
+});
+
+describe("formatBytes", () => {
+  it("reads the way the web's does", () => {
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(2.5 * 1024)).toBe("2.5 KB");
+    expect(formatBytes(12 * 1024)).toBe("12 KB");
+    expect(formatBytes(MAX_ATTACHMENT_BYTES)).toBe("10 MB");
+  });
+});
+
+describe("the phone attaches what it shows", () => {
+  const screen = () =>
+    readFileSync(join(process.cwd(), "apps/mobile/app/(app)/report-issue.tsx"), "utf8");
+
+  it("offers the multi-image picker to a signed-in bug reporter", () => {
+    expect(screen()).toContain("launchImageLibraryAsync");
+    expect(screen()).toContain("allowsMultipleSelection: true");
+    expect(screen()).toContain("selectionLimit: room");
+  });
+
+  it("uploads the picked screenshots before the report is inserted", () => {
+    expect(screen()).toContain("uploadFeedbackAttachments(user.id, picked)");
+    expect(screen()).toContain("attachments: attachmentPaths");
+  });
+
+  it("still sends the text when an upload fails", () => {
+    expect(screen()).toContain("sending the rest");
+  });
+
+  it("applies the same guards the web applies, at pick time", () => {
+    expect(screen()).toContain("attachmentIssue(candidate,");
+    expect(screen()).toContain("MAX_ATTACHMENT_BYTES");
   });
 });
 

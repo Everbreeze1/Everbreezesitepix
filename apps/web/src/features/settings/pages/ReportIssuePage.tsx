@@ -33,6 +33,7 @@ import {
   MAX_ATTACHMENTS,
   MAX_ATTACHMENT_BYTES,
   listMyFeedback,
+  screenAttachments,
   submitFeedback,
   uploadFeedbackAttachments,
   type FeedbackKind,
@@ -191,17 +192,19 @@ export function ReportIssuePage() {
       return;
     }
     const chosen = Array.from(picked);
-    const accepted: File[] = [];
-    for (const file of chosen.slice(0, room)) {
-      if (file.size > MAX_ATTACHMENT_BYTES) {
+    const { accepted, rejected } = screenAttachments(chosen, files, room);
+    for (const { reason, file } of rejected) {
+      if (reason === "type") {
+        toast.error(`${file.name} isn't an accepted file type - images or PDFs only.`);
+      } else if (reason === "size") {
         toast.error(
           `${file.name} is ${formatBytes(file.size)}, over the ${formatBytes(
             MAX_ATTACHMENT_BYTES,
           )} limit.`,
         );
-        continue;
+      } else {
+        toast.error(`${file.name} is already attached.`);
       }
-      accepted.push(file);
     }
     if (accepted.length) setFiles((prev) => [...prev, ...accepted]);
     if (chosen.length > room) {
@@ -635,7 +638,7 @@ function AttachmentField({
   return (
     <div>
       <p className="font-manrope text-sm font-extrabold text-foreground">
-        Screenshot <span className="font-bold text-muted-foreground">(optional)</span>
+        Screenshots <span className="font-bold text-muted-foreground">(optional)</span>
       </p>
       <p className="font-manrope mt-1 text-xs leading-5 text-muted-foreground">
         A picture of the screen when it went wrong is usually worth more than a paragraph. Up to{" "}
@@ -682,15 +685,22 @@ function AttachmentField({
       )}
 
       {files.length < MAX_ATTACHMENTS && (
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => inputRef.current?.click()}
-          className="font-manrope mt-3 h-10 gap-2 rounded-lg text-sm font-bold"
-        >
-          <Paperclip className="h-4 w-4" />
-          {files.length ? "Add another" : "Attach a screenshot"}
-        </Button>
+        <div className="mt-3 flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => inputRef.current?.click()}
+            className="font-manrope h-10 gap-2 rounded-lg text-sm font-bold"
+          >
+            <Paperclip className="h-4 w-4" />
+            {files.length ? "Add another" : "Attach a screenshot"}
+          </Button>
+          {files.length > 0 && (
+            <span className="font-manrope text-xs text-muted-foreground">
+              {files.length} of {MAX_ATTACHMENTS}
+            </span>
+          )}
+        </div>
       )}
     </div>
   );

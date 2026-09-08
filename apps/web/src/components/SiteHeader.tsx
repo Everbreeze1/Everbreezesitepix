@@ -121,7 +121,7 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
             {mounted &&
               (theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />)}
           </Button>
-          {/* Mobile menu — visible below md where the inline nav is hidden */}
+          {/* Mobile menu - visible below md where the inline nav is hidden */}
           <Sheet>
             <SheetTrigger asChild>
               <button

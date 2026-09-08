@@ -143,7 +143,7 @@ export const demoPhotos: DemoPhoto[] = [
   {
     id: "p01",
     projectId: "maple",
-    caption: "Foundation pour — north corner",
+    caption: "Foundation pour - north corner",
     phase: "Structure",
     taken: "May 8",
     src: heroImg,
@@ -159,7 +159,7 @@ export const demoPhotos: DemoPhoto[] = [
   {
     id: "p03",
     projectId: "maple",
-    caption: "Framing inspection — level 3",
+    caption: "Framing inspection - level 3",
     phase: "Framing",
     taken: "May 4",
     src: collaborationImg,
@@ -167,7 +167,7 @@ export const demoPhotos: DemoPhoto[] = [
   {
     id: "p04",
     projectId: "maple",
-    caption: "MEP rough-in — unit 4B",
+    caption: "MEP rough-in - unit 4B",
     phase: "MEP",
     taken: "May 3",
     src: problemImg,
@@ -175,7 +175,7 @@ export const demoPhotos: DemoPhoto[] = [
   {
     id: "p05",
     projectId: "maple",
-    caption: "Drywall progress — corridors",
+    caption: "Drywall progress - corridors",
     phase: "Finishes",
     taken: "Today",
     src: howItWorksImg,
@@ -183,7 +183,7 @@ export const demoPhotos: DemoPhoto[] = [
   {
     id: "p06",
     projectId: "maple",
-    caption: "Cabinetry mock-up — kitchen",
+    caption: "Cabinetry mock-up - kitchen",
     phase: "Finishes",
     taken: "May 1",
     src: ctaImg,
@@ -191,7 +191,7 @@ export const demoPhotos: DemoPhoto[] = [
   {
     id: "p07",
     projectId: "riverside",
-    caption: "Site prep — east lot",
+    caption: "Site prep - east lot",
     phase: "Site prep",
     taken: "Today",
     src: heroImg,
@@ -199,7 +199,7 @@ export const demoPhotos: DemoPhoto[] = [
   {
     id: "p08",
     projectId: "riverside",
-    caption: "Footing pour — retail bays",
+    caption: "Footing pour - retail bays",
     phase: "Structure",
     taken: "Yesterday",
     src: valueImg,
@@ -207,7 +207,7 @@ export const demoPhotos: DemoPhoto[] = [
   {
     id: "p09",
     projectId: "aspen",
-    caption: "Roof sheathing — main gable",
+    caption: "Roof sheathing - main gable",
     phase: "Structure",
     taken: "Apr 29",
     src: problemImg,
@@ -215,7 +215,7 @@ export const demoPhotos: DemoPhoto[] = [
   {
     id: "p10",
     projectId: "aspen",
-    caption: "Window install — south elevation",
+    caption: "Window install - south elevation",
     phase: "Envelope",
     taken: "Apr 27",
     src: howItWorksImg,
@@ -223,7 +223,7 @@ export const demoPhotos: DemoPhoto[] = [
   {
     id: "p11",
     projectId: "summit",
-    caption: "Deck pour — level 2",
+    caption: "Deck pour - level 2",
     phase: "Structure",
     taken: "Mar 19",
     src: ctaImg,
@@ -231,7 +231,7 @@ export const demoPhotos: DemoPhoto[] = [
   {
     id: "p12",
     projectId: "summit",
-    caption: "Waterproofing — plaza level",
+    caption: "Waterproofing - plaza level",
     phase: "Finishes",
     taken: "Mar 16",
     src: collaborationImg,
@@ -239,7 +239,7 @@ export const demoPhotos: DemoPhoto[] = [
   {
     id: "p13",
     projectId: "brewery",
-    caption: "Taproom interior — first fit",
+    caption: "Taproom interior - first fit",
     phase: "Finishes",
     taken: "Mar 2",
     src: valueImg,
@@ -271,7 +271,7 @@ export const demoActivity: DemoActivityItem[] = [
   },
   {
     icon: "sparkles",
-    text: "AI report ready — Weekly progress report for Maple Ave",
+    text: "AI report ready - Weekly progress report for Maple Ave",
     when: "2h ago",
   },
   { icon: "tag", text: "Sam Ortega tagged 8 photos in Framing", when: "3h ago" },
@@ -311,7 +311,7 @@ export const demoReports: DemoReport[] = [
     summary:
       "Crews made strong progress on Level 3 and the common corridors this week. Framing on Level 3 is fully inspected and closed, MEP rough-in for units 4B–4D is approved, and drywall is being hung on the north wing. The only open item is the elevator lobby ceiling coordination, which the MEP foreman flagged on Wednesday.",
     highlights: [
-      "Level 3 framing inspection cleared — all 12 units closed",
+      "Level 3 framing inspection cleared - all 12 units closed",
       "MEP rough-in approved for units 4B, 4C and 4D",
       "Drywall hanging started on the north wing corridors",
       "Cabinetry mock-up installed in unit 4B for client sign-off",
@@ -319,13 +319,13 @@ export const demoReports: DemoReport[] = [
     notes: [
       "Elevator lobby ceiling coordination: resolve MEP clash before Friday's ceiling rough-in",
       "Window deliveries for the east façade confirmed for Wednesday",
-      "Concrete cure samples from the Level 3 slab passed — strip scheduled Monday",
+      "Concrete cure samples from the Level 3 slab passed - strip scheduled Monday",
     ],
   },
   {
     id: "r2",
     projectId: "riverside",
-    title: "Photos as-built — Phase 2 closeout",
+    title: "Photos as-built - Phase 2 closeout",
     kind: "AI",
     generatedAgo: "Generated yesterday",
     summary:
@@ -344,7 +344,7 @@ export const demoReports: DemoReport[] = [
     kind: "Manual",
     generatedAgo: "Saved 3 days ago",
     summary:
-      "Field inspection of the finished parking deck surface — asphalt thickness spot-checks, striping layout and signage placement were verified against the drawings.",
+      "Field inspection of the finished parking deck surface - asphalt thickness spot-checks, striping layout and signage placement were verified against the drawings.",
     highlights: [
       "Spot-check cores met the 2.5″ spec across all 6 bays",
       "Striping layout matches the permit set within 1⁄2″",
@@ -355,7 +355,7 @@ export const demoReports: DemoReport[] = [
   {
     id: "r4",
     projectId: "maple",
-    title: "Daily log — sidewalk pour",
+    title: "Daily log - sidewalk pour",
     kind: "AI",
     generatedAgo: "Generated 5 days ago",
     summary:

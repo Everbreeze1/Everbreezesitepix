@@ -381,7 +381,7 @@ function LoginPage() {
             <Link to="/demo" className="font-bold text-primary hover:underline">
               Tour the interactive demo
             </Link>{" "}
-            — no account needed.
+            - no account needed.
           </p>
           <p className="font-manrope mt-4 text-center text-xs leading-5 text-muted-foreground">
             By continuing, you agree to our{" "}

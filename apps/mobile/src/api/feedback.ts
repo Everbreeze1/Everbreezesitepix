@@ -1,10 +1,14 @@
+import { File } from "expo-file-system";
 import { supabase } from "@/lib/supabase";
 import {
+  attachmentPath,
   contextAsText,
   feedbackExtras,
   feedbackRow,
+  FEEDBACK_BUCKET,
   type DeviceContext,
   type FeedbackKind,
+  type PickedAttachment,
 } from "./feedback-view";
 
 /**
@@ -22,6 +26,48 @@ import {
  * job is receiving them.
  */
 
+/**
+ * Uploads the picked screenshots at send time, exactly as the web does.
+ *
+ * Picking a file is not a commitment to send, and a bucket full of screenshots
+ * from reports nobody finished would be nobody's job to clean up.
+ *
+ * Never throws. A failed upload must not swallow the report that came with it,
+ * so the caller sends the text regardless and tells the user which files did
+ * not make it.
+ */
+export async function uploadFeedbackAttachments(
+  userId: string,
+  picked: PickedAttachment[],
+): Promise<{ paths: string[]; failed: string[] }> {
+  const paths: string[] = [];
+  const failed: string[] = [];
+  const stamp = Date.now();
+
+  for (const [i, item] of picked.entries()) {
+    const path = attachmentPath(userId, stamp, i, item.name);
+    try {
+      const bytes = await new File(item.uri).arrayBuffer();
+      const { error } = await supabase.storage
+        .from(FEEDBACK_BUCKET)
+        .upload(path, bytes, { contentType: item.mimeType || "application/octet-stream" });
+      if (error) throw new Error(error.message);
+      paths.push(path);
+    } catch (e) {
+      // Logged as well as reported. The error text has to stay short and
+      // blameless, so without this the actual cause - a bucket that was never
+      // created, a MIME type the bucket rejects, a policy - left no trace
+      // anywhere.
+      console.error("[feedback] attachment upload failed", {
+        path,
+        error: e instanceof Error ? e.message : String(e),
+      });
+      failed.push(item.name);
+    }
+  }
+  return { paths, failed };
+}
+
 export async function submitIssueReport(input: {
   kind: FeedbackKind;
   /** Bugs carry a one-line subject; ideas and praise are filed without one. */
@@ -30,6 +76,8 @@ export async function submitIssueReport(input: {
   projectId: string | null;
   screen: string | null;
   context: DeviceContext;
+  /** Storage paths in the `feedback-attachments` bucket, uploaded before this call. */
+  attachments: string[];
 }): Promise<void> {
   const { data: auth } = await supabase.auth.getUser();
   const user = auth.user ?? null;
@@ -49,17 +97,22 @@ export async function submitIssueReport(input: {
     // and stays out of the legacy retry below, which exists to drop exactly
     // these. `cleanSubject` has already trimmed and capped it.
     ...(input.subject ? { subject: input.subject } : {}),
-    ...feedbackExtras({ projectId: input.projectId, context: input.context }),
+    ...feedbackExtras({
+      projectId: input.projectId,
+      context: input.context,
+      attachments: input.attachments,
+    }),
   });
   if (!error) return;
 
   // Second attempt: long-standing columns only, context folded into the text.
   const { error: retryError } = await (supabase as any).from("issue_reports").insert({
     ...base,
-    description: `${base.description}${contextAsText(input.context, input.projectId)}`.slice(
-      0,
-      4000,
-    ),
+    description: `${base.description}${contextAsText(
+      input.context,
+      input.projectId,
+      input.attachments,
+    )}`.slice(0, 4000),
   });
   if (retryError) throw new Error(retryError.message);
 }

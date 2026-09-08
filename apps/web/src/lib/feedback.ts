@@ -191,6 +191,63 @@ function safeName(name: string): string {
   return (cleaned || "attachment").slice(-80);
 }
 
+/** The pickable MIME types, as a set for client-side rejection. */
+const ATTACHMENT_TYPES = new Set(ATTACHMENT_ACCEPT.split(","));
+
+/** Why a picked file should not be listed as attached. */
+export type AttachmentRejection =
+  | { reason: "duplicate"; file: File }
+  | { reason: "type"; file: File }
+  | { reason: "size"; file: File };
+
+/**
+ * Why a picked file should not be attached, or null when it can be.
+ *
+ * The file input's `accept` attribute filters the chooser but is not an
+ * enforcement: a file can still arrive with a type the bucket will reject
+ * ("All files", a drag-and-drop, an OS that ignores `accept`). The bucket's
+ * `allowed_mime_types` (20260921000000) then silently drops it during the
+ * upload, and the report goes out missing one of its screenshots. Rejecting
+ * it here, before it is shown as attached, is the difference between a clear
+ * error at pick time and a quiet loss at send time.
+ */
+export function attachmentRejection(file: File, existing: File[]): AttachmentRejection | null {
+  if (existing.some((f) => f.name === file.name && f.size === file.size)) {
+    return { reason: "duplicate", file };
+  }
+  if (!file.type || !ATTACHMENT_TYPES.has(file.type)) {
+    return { reason: "type", file };
+  }
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    return { reason: "size", file };
+  }
+  return null;
+}
+
+/**
+ * Splits one pick into the files worth keeping and the ones that have to go
+ * back, with the reason for each.
+ *
+ * `room` is the number of slots left on the report (`MAX_ATTACHMENTS` minus
+ * what is already attached). `existing` is the current list, extended with the
+ * accepted files from this same pick, so two copies of one file chosen in the
+ * same batch are not both kept.
+ */
+export function screenAttachments(
+  picked: File[],
+  existing: File[],
+  room: number,
+): { accepted: File[]; rejected: AttachmentRejection[] } {
+  const accepted: File[] = [];
+  const rejected: AttachmentRejection[] = [];
+  for (const file of picked.slice(0, room)) {
+    const rejection = attachmentRejection(file, [...existing, ...accepted]);
+    if (rejection) rejected.push(rejection);
+    else accepted.push(file);
+  }
+  return { accepted, rejected };
+}
+
 /**
  * Uploads at send time rather than at file-pick time.
  *

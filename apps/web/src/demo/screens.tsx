@@ -954,7 +954,7 @@ function MapPinMarker({
     <button
       type="button"
       onClick={onClick}
-      title={`${project.name} — preview project`}
+      title={`${project.name} - preview project`}
       aria-pressed={selected}
       className={cn(
         "absolute z-10 -translate-x-1/2 -translate-y-full transition hover:scale-110",
