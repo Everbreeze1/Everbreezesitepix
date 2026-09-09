@@ -11,11 +11,12 @@ import { normaliseRole, roleLabelForTier } from "@everlumen/shared/team-permissi
  * The crew on a job: who was put on it, as opposed to who has happened to
  * touch it.
  *
- * Deliberately a different thing from `ProjectContributors`, which counts who
- * has already uploaded a photo, opened a task or written a document here. That
- * count is a record of what happened; this is a decision somebody made. A new
- * hire assigned to Monday's job is crew and not yet a contributor, and the
- * person who uploaded one photo in March is a contributor and not crew.
+ * Deliberately a different thing from the attribution line under "The field,
+ * on record", which logs who has already uploaded a photo, opened a task or
+ * written a document here. That line is a record of what happened; this is a
+ * decision somebody made. A new hire assigned to Monday's job is crew and not
+ * yet in the log, and the person who uploaded one photo in March is in the log
+ * and not crew.
  *
  * Takes `userIds` rather than fetching them, because the projects grid resolves
  * every visible card in one request (`useProjectAssignees`) and one query per
@@ -28,6 +29,7 @@ export function ProjectCrew({
   variant = "light",
   labeled = false,
   max = 4,
+  caption,
   className,
 }: {
   userIds: string[];
@@ -35,9 +37,20 @@ export function ProjectCrew({
   onAssign: () => void;
   /** `dark` for the project hero, which sits on the sidebar surface. */
   variant?: "light" | "dark";
-  /** Persistent "Crew · names" label (header); the grid keeps bare avatars. */
+  /** Persistent "Crew Â· names" label (header); the grid keeps bare avatars. */
   labeled?: boolean;
   max?: number;
+  /**
+   * A permanent, always-visible explanation under the row.
+   *
+   * The header used to explain the crew only on hover, which a touch screen
+   * never sees. Captions are how it says what this control is - and, next to
+   * the "Logged by" line in the photos section, how a reader tells the crew
+   * (a decision) from the log (a record) without hovering either.
+   *
+   * Only the header passes one; the grid and the board keep the bare row.
+   */
+  caption?: string;
   className?: string;
 }) {
   const { members } = useTeamMembers();
@@ -61,108 +74,127 @@ export function ProjectCrew({
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className={cn("flex items-center gap-2", className)}>
-        {labeled && (
-          <span
-            className={cn(
-              "shrink-0 font-manrope text-[11px] font-bold",
-              dark ? "text-sidebar-foreground/70" : "text-muted-foreground",
-            )}
-          >
-            {crew.length > 0
-              ? `Crew · ${crew
-                  .map((m) => (m.full_name || m.email || "Teammate").split(" ")[0])
-                  .join(", ")}`
-              : "Crew"}
-          </span>
+      <div
+        className={cn(
+          caption ? "flex flex-col items-start gap-1" : "flex items-center gap-2",
+          className,
         )}
-        {crew.length > 0 && (
-          <div className="flex -space-x-1.5">
-            {shown.map((m) => {
-              const name = m.full_name || m.email || "Teammate";
-              return (
-                <Tooltip key={m.user_id}>
+      >
+        <div className="flex items-center gap-2">
+          {labeled && (
+            <span
+              className={cn(
+                "shrink-0 font-manrope text-[11px] font-bold",
+                dark ? "text-sidebar-foreground/70" : "text-muted-foreground",
+              )}
+            >
+              {crew.length > 0
+                ? `Crew Â· ${crew
+                    .map((m) => (m.full_name || m.email || "Teammate").split(" ")[0])
+                    .join(", ")}`
+                : "Crew"}
+            </span>
+          )}
+          {crew.length > 0 && (
+            <div className="flex -space-x-1.5">
+              {shown.map((m) => {
+                const name = m.full_name || m.email || "Teammate";
+                return (
+                  <Tooltip key={m.user_id}>
+                    <TooltipTrigger asChild>
+                      <Avatar
+                        className={cn("h-6 w-6 border-2", dark ? "border-sidebar" : "border-card")}
+                      >
+                        {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={name} /> : null}
+                        <AvatarFallback className="bg-foreground text-[9px] font-extrabold text-background">
+                          {initials(m.full_name, m.email)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      <div className="font-medium">{name}</div>
+                      <div className="text-muted-foreground">
+                        {roleLabelForTier(m.role, tier)}
+                        {normaliseRole(m.role) === "restricted"
+                          ? " - this job is one of the few they can see"
+                          : " - assigned to this job"}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+              {extra > 0 && (
+                <Tooltip>
                   <TooltipTrigger asChild>
-                    <Avatar
-                      className={cn("h-6 w-6 border-2", dark ? "border-sidebar" : "border-card")}
+                    <span
+                      className={cn(
+                        "flex h-6 w-6 items-center justify-center rounded-full border-2 bg-muted text-[9px] font-extrabold text-muted-foreground",
+                        dark ? "border-sidebar" : "border-card",
+                      )}
                     >
-                      {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={name} /> : null}
-                      <AvatarFallback className="bg-foreground text-[9px] font-extrabold text-background">
-                        {initials(m.full_name, m.email)}
-                      </AvatarFallback>
-                    </Avatar>
+                      +{extra}
+                    </span>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">
-                    <div className="font-medium">{name}</div>
-                    <div className="text-muted-foreground">
-                      {roleLabelForTier(m.role, tier)}
-                      {normaliseRole(m.role) === "restricted"
-                        ? " - this job is one of the few they can see"
-                        : " - assigned to this job"}
-                    </div>
+                  <TooltipContent side="bottom" className="max-w-[240px] text-xs">
+                    {crew
+                      .slice(max)
+                      .map((m) => m.full_name || m.email || "Teammate")
+                      .join(", ")}
                   </TooltipContent>
                 </Tooltip>
-              );
-            })}
-            {extra > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className={cn(
-                      "flex h-6 w-6 items-center justify-center rounded-full border-2 bg-muted text-[9px] font-extrabold text-muted-foreground",
-                      dark ? "border-sidebar" : "border-card",
-                    )}
-                  >
-                    +{extra}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[240px] text-xs">
-                  {crew
-                    .slice(max)
-                    .map((m) => m.full_name || m.email || "Teammate")
-                    .join(", ")}
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
 
-        {canAssign && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={(e) => {
-                  // Cards wrap this in a link to the project. Without these the
-                  // click navigates and the dialog opens behind the new page.
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onAssign();
-                }}
-                aria-label={crew.length === 0 ? "Assign teammates to this job" : "Change the crew"}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border border-dashed px-2 py-1 font-manrope text-[11px] font-bold transition",
-                  dark
-                    ? "border-sidebar-foreground/25 text-sidebar-foreground/70 hover:border-sidebar-ring hover:text-sidebar-foreground"
-                    : "border-border text-muted-foreground hover:border-primary hover:text-primary",
-                )}
-              >
-                {crew.length === 0 ? (
-                  <>
-                    <UserPlus className="h-3 w-3" /> Assign
-                  </>
-                ) : (
-                  <Users className="h-3 w-3" />
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-[240px] text-xs">
-              {crew.length === 0
-                ? "Nobody is on this job yet. Pick the teammates working it."
-                : "Change who is on this job."}
-            </TooltipContent>
-          </Tooltip>
-        )}
+          {canAssign && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    // Cards wrap this in a link to the project. Without these the
+                    // click navigates and the dialog opens behind the new page.
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onAssign();
+                  }}
+                  aria-label={
+                    crew.length === 0 ? "Assign teammates to this job" : "Change the crew"
+                  }
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border border-dashed px-2 py-1 font-manrope text-[11px] font-bold transition",
+                    dark
+                      ? "border-sidebar-foreground/25 text-sidebar-foreground/70 hover:border-sidebar-ring hover:text-sidebar-foreground"
+                      : "border-border text-muted-foreground hover:border-primary hover:text-primary",
+                  )}
+                >
+                  {crew.length === 0 ? (
+                    <>
+                      <UserPlus className="h-3 w-3" /> Assign
+                    </>
+                  ) : (
+                    <Users className="h-3 w-3" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[240px] text-xs">
+                {crew.length === 0
+                  ? "Nobody is on this job yet. Pick the teammates working it."
+                  : "Change who is on this job."}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+        {caption ? (
+          <span
+            className={cn(
+              "shrink-0 font-manrope text-[11px]",
+              dark ? "text-sidebar-foreground/45" : "text-muted-foreground",
+            )}
+          >
+            {caption}
+          </span>
+        ) : null}
       </div>
     </TooltipProvider>
   );

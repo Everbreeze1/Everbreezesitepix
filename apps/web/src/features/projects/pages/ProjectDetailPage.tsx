@@ -74,7 +74,7 @@ import {
 } from "@/lib/summaries.functions";
 import { listProjectDocumentTree, type DocumentTreePage } from "@/lib/project-pages.functions";
 import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
-import { ContributorsChip } from "@/features/projects/components/ProjectContributors";
+import { ProjectActivityLine } from "@/features/projects/components/ProjectActivityLine";
 import { ProjectCrew } from "@/features/projects/components/ProjectCrew";
 import { AssignTeammatesDialog } from "@/features/projects/components/AssignTeammatesDialog";
 import { useProjectAssignees } from "@/hooks/use-project-assignees";
@@ -423,9 +423,10 @@ export function ProjectDetailPage() {
     };
   }, [projectId, fetchContribs]);
   /*
-   * Who is staffed on this job, as opposed to who has touched it. Both are in
-   * the header because they answer different questions and the header used to
-   * answer only the second one, in a word nobody could hover.
+   * Who is staffed on this job, as opposed to who has touched it. The crew is
+   * in the header, where an admin changes it; who has touched it is rendered
+   * as the attribution line under "The field, on record", next to the photos
+   * it describes.
    */
   const { byProject: assigneesByProject, canAssign } = useProjectAssignees([projectId]);
   const assignees = assigneesByProject[projectId] ?? [];
@@ -2891,12 +2892,13 @@ export function ProjectDetailPage() {
                   </a>
                 )}
                 {/*
-                  Two people rows, because there are two questions and they have
-                  different answers. The crew is who was put on this job and is
-                  the one an admin can change from here; contributors is the
-                  record of who has actually worked in it. Previously the header
-                  showed only the second, as one initial and a count with
-                  nothing behind either.
+                  The staffing row. Who is on this job is a decision the admin
+                  makes here; the record of who has actually worked in it lives
+                  next to the photos it describes, under "The field, on record".
+                  One question in the header, one beside the work. Keeping the
+                  two apart is the whole point: a headcount beside the Assign
+                  control read as a staffing list, and the crew and the people
+                  who have worked the job are different things.
                 */}
                 <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
                   <ProjectCrew
@@ -2905,8 +2907,8 @@ export function ProjectDetailPage() {
                     onAssign={() => setAssignOpen(true)}
                     variant="dark"
                     labeled
+                    caption="Who this job is assigned to."
                   />
-                  <ContributorsChip contributors={contributorRows} variant="dark" />
                 </div>
               </div>
             </div>
@@ -3481,6 +3483,11 @@ export function ProjectDetailPage() {
               <h2 className="font-display mt-3 text-xl font-bold leading-tight tracking-tight text-foreground sm:text-2xl">
                 The field, on record
               </h2>
+              {/* Who actually worked the job, next to the work it produced. This
+                used to live in the header beside the crew, where it read as a
+                staffing count; it describes the photos below it, so it sits
+                directly under this heading now. */}
+              <ProjectActivityLine contributors={contributorRows} />
               <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
                 {(totalPhotos || photos.length).toLocaleString()} photos organized by date, label,
                 and job activity.

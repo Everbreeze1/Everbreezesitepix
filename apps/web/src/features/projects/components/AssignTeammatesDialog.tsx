@@ -19,8 +19,7 @@ import { useTeamMembers } from "@/hooks/use-team-members";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useProjectAssignees, useApplyProjectAssignees } from "@/hooks/use-project-assignees";
 import { setProjectAssignees } from "@/lib/teams.functions";
-import { normaliseRole } from "@everlumen/shared/team-permissions";
-import { RoleBadge } from "@/features/teams/components/RoleBadge";
+import { normaliseRole, roleLabelForTier } from "@everlumen/shared/team-permissions";
 
 /**
  * Who is on this job.
@@ -216,13 +215,24 @@ export function AssignTeammatesDialog({
                         </AvatarFallback>
                       </Avatar>
                       <span className="min-w-0 flex-1">
-                        <span className="flex min-w-0 items-center gap-2">
+                        <span className="flex min-w-0 items-center gap-1.5">
                           <span className="truncate font-manrope text-sm font-semibold text-foreground">
                             {name}
                           </span>
-                          <RoleBadge role={m.role} tier={tier} size="xs" />
+                          <span className="shrink-0 font-manrope text-[11px] font-medium text-muted-foreground">
+                            {roleLabelForTier(m.role, tier)}
+                          </span>
                         </span>
                         {/*
+                          The role as small plain text, deliberately not the
+                          coloured badge. This dialog changes who is on the job,
+                          not what a person can do, and a permission-coloured
+                          badge next to a name read as permission editing - the
+                          exact contradiction the "does not change what anyone
+                          can see" line then had to argue with. The role still
+                          names through the shared matrix (roleLabelForTier),
+                          just without the badge's permission costume.
+
                           The email, not a restatement of the role.
 
                           Every non-Restricted row used to read "<Role> -
@@ -230,8 +240,7 @@ export function AssignTeammatesDialog({
                           ten identical lines saying a thing that is true of the
                           workspace rather than of the person. It is stated once
                           in the description above now, and this line does the
-                          job only it can: telling two people apart. The role is
-                          already on the badge beside the name.
+                          job only it can: telling two people apart.
 
                           Restricted keeps a line of its own because there the
                           tick genuinely changes per person, which is the one
@@ -308,7 +317,7 @@ export function AssignTeammatesDialog({
             >
               {save.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
-              ) : dirty ? (
+              ) : dirty || selected.length > 0 ? (
                 "Save crew"
               ) : (
                 "No changes"

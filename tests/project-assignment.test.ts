@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { roleAllowedOnTier, tierHasJobScoping } from "@everlumen/shared/team-permissions";
+import { attributionText } from "../apps/web/src/features/projects/utils/contributor-attribution";
 
 const read = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
 
@@ -112,37 +113,130 @@ describe("family: a job can be staffed from the project, not only from Team sett
   });
 });
 
-describe("family: 'contributor' says what it means now", () => {
+describe("family: the crew is a decision, the log is a record", () => {
   /*
-   * "Right now on the individual project page there are a few places that say
-   * Contributor but when I hover over it there is no information."
+   * Managers staffing a job read the old header as one list with two names for
+   * it: "Crew · Sam" and "3 contributors" sat forty pixels apart, a number
+   * next to an avatar stack reads as a headcount no matter what word is
+   * attached, and the only explanation appeared in a hover panel a phone never
+   * opens.
    *
-   * There were two, both a bare `<span>` holding a number and a word, forty
-   * pixels apart in the same header. One is gone; the other is a chip that
-   * names the people, says what each of them did here, and distinguishes a
-   * contributor (what has happened) from the crew (what someone decided).
+   * The activity side is now an attribution line - "Logged by Dana · 12
+   * photos added · 2h ago" - beside the photos it describes, and the crew
+   * keeps the header with a permanent caption saying what it is.
    */
-  it("the header chip carries the names and the explanation", () => {
-    const src = read("apps/web/src/features/projects/components/ProjectContributors.tsx");
-    expect(src).toMatch(/export function ContributorsChip\(/);
-    expect(src).toMatch(/People who have added photos, tasks or documents here/);
-    // Names, and what each of them actually did, not just a count in a box.
-    expect(src).toMatch(/function contributionLine\(/);
+  it("writes the attribution as a log line, not a headcount", () => {
+    const rules = read("apps/web/src/features/projects/utils/contributor-attribution.ts");
+    expect(rules).toMatch(/export function attributionText\(/);
+    expect(rules).toMatch(/Logged by/);
+    expect(rules).toMatch(/photos added/);
+    // The reason this replaced the chip: no "N contributors" count anywhere.
+    expect(rules).not.toMatch(/contributors\.length/);
+    // And the component really renders it next to the photos.
+    const line = read("apps/web/src/features/projects/components/ProjectActivityLine.tsx");
+    expect(line).toContain("attributionText(contributors)");
+    expect(line).toContain("Who has been adding photos here");
   });
 
-  it("the project header no longer prints an unexplained count", () => {
-    const src = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
-    expect(src).toMatch(/<ContributorsChip contributors=\{contributorRows\}/);
-    // The bare hero span and its duplicate in the stats rail.
-    expect(src).not.toMatch(/\{contributors\.length\}\{" "\}/);
-    expect(src).not.toMatch(
-      /\{contributors\.length\} \{contributors\.length === 1 \? "contributor" : "contributors"\}/,
+  it("attributes photos to the people who actually added them", () => {
+    const hour = 3600 * 1000;
+    const at = (hoursAgo: number) => new Date(Date.now() - hoursAgo * hour).toISOString();
+    const base = { email: "x@example.com", avatarUrl: null, tasks: 0, reports: 0 };
+    const one = { userId: "1", fullName: "Dana Rojas", photos: 12, lastAt: at(2), ...base };
+    const two = { userId: "2", fullName: "Marcus Klein", photos: 3, lastAt: at(5), ...base };
+    const three = { userId: "3", fullName: "Ada Lovelace", photos: 1, lastAt: at(8), ...base };
+
+    expect(attributionText([one])).toBe("Logged by Dana Rojas · 12 photos added · 2h ago");
+    expect(attributionText([one, two])).toBe(
+      "Logged by Dana Rojas and Marcus Klein · 15 photos added · 2h ago",
+    );
+    expect(attributionText([one, two, three])).toBe(
+      "Logged by Dana Rojas, Marcus Klein and 1 other · 16 photos added · 2h ago",
     );
   });
 
-  it("crew and contributors are different components, because they answer different questions", () => {
+  it("the most recent activity leads and the count sums the photos", () => {
+    // `two` uploaded later than `one`, so their order must not matter.
+    const hour = 3600 * 1000;
+    const at = (hoursAgo: number) => new Date(Date.now() - hoursAgo * hour).toISOString();
+    const base = { email: "x@example.com", avatarUrl: null, tasks: 0, reports: 0 };
+    const one = { userId: "1", fullName: "Dana Rojas", photos: 12, lastAt: at(5), ...base };
+    const two = { userId: "2", fullName: "Marcus Klein", photos: 3, lastAt: at(1), ...base };
+    expect(attributionText([one, two])).toBe(
+      "Logged by Marcus Klein and Dana Rojas · 15 photos added · 1h ago",
+    );
+  });
+
+  it("says nothing on a job nobody has shot yet", () => {
+    expect(attributionText([])).toBeNull();
+    expect(
+      attributionText([
+        {
+          userId: "1",
+          fullName: "Dana",
+          email: "d@x.com",
+          avatarUrl: null,
+          photos: 0,
+          tasks: 4,
+          reports: 0,
+          lastAt: "2026-09-09T00:00:00.000Z",
+        },
+      ]),
+    ).toBeNull();
+  });
+
+  it("keeps only people with photos on the photos section's line", () => {
+    // A task-writer with no photos must not crowd out the photo attribution.
+    const rows = [
+      {
+        userId: "1",
+        fullName: "Dana",
+        email: "d@x.com",
+        avatarUrl: null,
+        photos: 10,
+        tasks: 0,
+        reports: 0,
+        lastAt: "2026-09-09T00:00:00.000Z",
+      },
+      {
+        userId: "2",
+        fullName: "Marcus",
+        email: "m@x.com",
+        avatarUrl: null,
+        photos: 0,
+        tasks: 9,
+        reports: 0,
+        lastAt: "2026-09-10T00:00:00.000Z",
+      },
+    ];
+    expect(attributionText(rows)).toContain("Logged by Dana");
+    expect(attributionText(rows)).not.toContain("Marcus");
+  });
+
+  it("the header is for the crew; the attribution lives with the photos", () => {
+    const src = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
+    // No contributor chip beside the Assign control any more.
+    expect(src).not.toMatch(/<ContributorsChip/);
+    // The header (everything before the Visual documentation section) has no
+    // attribution; the photos section has it, directly under its heading.
+    const header = src.slice(0, src.indexOf("Visual documentation"));
+    expect(header).not.toMatch(/Logged by/);
+    const docs = src.slice(src.indexOf("Visual documentation"));
+    expect(docs).toContain("The field, on record");
+    expect(docs).toMatch(/ProjectActivityLine contributors=\{contributorRows\}/);
+  });
+
+  it("the crew explains itself in permanent words, not a hover", () => {
     const crew = read("apps/web/src/features/projects/components/ProjectCrew.tsx");
-    expect(crew).toMatch(/Deliberately a different thing from `ProjectContributors`/);
+    expect(crew).toContain("caption?: string");
+    const detail = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
+    const usage = detail.slice(detail.indexOf("<ProjectCrew"));
+    expect(usage.slice(0, 500)).toContain(`caption="Who this job is assigned to."`);
+  });
+
+  it("crew and attribution are different things, because they answer different questions", () => {
+    const crew = read("apps/web/src/features/projects/components/ProjectCrew.tsx");
+    expect(crew).toMatch(/Deliberately a different thing from the attribution line/);
   });
 
   it("the project header labels the crew persistently", () => {

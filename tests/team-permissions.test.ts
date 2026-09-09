@@ -419,12 +419,16 @@ describe("family: one role vocabulary, not one per screen", () => {
    * So the rule is that a screen showing a role renders `RoleBadge`, which
    * reads the one matrix. These assertions are what keeps a fourth vocabulary
    * from being added the next time somebody needs a role on a page.
+   *
+   * The Assign crew dialog is the deliberate exception: it changes who is on a
+   * job, not what a person can do, and a permission-coloured badge read as
+   * permission editing. It still names the role through the shared matrix,
+   * just as plain text - see the dedicated test below.
    */
   const ROLE_SURFACES = [
     "apps/web/src/features/teams/pages/TeamsPage.tsx",
     "apps/web/src/features/teams/pages/CollaboratorsPage.tsx",
     "apps/web/src/features/settings/pages/SettingsPage.tsx",
-    "apps/web/src/features/projects/components/AssignTeammatesDialog.tsx",
   ];
 
   it("every screen that shows a role uses the shared badge", () => {
@@ -460,6 +464,19 @@ describe("family: one role vocabulary, not one per screen", () => {
       expect(src, path).not.toMatch(/function roleTitleFor\(/);
       expect(src, path).not.toMatch(/"Project manager"|"Crew member"|"Workspace admin"/);
     }
+  });
+
+  it("the crew dialog names the role without a permission badge", () => {
+    const src = read("apps/web/src/features/projects/components/AssignTeammatesDialog.tsx");
+    const stripped = strip(src);
+    // Still the one shared vocabulary, so the plain text cannot become a
+    // private map: the matrix names the role, and this screen only places it.
+    expect(src).toMatch(/roleLabelForTier\(m\.role, tier\)/);
+    // Deliberately not RoleBadge: assigning somebody to a job is not changing
+    // their role, and the coloured badge read as permission editing.
+    expect(src).not.toMatch(/<RoleBadge\b/);
+    expect(stripped).not.toMatch(/const \w*[rR]ole\w*: Record<string, string> =/);
+    expect(stripped).not.toMatch(/function roleTitleFor\(/);
   });
 });
 
