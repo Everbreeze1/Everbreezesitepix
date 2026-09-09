@@ -328,3 +328,34 @@ describe("feedback reaches the reporter", () => {
     }
   });
 });
+
+/*
+ * The project a report points at, and whether triage can see it.
+ *
+ * Reported by a customer: "I selected a project for the bug but the admin side
+ * shows no reference to it." The id was saved and returned, but no console
+ * rendered it - a report about a specific job looked exactly like one about
+ * nothing. These are absences, guarded by reading the source like the rest of
+ * this file.
+ */
+describe("the project on a report reaches triage", () => {
+  it("resolves the attached project to a name, not a bare id", () => {
+    const api = read("apps/api/src/domains/admin/feedback.ts");
+    expect(api).toContain("projectDisplayName");
+    expect(api).toContain("projectName: r.project_id");
+    // The lookup is scoped to the page's ids, mirroring the reporter lookup.
+    expect(api).toContain('from("projects")');
+    expect(api).toContain(".in(\"id\", projectIds)");
+  });
+
+  it("renders the project on the web queue card", () => {
+    const page = read("apps/web/src/features/admin/pages/AdminFeedbackPage.tsx");
+    expect(page).toContain("report.projectName");
+  });
+
+  it("names the project on the phone queue line", () => {
+    const view = read("apps/mobile/src/api/admin-view.ts");
+    expect(view).toContain("report.projectName");
+    expect(view).toContain("in ${report.projectName}");
+  });
+});

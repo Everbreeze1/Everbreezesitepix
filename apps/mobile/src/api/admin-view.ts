@@ -38,6 +38,7 @@ export type FeedbackReport = {
   user_agent: string | null;
   created_at: string;
   project_id: string | null;
+  projectName: string | null;
   user_id: string | null;
   email: string | null;
 };
@@ -114,6 +115,7 @@ export function reportOrigin(report: Pick<FeedbackReport, "user_agent" | "url">)
 export function reportSummary(report: FeedbackReport): string {
   const parts = [STATUS_LABELS[normaliseStatus(report.status)], reportOrigin(report)];
   if (report.feature) parts.push(report.feature);
+  if (report.projectName) parts.push(`in ${report.projectName}`);
   return parts.join(" · ");
 }
 

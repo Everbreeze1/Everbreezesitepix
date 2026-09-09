@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bug,
   FileText,
+  Folder,
   Heart,
   ImageOff,
   Lightbulb,
@@ -187,6 +188,15 @@ function ReportCard({ report, onChanged }: { report: FeedbackReport; onChanged: 
           {report.feature && (
             <span className="truncate rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
               {report.feature}
+            </span>
+          )}
+          {report.projectName && (
+            <span
+              title={report.projectId ?? undefined}
+              className="inline-flex max-w-[16rem] items-center gap-1 truncate rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary"
+            >
+              <Folder className="h-3 w-3 shrink-0" />
+              <span className="truncate">{report.projectName}</span>
             </span>
           )}
         </div>

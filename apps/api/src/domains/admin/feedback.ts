@@ -4,6 +4,7 @@ import { requirePlatformAdmin } from "../../lib/admin-context";
 import { escapeLikeValue } from "../../lib/postgrest";
 import { insertNotification } from "../notifications/service";
 import { logAdminAction } from "./audit";
+import { projectDisplayName } from "@everlumen/shared";
 import type { AuthedContext } from "../../lib/user-context";
 
 /*
@@ -65,6 +66,8 @@ export interface FeedbackReport {
   attachments: FeedbackAttachment[];
   createdAt: string;
   projectId: string | null;
+  /** The project's display name, resolved for triage so an id is not shown raw. */
+  projectName: string | null;
   /** Whoever filed it. Null for a signal from a session we could not resolve. */
   reporter: { id: string | null; name: string | null; email: string | null };
 }
@@ -225,6 +228,26 @@ export async function listFeedbackService(
   const profileById = new Map(((profileRows as any[]) ?? []).map((p) => [p.id, p]));
 
   /*
+   * The project a report points at, resolved to a name.
+   *
+   * `issue_reports.project_id` is a bare id and was arriving on the page
+   * unread: triage could see that a project was attached but not which one.
+   * Resolved to the display name here, with the service role, so both consoles
+   * can render it. No `deleted_at` filter - a report about a project that was
+   * since archived still deserves to name it.
+   */
+  const projectIds = Array.from(new Set(page.map((r) => r.project_id).filter(Boolean)));
+  const { data: projectRows } = projectIds.length
+    ? await (admin as any)
+        .from("projects")
+        .select(
+          "id, name, street, city, state, zip, client_name, project_number, created_at",
+        )
+        .in("id", projectIds)
+    : { data: [] };
+  const projectById = new Map(((projectRows as any[]) ?? []).map((p) => [p.id, p]));
+
+  /*
    * The screenshots, made viewable.
    *
    * The column has been carrying paths since 20260921000000 and the console had
@@ -261,6 +284,7 @@ export async function listFeedbackService(
         })),
       createdAt: r.created_at,
       projectId: r.project_id,
+      projectName: r.project_id ? projectDisplayName(projectById.get(r.project_id)) : null,
       reporter: {
         id: r.user_id ?? null,
         name: profileById.get(r.user_id)?.full_name ?? null,

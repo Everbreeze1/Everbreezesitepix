@@ -210,6 +210,7 @@ export interface FeedbackReport {
   attachments: FeedbackAttachment[];
   createdAt: string;
   projectId: string | null;
+  projectName: string | null;
   reporter: { id: string | null; name: string | null; email: string | null };
 }
 
