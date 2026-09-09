@@ -1,4 +1,4 @@
-﻿import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CheckCircle2, ArrowRight, ArrowLeft, Link2 as LinkIcon, Loader2 } from "lucide-react";
 import { authErrorMessage, isUnconfirmedEmail } from "@/lib/auth-errors";
@@ -147,7 +147,7 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-background lg:grid lg:grid-cols-2">
+    <div className="min-h-screen w-full bg-background landing lg:grid lg:grid-cols-2">
       {/* LEFT - marketing panel (desktop only) */}
       <aside className="relative hidden overflow-hidden bg-sidebar lg:flex lg:flex-col lg:justify-between">
         {/* Background rather than <img> - see signup.tsx. `hidden lg:flex` does
@@ -163,7 +163,7 @@ function LoginPage() {
         <div className="relative z-10 flex h-full flex-col justify-between p-10">
           <Link to="/" className="flex items-center gap-2.5">
             <BrandLogo size={40} />
-            <span className="font-manrope text-lg font-extrabold tracking-[-0.45px] text-sidebar-foreground">
+            <span className="font-manrope text-lg font-extrabold tracking-[-0.01em] text-sidebar-foreground">
               Ever<span className="text-brand-gold">lumen</span>
             </span>
           </Link>
@@ -172,7 +172,7 @@ function LoginPage() {
             <p className="font-manrope text-xs font-extrabold uppercase tracking-[1.92px] text-sidebar-ring">
               Field-ready documentation
             </p>
-            <h1 className="font-display mt-4 text-5xl font-black uppercase leading-[0.9] tracking-[-2.1px] text-sidebar-foreground xl:text-6xl">
+            <h1 className="font-display mt-4 text-5xl font-bold uppercase leading-tight tracking-[-0.01em] text-sidebar-foreground xl:text-6xl">
               Know what happened. <span className="text-sidebar-ring">Prove it.</span>
             </h1>
             <p className="font-manrope mt-6 text-base leading-7 text-sidebar-foreground/70">
@@ -214,7 +214,7 @@ function LoginPage() {
           <p className="font-manrope text-xs font-extrabold uppercase tracking-[1.92px] text-primary">
             Welcome back
           </p>
-          <h2 className="font-display mt-3 text-4xl font-black uppercase leading-[0.92] tracking-[-1.68px] text-foreground sm:text-5xl">
+          <h2 className="font-display mt-3 text-4xl font-bold uppercase leading-tight tracking-[-0.01em] text-foreground sm:text-5xl">
             Back to the work.
           </h2>
           <p className="font-manrope mt-4 text-sm leading-6 text-muted-foreground">

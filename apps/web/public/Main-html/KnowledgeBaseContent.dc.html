@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
+  <style>
+    :root{
+      --bg: oklch(97% 0.01 75);
+      --surface: oklch(99% 0.004 75);
+      --surface-2: oklch(94.5% 0.012 75);
+      --border: oklch(89% 0.012 75);
+      --ink: oklch(23% 0.02 75);
+      --ink-muted: oklch(48% 0.02 75);
+      --ink-faint: oklch(65% 0.015 75);
+      --accent: oklch(64% 0.14 55);
+      --accent-soft: oklch(94% 0.03 55);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Work Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);}
+    .cat-head{font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.06em;margin:22px 0 8px 2px;}
+    .art-row{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--border);cursor:pointer;}
+    .art-row:last-child{border-bottom:none;}
+    .art-row:hover{background:var(--surface-2);}
+    .art-excerpt{padding:2px 16px 16px 16px;font-size:12.5px;line-height:1.6;color:var(--ink-muted);border-bottom:1px solid var(--border);}
+  </style>
+</helmet>
+<div style="padding:32px 40px 40px 40px;max-width:900px;">
+
+  <div style="margin-bottom:22px;">
+    <div style="font-size:24px;font-weight:700;letter-spacing:-0.01em;">Knowledge Base</div>
+    <div style="font-size:13.5px;color:var(--ink-muted);margin-top:3px;">Guides for getting the most out of Everlumen.</div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:11px 15px;margin-bottom:8px;">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <span style="font-size:13px;color:var(--ink-faint);">Search articles...</span>
+  </div>
+
+  <div class="cat-head">Getting started</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+
+    <div class="art-row" onClick="{{toggle1}}">
+      <span style="font-size:13.5px;font-weight:600;">Setting up your first blueprint</span>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="{{chevron.a1}}"><path d="m6 9 6 6 6-6"/></svg>
+    </div>
+    <sc-if value="{{open.a1}}" hint-placeholder-val="{{true}}">
+    <div class="art-excerpt">A blueprint bundles the checklists, workflow phases, document templates and report templates a job type always needs. Go to Blueprints → New blueprint, then attach checklists from your library and lay out the phases in the order your crew actually works them. Once saved, assigning that blueprint to a project pre-fills all of it automatically.</div>
+    </sc-if>
+
+    <div class="art-row" onClick="{{toggle2}}">
+      <span style="font-size:13.5px;font-weight:600;">Inviting your crew and setting roles</span>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="{{chevron.a2}}"><path d="m6 9 6 6 6-6"/></svg>
+    </div>
+    <sc-if value="{{open.a2}}" hint-placeholder-val="{{false}}">
+    <div class="art-excerpt">Under Teams → Crew, use "Invite crew member" to send an email invite. Owner and Manager roles can see every project; Standard crew only see the ones they're assigned to. Check Roles &amp; Permissions to see exactly what each role can and can't do before inviting someone.</div>
+    </sc-if>
+
+    <div class="art-row" onClick="{{toggle3}}">
+      <span style="font-size:13.5px;font-weight:600;">Adding a subcontractor to a project</span>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="{{chevron.a3}}"><path d="m6 9 6 6 6-6"/></svg>
+    </div>
+    <sc-if value="{{open.a3}}" hint-placeholder-val="{{false}}">
+    <div class="art-excerpt">Subcontractors live on Teams → Subcontractors, separate from your W-2 crew. Add their company, trade, primary contact and insurance expiration there once, then assign them to any project the same way you'd assign an employee.</div>
+    </sc-if>
+
+  </div>
+
+  <div class="cat-head">Blueprints &amp; checklists</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+    <div class="art-row"><span style="font-size:13.5px;font-weight:600;">Building a reusable checklist</span><span style="font-size:11px;color:var(--ink-faint);">3 min read</span></div>
+    <div class="art-row"><span style="font-size:13.5px;font-weight:600;">When to version a report template</span><span style="font-size:11px;color:var(--ink-faint);">2 min read</span></div>
+    <div class="art-row"><span style="font-size:13.5px;font-weight:600;">Marking a workflow phase as a milestone</span><span style="font-size:11px;color:var(--ink-faint);">2 min read</span></div>
+  </div>
+
+  <div class="cat-head">Billing &amp; account</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+    <div class="art-row"><span style="font-size:13.5px;font-weight:600;">Updating your business profile</span><span style="font-size:11px;color:var(--ink-faint);">1 min read</span></div>
+    <div class="art-row"><span style="font-size:13.5px;font-weight:600;">Changing plans or seats</span><span style="font-size:11px;color:var(--ink-faint);">2 min read</span></div>
+  </div>
+
+  <div style="margin-top:24px;background:var(--accent-soft);border-radius:12px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <div style="font-size:13.5px;font-weight:700;">Still stuck?</div>
+      <div style="font-size:12px;color:var(--ink-muted);margin-top:2px;">Send us a note from the Feedback page and we'll follow up.</div>
+    </div>
+    <div style="background:var(--accent);color:oklch(99% 0.01 75);border-radius:8px;padding:9px 16px;font-size:12.5px;font-weight:600;white-space:nowrap;">Go to Feedback</div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { open: { a1: true, a2: false, a3: false } };
+  }
+  renderVals() {
+    const open = this.state.open;
+    const chev = (k) => (open[k] ? "transform:rotate(180deg);" : "");
+    return {
+      open,
+      chevron: { a1: chev("a1"), a2: chev("a2"), a3: chev("a3") },
+      toggle1: () => this.setState({ open: { ...this.state.open, a1: !open.a1 } }),
+      toggle2: () => this.setState({ open: { ...this.state.open, a2: !open.a2 } }),
+      toggle3: () => this.setState({ open: { ...this.state.open, a3: !open.a3 } }),
+    };
+  }
+}
+</script>
+</body>
+</html>

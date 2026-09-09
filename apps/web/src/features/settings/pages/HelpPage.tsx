@@ -799,7 +799,7 @@ export function HelpPage() {
       <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.52px] text-muted-foreground">
         Support
       </p>
-      <h1 className="font-display mt-3 text-[38.4px] font-bold leading-9 tracking-[-1.34px] text-foreground">
+      <h1 className="font-display mt-3 text-[38.4px] font-bold leading-9 tracking-[-0.01em] text-foreground">
         Knowledge base
       </h1>
       <p className="font-manrope mt-3 max-w-[576px] text-sm leading-6 text-muted-foreground">
@@ -881,7 +881,7 @@ export function HelpPage() {
                       <cat.icon className="h-[18px] w-[18px] text-primary" strokeWidth={1.75} />
                     </span>
                     <div className="min-w-0">
-                      <h2 className="font-manrope text-base font-bold tracking-[-0.3px] text-foreground">
+                      <h2 className="font-manrope text-base font-bold tracking-[-0.01em] text-foreground">
                         {cat.title}
                       </h2>
                       <p className="font-manrope text-xs text-muted-foreground">{cat.blurb}</p>

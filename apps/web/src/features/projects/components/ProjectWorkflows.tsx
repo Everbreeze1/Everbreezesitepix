@@ -417,7 +417,12 @@ export function ProjectWorkflows({
         .then((r: any) => {
           if (r.error) throw r.error;
         }),
-    { onError: () => toast.error("Couldn't save that change - check your connection") },
+    {
+      // Surface the real reason (RLS, the authoring guard, a lost FK) instead of
+      // a blanket "check your connection" - which is how deleting a workflow you
+      // are not allowed to delete used to present as a network failure (spec §6).
+      onError: (e) => toast.error(friendlyError(e, "Couldn't save that change")),
+    },
   );
 
   /**
@@ -744,7 +749,7 @@ export function ProjectWorkflows({
 
       const { data: tphs, error: tphErr } = await supabase
         .from("workflow_template_phases" as any)
-        .select("id, position, name, description, requires_signoff")
+        .select("id, position, name, description, requires_signoff, phase_type")
         .eq("template_id", templateId)
         .order("position", { ascending: true });
       if (tphErr) throw tphErr;
@@ -753,6 +758,7 @@ export function ProjectWorkflows({
         name: string;
         description: string | null;
         requires_signoff: boolean;
+        phase_type: string | null;
       }[];
 
       const { data: titems, error: titErr } = tphList.length
@@ -801,6 +807,7 @@ export function ProjectWorkflows({
               name: ph.name,
               description: ph.description,
               requires_signoff: ph.requires_signoff,
+              phase_type: ph.phase_type ?? "actionable",
             })),
           )
           .select("id, position");

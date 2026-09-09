@@ -45,7 +45,7 @@ export function PageHeader({
         )}
         <h1
           className={cn(
-            "font-display text-[32px] font-bold leading-none tracking-[-1.1px] text-foreground sm:text-[38.4px] sm:tracking-[-1.344px]",
+            "font-display text-[32px] font-bold leading-none tracking-[-0.01em] text-foreground sm:text-[38.4px] sm:tracking-[-0.01em]",
             eyebrow && "mt-3",
           )}
         >

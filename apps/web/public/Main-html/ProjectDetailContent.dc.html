@@ -1,0 +1,438 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
+  <style>
+    :root{
+      --bg: oklch(97% 0.01 75);
+      --surface: oklch(99% 0.004 75);
+      --surface-2: oklch(94.5% 0.012 75);
+      --border: oklch(89% 0.012 75);
+      --ink: oklch(23% 0.02 75);
+      --ink-muted: oklch(48% 0.02 75);
+      --ink-faint: oklch(65% 0.015 75);
+      --accent: oklch(64% 0.14 55);
+      --accent-2: oklch(64% 0.14 200);
+      --accent-2-soft: oklch(93% 0.025 200);
+      --status-complete: oklch(58% 0.12 250);
+      --status-complete-soft: oklch(94% 0.025 250);
+      --status-active: oklch(58% 0.13 150);
+      --status-active-soft: oklch(94% 0.035 150);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Work Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);}
+    a{color:var(--accent);text-decoration:none;cursor:pointer;}
+    .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;}
+    .tab{font-size:13px;font-weight:600;color:var(--ink-faint);padding:11px 2px;border-bottom:2.5px solid transparent;cursor:pointer;}
+    .tab.active{color:var(--ink);border-color:var(--accent);}
+    .photo-tile{aspect-ratio:4/3;border-radius:9px;background:var(--surface-2);}
+    .phase{display:flex;flex-direction:column;align-items:center;flex:1;position:relative;}
+    .phase-dot{width:15px;height:15px;border-radius:999px;z-index:1;}
+    .phase-line{position:absolute;top:7px;left:50%;width:100%;height:2px;z-index:0;}
+    .doc-row{display:flex;align-items:center;gap:13px;padding:13px 4px;border-bottom:1px solid var(--border);}
+    .doc-row:last-child{border-bottom:none;}
+    .doc-icon{width:34px;height:34px;border-radius:8px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .check-row{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13px;}
+    .checkbox-done{width:17px;height:17px;border-radius:5px;background:var(--status-active);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .checkbox-open{width:17px;height:17px;border-radius:5px;border:1.6px solid var(--border);flex-shrink:0;}
+    .group-label{font-size:11px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;margin:18px 0 8px 0;}
+    .group-label:first-child{margin-top:0;}
+  </style>
+</helmet>
+<div style="padding:28px 40px 40px 40px;max-width:1200px;">
+
+  <div style="font-size:12.5px;color:var(--ink-faint);margin-bottom:14px;">
+    <a onClick="{{goBack}}">Projects</a> &nbsp;/&nbsp; Salgiya
+  </div>
+
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="font-size:22px;font-weight:700;letter-spacing:-0.01em;">Salgiya &middot; 564 Fisher Circle</div>
+        <span class="pill" style="background:var(--status-complete-soft);color:var(--status-complete);">Completed</span>
+      </div>
+      <div style="font-size:13px;color:var(--ink-muted);margin-top:4px;">Folsom, CA</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 14px;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.5 8.5 4.8L12 13 3.5 8.3 12 3.5Z"/><path d="m3.5 13 8.5 4.8 8.5-4.8"/></svg>
+      <span style="font-size:12.5px;font-weight:600;color:var(--ink-muted);">Blueprint &middot; HVAC Service Call</span>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:40px;padding:18px 20px;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:26px;">
+    <div style="flex-grow:1;">
+      <div style="font-size:12px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:9px;">Crew &middot; who's staffed</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="display:flex;">
+          <div style="width:28px;height:28px;border-radius:999px;background:#4a5568;border:2px solid var(--surface);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;">AJ</div>
+          <div style="width:28px;height:28px;border-radius:999px;background:#2f6f4f;border:2px solid var(--surface);margin-left:-8px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;">JB</div>
+        </div>
+        <span style="font-size:13px;color:var(--ink-muted);">Ajmal, Jackson Brosgart</span>
+        <a style="font-size:12.5px;font-weight:600;margin-left:4px;">Assign</a>
+      </div>
+      <div style="font-size:11.5px;color:var(--ink-faint);margin-top:6px;">Scheduling only &mdash; doesn't change who can see this project.</div>
+    </div>
+    <div style="width:1px;background:var(--border);"></div>
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:9px;">Labels</div>
+      <div style="display:flex;gap:6px;">
+        <span class="pill" style="background:var(--surface-2);color:var(--ink-muted);">Draw request</span>
+        <span class="pill" style="background:var(--surface-2);color:var(--ink-muted);">Warranty</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-bottom:28px;">
+    <div style="font-size:12.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:14px;">Workflow &middot; Normal HVAC Service Call</div>
+    <div style="display:flex;align-items:flex-start;">
+      <div class="phase">
+        <div class="phase-line" style="background:var(--status-complete);"></div>
+        <div class="phase-dot" style="background:var(--status-complete);"></div>
+        <div style="font-size:11.5px;font-weight:600;margin-top:8px;text-align:center;">Initial contact</div>
+      </div>
+      <div class="phase">
+        <div class="phase-line" style="background:var(--status-complete);"></div>
+        <div class="phase-dot" style="background:var(--status-complete);"></div>
+        <div style="font-size:11.5px;font-weight:600;margin-top:8px;text-align:center;">Diagnosis</div>
+      </div>
+      <div class="phase">
+        <div class="phase-line" style="background:var(--status-complete);"></div>
+        <div class="phase-dot" style="background:var(--status-complete);"></div>
+        <div style="font-size:11.5px;font-weight:600;margin-top:8px;text-align:center;">Pictures of units</div>
+      </div>
+      <div class="phase">
+        <div class="phase-line" style="background:var(--status-complete);"></div>
+        <div class="phase-dot" style="background:var(--status-complete);"></div>
+        <div style="font-size:11.5px;font-weight:600;margin-top:8px;text-align:center;">Repair &amp; service</div>
+      </div>
+      <div class="phase">
+        <div class="phase-dot" style="background:var(--status-complete);border:2px solid var(--status-complete);"></div>
+        <div style="font-size:11.5px;font-weight:600;margin-top:8px;text-align:center;">Report back</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:26px;border-bottom:1px solid var(--border);margin-bottom:22px;">
+    <div class="tab" style="{{tabStyle.photos}}" onClick="{{setPhotos}}">Photos</div>
+    <div class="tab" style="{{tabStyle.documents}}" onClick="{{setDocuments}}">Documents</div>
+    <div class="tab" style="{{tabStyle.reports}}" onClick="{{setReports}}">Reports</div>
+    <div class="tab" style="{{tabStyle.checklists}}" onClick="{{setChecklists}}">Checklists</div>
+    <div class="tab" style="{{tabStyle.walkthroughs}}" onClick="{{setWalkthroughs}}">Walkthroughs</div>
+    <div class="tab" style="{{tabStyle.workflows}}" onClick="{{setWorkflows}}">Workflows</div>
+    <div class="tab" style="{{tabStyle.tasks}}" onClick="{{setTasks}}">Tasks</div>
+    <div class="tab" style="{{tabStyle.calendar}}" onClick="{{setCalendar}}">Calendar</div>
+  </div>
+
+  <sc-if value="{{isPhotos}}" hint-placeholder-val="{{true}}">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:15px;font-weight:600;">The field, on record</div>
+      <div style="font-size:12px;color:var(--ink-faint);">Logged by Ajmal &middot; 14 photos added &middot; 2 days ago</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;">
+      <div class="photo-tile"></div>
+      <div class="photo-tile"></div>
+      <div class="photo-tile" style="position:relative;">
+        <span class="pill" style="position:absolute;top:8px;left:8px;background:var(--accent-2-soft);color:var(--accent-2);">Needs review</span>
+      </div>
+      <div class="photo-tile"></div>
+      <div class="photo-tile"></div>
+      <div class="photo-tile"></div>
+      <div class="photo-tile"></div>
+      <div class="photo-tile" style="display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;color:var(--ink-muted);">+6 more</div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isDocuments}}" hint-placeholder-val="{{false}}">
+    <div style="font-size:15px;font-weight:600;margin-bottom:14px;">Documents</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2px 18px;">
+      <div class="doc-row">
+        <div class="doc-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l5 5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z"/><path d="M14 3.5V8a1 1 0 0 0 1 1h4.5"/></svg></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;">Site Plan.pdf</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">Site documentation &middot; added by Ajmal</div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);">2 days ago</div>
+      </div>
+      <div class="doc-row">
+        <div class="doc-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l5 5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z"/><path d="M14 3.5V8a1 1 0 0 0 1 1h4.5"/></svg></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;">Permit &mdash; City of Folsom.pdf</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">Permits &middot; added by Ajmal</div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);">6 days ago</div>
+      </div>
+      <div class="doc-row">
+        <div class="doc-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l5 5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z"/><path d="M14 3.5V8a1 1 0 0 0 1 1h4.5"/></svg></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;">Warranty &mdash; Trane Condenser Unit.pdf</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">Warranty &middot; <span style="color:var(--accent-2);">added automatically</span></div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);">2 days ago</div>
+      </div>
+      <div class="doc-row">
+        <div class="doc-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l5 5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z"/><path d="M14 3.5V8a1 1 0 0 0 1 1h4.5"/></svg></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;">Material Invoice &mdash; Ferguson HVAC.pdf</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">Invoices &middot; added by Jackson Brosgart</div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);">3 days ago</div>
+      </div>
+      <div class="doc-row">
+        <div class="doc-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l5 5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z"/><path d="M14 3.5V8a1 1 0 0 0 1 1h4.5"/></svg></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;">Customer Sign-Off Sheet.pdf</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">Sign-off &middot; added by Ajmal</div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);">2 days ago</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isReports}}" hint-placeholder-val="{{false}}">
+    <div style="font-size:15px;font-weight:600;margin-bottom:4px;">Reports</div>
+    <div style="font-size:12px;color:var(--ink-faint);margin-bottom:10px;">Grouped by type, with superseded versions marked so the current one is obvious.</div>
+
+    <div class="group-label">Progress &amp; draw request (2)</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2px 18px;margin-bottom:16px;">
+      <div class="doc-row">
+        <div class="doc-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--status-complete)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l5 5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z"/><path d="M8.5 13h7M8.5 16h4.5"/></svg></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;">Progress &amp; Draw Request Report &nbsp;<span class="pill" style="background:var(--status-active-soft);color:var(--status-active);">Current</span></div>
+          <div style="font-size:11.5px;color:var(--ink-faint);"><span style="color:var(--accent-2);">Added automatically</span></div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);">2 days ago</div>
+      </div>
+      <div class="doc-row">
+        <div class="doc-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l5 5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z"/><path d="M8.5 13h7M8.5 16h4.5"/></svg></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;color:var(--ink-muted);">Progress &amp; Draw Request Report &nbsp;<span class="pill" style="background:var(--surface-2);color:var(--ink-faint);">Superseded</span></div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">Added automatically</div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);">9 days ago</div>
+      </div>
+    </div>
+
+    <div class="group-label">Service reports (1)</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2px 18px;margin-bottom:16px;">
+      <div class="doc-row">
+        <div class="doc-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l5 5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z"/><path d="M8.5 13h7M8.5 16h4.5"/></svg></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;">HVAC Service Call Report</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);"><span style="color:var(--accent-2);">Added automatically</span></div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);">2 days ago</div>
+      </div>
+    </div>
+
+    <div class="group-label">Other (1)</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2px 18px;">
+      <div class="doc-row">
+        <div class="doc-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l5 5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z"/><path d="M8.5 13h7M8.5 16h4.5"/></svg></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;">Cleaning Invoice with Proof Photos</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">Added by Ajmal</div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);">5 days ago</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isChecklists}}" hint-placeholder-val="{{false}}">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:14px;font-weight:600;">Pre-service safety checklist</div>
+      <span style="font-size:12px;color:var(--status-active);font-weight:600;">6/6 complete</span>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:6px 18px;margin-bottom:20px;">
+      <div class="check-row"><div class="checkbox-done"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div>Gas shutoff confirmed before service</div>
+      <div class="check-row"><div class="checkbox-done"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div>Electrical disconnect verified</div>
+      <div class="check-row"><div class="checkbox-done"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div>PPE worn on site</div>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:14px;font-weight:600;">Completion checklist</div>
+      <span style="font-size:12px;color:var(--status-hold);font-weight:600;">4/5 complete</span>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:6px 18px;">
+      <div class="check-row"><div class="checkbox-done"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div>System tested and running</div>
+      <div class="check-row"><div class="checkbox-done"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div>Work area cleaned</div>
+      <div class="check-row"><div class="checkbox-open"></div><span style="color:var(--ink-muted);">Customer walkthrough completed</span></div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isWalkthroughs}}" hint-placeholder-val="{{false}}">
+    <div style="font-size:15px;font-weight:600;margin-bottom:14px;">Walkthroughs</div>
+    <div style="display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:16px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+        <div style="aspect-ratio:16/9;background:var(--surface-2);position:relative;display:flex;align-items:center;justify-content:center;">
+          <div style="width:40px;height:40px;border-radius:999px;background:rgba(20,16,10,0.55);display:flex;align-items:center;justify-content:center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="white"><path d="M8 5.5v13l11-6.5Z"/></svg></div>
+          <span style="position:absolute;bottom:8px;right:10px;font-size:11px;color:white;background:rgba(20,16,10,0.6);padding:2px 6px;border-radius:5px;">2:14</span>
+        </div>
+        <div style="padding:14px 16px;">
+          <div style="font-size:13.5px;font-weight:600;margin-bottom:6px;">Initial walkthrough &mdash; outdoor unit</div>
+          <div style="font-size:12px;color:var(--ink-muted);line-height:1.5;">AI summary: tech inspects the outdoor condenser, notes visible corrosion on the base pan, confirms refrigerant lines are intact before starting service.</div>
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+        <div style="aspect-ratio:16/9;background:var(--surface-2);position:relative;display:flex;align-items:center;justify-content:center;">
+          <div style="width:40px;height:40px;border-radius:999px;background:rgba(20,16,10,0.55);display:flex;align-items:center;justify-content:center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="white"><path d="M8 5.5v13l11-6.5Z"/></svg></div>
+          <span style="position:absolute;bottom:8px;right:10px;font-size:11px;color:white;background:rgba(20,16,10,0.6);padding:2px 6px;border-radius:5px;">1:48</span>
+        </div>
+        <div style="padding:14px 16px;">
+          <div style="font-size:13.5px;font-weight:600;margin-bottom:6px;">Final walkthrough &mdash; system test</div>
+          <div style="font-size:12px;color:var(--ink-muted);line-height:1.5;">AI summary: system powered on, airflow verified at all vents, customer walked through new thermostat settings and filter schedule.</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isWorkflows}}" hint-placeholder-val="{{false}}">
+    <div style="font-size:15px;font-weight:600;margin-bottom:14px;">Workflow phases &middot; Normal HVAC Service Call</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="font-size:13.5px;font-weight:600;">Initial contact</div>
+          <span class="pill" style="background:var(--status-complete-soft);color:var(--status-complete);">Complete</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--ink-faint);margin-top:4px;">Marker phase &mdash; informational only, no steps to complete.</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="font-size:13.5px;font-weight:600;">Pictures of units</div>
+          <span class="pill" style="background:var(--status-complete-soft);color:var(--status-complete);">Complete</span>
+        </div>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
+          <div class="check-row" style="padding:3px 0;"><div class="checkbox-done"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div><span style="font-size:12.5px;">Photograph outdoor unit</span></div>
+          <div class="check-row" style="padding:3px 0;"><div class="checkbox-done"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div><span style="font-size:12.5px;">Photograph indoor unit</span></div>
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:14px 18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="font-size:13.5px;font-weight:600;">Report back</div>
+          <span class="pill" style="background:var(--accent-2-soft);color:var(--accent-2);">In progress</span>
+        </div>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
+          <div class="check-row" style="padding:3px 0;"><div class="checkbox-done"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div><span style="font-size:12.5px;">Draft report</span></div>
+          <div class="check-row" style="padding:3px 0;"><div class="checkbox-open"></div><span style="font-size:12.5px;color:var(--ink-muted);">Send to customer &mdash; manual, by email (not automated)</span></div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isTasks}}" hint-placeholder-val="{{false}}">
+    <div style="font-size:15px;font-weight:600;margin-bottom:14px;">Tasks</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2px 18px;">
+      <div class="doc-row">
+        <div class="checkbox-done" style="margin-top:0;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;text-decoration:line-through;color:var(--ink-faint);">Confirm parts availability</div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);">Ajmal</div>
+      </div>
+      <div class="doc-row">
+        <div class="checkbox-open"></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;">Schedule follow-up inspection</div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);">Jackson &middot; due in 4 days</div>
+      </div>
+      <div class="doc-row">
+        <div class="checkbox-open"></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;">Send final invoice</div>
+        </div>
+        <div style="font-size:12px;color:var(--status-hold);font-weight:600;">due tomorrow</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isCalendar}}" hint-placeholder-val="{{false}}">
+    <div style="font-size:15px;font-weight:600;margin-bottom:14px;">Calendar</div>
+    <div style="display:grid;grid-template-columns:repeat(7, minmax(0,1fr));gap:8px;margin-bottom:20px;">
+      <div style="text-align:center;font-size:11px;color:var(--ink-faint);padding:8px 0;background:var(--surface);border:1px solid var(--border);border-radius:8px;">Mon</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-faint);padding:8px 0;background:var(--surface);border:1px solid var(--border);border-radius:8px;">Tue</div>
+      <div style="text-align:center;font-size:11px;font-weight:700;padding:8px 0;background:var(--accent);color:white;border-radius:8px;">Wed</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-faint);padding:8px 0;background:var(--surface);border:1px solid var(--border);border-radius:8px;">Thu</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-faint);padding:8px 0;background:var(--surface);border:1px solid var(--border);border-radius:8px;">Fri</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-faint);padding:8px 0;background:var(--surface);border:1px solid var(--border);border-radius:8px;">Sat</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-faint);padding:8px 0;background:var(--surface);border:1px solid var(--border);border-radius:8px;">Sun</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2px 18px;">
+      <div class="doc-row">
+        <div style="width:6px;height:32px;border-radius:3px;background:var(--accent);flex-shrink:0;"></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;">Site visit &mdash; 5205 Argo Way</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">Today, 1:00 PM</div>
+        </div>
+      </div>
+      <div class="doc-row">
+        <div style="width:6px;height:32px;border-radius:3px;background:var(--status-active);flex-shrink:0;"></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;">Follow-up inspection &mdash; Salgiya</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">Thursday, 10:00 AM</div>
+        </div>
+      </div>
+      <div class="doc-row">
+        <div style="width:6px;height:32px;border-radius:3px;background:var(--status-hold);flex-shrink:0;"></div>
+        <div style="flex-grow:1;">
+          <div style="font-size:13px;font-weight:600;">Install start &mdash; Placer Court</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">Friday, 8:00 AM</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"onBack":{"editor":null}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: "photos" };
+  }
+  renderVals() {
+    const tab = this.state.tab;
+    const active = "border-color:var(--accent);color:var(--ink);";
+    const idle = "";
+    const tabStyle = {
+      photos: tab === "photos" ? active : idle,
+      documents: tab === "documents" ? active : idle,
+      reports: tab === "reports" ? active : idle,
+      checklists: tab === "checklists" ? active : idle,
+      walkthroughs: tab === "walkthroughs" ? active : idle,
+      workflows: tab === "workflows" ? active : idle,
+      tasks: tab === "tasks" ? active : idle,
+      calendar: tab === "calendar" ? active : idle,
+    };
+    return {
+      tabStyle,
+      isPhotos: tab === "photos",
+      isDocuments: tab === "documents",
+      isReports: tab === "reports",
+      isChecklists: tab === "checklists",
+      isWalkthroughs: tab === "walkthroughs",
+      isWorkflows: tab === "workflows",
+      isTasks: tab === "tasks",
+      isCalendar: tab === "calendar",
+      setPhotos: () => this.setState({ tab: "photos" }),
+      setDocuments: () => this.setState({ tab: "documents" }),
+      setReports: () => this.setState({ tab: "reports" }),
+      setChecklists: () => this.setState({ tab: "checklists" }),
+      setWalkthroughs: () => this.setState({ tab: "walkthroughs" }),
+      setWorkflows: () => this.setState({ tab: "workflows" }),
+      setTasks: () => this.setState({ tab: "tasks" }),
+      setCalendar: () => this.setState({ tab: "calendar" }),
+      goBack: () => (this.props.onBack ?? (() => {}))(),
+    };
+  }
+}
+</script>
+</body>
+</html>

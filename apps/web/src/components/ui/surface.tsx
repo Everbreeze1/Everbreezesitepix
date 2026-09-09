@@ -56,7 +56,7 @@ export function SectionHeading({
         )}
         <h2
           className={cn(
-            "font-display text-2xl font-bold leading-none tracking-[-0.9px] text-foreground",
+            "font-display text-2xl font-bold leading-none tracking-[-0.01em] text-foreground",
             eyebrow && "mt-2.5",
           )}
         >

@@ -265,7 +265,7 @@ export function WorkspaceSchedule({
             <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
               Workspace schedule
             </p>
-            <h2 className="font-display mt-1.5 text-2xl font-bold leading-none tracking-[-0.6px]">
+            <h2 className="font-display mt-1.5 text-2xl font-bold leading-none tracking-[-0.01em]">
               {format(month, "MMMM yyyy")}
             </h2>
           </div>
@@ -495,7 +495,7 @@ export function WorkspaceSchedule({
           <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
             {selectedDay === today ? "Today" : "Selected day"}
           </p>
-          <h3 className="font-display mt-1.5 text-xl font-bold leading-none tracking-[-0.4px]">
+          <h3 className="font-display mt-1.5 text-xl font-bold leading-none tracking-[-0.01em]">
             {format(selectedDate, "EEEE, d MMM")}
           </h3>
           <p className="mt-1.5 text-xs font-semibold text-muted-foreground">

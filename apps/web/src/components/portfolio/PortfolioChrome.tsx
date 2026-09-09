@@ -122,7 +122,7 @@ function SiteHeader({
               {(site.business_name?.trim() || "W").slice(0, 1).toUpperCase()}
             </span>
           )}
-          <span className="font-portfolio-display truncate text-lg font-extrabold uppercase tracking-tight lg:text-xl">
+          <span className="font-portfolio-display truncate text-lg font-semibold tracking-tight lg:text-xl">
             {site.business_name?.trim() || "Our work"}
           </span>
         </Link>
@@ -251,7 +251,7 @@ function SiteFooter({
                   {name.slice(0, 1).toUpperCase()}
                 </span>
               )}
-              <span className="font-portfolio-display text-xl font-extrabold uppercase tracking-tight">
+              <span className="font-portfolio-display text-xl font-semibold tracking-tight">
                 {name}
               </span>
             </div>

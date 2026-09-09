@@ -386,7 +386,7 @@ export function DashboardPage() {
             </p>
             <h1
               aria-busy={!firstName && profileLoading}
-              className="font-display mt-4 text-5xl font-bold leading-none tracking-[-2.1px] text-foreground sm:text-6xl"
+              className="font-sans mt-4 text-2xl font-bold leading-tight tracking-[-0.01em] text-foreground sm:text-3xl"
             >
               {/*
                * Three states, and the name only ever appears once it is known.
@@ -426,7 +426,7 @@ export function DashboardPage() {
             <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[1.3px] text-muted-foreground">
               Active projects
             </p>
-            <p className="font-display mt-3 text-4xl font-bold leading-none tracking-[-1.26px] text-foreground">
+            <p className="font-mono mt-3 text-[26px] font-bold leading-none text-foreground">
               {activeCount}
             </p>
             <p className="font-manrope mt-2 text-xs font-bold text-muted-foreground">
@@ -437,7 +437,7 @@ export function DashboardPage() {
             <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[1.3px] text-muted-foreground">
               New field records
             </p>
-            <p className="font-display mt-3 text-4xl font-bold leading-none tracking-[-1.26px] text-foreground">
+            <p className="font-mono mt-3 text-[26px] font-bold leading-none text-foreground">
               {newRecordsCount}
             </p>
             <p className="font-manrope mt-2 text-xs font-bold text-muted-foreground">
@@ -448,7 +448,7 @@ export function DashboardPage() {
             <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[1.3px] text-muted-foreground">
               Documentation health
             </p>
-            <p className="font-display mt-3 text-4xl font-bold leading-none tracking-[-1.26px] text-foreground">
+            <p className="font-mono mt-3 text-[26px] font-bold leading-none text-foreground">
               {docHealthPct === null ? "-" : `${docHealthPct}%`}
             </p>
             <p className="font-manrope mt-2 text-xs font-bold text-muted-foreground">
@@ -466,7 +466,7 @@ export function DashboardPage() {
               <p className="font-manrope text-[11px] font-extrabold uppercase tracking-[1.5px] text-muted-foreground">
                 On site now
               </p>
-              <h2 className="font-manrope mt-2 text-xl font-extrabold tracking-[-0.5px] text-foreground">
+              <h2 className="font-manrope mt-2 text-xl font-extrabold tracking-[-0.01em] text-foreground">
                 Active projects
               </h2>
             </div>
@@ -499,7 +499,7 @@ export function DashboardPage() {
                     {p.status === "active" ? "Active" : p.status}
                   </span>
                   <div>
-                    <p className="font-display text-3xl font-bold leading-none tracking-[-1.05px] text-sidebar-foreground">
+                    <p className="font-display text-3xl font-bold leading-none tracking-[-0.01em] text-sidebar-foreground">
                       {p.name}
                     </p>
                     <p className="font-manrope mt-2 text-xs font-bold text-sidebar-foreground/65">
@@ -520,7 +520,7 @@ export function DashboardPage() {
           <p className="font-manrope text-[11px] font-extrabold uppercase tracking-[1.5px] text-muted-foreground">
             Live record
           </p>
-          <h2 className="font-manrope mt-2 text-xl font-extrabold tracking-[-0.5px] text-foreground">
+          <h2 className="font-manrope mt-2 text-xl font-extrabold tracking-[-0.01em] text-foreground">
             Latest field activity
           </h2>
           <div className="mt-5 space-y-2">

@@ -1,0 +1,434 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
+  <style>
+    :root{
+      --bg: oklch(97% 0.01 75); --surface: oklch(99% 0.004 75); --surface-2: oklch(94.5% 0.012 75);
+      --border: oklch(89% 0.012 75); --ink: oklch(23% 0.02 75); --ink-muted: oklch(48% 0.02 75); --ink-faint: oklch(65% 0.015 75);
+      --accent: oklch(64% 0.14 55); --accent-soft: oklch(93% 0.03 55);
+      --accent-2: oklch(64% 0.14 200); --accent-2-soft: oklch(93% 0.025 200);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Work Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);}
+    .mono{font-family:"Space Mono",monospace;}
+    .tab{padding:9px 2px;font-size:14px;font-weight:600;cursor:pointer;border-bottom:2.5px solid transparent;color:var(--ink-faint);}
+    .tab.active{color:var(--ink);border-bottom-color:var(--accent);}
+    .pill{font-size:12px;font-weight:600;padding:6px 13px;border-radius:999px;cursor:pointer;border:1px solid var(--border);color:var(--ink-muted);background:var(--surface);white-space:nowrap;}
+    .pill.active{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+    .doc-card{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:18px;display:flex;flex-direction:column;gap:11px;}
+    .doc-card:hover{border-color:var(--accent);}
+    .chip{font-size:10.5px;color:var(--ink-muted);background:var(--surface-2);padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:4px;}
+    .type-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.03em;padding:3px 8px;border-radius:6px;}
+    .btn-accent{background:var(--accent);color:oklch(99% 0.01 75);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+    .btn-line{border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--ink-muted);}
+    .step-dot{width:24px;height:24px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;}
+    .step-line{flex-grow:1;height:2px;background:var(--border);}
+    .cover-opt{border:1.5px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;}
+    .cover-opt.sel{border-color:var(--accent);background:var(--accent-soft);}
+    .tok{font-family:"Space Mono",monospace;font-size:10.5px;background:var(--accent-2-soft);color:oklch(38% 0.1 200);padding:2px 6px;border-radius:4px;}
+    .field{border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;background:var(--surface);}
+  </style>
+</helmet>
+
+<!-- ============ LIST VIEW ============ -->
+<sc-if value="{{isList}}" hint-placeholder-val="{{true}}">
+<div style="padding:32px 40px 40px 40px;max-width:1200px;">
+
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;">
+    <div>
+      <div style="font-size:24px;font-weight:700;letter-spacing:-0.01em;">Documents</div>
+      <div style="font-size:13.5px;color:var(--ink-muted);margin-top:3px;max-width:560px;">Word-style templates with dynamic placeholders that auto-fill from project data — reports, invoices, site logs, and anything else you send a client.</div>
+    </div>
+    <div class="btn-accent" style="padding:9px 16px;font-size:13.5px;" onClick="{{newTemplate}}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      New template
+    </div>
+  </div>
+
+  <div style="display:flex;gap:22px;border-bottom:1px solid var(--border);margin-bottom:22px;">
+    <div class="tab {{tabClass.documents}}" onClick="{{setDocs}}">Document templates <span class="mono" style="font-size:11px;color:var(--ink-faint);">6</span></div>
+    <div class="tab {{tabClass.reports}}" onClick="{{setReports}}">Report templates <span class="mono" style="font-size:11px;color:var(--ink-faint);">3</span></div>
+  </div>
+
+  <!-- DOCUMENT TEMPLATES TAB -->
+  <sc-if value="{{isDocs}}" hint-placeholder-val="{{true}}">
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px;">
+    <div class="pill {{tradeClass.all}}" onClick="{{setTradeAll}}">All trades <span class="mono">6</span></div>
+    <div class="pill {{tradeClass.general}}" onClick="{{setTradeGeneral}}">General <span class="mono">2</span></div>
+    <div class="pill {{tradeClass.hvac}}" onClick="{{setTradeHvac}}">HVAC ★ <span class="mono">1</span></div>
+    <div class="pill {{tradeClass.fieldReports}}" onClick="{{setTradeFieldReports}}">Field Reports <span class="mono">1</span></div>
+    <div class="pill {{tradeClass.construction}}" onClick="{{setTradeConstruction}}">Construction <span class="mono">1</span></div>
+    <div class="pill {{tradeClass.realEstate}}" onClick="{{setTradeRealEstate}}">Real Estate <span class="mono">1</span></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:16px;">
+
+    <sc-if value="{{vis.d1}}" hint-placeholder-val="{{true}}">
+    <div class="doc-card" onClick="{{editD1}}">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span class="type-badge" style="background:var(--accent-soft);color:oklch(40% 0.11 55);">Report</span>
+        <span style="font-size:11px;color:var(--ink-faint);" class="mono">4 tokens</span>
+      </div>
+      <div style="font-size:14.5px;font-weight:600;">HVAC Installation &amp; Start-Up Report</div>
+      <div style="font-size:12px;color:var(--ink-faint);line-height:1.5;">"Install complete for Meridian Build on Sept 8, 2026. Equipment: Carrier 3-ton condenser. Technician: Mike."</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--border);padding-top:11px;"><span class="chip">General</span><span class="chip">HVAC</span></div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{vis.d2}}" hint-placeholder-val="{{true}}">
+    <div class="doc-card" onClick="{{editD2}}">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span class="type-badge" style="background:oklch(90% 0.05 150);color:oklch(35% 0.1 150);">Invoice</span>
+        <span style="font-size:11px;color:var(--ink-faint);" class="mono">6 tokens</span>
+      </div>
+      <div style="font-size:14.5px;font-weight:600;">Service Call Invoice — With Photos</div>
+      <div style="font-size:12px;color:var(--ink-faint);line-height:1.5;">"Ironline GC · 2229 Zittel Drive · Invoice No. 1042 · Amount due: —"</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--border);padding-top:11px;"><span class="chip">General</span></div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{vis.d3}}" hint-placeholder-val="{{true}}">
+    <div class="doc-card" onClick="{{editD3}}">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span class="type-badge" style="background:var(--accent-2-soft);color:oklch(38% 0.1 200);">Site log</span>
+        <span style="font-size:11px;color:var(--ink-faint);" class="mono">5 tokens</span>
+      </div>
+      <div style="font-size:14.5px;font-weight:600;">Daily Site Log</div>
+      <div style="font-size:12px;color:var(--ink-faint);line-height:1.5;">"Harbor &amp; Stone · Sept 8, 2026 · Weather: Clear, 68°F · Crew on site: 4"</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--border);padding-top:11px;"><span class="chip">Field Reports</span></div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{vis.d4}}" hint-placeholder-val="{{true}}">
+    <div class="doc-card" onClick="{{editD4}}">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span class="type-badge" style="background:oklch(90% 0.05 30);color:oklch(40% 0.13 30);">Document</span>
+        <span style="font-size:11px;color:var(--ink-faint);" class="mono">3 tokens</span>
+      </div>
+      <div style="font-size:14.5px;font-weight:600;">Change Order Request</div>
+      <div style="font-size:12px;color:var(--ink-faint);line-height:1.5;">"Requesting approval for added ductwork run — additional cost: —, revised completion: Sept 22"</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--border);padding-top:11px;"><span class="chip">Construction</span></div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{vis.d5}}" hint-placeholder-val="{{true}}">
+    <div class="doc-card" onClick="{{editD5}}">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span class="type-badge" style="background:oklch(90% 0.05 30);color:oklch(40% 0.13 30);">Document</span>
+        <span style="font-size:11px;color:var(--ink-faint);" class="mono">2 tokens</span>
+      </div>
+      <div style="font-size:14.5px;font-weight:600;">Certificate of Completion</div>
+      <div style="font-size:12px;color:var(--ink-faint);line-height:1.5;">"This certifies that work at 29554 Main St was completed on Sept 3, 2026."</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--border);padding-top:11px;"><span class="chip">Real Estate</span></div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{vis.d6}}" hint-placeholder-val="{{true}}">
+    <div class="doc-card" onClick="{{editD6}}">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span class="type-badge" style="background:oklch(90% 0.05 150);color:oklch(35% 0.1 150);">Invoice</span>
+        <span style="font-size:11px;color:var(--ink-faint);" class="mono">5 tokens</span>
+      </div>
+      <div style="font-size:14.5px;font-weight:600;">Cleaning Services Invoice — With Photos</div>
+      <div style="font-size:12px;color:var(--ink-faint);line-height:1.5;">"Cedar Ridge Builders · Sept 5, 2026 · Invoice No. 1041"</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--border);padding-top:11px;"><span class="chip">General</span></div>
+    </div>
+    </sc-if>
+
+    <div class="doc-card" style="align-items:center;justify-content:center;border-style:dashed;color:var(--ink-faint);min-height:150px;" onClick="{{newTemplate}}">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      <div style="font-size:13px;font-weight:500;margin-top:8px;">Build a new template</div>
+    </div>
+
+  </div>
+  </sc-if>
+
+  <!-- REPORT TEMPLATES TAB -->
+  <sc-if value="{{isReports}}" hint-placeholder-val="{{false}}">
+  <div style="display:grid;grid-template-columns:280px 1fr;gap:20px;">
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="doc-card" style="{{repStyle.r1}} cursor:pointer;padding:14px 16px;" onClick="{{selR1}}">
+        <div style="font-size:13.5px;font-weight:600;">Site Visit Report</div>
+        <div style="font-size:11.5px;color:var(--ink-faint);">Centered cover · 4 sections</div>
+      </div>
+      <div class="doc-card" style="{{repStyle.r2}} cursor:pointer;padding:14px 16px;" onClick="{{selR2}}">
+        <div style="font-size:13.5px;font-weight:600;">Weekly Progress Report</div>
+        <div style="font-size:11.5px;color:var(--ink-faint);">Hero band · 5 sections</div>
+      </div>
+      <div class="doc-card" style="{{repStyle.r3}} cursor:pointer;padding:14px 16px;" onClick="{{selR3}}">
+        <div style="font-size:13.5px;font-weight:600;">Final Walkthrough Report</div>
+        <div style="font-size:11.5px;color:var(--ink-faint);">Photo cover · 6 sections</div>
+      </div>
+      <div class="doc-card" style="align-items:center;justify-content:center;border-style:dashed;color:var(--ink-faint);padding:14px;" onClick="{{newTemplate}}">
+        <div style="font-size:12.5px;">+ New report template</div>
+      </div>
+    </div>
+    <div class="doc-card" style="padding:26px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div>
+          <div style="font-size:17px;font-weight:700;">{{repDetail.title}}</div>
+          <div style="font-size:12.5px;color:var(--ink-faint);margin-top:2px;">{{repDetail.sub}}</div>
+        </div>
+        <div class="btn-line" onClick="{{editReport}}">Edit template</div>
+      </div>
+      <div style="font-size:11.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Sections</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--surface-2);border-radius:8px;font-size:13px;"><span>Executive summary</span><span class="chip">Text only</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--surface-2);border-radius:8px;font-size:13px;"><span>Observations</span><span class="chip">Text + photos</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--surface-2);border-radius:8px;font-size:13px;"><span>Photos</span><span class="chip">Photo grid</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--surface-2);border-radius:8px;font-size:13px;"><span>Next steps</span><span class="chip">Checklist recap</span></div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+</sc-if>
+
+<!-- ============ EDITOR (3-step wizard with live preview) ============ -->
+<sc-if value="{{isEditor}}" hint-placeholder-val="{{false}}">
+<div style="padding:28px 40px 40px 40px;max-width:1200px;">
+
+  <div style="font-size:12.5px;color:var(--ink-faint);margin-bottom:16px;">
+    <a onClick="{{closeEditor}}" style="color:var(--accent);cursor:pointer;">Documents</a> &nbsp;/&nbsp; New template
+  </div>
+
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;max-width:520px;">
+    <div style="display:flex;align-items:center;gap:8px;flex-grow:1;">
+      <div class="step-dot" style="{{stepDot1}}">1</div><div class="step-line" style="{{stepLine1}}"></div>
+      <div class="step-dot" style="{{stepDot2}}">2</div><div class="step-line" style="{{stepLine2}}"></div>
+      <div class="step-dot" style="{{stepDot3}}">3</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:36px;max-width:1120px;margin-bottom:8px;font-size:11.5px;font-weight:600;color:var(--ink-faint);">
+    <span style="{{labelStyle1}}">Basics</span><span style="{{labelStyle2}}">Sections</span><span style="{{labelStyle3}}">Placeholders</span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 420px;gap:28px;margin-top:22px;">
+
+    <!-- LEFT: step content -->
+    <div>
+
+      <sc-if value="{{isStep1}}" hint-placeholder-val="{{true}}">
+      <div class="doc-card" style="padding:26px;">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Template name</div>
+        <div class="field" style="margin-bottom:16px;">Site Visit Report</div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Subtitle (optional)</div>
+        <div class="field" style="margin-bottom:20px;color:var(--ink-faint);">Prepared for the client after each visit</div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:10px;">Cover page style</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="cover-opt {{coverSel.minimal}}" onClick="{{setCoverMinimal}}">
+            <div style="height:44px;border-radius:6px;background:var(--surface-2);margin-bottom:8px;display:flex;align-items:center;justify-content:center;"><div style="width:60%;height:5px;background:var(--ink-faint);border-radius:3px;"></div></div>
+            <div style="font-size:12.5px;font-weight:600;">Minimal</div><div style="font-size:11px;color:var(--ink-faint);">Clean title on a plain page.</div>
+          </div>
+          <div class="cover-opt {{coverSel.centered}}" onClick="{{setCoverCentered}}">
+            <div style="height:44px;border-radius:6px;background:var(--surface-2);margin-bottom:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;"><div style="width:50%;height:6px;background:var(--ink-faint);border-radius:3px;"></div><div style="width:30%;height:4px;background:var(--ink-faint);border-radius:3px;opacity:0.5;"></div></div>
+            <div style="font-size:12.5px;font-weight:600;">Centered</div><div style="font-size:11px;color:var(--ink-faint);">Large centered title with subtitle.</div>
+          </div>
+          <div class="cover-opt {{coverSel.hero}}" onClick="{{setCoverHero}}">
+            <div style="height:44px;border-radius:6px;background:var(--accent-soft);margin-bottom:8px;display:flex;align-items:center;padding:0 8px;"><div style="width:50%;height:5px;background:var(--accent);border-radius:3px;"></div></div>
+            <div style="font-size:12.5px;font-weight:600;">Hero band</div><div style="font-size:11px;color:var(--ink-faint);">Bold colored hero band on top.</div>
+          </div>
+          <div class="cover-opt {{coverSel.photo}}" onClick="{{setCoverPhoto}}">
+            <div style="height:44px;border-radius:6px;background:linear-gradient(160deg,oklch(45% 0.03 75),oklch(25% 0.02 75));margin-bottom:8px;"></div>
+            <div style="font-size:12.5px;font-weight:600;">Photo cover</div><div style="font-size:11px;color:var(--ink-faint);">Full-bleed cover photo with overlay.</div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{isStep2}}" hint-placeholder-val="{{false}}">
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="font-size:12px;color:var(--ink-faint);margin-bottom:2px;">Drag to reorder. Click a token below to insert it into the body text.</div>
+        <div class="doc-card" style="padding:16px 18px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><span style="font-size:13.5px;font-weight:600;">Executive summary</span><span class="chip">Text only</span></div>
+          <div class="field" style="font-size:12.5px;color:var(--ink-muted);">Overview of the site visit for <span class="tok">{{tokProjectName}}</span> on <span class="tok">{{tokReportDate}}</span>.</div>
+        </div>
+        <div class="doc-card" style="padding:16px 18px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><span style="font-size:13.5px;font-weight:600;">Observations</span><span class="chip">Text + photos</span></div>
+          <div class="field" style="font-size:12.5px;color:var(--ink-muted);">Notes from the crew, plus supporting photos from today's visit.</div>
+        </div>
+        <div class="doc-card" style="padding:16px 18px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><span style="font-size:13.5px;font-weight:600;">Photos</span><span class="chip">Photo grid</span></div>
+          <div class="field" style="font-size:12.5px;color:var(--ink-muted);">All photos tagged to this visit, in a grid.</div>
+        </div>
+        <div class="doc-card" style="align-items:center;justify-content:center;border-style:dashed;color:var(--ink-faint);padding:14px;">+ Add section</div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{isStep3}}" hint-placeholder-val="{{false}}">
+      <div class="doc-card" style="padding:26px;">
+        <div style="font-size:12.5px;color:var(--ink-muted);margin-bottom:16px;">Placeholders are tokens like <span class="tok">{{tokProjectName}}</span> that get replaced with real project data when the template is used.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;">
+          <span class="tok" style="padding:5px 9px;">{{tokProjectName}} ✕</span>
+          <span class="tok" style="padding:5px 9px;">{{tokProjectAddress}} ✕</span>
+          <span class="tok" style="padding:5px 9px;">{{tokAuthorName}} ✕</span>
+          <span class="tok" style="padding:5px 9px;">{{tokReportDate}} ✕</span>
+          <span class="tok" style="padding:5px 9px;">{{tokPhotoCount}} ✕</span>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <div class="field" style="flex-grow:1;color:var(--ink-faint);">e.g. client_name</div>
+          <div class="btn-line">+ Add</div>
+        </div>
+      </div>
+      </sc-if>
+
+      <div style="display:flex;justify-content:space-between;margin-top:24px;">
+        <div class="btn-line" onClick="{{prevStep}}" style="{{backVis}}">Back</div>
+        <div style="flex-grow:1;"></div>
+        <div class="btn-accent" onClick="{{nextStep}}">{{nextLabel}}</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: live preview -->
+    <div>
+      <div style="font-size:11.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">Live preview</div>
+      <div style="border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface);box-shadow:0 10px 26px rgba(20,15,5,0.06);">
+
+        <sc-if value="{{coverSel.minimalOn}}" hint-placeholder-val="{{false}}">
+        <div style="padding:34px 26px;"><div style="font-size:17px;font-weight:700;">Site Visit Report</div><div style="font-size:12px;color:var(--ink-faint);margin-top:4px;">Prepared for the client after each visit</div></div>
+        </sc-if>
+        <sc-if value="{{coverSel.centeredOn}}" hint-placeholder-val="{{false}}">
+        <div style="padding:44px 26px;text-align:center;"><div style="font-size:19px;font-weight:700;">Site Visit Report</div><div style="font-size:12px;color:var(--ink-faint);margin-top:6px;">Prepared for the client after each visit</div></div>
+        </sc-if>
+        <sc-if value="{{coverSel.heroOn}}" hint-placeholder-val="{{true}}">
+        <div style="padding:30px 26px;background:var(--accent);color:oklch(99% 0.01 75);"><div style="font-size:18px;font-weight:700;">Site Visit Report</div><div style="font-size:12px;opacity:0.85;margin-top:4px;">Prepared for the client after each visit</div></div>
+        </sc-if>
+        <sc-if value="{{coverSel.photoOn}}" hint-placeholder-val="{{false}}">
+        <div style="padding:40px 26px;background:linear-gradient(160deg,oklch(45% 0.03 75),oklch(25% 0.02 75));color:white;"><div style="font-size:18px;font-weight:700;">Site Visit Report</div><div style="font-size:12px;opacity:0.8;margin-top:4px;">Prepared for the client after each visit</div></div>
+        </sc-if>
+
+        <div style="padding:22px 26px;display:flex;flex-direction:column;gap:16px;">
+          <div>
+            <div style="font-size:10.5px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;margin-bottom:5px;">Executive summary</div>
+            <div style="font-size:12.5px;color:var(--ink-muted);line-height:1.55;">Overview of the site visit for <b>Meridian Build</b> on <b>Sept 8, 2026</b>.</div>
+          </div>
+          <div>
+            <div style="font-size:10.5px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;margin-bottom:5px;">Observations</div>
+            <div style="font-size:12.5px;color:var(--ink-muted);line-height:1.55;">Framing complete on the east wing; electrical rough-in begins next week.</div>
+          </div>
+          <div>
+            <div style="font-size:10.5px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;margin-bottom:6px;">Photos</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+              <div style="aspect-ratio:1;background:var(--surface-2);border-radius:6px;"></div>
+              <div style="aspect-ratio:1;background:var(--surface-2);border-radius:6px;"></div>
+              <div style="aspect-ratio:1;background:var(--surface-2);border-radius:6px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:var(--ink-faint);margin-top:10px;line-height:1.5;">This updates as you edit — what your client sees is exactly what you're building here, not a guess.</div>
+    </div>
+
+  </div>
+
+</div>
+</sc-if>
+
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { view: "list", tab: "documents", trade: "all", step: 1, cover: "hero", report: "r1" };
+  }
+  renderVals() {
+    const s = this.state;
+    const cardTrade = { d1: ["hvac","general"], d2: ["general"], d3: ["fieldReports"], d4: ["construction"], d5: ["realEstate"], d6: ["general"] };
+    const vis = {};
+    Object.keys(cardTrade).forEach((k) => { vis[k] = s.trade === "all" || cardTrade[k].includes(s.trade); });
+
+    const mkTradeClass = (k) => (s.trade === k ? "active" : "");
+    const reports = {
+      r1: { title: "Site Visit Report", sub: "Centered cover · 4 sections · used on 12 projects" },
+      r2: { title: "Weekly Progress Report", sub: "Hero band cover · 5 sections · used on 8 projects" },
+      r3: { title: "Final Walkthrough Report", sub: "Photo cover · 6 sections · used on 3 projects" },
+    };
+    const repStyleFor = (id) => (s.report === id ? "border-color:var(--accent);background:var(--accent-soft);" : "");
+
+    const stepDotStyle = (n) => {
+      const active = s.step === n, done = s.step > n;
+      const bg = done ? "var(--accent)" : active ? "var(--accent)" : "var(--surface-2)";
+      const color = (done || active) ? "oklch(99% 0.01 75)" : "var(--ink-faint)";
+      return `background:${bg};color:${color};`;
+    };
+    const stepLineStyle = (n) => (s.step > n ? "background:var(--accent);" : "");
+    const labelStyle = (n) => (s.step === n ? "color:var(--ink);" : "");
+
+    return {
+      isList: s.view === "list",
+      isEditor: s.view === "editor",
+      newTemplate: () => this.setState({ view: "editor", step: 1, cover: "hero" }),
+      closeEditor: () => this.setState({ view: "list" }),
+      editD1: () => this.setState({ view: "editor", step: 1 }),
+      editD2: () => this.setState({ view: "editor", step: 1 }),
+      editD3: () => this.setState({ view: "editor", step: 1 }),
+      editD4: () => this.setState({ view: "editor", step: 1 }),
+      editD5: () => this.setState({ view: "editor", step: 1 }),
+      editD6: () => this.setState({ view: "editor", step: 1 }),
+      editReport: () => this.setState({ view: "editor", step: 1 }),
+
+      tabClass: { documents: s.tab === "documents" ? "active" : "", reports: s.tab === "reports" ? "active" : "" },
+      isDocs: s.tab === "documents",
+      isReports: s.tab === "reports",
+      setDocs: () => this.setState({ tab: "documents" }),
+      setReports: () => this.setState({ tab: "reports" }),
+
+      tradeClass: {
+        all: mkTradeClass("all"), general: mkTradeClass("general"), hvac: mkTradeClass("hvac"),
+        fieldReports: mkTradeClass("fieldReports"), construction: mkTradeClass("construction"), realEstate: mkTradeClass("realEstate"),
+      },
+      setTradeAll: () => this.setState({ trade: "all" }),
+      setTradeGeneral: () => this.setState({ trade: "general" }),
+      setTradeHvac: () => this.setState({ trade: "hvac" }),
+      setTradeFieldReports: () => this.setState({ trade: "fieldReports" }),
+      setTradeConstruction: () => this.setState({ trade: "construction" }),
+      setTradeRealEstate: () => this.setState({ trade: "realEstate" }),
+      vis,
+
+      repStyle: { r1: repStyleFor("r1"), r2: repStyleFor("r2"), r3: repStyleFor("r3") },
+      repDetail: reports[s.report],
+      selR1: () => this.setState({ report: "r1" }),
+      selR2: () => this.setState({ report: "r2" }),
+      selR3: () => this.setState({ report: "r3" }),
+
+      isStep1: s.step === 1, isStep2: s.step === 2, isStep3: s.step === 3,
+      stepDot1: stepDotStyle(1), stepDot2: stepDotStyle(2), stepDot3: stepDotStyle(3),
+      stepLine1: stepLineStyle(1), stepLine2: stepLineStyle(2),
+      labelStyle1: labelStyle(1), labelStyle2: labelStyle(2), labelStyle3: labelStyle(3),
+      nextStep: () => this.setState({ step: Math.min(3, s.step + 1) }),
+      prevStep: () => this.setState({ step: Math.max(1, s.step - 1) }),
+      backVis: s.step === 1 ? "visibility:hidden;" : "",
+      nextLabel: s.step === 3 ? "Save changes" : "Next",
+
+      coverSel: {
+        minimal: s.cover === "minimal" ? "sel" : "", centered: s.cover === "centered" ? "sel" : "",
+        hero: s.cover === "hero" ? "sel" : "", photo: s.cover === "photo" ? "sel" : "",
+        minimalOn: s.cover === "minimal", centeredOn: s.cover === "centered", heroOn: s.cover === "hero", photoOn: s.cover === "photo",
+      },
+      setCoverMinimal: () => this.setState({ cover: "minimal" }),
+      setCoverCentered: () => this.setState({ cover: "centered" }),
+      setCoverHero: () => this.setState({ cover: "hero" }),
+      setCoverPhoto: () => this.setState({ cover: "photo" }),
+
+      tokProjectName: "{{project_name}}",
+      tokReportDate: "{{report_date}}",
+      tokProjectAddress: "{{project_address}}",
+      tokAuthorName: "{{author_name}}",
+      tokPhotoCount: "{{photo_count}}",
+    };
+  }
+}
+</script>
+</body>
+</html>

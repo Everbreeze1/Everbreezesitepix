@@ -196,7 +196,7 @@ export function PortfolioHome({
             <p className="text-[11px] font-bold uppercase tracking-[0.24em] opacity-70">
               Get in touch
             </p>
-            <h2 className="font-portfolio-display mt-3 text-balance text-4xl font-black uppercase leading-[0.92] tracking-tight lg:text-7xl">
+            <h2 className="font-portfolio-display mt-3 text-balance text-4xl font-semibold leading-tight tracking-tight lg:text-7xl">
               {site.cta_label?.trim() || "Let's talk about your project"}
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-pretty text-base leading-relaxed opacity-80 lg:text-lg">
@@ -275,7 +275,7 @@ function Hero({
                 className="mb-5"
               />
             )}
-            <h1 className="font-portfolio-display max-w-4xl text-balance text-5xl font-black uppercase leading-[0.9] tracking-[-0.01em] text-white sm:text-7xl lg:text-8xl">
+            <h1 className="font-portfolio-display max-w-4xl text-balance text-5xl font-semibold leading-tight tracking-[-0.01em] text-white sm:text-7xl lg:text-8xl">
               {headline}
             </h1>
             {site.hero_subhead && (
@@ -345,7 +345,7 @@ function Stat({ value, label, accent }: { value: number; label: string; accent: 
       <dt className="sr-only">{label}</dt>
       <dd>
         <span
-          className="font-portfolio-display block text-4xl font-black tabular-nums leading-none tracking-tight lg:text-6xl"
+          className="font-portfolio-display block text-4xl font-semibold tabular-nums leading-none tracking-tight lg:text-6xl"
           style={{ color: accent }}
         >
           {value.toLocaleString()}
@@ -369,7 +369,7 @@ function ServicesStrip({ services, accent }: { services: string[]; accent: strin
           {services.map((s) => (
             <span
               key={s}
-              className="font-portfolio-display inline-flex items-center gap-2.5 text-2xl font-extrabold uppercase tracking-tight text-neutral-800 lg:text-3xl"
+              className="font-portfolio-display inline-flex items-center gap-2.5 text-2xl font-semibold tracking-tight text-neutral-800 lg:text-3xl"
             >
               <span
                 className="h-1.5 w-1.5 shrink-0 rounded-full"
@@ -418,7 +418,7 @@ function Reviews({
           style={{ color: accent }}
           aria-hidden="true"
         />
-        <h2 className="font-portfolio-display mt-4 text-balance text-4xl font-black uppercase leading-[0.95] tracking-tight lg:text-6xl">
+        <h2 className="font-portfolio-display mt-4 text-balance text-4xl font-semibold leading-tight tracking-tight lg:text-6xl">
           Hear it from our customers
         </h2>
 
@@ -541,7 +541,7 @@ export function SectionHeading({
         <p className="text-[11px] font-bold uppercase tracking-[0.24em]" style={{ color: accent }}>
           {eyebrow}
         </p>
-        <h2 className="font-portfolio-display mt-2 text-balance text-4xl font-black uppercase leading-[0.95] tracking-[-0.01em] text-neutral-900 lg:text-6xl">
+        <h2 className="font-portfolio-display mt-2 text-balance text-4xl font-semibold leading-tight tracking-[-0.01em] text-neutral-900 lg:text-6xl">
           {title}
         </h2>
         {subtitle && (

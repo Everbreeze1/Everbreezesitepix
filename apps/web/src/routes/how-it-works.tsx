@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { usePwaGuard } from "@/lib/pwa-guard";
 import { Users, ShieldCheck, Bell } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -67,7 +67,7 @@ const collaborationPoints = [
 
 function HowItWorksPage() {
   return (
-    <div className="min-h-screen bg-background landing-yellow">
+    <div className="min-h-screen bg-background landing">
       <SiteHeader />
 
       {/* Header */}
@@ -76,7 +76,7 @@ function HowItWorksPage() {
           <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
             How it works
           </p>
-          <h1 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.4px] text-foreground sm:text-5xl sm:tracking-[-1.8px] lg:text-[60px] lg:tracking-[-2.1px]">
+          <h1 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl sm:tracking-[-0.01em] lg:text-[60px] lg:tracking-[-0.01em]">
             Capture. Organize. <span className="text-primary">Report.</span>
           </h1>
           <p className="font-manrope mx-auto mt-6 max-w-xl text-lg leading-[29px] text-muted-foreground">
@@ -103,7 +103,7 @@ function HowItWorksPage() {
                 </div>
               </div>
               <div className="mt-5">
-                <h3 className="font-display text-xl font-semibold tracking-[-0.63px] text-foreground">
+                <h3 className="font-display text-xl font-semibold tracking-[-0.01em] text-foreground">
                   Capture
                 </h3>
                 <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
@@ -125,7 +125,7 @@ function HowItWorksPage() {
                 </div>
               </div>
               <div className="mt-5">
-                <h3 className="font-display text-xl font-semibold tracking-[-0.63px] text-foreground">
+                <h3 className="font-display text-xl font-semibold tracking-[-0.01em] text-foreground">
                   Organize
                 </h3>
                 <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
@@ -147,7 +147,7 @@ function HowItWorksPage() {
                 </div>
               </div>
               <div className="mt-5">
-                <h3 className="font-display text-xl font-semibold tracking-[-0.63px] text-foreground">
+                <h3 className="font-display text-xl font-semibold tracking-[-0.01em] text-foreground">
                   Report
                 </h3>
                 <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
@@ -195,7 +195,7 @@ function HowItWorksPage() {
               <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
                 Collaboration
               </p>
-              <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
+              <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl">
                 The whole crew, finally in sync.
               </h2>
               <p className="font-manrope mt-6 max-w-lg text-lg leading-[29px] text-muted-foreground">

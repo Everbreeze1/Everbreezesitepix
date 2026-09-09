@@ -1225,7 +1225,7 @@ function WorkflowTemplatesBuilder({ embedded = false }: { embedded?: boolean } =
               return (
                 <Card key={s.name} className={cn(SURFACE_CARD, "flex flex-col p-4")}>
                   <div className="flex items-start justify-between gap-2">
-                    <div className="font-display text-lg font-bold tracking-[-0.3px]">{s.name}</div>
+                    <div className="font-display text-lg font-bold tracking-[-0.01em]">{s.name}</div>
                     {s.category === ownTrade && (
                       <span className="mt-1 shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.6px] text-primary">
                         Your trade

@@ -10,6 +10,12 @@ export function friendlyError(e: unknown, fallback: string): string {
   const msg = String((e as { message?: unknown } | null)?.message ?? "");
   if (/row-level security|permission denied|not authorized/i.test(msg))
     return "You don't have permission to do that on this project";
+  // The template/workflow authoring guards (20261008000000) raise a specific
+  // sentence about who may edit structure. That is a useful answer, not driver
+  // text, so it should reach the person rather than the "check your connection"
+  // fallback that used to swallow it (the delete-workflow bug, spec §6).
+  if (/only an owner, admin, or manager/i.test(msg))
+    return "Only an Owner, Admin, or Manager on Pro or Team can do that";
   if (/duplicate key|already exists/i.test(msg)) return "That already exists";
   if (/violates foreign key/i.test(msg))
     return "Something it depends on was removed - refresh and try again";

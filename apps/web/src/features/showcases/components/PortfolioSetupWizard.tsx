@@ -131,7 +131,7 @@ export function PortfolioSetupWizard({
             <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
               Build your site
             </p>
-            <h1 className="mt-2 font-display text-[32px] font-bold leading-none tracking-[-1.1px] text-foreground sm:text-[38.4px] sm:tracking-[-1.344px]">
+            <h1 className="mt-2 font-display text-[32px] font-bold leading-none tracking-[-0.01em] text-foreground sm:text-[38.4px] sm:tracking-[-0.01em]">
               {done ? "You're all set" : `Step ${index + 1} of ${SITE_STEPS.length}`}
             </h1>
             <p className="mt-3 font-manrope text-sm text-muted-foreground">
@@ -281,7 +281,7 @@ function StepScreen({
           <step.icon className="h-6 w-6" />
         </span>
         <div className="min-w-0">
-          <h2 className="text-balance font-display text-[28px] font-bold leading-[1.05] tracking-[-0.8px] text-foreground sm:text-[34px]">
+          <h2 className="text-balance font-display text-[28px] font-bold leading-[1.05] tracking-[-0.01em] text-foreground sm:text-[34px]">
             {step.question}
           </h2>
           <p className="mt-2.5 max-w-xl text-pretty text-sm text-muted-foreground sm:text-base">
@@ -364,7 +364,7 @@ function FinishScreen({
       <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-primary/10 text-primary">
         <PartyPopper className="h-8 w-8" />
       </span>
-      <h2 className="mt-6 text-balance font-display text-[30px] font-bold leading-none tracking-[-0.9px] text-foreground sm:text-[34px]">
+      <h2 className="mt-6 text-balance font-display text-[30px] font-bold leading-none tracking-[-0.01em] text-foreground sm:text-[34px]">
         Your site is built
       </h2>
       <p className="mx-auto mt-3 max-w-md text-pretty text-sm text-muted-foreground sm:text-base">

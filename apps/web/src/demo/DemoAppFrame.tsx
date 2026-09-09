@@ -65,7 +65,7 @@ export function DemoAppFrame({ active, onSelect, children }: DemoAppFrameProps) 
         <aside className="hidden w-[244px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
           <div className="flex h-[58px] items-center gap-2.5 px-4">
             <BrandLogo size={30} />
-            <span className="font-manrope text-sm font-extrabold tracking-[-0.3px] text-sidebar-foreground">
+            <span className="font-manrope text-sm font-extrabold tracking-[-0.01em] text-sidebar-foreground">
               Ever<span className="text-brand-gold">lumen</span>
             </span>
           </div>

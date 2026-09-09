@@ -1,0 +1,161 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap">
+  <style>
+    :root{
+      --navy-950: oklch(19% 0.03 265);
+      --navy-900: oklch(23% 0.035 265);
+      --navy-800: oklch(30% 0.04 265);
+      --paper: oklch(97.5% 0.006 90);
+      --paper-2: oklch(94% 0.01 90);
+      --card: oklch(99.5% 0.002 90);
+      --border: oklch(89% 0.01 90);
+      --ink: oklch(18% 0.015 265);
+      --ink-muted: oklch(46% 0.02 265);
+      --ink-faint: oklch(64% 0.015 265);
+      --gold: oklch(76% 0.16 78);
+      --gold-ink: oklch(38% 0.1 70);
+      --gold-soft: oklch(94% 0.05 80);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Inter",system-ui,sans-serif;background:var(--paper);color:var(--ink);}
+    .disp{font-family:"Oswald",sans-serif;font-weight:700;letter-spacing:-0.01em;line-height:1.04;}
+    .wrap{max-width:1160px;margin:0 auto;padding:0 32px;}
+    .btn-gold{display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:var(--navy-950);font-weight:700;font-size:14.5px;padding:13px 24px;border-radius:999px;cursor:pointer;}
+    .navlink{font-size:14px;font-weight:600;color:rgba(255,255,255,0.75);cursor:pointer;}
+    .navlink:hover{color:white;}
+    .navlink-active{color:white;}
+  </style>
+</helmet>
+
+<div style="background:var(--paper);">
+
+  <!-- NAV -->
+  <div style="position:sticky;top:0;z-index:30;background:var(--navy-950);">
+    <div class="wrap" style="display:flex;align-items:center;justify-content:space-between;height:74px;">
+      <div style="display:flex;align-items:center;gap:9px;cursor:pointer;" onClick="{{goHome}}">
+        <div style="width:32px;height:32px;border-radius:9px;background:linear-gradient(145deg,var(--navy-800),var(--navy-950));display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" fill="var(--gold)"/><g stroke="var(--gold)" stroke-width="2" stroke-linecap="round"><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></g></svg>
+        </div>
+        <div style="font-size:17px;font-weight:700;color:white;">Ever<span style="color:var(--gold);">lumen</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:30px;">
+        <div class="navlink" style="{{navStyle.home}}" onClick="{{goHome}}">Home</div>
+        <div class="navlink" style="{{navStyle.features}}" onClick="{{goFeatures}}">Features</div>
+        <div class="navlink" style="{{navStyle.home}}" onClick="{{goHome}}">How it works</div>
+        <div class="navlink" style="{{navStyle.pricing}}" onClick="{{goPricing}}">Pricing</div>
+        <div class="navlink" style="{{navStyle.faq}}" onClick="{{goFAQ}}">FAQ</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="font-size:14px;font-weight:600;color:rgba(255,255,255,0.75);cursor:pointer;" onClick="{{goLogin}}">Log in</div>
+        <div class="btn-gold" onClick="{{goSignup}}">Start free trial</div>
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{isHome}}" hint-placeholder-val="{{true}}">
+    <dc-import name="HomeContent" on-go-pricing="{{goPricing}}" on-go-features="{{goFeatures}}" on-go-faq="{{goFAQ}}" on-go-signup="{{goSignup}}" hint-size="1440px,7200px"></dc-import>
+  </sc-if>
+  <sc-if value="{{isFeatures}}" hint-placeholder-val="{{false}}">
+    <dc-import name="FeaturesContent" on-go-signup="{{goSignup}}" on-go-pricing="{{goPricing}}" hint-size="1440px,3200px"></dc-import>
+  </sc-if>
+  <sc-if value="{{isPricing}}" hint-placeholder-val="{{false}}">
+    <dc-import name="PricingContent" on-go-signup="{{goSignup}}" on-go-faq="{{goFAQ}}" hint-size="1440px,1900px"></dc-import>
+  </sc-if>
+  <sc-if value="{{isFAQ}}" hint-placeholder-val="{{false}}">
+    <dc-import name="FAQContent" on-go-signup="{{goSignup}}" hint-size="1440px,2500px"></dc-import>
+  </sc-if>
+  <sc-if value="{{isLogin}}" hint-placeholder-val="{{false}}">
+    <dc-import name="LoginContent" on-go-signup="{{goSignup}}" on-go-home="{{goHome}}" hint-size="1440px,760px"></dc-import>
+  </sc-if>
+  <sc-if value="{{isSignup}}" hint-placeholder-val="{{false}}">
+    <dc-import name="SignupContent" on-go-login="{{goLogin}}" on-go-home="{{goHome}}" hint-size="1440px,860px"></dc-import>
+  </sc-if>
+
+  <sc-if value="{{showFooter}}" hint-placeholder-val="{{true}}">
+  <div style="background:var(--navy-950);padding:56px 0 30px 0;">
+    <div class="wrap">
+      <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:32px;margin-bottom:36px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px;">
+            <div style="width:28px;height:28px;border-radius:8px;background:var(--navy-800);display:flex;align-items:center;justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" fill="var(--gold)"/></svg></div>
+            <div style="font-size:16px;font-weight:700;color:white;">Ever<span style="color:var(--gold);">lumen</span></div>
+          </div>
+          <div style="font-size:13.5px;color:rgba(255,255,255,0.5);line-height:1.6;max-width:260px;margin-bottom:14px;">Everlumen helps construction teams capture the truth of every job — then puts it where the whole team can use it.</div>
+          <div style="font-size:13.5px;color:var(--gold);">support@everlumen.co</div>
+        </div>
+        <div>
+          <div style="font-size:11.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:14px;">Platform</div>
+          <div style="display:flex;flex-direction:column;gap:10px;font-size:13.5px;color:rgba(255,255,255,0.65);">
+            <span style="cursor:pointer;" onClick="{{goFeatures}}">Features</span>
+            <span style="cursor:pointer;" onClick="{{goHome}}">How it works</span>
+            <span style="cursor:pointer;" onClick="{{goPricing}}">Pricing</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:14px;">Learn</div>
+          <div style="display:flex;flex-direction:column;gap:10px;font-size:13.5px;color:rgba(255,255,255,0.65);">
+            <span style="cursor:pointer;" onClick="{{goFAQ}}">FAQ</span><span>Privacy policy</span><span>Terms of service</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:14px;">Company</div>
+          <div style="display:flex;flex-direction:column;gap:10px;font-size:13.5px;color:rgba(255,255,255,0.65);">
+            <span>Contact &amp; support</span>
+          </div>
+        </div>
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:22px;font-size:12.5px;color:rgba(255,255,255,0.4);">© 2026 Everlumen. Built for the field.</div>
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { route: "home" };
+  }
+  renderVals() {
+    const route = this.state.route;
+    const go = (r) => () => this.setState({ route: r });
+    const activeStyle = "color:white;position:relative;";
+    const idleStyle = "";
+    return {
+      route,
+      isHome: route === "home",
+      isFeatures: route === "features",
+      isPricing: route === "pricing",
+      isFAQ: route === "faq",
+      isLogin: route === "login",
+      isSignup: route === "signup",
+      showFooter: route !== "login" && route !== "signup",
+      navStyle: {
+        home: route === "home" ? activeStyle : idleStyle,
+        features: route === "features" ? activeStyle : idleStyle,
+        pricing: route === "pricing" ? activeStyle : idleStyle,
+        faq: route === "faq" ? activeStyle : idleStyle,
+      },
+      goHome: go("home"),
+      goFeatures: go("features"),
+      goPricing: go("pricing"),
+      goFAQ: go("faq"),
+      goLogin: go("login"),
+      goSignup: go("signup"),
+    };
+  }
+}
+</script>
+</body>
+</html>

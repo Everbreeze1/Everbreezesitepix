@@ -151,7 +151,7 @@ export function PortfolioProject({ data }: { data: PublicPortfolioShowcase }) {
         <section className="border-t border-neutral-100 bg-neutral-50">
           <div className="mx-auto max-w-6xl px-6 py-16 lg:px-10 lg:py-20">
             <div className="flex flex-wrap items-end justify-between gap-4">
-              <h2 className="font-portfolio-display text-balance text-3xl font-black uppercase tracking-tight lg:text-5xl">
+              <h2 className="font-portfolio-display text-balance text-3xl font-semibold tracking-tight lg:text-5xl">
                 More {s.service_type?.toLowerCase() ?? "work"}
               </h2>
               <Link
@@ -186,7 +186,7 @@ export function PortfolioProject({ data }: { data: PublicPortfolioShowcase }) {
             className="mx-auto max-w-3xl px-6 py-16 text-center lg:px-10 lg:py-20"
             style={{ color: readableTextOn(accent) }}
           >
-            <h2 className="font-portfolio-display text-balance text-4xl font-black uppercase leading-[0.95] tracking-tight lg:text-6xl">
+            <h2 className="font-portfolio-display text-balance text-4xl font-semibold leading-tight tracking-tight lg:text-6xl">
               {site.cta_label?.trim() || "Want something like this?"}
             </h2>
             <p className="mx-auto mt-4 max-w-lg text-pretty text-base leading-relaxed opacity-80">

@@ -123,7 +123,7 @@ export function LabelsManager({ teamId, userId, canManage, templateUsage, projec
           <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
             Shared taxonomy
           </p>
-          <h3 className="font-display mt-1.5 text-xl font-bold tracking-[-0.6px] text-foreground">
+          <h3 className="font-display mt-1.5 text-xl font-bold tracking-[-0.01em] text-foreground">
             Labels
           </h3>
           <p className="mt-1.5 text-xs text-muted-foreground">

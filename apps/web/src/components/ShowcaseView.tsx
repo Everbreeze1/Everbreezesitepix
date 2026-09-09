@@ -138,7 +138,7 @@ export function ShowcaseView({
                 )}
               </div>
             )}
-            <h1 className="font-display max-w-4xl text-balance text-5xl font-bold uppercase leading-[0.92] tracking-[-0.01em] text-white sm:text-7xl lg:text-8xl">
+            <h1 className="font-display max-w-4xl text-balance text-5xl font-bold uppercase leading-tight tracking-[-0.01em] text-white sm:text-7xl lg:text-8xl">
               {s.title || "Untitled project"}
             </h1>
             {s.tagline && (

@@ -869,9 +869,9 @@ export function MapScreen({ onOpenProject }: { onOpenProject: (id: string) => vo
           </div>
           <div className="absolute right-3 top-3 hidden rounded-xl border border-border bg-card/95 px-3 py-2 shadow-md sm:block">
             <p className="font-manrope text-[10px] font-bold text-muted-foreground">
-              <span className="text-[#2584F4]">●</span> Active&ensp;
+              <span className="text-emerald-400">●</span> Active&ensp;
               <span className="text-amber-500">●</span> On hold&ensp;
-              <span className="text-slate-500">●</span> Completed
+              <span className="text-[#60A5FA]">●</span> Completed
             </p>
           </div>
 
@@ -949,7 +949,7 @@ function MapPinMarker({
   onClick: () => void;
 }) {
   const color =
-    project.status === "active" ? "#2584F4" : project.status === "on_hold" ? "#F59E0B" : "#64748B";
+    project.status === "active" ? "#34D399" : project.status === "on_hold" ? "#F59E0B" : "#60A5FA";
   return (
     <button
       type="button"

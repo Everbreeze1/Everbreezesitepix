@@ -782,7 +782,7 @@ export function ProjectDocuments({
           <p className="text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
             Plans, permits &amp; files
           </p>
-          <h2 className="font-display mt-3 text-4xl font-bold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
+          <h2 className="font-display mt-3 text-4xl font-bold leading-none tracking-[-0.01em] text-foreground sm:text-5xl">
             Project documents
           </h2>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">

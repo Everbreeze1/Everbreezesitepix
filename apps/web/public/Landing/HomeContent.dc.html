@@ -1,0 +1,366 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --navy-950: oklch(19% 0.03 265);
+      --navy-900: oklch(23% 0.035 265);
+      --navy-800: oklch(30% 0.04 265);
+      --paper: oklch(97.5% 0.006 90);
+      --paper-2: oklch(94% 0.01 90);
+      --card: oklch(99.5% 0.002 90);
+      --border: oklch(89% 0.01 90);
+      --ink: oklch(18% 0.015 265);
+      --ink-muted: oklch(46% 0.02 265);
+      --ink-faint: oklch(64% 0.015 265);
+      --gold: oklch(76% 0.16 78);
+      --gold-ink: oklch(38% 0.1 70);
+      --gold-soft: oklch(94% 0.05 80);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Inter",system-ui,sans-serif;background:var(--paper);color:var(--ink);}
+    .disp{font-family:"Oswald",sans-serif;font-weight:700;letter-spacing:-0.01em;line-height:1.04;}
+    .eyebrow{font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--gold-ink);}
+    .wrap{max-width:1160px;margin:0 auto;padding:0 32px;}
+    .btn-gold{display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:var(--navy-950);font-weight:700;font-size:14.5px;padding:13px 24px;border-radius:999px;cursor:pointer;}
+    .btn-dark{display:inline-flex;align-items:center;gap:8px;background:var(--navy-950);color:white;font-weight:700;font-size:14.5px;padding:13px 24px;border-radius:999px;cursor:pointer;}
+    .btn-outline{display:inline-flex;align-items:center;gap:8px;background:transparent;border:1.5px solid rgba(255,255,255,0.35);color:white;font-weight:600;font-size:14.5px;padding:12px 22px;border-radius:999px;cursor:pointer;}
+    .btn-outline-dark{display:inline-flex;align-items:center;gap:8px;background:transparent;border:1.5px solid var(--border);color:var(--ink);font-weight:600;font-size:14.5px;padding:12px 22px;border-radius:999px;cursor:pointer;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:18px;}
+    .chip{font-size:11.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;padding:4px 10px;border-radius:999px;}
+    .faq-row{border-bottom:1px solid var(--border);padding:20px 0;cursor:pointer;}
+    .faq-row:last-child{border-bottom:none;}
+    .stat-num{font-family:"Oswald",sans-serif;font-weight:700;font-size:34px;color:var(--navy-950);}
+    .link{color:var(--gold-ink);font-weight:600;cursor:pointer;}
+  </style>
+</helmet>
+
+  <!-- HERO -->
+  <div style="position:relative;background:linear-gradient(180deg, var(--navy-950) 0%, var(--navy-900) 55%, var(--navy-950) 100%);overflow:hidden;">
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 30% 20%, rgba(245,180,60,0.16), transparent 55%);"></div>
+    <div class="wrap" style="position:relative;padding:88px 32px 96px 32px;text-align:center;">
+      <div style="display:inline-flex;align-items:center;gap:9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:999px;padding:7px 16px 7px 8px;margin-bottom:30px;">
+        <span class="chip" style="background:var(--gold);color:var(--navy-950);">New</span>
+        <span style="font-size:12.5px;color:rgba(255,255,255,0.85);">Live map, walkthroughs &amp; AI-powered reports</span>
+      </div>
+      <div class="disp" style="font-size:56px;color:white;max-width:820px;margin:0 auto;">
+        Every photo becomes a <span style="color:var(--gold);">record you can stand behind.</span>
+      </div>
+      <div style="font-size:16.5px;color:rgba(255,255,255,0.72);max-width:600px;margin:24px auto 0 auto;line-height:1.6;">
+        Stop losing photos in camera rolls and group chats. Everlumen is the trusted job record for construction teams — capturing, mapping, and organizing every site photo automatically, with AI that drafts your reports in seconds.
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:34px;">
+        <div class="btn-gold" style="padding:15px 28px;font-size:15px;" onClick="{{goSignup}}">Start free trial <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="btn-outline" style="padding:15px 26px;font-size:15px;" onClick="{{goFeatures}}">See how it works</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:26px;margin-top:26px;flex-wrap:wrap;">
+        <span style="font-size:12.5px;color:rgba(255,255,255,0.55);display:flex;align-items:center;gap:6px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linecap="round"><path d="M5 13l5 5L19 7"/></svg>14-day free trial</span>
+        <span style="font-size:12.5px;color:rgba(255,255,255,0.55);display:flex;align-items:center;gap:6px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linecap="round"><path d="M5 13l5 5L19 7"/></svg>Set up in minutes</span>
+        <span style="font-size:12.5px;color:rgba(255,255,255,0.55);display:flex;align-items:center;gap:6px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linecap="round"><path d="M5 13l5 5L19 7"/></svg>No credit card required</span>
+      </div>
+
+      <div style="margin-top:56px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,0.12);box-shadow:0 30px 70px rgba(0,0,0,0.4);">
+        <div style="background:linear-gradient(160deg,#2b3350,#171b2c);height:360px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:13px;">Product screenshot — live project map &amp; capture view</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGOS -->
+  <div style="background:var(--paper-2);border-bottom:1px solid var(--border);padding:26px 0;">
+    <div class="wrap" style="text-align:center;">
+      <div style="font-size:11.5px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:18px;">Trusted by field teams building across the country</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px;color:var(--ink-faint);font-weight:700;font-size:15px;">
+        <span>Meridian Build</span><span>Ironline GC</span><span>Harbor &amp; Stone</span><span>Northgate Const.</span><span>Vantage Group</span><span>Cedar Ridge</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROBLEM -->
+  <div class="wrap" style="padding:96px 32px;display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;">
+    <div>
+      <div class="eyebrow" style="margin-bottom:14px;">The problem</div>
+      <div class="disp" style="font-size:36px;color:var(--ink);margin-bottom:18px;">Job site photos shouldn't be this hard to find.</div>
+      <div style="font-size:15.5px;color:var(--ink-muted);line-height:1.6;margin-bottom:22px;">When a question comes up weeks later — and it always does — your team shouldn't have to dig through camera rolls, group chats, and email threads to find the proof.</div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:10px;font-size:14.5px;color:var(--ink-muted);"><span style="width:7px;height:7px;border-radius:999px;background:oklch(62% 0.18 25);flex-shrink:0;"></span>"Which phone had that photo?"</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:14.5px;color:var(--ink-muted);"><span style="width:7px;height:7px;border-radius:999px;background:oklch(62% 0.18 25);flex-shrink:0;"></span>Buried in a 400-message group chat</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:14.5px;color:var(--ink-muted);"><span style="width:7px;height:7px;border-radius:999px;background:oklch(62% 0.18 25);flex-shrink:0;"></span>No proof of what happened, when</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:14.5px;color:var(--ink-muted);"><span style="width:7px;height:7px;border-radius:999px;background:oklch(62% 0.18 25);flex-shrink:0;"></span>Reports that take all evening to write</div>
+      </div>
+    </div>
+    <div style="border-radius:20px;overflow:hidden;background:linear-gradient(160deg,#3a3020,#171b2c);height:420px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:13px;">Job-site photo, phone in hand</div>
+  </div>
+
+  <!-- FEATURES -->
+  <div style="background:var(--paper-2);padding:96px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+    <div class="wrap">
+      <div style="text-align:center;max-width:640px;margin:0 auto 52px auto;">
+        <div class="eyebrow" style="margin-bottom:14px;">Everything your field team needs</div>
+        <div class="disp" style="font-size:36px;color:var(--ink);margin-bottom:14px;">One place for the entire job record.</div>
+        <div style="font-size:15.5px;color:var(--ink-muted);line-height:1.6;">From the first photo to the final report, Everlumen captures, organizes, and shares everything — so your crew can focus on the build.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div class="card" style="padding:28px;">
+          <div style="width:42px;height:42px;border-radius:11px;background:oklch(90% 0.06 190);display:flex;align-items:center;justify-content:center;margin-bottom:16px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="oklch(45% 0.1 190)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20 3 17V4l6 3m0 13 6-3m-6 3V7m6 10 6 3V7l-6-3m0 13V4m0 0L9 7"/></svg></div>
+          <div style="font-size:17px;font-weight:700;margin-bottom:8px;">Live site map</div>
+          <div style="font-size:14.5px;color:var(--ink-muted);line-height:1.55;">Every project pinned on one interactive map. See every active job, jump to the latest photos, and know exactly where your crews are.</div>
+        </div>
+        <div class="card" style="padding:28px;">
+          <div style="width:42px;height:42px;border-radius:11px;background:oklch(88% 0.06 240);display:flex;align-items:center;justify-content:center;margin-bottom:16px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="oklch(45% 0.13 240)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 10 20 6.5v11L15 14"/><rect x="3" y="6" width="12" height="12" rx="2.5"/></svg></div>
+          <div style="font-size:17px;font-weight:700;margin-bottom:8px;">Recorded walkthroughs</div>
+          <div style="font-size:14.5px;color:var(--ink-muted);line-height:1.55;">Record narrated video walkthroughs with audio, tied to the project timeline so anyone can revisit the site without leaving the office.</div>
+        </div>
+        <div class="card" style="padding:28px;">
+          <div style="width:42px;height:42px;border-radius:11px;background:oklch(90% 0.06 300);display:flex;align-items:center;justify-content:center;margin-bottom:16px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="oklch(48% 0.14 300)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3.5M12 17.5V21M3 12h3.5M17.5 12H21M6 6l2.2 2.2M15.8 15.8 18 18M18 6l-2.2 2.2M8.2 15.8 6 18"/><circle cx="12" cy="12" r="3.2"/></svg></div>
+          <div style="font-size:17px;font-weight:700;margin-bottom:8px;">AI assistant</div>
+          <div style="font-size:14.5px;color:var(--ink-muted);line-height:1.55;">Ask the assistant what changed, what's unresolved, and where the evidence is. Reports draft from the same project record — no re-typing what the photos already show.</div>
+        </div>
+        <div class="card" style="padding:28px;">
+          <div style="width:42px;height:42px;border-radius:11px;background:var(--gold-soft);display:flex;align-items:center;justify-content:center;margin-bottom:16px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold-ink)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+          <div style="font-size:17px;font-weight:700;margin-bottom:8px;">Smart organization</div>
+          <div style="font-size:14.5px;color:var(--ink-muted);line-height:1.55;">Timestamped, GPS-tagged, and auto-sorted by project. No more scrolling camera rolls or digging through group chats.</div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:30px;">
+        <span class="link" style="font-size:14px;" onClick="{{goFeatures}}">See every feature in detail →</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TIME SAVED -->
+  <div class="wrap" style="padding:96px 32px;display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;">
+    <div>
+      <div class="eyebrow" style="margin-bottom:14px;">The return</div>
+      <div class="disp" style="font-size:36px;color:var(--ink);margin-bottom:18px;">9 hours saved, every week, per crew.</div>
+      <div style="font-size:15.5px;color:var(--ink-muted);line-height:1.6;margin-bottom:26px;">Stop spending your evenings finding photos, writing reports, and answering project questions from memory. Everlumen automates all of it.</div>
+      <div style="display:flex;flex-direction:column;gap:18px;">
+        <div style="display:flex;gap:14px;">
+          <div style="width:34px;height:34px;border-radius:999px;background:oklch(93% 0.05 25);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(55% 0.16 25)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+          <div><div style="font-size:14.5px;font-weight:700;">Without Everlumen</div><div style="font-size:13.5px;color:var(--ink-muted);">Hunting through camera rolls, group chats, and email threads. Writing reports by hand. Searching for proof of what happened.</div></div>
+        </div>
+        <div style="display:flex;gap:14px;">
+          <div style="width:34px;height:34px;border-radius:999px;background:var(--gold-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--gold-ink)" stroke-width="2.4" stroke-linecap="round"><path d="M5 13l5 5L19 7"/></svg></div>
+          <div><div style="font-size:14.5px;font-weight:700;">With Everlumen</div><div style="font-size:13.5px;color:var(--ink-muted);">Photos auto-organized, mapped, and searchable. AI drafts your reports in seconds. One link shares the full job record.</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="padding:32px;">
+      <div style="font-size:11.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:6px;">Time saved per week</div>
+      <div class="stat-num" style="font-size:44px;color:var(--gold-ink);margin-bottom:22px;">9 hrs</div>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div><div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px;"><span>Finding photos</span><b>3.2 hrs</b></div><div style="height:7px;border-radius:999px;background:var(--paper-2);"><div style="height:100%;width:88%;border-radius:999px;background:var(--gold);"></div></div></div>
+        <div><div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px;"><span>Writing reports</span><b>2.8 hrs</b></div><div style="height:7px;border-radius:999px;background:var(--paper-2);"><div style="height:100%;width:76%;border-radius:999px;background:var(--gold);"></div></div></div>
+        <div><div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px;"><span>Answering questions</span><b>2.1 hrs</b></div><div style="height:7px;border-radius:999px;background:var(--paper-2);"><div style="height:100%;width:58%;border-radius:999px;background:var(--gold);"></div></div></div>
+        <div><div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px;"><span>Managing files</span><b>0.9 hrs</b></div><div style="height:7px;border-radius:999px;background:var(--paper-2);"><div style="height:100%;width:24%;border-radius:999px;background:var(--gold);"></div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <div style="background:var(--navy-950);padding:96px 0;">
+    <div class="wrap">
+      <div style="text-align:center;max-width:600px;margin:0 auto 52px auto;">
+        <div class="eyebrow" style="color:var(--gold);margin-bottom:14px;">How it works</div>
+        <div class="disp" style="font-size:36px;color:white;">Capture. Organize. Report. Done before you leave the site.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;">
+        <div>
+          <div style="border-radius:16px;overflow:hidden;background:linear-gradient(160deg,#2b3350,#171b2c);height:200px;margin-bottom:18px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.25);font-size:12.5px;">Capture screen</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span style="width:24px;height:24px;border-radius:999px;background:var(--gold);color:var(--navy-950);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;">1</span><span style="font-size:16px;font-weight:700;color:white;">Capture</span></div>
+          <div style="font-size:13.5px;color:rgba(255,255,255,0.6);line-height:1.55;">Field camera with grid, flash, before/after, scan, video, and walkthrough modes. Every photo is timestamped and GPS-tagged automatically.</div>
+        </div>
+        <div>
+          <div style="border-radius:16px;overflow:hidden;background:linear-gradient(160deg,#2b3350,#171b2c);height:200px;margin-bottom:18px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.25);font-size:12.5px;">Organize screen</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span style="width:24px;height:24px;border-radius:999px;background:var(--gold);color:var(--navy-950);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;">2</span><span style="font-size:16px;font-weight:700;color:white;">Organize</span></div>
+          <div style="font-size:13.5px;color:rgba(255,255,255,0.6);line-height:1.55;">Every photo lands on the right project automatically — sorted, searchable, and mapped. No filing, no folders to remember.</div>
+        </div>
+        <div>
+          <div style="border-radius:16px;overflow:hidden;background:linear-gradient(160deg,#2b3350,#171b2c);height:200px;margin-bottom:18px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.25);font-size:12.5px;">Report screen</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span style="width:24px;height:24px;border-radius:999px;background:var(--gold);color:var(--navy-950);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;">3</span><span style="font-size:16px;font-weight:700;color:white;">Report</span></div>
+          <div style="font-size:13.5px;color:rgba(255,255,255,0.6);line-height:1.55;">AI drafts your progress report from that same record. Review, edit, and share with one tap.</div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:44px;">
+        <div class="btn-outline" style="display:inline-flex;" onClick="{{goFeatures}}">See the full walkthrough <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHO IT'S FOR -->
+  <div class="wrap" style="padding:96px 32px;">
+    <div style="text-align:center;max-width:600px;margin:0 auto 48px auto;">
+      <div class="eyebrow" style="margin-bottom:14px;">Who it's for</div>
+      <div class="disp" style="font-size:36px;color:var(--ink);">Built for everyone on the job.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+      <div class="card" style="padding:22px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Superintendents</div>
+        <div style="font-size:13.5px;color:var(--ink-muted);line-height:1.5;">Know exactly what happened on site, when, and where. Document progress without slowing down your crew.</div>
+      </div>
+      <div class="card" style="padding:22px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Project managers</div>
+        <div style="font-size:13.5px;color:var(--ink-muted);line-height:1.5;">Stop chasing photos and writing reports. Get AI-drafted updates and share them with stakeholders in seconds.</div>
+      </div>
+      <div class="card" style="padding:22px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Owners &amp; GCs</div>
+        <div style="font-size:13.5px;color:var(--ink-muted);line-height:1.5;">One trusted record across every project. Settle disputes, track progress, and keep clients informed automatically.</div>
+      </div>
+      <div class="card" style="padding:22px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Clients &amp; stakeholders</div>
+        <div style="font-size:13.5px;color:var(--ink-muted);line-height:1.5;">See exactly how their investment is progressing with curated galleries and professional reports — no app required.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROOF -->
+  <div style="background:var(--paper-2);padding:96px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+    <div class="wrap">
+      <div style="text-align:center;max-width:600px;margin:0 auto 44px auto;">
+        <div class="eyebrow" style="margin-bottom:14px;">Why teams trust Everlumen</div>
+        <div class="disp" style="font-size:36px;color:var(--ink);">Proof, not promises.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:36px;">
+        <div class="card" style="padding:22px;text-align:center;"><div class="stat-num">4.2M</div><div style="font-size:13px;color:var(--ink-muted);margin-top:4px;">Photos captured on site</div></div>
+        <div class="card" style="padding:22px;text-align:center;"><div class="stat-num">12k+</div><div style="font-size:13px;color:var(--ink-muted);margin-top:4px;">Active projects mapped</div></div>
+        <div class="card" style="padding:22px;text-align:center;"><div class="stat-num">9 hrs</div><div style="font-size:13px;color:var(--ink-muted);margin-top:4px;">Saved per crew, weekly</div></div>
+        <div class="card" style="padding:22px;text-align:center;"><div class="stat-num">4.9★</div><div style="font-size:13px;color:var(--ink-muted);margin-top:4px;">Average field-team rating</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+        <div class="card" style="padding:24px;">
+          <div style="color:var(--gold);font-size:13px;margin-bottom:10px;">★★★★★</div>
+          <div style="font-size:14px;line-height:1.55;margin-bottom:16px;">"We settled a change-order dispute in five minutes with a timestamped photo. Everlumen paid for itself on day one."</div>
+          <div style="font-size:13px;font-weight:700;">Marcus Reyes</div>
+          <div style="font-size:12px;color:var(--ink-faint);">Superintendent, Ironline GC</div>
+        </div>
+        <div class="card" style="padding:24px;">
+          <div style="color:var(--gold);font-size:13px;margin-bottom:10px;">★★★★★</div>
+          <div style="font-size:14px;line-height:1.55;margin-bottom:16px;">"Everlumen writes our weekly client reports now. What used to eat my Friday nights takes about thirty seconds."</div>
+          <div style="font-size:13px;font-weight:700;">Dana Whitfield</div>
+          <div style="font-size:12px;color:var(--ink-faint);">Project Manager, Harbor &amp; Stone</div>
+        </div>
+        <div class="card" style="padding:24px;">
+          <div style="color:var(--gold);font-size:13px;margin-bottom:10px;">★★★★★</div>
+          <div style="font-size:14px;line-height:1.55;margin-bottom:16px;">"The whole crew finally documents the same way. Nothing gets lost, and clients love the galleries."</div>
+          <div style="font-size:13px;font-weight:700;">Theo Andersson</div>
+          <div style="font-size:12px;color:var(--ink-faint);">Owner, Cedar Ridge Builders</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COLLABORATION -->
+  <div class="wrap" style="padding:96px 32px;display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;">
+    <div style="border-radius:20px;overflow:hidden;background:linear-gradient(160deg,#3a3020,#171b2c);height:420px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:13px;">Crew reviewing a tablet on site</div>
+    <div>
+      <div class="eyebrow" style="margin-bottom:14px;">Collaboration</div>
+      <div class="disp" style="font-size:32px;color:var(--ink);margin-bottom:18px;">The whole crew, finally in sync.</div>
+      <div style="font-size:15px;color:var(--ink-muted);line-height:1.6;margin-bottom:22px;">From the superintendent to the office to the client, everyone works from the same up-to-date project — no forwarding, no group chats, no guessing what happened on site.</div>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div><div style="font-size:14.5px;font-weight:700;margin-bottom:3px;">One source of truth</div><div style="font-size:13.5px;color:var(--ink-muted);">Office and field see the same projects, live. Shared workspaces keep everyone on the same page.</div></div>
+        <div><div style="font-size:14.5px;font-weight:700;margin-bottom:3px;">Role-based access</div><div style="font-size:13.5px;color:var(--ink-muted);">Give clients a curated gallery, subs their scope, and admins the full picture — with permissions you control.</div></div>
+        <div><div style="font-size:14.5px;font-weight:700;margin-bottom:3px;">Real-time updates</div><div style="font-size:13.5px;color:var(--ink-muted);">Assign tasks, track status, and get notified the moment something changes on any active job.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLANS (no $ shown intentionally) -->
+  <div style="background:var(--paper-2);padding:96px 0;border-top:1px solid var(--border);">
+  <div class="wrap">
+    <div style="text-align:center;max-width:640px;margin:0 auto 44px auto;">
+      <div class="eyebrow" style="margin-bottom:14px;">Plans</div>
+      <div class="disp" style="font-size:36px;color:var(--ink);margin-bottom:14px;">Built to fit your crew size.</div>
+      <div style="font-size:15.5px;color:var(--ink-muted);line-height:1.6;">Every plan includes AI reports, live site maps, and unlimited photo storage — no per-feature upgrades.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">
+      <div class="card" style="padding:30px;">
+        <div style="font-size:19px;font-weight:700;margin-bottom:6px;">Starter</div>
+        <div style="font-size:13.5px;color:var(--ink-muted);margin-bottom:18px;">1 user · core capture &amp; maps</div>
+        <div class="btn-outline-dark" style="width:100%;justify-content:center;" onClick="{{goPricing}}">Compare plans</div>
+      </div>
+      <div class="card" style="padding:30px;border-color:var(--gold);box-shadow:0 12px 32px rgba(0,0,0,0.06);position:relative;">
+        <div style="position:absolute;top:-12px;left:24px;background:var(--gold);color:var(--navy-950);font-size:11px;font-weight:700;padding:4px 12px;border-radius:999px;">Most popular</div>
+        <div style="font-size:19px;font-weight:700;margin-bottom:6px;">Pro</div>
+        <div style="font-size:13.5px;color:var(--ink-muted);margin-bottom:18px;">5 users · AI reports &amp; walkthroughs</div>
+        <div class="btn-gold" style="width:100%;justify-content:center;" onClick="{{goPricing}}">Compare plans</div>
+      </div>
+      <div class="card" style="padding:30px;">
+        <div style="font-size:19px;font-weight:700;margin-bottom:6px;">Team</div>
+        <div style="font-size:13.5px;color:var(--ink-muted);margin-bottom:18px;">Unlimited · client sharing &amp; templates</div>
+        <div class="btn-outline-dark" style="width:100%;justify-content:center;" onClick="{{goPricing}}">Compare plans</div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- FAQ (condensed, links to full page) -->
+  <div style="padding:96px 0;">
+    <div class="wrap" style="max-width:820px;">
+      <div style="text-align:center;margin-bottom:40px;">
+        <div class="eyebrow" style="margin-bottom:14px;">FAQ</div>
+        <div class="disp" style="font-size:36px;color:var(--ink);">Questions, answered.</div>
+      </div>
+      <div class="card" style="padding:8px 28px;">
+        <div class="faq-row" onClick="{{toggle1}}">
+          <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:15px;font-weight:600;">Does it work without cell signal on site?</span><span style="font-size:20px;color:var(--ink-faint);">{{icon1}}</span></div>
+          <sc-if value="{{open.q1}}" hint-placeholder-val="{{true}}"><div style="font-size:14px;color:var(--ink-muted);line-height:1.6;margin-top:12px;">Yes. Capture works fully offline — photos, video, and walkthroughs queue on the device and sync automatically once you're back in range.</div></sc-if>
+        </div>
+        <div class="faq-row" onClick="{{toggle2}}">
+          <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:15px;font-weight:600;">Can clients see progress without downloading an app?</span><span style="font-size:20px;color:var(--ink-faint);">{{icon2}}</span></div>
+          <sc-if value="{{open.q2}}" hint-placeholder-val="{{false}}"><div style="font-size:14px;color:var(--ink-muted);line-height:1.6;margin-top:12px;">Yes. Share a link to a curated gallery or a generated report and it opens in any browser — no account, login, or app install required on their end.</div></sc-if>
+        </div>
+        <div class="faq-row" onClick="{{toggle3}}">
+          <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:15px;font-weight:600;">What happens if I need to cancel?</span><span style="font-size:20px;color:var(--ink-faint);">{{icon3}}</span></div>
+          <sc-if value="{{open.q3}}" hint-placeholder-val="{{false}}"><div style="font-size:14px;color:var(--ink-muted);line-height:1.6;margin-top:12px;">Cancel any time from account settings — no phone call or contract required. Your data stays exportable for a period afterward.</div></sc-if>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:26px;">
+        <span class="link" style="font-size:14px;" onClick="{{goFAQ}}">See all FAQs →</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FINAL CTA -->
+  <div class="wrap" style="padding:0 32px 96px 32px;">
+    <div style="background:linear-gradient(120deg,var(--gold),oklch(70% 0.17 60));border-radius:28px;padding:64px 48px;text-align:center;position:relative;overflow:hidden;">
+      <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 80% 0%, rgba(255,255,255,0.25), transparent 60%);"></div>
+      <div class="disp" style="position:relative;font-size:38px;color:var(--navy-950);max-width:600px;margin:0 auto 16px auto;">Bring every job into focus.</div>
+      <div style="position:relative;font-size:15.5px;color:oklch(30% 0.06 70);max-width:480px;margin:0 auto 30px auto;">14-day free trial. Set up in minutes. Cancel anytime.</div>
+      <div style="position:relative;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;">
+        <div class="btn-dark" onClick="{{goSignup}}">Start free trial</div>
+        <div class="btn-outline-dark" style="border-color:rgba(20,20,20,0.25);" onClick="{{goFeatures}}">See the interactive demo</div>
+      </div>
+    </div>
+  </div>
+
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { open: { q1: true, q2: false, q3: false } };
+  }
+  renderVals() {
+    const o = this.state.open;
+    const mk = (k) => () => this.setState({ open: { ...o, [k]: !o[k] } });
+    return {
+      open: o,
+      icon1: o.q1 ? "−" : "+", icon2: o.q2 ? "−" : "+", icon3: o.q3 ? "−" : "+",
+      toggle1: mk("q1"), toggle2: mk("q2"), toggle3: mk("q3"),
+      goSignup: this.props.onGoSignup,
+      goFeatures: this.props.onGoFeatures,
+      goPricing: this.props.onGoPricing,
+      goFAQ: this.props.onGoFaq,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --navy-950: oklch(19% 0.03 265); --navy-900: oklch(23% 0.035 265);
+      --ink: oklch(18% 0.015 265); --ink-muted: oklch(46% 0.02 265); --ink-faint: oklch(64% 0.015 265);
+      --border: oklch(89% 0.01 90); --gold: oklch(76% 0.16 78); --gold-ink: oklch(38% 0.1 70);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Inter",system-ui,sans-serif;}
+    .field{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;font-size:14px;color:var(--ink);background:white;margin-bottom:14px;}
+    .label{font-size:13px;font-weight:600;margin-bottom:6px;display:block;}
+    .btn-gold{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--gold);color:var(--navy-950);font-weight:700;font-size:14.5px;padding:13px 24px;border-radius:10px;cursor:pointer;width:100%;}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  </style>
+</helmet>
+
+<div style="background:linear-gradient(180deg, var(--navy-950), var(--navy-900));min-height:860px;display:flex;align-items:center;justify-content:center;padding:60px 24px;">
+  <div style="width:100%;max-width:440px;">
+    <div style="display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:26px;cursor:pointer;" onClick="{{goHome}}">
+      <div style="width:32px;height:32px;border-radius:9px;background:oklch(30% 0.04 265);display:flex;align-items:center;justify-content:center;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" fill="var(--gold)"/><g stroke="var(--gold)" stroke-width="2" stroke-linecap="round"><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></g></svg>
+      </div>
+      <div style="font-size:18px;font-weight:700;color:white;">Ever<span style="color:var(--gold);">lumen</span></div>
+    </div>
+
+    <div style="background:white;border-radius:18px;padding:34px 32px;box-shadow:0 30px 70px rgba(0,0,0,0.35);">
+      <div style="font-size:22px;font-weight:700;margin-bottom:6px;">Start your free trial</div>
+      <div style="font-size:13.5px;color:var(--ink-muted);margin-bottom:8px;">14 days free. No credit card required.</div>
+      <div style="display:flex;gap:16px;margin-bottom:22px;">
+        <span style="font-size:12px;color:var(--ink-faint);">✓ Set up in minutes</span>
+        <span style="font-size:12px;color:var(--ink-faint);">✓ Cancel anytime</span>
+      </div>
+
+      <div class="row2">
+        <div><label class="label">First name</label><div class="field" style="color:var(--ink-faint);">Jordan</div></div>
+        <div><label class="label">Last name</label><div class="field" style="color:var(--ink-faint);">Reyes</div></div>
+      </div>
+
+      <label class="label">Work email</label>
+      <div class="field" style="color:var(--ink-faint);">you@company.com</div>
+
+      <label class="label">Company name</label>
+      <div class="field" style="color:var(--ink-faint);">Meridian Build</div>
+
+      <label class="label">Password</label>
+      <div class="field" style="color:var(--ink-faint);">••••••••••</div>
+
+      <div class="btn-gold">Start free trial</div>
+
+      <div style="text-align:center;font-size:11.5px;color:var(--ink-faint);margin-top:14px;line-height:1.5;">By continuing you agree to Everlumen's Terms of Service and Privacy Policy.</div>
+
+      <div style="text-align:center;font-size:13.5px;color:var(--ink-muted);margin-top:18px;">
+        Already have an account? <span style="color:var(--gold-ink);font-weight:700;cursor:pointer;" onClick="{{goLogin}}">Log in</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = {}; }
+  renderVals() {
+    return {
+      goLogin: this.props.onGoLogin,
+      goHome: this.props.onGoHome,
+    };
+  }
+}
+</script>
+</body>
+</html>

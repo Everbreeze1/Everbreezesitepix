@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --navy-950: oklch(19% 0.03 265); --paper: oklch(97.5% 0.006 90); --paper-2: oklch(94% 0.01 90); --card: oklch(99.5% 0.002 90);
+      --border: oklch(89% 0.01 90); --ink: oklch(18% 0.015 265); --ink-muted: oklch(46% 0.02 265);
+      --ink-faint: oklch(64% 0.015 265); --gold: oklch(76% 0.16 78); --gold-ink: oklch(38% 0.1 70); --gold-soft: oklch(94% 0.05 80);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Inter",system-ui,sans-serif;background:var(--paper);color:var(--ink);}
+    .disp{font-family:"Oswald",sans-serif;font-weight:700;letter-spacing:-0.01em;line-height:1.04;}
+    .eyebrow{font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--gold-ink);}
+    .wrap{max-width:820px;margin:0 auto;padding:0 32px;}
+    .btn-gold{display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:var(--navy-950);font-weight:700;font-size:14.5px;padding:13px 24px;border-radius:999px;cursor:pointer;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:18px;}
+    .faq-row{border-bottom:1px solid var(--border);padding:19px 0;cursor:pointer;}
+    .faq-row:last-child{border-bottom:none;}
+    .cat{font-size:13px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--gold-ink);margin:44px 0 14px 0;}
+    .cat:first-child{margin-top:0;}
+  </style>
+</helmet>
+
+  <div style="background:var(--navy-950);padding:70px 0 56px 0;">
+    <div class="wrap" style="text-align:center;">
+      <div class="eyebrow" style="color:var(--gold);margin-bottom:14px;">FAQ</div>
+      <div class="disp" style="font-size:40px;color:white;">Questions, answered.</div>
+    </div>
+  </div>
+
+  <div class="wrap" style="padding:70px 32px;">
+
+    <div class="cat">Getting started</div>
+    <div class="card" style="padding:6px 26px;margin-bottom:8px;">
+      <div class="faq-row" onClick="{{t1}}"><div style="display:flex;justify-content:space-between;"><span style="font-size:15px;font-weight:600;">Do I need special hardware, or does a phone camera work?</span><span style="color:var(--ink-faint);">{{i1}}</span></div><sc-if value="{{open.q1}}" hint-placeholder-val="{{true}}"><div style="font-size:14px;color:var(--ink-muted);line-height:1.6;margin-top:12px;">Just the phone already in your crew's pocket. The in-app camera adds grid lines, level guidance, and before/after and scan modes on top of a normal phone camera — no extra equipment to buy or carry.</div></sc-if></div>
+      <div class="faq-row" onClick="{{t2}}"><div style="display:flex;justify-content:space-between;"><span style="font-size:15px;font-weight:600;">How long does it take to get a crew up and running?</span><span style="color:var(--ink-faint);">{{i2}}</span></div><sc-if value="{{open.q2}}" hint-placeholder-val="{{false}}"><div style="font-size:14px;color:var(--ink-muted);line-height:1.6;margin-top:12px;">Most teams are capturing photos into their first project within minutes of signing up. There's no migration step — you start documenting new work immediately and import older photos as you go.</div></sc-if></div>
+      <div class="faq-row" onClick="{{t3}}"><div style="display:flex;justify-content:space-between;"><span style="font-size:15px;font-weight:600;">Does it work without cell signal on site?</span><span style="color:var(--ink-faint);">{{i3}}</span></div><sc-if value="{{open.q3}}" hint-placeholder-val="{{false}}"><div style="font-size:14px;color:var(--ink-muted);line-height:1.6;margin-top:12px;">Yes. Capture works fully offline — photos, video, and walkthroughs queue on the device and sync automatically once you're back in range. Nothing is lost in a dead zone.</div></sc-if></div>
+    </div>
+
+    <div class="cat">Using Everlumen</div>
+    <div class="card" style="padding:6px 26px;margin-bottom:8px;">
+      <div class="faq-row" onClick="{{t4}}"><div style="display:flex;justify-content:space-between;"><span style="font-size:15px;font-weight:600;">Can clients see progress without downloading an app?</span><span style="color:var(--ink-faint);">{{i4}}</span></div><sc-if value="{{open.q4}}" hint-placeholder-val="{{false}}"><div style="font-size:14px;color:var(--ink-muted);line-height:1.6;margin-top:12px;">Yes. Share a link to a curated gallery or a generated report and it opens in any browser — no account, login, or app install required on their end.</div></sc-if></div>
+      <div class="faq-row" onClick="{{t5}}"><div style="display:flex;justify-content:space-between;"><span style="font-size:15px;font-weight:600;">How accurate are the AI-drafted reports — do I still need to check them?</span><span style="color:var(--ink-faint);">{{i5}}</span></div><sc-if value="{{open.q5}}" hint-placeholder-val="{{false}}"><div style="font-size:14px;color:var(--ink-muted);line-height:1.6;margin-top:12px;">The draft pulls directly from your timestamped photos, GPS data, and notes — it's grounded in what was actually captured, not guesswork. You always review and can edit before sending; most teams find a quick read-through takes under a minute versus the hour it used to take to write from scratch.</div></sc-if></div>
+      <div class="faq-row" onClick="{{t6}}"><div style="display:flex;justify-content:space-between;"><span style="font-size:15px;font-weight:600;">Can I control who sees what — subs, clients, and my own office staff?</span><span style="color:var(--ink-faint);">{{i6}}</span></div><sc-if value="{{open.q6}}" hint-placeholder-val="{{false}}"><div style="font-size:14px;color:var(--ink-muted);line-height:1.6;margin-top:12px;">Yes, on Team plans. Give clients a curated gallery, subs their own scope of work, and admins the full picture — all from one set of role-based permissions you control.</div></sc-if></div>
+    </div>
+
+    <div class="cat">Security &amp; data</div>
+    <div class="card" style="padding:6px 26px;margin-bottom:8px;">
+      <div class="faq-row" onClick="{{t7}}"><div style="display:flex;justify-content:space-between;"><span style="font-size:15px;font-weight:600;">Who owns the photos and data — can I export everything if I leave?</span><span style="color:var(--ink-faint);">{{i7}}</span></div><sc-if value="{{open.q7}}" hint-placeholder-val="{{false}}"><div style="font-size:14px;color:var(--ink-muted);line-height:1.6;margin-top:12px;">You own everything you capture. Full project exports — photos, reports, and walkthroughs — are available any time from account settings, and stay available for a period after cancellation.</div></sc-if></div>
+      <div class="faq-row" onClick="{{t8}}"><div style="display:flex;justify-content:space-between;"><span style="font-size:15px;font-weight:600;">Is a timestamped photo actually reliable enough to settle a dispute?</span><span style="color:var(--ink-faint);">{{i8}}</span></div><sc-if value="{{open.q8}}" hint-placeholder-val="{{false}}"><div style="font-size:14px;color:var(--ink-muted);line-height:1.6;margin-top:12px;">Every photo carries its original capture time and GPS location, set automatically and not editable after the fact — that's what makes it a record your team can point to with confidence, not just a photo.</div></sc-if></div>
+    </div>
+
+    <div class="cat">Billing &amp; plans</div>
+    <div class="card" style="padding:6px 26px;">
+      <div class="faq-row" onClick="{{t9}}"><div style="display:flex;justify-content:space-between;"><span style="font-size:15px;font-weight:600;">What happens if I need to cancel?</span><span style="color:var(--ink-faint);">{{i9}}</span></div><sc-if value="{{open.q9}}" hint-placeholder-val="{{false}}"><div style="font-size:14px;color:var(--ink-muted);line-height:1.6;margin-top:12px;">Cancel any time from account settings — no phone call or contract required. Your data stays exportable for a period afterward so you're never locked out of your own job record.</div></sc-if></div>
+      <div class="faq-row" onClick="{{t10}}"><div style="display:flex;justify-content:space-between;"><span style="font-size:15px;font-weight:600;">Is there a free trial, and does it need a credit card?</span><span style="color:var(--ink-faint);">{{i10}}</span></div><sc-if value="{{open.q10}}" hint-placeholder-val="{{false}}"><div style="font-size:14px;color:var(--ink-muted);line-height:1.6;margin-top:12px;">Every plan starts with a 14-day free trial, no credit card required. You'll only be asked for billing details if you decide to continue.</div></sc-if></div>
+    </div>
+
+    <div style="text-align:center;margin-top:52px;">
+      <div style="font-size:15px;color:var(--ink-muted);margin-bottom:18px;">Still have a question?</div>
+      <div class="btn-gold" style="display:inline-flex;" onClick="{{goSignup}}">Start free trial</div>
+    </div>
+  </div>
+
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { open: { q1: true, q2: false, q3: false, q4: false, q5: false, q6: false, q7: false, q8: false, q9: false, q10: false } };
+  }
+  renderVals() {
+    const o = this.state.open;
+    const mk = (k) => () => this.setState({ open: { ...o, [k]: !o[k] } });
+    const icon = (k) => (o[k] ? "−" : "+");
+    return {
+      open: o,
+      i1: icon("q1"), i2: icon("q2"), i3: icon("q3"), i4: icon("q4"), i5: icon("q5"),
+      i6: icon("q6"), i7: icon("q7"), i8: icon("q8"), i9: icon("q9"), i10: icon("q10"),
+      t1: mk("q1"), t2: mk("q2"), t3: mk("q3"), t4: mk("q4"), t5: mk("q5"),
+      t6: mk("q6"), t7: mk("q7"), t8: mk("q8"), t9: mk("q9"), t10: mk("q10"),
+      goSignup: this.props.onGoSignup,
+    };
+  }
+}
+</script>
+</body>
+</html>

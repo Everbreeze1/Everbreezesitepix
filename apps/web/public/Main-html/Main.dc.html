@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&display=swap">
+  <style>
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Work Sans",system-ui,sans-serif;}
+    .topbar-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+    .acct-menu-item{padding:9px 14px;font-size:12.5px;cursor:pointer;}
+    .acct-menu-item:hover{background:oklch(95% 0.01 75);}
+  </style>
+</helmet>
+<div style="display:flex;width:1440px;height:960px;background:{{shell.bg}};overflow:hidden;">
+  <dc-import name="Sidebar" active="{{route}}" on-navigate="{{navigate}}" hint-size="240px,100%"></dc-import>
+
+  <div style="display:flex;flex-direction:column;flex-grow:1;height:100%;min-width:0;">
+
+    <div style="height:56px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:0 20px;background:{{shell.topbarBg}};border-bottom:1px solid {{shell.topbarBorder}};position:relative;">
+
+      <div class="topbar-icon" style="background:{{shell.pillBg}};" onClick="{{toggleDark}}" title="Toggle light / dark">
+        <sc-if value="{{isDark}}" hint-placeholder-val="{{false}}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{shell.iconColor}}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/></svg>
+        </sc-if>
+        <sc-if value="{{isLight}}" hint-placeholder-val="{{true}}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{shell.iconColor}}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.8 5.8l1.6 1.6M16.6 16.6l1.6 1.6M18.2 5.8l-1.6 1.6M7.4 16.6l-1.6 1.6"/></svg>
+        </sc-if>
+      </div>
+
+      <div class="topbar-icon" style="background:{{shell.pillBg}};">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{shell.iconColor}}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8.5c0-3.6-2.7-6-6-6s-6 2.4-6 6c0 5.5-2 7-2 7h16s-2-1.5-2-7Z"/><path d="M10.3 19a1.8 1.8 0 0 0 3.4 0"/></svg>
+      </div>
+
+      <div style="width:1px;height:24px;background:{{shell.topbarBorder}};margin:0 4px;"></div>
+
+      <div style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:5px 8px 5px 5px;border-radius:9px;" onClick="{{toggleAcct}}">
+        <div style="width:26px;height:26px;border-radius:999px;background:#4a5568;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff;flex-shrink:0;">AJ</div>
+        <span style="font-size:12.5px;font-weight:600;color:{{shell.text}};">Ajmal</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="{{shell.iconColor}}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+
+      <sc-if value="{{acctOpen}}" hint-placeholder-val="{{false}}">
+      <div style="position:absolute;top:52px;right:20px;width:230px;background:var(--menu-surface,white);border:1px solid oklch(89% 0.012 75);border-radius:10px;box-shadow:0 8px 24px rgba(20,20,20,0.14);overflow:hidden;z-index:10;">
+        <div style="padding:12px 14px;border-bottom:1px solid oklch(89% 0.012 75);">
+          <div style="font-size:12.5px;font-weight:700;color:oklch(23% 0.02 75);">Ajmal</div>
+          <div style="font-size:11px;color:oklch(48% 0.02 75);">ajmalllo@icloud.com</div>
+        </div>
+        <div class="acct-menu-item" style="color:oklch(23% 0.02 75);" onClick="{{goAccount}}">Account settings</div>
+        <div class="acct-menu-item" style="color:oklch(23% 0.02 75);">Everbreeze Heating and Air</div>
+        <div style="border-top:1px solid oklch(89% 0.012 75);"></div>
+        <div class="acct-menu-item" style="color:oklch(58% 0.14 25);">Log out</div>
+      </div>
+      </sc-if>
+    </div>
+
+    <div style="flex-grow:1;overflow-y:auto;filter:{{contentFilter}};">
+
+      <sc-if value="{{isOverview}}" hint-placeholder-val="{{true}}">
+        <dc-import name="OverviewContent" on-navigate="{{navigate}}" hint-size="1200px,900px"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{isProjects}}" hint-placeholder-val="{{false}}">
+        <dc-import name="ProjectsContent" on-open-project="{{openProject}}" hint-size="1200px,1500px"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{isProjectDetail}}" hint-placeholder-val="{{false}}">
+        <dc-import name="ProjectDetailContent" on-back="{{goProjects}}" hint-size="1200px,1300px"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{isMaps}}" hint-placeholder-val="{{false}}">
+        <dc-import name="MapsContent" hint-size="1200px,960px"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{isPhotoLibrary}}" hint-placeholder-val="{{false}}">
+        <dc-import name="PhotoLibraryContent" hint-size="1200px,1000px"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{isBlueprints}}" hint-placeholder-val="{{false}}">
+        <dc-import name="BlueprintsContent" hint-size="1200px,960px"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{isChecklists}}" hint-placeholder-val="{{false}}">
+        <dc-import name="ChecklistLibraryContent" hint-size="1200px,960px"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{isDocuments}}" hint-placeholder-val="{{false}}">
+        <dc-import name="DocumentsContent" hint-size="1200px,1100px"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{isTeams}}" hint-placeholder-val="{{false}}">
+        <dc-import name="TeamsContent" hint-size="1200px,900px"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{isPortfolio}}" hint-placeholder-val="{{false}}">
+        <dc-import name="PortfolioContent" hint-size="1200px,1000px"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{isFeedback}}" hint-placeholder-val="{{false}}">
+        <dc-import name="FeedbackContent" hint-size="1200px,900px"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{isKnowledgeBase}}" hint-placeholder-val="{{false}}">
+        <dc-import name="KnowledgeBaseContent" hint-size="1200px,900px"></dc-import>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { route: "overview", dark: false, acctOpen: false };
+  }
+  renderVals() {
+    const route = this.state.route;
+    const dark = this.state.dark;
+    const navigate = (key) => this.setState({ route: key, acctOpen: false });
+    return {
+      route,
+      isOverview: route === "overview",
+      isProjects: route === "projects",
+      isProjectDetail: route === "projectDetail",
+      isMaps: route === "maps",
+      isPhotoLibrary: route === "photoLibrary",
+      isBlueprints: route === "blueprints",
+      isChecklists: route === "checklists",
+      isDocuments: route === "documents",
+      isTeams: route === "teams",
+      isPortfolio: route === "portfolio",
+      isFeedback: route === "feedback",
+      isKnowledgeBase: route === "knowledgeBase",
+      navigate,
+      openProject: () => this.setState({ route: "projectDetail" }),
+      goProjects: () => this.setState({ route: "projects" }),
+      isDark: dark,
+      isLight: !dark,
+      toggleDark: () => this.setState({ dark: !dark }),
+      contentFilter: (dark && route !== "portfolio") ? "invert(1) hue-rotate(180deg)" : "none",
+      acctOpen: this.state.acctOpen,
+      toggleAcct: () => this.setState({ acctOpen: !this.state.acctOpen }),
+      goAccount: () => this.setState({ route: "teams", acctOpen: false }),
+      shell: {
+        bg: dark ? "oklch(19% 0.014 75)" : "oklch(97% 0.01 75)",
+        topbarBg: dark ? "oklch(19% 0.014 75)" : "oklch(99% 0.004 75)",
+        topbarBorder: dark ? "oklch(28% 0.02 75)" : "oklch(89% 0.012 75)",
+        pillBg: dark ? "oklch(27% 0.02 75)" : "oklch(94.5% 0.012 75)",
+        iconColor: dark ? "oklch(85% 0.012 75)" : "oklch(40% 0.02 75)",
+        text: dark ? "oklch(88% 0.012 75)" : "oklch(23% 0.02 75)",
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>

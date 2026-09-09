@@ -1,0 +1,228 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
+  <style>
+    :root{
+      --bg: oklch(97% 0.01 75);
+      --surface: oklch(99% 0.004 75);
+      --surface-2: oklch(94.5% 0.012 75);
+      --border: oklch(89% 0.012 75);
+      --ink: oklch(23% 0.02 75);
+      --ink-muted: oklch(48% 0.02 75);
+      --ink-faint: oklch(65% 0.015 75);
+      --accent: oklch(64% 0.14 55);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Work Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);}
+    .mono{font-family:"Space Mono",monospace;}
+    .bp-card{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:20px;display:flex;flex-direction:column;gap:14px;cursor:pointer;}
+    .bp-card:hover{border-color:var(--accent);}
+    .chip{font-size:11px;color:var(--ink-muted);background:var(--surface-2);padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:4px;}
+    a{color:var(--accent);text-decoration:none;cursor:pointer;}
+    .bld-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:14px;}
+    .bld-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border);}
+    .bld-row:last-child{border-bottom:none;}
+  </style>
+</helmet>
+
+<sc-if value="{{isList}}" hint-placeholder-val="{{true}}">
+<div style="padding:32px 40px 40px 40px;max-width:1200px;">
+
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:26px;">
+    <div>
+      <div style="font-size:24px;font-weight:700;letter-spacing:-0.01em;">Blueprints</div>
+      <div style="font-size:13.5px;color:var(--ink-muted);margin-top:3px;max-width:520px;">Reusable bundles of checklists, workflows, documents and report templates for a job type. Every project shows the blueprint it was built from.</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:9px;background:var(--accent);color:oklch(99% 0.01 75);border-radius:9px;padding:9px 16px;font-size:13.5px;font-weight:600;flex-shrink:0;" onClick="{{openEditor}}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      New blueprint
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:16px;">
+
+    <div class="bp-card" onClick="{{openEditor}}">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.5 8.5 4.8L12 13 3.5 8.3 12 3.5Z"/><path d="m3.5 13 8.5 4.8 8.5-4.8"/></svg>
+        <div style="font-size:14.5px;font-weight:600;">HVAC Service Call</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span class="chip">2 checklists</span>
+        <span class="chip">1 workflow &middot; 5 phases</span>
+        <span class="chip">2 report templates</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:12px;">Used on <span class="mono">14</span> projects</div>
+    </div>
+
+    <div class="bp-card" onClick="{{openEditor}}">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.5 8.5 4.8L12 13 3.5 8.3 12 3.5Z"/><path d="m3.5 13 8.5 4.8 8.5-4.8"/></svg>
+        <div style="font-size:14.5px;font-weight:600;">Normal HVAC Service Call</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span class="chip">1 checklist</span>
+        <span class="chip">1 workflow &middot; 5 phases</span>
+        <span class="chip">1 report template</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:12px;">Used on <span class="mono">22</span> projects</div>
+    </div>
+
+    <div class="bp-card" onClick="{{openEditor}}">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.5 8.5 4.8L12 13 3.5 8.3 12 3.5Z"/><path d="m3.5 13 8.5 4.8 8.5-4.8"/></svg>
+        <div style="font-size:14.5px;font-weight:600;">HVAC Install &amp; Start-Up</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span class="chip">3 checklists</span>
+        <span class="chip">1 workflow &middot; 7 phases</span>
+        <span class="chip">1 report template</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:12px;">Used on <span class="mono">9</span> projects</div>
+    </div>
+
+    <div class="bp-card" onClick="{{openEditor}}">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.5 8.5 4.8L12 13 3.5 8.3 12 3.5Z"/><path d="m3.5 13 8.5 4.8 8.5-4.8"/></svg>
+        <div style="font-size:14.5px;font-weight:600;">Security Camera Install</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span class="chip">2 checklists</span>
+        <span class="chip">1 workflow &middot; 4 phases</span>
+        <span class="chip">1 report template</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:12px;">Used on <span class="mono">6</span> projects</div>
+    </div>
+
+    <div class="bp-card" onClick="{{openEditor}}">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.5 8.5 4.8L12 13 3.5 8.3 12 3.5Z"/><path d="m3.5 13 8.5 4.8 8.5-4.8"/></svg>
+        <div style="font-size:14.5px;font-weight:600;">Low-Voltage Panel Swap</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span class="chip">1 checklist</span>
+        <span class="chip">1 workflow &middot; 3 phases</span>
+        <span class="chip">1 report template</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:12px;">Used on <span class="mono">4</span> projects</div>
+    </div>
+
+    <div class="bp-card" style="align-items:center;justify-content:center;border-style:dashed;color:var(--ink-faint);" onClick="{{openEditor}}">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      <div style="font-size:13px;font-weight:500;">Build a new blueprint</div>
+    </div>
+
+  </div>
+
+</div>
+</sc-if>
+
+<sc-if value="{{isEditor}}" hint-placeholder-val="{{false}}">
+<div style="padding:28px 40px 40px 40px;max-width:1000px;">
+
+  <div style="font-size:12.5px;color:var(--ink-faint);margin-bottom:14px;">
+    <a onClick="{{closeEditor}}">Blueprints</a> &nbsp;/&nbsp; HVAC Service Call
+  </div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+    <div style="font-size:22px;font-weight:700;letter-spacing:-0.01em;">HVAC Service Call</div>
+    <div style="display:flex;gap:10px;">
+      <div style="border:1px solid var(--border);border-radius:9px;padding:9px 16px;font-size:13px;font-weight:600;color:var(--ink-muted);" onClick="{{closeEditor}}">Cancel</div>
+      <div style="background:var(--accent);color:oklch(99% 0.01 75);border-radius:9px;padding:9px 16px;font-size:13px;font-weight:600;" onClick="{{closeEditor}}">Save blueprint</div>
+    </div>
+  </div>
+  <div style="font-size:12.5px;color:var(--ink-faint);margin-bottom:24px;">Used on 14 projects &middot; changes apply the next time this blueprint is assigned to a new project.</div>
+
+  <div style="font-size:12px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Checklists</div>
+  <div class="bld-section">
+    <div class="bld-row">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 1.6 1.6L8.5 4.8"/><path d="M11 6h9.5"/><path d="m4 12.5 1.6 1.6 2.9-2.8"/><path d="M11 12.5h9.5"/></svg>
+      <div style="flex-grow:1;font-size:13px;font-weight:500;">Pre-service safety checklist</div>
+      <span style="font-size:11.5px;color:var(--ink-faint);">6 items</span>
+    </div>
+    <div class="bld-row">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 1.6 1.6L8.5 4.8"/><path d="M11 6h9.5"/><path d="m4 12.5 1.6 1.6 2.9-2.8"/><path d="M11 12.5h9.5"/></svg>
+      <div style="flex-grow:1;font-size:13px;font-weight:500;">Completion checklist</div>
+      <span style="font-size:11.5px;color:var(--ink-faint);">5 items</span>
+    </div>
+    <div class="bld-row" style="color:var(--accent);font-size:12.5px;font-weight:600;cursor:pointer;">+ Add from checklist library</div>
+  </div>
+
+  <div style="font-size:12px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Workflow phases</div>
+  <div class="bld-section">
+    <div class="bld-row">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      <div style="flex-grow:1;font-size:13px;font-weight:500;">Initial contact</div>
+      <span class="chip">Marker</span>
+    </div>
+    <div class="bld-row">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      <div style="flex-grow:1;font-size:13px;font-weight:500;">Diagnosis</div>
+      <span class="chip">Marker</span>
+    </div>
+    <div class="bld-row">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      <div style="flex-grow:1;font-size:13px;font-weight:500;">Pictures of units</div>
+      <span class="chip">Actionable &middot; 2 steps</span>
+    </div>
+    <div class="bld-row">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      <div style="flex-grow:1;font-size:13px;font-weight:500;">Repair &amp; service</div>
+      <span class="chip">Marker</span>
+    </div>
+    <div class="bld-row">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      <div style="flex-grow:1;font-size:13px;font-weight:500;">Report back</div>
+      <span class="chip">Actionable &middot; 2 steps</span>
+    </div>
+    <div class="bld-row" style="color:var(--accent);font-size:12.5px;font-weight:600;cursor:pointer;">+ Add phase</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Documents</div>
+      <div class="bld-section">
+        <div class="bld-row"><span style="font-size:13px;">Site Plan template</span></div>
+        <div class="bld-row" style="color:var(--accent);font-size:12.5px;font-weight:600;cursor:pointer;">+ Add document</div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Report templates</div>
+      <div class="bld-section">
+        <div class="bld-row"><span style="font-size:13px;">HVAC Service Call Report</span></div>
+        <div class="bld-row"><span style="font-size:13px;">Progress &amp; Draw Request Report</span></div>
+        <div class="bld-row" style="color:var(--accent);font-size:12.5px;font-weight:600;cursor:pointer;">+ Add report template</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</sc-if>
+
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { view: "list" };
+  }
+  renderVals() {
+    return {
+      isList: this.state.view === "list",
+      isEditor: this.state.view === "editor",
+      openEditor: () => this.setState({ view: "editor" }),
+      closeEditor: () => this.setState({ view: "list" }),
+    };
+  }
+}
+</script>
+</body>
+</html>

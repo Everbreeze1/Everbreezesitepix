@@ -994,6 +994,8 @@ export type Database = {
           thumb_path: string | null;
           updated_at: string;
           uploaded_by: string | null;
+          workflow_id: string | null;
+          workflow_phase_id: string | null;
         };
         Insert: {
           archived?: boolean;
@@ -1015,6 +1017,8 @@ export type Database = {
           thumb_path?: string | null;
           updated_at?: string;
           uploaded_by?: string | null;
+          workflow_id?: string | null;
+          workflow_phase_id?: string | null;
         };
         Update: {
           archived?: boolean;
@@ -1036,6 +1040,8 @@ export type Database = {
           thumb_path?: string | null;
           updated_at?: string;
           uploaded_by?: string | null;
+          workflow_id?: string | null;
+          workflow_phase_id?: string | null;
         };
         Relationships: [];
       };
@@ -1681,6 +1687,7 @@ export type Database = {
       };
       project_pages: {
         Row: {
+          added_automatically: boolean;
           blueprint_application_id: string | null;
           blueprint_origin_inferred: boolean;
           content_html: string;
@@ -1691,6 +1698,7 @@ export type Database = {
           header_html: string | null;
           id: string;
           project_id: string;
+          ready_to_send: boolean;
           revoked_at: string | null;
           share_token: string;
           source_template: string | null;
@@ -1699,6 +1707,7 @@ export type Database = {
           updated_by: string | null;
         };
         Insert: {
+          added_automatically?: boolean;
           blueprint_application_id?: string | null;
           blueprint_origin_inferred?: boolean;
           content_html?: string;
@@ -1709,6 +1718,7 @@ export type Database = {
           header_html?: string | null;
           id?: string;
           project_id: string;
+          ready_to_send?: boolean;
           revoked_at?: string | null;
           share_token?: string;
           source_template?: string | null;
@@ -1717,6 +1727,7 @@ export type Database = {
           updated_by?: string | null;
         };
         Update: {
+          added_automatically?: boolean;
           blueprint_application_id?: string | null;
           blueprint_origin_inferred?: boolean;
           content_html?: string;
@@ -1727,6 +1738,7 @@ export type Database = {
           header_html?: string | null;
           id?: string;
           project_id?: string;
+          ready_to_send?: boolean;
           revoked_at?: string | null;
           share_token?: string;
           source_template?: string | null;
@@ -2161,11 +2173,14 @@ export type Database = {
       };
       project_workflow_phases: {
         Row: {
+          completed_at: string | null;
+          completed_by: string | null;
           created_at: string;
           description: string | null;
           id: string;
           name: string;
           notes: string | null;
+          phase_type: string;
           position: number;
           requires_signoff: boolean;
           signed_off_at: string | null;
@@ -2174,11 +2189,14 @@ export type Database = {
           workflow_id: string;
         };
         Insert: {
+          completed_at?: string | null;
+          completed_by?: string | null;
           created_at?: string;
           description?: string | null;
           id?: string;
           name: string;
           notes?: string | null;
+          phase_type?: string;
           position?: number;
           requires_signoff?: boolean;
           signed_off_at?: string | null;
@@ -2187,11 +2205,14 @@ export type Database = {
           workflow_id: string;
         };
         Update: {
+          completed_at?: string | null;
+          completed_by?: string | null;
           created_at?: string;
           description?: string | null;
           id?: string;
           name?: string;
           notes?: string | null;
+          phase_type?: string;
           position?: number;
           requires_signoff?: boolean;
           signed_off_at?: string | null;
@@ -3606,6 +3627,7 @@ export type Database = {
           description: string | null;
           id: string;
           name: string;
+          phase_type: string;
           position: number;
           requires_signoff: boolean;
           template_id: string;
@@ -3615,6 +3637,7 @@ export type Database = {
           description?: string | null;
           id?: string;
           name: string;
+          phase_type?: string;
           position?: number;
           requires_signoff?: boolean;
           template_id: string;
@@ -3624,6 +3647,7 @@ export type Database = {
           description?: string | null;
           id?: string;
           name?: string;
+          phase_type?: string;
           position?: number;
           requires_signoff?: boolean;
           template_id?: string;
@@ -3647,6 +3671,7 @@ export type Database = {
           description: string | null;
           id: string;
           name: string;
+          stall_window_hours: number;
           updated_at: string;
         };
         Insert: {
@@ -3657,6 +3682,7 @@ export type Database = {
           description?: string | null;
           id?: string;
           name: string;
+          stall_window_hours?: number;
           updated_at?: string;
         };
         Update: {
@@ -3667,6 +3693,7 @@ export type Database = {
           description?: string | null;
           id?: string;
           name?: string;
+          stall_window_hours?: number;
           updated_at?: string;
         };
         Relationships: [];

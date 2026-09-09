@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
+  <style>
+    :root{
+      --bg: oklch(97% 0.01 75);
+      --surface: oklch(99% 0.004 75);
+      --surface-2: oklch(94.5% 0.012 75);
+      --border: oklch(89% 0.012 75);
+      --ink: oklch(23% 0.02 75);
+      --ink-muted: oklch(48% 0.02 75);
+      --ink-faint: oklch(65% 0.015 75);
+      --accent: oklch(64% 0.14 55);
+      --accent-2: oklch(64% 0.14 200);
+      --accent-2-soft: oklch(93% 0.025 200);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Work Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);}
+    .filter-chip{padding:7px 13px;border-radius:8px;font-size:12.5px;font-weight:500;border:1px solid var(--border);background:var(--surface);color:var(--ink-muted);display:flex;align-items:center;gap:6px;}
+    .photo-tile{aspect-ratio:4/3;border-radius:10px;background:var(--surface-2);position:relative;overflow:hidden;}
+    .caption{position:absolute;left:0;right:0;bottom:0;padding:16px 10px 8px 10px;font-size:11px;color:white;background:linear-gradient(to top, rgba(20,16,12,0.72), transparent);}
+  </style>
+</helmet>
+<div style="padding:32px 40px 40px 40px;max-width:1200px;">
+
+  <div style="margin-bottom:8px;">
+    <div style="font-size:24px;font-weight:700;letter-spacing:-0.01em;">Photo Library</div>
+    <div style="font-size:13.5px;color:var(--ink-muted);margin-top:3px;max-width:520px;">Every photo across every project, searchable in one place. Open a project's own Photos tab to see a photo in the context of that job's workflow.</div>
+  </div>
+
+  <div style="display:flex;gap:10px;margin:20px 0 26px 0;">
+    <div class="filter-chip">Project: All <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div>
+    <div class="filter-chip">Date: All time <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div>
+    <div class="filter-chip">Tag: Any <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div>
+  </div>
+
+  <div style="margin-bottom:14px;">
+    <div style="font-size:13.5px;font-weight:600;margin-bottom:12px;">Salgiya &middot; 564 Fisher Circle</div>
+    <div style="display:grid;grid-template-columns:repeat(5, minmax(0, 1fr));gap:12px;">
+      <div class="photo-tile"><div class="caption">Outdoor unit &mdash; north side</div></div>
+      <div class="photo-tile"><div class="caption">Indoor air handler</div></div>
+      <div class="photo-tile">
+        <span style="position:absolute;top:8px;left:8px;background:var(--accent-2-soft);color:var(--accent-2);font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;">Needs review</span>
+        <div class="caption">Corrosion near condenser line</div>
+      </div>
+      <div class="photo-tile"><div class="caption">Refrigerant line set</div></div>
+      <div class="photo-tile"><div class="caption">Completed install, wide</div></div>
+    </div>
+  </div>
+
+  <div>
+    <div style="font-size:13.5px;font-weight:600;margin-bottom:12px;">5205 Argo Way &middot; Site visit</div>
+    <div style="display:grid;grid-template-columns:repeat(5, minmax(0, 1fr));gap:12px;">
+      <div class="photo-tile"><div class="caption">Thermostat, pre-service</div></div>
+      <div class="photo-tile"><div class="caption">Access panel removed</div></div>
+      <div class="photo-tile"><div class="caption">Filter &mdash; before replacement</div></div>
+      <div class="photo-tile"><div class="caption">Ductwork, attic run</div></div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

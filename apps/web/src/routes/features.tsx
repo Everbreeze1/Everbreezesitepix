@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { usePwaGuard } from "@/lib/pwa-guard";
 import { Camera, FolderTree, Users, ShieldCheck, FileText, ClipboardCheck } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -62,7 +62,7 @@ const features = [
 
 function FeaturesPage() {
   return (
-    <div className="min-h-screen bg-background landing-yellow">
+    <div className="min-h-screen bg-background landing">
       <SiteHeader />
 
       {/* Header */}
@@ -71,7 +71,7 @@ function FeaturesPage() {
           <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
             Features
           </p>
-          <h1 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.4px] text-foreground sm:text-5xl sm:tracking-[-1.8px] lg:text-[60px] lg:tracking-[-2.1px]">
+          <h1 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl sm:tracking-[-0.01em] lg:text-[60px] lg:tracking-[-0.01em]">
             Everything the field needs,{" "}
             <span className="italic text-primary">nothing it doesn't.</span>
           </h1>
@@ -94,7 +94,7 @@ function FeaturesPage() {
                 <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
                   <f.icon className="h-6 w-6 text-primary" />
                 </span>
-                <h3 className="font-display mt-6 text-2xl font-semibold leading-8 tracking-[-0.84px] text-foreground">
+                <h3 className="font-display mt-6 text-2xl font-semibold leading-8 tracking-[-0.01em] text-foreground">
                   {f.title}
                 </h3>
                 <p className="font-manrope mt-3 text-base leading-[26px] text-muted-foreground">

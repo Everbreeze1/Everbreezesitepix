@@ -295,7 +295,7 @@ export function BuilderTitleBar({
               placeholder={titlePlaceholder}
               aria-label="Template name"
               className={cn(
-                "font-display font-bold leading-tight tracking-[-0.7px] transition-[font-size] duration-150",
+                "font-display font-bold leading-tight tracking-[-0.01em] transition-[font-size] duration-150",
                 condensed ? "text-[17px]" : "text-[26px] sm:text-[30px]",
               )}
             />

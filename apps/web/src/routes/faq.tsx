@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { usePwaGuard } from "@/lib/pwa-guard";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
 import { Plus } from "lucide-react";
@@ -78,7 +78,7 @@ const FAQS: { q: string; a: string }[] = [
 
 function FAQPage() {
   return (
-    <div className="min-h-screen bg-background landing-yellow">
+    <div className="min-h-screen bg-background landing">
       <SiteHeader />
 
       {/* Header */}
@@ -87,7 +87,7 @@ function FAQPage() {
           <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
             FAQ
           </p>
-          <h1 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.4px] text-foreground sm:text-5xl sm:tracking-[-1.8px] lg:text-[60px] lg:tracking-[-2.1px]">
+          <h1 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl sm:tracking-[-0.01em] lg:text-[60px] lg:tracking-[-0.01em]">
             The details, <span className="italic text-primary">up front.</span>
           </h1>
           <p className="font-manrope mx-auto mt-6 max-w-xl text-lg leading-[29px] text-muted-foreground">
@@ -109,7 +109,7 @@ function FAQPage() {
               <AccordionPrimitive.Item key={item.q} value={`item-${idx}`}>
                 <AccordionPrimitive.Header>
                   <AccordionPrimitive.Trigger className="group flex w-full items-center justify-between gap-6 py-6 text-left">
-                    <span className="font-display text-xl font-semibold leading-7 tracking-[-0.7px] text-foreground">
+                    <span className="font-display text-xl font-semibold leading-7 tracking-[-0.01em] text-foreground">
                       {item.q}
                     </span>
                     <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[0.8px] border-border transition-colors duration-200 group-data-[state=open]:border-primary group-data-[state=open]:bg-primary">

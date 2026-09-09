@@ -188,7 +188,7 @@ function TeamDesignPreview() {
           <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
             Stay aligned
           </p>
-          <h1 className="font-display mt-3 text-[32px] font-bold leading-9 tracking-[-1.1px] text-foreground sm:text-[38.4px] sm:tracking-[-1.344px]">
+          <h1 className="font-display mt-3 text-[32px] font-bold leading-9 tracking-[-0.01em] text-foreground sm:text-[38.4px] sm:tracking-[-0.01em]">
             Teams
           </h1>
           <p className="mt-3 max-w-md font-manrope text-sm text-muted-foreground">
@@ -263,7 +263,7 @@ function CreateTeamView({ onCreated }: { onCreated: () => void }) {
       <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
         Stay aligned
       </p>
-      <h1 className="font-display mt-3 text-[32px] font-bold leading-9 tracking-[-1.1px] text-foreground sm:text-[38.4px] sm:tracking-[-1.344px]">
+      <h1 className="font-display mt-3 text-[32px] font-bold leading-9 tracking-[-0.01em] text-foreground sm:text-[38.4px] sm:tracking-[-0.01em]">
         Teams
       </h1>
       <p className="mt-3 max-w-md font-manrope text-sm text-muted-foreground">
@@ -482,7 +482,7 @@ function WorkspaceCoverageCard({
       <p className="mt-10 font-manrope text-xs font-extrabold uppercase tracking-[1.8px] text-sidebar-ring">
         {plan === "team" ? "Your crew" : "Workspace coverage"}
       </p>
-      <p className="font-display mt-3 text-5xl font-bold leading-none tracking-[-1.68px] text-sidebar-foreground">
+      <p className="font-display mt-3 text-5xl font-bold leading-none tracking-[-0.01em] text-sidebar-foreground">
         {plan === "team" ? seatsUsed : `${seatsUsed} / ${memberLimit}`}
       </p>
       <p className="mt-3 font-manrope text-sm leading-6 text-sidebar-foreground/60">

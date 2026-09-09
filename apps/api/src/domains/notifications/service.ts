@@ -17,6 +17,12 @@ export interface Notification {
     | "task_completed"
     | "checklist_completed"
     | "workflow_completed"
+    // A workflow phase advanced on its own (spec #7), raised by the
+    // `notify_phase_advanced` trigger in 20261009000000.
+    | "workflow_phase_advanced"
+    // A workflow stalled past its escalation window (spec #9), raised by the
+    // workflow-escalation hook.
+    | "workflow_stalled"
     | "photo_comment_mention"
     | "team_invite_accepted"
     | "admin_announcement"

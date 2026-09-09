@@ -55,7 +55,7 @@ export function RunnerPanelHeader({
         <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
           {eyebrow}
         </p>
-        <h2 className="font-display mt-2.5 text-[32px] font-bold leading-none tracking-[-1.2px] text-foreground sm:text-[40px] sm:tracking-[-1.68px] lg:text-[48px]">
+        <h2 className="font-display mt-2.5 text-[32px] font-bold leading-none tracking-[-0.01em] text-foreground sm:text-[40px] sm:tracking-[-0.01em] lg:text-[48px]">
           {title}
         </h2>
         <p className="font-manrope mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
@@ -350,7 +350,7 @@ export function RunnerDetailHeader({
           <Icon className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="font-display truncate text-[22px] font-bold leading-tight tracking-[-0.6px] text-foreground sm:text-[26px]">
+          <h3 className="font-display truncate text-[22px] font-bold leading-tight tracking-[-0.01em] text-foreground sm:text-[26px]">
             {title}
           </h3>
           {description && (

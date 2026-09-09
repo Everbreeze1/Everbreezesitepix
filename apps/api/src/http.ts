@@ -13,6 +13,8 @@ export { fieldReportBodySchema } from "./domains/email/schemas";
 export { handlePurgeTrash } from "./domains/hooks/purge-trash";
 export { handleArchiveOldPhotos } from "./domains/hooks/archive-old-photos";
 export { handleSendPush } from "./domains/hooks/send-push";
+export { handleWorkflowAutomation } from "./domains/hooks/workflow-automation";
+export { handleWorkflowEscalation } from "./domains/hooks/workflow-escalation";
 
 export { handleReportPdf } from "./domains/reports/public-pdf";
 export { handleWalkthroughPdf } from "./domains/walkthroughs/public-pdf";

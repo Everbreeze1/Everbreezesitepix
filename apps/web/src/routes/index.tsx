@@ -1,4 +1,4 @@
-﻿import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Users,
   ShieldCheck,
@@ -229,7 +229,7 @@ function Landing() {
   usePwaGuard();
 
   return (
-    <div className="min-h-screen bg-background landing-yellow">
+    <div className="min-h-screen bg-background landing">
       <MobileAppBanner />
       <SiteHeader transparent />
 
@@ -251,7 +251,7 @@ function Landing() {
             <ArrowUpRight className="h-3.5 w-3.5 text-sidebar" />
           </div>
 
-          <h1 className="font-display mt-8 max-w-4xl text-4xl font-black uppercase leading-[0.95] tracking-[-0.03em] text-sidebar-foreground sm:text-6xl md:text-7xl lg:text-[96px]">
+          <h1 className="font-display mt-8 max-w-4xl text-4xl font-bold uppercase leading-tight tracking-[-0.01em] text-sidebar-foreground sm:text-6xl md:text-7xl lg:text-[96px]">
             Every photo becomes a{" "}
             <span className="text-brand-gold">record you can stand behind.</span>
           </h1>
@@ -327,7 +327,7 @@ function Landing() {
               <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
                 The problem
               </p>
-              <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
+              <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl">
                 Job site photos shouldn&apos;t be this hard to find.
               </h2>
               <p className="font-manrope mt-6 max-w-lg text-lg leading-[29px] text-muted-foreground">
@@ -363,7 +363,7 @@ function Landing() {
               <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
                 Simple pricing
               </p>
-              <h2 className="font-display mt-4 text-3xl font-semibold leading-none tracking-[-1.68px] text-foreground sm:text-4xl">
+              <h2 className="font-display mt-4 text-3xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-4xl">
                 Plans from{" "}
                 {HIDE_PUBLIC_PRICING ? (
                   <span className="text-primary">contact us</span>
@@ -413,7 +413,7 @@ function Landing() {
             <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
               Everything your field team needs
             </p>
-            <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
+            <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl">
               One place for the entire job record.
             </h2>
             <p className="font-manrope mx-auto mt-6 max-w-2xl text-lg leading-[29px] text-muted-foreground">
@@ -446,7 +446,7 @@ function Landing() {
                     </span>
                   )}
                 </div>
-                <h3 className="font-display mt-5 text-xl font-semibold tracking-[-0.63px] text-foreground">
+                <h3 className="font-display mt-5 text-xl font-semibold tracking-[-0.01em] text-foreground">
                   {f.title}
                 </h3>
                 <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
@@ -465,7 +465,7 @@ function Landing() {
               <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
                 The return
               </p>
-              <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
+              <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl">
                 9 hours saved, every week, per crew.
               </h2>
               <p className="font-manrope mt-6 max-w-lg text-lg leading-[29px] text-muted-foreground">
@@ -508,7 +508,7 @@ function Landing() {
                 <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-muted-foreground">
                   Time saved per week
                 </p>
-                <p className="font-display mt-3 text-6xl font-bold leading-none tracking-[-2.1px] text-primary">
+                <p className="font-display mt-3 text-6xl font-bold leading-none tracking-[-0.01em] text-primary">
                   9 hrs
                 </p>
                 <div className="mt-8 space-y-4">
@@ -553,7 +553,7 @@ function Landing() {
             <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
               How it works
             </p>
-            <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
+            <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl">
               Capture. Organize. Report.
             </h2>
             <p className="font-manrope mx-auto mt-6 max-w-2xl text-lg leading-[29px] text-muted-foreground">
@@ -602,7 +602,7 @@ function Landing() {
                 </div>
               </div>
               <div className="mt-5">
-                <h3 className="font-display text-xl font-semibold tracking-[-0.63px] text-foreground">
+                <h3 className="font-display text-xl font-semibold tracking-[-0.01em] text-foreground">
                   Capture
                 </h3>
                 <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
@@ -626,7 +626,7 @@ function Landing() {
                 </div>
               </div>
               <div className="mt-5">
-                <h3 className="font-display text-xl font-semibold tracking-[-0.63px] text-foreground">
+                <h3 className="font-display text-xl font-semibold tracking-[-0.01em] text-foreground">
                   Organize
                 </h3>
                 <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
@@ -648,7 +648,7 @@ function Landing() {
                 </div>
               </div>
               <div className="mt-5">
-                <h3 className="font-display text-xl font-semibold tracking-[-0.63px] text-foreground">
+                <h3 className="font-display text-xl font-semibold tracking-[-0.01em] text-foreground">
                   Report
                 </h3>
                 <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
@@ -682,7 +682,7 @@ function Landing() {
             <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
               Who it&apos;s for
             </p>
-            <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
+            <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl">
               Built for every role on the job.
             </h2>
             <p className="font-manrope mx-auto mt-6 max-w-2xl text-lg leading-[29px] text-muted-foreground">
@@ -700,7 +700,7 @@ function Landing() {
                 <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
                   <a.icon className="h-6 w-6 text-primary" />
                 </span>
-                <h3 className="font-display mt-5 text-xl font-semibold tracking-[-0.63px] text-foreground">
+                <h3 className="font-display mt-5 text-xl font-semibold tracking-[-0.01em] text-foreground">
                   {a.title}
                 </h3>
                 <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
@@ -727,7 +727,7 @@ function Landing() {
               <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
                 The value
               </p>
-              <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
+              <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl">
                 Every photo tells the story of your build.
               </h2>
               <p className="font-manrope mt-6 max-w-lg text-lg leading-[29px] text-muted-foreground">
@@ -758,7 +758,7 @@ function Landing() {
               <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
                 Collaboration
               </p>
-              <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
+              <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl">
                 The whole crew, finally in sync.
               </h2>
               <p className="font-manrope mt-6 max-w-lg text-lg leading-[29px] text-muted-foreground">
@@ -795,7 +795,7 @@ function Landing() {
             <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
               Why teams trust Everlumen
             </p>
-            <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
+            <h2 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl">
               Proof, not promises.
             </h2>
           </div>
@@ -806,7 +806,7 @@ function Landing() {
                 key={s.label}
                 className="rounded-[28px] border-[0.8px] border-border bg-card/50 p-7"
               >
-                <p className="font-display text-5xl font-bold leading-none tracking-[-1.68px] text-foreground">
+                <p className="font-display text-5xl font-bold leading-none tracking-[-0.01em] text-foreground">
                   {s.value}
                 </p>
                 <p className="font-manrope mt-2 text-sm text-muted-foreground">{s.label}</p>

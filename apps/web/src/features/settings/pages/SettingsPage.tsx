@@ -316,7 +316,7 @@ export function SettingsPage() {
             </div>
             <div className="min-w-0">
               <p className={fieldLabelClass}>{current.group}</p>
-              <h2 className="mt-1 font-manrope text-xl font-extrabold tracking-[-0.5px] text-foreground">
+              <h2 className="mt-1 font-manrope text-xl font-extrabold tracking-[-0.01em] text-foreground">
                 {current.label}
               </h2>
               <p className="mt-1 font-manrope text-sm text-muted-foreground">{current.hint}</p>
@@ -1541,7 +1541,7 @@ function BillingSection({
             <span className="inline-flex items-center gap-2 rounded-full bg-sidebar-foreground/10 px-3 py-1 font-manrope text-xs font-extrabold text-sidebar-ring">
               <Crown className="h-3.5 w-3.5" /> {planName} plan
             </span>
-            <h3 className="font-display mt-5 text-[36px] font-bold leading-9 tracking-[-1.26px] text-sidebar-foreground">
+            <h3 className="font-display mt-5 text-[36px] font-bold leading-9 tracking-[-0.01em] text-sidebar-foreground">
               {heroCopy.title}
             </h3>
             <p className="mt-3 font-manrope text-sm leading-6 text-sidebar-foreground/60">

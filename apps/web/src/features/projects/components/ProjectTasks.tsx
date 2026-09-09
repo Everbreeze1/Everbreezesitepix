@@ -1440,7 +1440,7 @@ export const ProjectTasks = forwardRef<ProjectTasksHandle, ProjectTasksProps>(fu
           <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.52px] text-muted-foreground">
             Keep the next move visible
           </p>
-          <h2 className="font-display mt-3 text-[48px] font-bold leading-[48px] tracking-[-1.68px] text-foreground">
+          <h2 className="font-display mt-3 text-[48px] font-bold leading-[48px] tracking-[-0.01em] text-foreground">
             What needs attention
           </h2>
           <p className="mt-3 max-w-md font-manrope text-sm leading-6 text-muted-foreground">
@@ -2210,7 +2210,7 @@ function TaskDialog({
           <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
             {task ? "Edit task" : "New task"}
           </p>
-          <DialogTitle className="font-display mt-1.5 text-[26px] font-bold leading-[30px] tracking-[-0.8px] text-foreground">
+          <DialogTitle className="font-display mt-1.5 text-[26px] font-bold leading-[30px] tracking-[-0.01em] text-foreground">
             {task ? (task.title ?? "Task") : "What needs doing?"}
           </DialogTitle>
         </DialogHeader>

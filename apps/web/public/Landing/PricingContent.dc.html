@@ -1,0 +1,130 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --navy-950: oklch(19% 0.03 265); --navy-900: oklch(23% 0.035 265); --navy-800: oklch(30% 0.04 265);
+      --paper: oklch(97.5% 0.006 90); --paper-2: oklch(94% 0.01 90); --card: oklch(99.5% 0.002 90);
+      --border: oklch(89% 0.01 90); --ink: oklch(18% 0.015 265); --ink-muted: oklch(46% 0.02 265);
+      --ink-faint: oklch(64% 0.015 265); --gold: oklch(76% 0.16 78); --gold-ink: oklch(38% 0.1 70); --gold-soft: oklch(94% 0.05 80);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Inter",system-ui,sans-serif;background:var(--paper);color:var(--ink);}
+    .disp{font-family:"Oswald",sans-serif;font-weight:700;letter-spacing:-0.01em;line-height:1.04;}
+    .eyebrow{font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--gold-ink);}
+    .wrap{max-width:1100px;margin:0 auto;padding:0 32px;}
+    .btn-gold{display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:var(--navy-950);font-weight:700;font-size:14.5px;padding:13px 24px;border-radius:999px;cursor:pointer;justify-content:center;}
+    .btn-outline-dark{display:inline-flex;align-items:center;gap:8px;background:transparent;border:1.5px solid var(--border);color:var(--ink);font-weight:600;font-size:14.5px;padding:12px 22px;border-radius:999px;cursor:pointer;justify-content:center;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:18px;}
+    .yes{color:oklch(55% 0.14 150);}
+    .row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;align-items:center;padding:13px 0;border-bottom:1px solid var(--border);font-size:13.5px;}
+    .row:last-child{border-bottom:none;}
+    .row-head{font-size:11.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-faint);padding-top:22px;padding-bottom:6px;}
+  </style>
+</helmet>
+
+  <!-- HEADER -->
+  <div class="wrap" style="padding:80px 32px 56px 32px;text-align:center;">
+    <div class="eyebrow" style="margin-bottom:14px;">Pricing</div>
+    <div class="disp" style="font-size:42px;color:var(--ink);max-width:640px;margin:0 auto 16px auto;">Built to fit your crew size.</div>
+    <div style="font-size:15.5px;color:var(--ink-muted);max-width:520px;margin:0 auto;line-height:1.6;">Every plan includes AI reports, live site maps, and unlimited photo storage — no per-feature upgrades. Tell us your crew size and we'll get you set up with the right one.</div>
+  </div>
+
+  <!-- PLAN CARDS -->
+  <div class="wrap" style="padding-bottom:60px;">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">
+      <div class="card" style="padding:30px;display:flex;flex-direction:column;">
+        <div style="font-size:20px;font-weight:700;margin-bottom:6px;">Starter</div>
+        <div style="font-size:13.5px;color:var(--ink-muted);margin-bottom:22px;">For solo operators and small crews just getting off camera rolls.</div>
+        <div style="font-size:13px;color:var(--ink-faint);margin-bottom:22px;">1 user included</div>
+        <div class="btn-outline-dark" onClick="{{goSignup}}">Start free trial</div>
+      </div>
+      <div class="card" style="padding:30px;border-color:var(--gold);box-shadow:0 12px 32px rgba(0,0,0,0.06);position:relative;display:flex;flex-direction:column;">
+        <div style="position:absolute;top:-12px;left:24px;background:var(--gold);color:var(--navy-950);font-size:11px;font-weight:700;padding:4px 12px;border-radius:999px;">Most popular</div>
+        <div style="font-size:20px;font-weight:700;margin-bottom:6px;">Pro</div>
+        <div style="font-size:13.5px;color:var(--ink-muted);margin-bottom:22px;">For crews running multiple active jobs who need AI reporting and walkthroughs.</div>
+        <div style="font-size:13px;color:var(--ink-faint);margin-bottom:22px;">5 users included</div>
+        <div class="btn-gold" onClick="{{goSignup}}">Start free trial</div>
+      </div>
+      <div class="card" style="padding:30px;display:flex;flex-direction:column;">
+        <div style="font-size:20px;font-weight:700;margin-bottom:6px;">Team</div>
+        <div style="font-size:13.5px;color:var(--ink-muted);margin-bottom:22px;">For general contractors managing subs, clients, and templates across every job.</div>
+        <div style="font-size:13px;color:var(--ink-faint);margin-bottom:22px;">Unlimited users</div>
+        <div class="btn-outline-dark" onClick="{{goSignup}}">Start free trial</div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:20px;font-size:13px;color:var(--ink-faint);">Annual billing available. <span style="color:var(--gold-ink);font-weight:600;cursor:pointer;">Talk to us</span> for a plan tailored to your team.</div>
+  </div>
+
+  <!-- COMPARISON TABLE -->
+  <div style="background:var(--paper-2);padding:64px 0 96px 0;border-top:1px solid var(--border);">
+  <div class="wrap">
+    <div class="disp" style="font-size:26px;text-align:center;margin-bottom:36px;">Compare plans in detail</div>
+    <div class="card" style="padding:8px 28px;">
+      <div class="row" style="border-bottom:2px solid var(--border);font-weight:700;">
+        <div>Feature</div><div style="text-align:center;">Starter</div><div style="text-align:center;color:var(--gold-ink);">Pro</div><div style="text-align:center;">Team</div>
+      </div>
+
+      <div class="row-head">Capture &amp; storage</div>
+      <div class="row"><div>Photo &amp; video capture</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div></div>
+      <div class="row"><div>Unlimited photo storage</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div></div>
+      <div class="row"><div>Offline mode</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div></div>
+      <div class="row"><div>Live site map</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div></div>
+
+      <div class="row-head">Reporting &amp; AI</div>
+      <div class="row"><div>Manual reports</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div></div>
+      <div class="row"><div>AI-drafted reports</div><div style="text-align:center;">—</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div></div>
+      <div class="row"><div>Recorded walkthroughs</div><div style="text-align:center;">—</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div></div>
+      <div class="row"><div>AI assistant</div><div style="text-align:center;">—</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div></div>
+      <div class="row"><div>Company watermark on exports</div><div style="text-align:center;">—</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div></div>
+
+      <div class="row-head">Organization</div>
+      <div class="row"><div>Tags &amp; labels</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div></div>
+      <div class="row"><div>Checklists &amp; templates</div><div style="text-align:center;">Basic</div><div style="text-align:center;" class="yes">Full</div><div style="text-align:center;" class="yes">Full</div></div>
+      <div class="row"><div>Tasks on photos</div><div style="text-align:center;">—</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div></div>
+      <div class="row"><div>Project blueprints</div><div style="text-align:center;">—</div><div style="text-align:center;">—</div><div style="text-align:center;" class="yes">✓</div></div>
+
+      <div class="row-head">Team &amp; client access</div>
+      <div class="row"><div>Share links with clients</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div><div style="text-align:center;" class="yes">✓</div></div>
+      <div class="row"><div>Portfolio site &amp; website embeds</div><div style="text-align:center;">—</div><div style="text-align:center;">—</div><div style="text-align:center;" class="yes">✓</div></div>
+      <div class="row"><div>Advanced roles &amp; permissions</div><div style="text-align:center;">—</div><div style="text-align:center;">—</div><div style="text-align:center;" class="yes">✓</div></div>
+      <div class="row"><div>Subcontractor access</div><div style="text-align:center;">—</div><div style="text-align:center;">—</div><div style="text-align:center;" class="yes">✓</div></div>
+    </div>
+  </div>
+  </div>
+
+  <!-- MINI FAQ -->
+  <div class="wrap" style="padding:80px 32px;max-width:760px;">
+    <div class="disp" style="font-size:26px;text-align:center;margin-bottom:28px;">Billing questions</div>
+    <div class="card" style="padding:22px 28px;">
+      <div style="padding:14px 0;border-bottom:1px solid var(--border);"><div style="font-size:14.5px;font-weight:600;margin-bottom:6px;">Can I switch plans later?</div><div style="font-size:13.5px;color:var(--ink-muted);">Yes — upgrade or downgrade any time from account settings; changes apply on your next billing cycle.</div></div>
+      <div style="padding:14px 0;border-bottom:1px solid var(--border);"><div style="font-size:14.5px;font-weight:600;margin-bottom:6px;">What counts as a "user"?</div><div style="font-size:13.5px;color:var(--ink-muted);">Anyone with a login — office staff and field crew both count. Subcontractors given scoped project access do not count against your seat total on Team.</div></div>
+      <div style="padding:14px 0;"><div style="font-size:14.5px;font-weight:600;margin-bottom:6px;">Is there a contract?</div><div style="font-size:13.5px;color:var(--ink-muted);">No. Month-to-month, cancel any time — annual billing is available if you'd rather lock in a rate.</div></div>
+    </div>
+    <div style="text-align:center;margin-top:22px;">
+      <span style="font-size:13.5px;color:var(--gold-ink);font-weight:600;cursor:pointer;" onClick="{{goFAQ}}">See the full FAQ →</span>
+    </div>
+  </div>
+
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = {}; }
+  renderVals() {
+    return {
+      goSignup: this.props.onGoSignup,
+      goFAQ: this.props.onGoFaq,
+    };
+  }
+}
+</script>
+</body>
+</html>

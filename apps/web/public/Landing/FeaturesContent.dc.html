@@ -1,0 +1,125 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --navy-950: oklch(19% 0.03 265); --navy-900: oklch(23% 0.035 265); --navy-800: oklch(30% 0.04 265);
+      --paper: oklch(97.5% 0.006 90); --paper-2: oklch(94% 0.01 90); --card: oklch(99.5% 0.002 90);
+      --border: oklch(89% 0.01 90); --ink: oklch(18% 0.015 265); --ink-muted: oklch(46% 0.02 265);
+      --ink-faint: oklch(64% 0.015 265); --gold: oklch(76% 0.16 78); --gold-ink: oklch(38% 0.1 70); --gold-soft: oklch(94% 0.05 80);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Inter",system-ui,sans-serif;background:var(--paper);color:var(--ink);}
+    .disp{font-family:"Oswald",sans-serif;font-weight:700;letter-spacing:-0.01em;line-height:1.04;}
+    .eyebrow{font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--gold-ink);}
+    .wrap{max-width:1160px;margin:0 auto;padding:0 32px;}
+    .btn-gold{display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:var(--navy-950);font-weight:700;font-size:14.5px;padding:13px 24px;border-radius:999px;cursor:pointer;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:18px;}
+    .pill{font-size:11.5px;font-weight:700;padding:4px 11px;border-radius:999px;display:inline-block;}
+  </style>
+</helmet>
+
+  <!-- HEADER -->
+  <div style="background:var(--navy-950);padding:70px 0 90px 0;">
+    <div class="wrap" style="text-align:center;">
+      <div class="eyebrow" style="color:var(--gold);margin-bottom:14px;">Features</div>
+      <div class="disp" style="font-size:44px;color:white;max-width:680px;margin:0 auto 16px auto;">Everything it takes to document a job, in one record.</div>
+      <div style="font-size:15.5px;color:rgba(255,255,255,0.65);max-width:560px;margin:0 auto 30px auto;line-height:1.6;">From the first photo on site to the report your client reads, here's exactly what Everlumen does at each step.</div>
+      <div class="btn-gold" style="display:inline-flex;" onClick="{{goSignup}}">Start free trial</div>
+    </div>
+  </div>
+
+  <!-- FEATURE 1: Live site map -->
+  <div class="wrap" style="padding:96px 32px;display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;">
+    <div>
+      <span class="pill" style="background:oklch(90% 0.06 190);color:oklch(38% 0.1 190);margin-bottom:16px;">Live project context</span>
+      <div class="disp" style="font-size:32px;margin-bottom:16px;">Live site map</div>
+      <div style="font-size:15px;color:var(--ink-muted);line-height:1.65;margin-bottom:20px;">Every project pinned on one interactive map. See every active job, jump straight to the latest photos, and know exactly where your crews are without a single phone call.</div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:14px;color:var(--ink-muted);">
+        <div>— Pin color shows job status at a glance (active, on hold, complete)</div>
+        <div>— Click any pin to jump straight into that project's latest activity</div>
+        <div>— Filter the map by crew, date range, or job type</div>
+      </div>
+    </div>
+    <div style="border-radius:20px;overflow:hidden;background:linear-gradient(160deg,#2b3350,#171b2c);height:340px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:13px;">Map view — project pins</div>
+  </div>
+
+  <!-- FEATURE 2: Recorded walkthroughs -->
+  <div style="background:var(--paper-2);padding:96px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+  <div class="wrap" style="display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;">
+    <div style="border-radius:20px;overflow:hidden;background:linear-gradient(160deg,#2b3350,#171b2c);height:340px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:13px;">Walkthrough recorder</div>
+    <div>
+      <span class="pill" style="background:oklch(88% 0.06 240);color:oklch(38% 0.13 240);margin-bottom:16px;">Video documentation</span>
+      <div class="disp" style="font-size:32px;margin-bottom:16px;">Recorded walkthroughs</div>
+      <div style="font-size:15px;color:var(--ink-muted);line-height:1.65;margin-bottom:20px;">Record narrated video walkthroughs with audio, tied to the project timeline so anyone — office staff, a new PM, a client — can revisit the site without ever leaving their desk.</div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:14px;color:var(--ink-muted);">
+        <div>— Audio narration captures context photos alone can't show</div>
+        <div>— Each walkthrough is timestamped and slots into the project timeline automatically</div>
+        <div>— Reusable walkthrough scripts keep every crew documenting the same way</div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- FEATURE 3: AI assistant -->
+  <div class="wrap" style="padding:96px 32px;display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;">
+    <div>
+      <span class="pill" style="background:oklch(90% 0.06 300);color:oklch(40% 0.14 300);margin-bottom:16px;">Ask, investigate, locate</span>
+      <div class="disp" style="font-size:32px;margin-bottom:16px;">AI assistant</div>
+      <div style="font-size:15px;color:var(--ink-muted);line-height:1.65;margin-bottom:20px;">Ask the assistant what changed, what's still unresolved, and exactly where the evidence lives. Reports draft from that same project record — nothing gets re-typed from memory.</div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:14px;color:var(--ink-muted);">
+        <div>— Answers are grounded in your actual timestamped photos and notes, not guesses</div>
+        <div>— One-tap report drafting, reviewed and edited before it goes out</div>
+        <div>— Workflows stay the structured, assigned-step process for sign-off — the assistant is for ad hoc questions</div>
+      </div>
+    </div>
+    <div style="border-radius:20px;overflow:hidden;background:linear-gradient(160deg,#3a3020,#171b2c);height:340px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:13px;">AI assistant chat panel</div>
+  </div>
+
+  <!-- FEATURE 4: Smart organization -->
+  <div style="background:var(--paper-2);padding:96px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+  <div class="wrap" style="display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;">
+    <div style="border-radius:20px;overflow:hidden;background:linear-gradient(160deg,#3a3020,#171b2c);height:340px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:13px;">Auto-sorted project gallery</div>
+    <div>
+      <span class="pill" style="background:var(--gold-soft);color:var(--gold-ink);margin-bottom:16px;">Zero filing</span>
+      <div class="disp" style="font-size:32px;margin-bottom:16px;">Smart organization</div>
+      <div style="font-size:15px;color:var(--ink-muted);line-height:1.65;margin-bottom:20px;">Every photo is timestamped, GPS-tagged, and auto-sorted by project the moment it's taken. No more scrolling camera rolls or digging through group chats to find one shot.</div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:14px;color:var(--ink-muted);">
+        <div>— Search by project, date, tag, or location</div>
+        <div>— Bulk-import an existing camera roll and it sorts itself in</div>
+        <div>— Every photo keeps its original metadata, permanently</div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="wrap" style="padding:96px 32px;text-align:center;">
+    <div class="disp" style="font-size:32px;margin-bottom:16px;">See it running on a real job.</div>
+    <div style="font-size:15px;color:var(--ink-muted);margin-bottom:26px;">14-day free trial, set up in minutes.</div>
+    <div class="btn-gold" style="display:inline-flex;" onClick="{{goSignup}}">Start free trial</div>
+    <div style="margin-top:14px;"><span style="font-size:13.5px;color:var(--ink-muted);cursor:pointer;text-decoration:underline;" onClick="{{goPricing}}">Or compare plans first</span></div>
+  </div>
+
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = {}; }
+  renderVals() {
+    return {
+      goSignup: this.props.onGoSignup,
+      goPricing: this.props.onGoPricing,
+    };
+  }
+}
+</script>
+</body>
+</html>

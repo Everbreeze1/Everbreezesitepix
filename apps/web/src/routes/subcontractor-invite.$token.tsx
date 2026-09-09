@@ -142,7 +142,7 @@ function AcceptSubcontractorInvitePage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-5 py-10">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background landing px-5 py-10">
       <div className="w-full max-w-[448px]">
         <Link to="/" className="mb-8 inline-flex items-center gap-2">
           <BrandLogo size={40} />
@@ -181,7 +181,7 @@ function AcceptSubcontractorInvitePage() {
             <p className="inline-flex items-center gap-1.5 font-manrope text-xs font-extrabold uppercase tracking-[1.92px] text-primary">
               <HardHat className="h-3.5 w-3.5" /> Site access
             </p>
-            <h1 className="font-display mt-3 text-[40px] font-black uppercase leading-[0.95] tracking-[-1.4px] text-foreground">
+            <h1 className="font-display mt-3 text-[40px] font-bold uppercase leading-tight tracking-[-0.01em] text-foreground">
               {companyName} added you to a job.
             </h1>
             <p className="mt-4 font-manrope text-sm leading-6 text-muted-foreground">

@@ -76,7 +76,7 @@ function ResetPasswordPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-subtle px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-subtle landing px-4 py-12">
       <div className="w-full max-w-md">
         <Link to="/" className="mb-8 flex items-center justify-center gap-2">
           <BrandLogo size={40} />

@@ -110,7 +110,7 @@ export function PortfolioLivePreview({
             </div>
 
             <div className="absolute inset-x-0 bottom-0 px-3 pb-3">
-              <p className="line-clamp-3 text-balance text-lg font-black uppercase leading-[0.95] tracking-tight text-white">
+              <p className="line-clamp-3 text-balance text-lg font-bold uppercase leading-tight tracking-tight text-white">
                 {headline}
               </p>
               {draft.heroSubhead.trim() && (

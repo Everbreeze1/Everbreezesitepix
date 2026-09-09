@@ -442,7 +442,7 @@ export async function applyProjectBlueprintService(
         if (!wt) continue;
         const { data: phases } = await supabaseAdmin
           .from("workflow_template_phases" as any)
-          .select("id, name, position, description, requires_signoff")
+          .select("id, name, position, description, requires_signoff, phase_type")
           .eq("template_id", it.ref_id)
           .order("position", { ascending: true });
         const { data: created } = await supabaseAdmin
@@ -468,6 +468,7 @@ export async function applyProjectBlueprintService(
               // sign-off gate into an ordinary phase on the applied copy.
               description: p.description ?? null,
               requires_signoff: !!p.requires_signoff,
+              phase_type: p.phase_type ?? "actionable",
             } as any)
             .select("id")
             .single();

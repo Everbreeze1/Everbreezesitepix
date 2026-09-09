@@ -45,6 +45,7 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-faint: var(--faint);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
@@ -68,38 +69,43 @@
   --color-brand: var(--brand-wordmark);
   --color-brand-gold: var(--brand-gold);
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Barlow Condensed", ui-sans-serif, system-ui, sans-serif;
-  --font-manrope: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Work Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Work Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-manrope: "Work Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-serif: "Fraunces", ui-serif, Georgia, serif;
+  --font-inter: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-oswald: "Oswald", ui-sans-serif, system-ui, sans-serif;
 
   --shadow-elegant: 0 10px 30px -10px color-mix(in oklab, var(--primary) 25%, transparent);
   --shadow-glow: 0 0 40px color-mix(in oklab, var(--primary-glow) 35%, transparent);
 }
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem;
 
-  /* Professional construction blue/gray palette */
-  --background: oklch(0.99 0.005 240);
-  --foreground: oklch(0.22 0.04 250);
+  /* Warm cream "Everlumen" palette (per the Main-html design reference) */
+  --background: oklch(0.97 0.01 75);
+  --foreground: oklch(0.23 0.02 75);
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.04 250);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.04 250);
+  --card: oklch(0.99 0.004 75);
+  --card-foreground: oklch(0.23 0.02 75);
+  --popover: oklch(0.99 0.004 75);
+  --popover-foreground: oklch(0.23 0.02 75);
 
-  --primary: oklch(0.45 0.14 245); /* deep trustworthy blue */
-  --primary-foreground: oklch(0.99 0.005 240);
-  --primary-glow: oklch(0.62 0.16 245);
+  --primary: oklch(0.64 0.14 55); /* warm amber accent */
+  --primary-foreground: oklch(0.99 0.01 75);
+  --primary-glow: oklch(0.72 0.14 55);
 
-  --secondary: oklch(0.96 0.01 240);
-  --secondary-foreground: oklch(0.3 0.05 250);
+  --secondary: oklch(0.945 0.012 75);
+  --secondary-foreground: oklch(0.3 0.02 75);
 
-  --muted: oklch(0.96 0.008 240);
-  --muted-foreground: oklch(0.5 0.03 250);
+  --muted: oklch(0.945 0.012 75);
+  --muted-foreground: oklch(0.48 0.02 75);
+  --faint: oklch(0.65 0.015 75);
 
-  --accent: oklch(0.94 0.03 240);
-  --accent-foreground: oklch(0.3 0.07 250);
+  --accent: oklch(0.93 0.025 200);
+  --accent-foreground: oklch(0.38 0.1 200);
 
   --safety: oklch(0.78 0.18 75); /* construction amber */
   --safety-foreground: oklch(0.22 0.04 250);
@@ -107,17 +113,17 @@
   --destructive: oklch(0.58 0.22 27);
   --destructive-foreground: oklch(0.99 0 0);
 
-  --border: oklch(0.91 0.013 245);
-  --input: oklch(0.91 0.013 245);
-  --ring: oklch(0.55 0.14 245);
+  --border: oklch(0.89 0.012 75);
+  --input: oklch(0.89 0.012 75);
+  --ring: oklch(0.64 0.14 55);
 
   --gradient-hero: linear-gradient(
     135deg,
-    oklch(0.3 0.1 245) 0%,
-    oklch(0.45 0.14 245) 60%,
-    oklch(0.62 0.16 245) 100%
+    oklch(0.55 0.13 55) 0%,
+    oklch(0.64 0.14 55) 60%,
+    oklch(0.72 0.13 60) 100%
   );
-  --gradient-subtle: linear-gradient(180deg, oklch(0.99 0.005 240) 0%, oklch(0.96 0.012 240) 100%);
+  --gradient-subtle: linear-gradient(180deg, oklch(0.97 0.01 75) 0%, oklch(0.945 0.012 75) 100%);
 
   /*
    * Height and spacing of one nav row in the app sidebar.
@@ -129,13 +135,13 @@
   --rail-row: 2.75rem;
   --rail-gap: 0.125rem;
 
-  /* App sidebar stays fixed dark navy regardless of light/dark app theme */
-  --sidebar: #101929;
-  --sidebar-foreground: #ffffff;
-  --sidebar-border: rgba(255, 255, 255, 0.1);
-  --sidebar-accent: rgba(255, 255, 255, 0.08);
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-ring: #2584f4;
+  /* App sidebar stays fixed dark regardless of light/dark app theme */
+  --sidebar: oklch(0.19 0.014 75);
+  --sidebar-foreground: oklch(0.88 0.012 75);
+  --sidebar-border: oklch(0.28 0.02 75);
+  --sidebar-accent: oklch(0.27 0.02 75);
+  --sidebar-accent-foreground: oklch(0.97 0.01 75);
+  --sidebar-ring: oklch(0.64 0.14 55);
 
   /*
    * Everlumen brand, taken from the logo artwork in src/assets/logo.svg.
@@ -190,68 +196,120 @@
 }
 
 .dark {
-  --background: oklch(0.16 0.025 250);
-  --foreground: oklch(0.97 0.005 240);
-  --card: oklch(0.2 0.03 250);
-  --card-foreground: oklch(0.97 0.005 240);
-  --popover: oklch(0.2 0.03 250);
-  --popover-foreground: oklch(0.97 0.005 240);
-  --primary: oklch(0.68 0.15 245);
-  --primary-foreground: oklch(0.16 0.025 250);
-  --primary-glow: oklch(0.75 0.14 245);
+  --background: oklch(0.19 0.014 75);
+  --foreground: oklch(0.92 0.012 75);
+  --card: oklch(0.23 0.016 75);
+  --card-foreground: oklch(0.92 0.012 75);
+  --popover: oklch(0.23 0.016 75);
+  --popover-foreground: oklch(0.92 0.012 75);
+  --primary: oklch(0.7 0.13 55);
+  --primary-foreground: oklch(0.19 0.014 75);
+  --primary-glow: oklch(0.76 0.13 55);
   /* On a dark ground the mark gold is legible as-is, so the wordmark matches
      the blades exactly. */
   --brand-wordmark: #ffb020;
-  --secondary: oklch(0.26 0.04 250);
-  --secondary-foreground: oklch(0.97 0.005 240);
-  --muted: oklch(0.26 0.04 250);
-  --muted-foreground: oklch(0.7 0.025 240);
-  --accent: oklch(0.3 0.05 250);
-  --accent-foreground: oklch(0.97 0.005 240);
+  --secondary: oklch(0.28 0.02 75);
+  --secondary-foreground: oklch(0.92 0.012 75);
+  --muted: oklch(0.27 0.02 75);
+  --muted-foreground: oklch(0.7 0.02 75);
+  --faint: oklch(0.55 0.015 75);
+  --accent: oklch(0.3 0.03 200);
+  --accent-foreground: oklch(0.92 0.012 75);
   --safety: oklch(0.78 0.18 75);
-  --safety-foreground: oklch(0.16 0.025 250);
+  --safety-foreground: oklch(0.19 0.014 75);
   --destructive: oklch(0.65 0.22 27);
   --destructive-foreground: oklch(0.97 0 0);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.68 0.15 245);
+  --ring: oklch(0.7 0.13 55);
 
   --gradient-hero: linear-gradient(
     135deg,
-    oklch(0.68 0.15 245) 0%,
-    oklch(0.75 0.14 245) 60%,
-    oklch(0.88 0.1 245) 100%
+    oklch(0.58 0.13 55) 0%,
+    oklch(0.7 0.13 55) 60%,
+    oklch(0.8 0.11 60) 100%
   );
-  --gradient-subtle: linear-gradient(180deg, oklch(0.16 0.025 250) 0%, oklch(0.2 0.03 250) 100%);
+  --gradient-subtle: linear-gradient(180deg, oklch(0.19 0.014 75) 0%, oklch(0.23 0.016 75) 100%);
 }
 /*
- * Landing page yellow theme.
- * Replaces the blue primary color with the gold/yellow from the lumen logo.
+ * Landing / marketing theme scope.
+ *
+ * The public marketing site (navy + gold, Inter body + Oswald display) is a
+ * distinct surface from the workspace app (cream + amber, Work Sans). This
+ * class, applied to the root of every marketing route, remaps the shared
+ * design tokens to the navy/gold "Landing" reference (apps/web/public/Landing)
+ * without touching the app's own palette.
  */
-.landing-yellow {
-  --primary: oklch(0.8 0.17 88);
-  --primary-foreground: oklch(0.99 0 0);
-  --primary-glow: oklch(0.86 0.15 88);
-  --ring: oklch(0.8 0.17 88);
+.landing {
+  --font-sans: var(--font-inter);
+  --font-manrope: var(--font-inter);
+  --font-display: var(--font-oswald);
+
+  /* Navy + gold palette (Landing reference) */
+  --background: oklch(0.975 0.006 90); /* paper */
+  --foreground: oklch(0.18 0.015 265); /* ink */
+  --card: oklch(0.995 0.002 90);
+  --card-foreground: oklch(0.18 0.015 265);
+  --popover: oklch(0.995 0.002 90);
+  --popover-foreground: oklch(0.18 0.015 265);
+
+  --primary: oklch(0.76 0.16 78); /* gold */
+  --primary-foreground: oklch(0.19 0.03 265); /* navy-950 */
+  --primary-glow: oklch(0.8 0.15 78);
+
+  --secondary: oklch(0.94 0.01 90); /* paper-2 */
+  --secondary-foreground: oklch(0.18 0.015 265);
+  --muted: oklch(0.94 0.01 90);
+  --muted-foreground: oklch(0.46 0.02 265); /* ink-muted */
+  --faint: oklch(0.64 0.015 265); /* ink-faint */
+
+  --accent: oklch(0.94 0.05 80); /* gold-soft */
+  --accent-foreground: oklch(0.38 0.1 70); /* gold-ink */
+
+  --border: oklch(0.89 0.01 90);
+  --input: oklch(0.89 0.01 90);
+  --ring: oklch(0.76 0.16 78);
+
+  /* Dark navy surfaces used by the hero, nav and footer */
+  --sidebar: oklch(0.19 0.03 265); /* navy-950 */
+  --sidebar-foreground: oklch(0.98 0.005 265);
+  --sidebar-border: rgba(255, 255, 255, 0.12);
+  --sidebar-accent: oklch(0.3 0.04 265); /* navy-800 */
+  --sidebar-accent-foreground: oklch(0.98 0.005 265);
+  --sidebar-ring: oklch(0.76 0.16 78);
+
   --gradient-hero: linear-gradient(
-    135deg,
-    oklch(0.7 0.18 88) 0%,
-    oklch(0.8 0.17 88) 60%,
-    oklch(0.86 0.15 88) 100%
+    180deg,
+    oklch(0.19 0.03 265) 0%,
+    oklch(0.23 0.035 265) 55%,
+    oklch(0.19 0.03 265) 100%
+  );
+  --gradient-subtle: linear-gradient(
+    180deg,
+    oklch(0.975 0.006 90) 0%,
+    oklch(0.94 0.01 90) 100%
   );
 }
-.landing-yellow.dark,
-.landing-yellow .dark {
-  --primary: oklch(0.86 0.15 88);
-  --primary-foreground: oklch(0.99 0 0);
-  --primary-glow: oklch(0.9 0.13 88);
-  --ring: oklch(0.86 0.15 88);
-  --gradient-hero: linear-gradient(
-    135deg,
-    oklch(0.86 0.15 88) 0%,
-    oklch(0.9 0.13 88) 60%,
-    oklch(0.93 0.11 88) 100%
-  );
+.landing.dark,
+.landing .dark {
+  --background: oklch(0.19 0.03 265);
+  --foreground: oklch(0.97 0.005 265);
+  --card: oklch(0.23 0.035 265);
+  --card-foreground: oklch(0.97 0.005 265);
+  --popover: oklch(0.23 0.035 265);
+  --popover-foreground: oklch(0.97 0.005 265);
+  --primary: oklch(0.76 0.16 78);
+  --primary-foreground: oklch(0.19 0.03 265);
+  --secondary: oklch(0.27 0.03 265);
+  --secondary-foreground: oklch(0.97 0.005 265);
+  --muted: oklch(0.27 0.03 265);
+  --muted-foreground: oklch(0.72 0.02 265);
+  --faint: oklch(0.6 0.02 265);
+  --accent: oklch(0.3 0.04 265);
+  --accent-foreground: oklch(0.97 0.005 265);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.76 0.16 78);
 }
 
 
@@ -301,8 +359,7 @@
  * chrome and the customer-facing site are allowed to diverge later.
  */
 @utility font-portfolio-display {
-  font-family: var(--font-display);
-  font-feature-settings: "ss01";
+  font-family: var(--font-serif);
 }
 
 @keyframes marquee {

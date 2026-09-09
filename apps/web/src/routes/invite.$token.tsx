@@ -248,7 +248,7 @@ function AcceptInvitePage() {
   const teamName = team?.name ?? "the team";
 
   return (
-    <div className="min-h-screen w-full bg-background lg:grid lg:grid-cols-2">
+    <div className="min-h-screen w-full bg-background landing lg:grid lg:grid-cols-2">
       {/* LEFT - marketing panel (desktop only) */}
       <aside className="relative hidden overflow-hidden bg-sidebar text-sidebar-foreground lg:flex lg:flex-col lg:justify-between">
         {/* A CSS background, not an <img> - see the note in signup.tsx: an <img>
@@ -272,7 +272,7 @@ function AcceptInvitePage() {
             <p className="font-manrope text-xs font-extrabold uppercase leading-4 tracking-[1.92px] text-sidebar-ring">
               You've been invited
             </p>
-            <h1 className="font-display mt-4 text-[60px] font-black uppercase leading-[0.9] tracking-[-2.1px] text-sidebar-foreground">
+            <h1 className="font-display mt-4 text-[60px] font-bold uppercase leading-tight tracking-[-0.01em] text-sidebar-foreground">
               Join the <span className="text-sidebar-ring">crew.</span>
             </h1>
             <p className="font-manrope mt-6 text-base leading-7 text-sidebar-foreground/70">
@@ -321,7 +321,7 @@ function AcceptInvitePage() {
               <p className="font-manrope text-xs font-extrabold uppercase leading-4 tracking-[1.92px] text-primary">
                 Team invitation
               </p>
-              <h2 className="font-display mt-3 text-[48px] font-black uppercase leading-[0.92] tracking-[-1.68px] text-foreground">
+              <h2 className="font-display mt-3 text-[48px] font-bold uppercase leading-tight tracking-[-0.01em] text-foreground">
                 Join {teamName}.
               </h2>
               {/*
@@ -525,7 +525,7 @@ function AcceptInvitePage() {
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
                 <MailCheck className="h-7 w-7 text-primary" />
               </div>
-              <h2 className="font-display mt-6 text-[40px] font-black uppercase leading-[0.92] tracking-[-1.4px] text-foreground">
+              <h2 className="font-display mt-6 text-[40px] font-bold uppercase leading-tight tracking-[-0.01em] text-foreground">
                 One more step
               </h2>
               <p className="font-manrope mt-4 text-sm leading-6 text-muted-foreground">
@@ -588,7 +588,7 @@ function AcceptInvitePage() {
           {state === "accepted" && (
             <div className="py-10 text-center">
               <CheckCircle2 className="mx-auto h-14 w-14 text-primary" />
-              <h2 className="font-display mt-5 text-[36px] font-black uppercase leading-[0.95] tracking-[-1.2px] text-foreground">
+              <h2 className="font-display mt-5 text-[36px] font-bold uppercase leading-tight tracking-[-0.01em] text-foreground">
                 You're in.
               </h2>
               <p className="font-manrope mt-3 text-sm text-muted-foreground">
@@ -600,7 +600,7 @@ function AcceptInvitePage() {
           {(state === "invalid" || state === "error") && (
             <div className="py-10 text-center">
               <AlertCircle className="mx-auto h-14 w-14 text-destructive" />
-              <h2 className="font-display mt-5 text-[36px] font-black uppercase leading-[0.95] tracking-[-1.2px] text-foreground">
+              <h2 className="font-display mt-5 text-[36px] font-bold uppercase leading-tight tracking-[-0.01em] text-foreground">
                 Invite unavailable
               </h2>
               <p className="font-manrope mt-3 text-sm text-muted-foreground">

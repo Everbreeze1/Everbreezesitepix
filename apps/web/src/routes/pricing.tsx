@@ -273,7 +273,7 @@ function PublicPricingPage() {
   const [seats, setSeats] = useState(1);
 
   return (
-    <div className="min-h-screen bg-background landing-yellow">
+    <div className="min-h-screen bg-background landing">
       <SiteHeader />
       <main className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
         <div className="text-center">

@@ -39,21 +39,32 @@
 -- (`purge-trash`) already removes them explicitly before the project goes; this
 -- is the floor under that, not a replacement for it.
 
-ALTER TABLE public.photos
-  ADD CONSTRAINT photos_project_id_fkey
-  FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE
-  NOT VALID;
+-- Idempotent guards: `photos_project_id_fkey` in particular already exists on
+-- production (it was created out-of-band before the migration history existed),
+-- so a bare `ADD CONSTRAINT` fails with 42710 and halts the whole push. Each
+-- constraint is therefore wrapped so a pre-existing one is skipped while the
+-- genuinely-missing ones (`videos`, `showcase_sections`) are still added.
+DO $$ BEGIN
+  ALTER TABLE public.photos
+    ADD CONSTRAINT photos_project_id_fkey
+    FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE
+    NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-ALTER TABLE public.videos
-  ADD CONSTRAINT videos_project_id_fkey
-  FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE
-  NOT VALID;
+DO $$ BEGIN
+  ALTER TABLE public.videos
+    ADD CONSTRAINT videos_project_id_fkey
+    FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE
+    NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Nullable here: a portfolio section need not be about a project.
-ALTER TABLE public.showcase_sections
-  ADD CONSTRAINT showcase_sections_project_id_fkey
-  FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE SET NULL
-  NOT VALID;
+DO $$ BEGIN
+  ALTER TABLE public.showcase_sections
+    ADD CONSTRAINT showcase_sections_project_id_fkey
+    FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE SET NULL
+    NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- === LATER, AND SEPARATELY ===================================================
 -- The eight rows above are still there, still unreachable. To finish the job:

@@ -280,7 +280,7 @@ export function ReportIssuePage() {
         <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.52px] text-muted-foreground">
           Support
         </p>
-        <h1 className="font-display mt-3 text-[38.4px] font-bold leading-9 tracking-[-1.34px] text-foreground">
+        <h1 className="font-display mt-3 text-[38.4px] font-bold leading-9 tracking-[-0.01em] text-foreground">
           Share feedback
         </h1>
         <p className="font-manrope mt-3 text-sm leading-6 text-muted-foreground">
@@ -528,7 +528,7 @@ function MyReportsSection({
 
   return (
     <section className="mt-10">
-      <h2 className="font-display text-[22px] font-bold tracking-[-0.6px] text-foreground">
+      <h2 className="font-display text-[22px] font-bold tracking-[-0.01em] text-foreground">
         Your reports
       </h2>
       <p className="font-manrope mt-1.5 text-sm leading-6 text-muted-foreground">
@@ -784,7 +784,7 @@ function SentPanel({
       <div className="grid h-12 w-12 place-items-center rounded-full bg-primary/10 text-primary">
         <Check className="h-6 w-6" />
       </div>
-      <h2 className="font-display mt-4 text-2xl font-bold tracking-[-0.6px] text-foreground">
+      <h2 className="font-display mt-4 text-2xl font-bold tracking-[-0.01em] text-foreground">
         {title}
       </h2>
       <p className="font-manrope mt-2 max-w-[46ch] text-sm leading-6 text-muted-foreground">

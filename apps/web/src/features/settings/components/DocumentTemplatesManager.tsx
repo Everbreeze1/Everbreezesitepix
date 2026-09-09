@@ -2145,22 +2145,22 @@ function ChipStyles() {
        */
       .doc-page,
       .doc-chrome {
-        --background: oklch(0.99 0.005 240);
-        --foreground: oklch(0.22 0.04 250);
-        --card: oklch(1 0 0);
-        --card-foreground: oklch(0.22 0.04 250);
-        --primary: oklch(0.45 0.14 245);
-        --primary-foreground: oklch(0.99 0.005 240);
-        --secondary: oklch(0.96 0.01 240);
-        --secondary-foreground: oklch(0.3 0.05 250);
-        --muted: oklch(0.96 0.008 240);
-        --muted-foreground: oklch(0.5 0.03 250);
-        --accent: oklch(0.94 0.03 240);
-        --accent-foreground: oklch(0.3 0.07 250);
-        --border: oklch(0.91 0.013 245);
-        --input: oklch(0.91 0.013 245);
-        --ring: oklch(0.55 0.14 245);
-        color: oklch(0.22 0.04 250);
+        --background: oklch(0.97 0.01 75);
+        --foreground: oklch(0.23 0.02 75);
+        --card: oklch(0.99 0.004 75);
+        --card-foreground: oklch(0.23 0.02 75);
+        --primary: oklch(0.64 0.14 55);
+        --primary-foreground: oklch(0.99 0.01 75);
+        --secondary: oklch(0.945 0.012 75);
+        --secondary-foreground: oklch(0.3 0.02 75);
+        --muted: oklch(0.945 0.012 75);
+        --muted-foreground: oklch(0.48 0.02 75);
+        --accent: oklch(0.93 0.025 200);
+        --accent-foreground: oklch(0.38 0.1 200);
+        --border: oklch(0.89 0.012 75);
+        --input: oklch(0.89 0.012 75);
+        --ring: oklch(0.64 0.14 55);
+        color: oklch(0.23 0.02 75);
       }
       .doc-page .ProseMirror {
         outline: none;

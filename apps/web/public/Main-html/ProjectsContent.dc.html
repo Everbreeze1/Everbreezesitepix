@@ -1,0 +1,740 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
+  <style>
+    :root{
+      --bg: oklch(97% 0.01 75);
+      --surface: oklch(99% 0.004 75);
+      --surface-2: oklch(94.5% 0.012 75);
+      --border: oklch(89% 0.012 75);
+      --ink: oklch(23% 0.02 75);
+      --ink-muted: oklch(48% 0.02 75);
+      --ink-faint: oklch(65% 0.015 75);
+      --accent: oklch(64% 0.14 55);
+      --accent-2: oklch(64% 0.14 200);
+      --accent-2-soft: oklch(93% 0.025 200);
+      --accent-3: oklch(58% 0.13 320);
+      --accent-3-soft: oklch(93% 0.03 320);
+      --status-active: oklch(58% 0.13 150);
+      --status-active-soft: oklch(94% 0.035 150);
+      --status-hold: oklch(62% 0.14 55);
+      --status-hold-soft: oklch(94% 0.035 55);
+      --status-complete: oklch(58% 0.12 250);
+      --status-complete-soft: oklch(94% 0.025 250);
+      --status-archived: oklch(56% 0.008 75);
+      --status-archived-soft: oklch(93% 0.006 75);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Work Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);}
+    a{color:var(--accent);text-decoration:none;}
+    .mono{font-family:"Space Mono",monospace;}
+    .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;}
+    .filter-pill{padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:600;border:1px solid var(--border);cursor:pointer;}
+    .row{display:grid;grid-template-columns:2.6fr 1fr 1.4fr 1fr 0.9fr;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);cursor:pointer;}
+    .row:hover{background:var(--surface-2);}
+    .row:last-child{border-bottom:none;}
+    .col-head{font-size:11px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;}
+    .tab{font-size:13px;font-weight:600;color:var(--ink-faint);padding:11px 2px;border-bottom:2.5px solid transparent;cursor:pointer;}
+    .tab.active{color:var(--ink);border-color:var(--accent);}
+
+    .grp-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
+    .grp-head{cursor:pointer;}
+    .grp-bar-track{background:var(--surface-2);border-radius:999px;height:6px;width:100%;overflow:hidden;margin-top:10px;}
+    .grp-bar-fill{background:var(--accent);height:100%;border-radius:999px;}
+    .grp-member-row{display:flex;align-items:center;justify-content:space-between;padding:11px 2px;border-top:1px solid var(--border);cursor:pointer;}
+    .grp-member-row:hover{background:var(--surface-2);}
+
+    .pipe-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;align-items:start;}
+    .pipe-col{background:var(--surface-2);border-radius:10px;padding:12px;min-height:280px;}
+    .pipe-col-head{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;color:var(--ink-muted);}
+    .pipe-card{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:11px 12px;margin-bottom:10px;box-shadow:0 1px 2px rgba(20,20,20,0.05);}
+    .pipe-card-title{font-size:12.5px;font-weight:600;line-height:1.35;margin-bottom:3px;}
+    .pipe-card-sub{font-size:11px;color:var(--ink-faint);margin-bottom:9px;}
+    .pipe-card-meta{display:flex;align-items:center;justify-content:space-between;}
+    .pipe-advance{width:23px;height:23px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+    .cal-dow{font-size:10.5px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;text-align:center;padding-bottom:4px;}
+    .cal-cell{min-height:64px;border-radius:8px;padding:7px 8px;font-size:12px;font-weight:600;cursor:pointer;position:relative;background:var(--surface);border:1px solid transparent;}
+    .cal-cell.dim{color:var(--ink-faint);background:transparent;cursor:default;font-weight:500;}
+    .cal-dot{width:6px;height:6px;border-radius:999px;position:absolute;bottom:9px;left:9px;}
+    .cal-count{position:absolute;bottom:7px;right:9px;font-size:9.5px;font-family:"Space Mono",monospace;color:var(--ink-faint);}
+    .agenda-item{padding:11px 0;border-bottom:1px solid var(--border);}
+    .agenda-item:last-child{border-bottom:none;}
+  </style>
+</helmet>
+<div style="padding:32px 40px 40px 40px;max-width:1200px;">
+
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;">
+    <div>
+      <div style="font-size:24px;font-weight:700;letter-spacing:-0.01em;">Projects</div>
+      <div style="font-size:13.5px;color:var(--ink-muted);margin-top:3px;">{{subtitle}}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:9px;background:var(--accent);color:oklch(99% 0.01 75);border-radius:9px;padding:9px 16px;font-size:13.5px;font-weight:600;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      {{headerBtnLabel}}
+    </div>
+  </div>
+
+  <div style="display:flex;gap:26px;border-bottom:1px solid var(--border);margin-bottom:22px;">
+    <div class="tab" style="{{tabStyle.list}}" onClick="{{setTabList}}">All Projects</div>
+    <div class="tab" style="{{tabStyle.groups}}" onClick="{{setTabGroups}}">Project Groups</div>
+    <div class="tab" style="{{tabStyle.pipeline}}" onClick="{{setTabPipeline}}">Pipeline</div>
+    <div class="tab" style="{{tabStyle.schedule}}" onClick="{{setTabSchedule}}">Schedule</div>
+  </div>
+
+  <sc-if value="{{isList}}" hint-placeholder-val="{{true}}">
+  <div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <div style="display:flex;gap:8px;">
+        <div class="filter-pill" onClick="{{setAll}}" style="background:{{f.all.bg}};color:{{f.all.color}};border-color:{{f.all.border}};">All &nbsp;<span class="mono">62</span></div>
+        <div class="filter-pill" onClick="{{setActive}}" style="background:{{f.active.bg}};color:{{f.active.color}};border-color:{{f.active.border}};">Active &nbsp;<span class="mono">42</span></div>
+        <div class="filter-pill" onClick="{{setHold}}" style="background:{{f.hold.bg}};color:{{f.hold.color}};border-color:{{f.hold.border}};">On hold &nbsp;<span class="mono">6</span></div>
+        <div class="filter-pill" onClick="{{setCompleted}}" style="background:{{f.completed.bg}};color:{{f.completed.color}};border-color:{{f.completed.border}};">Completed &nbsp;<span class="mono">9</span></div>
+        <div class="filter-pill" onClick="{{setArchived}}" style="background:{{f.archived.bg}};color:{{f.archived.color}};border-color:{{f.archived.border}};">Archived &nbsp;<span class="mono">5</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 13px;width:230px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span style="font-size:12.5px;color:var(--ink-faint);">Search projects...</span>
+      </div>
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+      <div class="row" style="background:var(--surface-2);cursor:default;">
+        <div class="col-head">Project</div>
+        <div class="col-head">Status</div>
+        <div class="col-head">Blueprint</div>
+        <div class="col-head">Crew</div>
+        <div class="col-head" style="text-align:right;">Last activity</div>
+      </div>
+
+      <sc-if value="{{rowVisible.active1}}" hint-placeholder-val="{{true}}">
+      <div class="row" onClick="{{openProject}}">
+        <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+          <div style="width:38px;height:38px;border-radius:7px;background:var(--surface-2);flex-shrink:0;"></div>
+          <div style="min-width:0;">
+            <div style="font-size:13.5px;font-weight:600;">Salgiya &middot; 564 Fisher Circle</div>
+            <div style="font-size:11.5px;color:var(--ink-faint);">Folsom, CA</div>
+          </div>
+        </div>
+        <span class="pill" style="background:var(--status-active-soft);color:var(--status-active);width:fit-content;">Active</span>
+        <div style="font-size:12.5px;color:var(--ink-muted);">HVAC Service Call</div>
+        <div style="display:flex;">
+          <div style="width:22px;height:22px;border-radius:999px;background:#4a5568;border:2px solid var(--surface);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">AJ</div>
+          <div style="width:22px;height:22px;border-radius:999px;background:#2f6f4f;border:2px solid var(--surface);margin-left:-7px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">JB</div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);text-align:right;">12m ago</div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{rowVisible.active2}}" hint-placeholder-val="{{true}}">
+      <div class="row" onClick="{{openProject}}">
+        <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+          <div style="width:38px;height:38px;border-radius:7px;background:var(--surface-2);flex-shrink:0;"></div>
+          <div style="min-width:0;">
+            <div style="font-size:13.5px;font-weight:600;">5205 Argo Way &middot; Site visit</div>
+            <div style="font-size:11.5px;color:var(--ink-faint);">Sacramento, CA</div>
+          </div>
+        </div>
+        <span class="pill" style="background:var(--status-active-soft);color:var(--status-active);width:fit-content;">Active</span>
+        <div style="font-size:12.5px;color:var(--ink-muted);">Normal HVAC Service Call</div>
+        <div style="display:flex;">
+          <div style="width:22px;height:22px;border-radius:999px;background:#3a4152;border:2px solid var(--surface);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">GV</div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);text-align:right;">1h ago</div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{rowVisible.hold1}}" hint-placeholder-val="{{true}}">
+      <div class="row" onClick="{{openProject}}">
+        <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+          <div style="width:38px;height:38px;border-radius:7px;background:var(--surface-2);flex-shrink:0;"></div>
+          <div style="min-width:0;">
+            <div style="font-size:13.5px;font-weight:600;">18373 Ring-necked Court</div>
+            <div style="font-size:11.5px;color:var(--ink-faint);">Elk Grove, CA</div>
+          </div>
+        </div>
+        <span class="pill" style="background:var(--status-hold-soft);color:var(--status-hold);width:fit-content;">On hold</span>
+        <div style="font-size:12.5px;color:var(--ink-muted);">Security Camera Install</div>
+        <div style="display:flex;">
+          <div style="width:22px;height:22px;border-radius:999px;background:#3a4152;border:2px solid var(--surface);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">KD</div>
+          <div style="width:22px;height:22px;border-radius:999px;background:#3a4152;border:2px solid var(--surface);margin-left:-7px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">SS</div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);text-align:right;">3d ago</div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{rowVisible.completed1}}" hint-placeholder-val="{{true}}">
+      <div class="row" onClick="{{openProject}}">
+        <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+          <div style="width:38px;height:38px;border-radius:7px;background:var(--surface-2);flex-shrink:0;"></div>
+          <div style="min-width:0;">
+            <div style="font-size:13.5px;font-weight:600;">2110 Placer Court &middot; Retrofit</div>
+            <div style="font-size:11.5px;color:var(--ink-faint);">Roseville, CA</div>
+          </div>
+        </div>
+        <span class="pill" style="background:var(--status-complete-soft);color:var(--status-complete);width:fit-content;">Completed</span>
+        <div style="font-size:12.5px;color:var(--ink-muted);">HVAC Install &amp; Start-Up</div>
+        <div style="display:flex;">
+          <div style="width:22px;height:22px;border-radius:999px;background:#4a5568;border:2px solid var(--surface);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">AJ</div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);text-align:right;">6d ago</div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{rowVisible.archived1}}" hint-placeholder-val="{{true}}">
+      <div class="row" onClick="{{openProject}}">
+        <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+          <div style="width:38px;height:38px;border-radius:7px;background:var(--surface-2);flex-shrink:0;"></div>
+          <div style="min-width:0;">
+            <div style="font-size:13.5px;font-weight:600;">890 Cedarwood Ave</div>
+            <div style="font-size:11.5px;color:var(--ink-faint);">Davis, CA</div>
+          </div>
+        </div>
+        <span class="pill" style="background:var(--status-archived-soft);color:var(--status-archived);width:fit-content;">Archived</span>
+        <div style="font-size:12.5px;color:var(--ink-muted);">Low-Voltage Panel Swap</div>
+        <div style="display:flex;">
+          <div style="width:22px;height:22px;border-radius:999px;background:#3a4152;border:2px solid var(--surface);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">JB</div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-faint);text-align:right;">3mo ago</div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{noneVisible}}" hint-placeholder-val="{{false}}">
+        <div style="padding:40px;text-align:center;font-size:13px;color:var(--ink-faint);">No projects match this filter in the sample data.</div>
+      </sc-if>
+
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{isGroups}}" hint-placeholder-val="{{false}}">
+  <div style="max-width:820px;">
+    <div style="font-size:12.5px;color:var(--ink-muted);margin-bottom:16px;">Group projects that belong to the same rebate program, rollout or seasonal push &mdash; independent of who the client is.</div>
+
+    <div class="grp-card">
+      <div class="grp-head" onClick="{{toggleG1}}" style="display:flex;align-items:flex-start;justify-content:space-between;">
+        <div>
+          <div style="font-size:14.5px;font-weight:700;">2026 HVAC Efficiency Rebate Program</div>
+          <div style="font-size:12px;color:var(--ink-muted);margin-top:3px;">Utility rebate&#8209;qualified installs across Sacramento County &middot; 3 projects</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="{{grpChevron.g1}};flex-shrink:0;margin-top:3px;"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="grp-bar-track"><div class="grp-bar-fill" style="width:62%;"></div></div>
+      <div style="font-size:11px;color:var(--ink-faint);margin-top:5px;">62% average progress</div>
+
+      <sc-if value="{{grpExpanded.g1}}" hint-placeholder-val="{{true}}">
+        <div class="grp-member-row" onClick="{{openProject}}">
+          <div style="font-size:12.5px;font-weight:600;">Salgiya &middot; 564 Fisher Circle</div>
+          <span class="pill" style="background:var(--status-active-soft);color:var(--status-active);">Active</span>
+        </div>
+        <div class="grp-member-row" onClick="{{openProject}}">
+          <div style="font-size:12.5px;font-weight:600;">5205 Argo Way &middot; Site visit</div>
+          <span class="pill" style="background:var(--status-active-soft);color:var(--status-active);">Active</span>
+        </div>
+        <div class="grp-member-row" onClick="{{openProject}}">
+          <div style="font-size:12.5px;font-weight:600;">12 Aspen Court &middot; New Install</div>
+          <span class="pill" style="background:var(--status-hold-soft);color:var(--status-hold);">Scheduled</span>
+        </div>
+      </sc-if>
+    </div>
+
+    <div class="grp-card">
+      <div class="grp-head" onClick="{{toggleG2}}" style="display:flex;align-items:flex-start;justify-content:space-between;">
+        <div>
+          <div style="font-size:14.5px;font-weight:700;">Commercial Security &amp; Low-Voltage Rollout &mdash; Placer County</div>
+          <div style="font-size:12px;color:var(--ink-muted);margin-top:3px;">Camera and panel installs for Placer County commercial accounts &middot; 2 projects</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="{{grpChevron.g2}};flex-shrink:0;margin-top:3px;"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="grp-bar-track"><div class="grp-bar-fill" style="width:40%;"></div></div>
+      <div style="font-size:11px;color:var(--ink-faint);margin-top:5px;">40% average progress</div>
+
+      <sc-if value="{{grpExpanded.g2}}" hint-placeholder-val="{{false}}">
+        <div class="grp-member-row" onClick="{{openProject}}">
+          <div style="font-size:12.5px;font-weight:600;">18373 Ring-necked Court</div>
+          <span class="pill" style="background:var(--status-hold-soft);color:var(--status-hold);">On hold</span>
+        </div>
+        <div class="grp-member-row" onClick="{{openProject}}">
+          <div style="font-size:12.5px;font-weight:600;">890 Cedarwood Ave</div>
+          <span class="pill" style="background:var(--status-archived-soft);color:var(--status-archived);">Archived</span>
+        </div>
+      </sc-if>
+    </div>
+
+    <div class="grp-card">
+      <div class="grp-head" onClick="{{toggleG3}}" style="display:flex;align-items:flex-start;justify-content:space-between;">
+        <div>
+          <div style="font-size:14.5px;font-weight:700;">Q3 Retrofit Initiative</div>
+          <div style="font-size:12px;color:var(--ink-muted);margin-top:3px;">Older-home HVAC retrofits scheduled before winter &middot; 1 project</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="{{grpChevron.g3}};flex-shrink:0;margin-top:3px;"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="grp-bar-track"><div class="grp-bar-fill" style="width:90%;"></div></div>
+      <div style="font-size:11px;color:var(--ink-faint);margin-top:5px;">90% average progress</div>
+
+      <sc-if value="{{grpExpanded.g3}}" hint-placeholder-val="{{false}}">
+        <div class="grp-member-row" onClick="{{openProject}}">
+          <div style="font-size:12.5px;font-weight:600;">2110 Placer Court &middot; Retrofit</div>
+          <span class="pill" style="background:var(--status-complete-soft);color:var(--status-complete);">Completed</span>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="border:1.5px dashed var(--border);border-radius:12px;padding:16px 20px;font-size:12.5px;color:var(--ink-faint);text-align:center;">+ New program or group</div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{isPipeline}}" hint-placeholder-val="{{false}}">
+  <div>
+    <div style="font-size:12.5px;color:var(--ink-muted);margin-bottom:16px;max-width:760px;">One board from first contact through project close. Click the arrow on a card to move it to the next stage.</div>
+    <div class="pipe-grid">
+
+      <div class="pipe-col">
+        <div class="pipe-col-head"><span>Lead</span><span class="mono">{{colCount.lead}}</span></div>
+        <sc-if value="{{vis.c1.lead}}" hint-placeholder-val="{{true}}">
+        <div class="pipe-card">
+          <div class="pipe-card-title">Whispering Pines HOA &middot; Clubhouse HVAC</div>
+          <div class="pipe-card-sub">Rocklin, CA &middot; est. $18,400 &middot; Unassigned</div>
+          <div class="pipe-card-meta">
+            <span style="font-size:10.5px;color:var(--ink-faint);">2d in stage</span>
+            <div class="pipe-advance" onClick="{{moveC1}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+
+      <div class="pipe-col">
+        <div class="pipe-col-head"><span>Quoted</span><span class="mono">{{colCount.quoted}}</span></div>
+        <sc-if value="{{vis.c1.quoted}}" hint-placeholder-val="{{false}}">
+        <div class="pipe-card">
+          <div class="pipe-card-title">Whispering Pines HOA &middot; Clubhouse HVAC</div>
+          <div class="pipe-card-sub">Rocklin, CA &middot; est. $18,400 &middot; Unassigned</div>
+          <div class="pipe-card-meta">
+            <span style="font-size:10.5px;color:var(--ink-faint);">just moved</span>
+            <div class="pipe-advance" onClick="{{moveC1}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{vis.c2.quoted}}" hint-placeholder-val="{{true}}">
+        <div class="pipe-card">
+          <div class="pipe-card-title">Meadowbrook Apartments &middot; 6-unit retrofit</div>
+          <div class="pipe-card-sub">Sacramento, CA &middot; est. $42,000 &middot; AJ</div>
+          <div class="pipe-card-meta">
+            <span style="font-size:10.5px;color:var(--ink-faint);">3d in stage</span>
+            <div class="pipe-advance" onClick="{{moveC2}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+
+      <div class="pipe-col">
+        <div class="pipe-col-head"><span>Scheduled</span><span class="mono">{{colCount.scheduled}}</span></div>
+        <sc-if value="{{vis.c1.scheduled}}" hint-placeholder-val="{{false}}">
+        <div class="pipe-card">
+          <div class="pipe-card-title">Whispering Pines HOA &middot; Clubhouse HVAC</div>
+          <div class="pipe-card-sub">Rocklin, CA &middot; est. $18,400 &middot; Unassigned</div>
+          <div class="pipe-card-meta">
+            <span style="font-size:10.5px;color:var(--ink-faint);">just moved</span>
+            <div class="pipe-advance" onClick="{{moveC1}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{vis.c2.scheduled}}" hint-placeholder-val="{{false}}">
+        <div class="pipe-card">
+          <div class="pipe-card-title">Meadowbrook Apartments &middot; 6-unit retrofit</div>
+          <div class="pipe-card-sub">Sacramento, CA &middot; est. $42,000 &middot; AJ</div>
+          <div class="pipe-card-meta">
+            <span style="font-size:10.5px;color:var(--ink-faint);">just moved</span>
+            <div class="pipe-advance" onClick="{{moveC2}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+
+      <div class="pipe-col">
+        <div class="pipe-col-head"><span>In Progress</span><span class="mono">{{colCount.inprogress}}</span></div>
+        <sc-if value="{{vis.c1.inprogress}}" hint-placeholder-val="{{false}}">
+        <div class="pipe-card">
+          <div class="pipe-card-title">Whispering Pines HOA &middot; Clubhouse HVAC</div>
+          <div class="pipe-card-sub">Rocklin, CA &middot; est. $18,400 &middot; Unassigned</div>
+          <div class="pipe-card-meta">
+            <span style="font-size:10.5px;color:var(--ink-faint);">just moved</span>
+            <div class="pipe-advance" onClick="{{moveC1}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{vis.c2.inprogress}}" hint-placeholder-val="{{false}}">
+        <div class="pipe-card">
+          <div class="pipe-card-title">Meadowbrook Apartments &middot; 6-unit retrofit</div>
+          <div class="pipe-card-sub">Sacramento, CA &middot; est. $42,000 &middot; AJ</div>
+          <div class="pipe-card-meta">
+            <span style="font-size:10.5px;color:var(--ink-faint);">just moved</span>
+            <div class="pipe-advance" onClick="{{moveC2}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{vis.c3.inprogress}}" hint-placeholder-val="{{true}}">
+        <div class="pipe-card" onClick="{{openProject}}">
+          <div class="pipe-card-title">5205 Argo Way &middot; Site visit follow-up</div>
+          <div class="pipe-card-sub">Sacramento, CA &middot; Normal HVAC Service Call &middot; GV</div>
+          <div class="pipe-card-meta">
+            <span style="font-size:10.5px;color:var(--ink-faint);">6d in stage</span>
+            <div class="pipe-advance" onClick="{{moveC3}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+
+      <div class="pipe-col">
+        <div class="pipe-col-head"><span>Review</span><span class="mono">{{colCount.review}}</span></div>
+        <sc-if value="{{vis.c1.review}}" hint-placeholder-val="{{false}}">
+        <div class="pipe-card">
+          <div class="pipe-card-title">Whispering Pines HOA &middot; Clubhouse HVAC</div>
+          <div class="pipe-card-sub">Rocklin, CA &middot; est. $18,400 &middot; Unassigned</div>
+          <div class="pipe-card-meta">
+            <span style="font-size:10.5px;color:var(--ink-faint);">just moved</span>
+            <div class="pipe-advance" onClick="{{moveC1}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{vis.c2.review}}" hint-placeholder-val="{{false}}">
+        <div class="pipe-card">
+          <div class="pipe-card-title">Meadowbrook Apartments &middot; 6-unit retrofit</div>
+          <div class="pipe-card-sub">Sacramento, CA &middot; est. $42,000 &middot; AJ</div>
+          <div class="pipe-card-meta">
+            <span style="font-size:10.5px;color:var(--ink-faint);">just moved</span>
+            <div class="pipe-advance" onClick="{{moveC2}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{vis.c3.review}}" hint-placeholder-val="{{false}}">
+        <div class="pipe-card" onClick="{{openProject}}">
+          <div class="pipe-card-title">5205 Argo Way &middot; Site visit follow-up</div>
+          <div class="pipe-card-sub">Sacramento, CA &middot; Normal HVAC Service Call &middot; GV</div>
+          <div class="pipe-card-meta">
+            <span style="font-size:10.5px;color:var(--ink-faint);">just moved</span>
+            <div class="pipe-advance" onClick="{{moveC3}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{vis.c4.review}}" hint-placeholder-val="{{true}}">
+        <div class="pipe-card" onClick="{{openProject}}">
+          <div class="pipe-card-title">2110 Placer Court &middot; Retrofit</div>
+          <div class="pipe-card-sub">Roseville, CA &middot; HVAC Install &amp; Start-Up &middot; AJ</div>
+          <div class="pipe-card-meta">
+            <span style="font-size:10.5px;color:var(--ink-faint);">2d in stage</span>
+            <div class="pipe-advance" onClick="{{moveC4}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+
+      <div class="pipe-col">
+        <div class="pipe-col-head"><span>Complete</span><span class="mono">{{colCount.complete}}</span></div>
+        <sc-if value="{{vis.c1.complete}}" hint-placeholder-val="{{false}}">
+        <div class="pipe-card">
+          <div class="pipe-card-title">Whispering Pines HOA &middot; Clubhouse HVAC</div>
+          <div class="pipe-card-sub">Rocklin, CA &middot; est. $18,400 &middot; Unassigned</div>
+          <span class="pill" style="background:var(--status-complete-soft);color:var(--status-complete);">Complete</span>
+        </div>
+        </sc-if>
+        <sc-if value="{{vis.c2.complete}}" hint-placeholder-val="{{false}}">
+        <div class="pipe-card">
+          <div class="pipe-card-title">Meadowbrook Apartments &middot; 6-unit retrofit</div>
+          <div class="pipe-card-sub">Sacramento, CA &middot; est. $42,000 &middot; AJ</div>
+          <span class="pill" style="background:var(--status-complete-soft);color:var(--status-complete);">Complete</span>
+        </div>
+        </sc-if>
+        <sc-if value="{{vis.c3.complete}}" hint-placeholder-val="{{false}}">
+        <div class="pipe-card" onClick="{{openProject}}">
+          <div class="pipe-card-title">5205 Argo Way &middot; Site visit follow-up</div>
+          <div class="pipe-card-sub">Sacramento, CA &middot; Normal HVAC Service Call &middot; GV</div>
+          <span class="pill" style="background:var(--status-complete-soft);color:var(--status-complete);">Complete</span>
+        </div>
+        </sc-if>
+        <sc-if value="{{vis.c4.complete}}" hint-placeholder-val="{{false}}">
+        <div class="pipe-card" onClick="{{openProject}}">
+          <div class="pipe-card-title">2110 Placer Court &middot; Retrofit</div>
+          <div class="pipe-card-sub">Roseville, CA &middot; HVAC Install &amp; Start-Up &middot; AJ</div>
+          <span class="pill" style="background:var(--status-complete-soft);color:var(--status-complete);">Complete</span>
+        </div>
+        </sc-if>
+      </div>
+
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{isSchedule}}" hint-placeholder-val="{{false}}">
+  <div style="display:flex;gap:28px;align-items:flex-start;">
+    <div style="flex:1.6;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="font-size:15px;font-weight:700;">September 2026</div>
+        <div style="display:flex;align-items:center;gap:14px;font-size:11px;color:var(--ink-muted);">
+          <span style="display:flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:999px;background:var(--accent);display:inline-block;"></span>AJ</span>
+          <span style="display:flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:999px;background:var(--accent-2);display:inline-block;"></span>GV</span>
+          <span style="display:flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:999px;background:var(--status-active);display:inline-block;"></span>JB</span>
+        </div>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-dow">Sun</div><div class="cal-dow">Mon</div><div class="cal-dow">Tue</div><div class="cal-dow">Wed</div><div class="cal-dow">Thu</div><div class="cal-dow">Fri</div><div class="cal-dow">Sat</div>
+
+        <div class="cal-cell dim">30</div>
+        <div class="cal-cell dim">31</div>
+        <div class="cal-cell" style="{{dayStyle.d1}}" onClick="{{sel.d1}}">1</div>
+        <div class="cal-cell" style="{{dayStyle.d2}}" onClick="{{sel.d2}}">2</div>
+        <div class="cal-cell" style="{{dayStyle.d3}}" onClick="{{sel.d3}}">3</div>
+        <div class="cal-cell" style="{{dayStyle.d4}}" onClick="{{sel.d4}}">4</div>
+        <div class="cal-cell" style="{{dayStyle.d5}}" onClick="{{sel.d5}}">5</div>
+
+        <div class="cal-cell" style="{{dayStyle.d6}}" onClick="{{sel.d6}}">6</div>
+        <div class="cal-cell" style="{{dayStyle.d7}}" onClick="{{sel.d7}}">7</div>
+        <div class="cal-cell" style="{{dayStyle.d8}}" onClick="{{sel.d8}}">8<div class="cal-dot" style="{{dot.d8}}"></div><div class="cal-count">{{count.d8}}</div></div>
+        <div class="cal-cell" style="{{dayStyle.d9}}" onClick="{{sel.d9}}">9</div>
+        <div class="cal-cell" style="{{dayStyle.d10}}" onClick="{{sel.d10}}">10<div class="cal-dot" style="{{dot.d10}}"></div></div>
+        <div class="cal-cell" style="{{dayStyle.d11}}" onClick="{{sel.d11}}">11<div class="cal-dot" style="{{dot.d11}}"></div></div>
+        <div class="cal-cell" style="{{dayStyle.d12}}" onClick="{{sel.d12}}">12</div>
+
+        <div class="cal-cell" style="{{dayStyle.d13}}" onClick="{{sel.d13}}">13</div>
+        <div class="cal-cell" style="{{dayStyle.d14}}" onClick="{{sel.d14}}">14<div class="cal-dot" style="{{dot.d14}}"></div></div>
+        <div class="cal-cell" style="{{dayStyle.d15}}" onClick="{{sel.d15}}">15</div>
+        <div class="cal-cell" style="{{dayStyle.d16}}" onClick="{{sel.d16}}">16</div>
+        <div class="cal-cell" style="{{dayStyle.d17}}" onClick="{{sel.d17}}">17</div>
+        <div class="cal-cell" style="{{dayStyle.d18}}" onClick="{{sel.d18}}">18<div class="cal-dot" style="{{dot.d18}}"></div></div>
+        <div class="cal-cell" style="{{dayStyle.d19}}" onClick="{{sel.d19}}">19</div>
+
+        <div class="cal-cell" style="{{dayStyle.d20}}" onClick="{{sel.d20}}">20</div>
+        <div class="cal-cell" style="{{dayStyle.d21}}" onClick="{{sel.d21}}">21</div>
+        <div class="cal-cell" style="{{dayStyle.d22}}" onClick="{{sel.d22}}">22<div class="cal-dot" style="{{dot.d22}}"></div></div>
+        <div class="cal-cell" style="{{dayStyle.d23}}" onClick="{{sel.d23}}">23</div>
+        <div class="cal-cell" style="{{dayStyle.d24}}" onClick="{{sel.d24}}">24</div>
+        <div class="cal-cell" style="{{dayStyle.d25}}" onClick="{{sel.d25}}">25<div class="cal-dot" style="{{dot.d25}}"></div></div>
+        <div class="cal-cell" style="{{dayStyle.d26}}" onClick="{{sel.d26}}">26</div>
+
+        <div class="cal-cell" style="{{dayStyle.d27}}" onClick="{{sel.d27}}">27</div>
+        <div class="cal-cell" style="{{dayStyle.d28}}" onClick="{{sel.d28}}">28</div>
+        <div class="cal-cell" style="{{dayStyle.d29}}" onClick="{{sel.d29}}">29<div class="cal-dot" style="{{dot.d29}}"></div></div>
+        <div class="cal-cell" style="{{dayStyle.d30}}" onClick="{{sel.d30}}">30</div>
+        <div class="cal-cell dim">1</div>
+        <div class="cal-cell dim">2</div>
+        <div class="cal-cell dim">3</div>
+      </div>
+    </div>
+
+    <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;min-height:200px;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:2px;">Due &middot; Sep {{selectedDay}}</div>
+      <div style="font-size:11.5px;color:var(--ink-faint);margin-bottom:8px;">Click any date to see what's due that day.</div>
+
+      <sc-if value="{{agenda.empty}}" hint-placeholder-val="{{false}}">
+        <div style="font-size:12.5px;color:var(--ink-faint);padding:14px 0;">Nothing due on this date.</div>
+      </sc-if>
+
+      <sc-if value="{{agenda.a1show}}" hint-placeholder-val="{{true}}">
+      <div class="agenda-item">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px;">
+          <span style="width:7px;height:7px;border-radius:999px;background:{{agenda.a1color}};display:inline-block;flex-shrink:0;"></span>
+          <span style="font-size:12.5px;font-weight:600;">{{agenda.a1title}}</span>
+        </div>
+        <div style="font-size:11px;color:var(--ink-faint);margin-left:14px;">{{agenda.a1project}} &middot; {{agenda.a1type}} &middot; {{agenda.a1who}}</div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{agenda.a2show}}" hint-placeholder-val="{{true}}">
+      <div class="agenda-item">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px;">
+          <span style="width:7px;height:7px;border-radius:999px;background:{{agenda.a2color}};display:inline-block;flex-shrink:0;"></span>
+          <span style="font-size:12.5px;font-weight:600;">{{agenda.a2title}}</span>
+        </div>
+        <div style="font-size:11px;color:var(--ink-faint);margin-left:14px;">{{agenda.a2project}} &middot; {{agenda.a2type}} &middot; {{agenda.a2who}}</div>
+      </div>
+      </sc-if>
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"onOpenProject":{"editor":null}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      tab: "list",
+      filter: "all",
+      grpExpanded: { g1: true, g2: false, g3: false },
+      pipelineStages: { c1: "lead", c2: "quoted", c3: "inprogress", c4: "review" },
+      selectedDay: 8,
+    };
+  }
+  renderVals() {
+    const tab = this.state.tab;
+    const filter = this.state.filter;
+    const openProject = () => (this.props.onOpenProject ?? (() => {}))();
+    const active = "border-color:var(--accent);color:var(--ink);";
+
+    // ---- list sub-tab (unchanged) ----
+    const idle = { bg: "var(--surface)", border: "var(--border)" };
+    const mk = (key, activeColor) => ({
+      bg: filter === key ? "var(--ink)" : idle.bg,
+      color: filter === key ? "var(--bg)" : activeColor,
+      border: filter === key ? "var(--ink)" : idle.border,
+    });
+    const statusOf = { active1: "active", active2: "active", hold1: "hold", completed1: "completed", archived1: "archived" };
+    const rowVisible = {};
+    Object.keys(statusOf).forEach((k) => {
+      rowVisible[k] = filter === "all" || filter === statusOf[k];
+    });
+    const noneVisible = Object.values(rowVisible).every((v) => !v);
+
+    // ---- groups ----
+    const grpExpanded = this.state.grpExpanded;
+    const grpChevron = {
+      g1: grpExpanded.g1 ? "transform:rotate(180deg);" : "",
+      g2: grpExpanded.g2 ? "transform:rotate(180deg);" : "",
+      g3: grpExpanded.g3 ? "transform:rotate(180deg);" : "",
+    };
+
+    // ---- pipeline ----
+    const PIPE_ORDER = ["lead", "quoted", "scheduled", "inprogress", "review", "complete"];
+    const stages = this.state.pipelineStages;
+    const cardIds = ["c1", "c2", "c3", "c4"];
+    const colCount = {};
+    PIPE_ORDER.forEach((s) => { colCount[s] = cardIds.filter((id) => stages[id] === s).length; });
+    const vis = {};
+    cardIds.forEach((id) => {
+      vis[id] = {};
+      PIPE_ORDER.forEach((s) => { vis[id][s] = stages[id] === s; });
+    });
+    const advance = (id) => () => {
+      const s = { ...this.state.pipelineStages };
+      const idx = PIPE_ORDER.indexOf(s[id]);
+      if (idx < PIPE_ORDER.length - 1) s[id] = PIPE_ORDER[idx + 1];
+      this.setState({ pipelineStages: s });
+    };
+
+    // ---- schedule ----
+    const DUE = {
+      8: [
+        { title: "Pre-service safety checklist due", project: "Salgiya", who: "AJ", type: "Task" },
+        { title: "Weekly progress report due", project: "5205 Argo Way", who: "GV", type: "Report" },
+      ],
+      10: [{ title: "Completion report due", project: "2110 Placer Court", who: "AJ", type: "Report" }],
+      11: [{ title: "Install readiness checklist due", project: "18373 Ring-necked Court", who: "JB", type: "Task" }],
+      14: [{ title: "Quarterly maintenance visit", project: "Salgiya", who: "GV", type: "Task" }],
+      18: [{ title: "Client walkthrough follow-up due", project: "5205 Argo Way", who: "AJ", type: "Task" }],
+      22: [{ title: "Panel swap safety checklist due", project: "890 Cedarwood Ave", who: "JB", type: "Task" }],
+      25: [{ title: "Send invoice & report", project: "18373 Ring-necked Court", who: "AJ", type: "Report" }],
+      29: [{ title: "Blueprint review due", project: "HVAC Service Call template", who: "GV", type: "Task" }],
+    };
+    const colorOf = (who) => (who === "AJ" ? "var(--accent)" : who === "GV" ? "var(--accent-2)" : "var(--status-active)");
+    const selectedDay = this.state.selectedDay;
+    const dayStyle = {};
+    const dot = {};
+    const count = {};
+    const sel = {};
+    for (let d = 1; d <= 30; d++) {
+      const isToday = d === 8;
+      const isSelected = d === selectedDay;
+      let ring = "";
+      if (isSelected) ring = "box-shadow: inset 0 0 0 2px var(--ink);";
+      else if (isToday) ring = "box-shadow: inset 0 0 0 1.5px var(--accent);";
+      dayStyle["d" + d] = ring;
+      const items = DUE[d];
+      dot["d" + d] = items ? ("background:" + colorOf(items[0].who) + ";") : "background:transparent;";
+      count["d" + d] = items && items.length > 1 ? String(items.length) : "";
+      sel["d" + d] = () => this.setState({ selectedDay: d });
+    }
+    const dayItems = DUE[selectedDay] || [];
+    const agenda = {
+      empty: dayItems.length === 0,
+      a1show: dayItems.length > 0,
+      a1title: dayItems[0] ? dayItems[0].title : "",
+      a1project: dayItems[0] ? dayItems[0].project : "",
+      a1who: dayItems[0] ? dayItems[0].who : "",
+      a1type: dayItems[0] ? dayItems[0].type : "",
+      a1color: dayItems[0] ? colorOf(dayItems[0].who) : "transparent",
+      a2show: dayItems.length > 1,
+      a2title: dayItems[1] ? dayItems[1].title : "",
+      a2project: dayItems[1] ? dayItems[1].project : "",
+      a2who: dayItems[1] ? dayItems[1].who : "",
+      a2type: dayItems[1] ? dayItems[1].type : "",
+      a2color: dayItems[1] ? colorOf(dayItems[1].who) : "transparent",
+    };
+
+    const subtitleByTab = {
+      list: "42 active out of 62 total",
+      groups: "3 active programs across 6 projects",
+      pipeline: "4 in progress toward close",
+      schedule: "8 items due this month across your crew",
+    };
+    const btnByTab = { list: "New project", groups: "New group", pipeline: "New lead", schedule: "New reminder" };
+
+    return {
+      subtitle: subtitleByTab[tab],
+      headerBtnLabel: btnByTab[tab],
+      tabStyle: {
+        list: tab === "list" ? active : "",
+        groups: tab === "groups" ? active : "",
+        pipeline: tab === "pipeline" ? active : "",
+        schedule: tab === "schedule" ? active : "",
+      },
+      isList: tab === "list",
+      isGroups: tab === "groups",
+      isPipeline: tab === "pipeline",
+      isSchedule: tab === "schedule",
+      setTabList: () => this.setState({ tab: "list" }),
+      setTabGroups: () => this.setState({ tab: "groups" }),
+      setTabPipeline: () => this.setState({ tab: "pipeline" }),
+      setTabSchedule: () => this.setState({ tab: "schedule" }),
+
+      f: {
+        all: filter === "all" ? { bg: "var(--ink)", color: "var(--bg)", border: "var(--ink)" } : { bg: idle.bg, color: "var(--ink)", border: idle.border },
+        active: mk("active", "var(--status-active)"),
+        hold: mk("hold", "var(--status-hold)"),
+        completed: mk("completed", "var(--status-complete)"),
+        archived: mk("archived", "var(--status-archived)"),
+      },
+      rowVisible,
+      noneVisible,
+      openProject,
+      setAll: () => this.setState({ filter: "all" }),
+      setActive: () => this.setState({ filter: "active" }),
+      setHold: () => this.setState({ filter: "hold" }),
+      setCompleted: () => this.setState({ filter: "completed" }),
+      setArchived: () => this.setState({ filter: "archived" }),
+
+      grpExpanded,
+      grpChevron,
+      toggleG1: () => this.setState({ grpExpanded: { ...this.state.grpExpanded, g1: !grpExpanded.g1 } }),
+      toggleG2: () => this.setState({ grpExpanded: { ...this.state.grpExpanded, g2: !grpExpanded.g2 } }),
+      toggleG3: () => this.setState({ grpExpanded: { ...this.state.grpExpanded, g3: !grpExpanded.g3 } }),
+
+      colCount,
+      vis,
+      moveC1: advance("c1"),
+      moveC2: advance("c2"),
+      moveC3: advance("c3"),
+      moveC4: advance("c4"),
+
+      dayStyle,
+      dot,
+      count,
+      sel,
+      selectedDay,
+      agenda,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-﻿import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { Menu, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -24,34 +24,23 @@ const navLinks = [
 ] as const;
 
 interface SiteHeaderProps {
-  /** Floats transparent over a dark hero until the user scrolls, then becomes the white pill. */
+  /** Kept for call-site compatibility; the landing nav is now always solid navy. */
   transparent?: boolean;
 }
 
-export function SiteHeader({ transparent = false }: SiteHeaderProps) {
+export function SiteHeader(_props: SiteHeaderProps) {
   const { user } = useAuth();
   const { theme, toggle } = useTheme();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [mounted, setMounted] = useState(false);
-  const [scrolled, setScrolled] = useState(!transparent);
   useEffect(() => setMounted(true), []);
-  useEffect(() => {
-    if (!transparent) return;
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [transparent]);
 
   const navLinkClass = (active: boolean) =>
     cn(
       "font-manrope relative rounded-lg px-3 py-2 text-sm font-bold transition-colors",
-      scrolled
-        ? cn(
-            "text-muted-foreground hover:bg-accent hover:text-foreground",
-            active && "text-foreground",
-          )
-        : cn("text-white/85 hover:bg-white/10 hover:text-white", active && "text-white"),
+      active
+        ? "text-sidebar-foreground"
+        : "text-sidebar-foreground/70 hover:text-sidebar-foreground",
     );
 
   const underline = (
@@ -59,31 +48,13 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
   );
 
   return (
-    <header
-      className="sticky top-0 z-40 w-full px-4 transition-[padding] duration-300 ease-out sm:px-6"
-      style={{ paddingTop: scrolled ? 16 : 0 }}
-    >
-      <div
-        className={cn(
-          "mx-auto flex h-[70px] max-w-[1280px] items-center justify-between px-6 transition-all duration-300 ease-out",
-          scrolled
-            ? "rounded-full border border-border bg-card/95 shadow-sm"
-            : "rounded-none border border-transparent bg-transparent shadow-none",
-        )}
-      >
+    <header className="sticky top-0 z-40 w-full border-b border-sidebar-border bg-sidebar">
+      <div className="mx-auto flex h-[70px] max-w-[1280px] items-center justify-between px-4 sm:px-6">
         <Link to="/" className="flex shrink-0 items-center gap-2.5">
           <BrandLogo size={40} />
-          <span
-            className={cn(
-              "font-manrope text-lg font-extrabold tracking-[-0.45px] transition-colors",
-              scrolled ? "text-foreground" : "text-white",
-            )}
-          >
+          <span className="font-manrope text-lg font-extrabold tracking-[-0.01em] text-sidebar-foreground">
             Ever
-            {/* The hero behind an unscrolled header is dark, so the mark gold
-                carries there as-is; once the header condenses onto a card it
-                needs the light-ground gold instead. */}
-            <span className={scrolled ? "text-brand" : "text-brand-gold"}>lumen</span>
+            <span className="text-brand-gold">lumen</span>
           </span>
         </Link>
 
@@ -103,12 +74,7 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
           <Button
             variant="ghost"
             size="icon"
-            className={cn(
-              "rounded-full transition-colors",
-              scrolled
-                ? "text-muted-foreground hover:bg-accent hover:text-foreground"
-                : "text-white/85 hover:bg-white/10 hover:text-white",
-            )}
+            className="rounded-full text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
             onClick={toggle}
             aria-label={
               mounted
@@ -127,12 +93,7 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
               <button
                 type="button"
                 aria-label="Open menu"
-                className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full transition-colors md:hidden",
-                  scrolled
-                    ? "text-muted-foreground hover:bg-accent hover:text-foreground"
-                    : "text-white/85 hover:bg-white/10 hover:text-white",
-                )}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-sidebar-foreground transition-colors hover:bg-sidebar-accent md:hidden"
               >
                 <Menu className="h-5 w-5" />
               </button>
@@ -209,21 +170,13 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
             <>
               <Link
                 to="/demo"
-                className={cn(
-                  "font-manrope hidden rounded-full border px-5 py-2 text-sm font-bold transition-colors sm:inline-flex md:inline-flex",
-                  scrolled
-                    ? "border-border text-foreground hover:bg-accent"
-                    : "border-white/30 text-white hover:bg-white/10",
-                )}
+                className="font-manrope hidden rounded-full border border-sidebar-border px-5 py-2 text-sm font-bold text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground sm:inline-flex md:inline-flex"
               >
                 Demo
               </Link>
               <Link
                 to="/login"
-                className={cn(
-                  "font-manrope hidden rounded-lg px-3 py-2 text-sm font-bold transition-colors sm:inline-flex md:inline-flex",
-                  scrolled ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10",
-                )}
+                className="font-manrope hidden rounded-lg px-3 py-2 text-sm font-bold text-sidebar-foreground/80 transition-colors hover:text-sidebar-foreground sm:inline-flex md:inline-flex"
               >
                 Log in
               </Link>
@@ -232,7 +185,7 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
                 size="sm"
                 className="font-manrope hidden rounded-full bg-primary px-5 font-bold text-primary-foreground shadow-none hover:bg-primary/90 md:inline-flex"
               >
-                <Link to="/signup">Sign up</Link>
+                <Link to="/signup">Start free trial</Link>
               </Button>
             </>
           )}

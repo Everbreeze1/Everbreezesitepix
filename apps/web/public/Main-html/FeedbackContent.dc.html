@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
+  <style>
+    :root{
+      --bg: oklch(97% 0.01 75);
+      --surface: oklch(99% 0.004 75);
+      --surface-2: oklch(94.5% 0.012 75);
+      --border: oklch(89% 0.012 75);
+      --ink: oklch(23% 0.02 75);
+      --ink-muted: oklch(48% 0.02 75);
+      --ink-faint: oklch(65% 0.015 75);
+      --accent: oklch(64% 0.14 55);
+      --accent-2: oklch(64% 0.14 200);
+      --accent-2-soft: oklch(93% 0.025 200);
+      --status-active: oklch(58% 0.13 150);
+      --status-active-soft: oklch(94% 0.035 150);
+      --status-hold: oklch(62% 0.14 55);
+      --status-hold-soft: oklch(94% 0.035 55);
+      --status-complete: oklch(58% 0.12 250);
+      --status-complete-soft: oklch(94% 0.025 250);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Work Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);}
+    .mono{font-family:"Space Mono",monospace;}
+    .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;flex-shrink:0;}
+    .filter-pill{padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:600;border:1px solid var(--border);cursor:pointer;}
+    .fb-row{display:flex;align-items:flex-start;gap:14px;padding:16px 18px;border-bottom:1px solid var(--border);}
+    .fb-row:last-child{border-bottom:none;}
+    .type-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .upvote{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;color:var(--ink-muted);flex-shrink:0;}
+  </style>
+</helmet>
+<div style="padding:32px 40px 40px 40px;max-width:1200px;">
+
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;">
+    <div>
+      <div style="font-size:24px;font-weight:700;letter-spacing:-0.01em;">Feedback</div>
+      <div style="font-size:13.5px;color:var(--ink-muted);margin-top:3px;">Bugs, ideas and questions &mdash; yours and your crew's.</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:9px;background:var(--accent);color:oklch(99% 0.01 75);border-radius:9px;padding:9px 16px;font-size:13.5px;font-weight:600;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      New feedback
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-bottom:20px;">
+    <div class="filter-pill" style="background:var(--ink);color:var(--bg);border-color:var(--ink);">All &nbsp;<span class="mono">8</span></div>
+    <div class="filter-pill">Bugs &nbsp;<span class="mono">3</span></div>
+    <div class="filter-pill">Ideas &nbsp;<span class="mono">4</span></div>
+    <div class="filter-pill">Questions &nbsp;<span class="mono">1</span></div>
+  </div>
+
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+
+    <div class="fb-row">
+      <div class="upvote">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+        <span class="mono" style="font-size:11px;">6</span>
+      </div>
+      <div class="type-icon" style="background:oklch(94% 0.05 25);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(52% 0.16 25)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 16.5h.01"/><path d="M10.3 3.9 2 18.5A1.6 1.6 0 0 0 3.4 21h17.2a1.6 1.6 0 0 0 1.4-2.5L13.7 3.9a1.6 1.6 0 0 0-2.8 0Z"/></svg>
+      </div>
+      <div style="flex-grow:1;">
+        <div style="font-size:13.5px;font-weight:600;">Delete workflow fails with a connection error</div>
+        <div style="font-size:11.5px;color:var(--ink-faint);margin-top:3px;">Bug &middot; Ajmal &middot; 2 days ago</div>
+      </div>
+      <span class="pill" style="background:var(--status-hold-soft);color:var(--status-hold);">Open</span>
+    </div>
+
+    <div class="fb-row">
+      <div class="upvote">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+        <span class="mono" style="font-size:11px;">4</span>
+      </div>
+      <div class="type-icon" style="background:oklch(94% 0.05 25);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(52% 0.16 25)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 16.5h.01"/><path d="M10.3 3.9 2 18.5A1.6 1.6 0 0 0 3.4 21h17.2a1.6 1.6 0 0 0 1.4-2.5L13.7 3.9a1.6 1.6 0 0 0-2.8 0Z"/></svg>
+      </div>
+      <div style="flex-grow:1;">
+        <div style="font-size:13.5px;font-weight:600;">Reports don't show which one is newest</div>
+        <div style="font-size:11.5px;color:var(--ink-faint);margin-top:3px;">Bug &middot; Gumaro Vazquez &middot; 3 weeks ago</div>
+      </div>
+      <span class="pill" style="background:var(--status-complete-soft);color:var(--status-complete);">Done</span>
+    </div>
+
+    <div class="fb-row">
+      <div class="upvote">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+        <span class="mono" style="font-size:11px;">11</span>
+      </div>
+      <div class="type-icon" style="background:var(--accent-2-soft);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-2)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.5.4.8 1 .8 1.6v.5h5.4v-.5c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3Z"/></svg>
+      </div>
+      <div style="flex-grow:1;">
+        <div style="font-size:13.5px;font-weight:600;">Let us reorder checklists inside a blueprint</div>
+        <div style="font-size:11.5px;color:var(--ink-faint);margin-top:3px;">Idea &middot; Ajmal &middot; 3 days ago</div>
+      </div>
+      <span class="pill" style="background:var(--accent-2-soft);color:var(--accent-2);">In review</span>
+    </div>
+
+    <div class="fb-row">
+      <div class="upvote">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+        <span class="mono" style="font-size:11px;">9</span>
+      </div>
+      <div class="type-icon" style="background:var(--accent-2-soft);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-2)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.5.4.8 1 .8 1.6v.5h5.4v-.5c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3Z"/></svg>
+      </div>
+      <div style="flex-grow:1;">
+        <div style="font-size:13.5px;font-weight:600;">Bulk-caption photos from one panel</div>
+        <div style="font-size:11.5px;color:var(--ink-faint);margin-top:3px;">Idea &middot; Jackson Brosgart &middot; 1 week ago</div>
+      </div>
+      <span class="pill" style="background:var(--status-active-soft);color:var(--status-active);">Planned</span>
+    </div>
+
+    <div class="fb-row">
+      <div class="upvote">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+        <span class="mono" style="font-size:11px;">2</span>
+      </div>
+      <div class="type-icon" style="background:var(--surface-2);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.7-2.2 2-2.4 3.6M12 16.5h.01"/></svg>
+      </div>
+      <div style="flex-grow:1;">
+        <div style="font-size:13.5px;font-weight:600;">Can a Manager delete a project, or only an Owner?</div>
+        <div style="font-size:11.5px;color:var(--ink-faint);margin-top:3px;">Question &middot; Kevin Dale Mergas &middot; 5 days ago</div>
+      </div>
+      <span class="pill" style="background:var(--status-hold-soft);color:var(--status-hold);">Open</span>
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

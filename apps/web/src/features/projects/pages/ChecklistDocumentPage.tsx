@@ -976,7 +976,7 @@ export function ChecklistDocumentPage() {
                 className="h-9 min-w-0 max-w-sm flex-1 border-none bg-transparent px-1 text-base font-extrabold shadow-none focus-visible:ring-1"
               />
             ) : (
-              <span className="font-display min-w-0 flex-1 truncate text-base font-extrabold">
+              <span className="font-display min-w-0 flex-1 truncate text-base font-bold">
                 {checklist.name}
               </span>
             )}
@@ -1112,7 +1112,7 @@ export function ChecklistDocumentPage() {
             <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
               Checklist record
             </p>
-            <h1 className="font-display mt-1 text-2xl font-extrabold tracking-[-0.5px]">
+            <h1 className="font-display mt-1 text-2xl font-bold tracking-[-0.01em]">
               {checklist.name}
             </h1>
             <p className="mt-1 text-xs text-muted-foreground">

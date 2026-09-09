@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS public.email_send_log (
 
 DO $$ BEGIN
   ALTER TABLE public.email_send_log ADD CONSTRAINT email_send_log_pkey PRIMARY KEY (id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS email_send_log_created_at_idx ON public.email_send_log USING btree (created_at DESC);
 CREATE INDEX IF NOT EXISTS email_send_log_message_id_idx ON public.email_send_log USING btree (message_id);
 ALTER TABLE public.email_send_log ENABLE ROW LEVEL SECURITY;
@@ -116,10 +116,10 @@ CREATE TABLE IF NOT EXISTS public.email_send_state (
 
 DO $$ BEGIN
   ALTER TABLE public.email_send_state ADD CONSTRAINT email_send_state_pkey PRIMARY KEY (id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.email_send_state ADD CONSTRAINT email_send_state_singleton CHECK ((id = 1));
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 ALTER TABLE public.email_send_state ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Service role can manage send state" ON public.email_send_state;
 CREATE POLICY "Service role can manage send state" ON public.email_send_state
@@ -141,10 +141,10 @@ CREATE TABLE IF NOT EXISTS public.email_unsubscribe_tokens (
 
 DO $$ BEGIN
   ALTER TABLE public.email_unsubscribe_tokens ADD CONSTRAINT email_unsubscribe_tokens_pkey PRIMARY KEY (id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.email_unsubscribe_tokens ADD CONSTRAINT email_unsubscribe_tokens_token_key UNIQUE (token);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS email_unsubscribe_tokens_email_idx ON public.email_unsubscribe_tokens USING btree (lower(email));
 ALTER TABLE public.email_unsubscribe_tokens ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Service role can insert tokens" ON public.email_unsubscribe_tokens;
@@ -174,13 +174,13 @@ CREATE TABLE IF NOT EXISTS public.photo_tags (
 
 DO $$ BEGIN
   ALTER TABLE public.photo_tags ADD CONSTRAINT photo_tags_pkey PRIMARY KEY (photo_id, tag_id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.photo_tags ADD CONSTRAINT photo_tags_photo_id_fkey FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.photo_tags ADD CONSTRAINT photo_tags_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS photo_tags_created_by_idx ON public.photo_tags USING btree (created_by);
 CREATE INDEX IF NOT EXISTS photo_tags_tag_id_idx ON public.photo_tags USING btree (tag_id);
 ALTER TABLE public.photo_tags ENABLE ROW LEVEL SECURITY;
@@ -234,13 +234,13 @@ CREATE TABLE IF NOT EXISTS public.photos (
 
 DO $$ BEGIN
   ALTER TABLE public.photos ADD CONSTRAINT photos_pkey PRIMARY KEY (id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.photos ADD CONSTRAINT photos_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE NOT VALID;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.photos ADD CONSTRAINT photos_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES auth.users(id) ON DELETE SET NULL;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS idx_photos_deleted_at ON public.photos USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_photos_project_active ON public.photos USING btree (project_id, taken_at DESC NULLS LAST, created_at DESC) WHERE (deleted_at IS NULL);
 CREATE INDEX IF NOT EXISTS photos_project_id_idx ON public.photos USING btree (project_id);
@@ -356,13 +356,13 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 
 DO $$ BEGIN
   ALTER TABLE public.profiles ADD CONSTRAINT profiles_pkey PRIMARY KEY (id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.profiles ADD CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.profiles ADD CONSTRAINT profiles_report_photos_per_page_check CHECK (((report_photos_per_page >= 1) AND (report_photos_per_page <= 4)));
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
 CREATE POLICY "Users can insert own profile" ON public.profiles
@@ -415,13 +415,13 @@ CREATE TABLE IF NOT EXISTS public.project_tags (
 
 DO $$ BEGIN
   ALTER TABLE public.project_tags ADD CONSTRAINT project_tags_pkey PRIMARY KEY (project_id, tag_id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.project_tags ADD CONSTRAINT project_tags_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.project_tags ADD CONSTRAINT project_tags_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS project_tags_created_by_idx ON public.project_tags USING btree (created_by);
 CREATE INDEX IF NOT EXISTS project_tags_tag_id_idx ON public.project_tags USING btree (tag_id);
 ALTER TABLE public.project_tags ENABLE ROW LEVEL SECURITY;
@@ -493,19 +493,19 @@ CREATE TABLE IF NOT EXISTS public.projects (
 
 DO $$ BEGIN
   ALTER TABLE public.projects ADD CONSTRAINT projects_pkey PRIMARY KEY (id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.projects ADD CONSTRAINT projects_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE CASCADE;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.projects ADD CONSTRAINT projects_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.projects ADD CONSTRAINT projects_pipeline_stage_id_fkey FOREIGN KEY (pipeline_stage_id) REFERENCES pipeline_stages(id) ON DELETE SET NULL;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.projects ADD CONSTRAINT projects_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS idx_projects_deleted_at ON public.projects USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_projects_owner_active ON public.projects USING btree (owner_id, updated_at DESC) WHERE (deleted_at IS NULL);
 CREATE INDEX IF NOT EXISTS projects_archived_at_idx ON public.projects USING btree (archived_at DESC) WHERE (archived = true);
@@ -597,7 +597,7 @@ CREATE TABLE IF NOT EXISTS public.suppressed_emails (
 
 DO $$ BEGIN
   ALTER TABLE public.suppressed_emails ADD CONSTRAINT suppressed_emails_pkey PRIMARY KEY (id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS suppressed_emails_email_idx ON public.suppressed_emails USING btree (lower(email));
 ALTER TABLE public.suppressed_emails ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Service role can insert suppressed emails" ON public.suppressed_emails;
@@ -624,7 +624,7 @@ CREATE TABLE IF NOT EXISTS public.tags (
 
 DO $$ BEGIN
   ALTER TABLE public.tags ADD CONSTRAINT tags_pkey PRIMARY KEY (id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS tags_created_by_idx ON public.tags USING btree (created_by);
 CREATE UNIQUE INDEX IF NOT EXISTS tags_name_lower_unique_idx ON public.tags USING btree (lower(name));
 ALTER TABLE public.tags ENABLE ROW LEVEL SECURITY;
@@ -663,10 +663,10 @@ CREATE TABLE IF NOT EXISTS public.user_roles (
 
 DO $$ BEGIN
   ALTER TABLE public.user_roles ADD CONSTRAINT user_roles_pkey PRIMARY KEY (id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.user_roles ADD CONSTRAINT user_roles_user_id_role_key UNIQUE (user_id, role);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Admins can manage roles" ON public.user_roles;
 CREATE POLICY "Admins can manage roles" ON public.user_roles
@@ -704,10 +704,10 @@ CREATE TABLE IF NOT EXISTS public.videos (
 
 DO $$ BEGIN
   ALTER TABLE public.videos ADD CONSTRAINT videos_pkey PRIMARY KEY (id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.videos ADD CONSTRAINT videos_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE NOT VALID;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 ALTER TABLE public.videos ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Restricted members add assigned videos" ON public.videos;
 CREATE POLICY "Restricted members add assigned videos" ON public.videos
@@ -754,19 +754,19 @@ CREATE TABLE IF NOT EXISTS public.walkthrough_photos (
 
 DO $$ BEGIN
   ALTER TABLE public.walkthrough_photos ADD CONSTRAINT walkthrough_photos_pkey PRIMARY KEY (id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.walkthrough_photos ADD CONSTRAINT walkthrough_photos_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE CASCADE;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.walkthrough_photos ADD CONSTRAINT walkthrough_photos_photo_id_fkey FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.walkthrough_photos ADD CONSTRAINT walkthrough_photos_walkthrough_id_fkey FOREIGN KEY (walkthrough_id) REFERENCES walkthroughs(id) ON DELETE CASCADE;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.walkthrough_photos ADD CONSTRAINT walkthrough_photos_walkthrough_id_photo_id_key UNIQUE (walkthrough_id, photo_id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS walkthrough_photos_photo_idx ON public.walkthrough_photos USING btree (photo_id);
 CREATE INDEX IF NOT EXISTS walkthrough_photos_walk_idx ON public.walkthrough_photos USING btree (walkthrough_id);
 CREATE INDEX IF NOT EXISTS walkthrough_photos_walkthrough_position_idx ON public.walkthrough_photos USING btree (walkthrough_id, "position");
@@ -837,22 +837,22 @@ CREATE TABLE IF NOT EXISTS public.walkthroughs (
 
 DO $$ BEGIN
   ALTER TABLE public.walkthroughs ADD CONSTRAINT walkthroughs_pkey PRIMARY KEY (id);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.walkthroughs ADD CONSTRAINT walkthroughs_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE CASCADE;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.walkthroughs ADD CONSTRAINT walkthroughs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.walkthroughs ADD CONSTRAINT walkthroughs_share_token_key UNIQUE (share_token);
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.walkthroughs ADD CONSTRAINT walkthroughs_source_check CHECK ((source = ANY (ARRAY['recorded'::text, 'summary'::text])));
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.walkthroughs ADD CONSTRAINT walkthroughs_status_check CHECK ((status = ANY (ARRAY['recording'::text, 'generating'::text, 'ready'::text, 'failed'::text])));
-EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object OR invalid_table_definition THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS walkthroughs_created_by_idx ON public.walkthroughs USING btree (created_by);
 CREATE INDEX IF NOT EXISTS walkthroughs_project_created_idx ON public.walkthroughs USING btree (project_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS walkthroughs_project_id_idx ON public.walkthroughs USING btree (project_id);

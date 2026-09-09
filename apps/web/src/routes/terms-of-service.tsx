@@ -46,7 +46,7 @@ function TermsOfServicePage() {
   const supportMailto = mailtoHref(SUPPORT_EMAIL);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground">
+    <div className="min-h-screen flex flex-col bg-background text-foreground landing">
       <header className="h-14 flex items-center border-b border-border bg-background/95 backdrop-blur px-4 sticky top-0 z-20">
         <Link to="/" className="flex items-center gap-2">
           <BrandLogo size={28} />

@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
+  <style>
+    :root{
+      --bg: oklch(97% 0.01 75);
+      --surface: oklch(99% 0.004 75);
+      --surface-2: oklch(94.5% 0.012 75);
+      --border: oklch(89% 0.012 75);
+      --ink: oklch(23% 0.02 75);
+      --ink-muted: oklch(48% 0.02 75);
+      --ink-faint: oklch(65% 0.015 75);
+      --accent: oklch(64% 0.14 55);
+      --status-active: oklch(58% 0.13 150);
+      --status-hold: oklch(62% 0.14 55);
+      --status-complete: oklch(58% 0.12 250);
+      --status-archived: oklch(56% 0.008 75);
+      --map-bg: oklch(93% 0.015 220);
+      --map-road: oklch(88% 0.012 220);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Work Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);}
+    .mono{font-family:"Space Mono",monospace;}
+    .legend-row{display:flex;align-items:center;gap:9px;padding:8px 0;font-size:13px;}
+    .dot{width:9px;height:9px;border-radius:999px;flex-shrink:0;}
+    .pin-row{display:flex;align-items:center;gap:10px;padding:10px 8px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:8px;}
+    .pin-row:last-child{border-bottom:none;}
+  </style>
+</helmet>
+<div style="display:flex;height:900px;">
+
+  <div style="width:340px;flex-shrink:0;padding:28px 24px;border-right:1px solid var(--border);overflow-y:auto;">
+    <div style="font-size:22px;font-weight:700;letter-spacing:-0.01em;margin-bottom:4px;">Maps</div>
+    <div style="font-size:13px;color:var(--ink-muted);margin-bottom:20px;">42 active across California</div>
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:4px 16px;margin-bottom:22px;">
+      <div class="legend-row" style="border-bottom:1px solid var(--border);"><div class="dot" style="background:var(--status-active);"></div><span style="flex-grow:1;">Active</span><span class="mono" style="color:var(--ink-faint);">42</span></div>
+      <div class="legend-row" style="border-bottom:1px solid var(--border);"><div class="dot" style="background:var(--status-hold);"></div><span style="flex-grow:1;">On hold</span><span class="mono" style="color:var(--ink-faint);">6</span></div>
+      <div class="legend-row" style="border-bottom:1px solid var(--border);"><div class="dot" style="background:var(--status-complete);"></div><span style="flex-grow:1;">Completed</span><span class="mono" style="color:var(--ink-faint);">9</span></div>
+      <div class="legend-row"><div class="dot" style="background:var(--status-archived);"></div><span style="flex-grow:1;">Archived</span><span class="mono" style="color:var(--ink-faint);">5</span></div>
+    </div>
+
+    <div style="font-size:11px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Nearby</div>
+
+    <div class="pin-row" onClick="{{selectA}}" style="background:{{sel.a}};">
+      <div class="dot" style="background:var(--status-active);width:10px;height:10px;"></div>
+      <div style="flex-grow:1;min-width:0;">
+        <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Salgiya &middot; Fisher Circle</div>
+        <div style="font-size:11px;color:var(--ink-faint);">Folsom, CA</div>
+      </div>
+    </div>
+    <div class="pin-row" onClick="{{selectB}}" style="background:{{sel.b}};">
+      <div class="dot" style="background:var(--status-active);width:10px;height:10px;"></div>
+      <div style="flex-grow:1;min-width:0;">
+        <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Argo Way &middot; Site visit</div>
+        <div style="font-size:11px;color:var(--ink-faint);">Sacramento, CA</div>
+      </div>
+    </div>
+    <div class="pin-row" onClick="{{selectC}}" style="background:{{sel.c}};">
+      <div class="dot" style="background:var(--status-hold);width:10px;height:10px;"></div>
+      <div style="flex-grow:1;min-width:0;">
+        <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Ring-necked Court</div>
+        <div style="font-size:11px;color:var(--ink-faint);">Elk Grove, CA</div>
+      </div>
+    </div>
+    <div class="pin-row" onClick="{{selectD}}" style="background:{{sel.d}};">
+      <div class="dot" style="background:var(--status-complete);width:10px;height:10px;"></div>
+      <div style="flex-grow:1;min-width:0;">
+        <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Placer Court &middot; Retrofit</div>
+        <div style="font-size:11px;color:var(--ink-faint);">Roseville, CA</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex-grow:1;position:relative;background:var(--map-bg);overflow:hidden;">
+    <svg width="100%" height="100%" viewBox="0 0 900 900" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0;">
+      <path d="M0 120 Q 220 200 380 140 T 900 220" stroke="var(--map-road)" stroke-width="10" fill="none"/>
+      <path d="M0 420 Q 260 360 460 440 T 900 400" stroke="var(--map-road)" stroke-width="14" fill="none"/>
+      <path d="M0 700 Q 300 640 520 720 T 900 680" stroke="var(--map-road)" stroke-width="10" fill="none"/>
+      <path d="M120 0 Q 200 300 160 600 T 220 900" stroke="var(--map-road)" stroke-width="8" fill="none"/>
+      <path d="M620 0 Q 560 280 640 560 T 600 900" stroke="var(--map-road)" stroke-width="8" fill="none"/>
+    </svg>
+
+    <div style="position:absolute;left:44%;top:34%;width:{{sz.a}};height:{{sz.a}};border-radius:999px 999px 999px 0;background:var(--status-active);transform:rotate(45deg);border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.18);"></div>
+    <div style="position:absolute;left:52%;top:41%;width:{{sz.b}};height:{{sz.b}};border-radius:999px 999px 999px 0;background:var(--status-active);transform:rotate(45deg);border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.18);"></div>
+    <div style="position:absolute;left:38%;top:47%;width:{{sz.c}};height:{{sz.c}};border-radius:999px 999px 999px 0;background:var(--status-hold);transform:rotate(45deg);border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.18);"></div>
+    <div style="position:absolute;left:47%;top:55%;width:{{sz.d}};height:{{sz.d}};border-radius:999px 999px 999px 0;background:var(--status-complete);transform:rotate(45deg);border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.18);"></div>
+    <div style="position:absolute;left:58%;top:30%;width:16px;height:16px;border-radius:999px 999px 999px 0;background:var(--status-active);transform:rotate(45deg);border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.18);"></div>
+    <div style="position:absolute;left:33%;top:28%;width:16px;height:16px;border-radius:999px 999px 999px 0;background:var(--status-active);transform:rotate(45deg);border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.18);"></div>
+    <div style="position:absolute;left:63%;top:52%;width:16px;height:16px;border-radius:999px 999px 999px 0;background:var(--status-archived);transform:rotate(45deg);border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.18);"></div>
+
+    <div style="position:absolute;right:22px;bottom:18px;font-size:10.5px;color:var(--ink-faint);background:rgba(255,255,255,0.7);padding:3px 8px;border-radius:6px;">Map illustrative &mdash; not live tiles</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { selected: "a" };
+  }
+  renderVals() {
+    const s = this.state.selected;
+    const on = "var(--surface-2)";
+    const off = "transparent";
+    const base = "16px";
+    const big = "22px";
+    return {
+      sel: { a: s === "a" ? on : off, b: s === "b" ? on : off, c: s === "c" ? on : off, d: s === "d" ? on : off },
+      sz: { a: s === "a" ? big : base, b: s === "b" ? big : base, c: s === "c" ? big : base, d: s === "d" ? big : base },
+      selectA: () => this.setState({ selected: "a" }),
+      selectB: () => this.setState({ selected: "b" }),
+      selectC: () => this.setState({ selected: "c" }),
+      selectD: () => this.setState({ selected: "d" }),
+    };
+  }
+}
+</script>
+</body>
+</html>

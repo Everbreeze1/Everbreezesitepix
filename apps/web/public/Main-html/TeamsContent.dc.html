@@ -1,0 +1,270 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
+  <style>
+    :root{
+      --bg: oklch(97% 0.01 75);
+      --surface: oklch(99% 0.004 75);
+      --surface-2: oklch(94.5% 0.012 75);
+      --border: oklch(89% 0.012 75);
+      --ink: oklch(23% 0.02 75);
+      --ink-muted: oklch(48% 0.02 75);
+      --ink-faint: oklch(65% 0.015 75);
+      --accent: oklch(64% 0.14 55);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Work Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);}
+    .mono{font-family:"Space Mono",monospace;}
+    .row{display:grid;grid-template-columns:2.4fr 1fr 1fr 1fr;align-items:center;padding:15px 18px;border-bottom:1px solid var(--border);}
+    .row:last-child{border-bottom:none;}
+    .col-head{font-size:11px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;}
+    .tab{font-size:13px;font-weight:600;color:var(--ink-faint);padding:11px 2px;border-bottom:2.5px solid transparent;cursor:pointer;}
+    .tab.active{color:var(--ink);border-color:var(--accent);}
+    .perm-row{display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr;align-items:center;padding:13px 18px;border-bottom:1px solid var(--border);}
+    .perm-row:last-child{border-bottom:none;}
+    .field-label{font-size:11.5px;color:var(--ink-faint);margin-bottom:5px;}
+    .field-box{border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;background:var(--surface);margin-bottom:16px;}
+  </style>
+</helmet>
+<div style="padding:32px 40px 40px 40px;max-width:1200px;">
+
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;">
+    <div>
+      <div style="font-size:24px;font-weight:700;letter-spacing:-0.01em;">Teams</div>
+      <div style="font-size:13.5px;color:var(--ink-muted);margin-top:3px;">{{subtitle}}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:9px;background:var(--accent);color:oklch(99% 0.01 75);border-radius:9px;padding:9px 16px;font-size:13.5px;font-weight:600;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      {{headerBtnLabel}}
+    </div>
+  </div>
+
+  <div style="display:flex;gap:26px;border-bottom:1px solid var(--border);margin-bottom:22px;">
+    <div class="tab" style="{{tabStyle.crew}}" onClick="{{setCrew}}">Crew</div>
+    <div class="tab" style="{{tabStyle.subs}}" onClick="{{setSubs}}">Subcontractors</div>
+    <div class="tab" style="{{tabStyle.permissions}}" onClick="{{setPermissions}}">Roles &amp; Permissions</div>
+    <div class="tab" style="{{tabStyle.account}}" onClick="{{setAccount}}">Account</div>
+  </div>
+
+  <sc-if value="{{isCrew}}" hint-placeholder-val="{{true}}">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+    <div class="row" style="background:var(--surface-2);">
+      <div class="col-head">Name</div>
+      <div class="col-head">Role</div>
+      <div class="col-head">Active projects</div>
+      <div class="col-head">Last active</div>
+    </div>
+
+    <div class="row">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:34px;height:34px;border-radius:999px;background:#4a5568;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">AJ</div>
+        <div>
+          <div style="font-size:13.5px;font-weight:600;">Ajmal</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">ajmalllo@icloud.com</div>
+        </div>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-muted);">Owner</div>
+      <div class="mono" style="font-size:12.5px;">6</div>
+      <div style="font-size:12px;color:var(--ink-faint);">Just now</div>
+    </div>
+
+    <div class="row">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:34px;height:34px;border-radius:999px;background:#3a4152;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">GV</div>
+        <div>
+          <div style="font-size:13.5px;font-weight:600;">Gumaro Vazquez</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">vgumaro255@gmail.com</div>
+        </div>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-muted);">Standard</div>
+      <div class="mono" style="font-size:12.5px;">3</div>
+      <div style="font-size:12px;color:var(--ink-faint);">1h ago</div>
+    </div>
+
+    <div class="row">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:34px;height:34px;border-radius:999px;background:#2f6f4f;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">JB</div>
+        <div>
+          <div style="font-size:13.5px;font-weight:600;">Jackson Brosgart</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">contact@everbreezehvac.com</div>
+        </div>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-muted);">Standard</div>
+      <div class="mono" style="font-size:12.5px;">4</div>
+      <div style="font-size:12px;color:var(--ink-faint);">12m ago</div>
+    </div>
+
+    <div class="row">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:34px;height:34px;border-radius:999px;background:#3a4152;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">KD</div>
+        <div>
+          <div style="font-size:13.5px;font-weight:600;">Kevin Dale Mergas</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">kdcmergas23@gmail.com</div>
+        </div>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-muted);">Manager</div>
+      <div class="mono" style="font-size:12.5px;">5</div>
+      <div style="font-size:12px;color:var(--ink-faint);">3d ago</div>
+    </div>
+
+    <div class="row">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:34px;height:34px;border-radius:999px;background:#3a4152;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">SS</div>
+        <div>
+          <div style="font-size:13.5px;font-weight:600;">Sally Sue</div>
+          <div style="font-size:11.5px;color:var(--ink-faint);">sally.sue@example.com</div>
+        </div>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-muted);">Manager</div>
+      <div class="mono" style="font-size:12.5px;">2</div>
+      <div style="font-size:12px;color:var(--ink-faint);">1w ago</div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{isSubs}}" hint-placeholder-val="{{false}}">
+  <div style="font-size:12.5px;color:var(--ink-muted);margin-bottom:14px;max-width:640px;">Outside trades and one-off crews you bring onto a project &mdash; kept separate from your own W-2 employees.</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:14px;">
+    <div class="row" style="grid-template-columns:2fr 1.2fr 1.3fr 1fr;background:var(--surface-2);">
+      <div class="col-head">Company</div>
+      <div class="col-head">Trade</div>
+      <div class="col-head">Insurance</div>
+      <div class="col-head">Status</div>
+    </div>
+
+    <div class="row" style="grid-template-columns:2fr 1.2fr 1.3fr 1fr;">
+      <div>
+        <div style="font-size:13.5px;font-weight:600;">Sierra Duct &amp; Sheet Metal</div>
+        <div style="font-size:11.5px;color:var(--ink-faint);">Mike Torres &middot; C-20 #884213</div>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-muted);">Ductwork</div>
+      <div style="font-size:12px;color:var(--ink-muted);">On file &middot; exp 03/2027</div>
+      <span class="pill" style="background:var(--status-active-soft,oklch(94% 0.035 150));color:var(--status-active,oklch(58% 0.13 150));width:fit-content;">Active</span>
+    </div>
+
+    <div class="row" style="grid-template-columns:2fr 1.2fr 1.3fr 1fr;">
+      <div>
+        <div style="font-size:13.5px;font-weight:600;">Valley Electric Co.</div>
+        <div style="font-size:11.5px;color:var(--ink-faint);">Priya Shah &middot; C-10 #55210</div>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-muted);">Electrical</div>
+      <div style="font-size:12px;color:var(--ink-muted);">On file &middot; exp 11/2026</div>
+      <span class="pill" style="background:var(--status-active-soft,oklch(94% 0.035 150));color:var(--status-active,oklch(58% 0.13 150));width:fit-content;">Active</span>
+    </div>
+
+    <div class="row" style="grid-template-columns:2fr 1.2fr 1.3fr 1fr;">
+      <div>
+        <div style="font-size:13.5px;font-weight:600;">Fast Trench Excavation</div>
+        <div style="font-size:11.5px;color:var(--ink-faint);">Dana Ruiz &middot; A #12094</div>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-muted);">Excavation</div>
+      <div style="font-size:12px;color:oklch(58% 0.14 25);">Expired &middot; renew to reassign</div>
+      <span class="pill" style="background:var(--surface-2);color:var(--ink-faint);width:fit-content;">Inactive</span>
+    </div>
+  </div>
+  <div style="border:1.5px dashed var(--border);border-radius:12px;padding:14px 20px;font-size:12.5px;color:var(--ink-faint);text-align:center;">+ Add subcontractor</div>
+  </sc-if>
+
+  <sc-if value="{{isPermissions}}" hint-placeholder-val="{{false}}">
+  <div style="font-size:12.5px;color:var(--ink-muted);margin-bottom:14px;max-width:640px;">What each role can do. Standard crew only see projects they're assigned to; Owner and Manager see everything.</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+    <div class="perm-row" style="background:var(--surface-2);">
+      <div class="col-head">Capability</div>
+      <div class="col-head">Owner</div>
+      <div class="col-head">Manager</div>
+      <div class="col-head">Standard</div>
+    </div>
+    <div class="perm-row"><span style="font-size:13px;">View projects</span><span style="color:var(--status-active,var(--accent));">&#10003;</span><span>&#10003;</span><span style="color:var(--ink-faint);">Assigned only</span></div>
+    <div class="perm-row"><span style="font-size:13px;">Edit project details</span><span>&#10003;</span><span>&#10003;</span><span>&#10003;</span></div>
+    <div class="perm-row"><span style="font-size:13px;">Assign crew</span><span>&#10003;</span><span>&#10003;</span><span style="color:var(--ink-faint);">&mdash;</span></div>
+    <div class="perm-row"><span style="font-size:13px;">Delete workflows</span><span>&#10003;</span><span>&#10003;</span><span style="color:var(--ink-faint);">&mdash;</span></div>
+    <div class="perm-row"><span style="font-size:13px;">Manage blueprints &amp; checklists</span><span>&#10003;</span><span style="color:var(--ink-faint);">&mdash;</span><span style="color:var(--ink-faint);">&mdash;</span></div>
+    <div class="perm-row"><span style="font-size:13px;">Invite crew members</span><span>&#10003;</span><span>&#10003;</span><span style="color:var(--ink-faint);">&mdash;</span></div>
+    <div class="perm-row"><span style="font-size:13px;">Manage billing &amp; account settings</span><span>&#10003;</span><span style="color:var(--ink-faint);">&mdash;</span><span style="color:var(--ink-faint);">&mdash;</span></div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{isAccount}}" hint-placeholder-val="{{false}}">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;max-width:900px;">
+    <div>
+      <div style="font-size:13.5px;font-weight:600;margin-bottom:14px;">Business profile</div>
+      <div class="field-label">Business name</div>
+      <div class="field-box">Everbreeze Heating and Air</div>
+      <div class="field-label">License number</div>
+      <div class="field-box">C-20 HVAC &middot; California</div>
+      <div class="field-label">Service area</div>
+      <div class="field-box">Greater Sacramento, CA</div>
+      <div class="field-label">Timezone</div>
+      <div class="field-box">Pacific Time (US &amp; Canada)</div>
+    </div>
+    <div>
+      <div style="font-size:13.5px;font-weight:600;margin-bottom:14px;">Your profile</div>
+      <div class="field-label">Name</div>
+      <div class="field-box">Ajmal</div>
+      <div class="field-label">Email</div>
+      <div class="field-box">ajmalllo@icloud.com</div>
+      <div class="field-label">Role</div>
+      <div class="field-box">Owner</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-top:6px;">
+        <span style="font-size:13px;color:var(--ink-muted);">Email me when a report is ready to send</span>
+        <div style="width:34px;height:19px;border-radius:999px;background:var(--accent);position:relative;flex-shrink:0;"><div style="width:15px;height:15px;border-radius:999px;background:white;position:absolute;top:2px;right:2px;"></div></div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: "crew" };
+  }
+  renderVals() {
+    const tab = this.state.tab;
+    const active = "border-color:var(--accent);color:var(--ink);";
+    const subtitleByTab = {
+      crew: "Everbreeze Heating and Air's crew · 5 people",
+      subs: "3 subcontractor companies on file",
+      permissions: "What each role can see and do",
+      account: "Business and personal settings",
+    };
+    const btnByTab = {
+      crew: "Invite crew member",
+      subs: "Add subcontractor",
+      permissions: "Invite crew member",
+      account: "Invite crew member",
+    };
+    return {
+      subtitle: subtitleByTab[tab],
+      headerBtnLabel: btnByTab[tab],
+      tabStyle: {
+        crew: tab === "crew" ? active : "",
+        subs: tab === "subs" ? active : "",
+        permissions: tab === "permissions" ? active : "",
+        account: tab === "account" ? active : "",
+      },
+      isCrew: tab === "crew",
+      isSubs: tab === "subs",
+      isPermissions: tab === "permissions",
+      isAccount: tab === "account",
+      setCrew: () => this.setState({ tab: "crew" }),
+      setSubs: () => this.setState({ tab: "subs" }),
+      setPermissions: () => this.setState({ tab: "permissions" }),
+      setAccount: () => this.setState({ tab: "account" }),
+    };
+  }
+}
+</script>
+</body>
+</html>

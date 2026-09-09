@@ -71,7 +71,7 @@ export function AppHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-[82px] shrink-0 items-center justify-between gap-4 border-b border-border bg-background/90 px-4 backdrop-blur sm:px-10">
+    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-background/90 px-4 backdrop-blur sm:px-10">
       <div className="flex items-center gap-2 md:hidden">
         <SidebarTrigger />
         <BrandLogo size={28} />

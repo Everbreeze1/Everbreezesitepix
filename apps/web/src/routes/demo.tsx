@@ -118,7 +118,7 @@ function DemoPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background landing">
       <SiteHeader />
       <DemoHero />
       <DemoPicker active={active} onSelect={setActive} />
@@ -143,7 +143,7 @@ function DemoHero() {
           <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
             Interactive demo
           </p>
-          <h1 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-1.68px] text-foreground sm:text-5xl">
+          <h1 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl">
             See the UI. No account, no sign-up.
           </h1>
           <p className="font-manrope mt-5 max-w-xl text-lg leading-[29px] text-muted-foreground">

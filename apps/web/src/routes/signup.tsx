@@ -1,4 +1,4 @@
-﻿import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CircleCheck, ArrowRight, MailCheck, Loader2 } from "lucide-react";
 import { authErrorMessage } from "@/lib/auth-errors";
@@ -163,7 +163,7 @@ function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-background lg:grid lg:grid-cols-2">
+    <div className="min-h-screen w-full bg-background landing lg:grid lg:grid-cols-2">
       {/* LEFT - marketing panel (desktop only) */}
       <aside className="relative hidden overflow-hidden bg-sidebar text-sidebar-foreground lg:flex lg:flex-col lg:justify-between">
         {/*
@@ -194,7 +194,7 @@ function SignupPage() {
             <p className="font-manrope text-xs font-extrabold uppercase leading-4 tracking-[1.92px] text-sidebar-ring">
               Field-ready documentation
             </p>
-            <h1 className="font-display mt-4 text-[60px] font-black uppercase leading-[0.9] tracking-[-2.1px] text-sidebar-foreground">
+            <h1 className="font-display mt-4 text-[60px] font-bold uppercase leading-tight tracking-[-0.01em] text-sidebar-foreground">
               Know what happened. <span className="text-sidebar-ring">Prove it.</span>
             </h1>
             <p className="font-manrope mt-6 text-base leading-7 text-sidebar-foreground/70">
@@ -240,7 +240,7 @@ function SignupPage() {
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
                 <MailCheck className="h-7 w-7 text-primary" />
               </div>
-              <h2 className="font-display mt-6 text-[40px] font-black uppercase leading-[0.92] tracking-[-1.4px] text-foreground">
+              <h2 className="font-display mt-6 text-[40px] font-bold uppercase leading-tight tracking-[-0.01em] text-foreground">
                 Check your email
               </h2>
               <p className="font-manrope mt-4 text-sm leading-6 text-muted-foreground">
@@ -310,7 +310,7 @@ function SignupPage() {
               <p className="font-manrope text-xs font-extrabold uppercase leading-4 tracking-[1.92px] text-primary">
                 Create your account
               </p>
-              <h2 className="font-display mt-3 text-[48px] font-black uppercase leading-[0.92] tracking-[-1.68px] text-foreground">
+              <h2 className="font-display mt-3 text-[48px] font-bold uppercase leading-tight tracking-[-0.01em] text-foreground">
                 Bring your job sites into focus.
               </h2>
               <p className="font-manrope mt-4 text-sm leading-[24px] text-muted-foreground">

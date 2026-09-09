@@ -1,0 +1,196 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
+  <style>
+    :root{
+      --bg: oklch(97% 0.01 75);
+      --surface: oklch(99% 0.004 75);
+      --surface-2: oklch(94.5% 0.012 75);
+      --border: oklch(89% 0.012 75);
+      --ink: oklch(23% 0.02 75);
+      --ink-muted: oklch(48% 0.02 75);
+      --ink-faint: oklch(65% 0.015 75);
+      --accent: oklch(64% 0.14 55);
+      --status-active: oklch(58% 0.13 150);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Work Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);}
+    a{color:var(--accent);text-decoration:none;cursor:pointer;}
+    .mono{font-family:"Space Mono",monospace;}
+    .cl-card{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:20px;display:flex;flex-direction:column;gap:12px;cursor:pointer;}
+    .cl-card:hover{border-color:var(--accent);}
+    .chip{font-size:11px;color:var(--ink-muted);background:var(--surface-2);padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:4px;}
+    .item-row{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--border);}
+    .item-row:last-child{border-bottom:none;}
+    .checkbox-done{width:17px;height:17px;border-radius:5px;background:var(--status-active);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .field{border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;background:var(--surface);}
+  </style>
+</helmet>
+
+<sc-if value="{{isList}}" hint-placeholder-val="{{true}}">
+<div style="padding:32px 40px 40px 40px;max-width:1200px;">
+
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:26px;">
+    <div>
+      <div style="font-size:24px;font-weight:700;letter-spacing:-0.01em;">Checklists</div>
+      <div style="font-size:13.5px;color:var(--ink-muted);margin-top:3px;max-width:520px;">Reusable checklist templates used across your blueprints. Edit one here and every blueprint using it stays in sync.</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:9px;background:var(--accent);color:oklch(99% 0.01 75);border-radius:9px;padding:9px 16px;font-size:13.5px;font-weight:600;flex-shrink:0;" onClick="{{openEditor}}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      New checklist
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:16px;">
+
+    <div class="cl-card" onClick="{{openEditor}}">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 1.6 1.6L8.5 4.8"/><path d="M11 6h9.5"/><path d="m4 12.5 1.6 1.6 2.9-2.8"/><path d="M11 12.5h9.5"/></svg>
+        <div style="font-size:14.5px;font-weight:600;">Pre-service safety checklist</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span class="chip">6 items</span>
+        <span class="chip">Used in 3 blueprints</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:12px;">Edited 2 weeks ago</div>
+    </div>
+
+    <div class="cl-card" onClick="{{openEditor}}">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 1.6 1.6L8.5 4.8"/><path d="M11 6h9.5"/><path d="m4 12.5 1.6 1.6 2.9-2.8"/><path d="M11 12.5h9.5"/></svg>
+        <div style="font-size:14.5px;font-weight:600;">Completion checklist</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span class="chip">5 items</span>
+        <span class="chip">Used in 5 blueprints</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:12px;">Edited 1 month ago</div>
+    </div>
+
+    <div class="cl-card" onClick="{{openEditor}}">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 1.6 1.6L8.5 4.8"/><path d="M11 6h9.5"/><path d="m4 12.5 1.6 1.6 2.9-2.8"/><path d="M11 12.5h9.5"/></svg>
+        <div style="font-size:14.5px;font-weight:600;">Install readiness checklist</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span class="chip">8 items</span>
+        <span class="chip">Used in 1 blueprint</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:12px;">Edited 3 days ago</div>
+    </div>
+
+    <div class="cl-card" onClick="{{openEditor}}">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 1.6 1.6L8.5 4.8"/><path d="M11 6h9.5"/><path d="m4 12.5 1.6 1.6 2.9-2.8"/><path d="M11 12.5h9.5"/></svg>
+        <div style="font-size:14.5px;font-weight:600;">Panel swap safety checklist</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span class="chip">4 items</span>
+        <span class="chip">Used in 1 blueprint</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:12px;">Edited 2 months ago</div>
+    </div>
+
+    <div class="cl-card" style="align-items:center;justify-content:center;border-style:dashed;color:var(--ink-faint);" onClick="{{openEditor}}">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      <div style="font-size:13px;font-weight:500;">Build a new checklist</div>
+    </div>
+
+  </div>
+
+</div>
+</sc-if>
+
+<sc-if value="{{isEditor}}" hint-placeholder-val="{{false}}">
+<div style="padding:28px 40px 40px 40px;max-width:900px;">
+
+  <div style="font-size:12.5px;color:var(--ink-faint);margin-bottom:14px;">
+    <a onClick="{{closeEditor}}">Checklists</a> &nbsp;/&nbsp; Pre-service safety checklist
+  </div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+    <div style="font-size:22px;font-weight:700;letter-spacing:-0.01em;">Pre-service safety checklist</div>
+    <div style="display:flex;gap:10px;">
+      <div style="border:1px solid var(--border);border-radius:9px;padding:9px 16px;font-size:13px;font-weight:600;color:var(--ink-muted);" onClick="{{closeEditor}}">Cancel</div>
+      <div style="background:var(--accent);color:oklch(99% 0.01 75);border-radius:9px;padding:9px 16px;font-size:13px;font-weight:600;" onClick="{{closeEditor}}">Save checklist</div>
+    </div>
+  </div>
+  <div style="font-size:12.5px;color:var(--ink-faint);margin-bottom:22px;">Used in 3 blueprints &middot; HVAC Service Call, Normal HVAC Service Call, HVAC Install &amp; Start-Up</div>
+
+  <div style="font-size:12px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">Items</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2px 18px;margin-bottom:16px;">
+
+    <div class="item-row">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      <div class="checkbox-done"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div>
+      <div style="flex-grow:1;font-size:13px;">Gas shutoff confirmed before service</div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </div>
+    <div class="item-row">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      <div class="checkbox-done"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div>
+      <div style="flex-grow:1;font-size:13px;">Electrical disconnect verified</div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </div>
+    <div class="item-row">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      <div class="checkbox-done"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div>
+      <div style="flex-grow:1;font-size:13px;">PPE worn on site</div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </div>
+    <div class="item-row">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      <div class="checkbox-done"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div>
+      <div style="flex-grow:1;font-size:13px;">Work area barricaded if near foot traffic</div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </div>
+    <div class="item-row">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      <div class="checkbox-done"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div>
+      <div style="flex-grow:1;font-size:13px;">Refrigerant recovery equipment inspected</div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </div>
+    <div class="item-row">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      <div class="checkbox-done"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l5 5L19 7"/></svg></div>
+      <div style="flex-grow:1;font-size:13px;">Customer notified before power shutoff</div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </div>
+  </div>
+
+  <div class="field" style="display:flex;align-items:center;gap:10px;color:var(--ink-faint);">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    Add item&hellip;
+  </div>
+
+</div>
+</sc-if>
+
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { view: "list" };
+  }
+  renderVals() {
+    return {
+      isList: this.state.view === "list",
+      isEditor: this.state.view === "editor",
+      openEditor: () => this.setState({ view: "editor" }),
+      closeEditor: () => this.setState({ view: "list" }),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -246,7 +246,7 @@ export function PhotoCalendar({
             <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
               Capture calendar
             </p>
-            <h2 className="font-display mt-1.5 text-2xl font-bold leading-none tracking-[-0.6px]">
+            <h2 className="font-display mt-1.5 text-2xl font-bold leading-none tracking-[-0.01em]">
               {view === "month" ? format(month, "MMMM yyyy") : format(month, "yyyy")}
             </h2>
           </div>
@@ -452,7 +452,7 @@ export function PhotoCalendar({
             <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
               {selected ? "Selected day" : "Pick a day"}
             </p>
-            <h3 className="font-display mt-1.5 text-xl font-bold leading-none tracking-[-0.4px]">
+            <h3 className="font-display mt-1.5 text-xl font-bold leading-none tracking-[-0.01em]">
               {selected ? format(selected, "EEEE, d MMM") : "Nothing selected"}
             </h3>
             <p className="mt-1.5 text-xs font-semibold text-muted-foreground">

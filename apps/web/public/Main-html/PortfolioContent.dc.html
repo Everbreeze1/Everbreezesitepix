@@ -1,0 +1,298 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap">
+  <style>
+    :root{
+      --bg: oklch(97% 0.01 75);
+      --surface: oklch(99% 0.004 75);
+      --surface-2: oklch(94.5% 0.012 75);
+      --border: oklch(89% 0.012 75);
+      --ink: oklch(23% 0.02 75);
+      --ink-muted: oklch(48% 0.02 75);
+      --ink-faint: oklch(65% 0.015 75);
+      --accent: oklch(64% 0.14 55);
+      --brand: oklch(28% 0.05 235);
+      --brand-ink: oklch(22% 0.03 250);
+      --brand-muted: oklch(46% 0.02 250);
+      --brand-tint: oklch(96% 0.016 70);
+      --brand-gold: oklch(72% 0.12 80);
+      --brand-gold-ink: oklch(40% 0.09 75);
+    }
+    .serif{font-family:"Fraunces",serif;}
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:"Work Sans",system-ui,sans-serif;background:var(--surface-2);color:var(--ink);}
+    .sect-row{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;}
+  </style>
+</helmet>
+<div style="display:flex;height:900px;">
+
+  <div style="width:300px;flex-shrink:0;padding:28px 22px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg);">
+    <div style="font-size:22px;font-weight:700;letter-spacing:-0.01em;margin-bottom:4px;">Portfolio</div>
+    <div style="font-size:12.5px;color:var(--ink-muted);margin-bottom:22px;">The public page customers see. Editing here changes what's live at your link.</div>
+
+    <div style="font-size:11px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Sections</div>
+    <div style="flex-grow:1;">
+      <div class="sect-row" onClick="{{setHero}}" style="background:{{sBg.hero}};font-weight:{{sW.hero}};">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/></svg>
+        Hero
+      </div>
+      <div class="sect-row" onClick="{{setAbout}}" style="background:{{sBg.about}};font-weight:{{sW.about}};">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/></svg>
+        About
+      </div>
+      <div class="sect-row" onClick="{{setServices}}" style="background:{{sBg.services}};font-weight:{{sW.services}};">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12.5V20a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7.5M2.5 11 12 3.5 21.5 11"/></svg>
+        Services
+      </div>
+      <div class="sect-row" onClick="{{setGallery}}" style="background:{{sBg.gallery}};font-weight:{{sW.gallery}};">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 15.5 15 10l-9.5 9"/></svg>
+        Gallery
+      </div>
+      <div class="sect-row" onClick="{{setTestimonials}}" style="background:{{sBg.testimonials}};font-weight:{{sW.testimonials}};">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M7 15h.01M12 15h.01M17 15h.01M4 6h16v10H8l-4 4V6Z"/></svg>
+        Testimonials
+      </div>
+      <div class="sect-row" onClick="{{setContact}}" style="background:{{sBg.contact}};font-weight:{{sW.contact}};">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m4 7 8 6 8-6"/></svg>
+        Contact
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:center;gap:9px;background:var(--accent);color:oklch(99% 0.01 75);border-radius:9px;padding:10px 16px;font-size:13.5px;font-weight:600;">
+      Publish changes
+    </div>
+  </div>
+
+  <div style="flex-grow:1;padding:28px 32px;display:flex;flex-direction:column;">
+
+    <div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 14px;margin-bottom:18px;">
+      <div style="display:flex;gap:5px;">
+        <div style="width:8px;height:8px;border-radius:999px;background:oklch(75% 0.13 25);"></div>
+        <div style="width:8px;height:8px;border-radius:999px;background:oklch(80% 0.13 90);"></div>
+        <div style="width:8px;height:8px;border-radius:999px;background:oklch(72% 0.12 150);"></div>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-muted);margin-left:6px;font-family:'Space Mono',monospace;">everlumen.co/p/everbreeze-heating-and-air</div>
+    </div>
+
+    <div style="flex-grow:1;background:#ffffff;border-radius:14px;border:1px solid var(--border);overflow:hidden;box-shadow:0 12px 40px rgba(20,16,10,0.1);display:flex;flex-direction:column;">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 32px;border-bottom:1px solid oklch(92% 0.008 75);background:white;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="var(--brand-ink)"/><path d="M8 13.5 11 16.5 16.5 9.5" stroke="var(--brand-gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="serif" style="font-size:16.5px;font-weight:600;color:var(--brand-ink);letter-spacing:-0.005em;">Everbreeze Heating and Air</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:26px;">
+          <div style="display:flex;gap:22px;font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--brand-muted);">
+            <span>Services</span><span>Gallery</span><span>Reviews</span><span>Contact</span>
+          </div>
+          <div style="background:var(--brand-ink);color:white;border-radius:999px;padding:9px 20px;font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;white-space:nowrap;">Request quote</div>
+        </div>
+      </div>
+
+      <div style="flex-grow:1;overflow-y:auto;">
+
+        <sc-if value="{{isHero}}" hint-placeholder-val="{{true}}">
+          <div style="display:flex;flex-direction:column;">
+            <div style="position:relative;display:flex;align-items:center;justify-content:center;padding:64px 40px;overflow:hidden;background:linear-gradient(155deg, oklch(20% 0.03 250) 0%, oklch(30% 0.06 235) 55%, oklch(24% 0.045 210) 100%);">
+              <div style="position:absolute;inset:0;background:radial-gradient(circle at 82% 15%, oklch(72% 0.12 80 / 0.22), transparent 55%);"></div>
+              <div style="position:relative;max-width:580px;text-align:center;">
+                <div style="font-size:11.5px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--brand-gold);margin-bottom:16px;">Licensed &middot; Insured &middot; C-20 HVAC</div>
+                <div class="serif" style="font-size:40px;font-weight:600;color:white;letter-spacing:-0.01em;line-height:1.14;">Comfort you can count on, all year round.</div>
+                <div style="font-size:14.5px;color:oklch(84% 0.02 235);margin-top:16px;line-height:1.6;max-width:460px;margin-left:auto;margin-right:auto;">Serving Folsom, Sacramento and the surrounding valley &mdash; installs, repairs and maintenance, documented every step of the way.</div>
+                <div style="display:inline-flex;align-items:center;gap:8px;background:var(--brand-gold);color:oklch(20% 0.03 250);border-radius:999px;padding:13px 30px;font-size:12px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;margin-top:28px;">Request a quote</div>
+                <div style="display:flex;justify-content:center;gap:36px;margin-top:34px;padding-top:22px;border-top:1px solid oklch(50% 0.03 235 / 0.35);">
+                  <div><div class="serif" style="font-size:20px;font-weight:600;color:white;">14 yrs</div><div style="font-size:10px;color:oklch(76% 0.02 235);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px;">In business</div></div>
+                  <div><div class="serif" style="font-size:20px;font-weight:600;color:white;">1,200+</div><div style="font-size:10px;color:oklch(76% 0.02 235);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px;">Jobs completed</div></div>
+                  <div><div class="serif" style="font-size:20px;font-weight:600;color:white;">4.9 &#9733;</div><div style="font-size:10px;color:oklch(76% 0.02 235);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px;">Average rating</div></div>
+                </div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4, minmax(0,1fr));gap:2px;background:oklch(92% 0.008 75);">
+              <div style="position:relative;aspect-ratio:5/3;background:oklch(88% 0.02 235);"><div style="position:absolute;inset:0;background:linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.4));"></div><div style="position:absolute;bottom:8px;left:10px;font-size:10px;font-weight:600;color:white;">Folsom &middot; Install</div></div>
+              <div style="position:relative;aspect-ratio:5/3;background:oklch(85% 0.02 235);"><div style="position:absolute;inset:0;background:linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.4));"></div><div style="position:absolute;bottom:8px;left:10px;font-size:10px;font-weight:600;color:white;">Sacramento &middot; Service</div></div>
+              <div style="position:relative;aspect-ratio:5/3;background:oklch(90% 0.02 235);"><div style="position:absolute;inset:0;background:linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.4));"></div><div style="position:absolute;bottom:8px;left:10px;font-size:10px;font-weight:600;color:white;">Elk Grove &middot; Camera install</div></div>
+              <div style="position:relative;aspect-ratio:5/3;background:oklch(87% 0.02 235);"><div style="position:absolute;inset:0;background:linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.4));"></div><div style="position:absolute;bottom:8px;left:10px;font-size:10px;font-weight:600;color:white;">Roseville &middot; Retrofit</div></div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isAbout}}" hint-placeholder-val="{{false}}">
+          <div style="padding:56px 60px;max-width:680px;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:var(--brand-gold-ink);margin-bottom:10px;">Our story</div>
+            <div class="serif" style="font-size:27px;font-weight:600;color:var(--brand-ink);margin-bottom:16px;letter-spacing:-0.005em;">Licensed, insured, and local.</div>
+            <div style="font-size:14px;color:var(--brand-muted);line-height:1.7;margin-bottom:8px;border-left:2.5px solid var(--brand-gold);padding-left:18px;font-style:italic;">"We treat every home the way we'd want ours treated &mdash; on time, documented, and cleaned up before we leave."</div>
+            <div style="font-size:12px;color:var(--brand-muted);margin-bottom:26px;padding-left:20.5px;">&mdash; Ajmal, Owner</div>
+            <div style="font-size:14px;color:var(--brand-muted);line-height:1.7;margin-bottom:28px;">Everbreeze has been keeping homes and businesses across the valley comfortable for years, with a two-person crew on every job and full documentation from first visit to final walkthrough.</div>
+            <div style="display:flex;gap:14px;">
+              <div style="background:white;border:1px solid oklch(92% 0.008 75);border-top:2.5px solid var(--brand-gold);border-radius:10px;padding:16px 18px;flex-grow:1;box-shadow:0 4px 14px rgba(20,20,30,0.05);">
+                <div style="font-size:10.5px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--brand-muted);">License</div>
+                <div class="serif" style="font-size:16px;font-weight:600;color:var(--brand-ink);margin-top:4px;">C-20 HVAC</div>
+              </div>
+              <div style="background:white;border:1px solid oklch(92% 0.008 75);border-top:2.5px solid var(--brand-gold);border-radius:10px;padding:16px 18px;flex-grow:1;box-shadow:0 4px 14px rgba(20,20,30,0.05);">
+                <div style="font-size:10.5px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--brand-muted);">Service area</div>
+                <div class="serif" style="font-size:16px;font-weight:600;color:var(--brand-ink);margin-top:4px;">Greater Sacramento</div>
+              </div>
+              <div style="background:white;border:1px solid oklch(92% 0.008 75);border-top:2.5px solid var(--brand-gold);border-radius:10px;padding:16px 18px;flex-grow:1;box-shadow:0 4px 14px rgba(20,20,30,0.05);">
+                <div style="font-size:10.5px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--brand-muted);">Crew size</div>
+                <div class="serif" style="font-size:16px;font-weight:600;color:var(--brand-ink);margin-top:4px;">2-person teams</div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isServices}}" hint-placeholder-val="{{false}}">
+          <div style="padding:56px 60px;background:var(--brand-tint);">
+            <div style="font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:var(--brand-gold-ink);margin-bottom:8px;text-align:center;">Capabilities</div>
+            <div class="serif" style="font-size:26px;font-weight:600;color:var(--brand-ink);margin-bottom:28px;text-align:center;">What we do</div>
+            <div style="display:grid;grid-template-columns:repeat(3, minmax(0,1fr));gap:18px;">
+              <div style="background:white;border-radius:12px;padding:26px 22px;box-shadow:0 6px 20px rgba(20,20,30,0.06);">
+                <div style="width:38px;height:38px;border-radius:10px;background:var(--brand-ink);display:flex;align-items:center;justify-content:center;margin-bottom:14px;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-gold)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="1.5"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/></svg>
+                </div>
+                <div class="serif" style="font-size:15.5px;font-weight:600;color:var(--brand-ink);margin-bottom:8px;">HVAC Installation</div>
+                <div style="font-size:12.5px;color:var(--brand-muted);line-height:1.55;">New systems, replacements and full start-up service, documented and warrantied.</div>
+              </div>
+              <div style="background:white;border-radius:12px;padding:26px 22px;box-shadow:0 6px 20px rgba(20,20,30,0.06);">
+                <div style="width:38px;height:38px;border-radius:10px;background:var(--brand-ink);display:flex;align-items:center;justify-content:center;margin-bottom:14px;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-gold)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4 4 14h6l-1 6 8-11h-6l1-5Z"/></svg>
+                </div>
+                <div class="serif" style="font-size:15.5px;font-weight:600;color:var(--brand-ink);margin-bottom:8px;">Repair &amp; Maintenance</div>
+                <div style="font-size:12.5px;color:var(--brand-muted);line-height:1.55;">Service calls, seasonal tune-ups and diagnostics with photo-documented findings.</div>
+              </div>
+              <div style="background:white;border-radius:12px;padding:26px 22px;box-shadow:0 6px 20px rgba(20,20,30,0.06);">
+                <div style="width:38px;height:38px;border-radius:10px;background:var(--brand-ink);display:flex;align-items:center;justify-content:center;margin-bottom:14px;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-gold)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="12" height="12" rx="2"/><path d="m16 10 4.5-2.5v9L16 14"/></svg>
+                </div>
+                <div class="serif" style="font-size:15.5px;font-weight:600;color:var(--brand-ink);margin-bottom:8px;">Security Camera Install</div>
+                <div style="font-size:12.5px;color:var(--brand-muted);line-height:1.55;">Commercial low-voltage camera systems, quoted and crewed by the same team.</div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isGallery}}" hint-placeholder-val="{{false}}">
+          <div style="padding:56px 60px;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:var(--brand-gold-ink);margin-bottom:8px;text-align:center;">Portfolio</div>
+            <div class="serif" style="font-size:26px;font-weight:600;color:var(--brand-ink);margin-bottom:26px;text-align:center;">Recent work</div>
+            <div style="display:grid;grid-template-columns:repeat(4, minmax(0,1fr));gap:12px;">
+              <div style="position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:oklch(88% 0.02 235);"><div style="position:absolute;inset:0;background:linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.45));"></div><div style="position:absolute;bottom:9px;left:11px;font-size:11px;font-weight:600;color:white;">Salgiya &middot; Install</div></div>
+              <div style="position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:oklch(85% 0.02 235);"><div style="position:absolute;inset:0;background:linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.45));"></div><div style="position:absolute;bottom:9px;left:11px;font-size:11px;font-weight:600;color:white;">Argo Way &middot; Service</div></div>
+              <div style="position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:oklch(90% 0.02 235);"><div style="position:absolute;inset:0;background:linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.45));"></div><div style="position:absolute;bottom:9px;left:11px;font-size:11px;font-weight:600;color:white;">Ring-necked Ct &middot; Cameras</div></div>
+              <div style="position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:oklch(87% 0.02 235);"><div style="position:absolute;inset:0;background:linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.45));"></div><div style="position:absolute;bottom:9px;left:11px;font-size:11px;font-weight:600;color:white;">Placer Court &middot; Retrofit</div></div>
+              <div style="position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:oklch(89% 0.02 235);"><div style="position:absolute;inset:0;background:linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.45));"></div><div style="position:absolute;bottom:9px;left:11px;font-size:11px;font-weight:600;color:white;">Cedarwood Ave &middot; Panel swap</div></div>
+              <div style="position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:oklch(86% 0.02 235);"><div style="position:absolute;inset:0;background:linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.45));"></div><div style="position:absolute;bottom:9px;left:11px;font-size:11px;font-weight:600;color:white;">Aspen Court &middot; New install</div></div>
+              <div style="position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:oklch(91% 0.02 235);"><div style="position:absolute;inset:0;background:linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.45));"></div><div style="position:absolute;bottom:9px;left:11px;font-size:11px;font-weight:600;color:white;">Meadowbrook &middot; Retrofit</div></div>
+              <div style="position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:oklch(88% 0.02 235);"><div style="position:absolute;inset:0;background:linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.45));"></div><div style="position:absolute;bottom:9px;left:11px;font-size:11px;font-weight:600;color:white;">Whispering Pines &middot; Clubhouse</div></div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isTestimonials}}" hint-placeholder-val="{{false}}">
+          <div style="padding:56px 60px;background:var(--brand-tint);">
+            <div style="font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:var(--brand-gold-ink);margin-bottom:8px;text-align:center;">Testimonials</div>
+            <div class="serif" style="font-size:26px;font-weight:600;color:var(--brand-ink);margin-bottom:28px;text-align:center;">What customers say</div>
+            <div style="display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:18px;">
+              <div style="background:white;border-radius:12px;padding:26px;box-shadow:0 6px 20px rgba(20,20,30,0.06);">
+                <div style="color:var(--brand-gold);font-size:14px;letter-spacing:2px;margin-bottom:10px;">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+                <div class="serif" style="font-size:14px;color:var(--brand-ink);line-height:1.6;font-style:italic;">"Showed up on time, explained everything, and sent photos of the whole job. Our new system has been rock solid since."</div>
+                <div style="display:flex;align-items:center;gap:10px;margin-top:16px;">
+                  <div style="width:30px;height:30px;border-radius:999px;background:var(--brand-ink);color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">RA</div>
+                  <div style="font-size:12px;color:var(--brand-muted);font-weight:600;">R. Alvarez &middot; Folsom</div>
+                </div>
+              </div>
+              <div style="background:white;border-radius:12px;padding:26px;box-shadow:0 6px 20px rgba(20,20,30,0.06);">
+                <div style="color:var(--brand-gold);font-size:14px;letter-spacing:2px;margin-bottom:10px;">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+                <div class="serif" style="font-size:14px;color:var(--brand-ink);line-height:1.6;font-style:italic;">"Fast diagnosis, fair price, and they left the unit cleaner than they found it."</div>
+                <div style="display:flex;align-items:center;gap:10px;margin-top:16px;">
+                  <div style="width:30px;height:30px;border-radius:999px;background:var(--brand-ink);color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">TN</div>
+                  <div style="font-size:12px;color:var(--brand-muted);font-weight:600;">T. Nguyen &middot; Sacramento</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isContact}}" hint-placeholder-val="{{false}}">
+          <div style="padding:56px 60px;display:grid;grid-template-columns:1fr 1fr;gap:40px;">
+            <div>
+              <div style="font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:var(--brand-gold-ink);margin-bottom:8px;">Contact</div>
+              <div class="serif" style="font-size:26px;font-weight:600;color:var(--brand-ink);margin-bottom:20px;">Get in touch</div>
+              <div style="display:flex;flex-direction:column;gap:11px;margin-bottom:22px;">
+                <div style="font-size:13px;color:var(--brand-ink);font-weight:600;">(916) 555-0148</div>
+                <div style="font-size:13px;color:var(--brand-muted);">contact@everbreezehvac.com</div>
+                <div style="font-size:13px;color:var(--brand-muted);">Mon&ndash;Sat, 7am&ndash;6pm</div>
+                <div style="font-size:13px;color:var(--brand-muted);">Serving Folsom &amp; the Greater Sacramento area</div>
+              </div>
+              <div style="border-radius:12px;overflow:hidden;border:1px solid oklch(92% 0.008 75);height:140px;background:
+                repeating-linear-gradient(0deg, oklch(93% 0.012 235), oklch(93% 0.012 235) 1px, oklch(97% 0.006 235) 1px, oklch(97% 0.006 235) 26px),
+                repeating-linear-gradient(90deg, oklch(93% 0.012 235), oklch(93% 0.012 235) 1px, oklch(97% 0.006 235) 1px, oklch(97% 0.006 235) 26px);
+                position:relative;">
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:999px 999px 999px 0;background:var(--brand-ink);transform-origin:center;rotate:-45deg;"></div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:14px;">
+              <div>
+                <div style="font-size:10.5px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--brand-muted);margin-bottom:5px;">Name</div>
+                <div style="border:1px solid oklch(88% 0.012 235);border-radius:8px;padding:11px 14px;font-size:12.5px;color:var(--brand-muted);background:white;">Jane Homeowner</div>
+              </div>
+              <div>
+                <div style="font-size:10.5px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--brand-muted);margin-bottom:5px;">Phone</div>
+                <div style="border:1px solid oklch(88% 0.012 235);border-radius:8px;padding:11px 14px;font-size:12.5px;color:var(--brand-muted);background:white;">(916) 555-0100</div>
+              </div>
+              <div>
+                <div style="font-size:10.5px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--brand-muted);margin-bottom:5px;">Message</div>
+                <div style="border:1px solid oklch(88% 0.012 235);border-radius:8px;padding:14px;min-height:64px;font-size:12.5px;color:var(--brand-muted);background:white;">Tell us what's going on...</div>
+              </div>
+              <div style="align-self:flex-start;background:var(--brand-ink);color:white;border-radius:999px;padding:11px 26px;font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin-top:4px;">Send message</div>
+            </div>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { section: "hero" };
+  }
+  renderVals() {
+    const s = this.state.section;
+    const keys = ["hero", "about", "services", "gallery", "testimonials", "contact"];
+    const sBg = {}, sW = {};
+    keys.forEach((k) => {
+      sBg[k] = s === k ? "var(--surface-2)" : "transparent";
+      sW[k] = s === k ? "600" : "500";
+    });
+    return {
+      sBg, sW,
+      isHero: s === "hero",
+      isAbout: s === "about",
+      isServices: s === "services",
+      isGallery: s === "gallery",
+      isTestimonials: s === "testimonials",
+      isContact: s === "contact",
+      setHero: () => this.setState({ section: "hero" }),
+      setAbout: () => this.setState({ section: "about" }),
+      setServices: () => this.setState({ section: "services" }),
+      setGallery: () => this.setState({ section: "gallery" }),
+      setTestimonials: () => this.setState({ section: "testimonials" }),
+      setContact: () => this.setState({ section: "contact" }),
+    };
+  }
+}
+</script>
+</body>
+</html>

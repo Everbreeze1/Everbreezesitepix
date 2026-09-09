@@ -155,7 +155,7 @@ export async function applyWorkflowTemplate(
 ): Promise<string> {
   const { data: templatePhases, error: phaseError } = await supabase
     .from("workflow_template_phases")
-    .select("id, position, name, description, requires_signoff")
+    .select("id, position, name, description, requires_signoff, phase_type")
     .eq("template_id", template.id)
     .order("position", { ascending: true });
 
@@ -168,6 +168,7 @@ export async function applyWorkflowTemplate(
           name: string;
           description: string | null;
           requires_signoff: boolean | null;
+          phase_type: string | null;
         }[]
       | null) ?? [];
 
@@ -215,6 +216,7 @@ export async function applyWorkflowTemplate(
             name: phase.name,
             description: phase.description,
             requires_signoff: phase.requires_signoff ?? false,
+            phase_type: phase.phase_type ?? "actionable",
           })) as never,
         )
         .select("id, position");

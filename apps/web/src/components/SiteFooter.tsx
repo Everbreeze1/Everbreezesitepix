@@ -38,7 +38,7 @@ export function SiteFooter() {
           <div>
             <Link to="/" className="flex items-center gap-2.5">
               <BrandLogo size={40} />
-              <span className="font-manrope text-lg font-extrabold tracking-[-0.45px] text-sidebar-foreground">
+              <span className="font-manrope text-lg font-extrabold tracking-[-0.01em] text-sidebar-foreground">
                 Ever<span className="text-brand-gold">lumen</span>
               </span>
             </Link>

@@ -1,4 +1,4 @@
-﻿import { Link } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { ArrowRight, Check, MonitorPlay } from "lucide-react";
 import ctaImg from "@/assets/cta-construction.png";
 import { HIDE_PUBLIC_PRICING, TRIAL_DAYS } from "@/lib/pricing";
@@ -21,7 +21,7 @@ export function MarketingCta() {
               <p className="font-manrope text-xs font-extrabold uppercase leading-4 tracking-[1.92px] text-white/75">
                 Ready when your crew is
               </p>
-              <h2 className="font-display mt-4 max-w-[672px] text-4xl font-black uppercase leading-none tracking-[-2.1px] text-white sm:text-5xl lg:text-[60px]">
+              <h2 className="font-display mt-4 max-w-[672px] text-4xl font-bold uppercase leading-tight tracking-[-0.01em] text-white sm:text-5xl lg:text-[60px]">
                 Bring every job into focus.
               </h2>
               <p className="font-manrope mt-5 max-w-[576px] text-base font-medium leading-7 text-white/85">

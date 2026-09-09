@@ -36,6 +36,8 @@ export type NotificationType =
   | "task_completed"
   | "checklist_completed"
   | "workflow_completed"
+  | "workflow_phase_advanced"
+  | "workflow_stalled"
   | "photo_comment_mention"
   | "team_invite_accepted"
   | "admin_announcement"

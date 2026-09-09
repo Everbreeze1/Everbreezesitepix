@@ -215,11 +215,11 @@ export function AppSidebar() {
   const navButtonClass = (active: boolean) =>
     `${buttonBase} ${
       active
-        ? "bg-sidebar-accent text-sidebar-foreground"
+        ? "bg-sidebar-accent text-sidebar-ring"
         : "text-sidebar-foreground/60 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
     }`;
   const navIconClass = (active: boolean) =>
-    `${iconBase} ${active ? "text-sidebar-foreground" : "text-sidebar-foreground/45"}`;
+    `${iconBase} ${active ? "text-sidebar-ring" : "text-sidebar-foreground/45"}`;
 
   return (
     <Sidebar collapsible="icon" className="border-r-0 bg-sidebar text-sidebar-foreground">
@@ -240,6 +240,11 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent className="scroll-slim px-2 gap-0">
         <SidebarGroup className="pt-1">
+          {!collapsed && (
+            <SidebarGroupLabel className="mb-1 text-[10px] font-bold uppercase tracking-[1.2px] text-sidebar-foreground/35">
+              Workspace
+            </SidebarGroupLabel>
+          )}
           <SidebarGroupContent>
             <SidebarMenu className={`${isMobile ? "gap-1.5" : "gap-(--rail-gap)"}`}>
               {navItems.map((item) => {

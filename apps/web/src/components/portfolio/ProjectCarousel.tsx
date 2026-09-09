@@ -188,7 +188,7 @@ export function ProjectCarousel({
                 </span>
               </div>
 
-              <h3 className="font-portfolio-display mt-4 max-w-3xl text-balance text-4xl font-black uppercase leading-[0.92] tracking-[-0.01em] text-white sm:text-6xl lg:text-7xl">
+              <h3 className="font-portfolio-display mt-4 max-w-3xl text-balance text-4xl font-semibold leading-tight tracking-[-0.01em] text-white sm:text-6xl lg:text-7xl">
                 {active.title}
               </h3>
               {active.summary && (
