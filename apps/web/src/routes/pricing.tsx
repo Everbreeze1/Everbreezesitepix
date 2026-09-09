@@ -344,9 +344,10 @@ function PublicPricingPage() {
         </div>
 
         {/* Pro and Team sell any number of seats, so this is not a seat
-            ceiling anyone has hit - it is the band of asks (API, SSO, a named
-            contact) that no self-serve tier answers, and which otherwise leave
-            with no next step on this page. */}
+            ceiling anyone has hit - it is the band of asks (API access, a
+            named contact) that no self-serve tier answers, and which otherwise
+            leave with no next step on this page. SSO is no longer on this
+            list: it is a Team feature now, on the card above. */}
         <div className="mt-8 flex flex-col items-start justify-between gap-4 rounded-[28px] border border-border bg-card p-6 sm:flex-row sm:items-center sm:p-7">
           <p className="font-manrope text-sm text-muted-foreground">
             <span className="font-extrabold text-foreground">{ENTERPRISE.headline}</span>{" "}
@@ -704,4 +705,3 @@ function PlanCard({
     </div>
   );
 }
-

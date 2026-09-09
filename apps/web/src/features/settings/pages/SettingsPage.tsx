@@ -17,6 +17,7 @@ import {
   Image as ImageIcon,
   Mail,
   Lock,
+  ShieldCheck,
   Globe,
   Briefcase,
   Cookie,
@@ -75,6 +76,7 @@ type SectionId =
   | "company"
   | "billing"
   | "team"
+  | "sso"
   | "reviews"
   | "labels";
 
@@ -132,6 +134,13 @@ const SECTIONS: {
     icon: Users,
     group: "Your Company",
     hint: "Invite and manage access",
+  },
+  {
+    id: "sso",
+    label: "Single Sign-On",
+    icon: ShieldCheck,
+    group: "Your Company",
+    hint: "Sign in with your company identity provider",
   },
   {
     // Moved here out of the Templates hub at the client's request: labels are a
@@ -341,6 +350,9 @@ export function SettingsPage() {
               />
             )}
             {active === "team" && <TeamSection isTeam={isTeam} teamData={teamData} tier={tier} />}
+            {active === "sso" && (
+              <SsoSection isTeam={isTeam} isOwner={can(myTeamRole, "billing")} />
+            )}
             {active === "reviews" && <ReviewLinksSection isTeam={isTeam} />}
             {active === "labels" && (
               <WorkspaceLabelsSection
@@ -813,6 +825,93 @@ function AccountSection() {
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * Single sign-on (SSO) for the workspace.
+ *
+ * SSO is a Team-tier feature, surfaced here because it was missing entirely
+ * before: the pricing card now lists it, and the people who administer the
+ * account (the owners) had nowhere in the app that even said it existed. The
+ * connection itself lives at the identity provider, so this section's job is
+ * to be accurate about that rather than pretend to manage it: what it is,
+ * who can change it, and how to get one connected.
+ */
+function SsoSection({ isTeam, isOwner }: { isTeam: boolean; isOwner: boolean }) {
+  const supportHref = mailtoHref(
+    SUPPORT_EMAIL,
+    "Single Sign-On setup - connect our identity provider",
+  );
+
+  if (!isTeam) {
+    return (
+      <div className="rounded-2xl border border-border bg-card/[0.55] p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="font-manrope text-base font-extrabold text-foreground">
+              Included with the Team plan
+            </div>
+            <p className="font-manrope text-xs text-muted-foreground">
+              Single Sign-On lets your team sign in with your company identity provider. It is part
+              of the Team plan.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5">
+          <Button asChild variant="outline" className="rounded-lg font-manrope font-bold">
+            <Link to="/pricing">View Team plan</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-border bg-card/[0.55] p-5">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <ShieldCheck className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <div className="font-manrope text-base font-extrabold text-foreground">
+            Single Sign-On (SSO)
+          </div>
+          <p className="font-manrope text-xs text-muted-foreground">
+            Your team signs in through your company identity provider with SAML 2.0 - Google
+            Workspace, Microsoft Entra ID, or Okta.
+          </p>
+        </div>
+      </div>
+      <ul className="mt-5 space-y-2 font-manrope text-sm text-foreground/80">
+        <li className="flex items-start gap-2">
+          <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          SAML 2.0 with Google Workspace, Microsoft Entra ID and Okta
+        </li>
+        <li className="flex items-start gap-2">
+          <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          Everyone signs in with their work identity - no separate password
+        </li>
+      </ul>
+      <div className="mt-5 border-t border-border pt-4">
+        <p className="font-manrope text-xs leading-5 text-muted-foreground">
+          {isOwner
+            ? "Single Sign-On is connected at your identity provider. To set up or change the connection, contact support and we will onboard your domain."
+            : "Only Owners and Admins can set up or change single sign-on. Ask the account owner to connect your identity provider."}
+        </p>
+        {isOwner && (
+          <Button
+            asChild
+            className="mt-4 rounded-lg bg-primary font-manrope font-bold text-primary-foreground hover:bg-primary/90"
+          >
+            <a href={supportHref ?? undefined}>Contact support to connect SSO</a>
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -85,7 +85,7 @@ export interface PlanPricing {
  */
 export const ENTERPRISE = {
   headline: "Enterprise",
-  summary: "10+ users, API access, SSO, dedicated success manager. Custom pricing.",
+  summary: "10+ users, API access, dedicated success manager. Custom pricing.",
   cta: "Talk to sales",
 } as const;
 
@@ -181,6 +181,12 @@ export const PLANS: PlanPricing[] = [
       // just hidden in the UI.
       "Subcontractor access, no extra seat",
       "Unlimited Auto Reports",
+      // SSO used to be painted as an Enterprise-only ask. It is exactly what a
+      // growing multi-crew operator asks the seller for, so it now belongs to
+      // the tier that sells itself as the multi-crew tier, and the Enterprise
+      // band below keeps the asks it actually owns: API access and a named
+      // contact.
+      "Single Sign-On (SSO) via your identity provider",
       // "Highest storage" deliberately absent. The tier does get the largest
       // allowance (see use-storage-usage), but nobody shops on a number they
       // cannot picture, and it invited "how many GB?" every time it appeared.
