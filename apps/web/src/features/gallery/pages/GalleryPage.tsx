@@ -73,7 +73,7 @@ import { PhotoThumb } from "@/components/PhotoThumb";
 import { photoObjectPaths } from "@everlumen/shared";
 import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import { CameraCapture, compressImageFile } from "@/features/photos/components/CameraCapture";
-import { applyWatermarkToFile, type BeforeAfterTag, type WatermarkContext } from "@/lib/watermark";
+import { applyWatermarkToFile, type BeforeAfterTag } from "@/lib/watermark";
 import { extractPhotoMeta, mergePhotoMeta } from "@/lib/photo-exif";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { BusyOverlay } from "@/components/BusyOverlay";
@@ -284,15 +284,6 @@ export function GalleryPage() {
     const parts = [p.street, [p.city, p.state].filter(Boolean).join(", "), p.zip].filter(Boolean);
     return parts.length ? parts.join(" · ") : (p.location ?? null);
   };
-  const watermarkCtx = (p: Project | null | undefined): WatermarkContext => ({
-    projectName: p?.name ?? null,
-    address: projectAddress(p),
-    companyName: profile?.company ?? null,
-    companyLogoUrl:
-      tier === "team" && profile?.watermark_enabled !== false
-        ? (profile?.company_logo_url ?? null)
-        : null,
-  });
 
   /**
    * Everything that changes after photos are added, edited or removed. The
@@ -756,14 +747,10 @@ export function GalleryPage() {
       toast.error("Create a project first");
       return;
     }
-    const projectForWatermark = projects.find((p) => p.id === projectId) ?? null;
     setUploading(true);
     try {
       for (const rawFile of incoming) {
-        const tagged = await applyWatermarkToFile(rawFile, {
-          ...watermarkCtx(projectForWatermark),
-          tag,
-        });
+        const tagged = await applyWatermarkToFile(rawFile, { tag });
         const file = await compressImageFile(tagged);
         const path = `${user.id}/${projectId}/${crypto.randomUUID()}.jpg`;
         const { error: upErr } = await supabase.storage

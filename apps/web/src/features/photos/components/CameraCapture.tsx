@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
-import { drawWatermark, type BeforeAfterTag, type WatermarkContext } from "@/lib/watermark";
+import { drawWatermark, type BeforeAfterTag } from "@/lib/watermark";
 import { PhotoAnnotator } from "@/features/photos/components/PhotoAnnotator";
 import { ScanCrop } from "@/features/photos/components/ScanCrop";
 import { TagPill } from "@/features/photos/components/TagPill";
@@ -42,8 +42,6 @@ interface CameraCaptureProps {
   ) => Promise<void> | void;
   /** Whether the user is allowed to immediately analyze with AI (Pro/Team tier). */
   canAnalyze?: boolean;
-  /** Project + company context drawn into the watermark band. */
-  watermark?: WatermarkContext;
   /** Existing photo tags shown as chips in the preview step. */
   existingTags?: string[];
   /** Create a new photo tag inline; should return the normalized name. */
@@ -75,7 +73,6 @@ export function CameraCapture({
   onClose,
   onCapture,
   canAnalyze = false,
-  watermark,
   existingTags = [],
   onCreateTag,
   autoSave = false,
@@ -336,7 +333,7 @@ export function CameraCapture({
       }
     }
 
-    await drawWatermark(ctx, w, h, { ...(watermark ?? {}), tag });
+    await drawWatermark(ctx, w, h, { tag });
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob((b) => resolve(b), "image/jpeg", JPEG_QUALITY),
     );

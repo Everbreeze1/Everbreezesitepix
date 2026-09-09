@@ -104,21 +104,28 @@ const draw = async (opts: WatermarkContext) => {
   return ctx.drawn;
 };
 
-describe("the watermark never burns the word UNTAGGED into a photo", () => {
+describe("the watermark only burns the before/after pill into a photo", () => {
   /*
-   * The reported symptom was read as two badges disagreeing, but there is only
-   * one badge and it is not live: `drawWatermark` painted UNTAGGED into the
-   * JPEG at capture time. Tag the photo afterwards and the Details panel
-   * updates while the pixels cannot, so the two can never agree again. Nothing
-   * in the app could have resynced them.
+   * The project address and the company logo used to be drawn here too, which
+   * put branding on every photo - including the report's title page - that
+   * could never be removed and that the phone app never drew. Photos are now
+   * pill-only: the share pages brand themselves in their own headers, so the
+   * stored photo stays clean.
+   *
+   * And the pill itself must never be the word UNTAGGED. The reported symptom
+   * was read as two badges disagreeing, but there is only one badge and it is
+   * not live: `drawWatermark` painted UNTAGGED into the JPEG at capture time.
+   * Tag the photo afterwards and the Details panel updates while the pixels
+   * cannot, so the two can never agree again. Nothing in the app could have
+   * resynced them.
    */
-  it("draws nothing top-right when the shooter picked no marker", async () => {
-    expect(await draw({ tag: null, address: "42 Rye Lane" })).not.toContain("UNTAGGED");
+  it("draws nothing when the shooter picked no marker", async () => {
+    expect(await draw({})).toEqual([]);
   });
 
-  it("draws nothing top-right for the Untagged capture mode either", async () => {
+  it("draws nothing for the Untagged capture mode either", async () => {
     // `uploadOne` stores the literal string "untagged" for that camera mode.
-    const drawn = await draw({ tag: "untagged" as unknown as null, address: "42 Rye Lane" });
+    const drawn = await draw({ tag: "untagged" as unknown as null });
     expect(drawn).not.toContain("UNTAGGED");
     expect(drawn).not.toContain("Untagged");
   });
@@ -128,10 +135,15 @@ describe("the watermark never burns the word UNTAGGED into a photo", () => {
     expect(await draw({ tag: "after" })).toContain("AFTER");
   });
 
-  it("keeps drawing the address next to a photo with no marker", async () => {
-    // The address is truncated against the tag box. With no tag box there is a
-    // whole photo's width to play with, and it must not fall out entirely.
-    expect(await draw({ tag: null, address: "42 Rye Lane" })).toContain("42 Rye Lane");
+  it("no longer burns the project address or the company logo into the photo", () => {
+    const src = stripComments(read("apps/web/src/lib/watermark.ts"));
+    // The context fields that used to carry them are gone, and nothing draws
+    // them any more.
+    expect(src).not.toMatch(/opts\.address/);
+    expect(src).not.toMatch(/opts\.companyLogoUrl/);
+    expect(src).not.toMatch(/opts\.projectName/);
+    // The pill survives - it is the only thing allowed to reach the pixels.
+    expect(src).toMatch(/opts\.tag === "before"/);
   });
 
   it("has no UNTAGGED literal left in the code", () => {

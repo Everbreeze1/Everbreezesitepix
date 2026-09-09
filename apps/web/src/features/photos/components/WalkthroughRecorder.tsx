@@ -15,7 +15,6 @@ import {
   SwitchCamera,
   PictureInPicture2,
 } from "lucide-react";
-import { drawWatermark, type WatermarkContext } from "@/lib/watermark";
 import { devLog } from "@/lib/dev-log";
 import { compressImageFile } from "@/features/photos/components/CameraCapture";
 
@@ -30,7 +29,6 @@ interface WalkthroughRecorderProps {
   maxSeconds: number;
   canRecord: boolean;
   tierLabel: string;
-  watermark?: WatermarkContext;
   /** Called per captured frame. Should upload, link to the active walkthrough, and return the new photo id. */
   onCapturePhoto: (
     file: File,
@@ -153,7 +151,6 @@ export function WalkthroughRecorder({
   maxSeconds,
   canRecord,
   tierLabel,
-  watermark,
   onCapturePhoto,
   onFinish,
   onContinueInBackground,
@@ -679,7 +676,6 @@ export function WalkthroughRecorder({
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.drawImage(video, 0, 0, w, h);
-      await drawWatermark(ctx, w, h, { ...(watermark ?? {}), tag: null });
 
       const blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob((b) => resolve(b), "image/jpeg", 0.85),

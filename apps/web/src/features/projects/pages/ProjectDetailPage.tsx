@@ -96,7 +96,7 @@ import {
 import { PhotoTasksPanel } from "@/features/photos/components/PhotoTasksPanel";
 import { PhotoDetailsPanel } from "@/features/photos/components/PhotoDetailsPanel";
 import { getProjectContributors } from "@/lib/teams.functions";
-import { applyWatermarkToFile, type BeforeAfterTag, type WatermarkContext } from "@/lib/watermark";
+import { applyWatermarkToFile, type BeforeAfterTag } from "@/lib/watermark";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -630,15 +630,6 @@ export function ProjectDetailPage() {
     const parts = [p.street, [p.city, p.state].filter(Boolean).join(", "), p.zip].filter(Boolean);
     return parts.length ? parts.join(" · ") : (p.location ?? null);
   };
-  const watermarkCtx = (p: Project | null): WatermarkContext => ({
-    projectName: p?.name ?? null,
-    address: projectAddress(p),
-    companyName: profile?.company ?? null,
-    companyLogoUrl:
-      tier === "team" && profile?.watermark_enabled !== false
-        ? (profile?.company_logo_url ?? null)
-        : null,
-  });
 
   const load = async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
@@ -1217,7 +1208,7 @@ export function ProjectDetailPage() {
       latitude: project?.latitude ?? null,
       longitude: project?.longitude ?? null,
     });
-    const tagged = await applyWatermarkToFile(rawFile, { ...watermarkCtx(project), tag });
+    const tagged = await applyWatermarkToFile(rawFile, { tag });
     const file = await compressImageFile(tagged);
     const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
     const path = `${user.id}/${projectId}/${crypto.randomUUID()}.${ext}`;
@@ -4053,7 +4044,6 @@ export function ProjectDetailPage() {
         }}
         onCapture={onCameraCapture}
         canAnalyze={isActive}
-        watermark={watermarkCtx(project)}
         existingTags={allPhotoTags}
         onCreateTag={createPhotoTag}
         onOpenWalkthrough={() => setWalkthroughOpen(true)}
@@ -4077,7 +4067,6 @@ export function ProjectDetailPage() {
         canRecord={canUseWalkthroughs}
         tierLabel={TIER_LABEL[tier] ?? TIER_LABEL.starter}
         maxSeconds={WALKTHROUGH_MAX_SECONDS[tier] ?? WALKTHROUGH_MAX_SECONDS.starter}
-        watermark={watermarkCtx(project)}
         onCapturePhoto={onWalkthroughCapture}
         onFinish={onWalkthroughFinish}
         uploadProgress={videoUploadProgress}
