@@ -42,6 +42,7 @@ import {
 } from "@/lib/feedback";
 import { clientContextRows, readClientContext, type ClientContext } from "@/lib/feedback-context";
 import { projectDisplayName } from "@everlumen/shared";
+import { formatRelativeTime } from "@/lib/format-time";
 
 /** The two things people actually come here to do. */
 const MODES: Array<{
@@ -462,33 +463,61 @@ export function ReportIssuePage() {
  * for what is usually "working as intended" or "already fixed". The stored
  * value is unchanged; only the label is.
  */
-const REPORT_STATUS: Record<FeedbackStatus, { label: string; note: string; className: string }> = {
+const REPORT_STATUS: Record<
+  FeedbackStatus,
+  { label: string; note: string; className: string; pillClass: string }
+> = {
   new: {
     label: "Received",
     note: "",
     className: "bg-primary/10 text-primary",
+    // Mockup "Open" tone: the hold amber.
+    pillClass: "bg-status-hold-soft text-status-hold",
   },
   triaged: {
     label: "In progress",
     note: "We've confirmed this one and it's being worked on.",
     className: "bg-amber-500/10 text-amber-600",
+    // Mockup "In review" tone: the complete blue.
+    pillClass: "bg-status-complete-soft text-status-complete",
   },
   resolved: {
     label: "Resolved",
     note: "Fixed or answered. Any reply from the team is in your notifications.",
     className: "bg-emerald-500/10 text-emerald-600",
+    // Mockup "Done"/"Planned" tone: the active green.
+    pillClass: "bg-status-active-soft text-status-active",
   },
   dismissed: {
     label: "Closed",
     note: "Closed without a change. Send it again if it's still happening.",
     className: "bg-muted text-muted-foreground",
+    // Mockup "Archived" tone: quiet slate.
+    pillClass: "bg-status-archived-soft text-status-archived",
   },
 };
 
-const REPORT_KIND: Record<string, { label: string; icon: typeof Bug }> = {
-  bug: { label: "Problem", icon: Bug },
-  idea: { label: "Suggestion", icon: Lightbulb },
-  praise: { label: "Praise", icon: Heart },
+const REPORT_KIND: Record<string, { label: string; icon: typeof Bug; tintClass: string; iconClass: string }> = {
+  // Mockup .type-icon tints: bug on a red-soft square, idea on the blue-soft
+  // (accent-2) square, praise on the green-soft square.
+  bug: {
+    label: "Problem",
+    icon: Bug,
+    tintClass: "bg-[oklch(0.94_0.05_25)]",
+    iconClass: "text-[oklch(0.52_0.16_25)]",
+  },
+  idea: {
+    label: "Suggestion",
+    icon: Lightbulb,
+    tintClass: "bg-[oklch(0.93_0.025_200)]",
+    iconClass: "text-[oklch(0.38_0.1_200)]",
+  },
+  praise: {
+    label: "Praise",
+    icon: Heart,
+    tintClass: "bg-status-active-soft",
+    iconClass: "text-status-active",
+  },
 };
 
 /**
@@ -508,6 +537,7 @@ function MyReportsSection({
   error: string | null;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [kindFilter, setKindFilter] = useState<"all" | FeedbackKind>("all");
   // Long enough to cover most accounts, short enough that a heavy reporter does
   // not push the form off the top of the page.
   const VISIBLE = 5;
@@ -521,50 +551,96 @@ function MyReportsSection({
     );
   }
 
-  const shown = expanded ? reports : reports.slice(0, VISIBLE);
+  /*
+   * The mockup's Feedback board opens with filter pills on the left ("All",
+   * "Bugs", "Ideas", "Questions") and mono counts. The real reports carry a
+   * `kind`, so the pills filter by it against the reporter's actual history.
+   */
+  const allCount = reports.length;
+  const bugCount = reports.filter((r) => r.kind === "bug").length;
+  const ideaCount = reports.filter((r) => r.kind === "idea").length;
+  const praiseCount = reports.filter((r) => r.kind === "praise").length;
+
+  const filtered =
+    kindFilter === "all" ? reports : reports.filter((r) => r.kind === kindFilter);
+  const shown = expanded ? filtered : filtered.slice(0, VISIBLE);
+
+  const pills: Array<{ key: "all" | FeedbackKind; label: string; count: number }> = [
+    { key: "all", label: "All", count: allCount },
+    { key: "bug", label: "Bugs", count: bugCount },
+    { key: "idea", label: "Ideas", count: ideaCount },
+    { key: "praise", label: "Praise", count: praiseCount },
+  ];
 
   return (
     <section className="mt-10">
-      <h2 className="font-display text-[22px] font-bold tracking-[-0.01em] text-foreground">
+      <h2 className="font-sans text-[22px] font-bold tracking-[-0.01em] text-foreground">
         Your reports
       </h2>
-      <p className="font-manrope mt-1.5 text-sm leading-6 text-muted-foreground">
+      <p className="font-sans mt-1.5 text-[13.5px] leading-snug text-muted-foreground">
         Everything you&rsquo;ve sent, and where it stands. This updates as the team works through
         them.
       </p>
 
       {error && (
-        <p className="font-manrope mt-3 text-sm text-muted-foreground">
+        <p className="font-sans mt-3 text-[13px] text-muted-foreground">
           {error} Try reloading the page.
         </p>
       )}
 
-      {!error && reports.length === 0 ? (
-        <div className="mt-4 rounded-[20px] border border-dashed border-border bg-card/50 px-6 py-8 text-center">
-          <div className="mx-auto grid h-10 w-10 place-items-center rounded-full bg-muted text-muted-foreground">
+      {!error && filtered.length === 0 ? (
+        <div className="mt-4 rounded-[12px] border border-dashed border-border bg-card px-6 py-8 text-center">
+          <div className="mx-auto grid h-10 w-10 place-items-center rounded-full bg-secondary text-muted-foreground">
             <Inbox className="h-5 w-5" />
           </div>
-          <p className="font-manrope mt-3 text-sm font-extrabold text-foreground">Nothing yet</p>
-          <p className="font-manrope mt-1 text-sm text-muted-foreground">
+          <p className="font-sans mt-3 text-sm font-semibold text-foreground">Nothing here yet</p>
+          <p className="font-sans mt-1 text-[13px] text-muted-foreground">
             Anything you send shows up here, with its status.
           </p>
         </div>
       ) : (
-        <ul className="mt-4 space-y-3">
-          {shown.map((report) => (
-            <ReportRow key={report.id} report={report} />
-          ))}
-        </ul>
+        <>
+          {/* Filter pills, mockup style: round, mono counts. */}
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            {pills.map((pill) => {
+              const active = kindFilter === pill.key;
+              return (
+                <button
+                  key={pill.key}
+                  type="button"
+                  onClick={() => setKindFilter(pill.key)}
+                  aria-pressed={active}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition ${
+                    active
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border bg-card text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {pill.label}
+                  <span className="font-mono text-[11px] opacity-70">{pill.count}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* The board: one surface, rows divided by hairlines - same as the
+              mockup's .fb-row list. */}
+          <ul className="mt-3 overflow-hidden rounded-[12px] border border-border bg-card">
+            {shown.map((report) => (
+              <ReportRow key={report.id} report={report} />
+            ))}
+          </ul>
+        </>
       )}
 
-      {reports.length > VISIBLE && (
+      {filtered.length > VISIBLE && (
         <Button
           type="button"
           variant="ghost"
           onClick={() => setExpanded((v) => !v)}
-          className="font-manrope mt-3 h-9 rounded-lg px-3 text-sm font-bold"
+          className="font-sans mt-3 h-9 rounded-lg px-3 text-[13px] font-semibold"
         >
-          {expanded ? "Show less" : `Show all ${reports.length}`}
+          {expanded ? "Show less" : `Show all ${filtered.length}`}
         </Button>
       )}
     </section>
@@ -575,46 +651,32 @@ function ReportRow({ report }: { report: MyFeedbackReport }) {
   const status = REPORT_STATUS[report.status];
   const kind = REPORT_KIND[report.kind] ?? REPORT_KIND.bug;
   const KindIcon = kind.icon;
+  const title =
+    report.subject?.trim() || report.description.split("\n")[0]?.trim() || "Untitled report";
 
   return (
-    <li className="rounded-[20px] border border-border bg-card p-4">
-      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <KindIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="font-manrope text-sm font-extrabold text-foreground">{kind.label}</span>
-          <span className="font-manrope shrink-0 text-xs text-muted-foreground">
-            {new Date(report.createdAt).toLocaleDateString(undefined, {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
-          </span>
-        </div>
-        <span
-          className={cn(
-            "font-manrope shrink-0 rounded-full px-2.5 py-1 text-[11px] font-extrabold",
-            status.className,
-          )}
-        >
-          {status.label}
-        </span>
+    <li className="flex items-start gap-3.5 border-b border-border px-4 py-4 last:border-b-0">
+      {/* Type icon on a tinted square - mockup .type-icon (32px, 8px radius). */}
+      <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", kind.tintClass)}>
+        <KindIcon className={cn("h-4 w-4", kind.iconClass)} strokeWidth={1.8} />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13.5px] font-semibold text-foreground">{title}</p>
+        <p className="mt-0.5 truncate text-[11.5px] text-faint">
+          {kind.label} &middot; You &middot; {formatRelativeTime(report.createdAt)}
+        </p>
       </div>
 
-      {report.subject && (
-        <p className="font-manrope mt-2 text-sm font-extrabold text-foreground">{report.subject}</p>
-      )}
-      <p
+      {/* Status pill - mockup .pill with the status tint family. */}
+      <span
         className={cn(
-          "font-manrope line-clamp-3 whitespace-pre-wrap text-sm leading-6 text-foreground",
-          report.subject ? "mt-1" : "mt-2",
+          "shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
+          status.pillClass,
         )}
       >
-        {report.description}
-      </p>
-
-      {status.note && (
-        <p className="font-manrope mt-2 text-xs leading-5 text-muted-foreground">{status.note}</p>
-      )}
+        {status.label}
+      </span>
     </li>
   );
 }
