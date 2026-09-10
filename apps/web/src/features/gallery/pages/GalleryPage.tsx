@@ -68,7 +68,6 @@ import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
-import { PageHeader } from "@/components/PageHeader";
 import { PhotoThumb } from "@/components/PhotoThumb";
 import { photoObjectPaths } from "@everlumen/shared";
 import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
@@ -1236,52 +1235,52 @@ export function GalleryPage() {
         description="Reading text, detecting defects, drafting findings"
       />
       {/*
-        Title and the two actions, and nothing else.
-
-        This header used to also carry the plan badge and a line of prose. Neither
-        is what someone opening a gallery came for: the plan is Settings' subject
-        and appears again on every paywall, and "Capture, upload, and analyze site
-        photos" restates the two buttons sitting beside it. Stacked above a filter
-        bar and a grid, they were two of the several things competing for the first
-        screen - which is what the field meant by "too much at once".
+        Header in the reference style: "Photo Library" title + a line of prose,
+        with the capture actions on the right. The plan badge and the stacked
+        prose that used to live here restated the buttons beside them.
       */}
-      <PageHeader
-        eyebrow="Media library"
-        title="Photo gallery"
-        actions={
-          <>
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => onUpload(e.target.files)}
-            />
-            <Button
-              onClick={openCamera}
-              disabled={uploading || noProjects}
-              className="h-11 flex-1 rounded-lg bg-primary px-5 font-manrope text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 sm:flex-none"
-            >
-              <Camera className="mr-2 h-4 w-4" />
-              Take photo
-            </Button>
-            <Button
-              variant="outline"
-              onClick={openUpload}
-              disabled={uploading || noProjects}
-              className="h-11 flex-1 rounded-lg border-border bg-card px-4 font-manrope text-sm font-medium text-foreground shadow-sm hover:bg-card/80 sm:flex-none"
-            >
-              {uploading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="mr-2 h-4 w-4" />
-              )}
-              {uploading ? "Uploading…" : "Upload"}
-            </Button>
-          </>
-        }
-      />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 max-w-[560px]">
+          <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
+            Photo Library
+          </h1>
+          <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
+            Every photo across every project, searchable in one place. Open a project&rsquo;s own
+            Photos tab to see a photo in the context of that job&rsquo;s workflow.
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => onUpload(e.target.files)}
+          />
+          <Button
+            onClick={openCamera}
+            disabled={uploading || noProjects}
+            className="font-sans h-10 rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            <Camera className="mr-2 h-4 w-4" />
+            Take photo
+          </Button>
+          <Button
+            variant="outline"
+            onClick={openUpload}
+            disabled={uploading || noProjects}
+            className="font-sans h-10 rounded-lg border-border bg-card px-4 text-[13.5px] font-medium text-foreground hover:bg-card/80"
+          >
+            {uploading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="mr-2 h-4 w-4" />
+            )}
+            {uploading ? "Uploading…" : "Upload"}
+          </Button>
+        </div>
+      </div>
 
       {noProjects && (
         <Card className="mt-6 flex flex-col items-center p-10 text-center border-dashed">

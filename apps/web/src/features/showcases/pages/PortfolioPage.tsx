@@ -192,18 +192,25 @@ export function PortfolioPage() {
   }
 
   return (
-    <div className="px-6 pb-24 pt-6 sm:px-10 sm:pt-10">
-      <PageHeader
-        title="Portfolio"
-        description="A shareable mini-site of your best work - one page per project, plus embeds for your own website."
-        actions={
-          <Button variant="outline" asChild disabled={!p.published}>
+    <div className="px-6 pb-24 pt-8 sm:px-10">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 max-w-[560px]">
+          <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
+            Portfolio
+          </h1>
+          <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
+            A shareable mini-site of your best work - one page per project, plus embeds for your
+            own website.
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Button variant="outline" asChild disabled={!p.published} className="font-sans h-10 rounded-lg border-border bg-card px-4 text-[13.5px] font-medium text-foreground hover:bg-secondary">
             <a href={siteUrl} target="_blank" rel="noreferrer">
               <ExternalLink className="mr-1.5 h-4 w-4" /> View site
             </a>
           </Button>
-        }
-      />
+        </div>
+      </div>
 
       <PublishBar
         published={p.published}

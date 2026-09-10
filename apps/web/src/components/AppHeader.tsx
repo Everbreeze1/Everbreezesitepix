@@ -1,9 +1,8 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Search, Bell, ChevronDown, Plus, CheckCheck, Moon, Sun } from "lucide-react";
+import { Bell, ChevronDown, CheckCheck, Moon, Sun } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { BrandLogo } from "@/components/BrandLogo";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +15,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
-import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { useNotifications } from "@/hooks/use-notifications";
 import { useTheme } from "@/hooks/use-theme";
 import { formatRelativeTime } from "@/lib/format-time";
@@ -37,79 +35,41 @@ export function AppHeader() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { profile } = useProfile();
-  const { guard } = useSubscriptionGate();
   const { unreadCount, recent, markRead, markAllRead } = useNotifications();
   const { theme, toggle: toggleTheme } = useTheme();
-  const [query, setQuery] = useState("");
   const [notifOpen, setNotifOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   /* The theme is only known once localStorage has been read on the client, so the
-     icon stays out of the server-rendered markup and appears on mount. Without
-     this the server always renders the light-mode icon and a dark-mode visitor
-     gets a hydration mismatch. Same guard as SiteHeader. */
+     icon stays out of the server-rendered markup and appears on mount. */
   const [themeReady, setThemeReady] = useState(false);
   useEffect(() => setThemeReady(true), []);
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        inputRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 
   const displayName = profile?.full_name || user?.email || "";
   const initials = getInitials(profile?.full_name, user?.email);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = query.trim();
-    navigate({ to: "/projects", search: (q ? { q } : {}) as any });
-  };
-
   return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-background/90 px-4 backdrop-blur sm:px-10">
+    <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4 sm:px-5">
       <div className="flex items-center gap-2 md:hidden">
         <SidebarTrigger />
         <BrandLogo size={28} />
       </div>
 
-      <form
-        onSubmit={handleSearch}
-        className="hidden max-w-[421px] flex-1 items-center gap-3 rounded-xl border border-border bg-card/70 px-3 py-2.5 shadow-sm md:flex"
-      >
-        <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <input
-          ref={inputRef}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search projects, photos, reportsâ€¦"
-          className="font-manrope w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-        />
-        <kbd className="font-manrope hidden shrink-0 rounded-md bg-muted px-1.5 py-1 text-[10px] font-bold text-muted-foreground lg:inline-block">
-          âŒ˜K
-        </kbd>
-      </form>
-
-      <div className="flex items-center gap-3">
+      {/* Right-aligned control cluster, styled to the Main-html topbar: 32px
+          icon pills on a secondary fill, a divider, then the account chip. */}
+      <div className="ml-auto flex items-center gap-1.5">
         <button
           type="button"
           onClick={toggleTheme}
           aria-label={
             themeReady
               ? theme === "dark"
-                ? "Switch to day mode"
-                : "Switch to night mode"
-              : "Toggle day and night mode"
+                ? "Switch to light"
+                : "Switch to dark"
+              : "Toggle light / dark"
           }
-          title={themeReady && theme === "dark" ? "Day mode" : "Night mode"}
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card/70 text-muted-foreground shadow-sm transition-colors hover:text-foreground"
+          title="Toggle light / dark"
+          className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary text-muted-foreground transition-colors hover:text-foreground"
         >
-          {themeReady &&
-            (theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />)}
+          {themeReady && (theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />)}
         </button>
 
         <Popover open={notifOpen} onOpenChange={setNotifOpen}>
@@ -117,7 +77,7 @@ export function AppHeader() {
             <button
               type="button"
               aria-label="Notifications"
-              className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card/70 text-muted-foreground shadow-sm transition-colors hover:text-foreground"
+              className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-secondary text-muted-foreground transition-colors hover:text-foreground"
             >
               <Bell className="h-4 w-4" />
               {unreadCount > 0 && (
@@ -148,7 +108,7 @@ export function AppHeader() {
             ) : (
               <ScrollArea className="max-h-[400px]">
                 <div className="divide-y divide-border">
-                  {recent.map((n) => (
+{recent.map((n) => (
                     <button
                       key={n.id}
                       type="button"
@@ -190,48 +150,42 @@ export function AppHeader() {
           </PopoverContent>
         </Popover>
 
+        <div className="mx-1 h-6 w-px bg-border" />
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
               aria-label="Account menu"
-              className="flex items-center gap-2 rounded-xl border border-border bg-card/70 px-2 py-1.5 shadow-sm"
+              className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-1.5 transition-colors hover:bg-secondary"
             >
               {profile?.avatar_url ? (
                 <img
                   src={profile.avatar_url}
                   alt=""
-                  className="h-7 w-7 shrink-0 rounded-full object-cover"
+                  className="h-[26px] w-[26px] shrink-0 rounded-full object-cover"
                 />
               ) : (
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-[10px] font-extrabold text-background">
+                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-foreground text-[10.5px] font-bold text-background">
                   {initials}
                 </span>
               )}
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <span className="hidden text-[12.5px] font-semibold text-foreground sm:block">
+                {profile?.full_name?.split(" ")[0] || displayName}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="w-[230px]">
             <DropdownMenuLabel className="truncate">{displayName}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link to="/settings">Account &amp; settings</Link>
+              <Link to="/settings">Account settings</Link>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={signOut}>Sign out</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        <Button
-          onClick={() =>
-            guard(() => navigate({ to: "/projects/new" }), "Subscribe to create new projects.")
-          }
-          className="font-manrope hidden rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-primary/90 sm:inline-flex"
-        >
-          <Plus className="h-4 w-4" /> New project
-        </Button>
       </div>
     </header>
   );
 }
-
-

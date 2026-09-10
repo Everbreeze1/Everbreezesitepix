@@ -796,15 +796,16 @@ export function HelpPage() {
       rail instead of nothing.
     */
     <div className="mx-auto w-full max-w-[1192px] px-6 pb-24 pt-10 md:px-10">
-      <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.52px] text-muted-foreground">
-        Support
-      </p>
-      <h1 className="font-display mt-3 text-[38.4px] font-bold leading-9 tracking-[-0.01em] text-foreground">
-        Knowledge base
-      </h1>
-      <p className="font-manrope mt-3 max-w-[576px] text-sm leading-6 text-muted-foreground">
-        Guides, tips, and answers for every Everlumen workflow.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 max-w-[560px]">
+          <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
+            Knowledge Base
+          </h1>
+          <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
+            Guides for getting the most out of Everlumen.
+          </p>
+        </div>
+      </div>
 
       {/*
         One scannable list rather than three copies of the same navigation.
@@ -938,29 +939,20 @@ export function HelpPage() {
             </Accordion>
           )}
 
-          {/*
-        Points at Feedback, which is where support actually is.
-
-        This used to send people to "Account -> Chat with support" and to a
-        "Report issue button in the sidebar". Neither exists: the settings
-        support panes are unreachable dead code, and the sidebar row was renamed
-        to Feedback when it grew to cover suggestions as well as bugs. A footer
-        naming two things that are not there is worse than no footer, because it
-        is the last thing somebody reads before giving up.
-      */}
-          <div className="mt-8 rounded-2xl border-[0.8px] border-border bg-card/60 p-6 text-center">
-            <h3 className="font-manrope text-base font-bold text-foreground">
-              Can't find what you need?
-            </h3>
-            <p className="font-manrope mt-1 text-sm text-muted-foreground">
-              Open Feedback in the sidebar to report a problem or suggest a feature. Both go
-              straight to the team.
-            </p>
+          {/* Points at Feedback, which is where support actually is. Rendered
+              as the reference's amber "Still stuck?" CTA band. */}
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-[12px] bg-primary/10 px-5 py-[18px] sm:px-6">
+            <div className="min-w-0">
+              <h3 className="text-[13.5px] font-bold text-foreground">Still stuck?</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Send us a note from the Feedback page and we'll follow up.
+              </p>
+            </div>
             <Link
               to="/report-issue"
-              className="font-manrope mt-3 inline-block text-sm font-bold text-primary hover:underline"
+              className="inline-flex shrink-0 items-center rounded-lg bg-primary px-4 py-2 text-[12.5px] font-semibold text-primary-foreground hover:bg-primary/90"
             >
-              Go to Feedback →
+              Go to Feedback
             </Link>
           </div>
         </div>

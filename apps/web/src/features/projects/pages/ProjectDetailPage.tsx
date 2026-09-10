@@ -59,7 +59,7 @@ import { useProjectBlueprintOrigin } from "@/hooks/use-project-blueprint-origin"
 import { startOfMonth } from "date-fns";
 import { PhotoCalendar, type CalendarPhoto } from "@/features/gallery/components/PhotoCalendar";
 import { PhotoThumb } from "@/components/PhotoThumb";
-import { PageTabStrip } from "@/components/PageTabStrip";
+import { ReferenceTabStrip } from "@/components/ui/reference";
 import { ProjectWorkflows } from "@/features/projects/components/ProjectWorkflows";
 import { ProjectTasks, type ProjectTasksHandle } from "@/features/projects/components/ProjectTasks";
 import { ProjectDocuments } from "@/features/projects/components/ProjectDocuments";
@@ -628,7 +628,7 @@ export function ProjectDetailPage() {
   const projectAddress = (p: Project | null) => {
     if (!p) return null;
     const parts = [p.street, [p.city, p.state].filter(Boolean).join(", "), p.zip].filter(Boolean);
-    return parts.length ? parts.join(" · ") : (p.location ?? null);
+    return parts.length ? parts.join(" Â· ") : (p.location ?? null);
   };
 
   const load = async (options?: { silent?: boolean }) => {
@@ -1007,7 +1007,7 @@ export function ProjectDetailPage() {
         .maybeSingle();
       if (!tagRow?.id) return;
       if (!has) {
-        // Newly added → ensure project_tags row exists.
+        // Newly added â†’ ensure project_tags row exists.
         await (supabase as any)
           .from("project_tags")
           .upsert(
@@ -1015,7 +1015,7 @@ export function ProjectDetailPage() {
             { onConflict: "project_id,tag_id", ignoreDuplicates: true },
           );
       } else {
-        // Removed → if no other photo in this project still carries the tag, drop it from the project.
+        // Removed â†’ if no other photo in this project still carries the tag, drop it from the project.
         const stillUsed = photos.some((p) => p.id !== photoId && (p.tags ?? []).includes(t));
         if (!stillUsed) {
           await (supabase as any)
@@ -1401,7 +1401,7 @@ export function ProjectDetailPage() {
       toast.success("Photo saved");
       cameraSessionIds.current.push(photoId);
       if (opts.analyze && isActive) {
-        toast.message("Analyzing photo…", { description: "This takes 10–25 seconds." });
+        toast.message("Analyzing photoâ€¦", { description: "This takes 10â€“25 seconds." });
         try {
           await analyze({ data: { photoId } });
           bumpAiAnalysesUsed();
@@ -1932,7 +1932,7 @@ export function ProjectDetailPage() {
       const cleaned = raw.replace(/\s+/g, " ").trim();
       if (!cleaned) return "";
       const sentences = cleaned
-        .split(/(?<=[.!?])\s+(?=[A-Z0-9"'“‘(])/)
+        .split(/(?<=[.!?])\s+(?=[A-Z0-9"'â€œâ€˜(])/)
         .map((s) => s.trim())
         .filter(Boolean);
       if (sentences.length <= 1) return cleaned;
@@ -1954,7 +1954,7 @@ export function ProjectDetailPage() {
           const s = Math.max(0, p.offsetSeconds) % 60;
           lines.push(
             "",
-            `### Photo ${i + 1} · ${m}:${s.toString().padStart(2, "0")}`,
+            `### Photo ${i + 1} Â· ${m}:${s.toString().padStart(2, "0")}`,
             "",
             `![Photo ${i + 1}](photo:${p.photoId})`,
           );
@@ -2330,7 +2330,7 @@ export function ProjectDetailPage() {
       // Reports section) from the transcript + photos, so the user gets a
       // client-ready, PDF-exportable report without opening the manual builder.
       try {
-        devLog("[walkthrough→report] Creating auto project report", { wid });
+        devLog("[walkthroughâ†’report] Creating auto project report", { wid });
         const built = await buildReportFromWalk({
           data: {
             walkthroughId: wid,
@@ -2357,7 +2357,7 @@ export function ProjectDetailPage() {
           }
         }
       } catch (e: any) {
-        console.error("[walkthrough→report] auto project report failed", e);
+        console.error("[walkthroughâ†’report] auto project report failed", e);
         toast.warning(`Auto project report failed: ${e?.message ?? "unknown error"}`);
       }
     })();
@@ -2431,7 +2431,7 @@ export function ProjectDetailPage() {
       url: null,
       title,
       mime: w.video_mime_type,
-      emptyMessage: "Loading walkthrough video…",
+      emptyMessage: "Loading walkthrough videoâ€¦",
     });
 
     // Always re-check the DB row: the finish flow may have written the
@@ -2721,7 +2721,7 @@ export function ProjectDetailPage() {
     <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pt-10">
       <BusyOverlay
         open={uploading}
-        title="Uploading photo…"
+        title="Uploading photoâ€¦"
         description="Compressing and saving to this project"
       />
 
@@ -2782,256 +2782,198 @@ export function ProjectDetailPage() {
         Projects
       </Link>
 
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-[32px] bg-sidebar">
-        <div className="pointer-events-none absolute -right-24 -top-28 h-[288px] w-[288px] rounded-full border-[28px] border-sidebar-ring/20" />
-        <div className="relative flex flex-col gap-7 p-6 sm:px-10 sm:py-9">
-          <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex flex-1 flex-col gap-6 sm:flex-row sm:items-start">
-              {/* Cover thumbnail */}
-              <div className="relative h-24 w-24 shrink-0 rounded-2xl border border-sidebar-foreground/20 bg-sidebar-foreground/10 p-1 shadow-xl sm:h-28 sm:w-28">
-                <div className="h-full w-full overflow-hidden rounded-xl bg-sidebar-foreground/5">
-                  {photos[0] && photoSrc(photos[0]) ? (
-                    <img
-                      src={photoSrc(photos[0])}
-                      alt={`${project.name} cover`}
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-sidebar-foreground/40">
-                      <ImageOff className="h-6 w-6" />
-                    </div>
-                  )}
-                </div>
-                {/*
-                  The badge takes its colour from the status, so its glyph has
-                  to agree with it. It was a tick for every status, which was
-                  survivable while changing the status meant opening a form and
-                  most projects stayed Active - now that the chip below changes
-                  it in one click, a paused job with a tick on it is the first
-                  thing you would see.
-                */}
-                <span
-                  className="absolute -bottom-1.5 -right-1.5 flex h-7 w-7 items-center justify-center rounded-full border-4 border-sidebar"
-                  style={{ background: (STATUS_DOT[project.status] ?? STATUS_DOT.active).dot }}
-                >
-                  {project.status === "on_hold" ? (
-                    <Pause className="h-3.5 w-3.5 text-[#101929]" strokeWidth={3} />
-                  ) : project.status === "archived" ? (
-                    <Archive className="h-3.5 w-3.5 text-[#101929]" strokeWidth={3} />
-                  ) : (
-                    <Check className="h-3.5 w-3.5 text-[#101929]" strokeWidth={3} />
-                  )}
-                </span>
-              </div>
-
-              {/* Title block */}
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="inline-flex items-center rounded-full bg-sidebar-ring px-3 py-1 text-[10px] font-extrabold uppercase tracking-[1.4px] text-sidebar-foreground">
-                    Project record
-                  </span>
-                  {/*
-                    One chip, because there is one answer to "where is this
-                    job". It carried two for a while - the Active/On hold
-                    bucket beside the pipeline stage - and the client read them
-                    the only way they can be read: as two statuses that could
-                    disagree. The stage owns the bucket now, so this shows the
-                    stage where there is one and the bucket where there is not,
-                    and setting either goes through here.
-                  */}
-                  <ProjectStatusChip
-                    projectId={project.id}
-                    status={project.status}
-                    stageId={project.pipeline_stage_id}
-                    onChanged={(next) =>
-                      setProject((p) =>
-                        p
-                          ? ({
-                              ...p,
-                              status: next.status,
-                              pipeline_stage_id: next.stageId,
-                            } as Project)
-                          : p,
-                      )
-                    }
-                  />
-                  {/*
-                   * Origin is identity, not a statistic. This used to sit at the
-                   * end of the metadata strip below, in 12px at 60% opacity
-                   * behind three numeric stats, where it read as a footnote about
-                   * counts and wrapped onto its own line on a narrow viewport -
-                   * "it's not readily apparent which blueprint has been applied"
-                   * was a fair description of it. Renders nothing unless a
-                   * blueprint really was applied.
-                   */}
-                  <ProjectBlueprintOrigin state={blueprintOrigin.state} onOpenPanel={setPanel} />
-                </div>
-                <h1 className="font-display mt-3 truncate text-2xl font-bold leading-tight tracking-tight text-sidebar-foreground sm:text-3xl">
-                  {project.name}
-                </h1>
-                {(projectAddress(project) || project.location) && (
-                  <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(projectAddress(project) ?? project.location ?? "")}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-sidebar-foreground/65 transition hover:text-sidebar-foreground"
-                  >
-                    <MapPin className="h-4 w-4 shrink-0 text-sidebar-ring" />
-                    <span className="truncate">{projectAddress(project) ?? project.location}</span>
-                  </a>
-                )}
-                {/*
-                  The staffing row. Who is on this job is a decision the admin
-                  makes here; the record of who has actually worked in it lives
-                  next to the photos it describes, under "The field, on record".
-                  One question in the header, one beside the work. Keeping the
-                  two apart is the whole point: a headcount beside the Assign
-                  control read as a staffing list, and the crew and the people
-                  who have worked the job are different things.
-                */}
-                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <ProjectCrew
-                    userIds={assignees}
-                    canAssign={canAssign}
-                    onAssign={() => setAssignOpen(true)}
-                    variant="dark"
-                    labeled
-                    caption="Who this job is assigned to."
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex shrink-0 items-center gap-2">
-              {/*
-                Generating a summary/log/report is a primary project action, so
-                it lives here rather than only inside the Documents tab - that
-                tab is where finished work is stored, not where you go to make
-                it. Same menu component as Documents, so they can't drift.
-              */}
-              <GenerateDocumentMenu
-                projectId={projectId}
-                trigger={
-                  <Button className="h-10 rounded-lg bg-sidebar-foreground px-5 font-bold text-sidebar shadow-sm hover:bg-sidebar-foreground/90">
-                    <Sparkles className="mr-2 h-4 w-4 text-sidebar-ring" />
-                    Create
-                  </Button>
-                }
-              />
-              {/*
-                Starter-tier only. Pro/Team generate documents with AI via
-                the Create menu, so the hand-built photo report is clutter
-                for them - see canUseManualPhotoReport in use-subscription.
-              */}
-              {canUseManualPhotoReport && (
-                <Button
-                  variant="outline"
-                  onClick={() => setCreateReportOpen(true)}
-                  className="h-10 rounded-lg border-sidebar-foreground/15 bg-sidebar-foreground/10 px-4 font-bold text-sidebar-foreground hover:bg-sidebar-foreground/20 hover:text-sidebar-foreground"
-                >
-                  <FileText className="mr-2 h-4 w-4 text-sidebar-ring" />
-                  Create Report
-                </Button>
-              )}
-              <ProjectActionsMenu
-                project={project}
-                photos={photos}
-                onEdit={() => setEditOpen(true)}
-                onTrash={() => setPanel("trash")}
-                onDeleted={() => navigate({ to: "/projects" })}
-                onStatusChange={(status) => setProject((p) => (p ? { ...p, status } : p))}
-                triggerClassName="h-10 w-10 rounded-xl border-sidebar-foreground/15 bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/20 hover:text-sidebar-foreground"
-              />
-            </div>
+      {/* Hero - the reference's light project header: title + status pill on
+          the left, actions on the right, crew / labels / counters beneath. */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 max-w-[640px]">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="font-sans text-[22px] font-bold leading-tight tracking-[-0.01em] text-foreground">
+              {project.name}
+            </h1>
+            <ProjectStatusChip
+              projectId={project.id}
+              status={project.status}
+              stageId={project.pipeline_stage_id}
+              onChanged={(next) =>
+                setProject((p) =>
+                  p
+                    ? ({
+                        ...p,
+                        status: next.status,
+                        pipeline_stage_id: next.stageId,
+                      } as Project)
+                    : p,
+                )
+              }
+            />
           </div>
+          {(projectAddress(project) || project.location) && (
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(projectAddress(project) ?? project.location ?? "")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1.5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground transition hover:text-foreground"
+            >
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="truncate">{projectAddress(project) ?? project.location}</span>
+            </a>
+          )}
 
+          {/* Origin is identity - it reads beside the title in the reference too. */}
+          <ProjectBlueprintOrigin state={blueprintOrigin.state} onOpenPanel={setPanel} />
+
+          {/* Crew + description */}
+          <div className="mt-4">
+            <ProjectCrew
+              userIds={assignees}
+              canAssign={canAssign}
+              onAssign={() => setAssignOpen(true)}
+              labeled
+              caption="Who this job is assigned to."
+            />
+          </div>
           {project.description && (
-            <p className="-mt-3 max-w-3xl text-sm leading-relaxed text-sidebar-foreground/60">
+            <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-muted-foreground">
               {project.description}
             </p>
           )}
 
-          {/* Footer stats row */}
-          <div className="flex flex-col gap-4 border-t border-sidebar-border pt-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="mr-1 text-[10px] font-extrabold uppercase tracking-[1.5px] text-sidebar-foreground/45">
-                Labels
-              </span>
-              <LabelPicker
-                value={projectLabels}
-                onChange={(next) => void setProjectLabels(next)}
-                suggestions={labelCatalog.rows.map((r) => r.name)}
-                triggerLabel="Add label"
-                placeholder="Search or create a label"
-                userId={user?.id}
-                variant="dark"
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-5 text-xs font-bold text-sidebar-foreground/60">
-              {/*
-                The second "N contributors" is gone rather than explained.
-                It was the same count as the one in the block above, forty
-                pixels away, in a rail of hard numbers where it read as a third
-                statistic - which is how one word ended up on this header twice
-                with nothing behind either copy. The chip above now carries the
-                names, the counts and what the word means; repeating the number
-                here would only give a reader a second thing to hover.
-              */}
-              <span className="inline-flex items-center gap-2">
-                <Camera className="h-4 w-4 text-sidebar-ring" />
-                {/*
-                  A project with one photo read "1 field captures". The count is
-                  the first thing on a new job, so the singular is not the rare
-                  case here - it is what every project shows on the day it is
-                  created.
-                */}
-                {(totalPhotos || photos.length).toLocaleString()}{" "}
-                {(totalPhotos || photos.length) === 1 ? "field capture" : "field captures"}
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-sidebar-ring" />
-                Updated {relativeTime(project.updated_at)}
-              </span>
-            </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
+              Labels
+            </span>
+            <LabelPicker
+              value={projectLabels}
+              onChange={(next) => void setProjectLabels(next)}
+              suggestions={labelCatalog.rows.map((r) => r.name)}
+              triggerLabel="Add label"
+              placeholder="Search or create a label"
+              userId={user?.id}
+            />
           </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex shrink-0 items-center gap-2">
+          <GenerateDocumentMenu
+            projectId={projectId}
+            trigger={
+              <Button className="font-sans h-10 rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90">
+                <Sparkles className="mr-2 h-4 w-4" />
+                Create
+              </Button>
+            }
+          />
+          {canUseManualPhotoReport && (
+            <Button
+              variant="outline"
+              onClick={() => setCreateReportOpen(true)}
+              className="font-sans h-10 rounded-lg border-border bg-card px-4 text-[13.5px] font-medium text-foreground hover:bg-secondary"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Create Report
+            </Button>
+          )}
+          <ProjectActionsMenu
+            project={project}
+            photos={photos}
+            onEdit={() => setEditOpen(true)}
+            onTrash={() => setPanel("trash")}
+            onDeleted={() => navigate({ to: "/projects" })}
+            onStatusChange={(status) => setProject((p) => (p ? { ...p, status } : p))}
+            triggerClassName="font-sans h-10 w-10 rounded-lg border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
+          />
         </div>
       </div>
 
-      <PageTabStrip
-        className="mt-3.5"
+      {/* Footer stats row - kept the counts the hero rail carried. */}
+      <div className="mt-5 flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
+            Counters
+          </span>
+          <span className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+            <Camera className="h-4 w-4 text-primary" />
+            {(totalPhotos || photos.length).toLocaleString()}{" "}
+            {(totalPhotos || photos.length) === 1 ? "field capture" : "field captures"}
+          </span>
+          <span className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+            <Calendar className="h-4 w-4 text-primary" />
+            Updated {relativeTime(project.updated_at)}
+          </span>
+        </div>
+      </div>
+      <ReferenceTabStrip
+        className="mt-6"
         value={panel ?? "photos"}
         items={[
-          { key: "photos", label: "Photos", count: photos.length, icon: Camera },
-          /*
-           * Two tabs, and the keys finally say what they hold. This was one
-           * entry keyed "reports" and labelled "Documents", which is the bug
-           * the client had been looking at: generated reports and stored
-           * paperwork were the same list, under a name that matched neither.
-           */
-          { key: "documents", label: "Documents", count: counts.documents, icon: FileText },
+          {
+            key: "photos",
+            label: (
+              <>
+                Photos <span className="font-mono text-[11px] text-faint">{photos.length}</span>
+              </>
+            ),
+          },
+          {
+            key: "documents",
+            label: (
+              <>
+                Documents{" "}
+                <span className="font-mono text-[11px] text-faint">{counts.documents}</span>
+              </>
+            ),
+          },
           {
             key: "reports",
-            label: "Reports",
-            count: counts.reports,
-            icon: ClipboardList,
+            label: (
+              <>
+                Reports <span className="font-mono text-[11px] text-faint">{counts.reports}</span>
+              </>
+            ),
           },
-          { key: "checklists", label: "Checklists", count: counts.checklists, icon: ListChecks },
+          {
+            key: "checklists",
+            label: (
+              <>
+                Checklists{" "}
+                <span className="font-mono text-[11px] text-faint">{counts.checklists}</span>
+              </>
+            ),
+          },
           {
             key: "walkthroughs",
             // Both sub-sections, because both live behind this tab: the
             // recordings and the summaries written from them.
-            label: "Walkthroughs",
-            count: walkthroughs.length + summaries.length,
-            icon: Footprints,
+            label: (
+              <>
+                Walkthroughs{" "}
+                <span className="font-mono text-[11px] text-faint">
+                  {walkthroughs.length + summaries.length}
+                </span>
+              </>
+            ),
           },
-          { key: "workflows", label: "Workflows", count: counts.workflows, icon: Workflow },
-          { key: "tasks", label: "Tasks", count: counts.tasksOpen, icon: CheckSquare },
+          {
+            key: "workflows",
+            label: (
+              <>
+                Workflows{" "}
+                <span className="font-mono text-[11px] text-faint">{counts.workflows}</span>
+              </>
+            ),
+          },
+          {
+            key: "tasks",
+            label: (
+              <>
+                Tasks <span className="font-mono text-[11px] text-faint">{counts.tasksOpen}</span>
+              </>
+            ),
+          },
           // No count: the calendar is a view of the photos already counted on
           // the Photos tab, so a number here would double-count the same work.
-          { key: "calendar", label: "Calendar", count: null, icon: CalendarDays },
+          { key: "calendar", label: <span>Calendar</span> },
         ]}
         onChange={(key) => {
           if (key === "photos") {
@@ -3045,7 +2987,6 @@ export function ProjectDetailPage() {
           setPanel((cur) => (cur === key ? null : (key as any)));
         }}
       />
-
       {/* Other panels open as dedicated full pages (see early return above). Walkthroughs renders inline. */}
       {panel === "walkthroughs" && (
         <>
@@ -3169,7 +3110,7 @@ export function ProjectDetailPage() {
                   {retryingVideo
                     ? videoUploadProgress != null
                       ? `Uploading ${videoUploadProgress}%`
-                      : "Uploading…"
+                      : "Uploadingâ€¦"
                     : "Retry upload"}
                 </Button>
                 <Button
@@ -3284,10 +3225,10 @@ export function ProjectDetailPage() {
                             month: "short",
                             day: "numeric",
                           })}
-                          {" · "}
+                          {" Â· "}
                           {isSummary
-                            ? `AI Summary · ${w.photo_count} ${w.photo_count === 1 ? "photo" : "photos"}`
-                            : `${mins}:${secs.toString().padStart(2, "0")} · ${w.photo_count} ${
+                            ? `AI Summary Â· ${w.photo_count} ${w.photo_count === 1 ? "photo" : "photos"}`
+                            : `${mins}:${secs.toString().padStart(2, "0")} Â· ${w.photo_count} ${
                                 w.photo_count === 1 ? "photo" : "photos"
                               }`}
                         </p>
@@ -3329,7 +3270,7 @@ export function ProjectDetailPage() {
                           className="mt-3 inline-flex items-center gap-2 text-xs font-extrabold text-primary hover:underline"
                         >
                           {isSummary ? "Open AI Summary" : "Open walkthrough"}{" "}
-                          <span aria-hidden>→</span>
+                          <span aria-hidden>â†’</span>
                         </Link>
                       </div>
                     </div>
@@ -3655,7 +3596,7 @@ export function ProjectDetailPage() {
             <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Photo tags · filter photos ({tagLogic.toUpperCase()})
+                  Photo tags Â· filter photos ({tagLogic.toUpperCase()})
                 </div>
                 {tagFilter.length > 0 && (
                   <button
@@ -3886,7 +3827,7 @@ export function ProjectDetailPage() {
                           {cleanCaption(p.caption) || formatPhotoDateGroup(when)}
                         </p>
                         <p className="text-[11px] text-muted-foreground">
-                          {formatPhotoDateGroup(when)} · {relativeTime(when)}
+                          {formatPhotoDateGroup(when)} Â· {relativeTime(when)}
                         </p>
                       </div>
                     </div>
@@ -3974,7 +3915,7 @@ export function ProjectDetailPage() {
                             day: "numeric",
                             year: "numeric",
                           })}
-                          {" · "}
+                          {" Â· "}
                           {Math.max(1, Math.round((v.size_bytes ?? 0) / 1024 / 1024))} MB
                         </div>
                       </div>
@@ -4264,7 +4205,7 @@ export function ProjectDetailPage() {
           {ocrLoading ? (
             <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Reading text from photo…</span>
+              <span className="text-sm">Reading text from photoâ€¦</span>
             </div>
           ) : (
             <>

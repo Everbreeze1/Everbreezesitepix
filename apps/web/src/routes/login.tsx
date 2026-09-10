@@ -147,9 +147,9 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-background landing lg:grid lg:grid-cols-2">
+    <div className="flex min-h-screen w-full items-center justify-center bg-sidebar landing px-4 py-10">
       {/* LEFT - marketing panel (desktop only) */}
-      <aside className="relative hidden overflow-hidden bg-sidebar lg:flex lg:flex-col lg:justify-between">
+      <aside className="hidden">
         {/* Background rather than <img> - see signup.tsx. `hidden lg:flex` does
             not stop an <img src> downloading, so this 606 KB decoration was
             being fetched on every phone that opened the login page. */}
@@ -197,13 +197,13 @@ function LoginPage() {
       </aside>
 
       {/* RIGHT - form */}
-      <div className="flex min-h-screen flex-col px-5 py-8 sm:px-8 lg:justify-center lg:px-12 lg:py-12">
+      <div className="w-full max-w-[420px] rounded-2xl bg-card p-8 shadow-xl">
         <div className="mb-6 flex items-center justify-between lg:hidden"></div>
 
-        <div className="mx-auto flex w-full max-w-[448px] flex-1 flex-col justify-center lg:flex-none">
+        <div className="flex w-full flex-col">
           <MobileAppBanner />
 
-          <div className="mb-8 flex flex-col items-center text-center lg:hidden">
+          <div className="mb-7 flex flex-col items-center text-center">
             <BrandLogo size={44} />
             <div className="mt-3 flex items-baseline text-xl font-bold tracking-tight">
               <span className="text-foreground">Ever</span>
@@ -214,11 +214,11 @@ function LoginPage() {
           <p className="font-manrope text-xs font-extrabold uppercase tracking-[1.92px] text-primary">
             Welcome back
           </p>
-          <h2 className="font-display mt-3 text-4xl font-bold uppercase leading-tight tracking-[-0.01em] text-foreground sm:text-5xl">
+          <h2 className="font-display mt-3 text-2xl font-bold leading-tight tracking-[-0.01em] text-foreground">
             Back to the work.
           </h2>
           <p className="font-manrope mt-4 text-sm leading-6 text-muted-foreground">
-            Log in to see what is moving across your projects.
+            Log in to your job record.
           </p>
 
           {/*
@@ -396,7 +396,7 @@ function LoginPage() {
           </p>
         </div>
 
-        <div className="mt-8 text-center text-xs text-muted-foreground lg:hidden">
+        <div className="mt-6 text-center text-xs text-muted-foreground">
           Â© {new Date().getFullYear()} Everlumen
         </div>
       </div>

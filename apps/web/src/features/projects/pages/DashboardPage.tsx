@@ -1,8 +1,9 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Camera, FileText } from "lucide-react";
+import { Camera, FileText, Search, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ReferencePill } from "@/components/ui/reference";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
@@ -66,6 +67,12 @@ export function DashboardPage() {
   const [docHealthPct, setDocHealthPct] = useState<number | null>(null);
   const [weekCounts, setWeekCounts] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  /*
+   * "Needs review" is the count of photos that are still untagged - the same
+   * definition the project's Photos tab uses for its "Needs review" filter
+   * (untagged photos need a human to look at them before a report ships).
+   */
+  const [needsReviewCount, setNeedsReviewCount] = useState(0);
   const [captureOpen, setCaptureOpen] = useState(false);
 
   /*
@@ -116,6 +123,7 @@ export function DashboardPage() {
       setDocHealthPct(query.data.docHealthPct);
       setWeekCounts(query.data.weekCounts);
       setActivity(query.data.activity);
+      setNeedsReviewCount(query.data.needsReviewCount);
     }
   }, [query.data]);
 
@@ -128,6 +136,7 @@ export function DashboardPage() {
     docHealthPct: number | null;
     weekCounts: number[];
     activity: ActivityItem[];
+    needsReviewCount: number;
   }> {
     const { data: projectList } = await (supabase as any)
       .from("projects")
@@ -144,6 +153,7 @@ export function DashboardPage() {
       newRecordsResult,
       weekPhotosResult,
       healthResult,
+      needsReviewResult,
       recentPhotosResult,
       recentReportsResult,
     ] = await Promise.all([
@@ -172,6 +182,12 @@ export function DashboardPage() {
             .is("deleted_at", null)
             .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
         : Promise.resolve({ data: [] }),
+      // Untagged photos = "Needs review" (matches the Photos tab's filter).
+      supabase
+        .from("photos")
+        .select("id", { count: "exact", head: true })
+        .is("deleted_at", null)
+        .or("tags.is.null,tags.eq.{}"),
       (supabase as any)
         .from("photos")
         .select("project_id, uploaded_by, created_at")
@@ -217,6 +233,7 @@ export function DashboardPage() {
       docHealthPct,
       weekCounts: buckets,
       activity,
+      needsReviewCount: needsReviewResult.count ?? 0,
     };
   }
 
@@ -370,213 +387,165 @@ export function DashboardPage() {
     { weekday: "short" },
   );
 
-  return (
-    <div className="min-h-full bg-background px-6 pb-24 pt-6 sm:px-10 sm:pt-10">
-      {/* Above the greeting, and only until it is answered or dismissed - see
-          AccountSetupCard, which renders nothing in every other case. */}
-      <AccountSetupCard className="mb-5" />
+return (
+    <div className="min-h-full bg-background">
+      <div className="mx-auto w-full max-w-[1200px] px-6 pb-10 pt-8 sm:px-10">
+        {/* Above the greeting, and only until it is answered or dismissed - see
+            AccountSetupCard, which renders nothing in every other case. */}
+        <AccountSetupCard className="mb-5" />
 
-      {/* Greeting hero */}
-      <div className="relative overflow-hidden rounded-[32px] border border-border bg-card p-8 sm:p-10">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary/10 blur-[64px]" />
-        <div className="relative flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
-          <div className="max-w-[448px]">
-            <p className="font-manrope text-xs font-extrabold uppercase tracking-[1.92px] text-primary">
-              {today}
-            </p>
-            <h1
-              aria-busy={!firstName && profileLoading}
-              className="font-sans mt-4 text-2xl font-bold leading-tight tracking-[-0.01em] text-foreground sm:text-3xl"
+        {/* Search + Capture update */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex h-[38px] w-[320px] items-center gap-2.5 rounded-[10px] border border-border bg-card px-3.5">
+            <Search className="h-3.5 w-3.5 shrink-0 text-faint" />
+            <span className="text-[13px] text-faint">Search projects, photos, reports...</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Bell className="h-[19px] w-[19px] shrink-0 text-muted-foreground" aria-hidden />
+            <Button
+              disabled={loading}
+              onClick={() =>
+                guard(
+                  () =>
+                    projects.length === 0 ? navigate({ to: "/projects/new" }) : setCaptureOpen(true),
+                  "Subscribe to capture new field updates.",
+                )
+              }
+              className="font-sans h-[38px] rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90"
             >
-              {/*
-               * Three states, and the name only ever appears once it is known.
-               * The unknown one drops the punctuation rather than holding a
-               * shimmer block where the name goes: at this size the block is
-               * wide enough to wrap onto its own line, and a heading that
-               * reflows as it resolves trades one distraction for another.
-               */}
-              {firstName
-                ? `${greeting}, ${firstName}.`
-                : profileLoading
-                  ? greeting
-                  : `${greeting}.`}
-            </h1>
-            <p className="font-manrope mt-5 text-sm leading-6 text-muted-foreground">
-              Your crews are documenting steadily. Here is the field record that needs your
-              attention today.
-            </p>
+              <Camera className="h-4 w-4" /> Capture update
+            </Button>
           </div>
-          <Button
-            disabled={loading}
-            onClick={() =>
-              guard(
-                () =>
-                  projects.length === 0 ? navigate({ to: "/projects/new" }) : setCaptureOpen(true),
-                "Subscribe to capture new field updates.",
-              )
-            }
-            className="font-manrope w-fit rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90"
+        </div>
+
+        {/* Greeting */}
+        <div className="mt-6">
+          <h1
+            aria-busy={!firstName && profileLoading}
+            className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground"
           >
-            <Camera className="h-4 w-4" /> Capture update
-          </Button>
+            {firstName ? `${greeting}, ${firstName}.` : profileLoading ? greeting : `${greeting}.`}
+          </h1>
+          <p className="font-sans mt-1 text-[14px] leading-snug text-muted-foreground">
+            Here's where every job on the board stands today.
+          </p>
         </div>
 
-        <div className="relative mt-10 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl border border-border bg-muted p-4">
-            <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[1.3px] text-muted-foreground">
-              Active projects
-            </p>
-            <p className="font-mono mt-3 text-[26px] font-bold leading-none text-foreground">
+        {/* Stat cards */}
+        <div className="mt-6 grid grid-cols-2 gap-[14px] lg:grid-cols-4">
+          <div className="rounded-[12px] border border-border bg-card p-[18px_20px]">
+            <div className="text-xs text-muted-foreground">Active projects</div>
+            <div className="font-mono mt-1.5 text-[26px] font-bold leading-none text-foreground">
               {activeCount}
-            </p>
-            <p className="font-manrope mt-2 text-xs font-bold text-muted-foreground">
-              {primaryState ? `Across ${primaryState}` : "Across your job sites"}
-            </p>
+            </div>
           </div>
-          <div className="rounded-2xl border border-border bg-muted p-4">
-            <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[1.3px] text-muted-foreground">
-              New field records
-            </p>
-            <p className="font-mono mt-3 text-[26px] font-bold leading-none text-foreground">
-              {newRecordsCount}
-            </p>
-            <p className="font-manrope mt-2 text-xs font-bold text-muted-foreground">
-              Since yesterday
-            </p>
+          <div className="rounded-[12px] border border-border bg-card p-[18px_20px]">
+            <div className="text-xs text-muted-foreground">New field records</div>
+            <div className="font-mono mt-1.5 text-[26px] font-bold leading-none text-foreground">
+              {newRecordsCount} <span className="text-xs font-normal text-faint">today</span>
+            </div>
           </div>
-          <div className="rounded-2xl border border-border bg-muted p-4">
-            <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[1.3px] text-muted-foreground">
-              Documentation health
-            </p>
-            <p className="font-mono mt-3 text-[26px] font-bold leading-none text-foreground">
-              {docHealthPct === null ? "-" : `${docHealthPct}%`}
-            </p>
-            <p className="font-manrope mt-2 text-xs font-bold text-muted-foreground">
-              Documented this week
-            </p>
+          <div className="rounded-[12px] border border-border bg-card p-[18px_20px]">
+            <div className="text-xs text-muted-foreground">Documentation health</div>
+            <div className="font-mono mt-1.5 text-[26px] font-bold leading-none text-foreground">
+              {docHealthPct === null ? "—" : `${docHealthPct}%`}
+            </div>
+          </div>
+          <div className="rounded-[12px] border border-status-hold bg-status-hold-soft p-[18px_20px]">
+            <div className="text-xs text-muted-foreground">Needs review</div>
+            <div className="font-mono mt-1.5 text-[26px] font-bold leading-none text-status-hold">
+              {needsReviewCount}
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Active projects */}
-      {!loading && activeCards.length > 0 && (
-        <div className="mt-9">
-          <div className="flex items-end justify-between gap-5">
-            <div>
-              <p className="font-manrope text-[11px] font-extrabold uppercase tracking-[1.5px] text-muted-foreground">
-                On site now
-              </p>
-              <h2 className="font-manrope mt-2 text-xl font-extrabold tracking-[-0.01em] text-foreground">
-                Active projects
-              </h2>
+{/* On site now + Needs attention */}
+        <div className="mt-7 flex flex-col gap-[22px] lg:flex-row lg:items-start">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-[15px] font-semibold text-foreground">On site now</h2>
+              <Link to="/projects" className="text-[12.5px] font-semibold text-primary">
+                View all projects &rarr;
+              </Link>
             </div>
-            <Link to="/map" className="font-manrope text-sm font-extrabold text-primary">
-              View map →
-            </Link>
+            <div className="mt-3 flex flex-col gap-2.5">
+              {!loading && activeCards.length === 0 && (
+                <p className="rounded-[12px] border border-border bg-card p-4 text-sm text-muted-foreground">
+                  Your active projects will show here once work starts. Create a project to begin.
+                </p>
+              )}
+              {activeCards.map((p) => {
+                const tone: "active" | "hold" | "complete" | "archived" =
+                  p.status === "completed"
+                    ? "complete"
+                    : p.status === "hold" || p.status === "on-hold"
+                      ? "hold"
+                      : "active";
+                return (
+                  <Link
+                    key={p.id}
+                    to="/projects/$projectId"
+                    params={{ projectId: p.id }}
+                    search={{} as any}
+                    className="flex items-center gap-3.5 rounded-[12px] border border-border bg-card px-4 py-[15px] transition-colors hover:border-primary"
+                  >
+                    <div className="h-[44px] w-[44px] shrink-0 rounded-lg bg-secondary" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13.5px] font-semibold text-foreground">
+                        {p.name}
+                      </div>
+                      <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {projectLocation(p) || "Site"} &middot; {p.photoCount} photo
+                        {p.photoCount === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                    <ReferencePill tone={tone}>
+                      {p.status === "completed" ? "Completed" : p.status === "hold" ? "On hold" : "Active"}
+                    </ReferencePill>
+                    <div className="w-[74px] shrink-0 text-right text-[11.5px] text-faint">
+                      {p.lastPhotoAt ? timeAgo(p.lastPhotoAt) : timeAgo(p.updated_at)}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="mt-5 grid gap-5 lg:grid-cols-3">
-            {activeCards.map((p, i) => (
-              <Link
-                key={p.id}
-                to="/projects/$projectId"
-                params={{ projectId: p.id }}
-                search={{} as any}
-                className={`group relative block h-[255px] overflow-hidden rounded-3xl shadow-[0_22px_40px_-28px_rgba(16,25,41,0.65)] ${i === 0 ? "lg:col-span-2" : ""}`}
-              >
-                {p.coverUrl ? (
-                  <img
-                    src={p.coverUrl}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                ) : (
-                  <div className="absolute inset-0 bg-muted" />
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-sidebar via-sidebar/25 to-transparent" />
-                <div className="relative flex h-full flex-col justify-between p-5">
-                  <span className="font-manrope w-fit rounded-full bg-[#34D399] px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[1.2px] text-sidebar">
-                    {p.status === "active" ? "Active" : p.status}
-                  </span>
-                  <div>
-                    <p className="font-display text-3xl font-bold leading-none tracking-[-0.01em] text-sidebar-foreground">
-                      {p.name}
-                    </p>
-                    <p className="font-manrope mt-2 text-xs font-bold text-sidebar-foreground/65">
-                      {p.photoCount} photo{p.photoCount === 1 ? "" : "s"} ·{" "}
-                      {p.lastPhotoAt ? timeAgo(p.lastPhotoAt) : timeAgo(p.updated_at)}
-                    </p>
+          <div className="w-full max-w-[320px] shrink-0 lg:w-[320px]">
+            <h2 className="text-[15px] font-semibold text-foreground">Needs attention</h2>
+            <div className="mt-3 rounded-[12px] border border-border bg-card">
+              {activity.length === 0 && !loading && (
+                <p className="px-4 py-8 text-center text-[12.5px] text-faint">
+                  Nothing needs attention right now.
+                </p>
+              )}
+              {activity.map((item) => (
+                <div
+                  key={item.key}
+                  className="flex items-start gap-3 border-b border-border px-3.5 py-3 last:border-b-0"
+                >
+                  {item.kind === "report" ? (
+                    <FileText className="mt-0.5 h-4 w-4 shrink-0 text-accent-foreground" />
+                  ) : (
+                    <Camera className="mt-0.5 h-4 w-4 shrink-0 text-status-hold" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-[12.5px] font-medium leading-snug text-foreground">
+                      {item.text}
+                    </div>
+                    <div className="mt-1 text-[11.5px] text-faint">{timeAgo(item.at)}</div>
                   </div>
                 </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Activity + crew pulse */}
-      <div className="mt-9 grid gap-5 lg:grid-cols-[1fr_420px]">
-        <div className="rounded-3xl border border-border bg-card p-6">
-          <p className="font-manrope text-[11px] font-extrabold uppercase tracking-[1.5px] text-muted-foreground">
-            Live record
-          </p>
-          <h2 className="font-manrope mt-2 text-xl font-extrabold tracking-[-0.01em] text-foreground">
-            Latest field activity
-          </h2>
-          <div className="mt-5 space-y-2">
-            {activity.length === 0 && !loading && (
-              <p className="font-manrope rounded-2xl bg-muted p-4 text-sm text-muted-foreground">
-                No field activity yet. Capture your first update to see it here.
-              </p>
-            )}
-            {activity.map((item) => (
-              <div key={item.key} className="flex items-center gap-4 rounded-2xl bg-muted p-4">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-card text-primary shadow-sm">
-                  {item.kind === "report" ? (
-                    <FileText className="h-4 w-4" />
-                  ) : (
-                    <Camera className="h-4 w-4" />
-                  )}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-manrope truncate text-sm font-extrabold text-foreground">
-                    {item.text}
-                  </p>
-                  <p className="font-manrope mt-1 text-xs text-muted-foreground">
-                    {timeAgo(item.at)}
-                  </p>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-6">
-          <h2 className="font-manrope text-lg font-extrabold text-foreground">Crew pulse</h2>
-          <p className="font-manrope mt-1 text-sm text-muted-foreground">Work captured this week</p>
-          <div className="mt-7 flex h-[221px] items-end gap-2">
-            {weekCounts.map((c, i) => (
-              <div
-                key={i}
-                className="flex-1 rounded-t-[4px] bg-primary/20"
-                style={{ height: `${c === 0 ? 4 : Math.max(16, (c / maxWeekCount) * 100)}%` }}
-              />
-            ))}
-          </div>
-          <div className="mt-4 flex items-start justify-between">
-            <span className="font-manrope text-xs font-bold text-muted-foreground">
-              {weekdayLabel}
-            </span>
-            <span className="font-manrope text-xs font-bold text-muted-foreground">Today</span>
-          </div>
-        </div>
+        <CaptureUpdateDialog
+          open={captureOpen}
+          onOpenChange={setCaptureOpen}
+          projects={projectPickerRows}
+        />
       </div>
-
-      <CaptureUpdateDialog
-        open={captureOpen}
-        onOpenChange={setCaptureOpen}
-        projects={projectPickerRows}
-      />
     </div>
   );
 }

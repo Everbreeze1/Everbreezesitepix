@@ -40,6 +40,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SectionHeading, SURFACE_CARD_INTERACTIVE } from "@/components/ui/surface";
 import { PageTabStrip } from "@/components/PageTabStrip";
+import { ReferenceTabStrip } from "@/components/ui/reference";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1186,7 +1187,7 @@ export function ProjectsPage() {
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder={tab === "groups" ? "Search groups…" : "Search projects by name or address…"}
+        placeholder={tab === "groups" ? "Search groupsÃ¢â‚¬Â¦" : "Search projects by name or addressÃ¢â‚¬Â¦"}
         className="h-8 rounded-lg border-border bg-card/80 pl-8 pr-8 text-xs shadow-none placeholder:text-muted-foreground"
       />
       {query && (
@@ -1542,7 +1543,7 @@ export function ProjectsPage() {
             <div className="max-h-60 overflow-y-auto pr-1">
               {labelCatalog.rows.length === 0 ? (
                 <div className="px-1 py-3 text-xs text-muted-foreground">
-                  No labels yet - they’ll appear here after your first visit.
+                  No labels yet - theyÃ¢â‚¬â„¢ll appear here after your first visit.
                 </div>
               ) : (
                 <div className="space-y-0.5">
@@ -1726,7 +1727,7 @@ export function ProjectsPage() {
                 style={{ transform: refreshing ? undefined : `rotate(${progress * 270}deg)` }}
               />
               {refreshing
-                ? "Refreshing…"
+                ? "RefreshingÃ¢â‚¬Â¦"
                 : progress >= 1
                   ? "Release to refresh"
                   : "Pull to refresh"}
@@ -1738,102 +1739,80 @@ export function ProjectsPage() {
 
         {/* Same container as the project home page, so the content edge does not
             jump when you click through from this list into a project. */}
-        <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pt-10">
-          {/* Hero - same shell, ornament, badge and stats rail as the project home page. */}
-          <div className="relative overflow-hidden rounded-[32px] bg-sidebar">
-            <div className="pointer-events-none absolute -right-24 -top-28 h-[288px] w-[288px] rounded-full border-[28px] border-sidebar-ring/20" />
-            <div className="relative flex flex-col gap-7 p-6 sm:px-10 sm:py-9">
-              <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="inline-flex items-center rounded-full bg-sidebar-ring px-3 py-1 text-[10px] font-extrabold uppercase tracking-[1.4px] text-sidebar-foreground">
-                      Workspace library
-                    </span>
-                  </div>
-                  <h1 className="font-display mt-3 truncate text-2xl font-bold leading-tight tracking-tight text-sidebar-foreground sm:text-3xl">
-                    Projects
-                  </h1>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-2">
+        <div className="mx-auto w-full max-w-[1200px] px-4 pb-24 pt-8 sm:px-8 md:px-10">
+          {/* Hero - mockup-style: title, subtitle, primary action and a trash menu. */}
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 max-w-[560px]">
+              <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
+                Projects
+              </h1>
+              <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
+                {bodyDescription}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Button
+                onClick={() =>
+                  guard(
+                    () => navigate({ to: "/projects/new" }),
+                    "Subscribe to create new projects.",
+                  )
+                }
+                className="font-sans h-10 rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90"
+              >
+                <Plus className="h-4 w-4" /> New project
+              </Button>
+              {/* Trash is a rare recovery action; it stays behind the page's
+                  primary action, restyled to the reference quiet button. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                   <Button
-                    onClick={() =>
-                      guard(
-                        () => navigate({ to: "/projects/new" }),
-                        "Subscribe to create new projects.",
-                      )
-                    }
-                    className="h-10 rounded-lg bg-sidebar-foreground px-5 font-bold text-sidebar shadow-sm hover:bg-sidebar-foreground/90"
+                    variant="outline"
+                    size="icon"
+                    aria-label="More project actions"
+                    className="h-10 w-10 rounded-lg border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
                   >
-                    <Plus className="mr-2 h-4 w-4 text-sidebar-ring" /> Create project
+                    <MoreHorizontal className="h-4 w-4" />
                   </Button>
-                  {/* Trash is a rare recovery action; it was sized as a peer of the
-                      page's only primary action. Behind the same overflow trigger
-                      the project home page uses. */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        aria-label="More project actions"
-                        className="h-10 w-10 rounded-xl border-sidebar-foreground/15 bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/20 hover:text-sidebar-foreground"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                      <DropdownMenuItem asChild>
-                        <Link to="/projects/trash">
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Project trash
-                        </Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-
-              {/* Stats rail - states the workload and cuts to it in the same click. */}
-              <div className="flex flex-col gap-4 border-t border-sidebar-border pt-5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="mr-1 text-[10px] font-extrabold uppercase tracking-[1.5px] text-sidebar-foreground/45">
-                    Workspace
-                  </span>
-                  <span className="text-xs font-bold text-sidebar-foreground">
-                    {activeCount} {activeCount === 1 ? "project" : "projects"}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-5 text-xs font-bold text-sidebar-foreground/60">
-                  {heroStats.map((s) => (
-                    <button
-                      key={s.key}
-                      type="button"
-                      onClick={s.toggle}
-                      aria-pressed={s.on}
-                      className={cn(
-                        "inline-flex items-center gap-2 rounded-md transition hover:text-sidebar-foreground",
-                        s.on && "text-sidebar-foreground",
-                      )}
-                    >
-                      <s.icon
-                        className={cn(
-                          "h-4 w-4 text-sidebar-ring",
-                          s.key === "starred" && s.on && "fill-current",
-                        )}
-                      />
-                      {s.count} {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem asChild>
+                    <Link to="/projects/trash">
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Project trash
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
-          {/* Literally the same component the project home page uses, so the two
-              strips can no longer drift apart. */}
-          <PageTabStrip
-            className="mt-3.5"
-            items={tabs}
+          {/* Stats rail - the status counts double as the filter, now rendered
+              as the reference's rounded filter pills. */}
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            {heroStats.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={s.toggle}
+                aria-pressed={s.on}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[12px] font-semibold transition",
+                  s.on
+                    ? "bg-secondary text-foreground"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <s.icon className={cn("h-3.5 w-3.5", s.on && "text-primary")} />
+                {s.count} {s.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Underline tabs, the same control every reference screen shares. */}
+          <ReferenceTabStrip
+            className="mt-6"
+            items={tabs.map((t) => ({ key: t.key, label: t.label }))}
             value={tab}
             onChange={(key) => {
               const next = key as TabKey;
@@ -1863,44 +1842,22 @@ export function ProjectsPage() {
             }}
           />
 
-          {/*
-            One header, and it is the toolbar.
-
-            There used to be a full-width search/Filters band here, an
-            "Active filters:" chip rail under it, a Recent activity rail under
-            that, and then a second header that repeated the hero's own
-            "Workspace library" eyebrow - five bands before the first project.
-            The project home page states the section and puts the controls that
-            act on it on the same line, so this does too.
-          */}
-          {/* Same reasoning as Pipelines below: the Calendar owns its own
-              header (the month, and the three counts), and neither the search
-              box nor the Filters popover acts on it. One title per screen. */}
-          {tab !== "boards" && tab !== "schedule" && (
-            <SectionHeading
-              className="mt-8"
-              eyebrow={tab === "groups" ? "Saved collections" : "Field records"}
-              title={bodyLabel}
-              description={bodyDescription}
-              actions={
-                <>
-                  {searchInput}
-                  {tab === "projects" && filtersPopover}
-                  {/* Groups had no create action outside the empty state, so once
-                      one group existed the only route left was a project's
-                      "File under a group" menu. This is the tab's own action. */}
-                  {tab === "groups" && (
-                    <Button
-                      size="sm"
-                      className="h-8 shrink-0 gap-1.5 text-xs"
-                      onClick={() => setCreateGroupOpen(true)}
-                    >
-                      <FolderPlus className="h-3.5 w-3.5" /> New Group
-                    </Button>
-                  )}
-                </>
-              }
-            />
+          {/* Toolbar - search + filters for the lists, create for groups, and
+              nothing for boards/schedule which own their own header. */}
+          {(tab === "projects" || tab === "groups") && (
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              {searchInput}
+              {tab === "projects" && filtersPopover}
+              {tab === "groups" && (
+                <Button
+                  size="sm"
+                  className="h-8 shrink-0 gap-1.5 text-xs"
+                  onClick={() => setCreateGroupOpen(true)}
+                >
+                  <FolderPlus className="h-3.5 w-3.5" /> New Group
+                </Button>
+              )}
+            </div>
           )}
           {/* Projects / Groups / Pipelines / Calendar */}
           <div>

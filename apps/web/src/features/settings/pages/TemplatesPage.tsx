@@ -1254,71 +1254,34 @@ export function TemplatesPage() {
           grow past the viewport, both for the tabs that are long lists and for
           a short screen where the workspace hits its floor. */}
       <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pb-10 md:pt-10 workspace:flex workspace:min-h-0 workspace:flex-1 workspace:flex-col [@media(max-height:950px)]:md:pb-4 [@media(max-height:950px)]:md:pt-5">
-        {/* Hero - same shell, ornament, badge and stats rail as Projects and the
-            project home page. Templates was the last product surface still
-            wearing the plain settings header, which is most of why it read as a
-            bolted-on admin screen rather than the thing the workflow runs on.
-
-            The `max-height` variants are the one departure, and they are height
-            variants rather than width ones on purpose: on a 800px-tall laptop
-            the hero's 200px is the difference between the blueprints workspace
-            fitting the screen and not, and a shorter window is exactly the case
-            where a decorative band should yield to the working area. Nothing is
-            removed above 950px. */}
-        <div className="relative overflow-hidden rounded-[32px] bg-sidebar">
-          <div className="pointer-events-none absolute -right-24 -top-28 h-[288px] w-[288px] rounded-full border-[28px] border-sidebar-ring/20" />
-          <div className="relative flex flex-col gap-7 p-6 sm:px-10 sm:py-9 [@media(min-height:821px)_and_(max-height:950px)]:sm:py-5 [@media(max-height:820px)]:sm:py-3">
-            <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0 flex-1">
-                {/* The eyebrow goes at the third height band. It names the
-                    section of the sidebar you clicked to get here, which is a
-                    nicety at 1080px and 34px of an 800px window that the
-                    section list needs more. 820px is the boundary because 768
-                    and 800 are what a maximised window on an ordinary laptop
-                    reports, and both should get the tight hero. */}
-                <span className="inline-flex items-center rounded-full bg-sidebar-ring px-3 py-1 text-[10px] font-extrabold uppercase tracking-[1.4px] text-sidebar-foreground [@media(max-height:820px)]:hidden">
-                  Workspace tools
-                </span>
-                <h1 className="font-display mt-3 truncate text-2xl font-bold leading-tight tracking-tight text-sidebar-foreground sm:text-3xl [@media(max-height:820px)]:mt-0 [@media(max-height:820px)]:text-xl [@media(max-height:820px)]:sm:text-2xl">
-                  Templates
-                </h1>
-                <p className="mt-2 max-w-xl text-sm leading-6 text-sidebar-foreground/60 [@media(max-height:950px)]:hidden">
-                  Build a job setup once as a blueprint, then apply it to any project - its
-                  checklists, workflows, documents, reports and labels all land in place.
-                </p>
-              </div>
-
-              <div className="flex shrink-0 items-center gap-2">
-                {canManage && (
-                  <Button
-                    onClick={() => {
-                      setTab("blueprints");
-                      setCreateOpen(true);
-                    }}
-                    className="h-10 rounded-lg bg-sidebar-foreground px-5 font-bold text-sidebar shadow-sm hover:bg-sidebar-foreground/90"
-                  >
-                    <Plus className="mr-2 h-4 w-4 text-sidebar-ring" /> New blueprint
-                  </Button>
-                )}
-              </div>
+        {/* Hero - a light reference header: the mockup's "Blueprints" page has
+            no dark band, just the title, subtitle, and primary action. */}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 max-w-[560px]">
+              <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
+                Templates
+              </h1>
+              <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
+                Build a job setup once as a blueprint, then apply it to any project - its
+                checklists, workflows, documents, reports and labels all land in place.
+              </p>
             </div>
-
-            {/*
-             * No stats rail here, deliberately, though Projects and the project
-             * home page both carry one.
-             *
-             * On those screens the rail earns its space: every figure in it is a
-             * filter, and clicking one cuts the list below to it. This page's
-             * rail was three inert figures, and the PageTabStrip twelve pixels
-             * underneath it already showed all three - "Library 2 blueprints" is
-             * the first tab's count, and "33 reusable pieces" was the sum of the
-             * other five. A band of numbers restating the band of numbers below
-             * it is the "way too much information" complaint in one element.
-             */}
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {canManage && (
+                <Button
+                  onClick={() => {
+                    setTab("blueprints");
+                    setCreateOpen(true);
+                  }}
+                  className="font-sans h-10 rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  <Plus className="h-4 w-4" /> New blueprint
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* The same strip Projects and the project home page use, so the three
+          {/* The same strip Projects and the project home page use, so the three
             hub screens can no longer drift apart. */}
         <PageTabStrip
           className="mt-3.5"

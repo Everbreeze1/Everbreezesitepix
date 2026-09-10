@@ -240,7 +240,7 @@ function Landing() {
           alt="Construction professional capturing a job site photo"
           className="absolute inset-0 h-full w-full object-cover opacity-45"
         />
-        <div className="container relative mx-auto flex max-w-[875px] flex-col items-center px-4 pb-24 pt-[166px] text-center sm:pb-28 sm:pt-[182px] md:pb-36 md:pt-[214px]">
+        <div className="container relative mx-auto flex max-w-[875px] flex-col items-center px-4 pb-16 pt-[120px] text-center sm:pb-20 sm:pt-[132px] md:pb-24 md:pt-[148px]">
           <div className="inline-flex items-center gap-2 rounded-full bg-sidebar-foreground px-3 py-1.5 shadow-sm">
             <span className="font-manrope rounded-full bg-brand-gold px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#1E2B4D]">
               New
@@ -251,7 +251,7 @@ function Landing() {
             <ArrowUpRight className="h-3.5 w-3.5 text-sidebar" />
           </div>
 
-          <h1 className="font-display mt-8 max-w-4xl text-4xl font-bold uppercase leading-tight tracking-[-0.01em] text-sidebar-foreground sm:text-6xl md:text-7xl lg:text-[96px]">
+          <h1 className="font-display mt-6 max-w-3xl text-3xl font-bold uppercase leading-tight tracking-[-0.01em] text-sidebar-foreground sm:text-5xl md:text-6xl lg:text-7xl">
             Every photo becomes a{" "}
             <span className="text-brand-gold">record you can stand behind.</span>
           </h1>

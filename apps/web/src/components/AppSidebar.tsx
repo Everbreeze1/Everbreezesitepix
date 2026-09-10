@@ -4,13 +4,13 @@ import {
   FolderKanban,
   Images,
   Users,
-  LogOut,
   LifeBuoy,
   Crown,
   Map,
   LayoutTemplate,
   HelpCircle,
-  ChevronRight,
+  ClipboardList,
+  FileText,
   Layers,
   Lock,
   ShieldCheck,
@@ -20,11 +20,11 @@ import { BrandLogo } from "@/components/BrandLogo";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
-  SidebarFooter,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -32,58 +32,66 @@ import {
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
-import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { getMyTeam } from "@/lib/teams.functions";
 import { checkIsPlatformAdmin } from "@/lib/admin.functions";
 
-const baseItems = [
+/*
+ * Sidebar nav, grouped exactly like the Main-html reference: a "Workspace"
+ * group (Overview, Projects, Photo Library, Maps), a "Set up" group
+ * (Blueprints, Checklists, Documents, Teams) and a "Client-facing" group
+ * (Portfolio). The templates hub is one page with deep-linkable tabs, so the
+ * three template-library rows share /templates and differ only in ?tab=.
+ */
+type NavItem = {
+  title: string;
+  url: string;
+  icon: LucideIcon;
+  locked?: boolean;
+  tab?: "checklists" | "documents";
+};
+
+const workspaceItems: NavItem[] = [
   { title: "Overview", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projects", url: "/projects", icon: FolderKanban },
+  { title: "Photo Library", url: "/gallery", icon: Images },
   { title: "Maps", url: "/map", icon: Map },
-  { title: "Gallery", url: "/gallery", icon: Images },
-] as const;
-const teamItem = { title: "Teams", url: "/teams", icon: Users } as const;
-const collabItem = { title: "Collaborators", url: "/collaborators", icon: Users } as const;
-const templatesItem = { title: "Templates", url: "/templates", icon: LayoutTemplate } as const;
-// No Timeline item: the company-wide timeline was the gallery's calendar with
-// fewer controls behind a Pro gate, so it lives at /gallery (Calendar) now.
-// The page behind /showcases is now the whole portfolio mini-site (site +
-// project pages + website embeds), so "Portfolio" is what it actually is.
-const showcasesItem = { title: "Portfolio", url: "/showcases", icon: Layers } as const;
-const pricingItem = { title: "Upgrade", url: "/pricing", icon: Crown } as const;
-// "Knowledge Base" rather than "Help Center": this row is an article library,
-// and the path to a human is the separate Feedback row directly below it.
-const helpItem = { title: "Knowledge Base", url: "/help", icon: HelpCircle } as const;
+];
+
+const blueprintsItem: NavItem = { title: "Blueprints", url: "/templates", icon: LayoutTemplate };
+// "Checklists" and "Documents" live on the Templates hub too; the tab search
+// param picks which panel opens, and lights up which row reads as active.
+const checklistsItem: NavItem = {
+  title: "Checklists",
+  url: "/templates",
+  icon: ClipboardList,
+  tab: "checklists",
+};
+const documentsItem: NavItem = {
+  title: "Documents",
+  url: "/templates",
+  icon: FileText,
+  tab: "documents",
+};
+const teamItem: NavItem = { title: "Teams", url: "/teams", icon: Users };
+const collabItem: NavItem = { title: "Collaborators", url: "/collaborators", icon: Users };
+// The page behind /showcases is the whole portfolio mini-site (site + project
+// pages + website embeds), so "Portfolio" is what it actually is.
+const portfolioItem: NavItem = { title: "Portfolio", url: "/showcases", icon: Layers };
+const pricingItem: NavItem = { title: "Upgrade", url: "/pricing", icon: Crown };
+// "Knowledge Base" rather than "Help Center": this row is an article library.
+const helpItem: NavItem = { title: "Knowledge Base", url: "/help", icon: HelpCircle };
 // Covers bugs *and* feature suggestions now, so "Report issue" undersold it.
-const reportIssueItem = { title: "Feedback", url: "/report-issue", icon: LifeBuoy } as const;
+const reportIssueItem: NavItem = { title: "Feedback", url: "/report-issue", icon: LifeBuoy };
 /*
- * The admin dashboard had no link anywhere in the product. Five pages, a route
- * tree and a server-side gate all shipped, reachable only by typing /admin from
- * memory - so the console built to run the platform was, in practice, hidden
- * from the people who run it.
- *
- * Unlike the plan-gated rows above, this one is genuinely absent for
- * non-admins rather than badged. The badge convention exists so a customer can
- * see what their plan is missing and upgrade; platform admin is not a tier
+ * The admin dashboard had no link anywhere in the product - five pages, a
+ * route tree and a server-side gate all shipped, reachable only by typing
+ * /admin from memory. Unlike the plan-gated rows above, this one is genuinely
+ * absent for non-admins rather than badged: platform admin is not a tier
  * anyone can buy, and advertising the console to every customer only invites
  * them to knock on a door that will not open.
  */
-const adminItem = { title: "Admin", url: "/admin", icon: ShieldCheck } as const;
-
-/**
- * The brand-blue rule down the left edge of the current row. Purely a marker:
- * the row's own tint and full-strength label are what carry "you are here" on
- * screen, and `isActive` on the button is what says it to a screen reader.
- */
-function ActiveMarker() {
-  return (
-    <span
-      aria-hidden
-      className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-sidebar-ring"
-    />
-  );
-}
+const adminItem: NavItem = { title: "Admin", url: "/admin", icon: ShieldCheck };
 
 function getInitials(name?: string | null, email?: string | null) {
   const trimmed = name?.trim();
@@ -100,22 +108,35 @@ export function AppSidebar() {
   const { state, isMobile } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { signOut, user } = useAuth();
+  const searchParams = useRouterState({ select: (s) => s.location.search }) as {
+    tab?: unknown;
+  };
+  /*
+   * Templates-hub tab, read from the URL so the three template rows each light
+   * up only when their own panel is showing. "blueprints" (or absent) is the
+   * hub's default, so both normalize to undefined for active-row detection.
+   */
+  const rawTab = searchParams.tab;
+  const templateTab =
+    rawTab === undefined || rawTab === "blueprints"
+      ? undefined
+      : rawTab === "checklists" || rawTab === "documents"
+        ? rawTab
+        : undefined;
+  const { user } = useAuth();
   const { profile } = useProfile();
 
-  // Only the team owner (account owner who created the team) sees the Teams
-  // tab, and only an owner is ever offered Upgrade - an invited member cannot
-  // buy anything for a team that is not theirs. Owners are scoped further by
-  // tier below.
   const fetchTeam = getMyTeam;
+  // The team row shape (plan gates, portfolio access) is intentionally read as
+  // `any`, matching the rest of the app: the endpoint is shared and produces a
+  // looser union than the fields this rail needs to branch on.
   const { data: teamData } = useQuery({
     queryKey: ["my-team"],
     queryFn: async () => (await fetchTeam()) as any,
     enabled: !!user,
-    staleTime: 60_000,
+    staleTime: 30_000,
   });
-  // Only once we've confirmed the signed-in user is an invited (non-owner)
-  // member of a team. Owners and solo users are not treated as members.
+
   const isInvitedMember =
     !!teamData && !!teamData.team && !!teamData.myRole && teamData.myRole !== "owner";
   const showOwnerNav = !isInvitedMember;
@@ -130,34 +151,24 @@ export function AppSidebar() {
    * treats them.
    */
   const hasTeamAccess = !!teamData?.isInternal || (!!teamData?.isActive && plan === "team");
-  /*
+/*
    * Portfolio is a Team-tier feature, but it is *badged*, never removed.
    *
    * Dropping the row from the array is what produced "the Portfolio is still
    * not showing": a team on the Team plan whose `subscription_status` is
    * anything other than "active" (trialing, past_due, or simply never written)
    * got no nav row, no page, and no explanation - while Templates, which
-   * checks `plan` alone, stayed visible right above it. Two gates of different
-   * strictness reading as "half the app vanished".
-   *
-   * PortfolioPage already renders the upsell for a locked account, and this is
-   * the rule that page states for its own tabs: "why can't I see Embeds?" is a
-   * worse question than "why is this read-only?" - only one answers itself.
-   * Nothing leaks by showing the row: the API and RLS gate on team membership.
+   * checks `plan` alone, stayed visible right above it. PortfolioPage already
+   * renders the upsell for a locked account; showing the row leaks nothing
+   * because the API and RLS gate on team membership.
    */
   const portfolioLocked = !hasTeamAccess;
-  const navItems: Array<{ title: string; url: string; icon: LucideIcon; locked?: boolean }> = [
-    ...baseItems,
-    ...(showTemplates ? [templatesItem] : []),
-    { ...showcasesItem, locked: portfolioLocked },
-    ...(showOwnerNav ? [teamItem] : [collabItem]),
-  ];
+
   /*
    * Gated on the same server check the admin layout uses, so the row and the
    * page can never disagree. A non-admin who reaches /admin by hand still gets
    * the layout's "Admin access required" screen; hiding the row is a
-   * convenience, never the security boundary - that lives in
-   * requirePlatformAdmin() on every service.
+   * convenience, never the security boundary.
    */
   const { data: adminCheck } = useQuery({
     queryKey: ["admin", "check"],
@@ -165,22 +176,19 @@ export function AppSidebar() {
     enabled: !!user,
     staleTime: 5 * 60_000,
   });
+
+  const setupItems: NavItem[] = [
+    ...(showTemplates ? [blueprintsItem, checklistsItem, documentsItem] : []),
+  ];
+  const clientFacingItems: NavItem[] = [{ ...portfolioItem, locked: portfolioLocked }];
+  const teamsRow: NavItem = showOwnerNav ? teamItem : collabItem;
+
   /*
-   * "Upgrade" is only a row while there is something left to upgrade to.
-   *
-   * Team is the top self-serve tier, so on it this crown sat in Workspace
-   * tools advertising the plan the account already pays for: the one customer
-   * who is not missing anything was the one being told they were. That is the
-   * opposite of the plan-gated rows above, which stay visible and badged
-   * precisely because they point at something the account could still get.
-   *
-   * Nothing is stranded by dropping it. The plan itself - invoices, seats,
-   * what is included - lives in Settings > Billing, which the account row in
-   * the footer opens. An inactive or lapsed account keeps the row whatever its
-   * plan column says, because for them /pricing is the way back to a working
-   * workspace.
+   * "Upgrade" is only a row while there is something left to upgrade to: Team
+   * is the top self-serve tier, so on it this crown advertised the plan the
+   * account already pays for.
    */
-  const toolItems = [
+  const utilItems: NavItem[] = [
     ...(showOwnerNav && !hasTeamAccess ? [pricingItem] : []),
     helpItem,
     reportIssueItem,
@@ -189,176 +197,159 @@ export function AppSidebar() {
 
   const displayName = profile?.full_name || user?.email || "";
   const initials = getInitials(profile?.full_name, user?.email);
+  const companyName = (teamData as { team?: { name?: string } } | null | undefined)?.team?.name;
 
-  /*
-   * Every row used to carry its icon inside a filled rounded box, so a rail of
-   * a dozen entries read as a dozen grey tiles stacked on the navy, and the
-   * current row was a white slab with a drop shadow - a raised button floating
-   * on the flat surface it is part of.
-   *
-   * The chips are gone, because an icon on a rail does not need a container to
-   * be legible. That, plus the shorter rows, is also what buys back the height
-   * the list was overflowing by: at a 900px window the nav needed 765px in a
-   * 671px box, so the last rows were sliced in half by the footer and a
-   * scrollbar ran down the navy.
-   *
-   * The current row is a quiet tint with the brand blue as a rule down its
-   * left edge. Deliberately not a solid blue pill: white on #2584f4 is 3.7:1,
-   * under AA at this size, while white on the tint clears 12:1 and the blue
-   * does its work as an accent instead of as a background.
-   */
-  const buttonBase = isMobile
-    ? "relative flex items-center gap-3 h-[52px] px-3 rounded-lg text-[15px] font-semibold transition-colors"
-    : "relative flex items-center gap-3 h-(--rail-row) px-3 rounded-lg text-sm font-semibold transition-colors";
+  const buttonBase =
+    "relative flex items-center rounded-lg px-3 text-[13.5px] font-semibold transition-colors" +
+    (isMobile ? " h-[52px] gap-3 text-[15px]" : " h-(--rail-row) gap-[11px]");
   const iconBase = isMobile ? "h-5 w-5" : "h-[18px] w-[18px]";
-
-  const navButtonClass = (active: boolean) =>
+const navButtonClass = (active: boolean) =>
     `${buttonBase} ${
       active
         ? "bg-sidebar-accent text-sidebar-ring"
-        : "text-sidebar-foreground/60 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+        : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
     }`;
   const navIconClass = (active: boolean) =>
     `${iconBase} ${active ? "text-sidebar-ring" : "text-sidebar-foreground/45"}`;
 
+  const isActive = (item: { url: string; tab?: string }) => {
+    if (item.url === "/templates") {
+      const mine = item.tab ?? undefined;
+      return (
+        pathname === "/templates" &&
+        (mine === templateTab || (mine === undefined && templateTab === undefined))
+      );
+    }
+    return pathname === item.url || pathname.startsWith(item.url + "/");
+  };
+
+  const renderNavRow = (item: NavItem) => {
+    const active = isActive(item);
+    return (
+      <SidebarMenuItem key={item.url + (item.tab ?? "")}>
+        <SidebarMenuButton asChild isActive={active} className={navButtonClass(active)}>
+          <Link to={item.url} search={item.tab ? { tab: item.tab } : undefined}>
+            {/*
+              Kept in a wrapper: SidebarMenuButton's own variant carries
+              `[&>svg]:size-4`, which outranks a class set on the svg and would
+              pin every icon to 16px, mobile included.
+            */}
+            <span className="flex shrink-0 items-center">
+              <item.icon className={navIconClass(active)} />
+            </span>
+            {!collapsed && <span>{item.title}</span>}
+            {!collapsed && item.locked && (
+              <span className="ml-auto flex shrink-0 items-center">
+                <Lock className="h-3.5 w-3.5 text-sidebar-foreground/40" aria-hidden />
+                <span className="sr-only">Team plan</span>
+              </span>
+            )}
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  };
+
+  const groupLabelClass =
+    "mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-sidebar-foreground/45";
+
   return (
     <Sidebar collapsible="icon" className="border-r-0 bg-sidebar text-sidebar-foreground">
-      <SidebarHeader className="px-3 py-4 [@media(max-height:719px)]:py-2">
-        <Link to="/dashboard" className="flex items-center gap-2.5 px-1">
-          {/* The collapsed rail is 48px wide and this Link is inset 16px, so a
-              36px mark hung 5px out over the page beside it. */}
-          <BrandLogo size={collapsed ? 28 : 36} />
+      <SidebarHeader className="px-5 py-5 [@media(max-height:719px)]:py-3">
+        <Link to="/dashboard" className="flex items-center gap-2.5">
+          <BrandLogo size={collapsed ? 28 : 24} />
           {!collapsed && (
-            <span className="text-[17px] font-bold leading-tight tracking-tight text-sidebar-foreground">
-              {/* The sidebar is fixed dark navy whatever the app theme is, so
-                  this takes the mark gold directly rather than the token that
-                  darkens for light grounds. */}
+            <span className="text-base font-bold leading-tight tracking-[-0.01em] text-sidebar-foreground">
               Ever<span className="text-brand-gold">lumen</span>
             </span>
           )}
         </Link>
       </SidebarHeader>
-      <SidebarContent className="scroll-slim px-2 gap-0">
-        <SidebarGroup className="pt-1">
+      <SidebarContent className="scroll-slim gap-0 px-2">
+        <SidebarGroup>
           {!collapsed && (
-            <SidebarGroupLabel className="mb-1 text-[10px] font-bold uppercase tracking-[1.2px] text-sidebar-foreground/35">
-              Workspace
-            </SidebarGroupLabel>
+            <SidebarGroupLabel className={groupLabelClass}>Workspace</SidebarGroupLabel>
           )}
           <SidebarGroupContent>
-            <SidebarMenu className={`${isMobile ? "gap-1.5" : "gap-(--rail-gap)"}`}>
-              {navItems.map((item) => {
-                const active = pathname === item.url || pathname.startsWith(item.url + "/");
-                return (
-                  <SidebarMenuItem key={item.url}>
-                    <SidebarMenuButton asChild isActive={active} className={navButtonClass(active)}>
-                      <Link to={item.url}>
-                        {active && !collapsed && <ActiveMarker />}
-                        {/*
-                          The icon keeps a wrapper even with the chip gone:
-                          SidebarMenuButton's own variant carries
-                          `[&>svg]:size-4`, which outranks a class set on the
-                          svg itself and would pin every icon to 16px, mobile
-                          included.
-                        */}
-                        <span className="flex shrink-0 items-center">
-                          <item.icon className={navIconClass(active)} />
-                        </span>
-                        {!collapsed && <span>{item.title}</span>}
-                        {!collapsed && item.locked && (
-                          // The name goes on a real text node, not as aria-label
-                          // on the <svg> - lucide spreads props straight onto the
-                          // element, and an aria-label there is only reliably
-                          // announced with role="img". The link still reads as
-                          // "Portfolio, Team plan"; the icon is decoration.
-                          <span className="ml-auto flex shrink-0 items-center">
-                            <Lock className="h-3.5 w-3.5 text-sidebar-foreground/40" aria-hidden />
-                            <span className="sr-only">Team plan</span>
-                          </span>
-                        )}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+            <SidebarMenu className={isMobile ? "gap-1.5" : "gap-(--rail-gap)"}>
+              {workspaceItems.map(renderNavRow)}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+<SidebarGroup className="mt-5">
+          {!collapsed && (
+            <SidebarGroupLabel className={groupLabelClass}>Set up</SidebarGroupLabel>
+          )}
+          <SidebarGroupContent>
+            <SidebarMenu className={isMobile ? "gap-1.5" : "gap-(--rail-gap)"}>
+              {setupItems.map(renderNavRow)}
+              {renderNavRow(teamsRow)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup className="mt-2 border-t border-sidebar-border pt-3">
+        <SidebarGroup className="mt-5">
           {!collapsed && (
-            <SidebarGroupLabel className="mb-1 text-[10px] font-bold uppercase tracking-[1.2px] text-sidebar-foreground/35">
-              Workspace tools
-            </SidebarGroupLabel>
+            <SidebarGroupLabel className={groupLabelClass}>Client-facing</SidebarGroupLabel>
           )}
           <SidebarGroupContent>
-            <SidebarMenu className={`${isMobile ? "gap-1.5" : "gap-(--rail-gap)"}`}>
-              {toolItems.map((item) => {
-                const active = pathname === item.url || pathname.startsWith(item.url + "/");
-                return (
-                  <SidebarMenuItem key={item.url}>
-                    <SidebarMenuButton asChild isActive={active} className={navButtonClass(active)}>
-                      <Link to={item.url}>
-                        {active && !collapsed && <ActiveMarker />}
-                        <span className="flex shrink-0 items-center">
-                          <item.icon className={navIconClass(active)} />
-                        </span>
-                        {!collapsed && <span>{item.title}</span>}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+            <SidebarMenu className={isMobile ? "gap-1.5" : "gap-(--rail-gap)"}>
+              {clientFacingItems.map(renderNavRow)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t border-sidebar-border px-2 pb-2 pt-1">
+      <SidebarFooter className="border-t border-sidebar-border px-2 pb-2.5 pt-1">
+        <div className={`flex flex-col ${isMobile ? "gap-1.5" : "gap-(--rail-gap)"}`}>
+          {utilItems.map((item) => (
+            <Link
+              key={item.url}
+              to={item.url}
+              className={`flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[12.5px] transition-colors ${
+                isActive(item)
+                  ? "bg-sidebar-accent text-sidebar-ring"
+                  : "text-sidebar-foreground/55 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+              }`}
+            >
+              <item.icon
+                className={`h-[15px] w-[15px] shrink-0 ${
+                  isActive(item) ? "text-sidebar-ring" : "text-sidebar-foreground/40"
+                }`}
+              />
+              {!collapsed && <span>{item.title}</span>}
+            </Link>
+          ))}
+        </div>
         {user && (
           <Link
             to="/settings"
-            className={`flex items-center gap-3 rounded-lg px-3 transition-colors hover:bg-sidebar-accent ${isMobile ? "h-16" : "h-14"}`}
+            className={`mt-2 flex items-center gap-3 rounded-lg px-3 transition-colors hover:bg-sidebar-accent ${
+              isMobile ? "h-14" : "h-11"
+            }`}
           >
             {profile?.avatar_url ? (
               <img
                 src={profile.avatar_url}
                 alt=""
-                className="h-8 w-8 shrink-0 rounded-full object-cover"
+                className="h-7 w-7 shrink-0 rounded-full object-cover"
               />
             ) : (
-              <span className="flex items-center justify-center h-8 w-8 rounded-full bg-sidebar-foreground/15 text-[10px] font-extrabold text-sidebar-foreground/65 shrink-0">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[11px] font-bold text-sidebar-foreground">
                 {initials}
               </span>
             )}
             {!collapsed && (
-              <>
-                <span className="flex flex-col min-w-0 flex-1">
-                  <span className="truncate text-sm font-semibold text-sidebar-foreground/85">
-                    {displayName}
-                  </span>
-                  <span className="text-[11px] font-medium text-sidebar-foreground/45">
-                    Account &amp; settings
-                  </span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-[12.5px] font-semibold text-sidebar-foreground">
+                  {displayName}
                 </span>
-                <ChevronRight className="h-4 w-4 text-sidebar-foreground/65 shrink-0" />
-              </>
+                <span className="truncate text-[11px] text-sidebar-foreground/40">
+                  {companyName || "Account & settings"}
+                </span>
+              </span>
             )}
           </Link>
         )}
-        <Button
-          variant="ghost"
-          onClick={signOut}
-          aria-label="Sign out"
-          title="Sign out"
-          className={`mt-1 w-full justify-center ${isMobile ? "h-12 text-base" : "h-9 text-sm [@media(max-height:719px)]:h-8"} rounded-lg font-semibold text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground/80`}
-        >
-          <LogOut className={isMobile ? "h-5 w-5" : "h-4 w-4"} />
-          {/* Collapsed to icons the label had nowhere to go and ran out past
-              the rail. The accessible name moves onto the button so the
-              icon-only state is still announced,and the tooltip says it to
-              everyone else. */}
-          {!collapsed && <span className="ml-2.5">Sign out</span>}
-        </Button>
       </SidebarFooter>
     </Sidebar>
   );

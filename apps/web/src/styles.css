@@ -62,6 +62,18 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
 
+  /* Project / pipeline status colors (Main-html reference): one strong hue
+     plus a soft tint per state, consumed as bg-status-* / text-status-*
+     utilities for the status pills every screen shares. */
+  --color-status-active: var(--status-active);
+  --color-status-active-soft: var(--status-active-soft);
+  --color-status-hold: var(--status-hold);
+  --color-status-hold-soft: var(--status-hold-soft);
+  --color-status-complete: var(--status-complete);
+  --color-status-complete-soft: var(--status-complete-soft);
+  --color-status-archived: var(--status-archived);
+  --color-status-archived-soft: var(--status-archived-soft);
+
   /* Brand. `brand` is the wordmark gold, which flips for light and dark
      grounds; `brand-gold` is the mark gold itself and never flips, for use on
      surfaces that are dark whatever the app theme is (the sidebar, the
@@ -116,6 +128,17 @@
   --border: oklch(0.89 0.012 75);
   --input: oklch(0.89 0.012 75);
   --ring: oklch(0.64 0.14 55);
+
+  /* Status hues (Main-html reference): active green, hold amber, complete
+     blue, archived slate - each with a soft tint for pill backgrounds. */
+  --status-active: oklch(0.58 0.13 150);
+  --status-active-soft: oklch(0.94 0.035 150);
+  --status-hold: oklch(0.62 0.14 55);
+  --status-hold-soft: oklch(0.94 0.035 55);
+  --status-complete: oklch(0.58 0.12 250);
+  --status-complete-soft: oklch(0.94 0.025 250);
+  --status-archived: oklch(0.56 0.008 75);
+  --status-archived-soft: oklch(0.93 0.006 75);
 
   --gradient-hero: linear-gradient(
     135deg,
@@ -222,6 +245,17 @@
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.7 0.13 55);
+
+  /* Status hues for dark grounds - the same families, lifted and desaturated
+     so the pills stay legible on the dark cream surfaces. */
+  --status-active: oklch(0.72 0.1 150);
+  --status-active-soft: oklch(0.27 0.03 150);
+  --status-hold: oklch(0.72 0.1 55);
+  --status-hold-soft: oklch(0.27 0.03 55);
+  --status-complete: oklch(0.72 0.09 250);
+  --status-complete-soft: oklch(0.27 0.03 250);
+  --status-archived: oklch(0.6 0.012 75);
+  --status-archived-soft: oklch(0.3 0.015 75);
 
   --gradient-hero: linear-gradient(
     135deg,

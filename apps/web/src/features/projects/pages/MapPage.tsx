@@ -821,31 +821,29 @@ export function MapPage() {
   };
 
   return (
-    <div className="min-h-full bg-background px-6 pb-24 pt-6 sm:px-10 sm:pt-10">
-      <PageHeader
-        eyebrow="Field overview"
-        title="Project map"
-        description={
-          <>
+    <div className="min-h-full bg-background px-6 pb-24 pt-8 sm:px-10">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0 max-w-[560px]">
+          <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
+            Maps
+          </h1>
+          <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
             Every project with an address, plotted at a glance.
             {geocoding > 0 ? ` Locating ${geocoding}…` : ""}
-          </>
-        }
-        actions={
-          <div className="flex flex-wrap items-center gap-1 rounded-xl border-[0.8px] border-border bg-card/65 p-1 shadow-sm">
-            {/*
-              One chip per status the legend documents, then All. The dot is the
-              pin colour, so the row that filters the map and the panel that
-              explains it are saying the same thing in the same colours.
-            */}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          {/* One pill per status, then All - the same vocabulary as the map's
+              legend, in the same order, so filtering and reading never drift. */}
+          <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-card p-1 shadow-sm">
             {[...STATUSES, "all" as const].map((key) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => setFilter(key)}
-                className={`font-manrope flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors ${
                   filter === key
-                    ? "bg-card text-foreground shadow-sm"
+                    ? "bg-secondary text-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -857,12 +855,12 @@ export function MapPage() {
                   />
                 )}
                 {key === "all" ? "All" : statusLabel[key]}{" "}
-                <span className="text-xs">{counts[key]}</span>
+                <span className="text-xs tabular-nums">{counts[key]}</span>
               </button>
             ))}
           </div>
-        }
-      />
+        </div>
+      </div>
 
       {projects.length === 0 ? (
         <div className="mt-8 rounded-3xl border-[0.8px] border-border bg-card/80 p-8">

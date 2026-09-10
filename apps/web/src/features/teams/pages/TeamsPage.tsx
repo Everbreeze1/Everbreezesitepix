@@ -21,7 +21,6 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PageHeader } from "@/components/PageHeader";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -361,32 +360,29 @@ function TeamDashboard({
   const [inviteOpen, setInviteOpen] = useState(false);
 
   return (
-    <div className="mx-auto max-w-[1192px] px-6 pb-24 pt-10 md:px-10">
-      <PageHeader
-        eyebrow="Stay aligned"
-        title={team.name || "Teams"}
-        description="Manage the people who capture, review, and share your project record."
-        actions={
-          <>
-            {/*
-              No billing action here. Billing has one home - Settings → Billing
-              - and duplicating the Stripe portal on this page meant two places
-              to keep in sync and two places for a user to look. This page is
-              about people and seats; upgrade paths still point at /pricing.
-            */}
-            {!isOwner && <LeaveTeamButton onLeft={onChange} />}
-            {canManage && !atCap && (
-              <Button
-                onClick={() => setInviteOpen(true)}
-                className="h-10 rounded-lg bg-primary px-5 font-manrope text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90"
-              >
-                <UserPlus className="mr-2 h-4 w-4" />
-                Invite teammate
-              </Button>
-            )}
-          </>
-        }
-      />
+    <div className="mx-auto max-w-[1200px] px-6 pb-24 pt-8 md:px-10">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 max-w-[560px]">
+          <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
+            {team.name || "Teams"}
+          </h1>
+          <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
+            Manage the people who capture, review, and share your project record.
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {!isOwner && <LeaveTeamButton onLeft={onChange} />}
+          {canManage && !atCap && (
+            <Button
+              onClick={() => setInviteOpen(true)}
+              className="font-sans h-10 rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              <UserPlus className="h-4 w-4" />
+              Invite teammate
+            </Button>
+          )}
+        </div>
+      </div>
 
       {atCap && canManage && (
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-border bg-card/60 p-5">

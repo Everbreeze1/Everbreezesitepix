@@ -271,22 +271,19 @@ export function ReportIssuePage() {
 
   return (
     <div className="px-5 py-8 md:px-10 md:py-10">
-      {/*
-        One column, capped and centred. On a wide monitor the form used to sit
-        against the left edge of an otherwise empty page, which reads as
-        unfinished rather than deliberate.
-      */}
-      <div className="mx-auto w-full max-w-[720px]">
-        <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.52px] text-muted-foreground">
-          Support
-        </p>
-        <h1 className="font-display mt-3 text-[38.4px] font-bold leading-9 tracking-[-0.01em] text-foreground">
-          Share feedback
-        </h1>
-        <p className="font-manrope mt-3 text-sm leading-6 text-muted-foreground">
-          Report something that&rsquo;s broken, or tell us what to build next. Both go straight to
-          the team.
-        </p>
+      {/* One column, capped and centred - the same reference page scaffold the
+          rest of the app uses. */}
+      <div className="mx-auto w-full max-w-[900px]">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 max-w-[560px]">
+            <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
+              Feedback
+            </h1>
+            <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
+              Bugs, ideas and questions &mdash; yours and your crew's.
+            </p>
+          </div>
+        </div>
 
         {sent ? (
           <SentPanel

@@ -163,9 +163,9 @@ function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-background landing lg:grid lg:grid-cols-2">
+    <div className="flex min-h-screen w-full items-center justify-center bg-sidebar landing px-4 py-10">
       {/* LEFT - marketing panel (desktop only) */}
-      <aside className="relative hidden overflow-hidden bg-sidebar text-sidebar-foreground lg:flex lg:flex-col lg:justify-between">
+      <aside className="hidden">
         {/*
           A CSS background, not an <img>, and deliberately so.
           The panel is `hidden lg:flex`, but display:none does NOT stop a browser
@@ -215,13 +215,13 @@ function SignupPage() {
       </aside>
 
       {/* RIGHT - form */}
-      <div className="flex min-h-screen flex-col items-center justify-center px-5 py-8 sm:px-8 lg:px-12">
-        <div className="mx-auto flex w-full max-w-[448px] flex-1 flex-col justify-center lg:flex-none">
+      <div className="w-full max-w-[440px] rounded-2xl bg-card p-8 shadow-xl">
+        <div className="flex w-full flex-col">
           <div className="mb-4 lg:hidden">
             <MobileAppBanner />
           </div>
 
-          <div className="mb-6 flex items-center justify-center lg:hidden">
+          <div className="mb-7 flex items-center justify-center">
             <Link to="/" className="inline-flex items-center gap-2">
               <BrandLogo size={40} />
               <span className="font-manrope text-lg font-extrabold tracking-tight text-foreground">
@@ -240,7 +240,7 @@ function SignupPage() {
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
                 <MailCheck className="h-7 w-7 text-primary" />
               </div>
-              <h2 className="font-display mt-6 text-[40px] font-bold uppercase leading-tight tracking-[-0.01em] text-foreground">
+              <h2 className="font-display mt-6 text-2xl font-bold leading-tight tracking-[-0.01em] text-foreground">
                 Check your email
               </h2>
               <p className="font-manrope mt-4 text-sm leading-6 text-muted-foreground">
@@ -310,7 +310,7 @@ function SignupPage() {
               <p className="font-manrope text-xs font-extrabold uppercase leading-4 tracking-[1.92px] text-primary">
                 Create your account
               </p>
-              <h2 className="font-display mt-3 text-[48px] font-bold uppercase leading-tight tracking-[-0.01em] text-foreground">
+              <h2 className="font-display mt-3 text-2xl font-bold leading-tight tracking-[-0.01em] text-foreground">
                 Bring your job sites into focus.
               </h2>
               <p className="font-manrope mt-4 text-sm leading-[24px] text-muted-foreground">
