@@ -1648,7 +1648,7 @@ export function GalleryPage() {
       {/* Unmounted rather than hidden in calendar view - a `hidden` grid still
           mounts every tile and fires a signed-thumbnail request per photo. */}
       {!calendarView && (
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mt-6 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
           {loading ? (
             <Card className="col-span-full p-8 text-center text-muted-foreground">
               Loading photos…
@@ -1695,7 +1695,7 @@ export function GalleryPage() {
                  */
                 <div
                   key={p.id}
-                  className={`group relative overflow-hidden rounded-[10px] transition-transform hover:-translate-y-0.5 ${
+                  className={`group relative rounded-3xl transition-transform hover:-translate-y-0.5 ${
                     selected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
                   }`}
                 >
@@ -1708,7 +1708,7 @@ export function GalleryPage() {
                         ? `${selected ? "Deselect" : "Select"} ${cleanCaption(p.caption) ?? "photo"}`
                         : undefined
                     }
-                    className="flex w-full flex-col overflow-hidden rounded-[10px] bg-surface text-left"
+                    className="flex w-full flex-col overflow-hidden rounded-3xl bg-sidebar text-left shadow-[0_20px_35px_-26px_rgba(16,25,41,0.55)]"
                   >
                     <div className="relative aspect-[4/3] w-full overflow-hidden">
                       {/* Thumbnail, not the camera original - a 200-photo grid of
@@ -1721,7 +1721,7 @@ export function GalleryPage() {
                         fallbackUrl={signed[p.id]}
                         width={400}
                         alt={p.caption ?? ""}
-                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                        className="transition duration-300 group-hover:scale-105"
                       />
                       {watermarkUrl && signed[p.id] && (
                         <img
@@ -1731,21 +1731,17 @@ export function GalleryPage() {
                           className="pointer-events-none absolute bottom-2 right-2 h-7 w-auto max-w-[35%] opacity-40 drop-shadow-sm"
                         />
                       )}
-                      {/* Caption overlay - the mockup's .caption gradient, white
-                          text on a dark fade from the bottom of the tile. */}
-                      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-[rgba(20,16,12,0.72)] to-transparent px-2.5 pb-2 pt-6">
-                        <p className="truncate text-[11px] font-medium text-white">
-                          {cleanCaption(p.caption) ??
-                            `${project?.name ?? "Unassigned"} · ${timeAgo(p.created_at)}`}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-sidebar/90 to-transparent px-4 pb-3 pt-8">
+                        <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[1.2px] text-sidebar-foreground/90">
+                          Site record
                         </p>
                       </div>
-                      {/* Untagged photos are "Needs review" - the product's name
-                          for photos that need a human before a report ships. */}
-                      {(!p.tags || p.tags.length === 0) && (
-                        <span className="absolute left-2 top-2 z-10 rounded-full bg-[oklch(0.93_0.025_200)] px-2 py-0.5 text-[10px] font-semibold text-[oklch(0.38_0.1_200)]">
-                          Needs review
-                        </span>
-                      )}
+                    </div>
+                    <div className="px-4 py-3">
+                      <p className="truncate font-manrope text-[11px] font-bold text-sidebar-foreground/70">
+                        {cleanCaption(p.caption) ??
+                          `${project?.name ?? "Unassigned"} · ${timeAgo(p.created_at)}`}
+                      </p>
                     </div>
                   </button>
 

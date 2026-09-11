@@ -358,48 +358,16 @@ function TeamDashboard({
   const seatsLeft = Math.max(0, memberLimit - seatsUsed);
   const atCap = seatsLeft === 0;
   const [inviteOpen, setInviteOpen] = useState(false);
-  /*
-   * The mockup's Teams screen is four tabs: Crew, Subcontractors, Roles &
-   * Permissions, Account. The first two are the real roster and the
-   * subcontractor company list this page already renders; the permissions
-   * matrix and account cards are read-only summaries of the same data.
-   */
-  const [tab, setTab] = useState<"crew" | "subs" | "permissions" | "account">("crew");
-
-  const subtitleByTab = {
-    crew: `${team.name ?? "This team"}'s crew · ${members.length} member${members.length === 1 ? "" : "s"}`,
-    subs: "Outside trades and one-off crews, kept separate from your W-2 employees.",
-    permissions: "What each role can see and do.",
-    account: "Business and personal settings.",
-  };
-
-  // Capability matrix, the same rows the mockup's TeamsContent shows.
-  const capabilityRows: Array<{
-    label: string;
-    owner: string;
-    manager: string;
-    standard: string;
-  }> = [
-    { label: "View projects", owner: "✓", manager: "✓", standard: "Assigned only" },
-    { label: "Edit project details", owner: "✓", manager: "✓", standard: "✓" },
-    { label: "Assign crew", owner: "✓", manager: "✓", standard: "—" },
-    { label: "Delete workflows", owner: "✓", manager: "✓", standard: "—" },
-    { label: "Manage blueprints & checklists", owner: "✓", manager: "—", standard: "—" },
-    { label: "Invite crew members", owner: "✓", manager: "✓", standard: "—" },
-    { label: "Manage billing & account settings", owner: "✓", manager: "—", standard: "—" },
-  ];
-
-  const me = members.find((m: any) => m.role === myRole);
 
   return (
     <div className="mx-auto max-w-[1200px] px-6 pb-24 pt-8 md:px-10">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-[560px]">
           <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
-            Teams
+            {team.name || "Teams"}
           </h1>
           <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
-            {subtitleByTab[tab]}
+            Manage the people who capture, review, and share your project record.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -410,164 +378,66 @@ function TeamDashboard({
               className="font-sans h-10 rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90"
             >
               <UserPlus className="h-4 w-4" />
-              {tab === "subs" ? "Add subcontractor" : "Invite crew member"}
+              Invite teammate
             </Button>
           )}
         </div>
       </div>
 
-      {/* Underline tabs - the same control every reference screen shares. */}
-      <div className="mt-6 flex gap-[26px] overflow-x-auto border-b border-border">
-        {(["crew", "subs", "permissions", "account"] as const).map((key) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            aria-current={tab === key ? "page" : undefined}
-            className={`shrink-0 whitespace-nowrap border-b-[2.5px] pb-2.5 pt-2.5 text-sm font-semibold transition-colors ${
-              tab === key
-                ? "border-primary text-foreground"
-                : "border-transparent text-faint hover:text-muted-foreground"
-            }`}
-          >
-            {key === "crew"
-              ? "Crew"
-              : key === "subs"
-                ? "Subcontractors"
-                : key === "permissions"
-                  ? "Roles & Permissions"
-                  : "Account"}
-          </button>
-        ))}
+      {atCap && canManage && (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-border bg-card/60 p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <Lock className="h-5 w-5" />
+            </div>
+            <div>
+              {/*
+               * Kept for Team too, unlike the coverage card. `memberLimit` here
+               * is not the 50 ceiling - it prefers `teams.member_limit`, which
+               * billing sets to the number of seats actually purchased. A Team
+               * customer who bought 6 is genuinely at cap at 6, and this banner
+               * is the only thing explaining why the Invite buttons vanished.
+               */}
+              <h2 className="font-manrope text-sm font-bold text-foreground">
+                {plan === "team"
+                  ? `All ${memberLimit} of your seats are in use`
+                  : `${memberLimit}-seat limit reached`}
+              </h2>
+              <p className="font-manrope text-xs text-muted-foreground">
+                {plan === "starter"
+                  ? "Starter includes 2 users (you + 1), sharing the same projects. Upgrade to add more teammates."
+                  : plan === "team"
+                    ? "Add seats from Settings → Billing, or remove a member to free one up."
+                    : "Remove a member or upgrade your plan to invite more."}
+              </p>
+            </div>
+          </div>
+          {plan === "starter" && (
+            <Button asChild className="bg-primary hover:bg-primary/90">
+              <Link to="/pricing">Upgrade plan</Link>
+            </Button>
+          )}
+        </div>
+      )}
+
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+        <MembersList members={members} myRole={myRole} plan={plan} onChange={onChange} />
+        <WorkspaceCoverageCard
+          seatsUsed={seatsUsed}
+          memberLimit={memberLimit}
+          plan={plan}
+          canInvite={canManage && !atCap}
+          onInviteClick={() => setInviteOpen(true)}
+        />
       </div>
 
-      {tab === "crew" && (
-        <>
-          {atCap && canManage && (
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-border bg-card/60 p-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                  <Lock className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="font-sans text-sm font-bold text-foreground">
-                    {plan === "team"
-                      ? `All ${memberLimit} of your seats are in use`
-                      : `${memberLimit}-seat limit reached`}
-                  </h2>
-                  <p className="font-sans mt-0.5 text-xs text-muted-foreground">
-                    {plan === "starter"
-                      ? "Starter includes 2 users (you + 1), sharing the same projects. Upgrade to add more teammates."
-                      : plan === "team"
-                        ? "Add seats from Settings â†’ Billing, or remove a member to free one up."
-                        : "Remove a member or upgrade your plan to invite more."}
-                  </p>
-                </div>
-              </div>
-              {plan === "starter" && (
-                <Button asChild className="bg-primary hover:bg-primary/90">
-                  <Link to="/pricing">Upgrade plan</Link>
-                </Button>
-              )}
-            </div>
-          )}
+      {/* Below the roster, not inside it. A subcontractor holds no seat, so
+          listing them among members would put a person in the crew list who
+          never moves the seat count - the first thing an owner would query. */}
+      <SubcontractorsPanel isTeamPlan={plan === "team"} />
 
-          <div className="mt-6">
-            <MembersList members={members} myRole={myRole} plan={plan} onChange={onChange} />
-          </div>
-
-          {invites.length > 0 && (
-            <PendingInvites
-              invites={invites}
-              canManage={canManage}
-              plan={plan}
-              onChange={onChange}
-            />
-          )}
-        </>
-      )}
-
-      {tab === "subs" && (
-        <div className="mt-6">
-          <SubcontractorsPanel isTeamPlan={plan === "team"} />
-        </div>
-      )}
-
-{tab === "permissions" && (
-        <div className="mt-6 max-w-[900px]">
-          <p className="font-sans text-[13px] text-muted-foreground">
-            What each role can do. Standard crew only see projects they're assigned to; Owner and
-            Manager see everything.
-          </p>
-          <div className="mt-4 overflow-hidden rounded-[12px] border border-border bg-card">
-            <div className="grid grid-cols-[1.6fr_1fr_1fr_1fr] items-center bg-secondary px-4 py-3">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-                Capability
-              </span>
-              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-                Owner
-              </span>
-              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-                Manager
-              </span>
-              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-                Standard
-              </span>
-            </div>
-            {capabilityRows.map((row) => (
-              <div
-                key={row.label}
-                className="grid grid-cols-[1.6fr_1fr_1fr_1fr] items-center border-t border-border px-4 py-3"
-              >
-                <span className="text-[13px] text-foreground">{row.label}</span>
-                <span className="text-[13px] text-primary">{row.owner}</span>
-                <span className="text-[13px]">{row.manager}</span>
-                <span className="text-[13px] text-faint">{row.standard}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {tab === "account" && (
-        <div className="mt-6 grid max-w-[900px] grid-cols-1 gap-8 sm:grid-cols-2">
-          <div>
-            <h2 className="font-sans text-[13.5px] font-semibold text-foreground">
-              Business profile
-            </h2>
-            <div className="mt-3">
-              <p className="mb-1 text-[11.5px] text-faint">Business name</p>
-              <div className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px]">
-                {team.name ?? "â€”"}
-              </div>
-              <p className="mb-1 mt-4 text-[11.5px] text-faint">Plan</p>
-              <div className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px] capitalize">
-                {plan}
-              </div>
-              <p className="mb-1 mt-4 text-[11.5px] text-faint">Seats</p>
-              <div className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px]">
-                {seatsUsed} of {memberLimit} in use
-              </div>
-            </div>
-          </div>
-          <div>
-            <h2 className="font-sans text-[13.5px] font-semibold text-foreground">Your profile</h2>
-            <div className="mt-3">
-              <p className="mb-1 text-[11.5px] text-faint">Name</p>
-              <div className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px]">
-                {(me as any)?.profile?.full_name ?? "You"}
-              </div>
-              <p className="mb-1 mt-4 text-[11.5px] text-faint">Email</p>
-              <div className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px]">
-                {(me as any)?.profile?.email ?? "â€”"}
-              </div>
-              <p className="mb-1 mt-4 text-[11.5px] text-faint">Role</p>
-              <div className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px]">
-                {ROLE_LABEL[normaliseRole(myRole)]}
-              </div>
-            </div>
-          </div>
-        </div>
+      {invites.length > 0 && (
+        <PendingInvites invites={invites} canManage={canManage} plan={plan} onChange={onChange} />
       )}
 
       <InviteDialog

@@ -19,6 +19,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -794,7 +795,7 @@ export function HelpPage() {
       the shell, and on xl the width that is left over carries the category
       rail instead of nothing.
     */
-    <div className="mx-auto w-full max-w-[900px] px-6 pb-24 pt-10 md:px-10">
+    <div className="mx-auto w-full max-w-[1192px] px-6 pb-24 pt-10 md:px-10">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-[560px]">
           <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
@@ -813,16 +814,16 @@ export function HelpPage() {
         meant scrolling past all of them. Topics are now collapsed by default
         and open in place.
       */}
-      <div className="mt-8">
-        <div className="min-w-0 max-w-none">
+      <div className="mt-8 grid grid-cols-1 gap-x-10 gap-y-8 xl:grid-cols-[minmax(0,1fr)_236px] xl:items-start">
+        <div className="min-w-0 max-w-4xl xl:max-w-none">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search articles..."
-                className="h-10 rounded-[9px] border-border bg-card pl-9 pr-9 text-[13px] shadow-none placeholder:text-faint"
+                placeholder="Search help - e.g. “blueprint”, “roles”, “tasks”…"
+                className="h-11 rounded-xl pl-9 pr-9 text-sm font-medium"
                 aria-label="Search help topics"
               />
               {query && (
@@ -837,15 +838,15 @@ export function HelpPage() {
               )}
             </div>
             <Button
-              variant="ghost"
-              className="h-10 shrink-0 rounded-lg px-3 text-xs font-semibold text-muted-foreground hover:text-foreground"
+              variant="outline"
+              className="h-11 shrink-0 rounded-xl text-xs font-bold"
               onClick={() => setOpen(allOpen ? [] : ALL_GUIDE_IDS)}
             >
               {allOpen ? "Collapse all" : "Expand all"}
             </Button>
           </div>
 
-          <p className="mt-3 text-xs font-semibold text-muted-foreground">
+          <p className="font-manrope mt-3 text-xs font-semibold text-muted-foreground">
             {q
               ? `${matchCount} ${matchCount === 1 ? "topic" : "topics"} matching “${query.trim()}”`
               : `${TOTAL_GUIDES} topics across ${CATEGORIES.length} categories`}
@@ -853,10 +854,10 @@ export function HelpPage() {
 
           {results.length === 0 ? (
             <div className="mt-8 rounded-2xl border-[0.8px] border-dashed border-border bg-card/60 p-10 text-center">
-              <p className="text-sm font-bold text-foreground">
+              <p className="font-manrope text-sm font-bold text-foreground">
                 No topics match that.
               </p>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="font-manrope mt-1 text-sm text-muted-foreground">
                 Try a different word, or clear the search to browse everything.
               </p>
               <Button
@@ -872,37 +873,42 @@ export function HelpPage() {
               type="multiple"
               value={open}
               onValueChange={setOpen}
-              className="mt-6"
+              className="mt-6 space-y-8"
             >
               {results.map((cat) => (
                 <section key={cat.id} id={cat.id} className="scroll-mt-24">
-                  {/* Mockup .cat-head: faint uppercase eyebrow above each card. */}
-                  <h2 className="mb-2 ml-0.5 mt-5 text-[11px] font-bold uppercase tracking-[0.06em] text-faint first:mt-0">
-                    {cat.title}
-                  </h2>
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                      <cat.icon className="h-[18px] w-[18px] text-primary" strokeWidth={1.75} />
+                    </span>
+                    <div className="min-w-0">
+                      <h2 className="font-manrope text-base font-bold tracking-[-0.01em] text-foreground">
+                        {cat.title}
+                      </h2>
+                      <p className="font-manrope text-xs text-muted-foreground">{cat.blurb}</p>
+                    </div>
+                  </div>
 
-                  <div className="overflow-hidden rounded-[12px] border border-border bg-card">
+                  <div className="mt-3 overflow-hidden rounded-2xl border-[0.8px] border-border bg-card/[0.82]">
                     {cat.guides.map((g) => (
                       <AccordionItem
                         key={g.id}
                         value={g.id}
                         id={g.id}
-                        className="scroll-mt-24 border-b border-border last:border-b-0"
+                        className="scroll-mt-24 border-b-[0.8px] border-border px-5 last:border-b-0"
                       >
-                        <AccordionTrigger className="gap-4 px-4 py-3.5 hover:no-underline">
-                          <span className="min-w-0 flex-1 text-left">
-                            <span className="block text-[13.5px] font-semibold text-foreground">
+                        <AccordionTrigger className="gap-4 py-4 hover:no-underline">
+                          <span className="min-w-0 text-left">
+                            <span className="font-manrope block text-sm font-bold text-foreground">
                               {g.title}
                             </span>
-                            {g.summary && (
-                              <span className="mt-0.5 block text-xs text-muted-foreground">
-                                {g.summary}
-                              </span>
-                            )}
+                            <span className="font-manrope mt-0.5 block text-xs text-muted-foreground">
+                              {g.summary}
+                            </span>
                           </span>
                         </AccordionTrigger>
-                        <AccordionContent className="px-4 pb-4">
-                          <ol className="ml-4 list-decimal space-y-2 text-[12.5px] leading-relaxed text-muted-foreground">
+                        <AccordionContent className="pb-5">
+                          <ol className="font-manrope ml-4 list-decimal space-y-2 text-sm leading-relaxed text-muted-foreground">
                             {g.steps.map((s, i) => (
                               <li key={i} className="pl-1">
                                 {s}
@@ -914,12 +920,12 @@ export function HelpPage() {
                               {g.tips.map((t, i) => (
                                 <div
                                   key={i}
-                                  className="flex items-start gap-2 rounded-lg bg-secondary p-3 text-sm"
+                                  className="flex items-start gap-2 rounded-lg bg-muted p-3 text-sm"
                                 >
-                                  <span className="mt-0.5 shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-bold text-primary">
+                                  <span className="font-manrope mt-0.5 shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-bold text-primary">
                                     Tip
                                   </span>
-                                  <span className="text-muted-foreground">{t}</span>
+                                  <span className="font-manrope text-muted-foreground">{t}</span>
                                 </div>
                               ))}
                             </div>
@@ -952,10 +958,41 @@ export function HelpPage() {
         </div>
 
         {/*
-          The rail is what the empty right-hand third becomes on wide screens;
-          the reference's single 900px column does not have one. Reaching a
-          category is a scroll, not a jump-link rail.
+          The rail is what the empty right-hand third becomes: 14 categories,
+          each one a jump link, with the guide count and the section you are
+          currently reading marked. It only appears at xl, where there is room
+          for it beside a comfortable line length - below that the page falls
+          back to the single column it has always been.
         */}
+        {results.length > 0 && (
+          <nav aria-label="Help categories" className="hidden xl:sticky xl:top-[98px] xl:block">
+            <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.52px] text-muted-foreground">
+              Categories
+            </p>
+            <ul className="mt-3 space-y-0.5 border-l-[0.8px] border-border">
+              {results.map((cat) => (
+                <li key={cat.id}>
+                  <a
+                    href={`#${cat.id}`}
+                    onClick={() => setActiveCat(cat.id)}
+                    className={cn(
+                      "font-manrope -ml-px flex items-center gap-2 border-l-2 py-1.5 pl-3 text-xs transition-colors",
+                      activeCat === cat.id
+                        ? "border-primary font-bold text-foreground"
+                        : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
+                    )}
+                  >
+                    <cat.icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                    <span className="min-w-0 flex-1 truncate">{cat.title}</span>
+                    <span className="shrink-0 text-[11px] font-semibold tabular-nums text-muted-foreground">
+                      {cat.guides.length}
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
       </div>
     </div>
   );

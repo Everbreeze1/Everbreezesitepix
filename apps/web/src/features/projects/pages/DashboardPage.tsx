@@ -420,17 +420,12 @@ return (
 
         {/* Greeting */}
         <div className="mt-6">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1
-              aria-busy={!firstName && profileLoading}
-              className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground"
-            >
-              {firstName ? `${greeting}, ${firstName}.` : profileLoading ? greeting : `${greeting}.`}
-            </h1>
-            <span className="font-mono inline-flex items-center rounded-full border border-border bg-card px-2.5 py-[3px] text-[11px] font-medium tracking-[0.04em] text-muted-foreground">
-              {today}
-            </span>
-          </div>
+          <h1
+            aria-busy={!firstName && profileLoading}
+            className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground"
+          >
+            {firstName ? `${greeting}, ${firstName}.` : profileLoading ? greeting : `${greeting}.`}
+          </h1>
           <p className="font-sans mt-1 text-[14px] leading-snug text-muted-foreground">
             Here's where every job on the board stands today.
           </p>
