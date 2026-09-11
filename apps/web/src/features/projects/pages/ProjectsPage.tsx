@@ -38,11 +38,22 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SectionHeading, SURFACE_CARD_INTERACTIVE } from "@/components/ui/surface";
-import { PageTabStrip } from "@/components/PageTabStrip";
-import { ReferenceTabStrip } from "@/components/ui/reference";
+import {
+  REFERENCE_PAGE,
+  REFERENCE_TITLE,
+  REFERENCE_SUBTITLE,
+  REFERENCE_CARD,
+  ReferencePill,
+  ReferenceTabStrip,
+} from "@/components/ui/reference";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TagPillRow, TagPill } from "@/features/photos/components/TagPill";
@@ -63,14 +74,13 @@ import { useAuth } from "@/hooks/use-auth";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
 import { supabase } from "@/integrations/everlumen/client";
 import { getMyTeam } from "@/lib/teams.functions";
-import { MobileAppBanner } from "@/components/MobileAppBanner";
+import { useTeamMembers, type TeamMemberLite } from "@/hooks/use-team-members";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
 import { listProjectGroups } from "@/features/projects/api";
 import {
   listProjectBoards,
-  setProjectPipelineStage,
   type PipelineStage,
   type ProjectBoard,
 } from "@/features/projects/api";
@@ -272,7 +282,8 @@ export type ProjectsIndexSearch = {
 };
 
 /** Status is a refinement of the project list, reachable from the hero stats and the Filters popover. */
-type StatusFilter = "any" | "active" | "completed";
+type StatusFilter = "any" | "active" | "on_hold" | "completed";
+type FilterPillKey = "all" | "active" | "on_hold" | "completed" | "archived";
 
 /** hide = the default list; include = widen with archived; only = the archive itself. */
 type ArchivedMode = "hide" | "include" | "only";
@@ -321,6 +332,7 @@ export function ProjectsPage() {
   const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
   const [reportCounts, setReportCounts] = useState<Record<string, number>>({});
   const [checklistCounts, setChecklistCounts] = useState<Record<string, number>>({});
+  const [blueprintNames, setBlueprintNames] = useState<Record<string, string>>({});
   const [recentMembers, setRecentMembers] = useState<
     Record<string, Array<{ id: string; name: string | null; avatar: string | null }>>
   >({});
@@ -359,7 +371,7 @@ export function ProjectsPage() {
    * click, and a button reading "12 archived" that makes the list *grow* by 12
    * is a different gesture wearing the same clothes as the three beside it.
    */
-  const [archivedMode, setArchivedMode] = useState<ArchivedMode>("hide");
+  const [archivedMode, setArchivedMode] = useState<ArchivedMode>("include");
 
   /**
    * Refinement lives behind one control now.
@@ -427,6 +439,7 @@ export function ProjectsPage() {
     photoCounts: Record<string, number>;
     reportCounts: Record<string, number>;
     checklistCounts: Record<string, number>;
+    blueprintNames: Record<string, string>;
     recentMembers: Record<
       string,
       Array<{ id: string; name: string | null; avatar: string | null }>
@@ -446,6 +459,7 @@ export function ProjectsPage() {
         photoCounts: {},
         reportCounts: {},
         checklistCounts: {},
+        blueprintNames: {},
         recentMembers: {},
       };
     }
@@ -487,8 +501,8 @@ export function ProjectsPage() {
           .select("project_id, storage_path, thumb_path, image_url, uploaded_by, created_at")
           .in("project_id", ids)
           .order("created_at", { ascending: false }),
-        (supabase as any).from("project_reports").select("project_id").in("project_id", ids),
-        (supabase as any).from("project_checklists").select("project_id").in("project_id", ids),
+        (supabase as any).from("project_reports").select("project_id, name, created_at").in("project_id", ids),
+        (supabase as any).from("project_checklists").select("project_id, name, created_at").in("project_id", ids),
       ]);
       const samplesByProject: Record<
         string,
@@ -544,14 +558,26 @@ export function ProjectsPage() {
         });
       });
 
+      const blueprintNames: Record<string, string> = {};
+      const blueprintAt: Record<string, string> = {};
+      const noteBlueprint = (pid: string, name: unknown, at: unknown) => {
+        if (typeof name !== "string" || !name.trim()) return;
+        const stamp = typeof at === "string" ? at : "";
+        if (!(pid in blueprintNames) || stamp >= (blueprintAt[pid] ?? "")) {
+          blueprintNames[pid] = name;
+          blueprintAt[pid] = stamp;
+        }
+      };
       const rc: Record<string, number> = {};
-      ((rep as Array<{ project_id: string }>) ?? []).forEach((r) => {
+      ((rep as Array<{ project_id: string; name?: string | null; created_at?: string }>) ?? []).forEach((r) => {
         rc[r.project_id] = (rc[r.project_id] ?? 0) + 1;
+        noteBlueprint(r.project_id, r.name, r.created_at);
       });
 
       const cc: Record<string, number> = {};
-      ((cl as Array<{ project_id: string }>) ?? []).forEach((r) => {
+      ((cl as Array<{ project_id: string; name?: string | null; created_at?: string }>) ?? []).forEach((r) => {
         cc[r.project_id] = (cc[r.project_id] ?? 0) + 1;
+        noteBlueprint(r.project_id, r.name, r.created_at);
       });
 
       const uploaderIds = Array.from(new Set(Object.values(uploadersByProject).flat()));
@@ -613,6 +639,7 @@ export function ProjectsPage() {
         photoCounts: counts,
         reportCounts: rc,
         checklistCounts: cc,
+        blueprintNames,
         recentMembers: membersByProject,
       };
     }
@@ -697,6 +724,7 @@ export function ProjectsPage() {
     setPhotoCounts(projectsQuery.data.photoCounts);
     setReportCounts(projectsQuery.data.reportCounts);
     setChecklistCounts(projectsQuery.data.checklistCounts);
+    setBlueprintNames(projectsQuery.data.blueprintNames ?? {});
     setRecentMembers(projectsQuery.data.recentMembers);
   }, [projectsQuery.data]);
 
@@ -770,12 +798,17 @@ export function ProjectsPage() {
     return Array.from(map.values()).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
   }, [recentMembers]);
 
+  /*
+   * "include" widens the list rather than replacing it, so an archived project
+   * can still be found under All - the old Archived tab was a
+   * separate world you had to leave your view to visit. "only" is that world,
+   * for when you deliberately went looking for it.
+   *
+   * "All" is include + no status (everything, like the mockup's All 62);
+   * Active/On hold/Completed are hide + that status (open work only).
+   */
   const filteredProjects = useMemo(() => {
     let list = allProjects;
-    // "include" widens the list rather than replacing it, so an archived project
-    // can still be found under Active/Completed - the old Archived tab was a
-    // separate world you had to leave your view to visit. "only" is that world,
-    // for when you deliberately went looking for it.
     if (archivedMode === "hide") list = list.filter((p) => !p.archived);
     else if (archivedMode === "only") list = list.filter((p) => p.archived);
     if (starredOnly) list = list.filter((p) => p.starred);
@@ -903,22 +936,6 @@ export function ProjectsPage() {
   /**
    * The same move the board's drag makes, from the project list.
    *
-   * A stage is a field on the project, so it should be settable wherever the
-   * project is - not only on the one screen that draws it as a column. Same
-   * op, same optimism, same undo.
-   */
-  const updatePipelineStage = async (projectId: string, stageId: string | null) => {
-    const previous = allProjects.find((p) => p.id === projectId)?.pipeline_stage_id ?? null;
-    if (previous === stageId) return;
-    setPipelineStageLocally(projectId, stageId);
-    try {
-      await setProjectPipelineStage({ data: { projectId, stageId } });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Could not change the stage");
-      setPipelineStageLocally(projectId, previous);
-    }
-  };
-
   /** Stage id to how it should be drawn, plus which pipeline it belongs to. */
   const stageLookup = useMemo(() => {
     const out: Record<
@@ -1054,89 +1071,77 @@ export function ProjectsPage() {
     } else toast.success(next ? "Project archived" : "Project restored");
   };
 
-  const activeCount = allProjects.filter((p) => !p.archived).length;
-  const activeStatusCount = allProjects.filter((p) => !p.archived && p.status === "active").length;
+  const activeCount = allProjects.filter((p) => !p.archived && p.status === "active").length;
+  const onHoldCount = allProjects.filter((p) => !p.archived && p.status === "on_hold").length;
   const completedCount = allProjects.filter((p) => !p.archived && p.status === "completed").length;
-  const starredCount = allProjects.filter((p) => p.starred && !p.archived).length;
   const archivedCount = allProjects.filter((p) => p.archived).length;
+  const totalCount = allProjects.length;
+  const starredCount = allProjects.filter((p) => p.starred && !p.archived).length;
 
-  // Four destinations, one per kind of thing. Every pill carries an icon so
-  // the run reads as one navigation control - the same strip, now literally the
-  // same component, that the project home page uses.
+  // Four destinations, one per kind of thing. Labels match the reference
+  // mockup exactly (All Projects / Project Groups / Pipeline / Schedule).
   const tabs = [
-    { key: "projects", label: "Projects", count: activeCount, icon: LayoutGrid },
-    { key: "groups", label: "Groups", count: groups.length, icon: FolderPlus },
+    { key: "projects", label: "All Projects" },
+    { key: "groups", label: "Project Groups" },
     // Key stays "boards" (route/state/table naming); only the label is
     // user-facing, and "Pipeline" describes what the columns actually are.
-    { key: "boards", label: "Pipelines", count: boards.length, icon: Layers },
-    /*
-     * The one count on this strip that is not "how many of these exist".
-     *
-     * The other three are inventory. This one is a workload: open work that is
-     * due today or already late. "Calendar 214" because a task is due next
-     * spring says nothing; "Calendar 3" when three things are waiting on you
-     * today is the entire feature in one number, and it is legible without
-     * opening the tab. See attentionCount().
-     */
-    { key: "schedule", label: "Schedule", count: attentionCount(schedule), icon: CalendarClock },
+    { key: "boards", label: "Pipeline" },
+    { key: "schedule", label: "Schedule" },
   ];
 
   /**
-   * Status stats double as the status filter.
+   * Status pills double as the status filter.
    *
-   * These four numbers used to be tab labels. Reading the workload and cutting
-   * to it are the same gesture, so the number *is* the control - click "19
-   * active" to see the 19. That is what the pipeline view does well, and it is
-   * why Active/Completed could leave the tab strip without going two clicks deep.
+   * Five pills matching the reference mockup: All (dark when selected) /
+   * Active (green) / On hold (amber) / Completed (blue) / Archived (gray).
+   * "All" and "Archived" drive archivedMode; the middle three are non-archived
+   * projects of that status. This replaces heroStats (starred now lives in the
+   * Filters popover only).
    */
-  const heroStats = [
-    {
-      key: "active",
-      icon: CircleDot,
-      count: activeStatusCount,
-      label: "active",
-      on: statusFilter === "active",
-      toggle: () => setStatusFilter((s) => (s === "active" ? "any" : "active")),
-    },
+  const activePill: FilterPillKey =
+    archivedMode === "only"
+      ? "archived"
+      : archivedMode === "include"
+        ? "all"
+        : statusFilter === "any"
+          ? "all"
+          : statusFilter;
+  const setPill = (pill: FilterPillKey) => {
+    if (pill === "all") {
+      setArchivedMode("include");
+      setStatusFilter("any");
+    } else if (pill === "archived") {
+      setArchivedMode("only");
+      setStatusFilter("any");
+    } else {
+      setArchivedMode("hide");
+      setStatusFilter(pill);
+    }
+  };
+  const filterPills: Array<{ key: FilterPillKey; label: string; count: number; toneClass: string }> = [
+    { key: "all", label: "All", count: totalCount, toneClass: "text-foreground" },
+    { key: "active", label: "Active", count: activeCount, toneClass: "text-status-active" },
+    { key: "on_hold", label: "On hold", count: onHoldCount, toneClass: "text-status-hold" },
     {
       key: "completed",
-      icon: CheckCircle2,
+      label: "Completed",
       count: completedCount,
-      label: "completed",
-      on: statusFilter === "completed",
-      toggle: () => setStatusFilter((s) => (s === "completed" ? "any" : "completed")),
+      toneClass: "text-status-complete",
     },
-    {
-      key: "starred",
-      icon: Star,
-      count: starredCount,
-      label: "starred",
-      on: starredOnly,
-      toggle: () => setStarredOnly((s) => !s),
-    },
-    {
-      key: "archived",
-      icon: Archive,
-      count: archivedCount,
-      label: "archived",
-      on: archivedMode === "only",
-      toggle: () => setArchivedMode((m) => (m === "only" ? "hide" : "only")),
-    },
+    { key: "archived", label: "Archived", count: archivedCount, toneClass: "text-status-archived" },
   ];
 
-  /** Refinements behind the Filters button. Search is counted separately. */
+  /** Refinements behind the Filters button. Search is counted separately. Pills are the default view, not a refinement. */
   const filterCount =
     selectedTagIds.length +
     selectedStageIds.length +
     selectedLabels.length +
     selectedContributors.length +
     (dateFrom || dateTo ? 1 : 0) +
-    (statusFilter !== "any" ? 1 : 0) +
-    (starredOnly ? 1 : 0) +
-    (archivedMode !== "hide" ? 1 : 0);
+    (starredOnly ? 1 : 0);
   const hasActiveFilters = !!query.trim() || filterCount > 0;
 
-  /** Clears the popover's refinements. Does not touch the search keyword. */
+  /** Clears the popover's refinements. Does not touch the search keyword or the status pills. */
   const clearRefinements = () => {
     setSelectedTagIds([]);
     setSelectedStageIds([]);
@@ -1144,16 +1149,25 @@ export function ProjectsPage() {
     setSelectedContributors([]);
     setDateFrom("");
     setDateTo("");
-    setStatusFilter("any");
     setStarredOnly(false);
-    setArchivedMode("hide");
   };
 
   const clearAllFilters = () => {
     setQuery("");
     clearRefinements();
+    setPill("all");
   };
 
+  const subtitleText =
+    tab === "groups"
+      ? `${groups.length} ${groups.length === 1 ? "group" : "groups"}`
+      : tab === "boards"
+        ? activeBoard
+          ? activeBoard.name
+          : "Pipelines"
+        : tab === "schedule"
+          ? "Upcoming work and due dates"
+          : `${activeCount} active out of ${totalCount} total`;
   const bodyLabel =
     tab === "groups"
       ? "Groups"
@@ -1165,16 +1179,14 @@ export function ProjectsPage() {
           ? "Archived projects"
           : statusFilter === "active"
             ? "Active projects"
-            : statusFilter === "completed"
-              ? "Completed projects"
-              : starredOnly
-                ? "Starred projects"
-                : "All projects";
+            : statusFilter === "on_hold"
+              ? "Projects on hold"
+              : statusFilter === "completed"
+                ? "Completed projects"
+                : starredOnly
+                  ? "Starred projects"
+                  : "All projects";
   const bodyShownCount = tab === "groups" ? groups.length : filteredProjects.length;
-  const bodyDescription =
-    tab === "groups"
-      ? `${bodyShownCount} ${bodyShownCount === 1 ? "group" : "groups"}. Bundle projects that belong together - one client, one building, or a multi-site contract - to see their photos, stats and views in one place.`
-      : `${bodyShownCount} ${bodyShownCount === 1 ? "project" : "projects"} shown, most recently updated first.`;
 
   /**
    * The toolbar is not a band of its own any more - these two render into the
@@ -1735,8 +1747,6 @@ export function ProjectsPage() {
           </div>
         )}
 
-        <MobileAppBanner />
-
         {/* Same container as the project home page, so the content edge does not
             jump when you click through from this list into a project. */}
         <div className="mx-auto w-full max-w-[1200px] px-4 pb-24 pt-8 sm:px-8 md:px-10">
@@ -1747,7 +1757,7 @@ export function ProjectsPage() {
                 Projects
               </h1>
               <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
-                {bodyDescription}
+                {subtitleText}
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -1787,28 +1797,6 @@ export function ProjectsPage() {
             </div>
           </div>
 
-          {/* Stats rail - the status counts double as the filter, now rendered
-              as the reference's rounded filter pills. */}
-          <div className="mt-5 flex flex-wrap items-center gap-2">
-            {heroStats.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                onClick={s.toggle}
-                aria-pressed={s.on}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[12px] font-semibold transition",
-                  s.on
-                    ? "bg-secondary text-foreground"
-                    : "border-border bg-card text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <s.icon className={cn("h-3.5 w-3.5", s.on && "text-primary")} />
-                {s.count} {s.label}
-              </button>
-            ))}
-          </div>
-
           {/* Underline tabs, the same control every reference screen shares. */}
           <ReferenceTabStrip
             className="mt-6"
@@ -1842,24 +1830,51 @@ export function ProjectsPage() {
             }}
           />
 
-          {/* Toolbar - search + filters for the lists, create for groups, and
-              nothing for boards/schedule which own their own header. */}
-          {(tab === "projects" || tab === "groups") && (
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              {searchInput}
-              {tab === "projects" && filtersPopover}
-              {tab === "groups" && (
-                <Button
-                  size="sm"
-                  className="h-8 shrink-0 gap-1.5 text-xs"
-                  onClick={() => setCreateGroupOpen(true)}
-                >
-                  <FolderPlus className="h-3.5 w-3.5" /> New Group
-                </Button>
-              )}
+          {/* Filter pills + search - the mockup's row: pills left, search box right. */}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              {filterPills.map((pill) => {
+                const selected = activePill === pill.key;
+                return (
+                  <button
+                    key={pill.key}
+                    type="button"
+                    onClick={() => setPill(pill.key)}
+                    aria-pressed={selected}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-[7px] text-[12.5px] font-semibold transition",
+                      selected
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border bg-card text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {pill.label}
+                    <span className={cn("font-mono text-[11px]", selected ? "text-background/70" : pill.toneClass)}>
+                      {pill.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="ml-auto w-full sm:w-60 md:w-[230px]">{searchInput}</div>
+          </div>
+          {tab === "projects" && (
+            <div className="mt-3 flex flex-wrap items-center gap-3">{filtersPopover}</div>
+          )}
+          {tab === "groups" && (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {filtersPopover}
+              <Button
+                size="sm"
+                className="h-8 shrink-0 gap-1.5 text-xs"
+                onClick={() => setCreateGroupOpen(true)}
+              >
+                <FolderPlus className="h-3.5 w-3.5" /> New Group
+              </Button>
             </div>
           )}
-          {/* Projects / Groups / Pipelines / Calendar */}
+
+{/* Projects / Groups / Pipelines / Calendar */}
           <div>
             {/*
               No header on the Pipelines tab: the pipeline strip below already
@@ -1956,20 +1971,12 @@ export function ProjectsPage() {
                   loading={loading}
                   hasQueryOrFilter={hasActiveFilters}
                   onClearFilters={clearAllFilters}
-                  projectTagMap={projectTagMap}
+                  blueprintNames={blueprintNames}
                   coverUrls={coverUrls}
                   coverPaths={coverPaths}
                   coverThumbPaths={coverThumbPaths}
-                  photoCounts={photoCounts}
-                  reportCounts={reportCounts}
-                  checklistCounts={checklistCounts}
-                  recentMembers={recentMembers}
                   onStar={toggleStar}
                   onArchive={toggleArchive}
-                  onStatus={updateStatus}
-                  stageLookup={stageLookup}
-                  stageOptions={stageOptions}
-                  onStage={updatePipelineStage}
                 />
               )}
             </div>
@@ -2131,6 +2138,234 @@ function GroupsGrid({
   );
 }
 
+function statusTone(s: string, archived?: boolean | null): "active" | "hold" | "complete" | "archived" {
+  if (archived) return "archived";
+  if (s === "on_hold") return "hold";
+  if (s === "completed") return "complete";
+  return "active";
+}
+
+function statusLabel(s: string, archived?: boolean | null): string {
+  if (archived) return "Archived";
+  return statusBadge(s).label;
+}
+
+function crewInitials(name?: string | null, email?: string | null): string {
+  const src = (name || email || "?").trim();
+  const parts = src.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return src.slice(0, 2).toUpperCase();
+}
+
+/**
+ * Compact crew stack for the All Projects table: overlapping 22px avatars
+ * with a 2px surface border, plus a "+N" overflow indicator.
+ *
+ * Kept separate from `ProjectCrew` so the list row can stay bare while the
+ * header/grid keep their labeled, caption-bearing variant.
+ */
+function CrewCell({
+  crew,
+  extra,
+  canAssign,
+  onAssign,
+}: {
+  crew: TeamMemberLite[];
+  extra: number;
+  canAssign: boolean;
+  onAssign: () => void;
+}) {
+  if (crew.length === 0 && !canAssign) return null;
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div className="flex items-center gap-0">
+        <div className="flex -space-x-1.5">
+          {crew.length === 0 && canAssign ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAssign();
+                  }}
+                  className="flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-border bg-secondary/60 text-[10px] font-extrabold text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+                >
+                  +
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                Assign crew
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+          {crew.slice(0, 3).map((m) => (
+            <Tooltip key={m.user_id}>
+              <TooltipTrigger asChild>
+                <Avatar className="h-[22px] w-[22px] border-2 border-border shrink-0">
+                  {m.avatar_url ? (
+                    <AvatarImage src={m.avatar_url} alt={m.full_name ?? m.email ?? ""} />
+                  ) : null}
+                  <AvatarFallback className="bg-foreground text-[9px] font-extrabold text-background">
+                    {crewInitials(m.full_name ?? null, m.email ?? null)}
+                  </AvatarFallback>
+                </Avatar>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                <div className="font-medium">{m.full_name ?? m.email ?? "Teammate"}</div>
+              </TooltipContent>
+            </Tooltip>
+          ))}
+        </div>
+        {extra > 0 && (
+          <span className="ml-1.5 inline-flex h-[22px] items-center justify-center rounded-full border border-border bg-secondary/60 px-1 text-[10px] font-semibold text-muted-foreground">
+            +{extra}
+          </span>
+        )}
+      </div>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * Hover-revealed kebab for the last column. Wrapped in a stop-propagation
+ * div so the click that opens the menu does not also navigate the row link.
+ */
+function RowActions({
+  project,
+  canAssign,
+  onAssign,
+  onStar,
+  onArchive,
+}: {
+  project: ProjectRow;
+  canAssign: boolean;
+  onAssign: () => void;
+  onStar: (id: string, next: boolean) => void;
+  onArchive: (id: string, next: boolean) => void;
+}) {
+  return (
+    <div onClick={(e) => e.stopPropagation()}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 opacity-0 transition-opacity hover:opacity-100 group-hover:opacity-100"
+            aria-label="More actions"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-40">
+          <DropdownMenuItem onClick={() => onStar(project.id, !project.starred)}>
+            <Star className={cn("mr-2 h-4 w-4", project.starred ? "fill-current text-foreground" : "text-muted-foreground")} />
+            {project.starred ? "Unstar project" : "Star project"}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => onArchive(project.id, !project.archived)}>
+            <Archive className={cn("mr-2 h-4 w-4", project.archived ? "text-status-complete" : "text-muted-foreground")} />
+            {project.archived ? "Restore project" : "Archive project"}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+/**
+ * One row of the All Projects table: 38px thumb + title/city, status pill,
+ * blueprint name, overlapping crew avatars, relative last-activity time.
+ */
+function ProjectTableRow({
+  project,
+  blueprintName,
+  coverUrl,
+  coverPath,
+  coverThumbPath,
+  assigned,
+  canAssign,
+  onAssign,
+  onStar,
+  onArchive,
+}: {
+  project: ProjectRow;
+  blueprintName?: string;
+  coverUrl?: string;
+  coverPath?: string;
+  coverThumbPath?: string;
+  assigned: string[];
+  canAssign: boolean;
+  onAssign: () => void;
+  onStar: (id: string, next: boolean) => void;
+  onArchive: (id: string, next: boolean) => void;
+}) {
+  const { members } = useTeamMembers();
+  const crew = useMemo(() => {
+    const byId = new Map(members.map((m) => [m.user_id, m]));
+    return assigned
+      .map((id) => byId.get(id))
+      .filter((m): m is NonNullable<typeof m> => !!m)
+      .slice(0, 3);
+  }, [members, assigned]);
+  const extra = assigned.length - crew.length;
+  const loc = projectLocation(project);
+
+  return (
+    <div className="group relative">
+      <Link
+        to="/projects/$projectId"
+        params={{ projectId: project.id }}
+        className="grid min-w-0 grid-cols-[2.6fr_1fr_1.4fr_1fr_0.9fr] items-center gap-3 px-[18px] py-[14px] transition-colors hover:bg-secondary/50"
+      >
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center overflow-hidden rounded-[7px] bg-secondary text-muted-foreground">
+            {coverUrl || coverPath ? (
+              <PhotoThumb
+                storagePath={coverPath}
+                thumbPath={coverThumbPath}
+                fallbackUrl={coverUrl}
+                width={200}
+                alt=""
+              />
+            ) : (
+              <FolderKanban className="h-4 w-4" />
+            )}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[13.5px] font-semibold leading-snug text-foreground">
+              {project.name}
+            </span>
+            {loc && (
+              <span className="block truncate text-[11.5px] text-muted-foreground">{loc}</span>
+            )}
+          </span>
+        </span>
+        <span>
+          <ReferencePill tone={statusTone(project.status, project.archived)}>
+            {statusLabel(project.status, project.archived)}
+          </ReferencePill>
+        </span>
+        <span className="truncate text-[12.5px] text-muted-foreground">
+          {blueprintName || <span className="text-faint">—</span>}
+        </span>
+        <CrewCell crew={crew} extra={extra} canAssign={canAssign} onAssign={onAssign} />
+        <span className="flex items-center justify-end gap-1 text-[12px] text-muted-foreground">
+          {timeAgo(project.updated_at)}
+          <RowActions
+            project={project}
+            canAssign={canAssign}
+            onAssign={onAssign}
+            onStar={onStar}
+            onArchive={onArchive}
+          />
+        </span>
+      </Link>
+    </div>
+  );
+}
+
 function ProjectsList({
   projects,
   loading,
@@ -2139,17 +2374,9 @@ function ProjectsList({
   coverUrls,
   coverPaths,
   coverThumbPaths,
-  photoCounts,
-  reportCounts,
-  checklistCounts,
-  recentMembers,
-  projectTagMap,
+  blueprintNames,
   onStar,
   onArchive,
-  onStatus,
-  stageLookup,
-  stageOptions,
-  onStage,
 }: {
   projects: ProjectRow[];
   loading: boolean;
@@ -2158,18 +2385,9 @@ function ProjectsList({
   coverUrls: Record<string, string>;
   coverPaths: Record<string, string>;
   coverThumbPaths: Record<string, string>;
-  photoCounts: Record<string, number>;
-  reportCounts: Record<string, number>;
-  checklistCounts: Record<string, number>;
-  recentMembers: Record<string, Array<{ id: string; name: string | null; avatar: string | null }>>;
-  projectTagMap: Record<string, TagRow[]>;
+  blueprintNames: Record<string, string>;
   onStar: (id: string, next: boolean) => void;
   onArchive: (id: string, next: boolean) => void;
-  onStatus: (id: string, status: string) => void;
-  /** Stage id to how the chip should read. Empty until a pipeline exists. */
-  stageLookup: Record<string, { name: string; color: string; boardName: string }>;
-  stageOptions: Array<{ id: string; name: string; stages: PipelineStage[] }>;
-  onStage: (projectId: string, stageId: string | null) => void;
 }) {
   /*
    * The crew on every visible card, in one request.
@@ -2214,350 +2432,33 @@ function ProjectsList({
 
   return (
     <>
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        {projects.map((p) => {
-          const badge = statusBadge(p.status);
-          const stage = p.pipeline_stage_id ? stageLookup[p.pipeline_stage_id] : undefined;
-          const cover = coverUrls[p.id];
-          const photoCount = photoCounts[p.id] ?? 0;
-          const reportCount = reportCounts[p.id] ?? 0;
-          const checklistCount = checklistCounts[p.id] ?? 0;
-          const members = recentMembers[p.id] ?? [];
-          const assigned = byProject[p.id] ?? [];
-          const loc = projectLocation(p);
-          const tags = projectTagMap[p.id] ?? [];
-          return (
-            <div
-              key={p.id}
-              className={cn(SURFACE_CARD_INTERACTIVE, "group flex flex-col overflow-hidden")}
-            >
-              <Link
-                to="/projects/$projectId"
-                params={{ projectId: p.id }}
-                className="relative block h-40 w-full shrink-0 overflow-hidden bg-muted"
-                aria-label={`Open ${p.name}`}
-              >
-                {cover || coverPaths[p.id] ? (
-                  <PhotoThumb
-                    storagePath={coverPaths[p.id]}
-                    thumbPath={coverThumbPaths[p.id]}
-                    fallbackUrl={cover}
-                    width={420}
-                    alt={`${p.name} cover`}
-                    className="transition-transform duration-300 group-hover:scale-105"
-                  />
-                ) : (
-                  <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
-                    <ImageOff className="h-6 w-6 opacity-60" />
-                    <span className="text-[10px] uppercase tracking-wider">No photos</span>
-                  </div>
-                )}
-                {/*
-                  One badge, not two. This card used to carry the Active/On
-                  hold bucket here and the pipeline stage again lower down,
-                  which is the pair the client asked us to reconcile. The stage
-                  is the more precise of the two and now owns the other, so it
-                  is what the card shows wherever a team has one.
-                */}
-                <span
-                  className={`absolute left-3 top-3 inline-flex max-w-[calc(100%-5rem)] items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white shadow ${stage ? "" : badge.badgeClass}`}
-                  style={
-                    stage
-                      ? { background: stage.color, color: stageChipTextColor(stage.color) }
-                      : undefined
-                  }
-                  title={
-                    stage
-                      ? `${stage.boardName}: ${stage.name}, which counts as ${statusBadge(p.status).label}`
-                      : undefined
-                  }
-                >
-                  {stage ? (
-                    <GitBranch className="h-3 w-3 shrink-0" />
-                  ) : (
-                    <span className="h-1.5 w-1.5 rounded-full bg-white/90" />
-                  )}
-                  <span className="truncate">{stage ? stage.name : badge.label}</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onStar(p.id, !p.starred);
-                  }}
-                  aria-label={p.starred ? "Unstar project" : "Star project"}
-                  className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-sidebar/40 text-sidebar-foreground backdrop-blur transition hover:bg-sidebar/60"
-                >
-                  <Star className={`h-4 w-4 ${p.starred ? "fill-amber-400 text-amber-400" : ""}`} />
-                </button>
-              </Link>
-
-              <div className="flex flex-1 flex-col gap-3 p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link
-                      to="/projects/$projectId"
-                      params={{ projectId: p.id }}
-                      className="block truncate text-base font-extrabold tracking-tight text-foreground hover:text-primary"
-                    >
-                      {p.name}
-                    </Link>
-                    {loc && (
-                      <p className="mt-1 flex items-center gap-1 truncate text-xs text-muted-foreground">
-                        <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
-                        <span className="truncate">{loc}</span>
-                      </p>
-                    )}
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-                        aria-label="More actions"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                      {/*
-                        A project standing in a pipeline takes its status from
-                        its stage, so these three are offered only where there
-                        is no stage to disagree with. Leaving both in was what
-                        the client saw on the project page: "there is another
-                        status also that says complete, Active or onhold. we
-                        have to reconcile between these two statuses."
-                      */}
-                      {stage ? (
-                        <DropdownMenuLabel className="text-[10px] font-normal normal-case leading-snug text-muted-foreground">
-                          At <span className="font-bold text-foreground">{stage.name}</span>, which
-                          counts as {badge.label.toLowerCase()}.
-                        </DropdownMenuLabel>
-                      ) : (
-                        <>
-                          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            Set status
-                          </DropdownMenuLabel>
-                          <DropdownMenuItem
-                            disabled={p.status === "active"}
-                            onClick={() => onStatus(p.id, "active")}
-                          >
-                            <span className="mr-2 h-2 w-2 rounded-full bg-emerald-400" />
-                            Active
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            disabled={p.status === "on_hold"}
-                            onClick={() => onStatus(p.id, "on_hold")}
-                          >
-                            <span className="mr-2 h-2 w-2 rounded-full bg-amber-400" />
-                            On hold
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            disabled={p.status === "completed"}
-                            onClick={() => onStatus(p.id, "completed")}
-                          >
-                            <span className="mr-2 h-2 w-2 rounded-full bg-violet-400" />
-                            Completed
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                      {/*
-                      Moving a job along without opening the board.
-
-                      A submenu rather than a flat list: with two pipelines of
-                      six stages this would otherwise be twelve rows pushed in
-                      between "Set status" and "Crew", burying both. Grouped by
-                      pipeline, because "In Progress" on two different boards is
-                      two different places.
-                    */}
-                      {stageOptions.length > 0 && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuSub>
-                            <DropdownMenuSubTrigger>
-                              <GitBranch className="mr-2 h-4 w-4" />
-                              {p.pipeline_stage_id && stageLookup[p.pipeline_stage_id]
-                                ? stageLookup[p.pipeline_stage_id].name
-                                : "Set pipeline stage"}
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent className="w-56">
-                              {stageOptions.map((board, i) => (
-                                <div key={board.id}>
-                                  {i > 0 && <DropdownMenuSeparator />}
-                                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                                    {board.name}
-                                  </DropdownMenuLabel>
-                                  {board.stages.map((s) => (
-                                    <DropdownMenuItem
-                                      key={s.id}
-                                      disabled={s.id === p.pipeline_stage_id}
-                                      onClick={() => onStage(p.id, s.id)}
-                                    >
-                                      <span
-                                        className="mr-2 h-2.5 w-2.5 shrink-0 rounded-full"
-                                        style={{ background: s.color }}
-                                      />
-                                      <span className="min-w-0 flex-1 truncate">{s.name}</span>
-                                      {/* What moving there does to the status, before you move there. */}
-                                      <span className="ml-2 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                        {PROJECT_STATUS_LABELS[s.status]}
-                                      </span>
-                                    </DropdownMenuItem>
-                                  ))}
-                                </div>
-                              ))}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                disabled={!p.pipeline_stage_id}
-                                onClick={() => onStage(p.id, null)}
-                              >
-                                <CircleSlash className="mr-2 h-3.5 w-3.5" />
-                                Not in a pipeline
-                              </DropdownMenuItem>
-                            </DropdownMenuSubContent>
-                          </DropdownMenuSub>
-                        </>
-                      )}
-                      {/*
-                      Staffing a job from the list it is on, rather than from
-                      Team settings. The roster's picker still exists and writes
-                      the same rows, but nobody opens Team settings to answer
-                      "who is doing this one" - they are already looking at it.
-                      Hidden entirely when the viewer cannot assign, since the
-                      server would refuse the write.
-                    */}
-                      {canAssign && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            Crew
-                          </DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => setAssignFor(p)}>
-                            <UsersIcon className="mr-2 h-4 w-4" />
-                            {assigned.length === 0
-                              ? "Assign teammates"
-                              : `Change crew (${assigned.length})`}
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => onStar(p.id, !p.starred)}>
-                        <Star
-                          className={`mr-2 h-4 w-4 ${p.starred ? "fill-amber-400 text-amber-400" : ""}`}
-                        />
-                        {p.starred ? "Unstar" : "Star"}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onArchive(p.id, !p.archived)}>
-                        {p.archived ? (
-                          <>
-                            <ArchiveRestore className="mr-2 h-4 w-4" />
-                            Restore
-                          </>
-                        ) : (
-                          <>
-                            <Archive className="mr-2 h-4 w-4" />
-                            Archive
-                          </>
-                        )}
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link to="/projects/$projectId" params={{ projectId: p.id }}>
-                          Open project
-                        </Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                {(p.labels ?? []).length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1">
-                    {(p.labels ?? []).slice(0, 3).map((label) => (
-                      <LabelChip key={label} label={label} />
-                    ))}
-                    {(p.labels ?? []).length > 3 && (
-                      <span className="text-[10px] font-medium text-muted-foreground">
-                        +{(p.labels ?? []).length - 3}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {tags.length > 0 && <TagPillRow tags={tags.map((t) => t.name)} size="sm" max={4} />}
-
-                {/*
-                One meta band, not two. Counts, last activity and the crew used
-                to sit in two stacked bordered rows, which cost a row of cards
-                per screen to say the same thing.
-              */}
-                <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-3">
-                  <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] font-semibold text-muted-foreground">
-                    <span
-                      className="inline-flex items-center gap-1.5"
-                      title={`${photoCount} ${photoCount === 1 ? "photo" : "photos"}`}
-                    >
-                      <Camera className="h-3.5 w-3.5" />
-                      {photoCount}
-                    </span>
-                    <span
-                      className="inline-flex items-center gap-1.5"
-                      title={`${reportCount} ${reportCount === 1 ? "report" : "reports"}`}
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      {reportCount}
-                    </span>
-                    <span
-                      className="inline-flex items-center gap-1.5"
-                      title={`${checklistCount} ${checklistCount === 1 ? "checklist" : "checklists"}`}
-                    >
-                      <FolderKanban className="h-3.5 w-3.5" />
-                      {checklistCount}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5" title="Last activity">
-                      <Clock className="h-3.5 w-3.5" />
-                      {timeAgo(p.updated_at)}
-                    </span>
-                  </div>
-                  {/*
-                  The crew wins this slot when there is one, because it is the
-                  answer to a question somebody decided ("who is on this job")
-                  rather than a by-product ("who has uploaded here"). The
-                  uploader stack stays as the fallback for an unstaffed job so
-                  the card is not blank, and both now say which they are on
-                  hover - they were bare initials with nothing to hover before.
-                */}
-                  {assigned.length > 0 || canAssign ? (
-                    <ProjectCrew
-                      userIds={assigned}
-                      canAssign={canAssign}
-                      onAssign={() => setAssignFor(p)}
-                      className="shrink-0"
-                    />
-                  ) : (
-                    members.length > 0 && (
-                      <div className="flex shrink-0 -space-x-1.5">
-                        {members.slice(0, 4).map((m) => (
-                          <Avatar
-                            key={m.id}
-                            className="h-6 w-6 border-2 border-card"
-                            title={`${m.name ?? "Someone"} has added photos to this project`}
-                          >
-                            {m.avatar ? <AvatarImage src={m.avatar} alt={m.name ?? ""} /> : null}
-                            <AvatarFallback className="bg-foreground text-[9px] font-extrabold text-background">
-                              {(m.name ?? "?").slice(0, 1).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                        ))}
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <div className={cn(REFERENCE_CARD, "overflow-hidden")}>
+          {/* Column heads - uppercase eyebrow labels on a surface-2 wash. */}
+          <div className="hidden grid-cols-[2.6fr_1fr_1.4fr_1fr_0.9fr] items-center gap-3 border-b border-border bg-secondary/60 px-[18px] py-3 md:grid">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Project</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Status</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Blueprint</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Crew</span>
+            <span className="text-right text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Last activity</span>
+          </div>
+          <div className="divide-y divide-border">
+            {projects.map((p) => (
+              <ProjectTableRow
+                key={p.id}
+                project={p}
+                blueprintName={blueprintNames[p.id]}
+                coverUrl={coverUrls[p.id]}
+                coverPath={coverPaths[p.id]}
+                coverThumbPath={coverThumbPaths[p.id]}
+                assigned={byProject[p.id] ?? []}
+                canAssign={canAssign}
+                onAssign={() => setAssignFor(p)}
+                onStar={onStar}
+                onArchive={onArchive}
+              />
+            ))}
+          </div>
+        </div>
 
       {/*
       One dialog for the whole grid, opened with whichever card was clicked.
