@@ -1,8 +1,14 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import {
-  addDays,
+  addMonths,
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
   format,
+  isSameMonth,
+  isToday,
+  startOfMonth,
   startOfWeek,
 } from "date-fns";
 import {
@@ -64,24 +70,18 @@ import type { AwaitingDateJob, ScheduleEntry, ScheduleData } from "@/lib/workspa
  * to page back to the month it slipped in. Something three weeks late is not
  * something you should have to go looking for.
  */
-/** 7 AM through 9 PM — the occupied band of a typical workday. */
-const TIME_SLOTS = [
-  { label: "7 AM" },
-  { label: "8 AM" },
-  { label: "9 AM" },
-  { label: "10 AM" },
-  { label: "11 AM" },
-  { label: "12 PM" },
-  { label: "1 PM" },
-  { label: "2 PM" },
-  { label: "3 PM" },
-  { label: "4 PM" },
-  { label: "5 PM" },
-  { label: "6 PM" },
-  { label: "7 PM" },
-  { label: "8 PM" },
-  { label: "9 PM" },
+const WEEKDAYS = [
+  { key: "sun", label: "S" },
+  { key: "mon", label: "M" },
+  { key: "tue", label: "T" },
+  { key: "wed", label: "W" },
+  { key: "thu", label: "T" },
+  { key: "fri", label: "F" },
+  { key: "sat", label: "S" },
 ];
+
+/** Past this a cell is a wall of text, and the rail is the place to read it. */
+const CELL_ENTRY_LIMIT = 3;
 
 const dayKey = (d: Date) => format(d, "yyyy-MM-dd");
 
@@ -211,42 +211,41 @@ export function WorkspaceSchedule({
   onSetScheduledDate: (projectId: string, date: string | null) => void;
 }) {
   const today = todayCalendarDate();
-  const todayDate = new Date();
+  const [month, setMonth] = useState<Date>(() => startOfMonth(new Date()));
+  const [selectedDay, setSelectedDay] = useState<string>(today);
 
-  // Monday of the currently displayed week.
-  const [weekStart, setWeekStart] = useState<Date>(() =>
-    startOfWeek(todayDate, { weekStartsOn: 1 }),
+  const gridDays = useMemo(
+    () =>
+      eachDayOfInterval({
+        start: startOfWeek(startOfMonth(month)),
+        end: endOfWeek(endOfMonth(month)),
+      }),
+    [month],
   );
 
-  // The seven days Mon→Sun of the current week.
-  const weekDays = useMemo(() => {
-    const days = [];
-    for (let i = 0; i < 7; i++) days.push(addDays(weekStart, i));
-    return days;
-  }, [weekStart]);
+  /*
+   * The grid pages without limit; the task read does not. Booked jobs are not
+   * windowed either, so a month outside the read would draw jobs and silently
+   * no tasks - a half-true month that reads as a quiet one. Say it instead.
+   */
+  const monthCovered = coversRange(
+    schedule.taskCoverage,
+    dayKey(startOfMonth(month)),
+    dayKey(endOfMonth(month)),
+  );
 
-  const weekRangeLabel = useMemo(() => {
-    const end = weekDays[6];
-    return `${format(weekStart, "MMMM d")} – ${format(end, "MMMM d, yyyy")}`;
-  }, [weekStart, weekDays]);
+  const dayEntries = schedule.byDate.get(selectedDay) ?? [];
+  const selectedDate = useMemo(() => new Date(`${selectedDay}T00:00:00`), [selectedDay]);
+  const openToday = schedule.today.filter((e) => !e.done).length;
 
-  const goToPrevWeek = () =>
-    setWeekStart(startOfWeek(addDays(weekStart, -7), { weekStartsOn: 1 }));
-  const goToNextWeek = () =>
-    setWeekStart(startOfWeek(addDays(weekStart, 7), { weekStartsOn: 1 }));
-  const goToToday = () =>
-    setWeekStart(startOfWeek(todayDate, { weekStartsOn: 1 }));
-
-  const getEntriesForDay = (dayDate: Date) => {
-    const key = format(dayDate, "yyyy-MM-dd");
-    return schedule.byDate.get(key) ?? [];
+  const goToDay = (day: string) => {
+    setSelectedDay(day);
+    const asDate = new Date(`${day}T00:00:00`);
+    if (!isSameMonth(asDate, month)) setMonth(startOfMonth(asDate));
   };
 
   const nothingAtAll =
-    !loading &&
-    !error &&
-    schedule.entries.length === 0 &&
-    schedule.awaitingDate.length === 0;
+    !loading && !error && schedule.entries.length === 0 && schedule.awaitingDate.length === 0;
 
   if (nothingAtAll) {
     return (
@@ -259,117 +258,316 @@ export function WorkspaceSchedule({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
-            Workspace schedule
-          </p>
-          <h2 className="font-display mt-1.5 text-2xl font-bold leading-none tracking-[-0.01em]">
-            {weekRangeLabel}
-          </h2>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="sm" className="h-8" onClick={goToToday}>
-            Today
-          </Button>
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={goToPrevWeek} aria-label="Previous week">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={goToNextWeek} aria-label="Next week">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Week grid */}
-      <div className="flex flex-col">
-        {/* Day headers */}
-        <div className="flex border-b border-border" style={{ width: "100%" }}>
-          <div className="flex-shrink-0 w-[64px] py-3 px-1 text-center">
-            <span className="text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">Time</span>
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:items-start">
+      <Card className={cn(SURFACE_CARD, "p-4 sm:p-5")}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
+              Workspace schedule
+            </p>
+            <h2 className="font-display mt-1.5 text-2xl font-bold leading-none tracking-[-0.01em]">
+              {format(month, "MMMM yyyy")}
+            </h2>
           </div>
-          {weekDays.map((day) => {
-            const k = format(day, "yyyy-MM-dd");
-            const isToday = k === today;
-            return (
-              <div key={k} className={cn("flex-1 min-w-0 py-3 px-2 text-center border-l border-border/50", isToday && "bg-primary/10")}>
-                <p className="text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">{format(day, "EEE")}</p>
-                <p className={cn("mt-0.5 text-[15px] font-extrabold tabular-nums", isToday ? "text-primary" : "text-foreground")}>{format(day, "d")}</p>
-              </div>
-            );
-          })}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => {
+                setMonth(startOfMonth(new Date()));
+                setSelectedDay(today);
+              }}
+            >
+              Today
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setMonth(addMonths(month, -1))}
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setMonth(addMonths(month, 1))}
+              aria-label="Next month"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
-        {/* Grid body */}
-        <div className="flex" style={{ width: "100%" }}>
-          {/* Time column */}
-          <div className="flex-shrink-0 w-[64px] flex flex-col">
-            {TIME_SLOTS.map((slot) => (
-              <div key={slot.label} className="flex items-start h-[48px] px-1 pt-1 border-b border-border/10">
-                <span className="text-[10px] font-extrabold tabular-nums text-muted-foreground">{slot.label}</span>
-              </div>
-            ))}
-          </div>
+        {/* The three numbers the tab exists to produce. Each is a button,
+            because reading "4 overdue" and wanting to see the four is one
+            gesture, not two. */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {error ? (
+            <span className="inline-flex items-center gap-1.5 text-[11.5px] font-bold text-destructive">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Couldn&apos;t load task due dates
+              <button
+                type="button"
+                onClick={onRetry}
+                className="underline underline-offset-2 hover:no-underline"
+              >
+                Retry
+              </button>
+            </span>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => goToDay(today)}
+                className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-muted-foreground transition hover:text-foreground"
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                {openToday} due today
+              </button>
+              <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-muted-foreground">
+                <CalendarClock className="h-3.5 w-3.5" />
+                {schedule.next7.length} in the next 7 days
+              </span>
+              {schedule.overdue.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => goToDay(schedule.overdue[0].date)}
+                  className="inline-flex items-center gap-1.5 text-[11.5px] font-bold text-destructive transition hover:underline"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {schedule.overdue.length} overdue
+                </button>
+              )}
+              {loading && (
+                <span className="text-[11.5px] font-semibold text-muted-foreground">Loading…</span>
+              )}
+              {/* Both of these are "what you are looking at is short, and here
+                  is why", which is the one thing a calendar must never leave
+                  the reader to work out. */}
+              {!monthCovered && (
+                <span className="inline-flex items-center gap-1.5 text-[11.5px] font-bold text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Task due dates aren&apos;t loaded this far out. Booked jobs still show.
+                </span>
+              )}
+              {schedule.taskCoverage?.capped && (
+                <span className="text-[11.5px] font-bold text-amber-600 dark:text-amber-400">
+                  Too many dated tasks to load at once - the far future is cut off
+                </span>
+              )}
+            </>
+          )}
+        </div>
 
-          {/* Day columns */}
-          {weekDays.map((day) => {
-            const k = format(day, "yyyy-MM-dd");
-            const entries = getEntriesForDay(day);
-            const isToday = k === today;
+        <div className="mt-4 grid grid-cols-7 gap-1 sm:gap-1.5">
+          {WEEKDAYS.map((d) => (
+            <div
+              key={d.key}
+              className="pb-1 text-center text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground"
+            >
+              {d.label}
+            </div>
+          ))}
+
+          {gridDays.map((day) => {
+            const k = dayKey(day);
+            const entries = schedule.byDate.get(k) ?? [];
+            const outside = !isSameMonth(day, month);
+            const isSelected = selectedDay === k;
+            const hasLate = entries.some((e) => e.overdue);
+
             return (
-              <div key={k} className={cn("flex-1 min-w-0 flex flex-col border-l border-border/50", isToday && "bg-primary/5")}>
-                {/* All-day events */}
-                <div className="flex flex-col gap-1 p-1.5 overflow-y-auto" style={{ maxHeight: "200px" }}>
-                  {entries.length === 0 ? (
-                    <div className="flex h-8 items-center justify-center text-[10px] text-muted-foreground opacity-40">—</div>
-                  ) : (
-                    entries.map((entry) => (
-                      <div key={entry.key} className={cn("flex items-center gap-1.5 rounded-md border border-border/70 bg-card/60 px-1.5 py-1 transition hover:border-primary/40", entry.overdue && "border-destructive/40 bg-destructive/5")}>
-                        <Link {...entryLink(entry)} className="flex min-w-0 items-center gap-1.5">
-                          <span aria-hidden className={cn("h-2 w-2 shrink-0", entry.kind === "job" ? "rounded-[2px]" : "rounded-full", entry.done && "opacity-40")} style={{ backgroundColor: entry.color }} />
-                          <span className="min-w-0 flex-1">
-                            <span className={cn("block truncate text-[11px] font-bold", entry.done ? "text-muted-foreground line-through" : "text-foreground")}>{entry.title}</span>
-                            <span className="mt-0.5 block truncate text-[10px] font-semibold text-muted-foreground">{entry.projectName}</span>
-                          </span>
-                        </Link>
-                        {entry.overdue && <AlertTriangle className="h-3 w-3 shrink-0 text-destructive" />}
-                        {entry.done && <CheckCircle2 className="h-3 w-3 shrink-0 text-muted-foreground" />}
-                      </div>
-                    ))
+              /*
+               * The cell is a container, not a button.
+               *
+               * It used to be one big `<button>` with inert `<span>` chips
+               * inside it, and the client found exactly what that costs:
+               * "clicking a task directly on the calendar grid does nothing -
+               * only the same item in the sidebar is clickable". A chip that
+               * names a task and does not open it is a dead control on the
+               * busiest surface of the screen.
+               *
+               * It cannot be fixed by nesting: a link inside a button is
+               * invalid HTML and browsers disagree about which one a click
+               * belongs to. So the day surface is a full-bleed button UNDER the
+               * content, and each chip is a real link ABOVE it with pointer
+               * events switched back on. Empty space in the cell still selects
+               * the day; a chip opens what it names; both are reachable by
+               * keyboard, in reading order.
+               */
+              <div
+                key={k}
+                className={cn(
+                  "group/cell relative flex min-h-[74px] flex-col rounded-xl border p-1.5 transition sm:min-h-[104px]",
+                  outside
+                    ? "border-transparent bg-transparent opacity-40"
+                    : "border-border hover:border-primary/50",
+                  isSelected && "border-primary ring-2 ring-primary/25",
+                  !outside && entries.length === 0 && "bg-muted/20",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSelectedDay(k)}
+                  aria-pressed={isSelected}
+                  aria-label={`${format(day, "EEEE d MMMM")}, ${entries.length} ${
+                    entries.length === 1 ? "entry" : "entries"
+                  }`}
+                  className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                />
+
+                {/* Above the day surface, and transparent to the pointer except
+                    where a chip switches it back on. */}
+                <div className="pointer-events-none relative flex min-w-0 flex-col gap-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <span
+                      className={cn(
+                        "text-[11px] font-extrabold tabular-nums",
+                        isToday(day)
+                          ? "flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {format(day, "d")}
+                    </span>
+                    {hasLate && (
+                      <span
+                        aria-hidden
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive"
+                        title="Something here is overdue"
+                      />
+                    )}
+                  </div>
+
+                  {/* Phones get markers, because a 48px-wide cell cannot hold a
+                      readable title and a truncated one is worse than a mark
+                      saying "there is something here". Square for a job, round
+                      for a task: the shape is the type, so it survives being
+                      too small for an icon and being read by someone who cannot
+                      separate the colours. */}
+                  {entries.length > 0 && (
+                    <div className="flex flex-wrap gap-0.5 sm:hidden">
+                      {entries.slice(0, 4).map((e) => (
+                        <span
+                          key={e.key}
+                          aria-hidden
+                          className={cn(
+                            "h-1.5 w-1.5",
+                            e.kind === "job" ? "rounded-[1px]" : "rounded-full",
+                            e.done && "opacity-40",
+                          )}
+                          style={{ backgroundColor: e.color }}
+                        />
+                      ))}
+                    </div>
                   )}
-                </div>
 
-                {/* Time grid */}
-                <div className="flex flex-col border-t border-border/50" style={{ minHeight: "720px" }}>
-                  {TIME_SLOTS.map((slot) => (
-                    <div key={slot.label} className="h-[48px] border-b border-border/10">{/* Empty time slot */}</div>
-                  ))}
+                  <div className="hidden min-w-0 flex-col gap-0.5 sm:flex">
+                    {entries.slice(0, CELL_ENTRY_LIMIT).map((e) => (
+                      <EntryChip key={e.key} entry={e} />
+                    ))}
+                    {entries.length > CELL_ENTRY_LIMIT && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDay(k)}
+                        className="pointer-events-auto rounded px-1 text-left text-[10px] font-extrabold text-muted-foreground hover:text-foreground"
+                      >
+                        +{entries.length - CELL_ENTRY_LIMIT} more
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
-      </div>
 
-      {/* Legend */}
-      <Legend />
+        <Legend />
+      </Card>
 
-      {/* Awaiting date jobs */}
-      {schedule.awaitingDate.length > 0 && canSchedule && (
-        <Card className={cn(SURFACE_CARD, "p-4 sm:p-5")}>
-          <RailSection icon={CalendarDays} title="Awaiting a date" description="Sitting in a Scheduled pipeline stage with no day booked. Pick one and it lands on the grid.">
-            {schedule.awaitingDate.map((job) => (
-              <AwaitingRow key={job.projectId} job={job} canSchedule={canSchedule} onSetScheduledDate={onSetScheduledDate} />
-            ))}
-          </RailSection>
-        </Card>
-      )}
+      {/* The rail: where a day is actually read. */}
+      <Card className={cn(SURFACE_CARD, "overflow-hidden p-0 lg:sticky lg:top-4")}>
+        <div className="border-b border-border/60 px-4 py-3.5">
+          <p className="font-manrope text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
+            {selectedDay === today ? "Today" : "Selected day"}
+          </p>
+          <h3 className="font-display mt-1.5 text-xl font-bold leading-none tracking-[-0.01em]">
+            {format(selectedDate, "EEEE, d MMM")}
+          </h3>
+          <p className="mt-1.5 text-xs font-semibold text-muted-foreground">
+            {dayEntries.length === 0
+              ? "Nothing dated on this day."
+              : `${dayEntries.length} ${dayEntries.length === 1 ? "entry" : "entries"}`}
+          </p>
+        </div>
+
+        <div className="max-h-[560px] space-y-4 overflow-y-auto p-3">
+          {dayEntries.length > 0 && (
+            <div className="space-y-1.5">
+              {dayEntries.map((e) => (
+                <EntryRow
+                  key={e.key}
+                  entry={e}
+                  canSchedule={canSchedule}
+                  onSetScheduledDate={onSetScheduledDate}
+                />
+              ))}
+            </div>
+          )}
+
+          {schedule.overdue.length > 0 && (
+            <RailSection
+              icon={AlertTriangle}
+              title={`${schedule.overdue.length} overdue`}
+              tone="destructive"
+              description="Open, and the day has passed. Listed here whichever month you are looking at."
+            >
+              {schedule.overdue.slice(0, 12).map((e) => (
+                <EntryRow
+                  key={e.key}
+                  entry={e}
+                  showDate
+                  canSchedule={canSchedule}
+                  onSetScheduledDate={onSetScheduledDate}
+                />
+              ))}
+              {schedule.overdue.length > 12 && (
+                <p className="px-1 pt-1 text-[11px] font-semibold text-muted-foreground">
+                  Showing the 12 oldest of {schedule.overdue.length}.
+                </p>
+              )}
+            </RailSection>
+          )}
+
+          {schedule.awaitingDate.length > 0 && (
+            <RailSection
+              icon={CircleSlash}
+              title={`${schedule.awaitingDate.length} awaiting a date`}
+              description={
+                canSchedule
+                  ? "Sitting in a Scheduled pipeline stage with no day booked. Pick one and it lands on the grid."
+                  : "Sitting in a Scheduled pipeline stage with no day booked."
+              }
+            >
+              {schedule.awaitingDate.map((job) => (
+                <AwaitingRow
+                  key={job.projectId}
+                  job={job}
+                  canSchedule={canSchedule}
+                  onSetScheduledDate={onSetScheduledDate}
+                />
+              ))}
+            </RailSection>
+          )}
+        </div>
+      </Card>
     </div>
   );
 }
-
 
 /**
  * A date field that does not write down a year somebody is halfway through
