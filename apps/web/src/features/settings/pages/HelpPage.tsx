@@ -27,6 +27,8 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from "@/components/ui/accordion";
+import { REFERENCE_SUBTITLE, REFERENCE_TITLE } from "@/components/ui/reference";
+import { cn } from "@/lib/utils";
 
 type Guide = {
   id: string;
@@ -794,13 +796,13 @@ export function HelpPage() {
       the shell, and on xl the width that is left over carries the category
       rail instead of nothing.
     */
-    <div className="mx-auto w-full max-w-[900px] px-6 pb-24 pt-10 md:px-10">
+    <div className="mx-auto w-full max-w-[900px] px-10 pb-10 pt-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-[560px]">
-          <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
+          <h1 className={REFERENCE_TITLE}>
             Knowledge Base
           </h1>
-          <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
+          <p className={cn(REFERENCE_SUBTITLE, "mt-1")}>
             Guides for getting the most out of Everlumen.
           </p>
         </div>

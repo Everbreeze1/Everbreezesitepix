@@ -157,7 +157,7 @@ export function AppHeader() {
             <button
               type="button"
               aria-label="Account menu"
-              className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-1.5 transition-colors hover:bg-secondary"
+              className="flex items-center gap-2 rounded-lg py-[5px] pl-[5px] pr-2 transition-colors hover:bg-secondary"
             >
               {profile?.avatar_url ? (
                 <img

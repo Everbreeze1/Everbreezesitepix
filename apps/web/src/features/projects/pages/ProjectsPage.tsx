@@ -1739,14 +1739,14 @@ export function ProjectsPage() {
 
         {/* Same container as the project home page, so the content edge does not
             jump when you click through from this list into a project. */}
-        <div className="mx-auto w-full max-w-[1200px] px-4 pb-24 pt-8 sm:px-8 md:px-10">
+        <div className="mx-auto w-full max-w-[1200px] px-10 pb-10 pt-8">
           {/* Hero - mockup-style: title, subtitle, primary action and a trash menu. */}
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 max-w-[560px]">
-              <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
+              <h1 className={REFERENCE_TITLE}>
                 Projects
               </h1>
-              <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
+              <p className={cn(REFERENCE_SUBTITLE, "mt-1")}>
                 {bodyDescription}
               </p>
             </div>
@@ -1797,13 +1797,13 @@ export function ProjectsPage() {
                 onClick={s.toggle}
                 aria-pressed={s.on}
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[12px] font-semibold transition",
+                  "inline-flex items-center gap-1.5 rounded-full border px-[14px] py-[7px] text-[12.5px] font-semibold transition",
                   s.on
-                    ? "bg-secondary text-foreground"
+                    ? "border-foreground bg-foreground text-background"
                     : "border-border bg-card text-muted-foreground hover:text-foreground",
                 )}
               >
-                <s.icon className={cn("h-3.5 w-3.5", s.on && "text-primary")} />
+                <s.icon className={cn("h-3.5 w-3.5", s.on && "text-background")} />
                 {s.count} {s.label}
               </button>
             ))}
@@ -2183,6 +2183,7 @@ function ProjectsList({
     useMemo(() => projects.slice(0, 200).map((p) => p.id), [projects]),
   );
   const [assignFor, setAssignFor] = useState<ProjectRow | null>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "table">("table");
 
   if (loading) {
     return null;
@@ -2211,9 +2212,84 @@ function ProjectsList({
       />
     );
   }
+  if (viewMode === "table") {
+    return (
+      <div className="overflow-hidden rounded-[12px] border border-border bg-card">
+        <div className="grid grid-cols-[2.6fr_1fr_1.4fr_1fr_0.9fr] items-center border-b border-border bg-secondary px-[18px] py-[14px]">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">Project</span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">Status</span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">Blueprint</span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">Crew</span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint text-right">Last activity</span>
+        </div>
+        {projects.map((p) => {
+          const badge = statusBadge(p.status);
+          const stage = p.pipeline_stage_id ? stageLookup[p.pipeline_stage_id] : undefined;
+          const assigned = byProject[p.id] ?? [];
+          const loc = projectLocation(p);
+          return (
+            <Link
+              key={p.id}
+              to="/projects/$projectId"
+              params={{ projectId: p.id }}
+              className="grid grid-cols-[2.6fr_1fr_1.4fr_1fr_0.9fr] items-center border-b border-border px-[18px] py-[14px] transition-colors hover:bg-secondary"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary">
+                  <FolderKanban className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <span className="block truncate text-[13.5px] font-semibold text-foreground">{p.name}</span>
+                  {loc && <span className="block truncate text-xs text-faint">{loc}</span>}
+                </div>
+              </div>
+              <span className={`inline-flex w-fit items-center gap-1 rounded-full px-2.5 py-[3px] text-[11px] font-semibold ${stage ? "" : badge.badgeClass}`} style={stage ? { background: stage.color, color: stageChipTextColor(stage.color) } : undefined}>
+                {stage ? stage.name : badge.label}
+              </span>
+              <span className="text-[12.5px] text-muted-foreground">HVAC Service Call</span>
+              <div className="flex -space-x-1.5">
+                {assigned.length > 0 ? (
+                  assigned.slice(0, 2).map((m) => (
+                    <span key={m.id} className="flex h-6 w-6 items-center justify-center rounded-full bg-[#4a5568] text-[9px] font-bold text-white ring-2 ring-card">
+                      {(m.name ?? "?")[0]?.toUpperCase()}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs text-faint">—</span>
+                )}
+              </div>
+              <span className="text-[12px] text-faint text-right font-mono">
+                {p.updated_at ? new Date(p.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—"}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <>
+      <div className="flex justify-end mb-3">
+        <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
+          <button
+            type="button"
+            onClick={() => setViewMode("table")}
+            className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${viewMode === "table" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+            aria-label="Table view"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("grid")}
+            className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${viewMode === "grid" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+            aria-label="Grid view"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          </button>
+        </div>
+      </div>
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {projects.map((p) => {
           const badge = statusBadge(p.status);

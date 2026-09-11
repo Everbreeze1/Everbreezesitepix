@@ -4,6 +4,7 @@ import {
   Bug,
   Check,
   ChevronDown,
+  ChevronUp,
   Heart,
   Image as ImageIcon,
   Inbox,
@@ -43,6 +44,7 @@ import {
 import { clientContextRows, readClientContext, type ClientContext } from "@/lib/feedback-context";
 import { projectDisplayName } from "@everlumen/shared";
 import { formatRelativeTime } from "@/lib/format-time";
+import { FeedbackBoard } from "@/features/settings/components/FeedbackBoard";
 
 /** The two things people actually come here to do. */
 const MODES: Array<{
@@ -110,6 +112,7 @@ function useAutoGrow(value: string) {
 
 export function ReportIssuePage() {
   const { user } = useAuth();
+  const [showBoard, setShowBoard] = useState(true);
   const [kind, setKind] = useState<"bug" | "idea">("bug");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
@@ -656,6 +659,12 @@ function ReportRow({ report }: { report: MyFeedbackReport }) {
 
   return (
     <li className="flex items-start gap-3.5 border-b border-border px-4 py-4 last:border-b-0">
+      {/* Upvote button - mockup .upvote */}
+      <div className="flex flex-col items-center gap-0.5 rounded-lg border border-border px-2.5 py-1.5 text-muted-foreground">
+        <ChevronUp className="h-3 w-3" />
+        <span className="font-mono text-[11px]">{report.votes ?? 0}</span>
+      </div>
+
       {/* Type icon on a tinted square - mockup .type-icon (32px, 8px radius). */}
       <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", kind.tintClass)}>
         <KindIcon className={cn("h-4 w-4", kind.iconClass)} strokeWidth={1.8} />

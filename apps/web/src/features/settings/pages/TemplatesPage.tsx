@@ -70,7 +70,9 @@ import { getMyTeam } from "@/features/settings/api";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { PageTabStrip } from "@/components/PageTabStrip";
+import { REFERENCE_BUTTON_PRIMARY, REFERENCE_CARD, REFERENCE_CARD_INTERACTIVE, REFERENCE_CHIP, REFERENCE_EYEBROW, REFERENCE_MONO, REFERENCE_PAGE, REFERENCE_SUBTITLE, REFERENCE_TITLE } from "@/components/ui/reference";
 import { SURFACE_CARD } from "@/components/ui/surface";
+import { cn } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { LabelChip, LabelPicker } from "@/features/photos/components/LabelPicker";
 import { ApplyBlueprintDialog } from "@/features/settings/components/ApplyBlueprintDialog";
@@ -93,6 +95,8 @@ import { installBlueprintStarter } from "@/features/settings/components/install-
 import { LabelSetsManager } from "@/features/settings/components/LabelSetsManager";
 import { ReportTemplatesManager } from "@/features/settings/components/ReportTemplatesManager";
 import { DocumentTemplatesManager } from "@/features/settings/components/DocumentTemplatesManager";
+import { BlueprintEditor } from "@/features/settings/components/BlueprintEditor";
+import { DocumentWizard } from "@/features/settings/components/DocumentWizard";
 import {
   CATEGORY_ORDER,
   GENERAL_CATEGORY,
@@ -470,6 +474,13 @@ export function TemplatesPage() {
   const [editCategory, setEditCategory] = useState<string>(NO_CATEGORY);
   const [editDefault, setEditDefault] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Blueprint editor overlay state
+  const [blueprintEditorOpen, setBlueprintEditorOpen] = useState(false);
+  const [editingBlueprintId, setEditingBlueprintId] = useState<string | null>(null);
+
+  // Document wizard overlay state
+  const [documentWizardOpen, setDocumentWizardOpen] = useState(false);
 
   const loadApplications = useCallback(async () => {
     const { data, error } = await supabase
@@ -1253,15 +1264,15 @@ export function TemplatesPage() {
       {/* Link two. No `min-h-0`, on purpose: the container has to be free to
           grow past the viewport, both for the tabs that are long lists and for
           a short screen where the workspace hits its floor. */}
-      <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pb-10 md:pt-10 workspace:flex workspace:min-h-0 workspace:flex-1 workspace:flex-col [@media(max-height:950px)]:md:pb-4 [@media(max-height:950px)]:md:pt-5">
+      <div className="container mx-auto px-10 pb-10 pt-8 workspace:flex workspace:min-h-0 workspace:flex-1 workspace:flex-col">
         {/* Hero - a light reference header: the mockup's "Blueprints" page has
             no dark band, just the title, subtitle, and primary action. */}
         <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 max-w-[560px]">
-              <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
+              <h1 className={REFERENCE_TITLE}>
                 Templates
               </h1>
-              <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
+              <p className={cn(REFERENCE_SUBTITLE, "mt-1")}>
                 Build a job setup once as a blueprint, then apply it to any project - its
                 checklists, workflows, documents, reports and labels all land in place.
               </p>
@@ -1271,7 +1282,8 @@ export function TemplatesPage() {
                 <Button
                   onClick={() => {
                     setTab("blueprints");
-                    setCreateOpen(true);
+                    setEditingBlueprintId(null);
+                    setBlueprintEditorOpen(true);
                   }}
                   className="font-sans h-10 rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90"
                 >
@@ -1755,6 +1767,38 @@ export function TemplatesPage() {
           companyName={teamData?.team?.name ?? null}
           onApplied={() => void loadApplications()}
         />
+      )}
+
+      {/* Blueprint Editor Overlay */}
+      {blueprintEditorOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 pt-10 pb-10">
+          <div className="w-full max-w-[1000px]">
+            <BlueprintEditor
+              blueprintId={editingBlueprintId ?? undefined}
+              onBack={() => setBlueprintEditorOpen(false)}
+              onCancel={() => setBlueprintEditorOpen(false)}
+              onSave={() => {
+                setBlueprintEditorOpen(false);
+                // Reload templates after save
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Document Wizard Overlay */}
+      {documentWizardOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 pt-10 pb-10">
+          <div className="w-full max-w-[1200px]">
+            <DocumentWizard
+              onBack={() => setDocumentWizardOpen(false)}
+              onSave={() => {
+                setDocumentWizardOpen(false);
+                // Reload templates after save
+              }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
