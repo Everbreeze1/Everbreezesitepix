@@ -1273,44 +1273,6 @@ export function ProjectsPage() {
 
         {filterPane === "views" && (
           <div className="p-3">
-            {/*
-                  Status used to be three tabs. It is a predicate over the one
-                  project list, same as Starred and Archived, so it lives with
-                  them - reachable here, and one click away on the hero stats.
-                */}
-            <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              Status
-            </div>
-            <div className="mb-3 inline-flex w-full overflow-hidden rounded-lg border border-border">
-              {(
-                [
-                  { key: "any", label: "Any", count: activeCount },
-                  { key: "active", label: "Active", count: activeStatusCount },
-                  { key: "completed", label: "Completed", count: completedCount },
-                ] as const
-              ).map((s) => (
-                <button
-                  key={s.key}
-                  type="button"
-                  onClick={() => setStatusFilter(s.key)}
-                  className={`flex flex-1 items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-semibold transition ${
-                    statusFilter === s.key
-                      ? "bg-foreground text-background"
-                      : "text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  {s.label}
-                  <span
-                    className={
-                      statusFilter === s.key ? "text-background/60" : "text-muted-foreground"
-                    }
-                  >
-                    {s.count}
-                  </span>
-                </button>
-              ))}
-            </div>
-
             <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               Narrow the current view
             </div>
