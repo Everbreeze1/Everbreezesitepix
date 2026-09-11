@@ -16,18 +16,6 @@ import { cn } from "@/lib/utils";
 /** Page scaffold: the mockup pages sit on a 32px top / 40px side+bottom inset, capped at 1200px. */
 export const REFERENCE_PAGE = "mx-auto w-full max-w-[1200px] px-6 pb-10 pt-8 sm:px-10";
 
-/** Exact page padding from reference: padding: 32px 40px 40px 40px */
-export const REFERENCE_PAGE_PADDING = "px-10 pb-10 pt-8";
-
-/** Page wrapper with max-width and exact reference padding */
-export function ReferencePage({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={cn("mx-auto w-full max-w-[1200px] px-10 pb-10 pt-8", className)}>
-      {children}
-    </div>
-  );
-}
-
 /** Page title: 24px / 700 / -0.01em tracking, as in "Blueprints", "Projects". */
 export const REFERENCE_TITLE = "text-2xl font-bold tracking-[-0.01em] text-foreground";
 
@@ -49,7 +37,7 @@ export const REFERENCE_CARD_META = "border-t border-border pb-0.5 pt-3 text-xs t
 
 /** Chip: 11px muted on a secondary fill (mockup .chip). */
 export const REFERENCE_CHIP =
-  "inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-[3px] text-[11px] font-medium text-muted-foreground";
+  "inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground";
 
 /** Eyebrow / section label: 12px / 600 faint uppercase (mockup section headers). */
 export const REFERENCE_EYEBROW =
@@ -57,7 +45,7 @@ export const REFERENCE_EYEBROW =
 
 /** Primary action button: amber pill, 9px radius (mockup "New blueprint"). */
 export const REFERENCE_BUTTON_PRIMARY =
-  "inline-flex items-center gap-[9px] rounded-lg bg-primary px-4 py-[9px] text-[13.5px] font-semibold text-primary-foreground";
+  "inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-[13.5px] font-semibold text-primary-foreground";
 
 /** Secondary action: 1px border, no fill (mockup Cancel / Edit template). */
 export const REFERENCE_BUTTON_SECONDARY =
@@ -84,12 +72,12 @@ export function ReferencePill({
     hold: "bg-status-hold-soft text-status-hold",
     complete: "bg-status-complete-soft text-status-complete",
     archived: "bg-status-archived-soft text-status-archived",
-    review: "bg-accent-2-soft text-accent-2",
+    review: "bg-status-complete-soft text-status-complete",
   }[tone];
   return (
     <span
       className={cn(
-        "inline-flex w-fit shrink-0 items-center gap-1 rounded-full px-2.5 py-[3px] text-[11px] font-semibold",
+        "inline-flex w-fit shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
         cls,
         className,
       )}
@@ -150,7 +138,7 @@ export function ReferenceTabStrip({
             onClick={() => onChange(item.key)}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "shrink-0 whitespace-nowrap border-b-[2.5px] pb-[11px] pt-[11px] text-[13px] font-semibold transition-colors",
+              "shrink-0 whitespace-nowrap border-b-[2.5px] pb-2.5 pt-2.5 text-sm font-semibold transition-colors",
               active
                 ? "border-primary text-foreground"
                 : "border-transparent text-faint hover:text-muted-foreground",

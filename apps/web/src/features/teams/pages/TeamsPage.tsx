@@ -66,8 +66,6 @@ import {
 import { SubcontractorsPanel } from "../components/SubcontractorsPanel";
 import { AssignJobsDialog } from "../components/AssignJobsDialog";
 import { RoleBadge } from "../components/RoleBadge";
-import { REFERENCE_BUTTON_PRIMARY, REFERENCE_CARD, REFERENCE_EYEBROW, REFERENCE_MONO, REFERENCE_PAGE, REFERENCE_SUBTITLE, REFERENCE_TITLE } from "@/components/ui/reference";
-import { cn } from "@/lib/utils";
 
 const AVATAR_PALETTE = ["#059669", "#7C3AED", "#D97706", "#DB2777", "#0EA5E9", "#65A30D"];
 const avatarColor = (role: string, index: number) =>
@@ -394,13 +392,13 @@ function TeamDashboard({
   const me = members.find((m: any) => m.role === myRole);
 
   return (
-    <div className="mx-auto max-w-[1200px] px-10 pb-10 pt-8">
+    <div className="mx-auto max-w-[1200px] px-6 pb-24 pt-8 md:px-10">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-[560px]">
-          <h1 className={REFERENCE_TITLE}>
+          <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
             Teams
           </h1>
-          <p className={cn(REFERENCE_SUBTITLE, "mt-1")}>
+          <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
             {subtitleByTab[tab]}
           </p>
         </div>

@@ -3,8 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Camera, FileText, Search, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { REFERENCE_CARD, REFERENCE_CARD_INTERACTIVE, REFERENCE_PAGE, REFERENCE_SUBTITLE, REFERENCE_TITLE, ReferencePill } from "@/components/ui/reference";
-import { cn } from "@/lib/utils";
+import { ReferencePill } from "@/components/ui/reference";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
@@ -397,7 +396,7 @@ return (
 
         {/* Search + Capture update */}
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex h-10 w-[320px] items-center gap-2.5 rounded-[10px] border border-border bg-card px-3.5 py-2">
+          <div className="flex h-[38px] w-[320px] items-center gap-2.5 rounded-[10px] border border-border bg-card px-3.5">
             <Search className="h-3.5 w-3.5 shrink-0 text-faint" />
             <span className="text-[13px] text-faint">Search projects, photos, reports...</span>
           </div>
@@ -424,7 +423,7 @@ return (
           <div className="flex flex-wrap items-center gap-2.5">
             <h1
               aria-busy={!firstName && profileLoading}
-              className={REFERENCE_TITLE}
+              className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground"
             >
               {firstName ? `${greeting}, ${firstName}.` : profileLoading ? greeting : `${greeting}.`}
             </h1>
@@ -432,7 +431,7 @@ return (
               {today}
             </span>
           </div>
-          <p className={cn(REFERENCE_SUBTITLE, "mt-1")}>
+          <p className="font-sans mt-1 text-[14px] leading-snug text-muted-foreground">
             Here's where every job on the board stands today.
           </p>
         </div>
@@ -500,16 +499,13 @@ return (
                         {p.name}
                       </div>
                       <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {projectLocation(p) || "Site"} &middot; HVAC Service Call blueprint
+                        {projectLocation(p) || "Site"} &middot; {p.photoCount} photo
+                        {p.photoCount === 1 ? "" : "s"}
                       </div>
                     </div>
                     <ReferencePill tone={tone}>
                       {p.status === "completed" ? "Completed" : p.status === "hold" ? "On hold" : "Active"}
                     </ReferencePill>
-                    <div className="flex -space-x-1.5">
-                      <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-[#4a5568] text-[9px] font-bold text-white ring-2 ring-card">AJ</span>
-                      <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-[#2f6f4f] text-[9px] font-bold text-white ring-2 ring-card">JB</span>
-                    </div>
                     <div className="w-[74px] shrink-0 text-right text-[11.5px] text-faint">
                       {p.lastPhotoAt ? timeAgo(p.lastPhotoAt) : timeAgo(p.updated_at)}
                     </div>
@@ -530,7 +526,7 @@ return (
               {activity.map((item) => (
                 <div
                   key={item.key}
-                  className="flex items-start gap-[11px] border-b border-border px-4 py-3 last:border-b-0"
+                  className="flex items-start gap-3 border-b border-border px-3.5 py-3 last:border-b-0"
                 >
                   {item.kind === "report" ? (
                     <FileText className="mt-0.5 h-4 w-4 shrink-0 text-accent-foreground" />
@@ -541,7 +537,7 @@ return (
                     <div className="text-[12.5px] font-medium leading-snug text-foreground">
                       {item.text}
                     </div>
-                    <div className="mt-0.5 text-[11.5px] text-faint">{timeAgo(item.at)}</div>
+                    <div className="mt-1 text-[11.5px] text-faint">{timeAgo(item.at)}</div>
                   </div>
                 </div>
               ))}

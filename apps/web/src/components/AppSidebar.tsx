@@ -200,7 +200,7 @@ export function AppSidebar() {
   const companyName = (teamData as { team?: { name?: string } } | null | undefined)?.team?.name;
 
   const buttonBase =
-    "relative flex items-center rounded-lg px-3 py-[9px] text-[13.5px] font-semibold transition-colors mx-2" +
+    "relative flex items-center rounded-lg px-3 text-[13.5px] font-semibold transition-colors" +
     (isMobile ? " h-[52px] gap-3 text-[15px]" : " h-(--rail-row) gap-[11px]");
   const iconBase = isMobile ? "h-5 w-5" : "h-[18px] w-[18px]";
 const navButtonClass = (active: boolean) =>
@@ -251,7 +251,7 @@ const navButtonClass = (active: boolean) =>
   };
 
   const groupLabelClass =
-    "mb-[6px] mt-[22px] px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-sidebar-foreground/45";
+    "mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-sidebar-foreground/45";
 
   return (
     <Sidebar collapsible="icon" className="border-r-0 bg-sidebar text-sidebar-foreground">
@@ -300,12 +300,12 @@ const navButtonClass = (active: boolean) =>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border px-2 pb-2.5 pt-1">
-        <div className={`flex flex-col ${isMobile ? "gap-1.5" : "gap-(--rail-gap)"} mx-2`}>
+        <div className={`flex flex-col ${isMobile ? "gap-1.5" : "gap-(--rail-gap)"}`}>
           {utilItems.map((item) => (
             <Link
               key={item.url}
               to={item.url}
-              className={`flex items-center gap-[10px] rounded-lg px-3 py-[7px] text-[12.5px] transition-colors ${
+              className={`flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[12.5px] transition-colors ${
                 isActive(item)
                   ? "bg-sidebar-accent text-sidebar-ring"
                   : "text-sidebar-foreground/55 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
@@ -343,7 +343,7 @@ const navButtonClass = (active: boolean) =>
                 <span className="truncate text-[12.5px] font-semibold text-sidebar-foreground">
                   {displayName}
                 </span>
-                <span className="truncate text-[11px] text-sidebar-foreground/30">
+                <span className="truncate text-[11px] text-sidebar-foreground/40">
                   {companyName || "Account & settings"}
                 </span>
               </span>

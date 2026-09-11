@@ -77,8 +77,6 @@ import { extractPhotoMeta, mergePhotoMeta } from "@/lib/photo-exif";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { PhotoLightbox } from "@/features/photos/components/PhotoLightbox";
-import { REFERENCE_SUBTITLE, REFERENCE_TITLE } from "@/components/ui/reference";
-import { cn } from "@/lib/utils";
 import {
   PhotoBulkActionBar,
   type BulkPhoto,
@@ -1205,7 +1203,7 @@ export function GalleryPage() {
 
   return (
     <div
-      className="container mx-auto px-10 pb-10 pt-8"
+      className="container mx-auto px-4 pb-24 pt-6 md:pt-10"
       style={{
         transform: `translateY(${Math.min(pull, 70) * 0.5}px)`,
         transition: refreshing || pull === 0 ? "transform 200ms ease" : undefined,
@@ -1243,10 +1241,10 @@ export function GalleryPage() {
       */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-[560px]">
-          <h1 className={REFERENCE_TITLE}>
+          <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
             Photo Library
           </h1>
-          <p className={cn(REFERENCE_SUBTITLE, "mt-1")}>
+          <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
             Every photo across every project, searchable in one place. Open a project&rsquo;s own
             Photos tab to see a photo in the context of that job&rsquo;s workflow.
           </p>
