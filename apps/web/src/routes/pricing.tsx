@@ -277,14 +277,15 @@ function PublicPricingPage() {
       <SiteHeader />
       <main className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
         <div className="text-center">
-          <h1 className="font-display text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-            Document every job.
-          </h1>
-          <p className="font-display mt-1 text-2xl font-bold italic tracking-tight text-foreground sm:text-3xl">
-            Never lose proof of work.
+          <p className="font-manrope text-xs font-bold uppercase tracking-[0.14em] text-accent-foreground">
+            Pricing
           </p>
-          <p className="mt-4 font-manrope text-sm text-muted-foreground">
-            Start your {TRIAL_DAYS}-day free trial. Cancel anytime.
+          <h1 className="font-display mx-auto mt-5 max-w-2xl text-[40px] font-bold leading-[1.04] tracking-[-0.01em] text-foreground sm:text-[42px]">
+            Built to fit your crew size.
+          </h1>
+          <p className="font-manrope mx-auto mt-6 max-w-xl text-[15.5px] leading-[1.6] text-muted-foreground">
+            Every plan includes AI reports, live site maps, and unlimited photo storage - no
+            per-feature upgrades. Start your {TRIAL_DAYS}-day free trial and cancel anytime.
           </p>
         </div>
 
@@ -303,7 +304,7 @@ function PublicPricingPage() {
             return (
               <div
                 key={plan.id}
-                className={`relative flex flex-col rounded-[28px] border p-7 transition-opacity ${
+                className={`relative flex flex-col rounded-[18px] border p-[30px] transition-opacity ${
                   capped ? "opacity-60" : ""
                 } ${plan.popular ? "border-primary shadow-sm" : "border-border"} bg-card`}
               >
@@ -315,10 +316,10 @@ function PublicPricingPage() {
                     Most popular
                   </span>
                 )}
-                <p className="font-display text-2xl font-bold text-foreground">{plan.name}</p>
-                <span className="mt-2 inline-flex w-fit rounded-full bg-foreground px-3 py-1 font-manrope text-[11px] font-bold text-background">
+                <p className="font-display text-[20px] font-bold text-foreground">{plan.name}</p>
+                <p className="mt-2 font-manrope text-[13.5px] text-muted-foreground">
                   {plan.audience}
-                </span>
+                </p>
 
                 <div className="mt-5">
                   {HIDE_PUBLIC_PRICING ? (
@@ -331,9 +332,10 @@ function PublicPricingPage() {
                 <Button
                   asChild={!capped}
                   disabled={capped}
-                  className="mt-6 h-11 rounded-lg font-manrope text-sm font-bold"
+                  variant={plan.popular ? "default" : "outline"}
+                  className="mt-6 h-11 w-full rounded-full font-manrope text-[14.5px] font-bold"
                 >
-                  {capped ? <span>Not available</span> : <Link to="/signup">Start Free Trial</Link>}
+                  {capped ? <span>Not available</span> : <Link to="/signup">Start free trial</Link>}
                 </Button>
 
                 <p className="mt-4 font-manrope text-xs text-muted-foreground">{plan.tagline}</p>

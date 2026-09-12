@@ -1,5 +1,5 @@
 import { useSearch } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query-keys";
 import {
@@ -28,6 +28,7 @@ import {
   CalendarDays,
   Check,
   CheckSquare,
+  ChevronDown,
 } from "lucide-react";
 import { startOfMonth } from "date-fns";
 import { PhotoCalendar } from "@/features/gallery/components/PhotoCalendar";
@@ -62,6 +63,8 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/everlumen/client";
 import { everlumenApi } from "@/lib/everlumen-api";
+import { cn } from "@/lib/utils";
+import { REFERENCE_PAGE, REFERENCE_TITLE, REFERENCE_SUBTITLE } from "@/components/ui/reference";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useSubscriptionGate } from "@/hooks/use-subscription-gate";
@@ -601,6 +604,30 @@ export function GalleryPage() {
     tagFilter.length === 0
       ? photos
       : photos.filter((p) => (p.tags ?? []).some((t) => tagFilter.includes(t)));
+
+  /*
+   * The reference mockup groups the gallery into one section per project -
+   * "Salgiya · 564 Fisher Circle" - rather than one flat strip, so a job is
+   * read as a job. Photos land newest-first from the query, so the section
+   * with the newest photo comes first and each section keeps that order.
+   * Unknown project ids (a project deleted out from under the photo, or a
+   * calendar day's copy) fall back to a single "Unsorted" section instead of
+   * being dropped from view.
+   */
+  const photoSections = useMemo(() => {
+    const byProject = new Map<string, Photo[]>();
+    for (const p of visiblePhotos) {
+      const list = byProject.get(p.project_id);
+      if (list) list.push(p);
+      else byProject.set(p.project_id, [p]);
+    }
+    return [...byProject.entries()]
+      .map(([projectId, items]) => {
+        const project = projects.find((pr) => pr.id === projectId);
+        return { projectId, project, items };
+      })
+      .sort((a, b) => (b.items[0]?.created_at ?? "").localeCompare(a.items[0]?.created_at ?? ""));
+  }, [visiblePhotos, projects]);
 
   const toggleSelect = (id: string) =>
     setSelectedIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -1203,7 +1230,7 @@ export function GalleryPage() {
 
   return (
     <div
-      className="container mx-auto px-4 pb-24 pt-6 md:pt-10"
+      className={REFERENCE_PAGE}
       style={{
         transform: `translateY(${Math.min(pull, 70) * 0.5}px)`,
         transition: refreshing || pull === 0 ? "transform 200ms ease" : undefined,
@@ -1241,10 +1268,8 @@ export function GalleryPage() {
       */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-[560px]">
-          <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
-            Photo Library
-          </h1>
-          <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
+          <h1 className={REFERENCE_TITLE}>Photo Library</h1>
+          <p className={cn(REFERENCE_SUBTITLE, "mt-1")}>
             Every photo across every project, searchable in one place. Open a project&rsquo;s own
             Photos tab to see a photo in the context of that job&rsquo;s workflow.
           </p>
@@ -1306,223 +1331,223 @@ export function GalleryPage() {
         where the eye lands after the grid rather than before the filters.
       */}
       {projects.length > 0 && showFilterBar && (
-        <div className="mt-5 rounded-[14px] border border-border bg-card p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Projects multi-select */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-foreground px-3 font-manrope text-background"
+        <div className="mt-5 flex flex-wrap items-center gap-2.5">
+          {/* Projects multi-select */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-[12.5px] font-medium text-muted-foreground transition hover:text-foreground"
+              >
+                <span>Project:</span>
+                <span
+                  className={cn(projectFilter.length > 0 ? "font-semibold text-foreground" : "")}
                 >
-                  <span className="text-xs font-semibold uppercase tracking-[0.3px]">Projects</span>
-                  <span className="text-sm font-medium">
-                    {projectFilter.length === 0
-                      ? "All"
-                      : projectFilter.length === 1
-                        ? (projects.find((p) => p.id === projectFilter[0])?.name ?? "1 selected")
-                        : `${projectFilter.length} selected`}
-                  </span>
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-72 p-2">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Projects
-                  </span>
-                  {projectFilter.length > 0 && (
+                  {projectFilter.length === 0
+                    ? "All"
+                    : projectFilter.length === 1
+                      ? (projects.find((p) => p.id === projectFilter[0])?.name ?? "1 selected")
+                      : `${projectFilter.length} selected`}
+                </span>
+                <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-72 p-2">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Projects
+                </span>
+                {projectFilter.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setProjectFilter([])}
+                    className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="max-h-64 space-y-0.5 overflow-y-auto">
+                {projects.map((p) => {
+                  const active = projectFilter.includes(p.id);
+                  return (
                     <button
+                      key={p.id}
                       type="button"
-                      onClick={() => setProjectFilter([])}
-                      className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                      onClick={() =>
+                        setProjectFilter((s) =>
+                          s.includes(p.id) ? s.filter((x) => x !== p.id) : [...s, p.id],
+                        )
+                      }
+                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition ${active ? "bg-primary/10 text-foreground" : "hover:bg-muted"}`}
                     >
-                      Clear
+                      <span
+                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${active ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}
+                      >
+                        {active && <CheckCircle2 className="h-3 w-3" />}
+                      </span>
+                      <span className="truncate">{p.name}</span>
                     </button>
-                  )}
+                  );
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Date range - in calendar view the visible month already is the
+                range, so this would be a second way to say the same thing. */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={`inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-[12.5px] font-medium text-muted-foreground transition hover:text-foreground ${
+                  calendarView ? "hidden" : ""
+                }`}
+              >
+                <span>Date:</span>
+                <span className={cn(dateFrom || dateTo ? "font-semibold text-foreground" : "")}>
+                  {dateFrom || dateTo ? `${dateFrom || "…"} → ${dateTo || "…"}` : "All time"}
+                </span>
+                <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-64 p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Date range
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">From</label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                  />
                 </div>
-                <div className="max-h-64 space-y-0.5 overflow-y-auto">
-                  {projects.map((p) => {
-                    const active = projectFilter.includes(p.id);
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">To</label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                  />
+                </div>
+                {(dateFrom || dateTo) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDateFrom("");
+                      setDateTo("");
+                    }}
+                    className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Tags multi-select searchable */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-[12.5px] font-medium text-muted-foreground transition hover:text-foreground"
+              >
+                <TagIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                <span>Tag:</span>
+                <span className={cn(tagFilter.length > 0 ? "font-semibold text-foreground" : "")}>
+                  {tagFilter.length === 0 ? "Any" : `${tagFilter.length} selected`}
+                </span>
+                <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-72 p-2">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Tags
+                </span>
+                {tagFilter.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setTagFilter([])}
+                    className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                value={tagSearch}
+                onChange={(e) => setTagSearch(e.target.value)}
+                placeholder="Search tags…"
+                className="mb-2 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+              />
+              <div className="max-h-56 space-y-0.5 overflow-y-auto">
+                {filteredTagOptions.length === 0 ? (
+                  <div className="px-2 py-4 text-center text-xs text-muted-foreground">
+                    {allTags.length === 0 ? "No tags yet" : "No matching tags"}
+                  </div>
+                ) : (
+                  filteredTagOptions.map((t) => {
+                    const active = tagFilter.includes(t);
                     return (
                       <button
-                        key={p.id}
+                        key={t}
                         type="button"
                         onClick={() =>
-                          setProjectFilter((s) =>
-                            s.includes(p.id) ? s.filter((x) => x !== p.id) : [...s, p.id],
+                          setTagFilter((s) =>
+                            s.includes(t) ? s.filter((x) => x !== t) : [...s, t],
                           )
                         }
-                        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition ${active ? "bg-primary/10 text-foreground" : "hover:bg-muted"}`}
+                        className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left transition ${active ? "bg-primary/10" : "hover:bg-muted"}`}
                       >
-                        <span
-                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${active ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}
-                        >
-                          {active && <CheckCircle2 className="h-3 w-3" />}
-                        </span>
-                        <span className="truncate">{p.name}</span>
+                        <TagPill name={t} size="sm" />
+                        <CheckCircle2
+                          className={`h-3.5 w-3.5 shrink-0 text-primary ${active ? "" : "opacity-0"}`}
+                        />
                       </button>
                     );
-                  })}
-                </div>
-              </PopoverContent>
-            </Popover>
+                  })
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
 
-            {/* Date range - in calendar view the visible month already is the
-                range, so this would be a second way to say the same thing. */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className={`inline-flex h-9 items-center gap-1.5 rounded-full bg-muted px-3 font-manrope text-foreground ${
-                    calendarView ? "hidden" : ""
-                  }`}
-                >
-                  <span className="text-xs font-semibold uppercase tracking-[0.3px] text-muted-foreground">
-                    Date
-                  </span>
-                  <span className="text-sm font-medium">
-                    {dateFrom || dateTo ? `${dateFrom || "…"} → ${dateTo || "…"}` : "Any"}
-                  </span>
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-64 p-3">
-                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Date range
-                </div>
-                <div className="space-y-2">
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">From</label>
-                    <input
-                      type="date"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                      className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">To</label>
-                    <input
-                      type="date"
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
-                      className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                    />
-                  </div>
-                  {(dateFrom || dateTo) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDateFrom("");
-                        setDateTo("");
-                      }}
-                      className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              </PopoverContent>
-            </Popover>
+          {filtersActive && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 font-manrope text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              onClick={() => {
+                setProjectFilter([]);
+                setTagFilter([]);
+                setDateFrom("");
+                setDateTo("");
+              }}
+            >
+              <X className="mr-1 h-3.5 w-3.5" />
+              Clear all
+            </Button>
+          )}
 
-            {/* Tags multi-select searchable */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-muted px-3 font-manrope text-foreground"
-                >
-                  <TagIcon className="h-3.5 w-3.5 text-foreground" />
-                  <span className="text-xs font-semibold uppercase tracking-[0.3px] text-muted-foreground">
-                    Tags
-                  </span>
-                  <span className="text-sm font-medium">
-                    {tagFilter.length === 0 ? "Any" : `${tagFilter.length} selected`}
-                  </span>
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-72 p-2">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Tags
-                  </span>
-                  {tagFilter.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setTagFilter([])}
-                      className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  value={tagSearch}
-                  onChange={(e) => setTagSearch(e.target.value)}
-                  placeholder="Search tags…"
-                  className="mb-2 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                />
-                <div className="max-h-56 space-y-0.5 overflow-y-auto">
-                  {filteredTagOptions.length === 0 ? (
-                    <div className="px-2 py-4 text-center text-xs text-muted-foreground">
-                      {allTags.length === 0 ? "No tags yet" : "No matching tags"}
-                    </div>
-                  ) : (
-                    filteredTagOptions.map((t) => {
-                      const active = tagFilter.includes(t);
-                      return (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() =>
-                            setTagFilter((s) =>
-                              s.includes(t) ? s.filter((x) => x !== t) : [...s, t],
-                            )
-                          }
-                          className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left transition ${active ? "bg-primary/10" : "hover:bg-muted"}`}
-                        >
-                          <TagPill name={t} size="sm" />
-                          <CheckCircle2
-                            className={`h-3.5 w-3.5 shrink-0 text-primary ${active ? "" : "opacity-0"}`}
-                          />
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            {filtersActive && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 font-manrope text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-                onClick={() => {
-                  setProjectFilter([]);
-                  setTagFilter([]);
-                  setDateFrom("");
-                  setDateTo("");
-                }}
-              >
-                <X className="mr-1 h-3.5 w-3.5" />
-                Clear all
-              </Button>
-            )}
-
-            <div className="ml-auto flex items-center gap-3">
-              {/*
+          <div className="ml-auto flex items-center gap-3">
+            {/*
                 The count answers "did my filter catch anything", so it appears
                 when there is a filter to answer for. Unfiltered it was the grid
                 counting itself out loud.
               */}
-              {!calendarView && filtersActive && (
-                <span className="font-manrope text-xs font-bold text-muted-foreground">
-                  {visiblePhotos.length} photo{visiblePhotos.length === 1 ? "" : "s"}
-                </span>
-              )}
+            {!calendarView && filtersActive && (
+              <span className="font-manrope text-xs font-bold text-muted-foreground">
+                {visiblePhotos.length} photo{visiblePhotos.length === 1 ? "" : "s"}
+              </span>
+            )}
 
-              {/*
+            {/*
                 Select. The one thing that makes bulk actions discoverable
                 without a photo already ticked, and the only way in at all on
                 touch, where the hover checkbox never appears.
@@ -1531,52 +1556,51 @@ export function GalleryPage() {
                 (move, trash, hide) would be reordering the very list it reads
                 from underneath it.
               */}
-              {!calendarView && visiblePhotos.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (selectMode || selectedIds.length > 0) clearSelection();
-                    else setSelectMode(true);
-                  }}
-                  aria-pressed={selectMode || selectedIds.length > 0}
-                  className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 font-manrope text-xs font-bold transition ${
-                    selectMode || selectedIds.length > 0
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <CheckSquare className="h-3.5 w-3.5" />
-                  {selectMode || selectedIds.length > 0 ? "Done" : "Select"}
-                </button>
-              )}
+            {!calendarView && visiblePhotos.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectMode || selectedIds.length > 0) clearSelection();
+                  else setSelectMode(true);
+                }}
+                aria-pressed={selectMode || selectedIds.length > 0}
+                className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3.5 text-[12.5px] font-semibold transition ${
+                  selectMode || selectedIds.length > 0
+                    ? "border-foreground bg-foreground text-background shadow-sm"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <CheckSquare className="h-3.5 w-3.5" />
+                {selectMode || selectedIds.length > 0 ? "Done" : "Select"}
+              </button>
+            )}
 
-              {/* Grid vs calendar. Segmented, so the current mode is never in doubt. */}
-              <div className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-muted p-0.5">
-                {(
-                  [
-                    { key: "grid", label: "Grid", icon: LayoutGrid },
-                    { key: "calendar", label: "Calendar", icon: CalendarDays },
-                  ] as const
-                ).map((v) => {
-                  const on = view === v.key;
-                  return (
-                    <button
-                      key={v.key}
-                      type="button"
-                      onClick={() => switchView(v.key)}
-                      aria-pressed={on}
-                      className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 font-manrope text-xs font-bold transition ${
-                        on
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <v.icon className="h-3.5 w-3.5" />
-                      {v.label}
-                    </button>
-                  );
-                })}
-              </div>
+            {/* Grid vs calendar. Segmented, so the current mode is never in doubt. */}
+            <div className="inline-flex h-9 shrink-0 items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
+              {(
+                [
+                  { key: "grid", label: "Grid", icon: LayoutGrid },
+                  { key: "calendar", label: "Calendar", icon: CalendarDays },
+                ] as const
+              ).map((v) => {
+                const on = view === v.key;
+                return (
+                  <button
+                    key={v.key}
+                    type="button"
+                    onClick={() => switchView(v.key)}
+                    aria-pressed={on}
+                    className={`inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-[12.5px] font-semibold transition ${
+                      on
+                        ? "bg-foreground text-background shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <v.icon className="h-3.5 w-3.5" />
+                    {v.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1648,14 +1672,12 @@ export function GalleryPage() {
       {/* Unmounted rather than hidden in calendar view - a `hidden` grid still
           mounts every tile and fires a signed-thumbnail request per photo. */}
       {!calendarView && (
-        <div className="mt-6 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="mt-4">
           {loading ? (
-            <Card className="col-span-full p-8 text-center text-muted-foreground">
-              Loading photos…
-            </Card>
+            <Card className="p-8 text-center text-muted-foreground">Loading photos…</Card>
           ) : visiblePhotos.length === 0 ? (
             projects.length > 0 && (
-              <Card className="col-span-full flex flex-col items-center p-12 text-center border-dashed">
+              <Card className="flex flex-col items-center p-12 text-center border-dashed">
                 <Upload className="h-10 w-10 text-muted-foreground" />
                 <h2 className="mt-3 text-lg font-semibold">
                   {photos.length === 0 ? "No photos yet" : "No photos match your filters"}
@@ -1680,90 +1702,116 @@ export function GalleryPage() {
               </Card>
             )
           ) : (
-            visiblePhotos.map((p) => {
-              const project = projects.find((pr) => pr.id === p.project_id);
-              const selected = selectedIds.includes(p.id);
-              // Once anything is ticked, a plain click keeps selecting. Being
-              // sent to the lightbox on the third photo of a run is the fastest
-              // way to lose a selection you were halfway through building.
-              const picking = selectMode || selectedIds.length > 0;
-              return (
-                /*
-                 * The tick box is a sibling of the tile button, not a child of
-                 * it: a button inside a button is invalid, and browsers do not
-                 * agree on which one a click belongs to.
-                 */
-                <div
-                  key={p.id}
-                  className={`group relative rounded-3xl transition-transform hover:-translate-y-0.5 ${
-                    selected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => (picking ? toggleSelect(p.id) : void openPhoto(p))}
-                    aria-pressed={picking ? selected : undefined}
-                    aria-label={
-                      picking
-                        ? `${selected ? "Deselect" : "Select"} ${cleanCaption(p.caption) ?? "photo"}`
-                        : undefined
-                    }
-                    className="flex w-full flex-col overflow-hidden rounded-3xl bg-sidebar text-left shadow-[0_20px_35px_-26px_rgba(16,25,41,0.55)]"
-                  >
-                    <div className="relative aspect-[4/3] w-full overflow-hidden">
-                      {/* Thumbnail, not the camera original - a 200-photo grid of
+            /* One section per project - the mockup's "Salgiya · 564 Fisher
+               Circle" heading above a five-across strip of 4:3 tiles. */
+            <div className="space-y-7">
+              {photoSections.map((section) => {
+                const project = section.project;
+                return (
+                  <section key={section.projectId}>
+                    <div className="mb-3 text-[13.5px] font-semibold text-foreground">
+                      {project
+                        ? [project.name, project.street].filter(Boolean).join(" · ")
+                        : "Unsorted"}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                      {section.items.map((p) => {
+                        const selected = selectedIds.includes(p.id);
+                        // Once anything is ticked, a plain click keeps selecting.
+                        // Being sent to the lightbox on the third photo of a run is
+                        // the fastest way to lose a selection you were halfway
+                        // through building.
+                        const picking = selectMode || selectedIds.length > 0;
+                        return (
+                          /*
+                           * The tick box is a sibling of the tile button, not a child of
+                           * it: a button inside a button is invalid, and browsers do not
+                           * agree on which one a click belongs to.
+                           */
+                          <div
+                            key={p.id}
+                            className={`group relative overflow-hidden rounded-[10px] bg-muted transition-transform hover:-translate-y-0.5 ${
+                              selected
+                                ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                                : ""
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => (picking ? toggleSelect(p.id) : void openPhoto(p))}
+                              aria-pressed={picking ? selected : undefined}
+                              aria-label={
+                                picking
+                                  ? `${selected ? "Deselect" : "Select"} ${cleanCaption(p.caption) ?? "photo"}`
+                                  : undefined
+                              }
+                              className="flex h-full w-full flex-col overflow-hidden rounded-[10px] text-left"
+                            >
+                              <div className="relative aspect-[4/3] w-full overflow-hidden">
+                                {/* Thumbnail, not the camera original - a 200-photo grid of
                       full-res site photos is the single heaviest thing in the
                       app on a phone. Falls back to the full image if the
                       project's plan has no image transformation. */}
-                      <PhotoThumb
-                        storagePath={p.storage_path}
-                        thumbPath={p.thumb_path}
-                        fallbackUrl={signed[p.id]}
-                        width={400}
-                        alt={p.caption ?? ""}
-                        className="transition duration-300 group-hover:scale-105"
-                      />
-                      {watermarkUrl && signed[p.id] && (
-                        <img
-                          src={watermarkUrl}
-                          alt=""
-                          aria-hidden
-                          className="pointer-events-none absolute bottom-2 right-2 h-7 w-auto max-w-[35%] opacity-40 drop-shadow-sm"
-                        />
-                      )}
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-sidebar/90 to-transparent px-4 pb-3 pt-8">
-                        <p className="font-manrope text-[10px] font-extrabold uppercase tracking-[1.2px] text-sidebar-foreground/90">
-                          Site record
-                        </p>
-                      </div>
-                    </div>
-                    <div className="px-4 py-3">
-                      <p className="truncate font-manrope text-[11px] font-bold text-sidebar-foreground/70">
-                        {cleanCaption(p.caption) ??
-                          `${project?.name ?? "Unassigned"} · ${timeAgo(p.created_at)}`}
-                      </p>
-                    </div>
-                  </button>
+                                <PhotoThumb
+                                  storagePath={p.storage_path}
+                                  thumbPath={p.thumb_path}
+                                  fallbackUrl={signed[p.id]}
+                                  width={400}
+                                  alt={p.caption ?? ""}
+                                  className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                                />
+                                {watermarkUrl && signed[p.id] && (
+                                  <img
+                                    src={watermarkUrl}
+                                    alt=""
+                                    aria-hidden
+                                    className="pointer-events-none absolute bottom-2 right-2 h-7 w-auto max-w-[35%] opacity-40 drop-shadow-sm"
+                                  />
+                                )}
+                                {/* Caption overlay - the mockup's .caption formula:
+                                    white 11px text on a dark fade up from the
+                                    bottom of the tile. */}
+                                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-[rgba(20,16,12,0.72)] to-transparent px-2.5 pb-2 pt-6">
+                                  <p className="truncate text-[11px] font-medium text-white">
+                                    {cleanCaption(p.caption) ??
+                                      `${project?.name ?? "Unassigned"} · ${timeAgo(p.created_at)}`}
+                                  </p>
+                                </div>
+                                {/* Untagged photos are "Needs review" - the product's
+                                    name for photos that need a human before a report
+                                    ships. The accent-2 soft/ink pair from the mockup. */}
+                                {(!p.tags || p.tags.length === 0) && (
+                                  <span className="absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-accent-foreground">
+                                    Needs review
+                                  </span>
+                                )}
+                              </div>
+                            </button>
 
-                  {/* Always visible while picking, hover-only otherwise, so the
+                            {/* Always visible while picking, hover-only otherwise, so the
                       resting grid stays as clean as it was. */}
-                  <button
-                    type="button"
-                    onClick={() => toggleSelect(p.id)}
-                    aria-label={selected ? "Deselect photo" : "Select photo"}
-                    className={`absolute left-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-md border-2 shadow transition ${
-                      selected
-                        ? "border-primary bg-primary text-primary-foreground opacity-100"
-                        : `border-white/90 bg-black/30 text-transparent backdrop-blur-sm hover:text-white/70 group-hover:opacity-100 focus-visible:opacity-100 ${
-                            picking ? "opacity-100" : "opacity-0"
-                          }`
-                    }`}
-                  >
-                    <Check className="h-4 w-4" />
-                  </button>
-                </div>
-              );
-            })
+                            <button
+                              type="button"
+                              onClick={() => toggleSelect(p.id)}
+                              aria-label={selected ? "Deselect photo" : "Select photo"}
+                              className={`absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-md border-2 shadow transition ${
+                                selected
+                                  ? "border-primary bg-primary text-primary-foreground opacity-100"
+                                  : `border-white/90 bg-black/30 text-transparent backdrop-blur-sm hover:text-white/70 group-hover:opacity-100 focus-visible:opacity-100 ${
+                                      picking ? "opacity-100" : "opacity-0"
+                                    }`
+                              }`}
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
           )}
         </div>
       )}

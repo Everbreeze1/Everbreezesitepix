@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { usePwaGuard } from "@/lib/pwa-guard";
-import { Users, ShieldCheck, Bell } from "lucide-react";
+import { Users, ShieldCheck, Bell, ArrowRight } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { Button } from "@/components/ui/button";
 import { MarketingCta } from "@/components/MarketingCta";
 import collaborationImg from "@/assets/collaboration-image.png";
 import siteAerialImg from "@/assets/how-it-works-aerial.png";
@@ -70,99 +71,93 @@ function HowItWorksPage() {
     <div className="min-h-screen bg-background landing">
       <SiteHeader />
 
-      {/* Header */}
-      <section className="pt-32 pb-4 sm:pt-40">
-        <div className="mx-auto max-w-[768px] px-5 text-center">
-          <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
+      {/* Header - the navy band, same look as the homepage How it works section */}
+      <section className="relative overflow-hidden bg-sidebar">
+        <div className="relative mx-auto max-w-[820px] px-4 pt-[70px] pb-14 text-center sm:px-8">
+          <p className="font-manrope text-xs font-bold uppercase tracking-[0.14em] text-brand-gold">
             How it works
           </p>
-          <h1 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl sm:tracking-[-0.01em] lg:text-[60px] lg:tracking-[-0.01em]">
-            Capture. Organize. <span className="text-primary">Report.</span>
+          <h1 className="font-display mx-auto mt-5 text-[40px] font-bold leading-[1.04] tracking-[-0.01em] text-white">
+            Capture. Organize. Report.
           </h1>
-          <p className="font-manrope mx-auto mt-6 max-w-xl text-lg leading-[29px] text-muted-foreground">
-            Everlumen fits the way crews already work. No new process to learn - just open the app
-            and capture.
+          <p className="font-manrope mx-auto mt-5 max-w-xl text-[15.5px] leading-[1.6] text-white/60">
+            Everlumen fits the way crews already work. No new process to learn - just open the
+            app and capture.
           </p>
         </div>
       </section>
 
-      {/* Steps - visual journey with product screenshots */}
-      <section className="py-24">
-        <div className="mx-auto max-w-[1280px] px-8">
-          <div className="grid gap-8 md:grid-cols-3">
+      {/* Steps - the navy band with three steps, same as the homepage */}
+      <section className="bg-sidebar py-24">
+        <div className="mx-auto max-w-[1160px] px-4 sm:px-8">
+          <div className="grid gap-6 md:grid-cols-3 lg:gap-x-8">
             {/* Step 1: Capture */}
             <div className="flex flex-col">
-              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[24px] border-[0.8px] border-border bg-card">
+              <div className="relative h-[200px] w-full overflow-hidden rounded-[16px] bg-gradient-to-br from-[#2b3350] to-[#171b2c]">
                 <img
                   src="/capture-image.png"
                   alt="Capture a photo on site - automatically stamped with time, date and location"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-cover opacity-70"
                 />
-                <div className="absolute top-3 left-3 flex h-8 w-8 items-center justify-center rounded-full bg-primary font-manrope text-sm font-bold text-primary-foreground">
-                  1
-                </div>
+
               </div>
-              <div className="mt-5">
-                <h3 className="font-display text-xl font-semibold tracking-[-0.01em] text-foreground">
-                  Capture
-                </h3>
-                <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
-                  Snap a photo or record a walkthrough. It is stamped with time, date, and location automatically.
-                </p>
+              <div className="mt-5 flex items-center gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-gold font-manrope text-[13px] font-bold text-sidebar">1</span>
+                <h3 className="font-manrope text-base font-semibold text-white">Capture</h3>
               </div>
+              <p className="font-manrope mt-3 max-w-[280px] text-[13.5px] leading-[1.55] text-white/60">
+                Snap a photo or record a walkthrough. It is stamped with time, date, and location automatically.
+              </p>
             </div>
 
             {/* Step 2: Organize */}
             <div className="flex flex-col">
-              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[24px] border-[0.8px] border-border bg-card">
+              <div className="relative h-[200px] w-full overflow-hidden rounded-[16px] bg-gradient-to-br from-[#2b3350] to-[#171b2c]">
                 <img
                   src="/organize-image.png"
                   alt="Photos organized automatically into the right project, sorted and searchable"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-cover opacity-70"
                 />
-                <div className="absolute top-3 left-3 flex h-8 w-8 items-center justify-center rounded-full bg-primary font-manrope text-sm font-bold text-primary-foreground">
-                  2
-                </div>
+
               </div>
-              <div className="mt-5">
-                <h3 className="font-display text-xl font-semibold tracking-[-0.01em] text-foreground">
-                  Organize
-                </h3>
-                <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
-                  Every photo lands on the right project automatically - sorted, searchable, and mapped.
-                </p>
+              <div className="mt-5 flex items-center gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-gold font-manrope text-[13px] font-bold text-sidebar">2</span>
+                <h3 className="font-manrope text-base font-semibold text-white">Organize</h3>
               </div>
+              <p className="font-manrope mt-3 max-w-[280px] text-[13.5px] leading-[1.55] text-white/60">
+                Every photo lands on the right project automatically - sorted, searchable, and mapped.
+              </p>
             </div>
 
             {/* Step 3: Report */}
             <div className="flex flex-col">
-              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[24px] border-[0.8px] border-border bg-card">
+              <div className="relative h-[200px] w-full overflow-hidden rounded-[16px] bg-gradient-to-br from-[#2b3350] to-[#171b2c]">
                 <img
                   src="/report-image.png"
                   alt="AI-generated progress report drafted from your site photos"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-cover opacity-70"
                 />
-                <div className="absolute top-3 left-3 flex h-8 w-8 items-center justify-center rounded-full bg-primary font-manrope text-sm font-bold text-primary-foreground">
-                  3
-                </div>
+
               </div>
-              <div className="mt-5">
-                <h3 className="font-display text-xl font-semibold tracking-[-0.01em] text-foreground">
-                  Report
-                </h3>
-                <p className="font-manrope mt-2 text-sm leading-[22px] text-muted-foreground">
-                  AI drafts your progress report. Review, edit, and share with one tap.
-                </p>
+              <div className="mt-5 flex items-center gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-gold font-manrope text-[13px] font-bold text-sidebar">3</span>
+                <h3 className="font-manrope text-base font-semibold text-white">Report</h3>
               </div>
+              <p className="font-manrope mt-3 max-w-[280px] text-[13.5px] leading-[1.55] text-white/60">
+                AI drafts your progress report. Review, edit, and share with one tap.
+              </p>
             </div>
           </div>
 
-          {/* Visual connector */}
-          <div className="mt-8 flex items-center justify-center gap-2">
-            <div className="h-0.5 w-12 rounded bg-primary/30" />
-            <div className="h-0.5 w-12 rounded bg-primary/50" />
-            <div className="h-0.5 w-12 rounded bg-primary/70" />
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 text-primary"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          <div className="mt-10 flex justify-center">
+            <Button
+              asChild
+              className="font-manrope rounded-full border-2 border-white/40 bg-transparent px-7 py-[13px] text-[14.5px] font-semibold text-white transition-colors hover:bg-white/10"
+            >
+              <Link to="/demo">
+                See the interactive demo <ArrowRight className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
           </div>
         </div>
       </section>

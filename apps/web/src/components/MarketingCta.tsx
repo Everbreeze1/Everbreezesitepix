@@ -1,74 +1,49 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Check, MonitorPlay } from "lucide-react";
-import ctaImg from "@/assets/cta-construction.png";
-import { HIDE_PUBLIC_PRICING, TRIAL_DAYS } from "@/lib/pricing";
+import { ArrowRight } from "lucide-react";
+import { TRIAL_DAYS } from "@/lib/pricing";
 
+/**
+ * Final CTA banner - matches the Landing reference: a gold gradient panel with a
+ * soft white radial glow, the Oswald headline in navy, and the pill CTAs.
+ */
 export function MarketingCta() {
   return (
-    <section className="bg-background py-24">
-      <div className="mx-auto max-w-[1280px] px-8">
-        <div className="relative isolate flex h-auto min-h-[328px] flex-col justify-center overflow-hidden rounded-[32px] bg-brand-gold px-8 py-16 sm:px-16 sm:py-20 lg:h-[328px] lg:py-0">
-          <img
-            src={ctaImg}
-            alt=""
+    <section className="py-24">
+      <div className="mx-auto max-w-[1160px] px-4 sm:px-8">
+        <div
+          className="relative overflow-hidden rounded-[28px] px-6 py-16 text-center sm:px-12 md:py-16"
+          style={{
+            background: "linear-gradient(120deg, oklch(0.76 0.16 78), oklch(0.7 0.17 60))",
+          }}
+        >
+          <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 h-full w-full object-cover brightness-125 contrast-110"
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage:
+                "radial-gradient(ellipse at 80% 0%, rgba(255,255,255,0.25), transparent 60%)",
+            }}
           />
-          <div className="pointer-events-none absolute inset-0 bg-brand-gold mix-blend-color" />
-          <div className="pointer-events-none absolute inset-0 bg-brand-gold/15" />
-          <div className="relative flex w-full flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-[681px]">
-              <p className="font-manrope text-xs font-extrabold uppercase leading-4 tracking-[1.92px] text-white/75">
-                Ready when your crew is
-              </p>
-              <h2 className="font-display mt-4 max-w-[672px] text-4xl font-bold uppercase leading-tight tracking-[-0.01em] text-white sm:text-5xl lg:text-[60px]">
-                Bring every job into focus.
-              </h2>
-              <p className="font-manrope mt-5 max-w-[576px] text-base font-medium leading-7 text-white/85">
-                {HIDE_PUBLIC_PRICING
-                  ? "Start capturing a better record today. Pick the plan that fits your crew and cancel anytime."
-                  : "Start capturing a better record today. Plans start at $24/mo - pick the one that fits your crew and cancel anytime."}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-col items-start gap-3">
-              <Link
-                to="/signup"
-                className="font-manrope inline-flex h-12 w-full items-center justify-center gap-2 rounded-3xl bg-sidebar px-6 text-sm font-bold leading-5 text-sidebar-foreground hover:bg-sidebar/90"
-              >
-                Start Your Job Journey
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                to="/how-it-works"
-                className="font-manrope inline-flex h-12 w-full items-center justify-center gap-2 rounded-3xl border border-white/30 bg-transparent px-6 text-sm font-bold leading-5 text-white hover:bg-white/10"
-              >
-                See how it works
-              </Link>
-              <Link
-                to="/demo"
-                className="font-manrope inline-flex h-12 w-full items-center justify-center gap-2 rounded-3xl border border-white/30 bg-transparent px-6 text-sm font-bold leading-5 text-white hover:bg-white/10"
-              >
-                <MonitorPlay className="h-4 w-4" />
-                See the interactive demo
-              </Link>
-              <ul className="mt-2 w-full">
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 shrink-0 text-white/90" strokeWidth={1.33} />
-                  <span className="font-manrope text-xs font-bold leading-4 text-white/90">
-                    {/* The trial is the other half of the same promise, so it
-                        keeps the pair of ticks intact rather than leaving one
-                        lonely bullet where the price used to be. */}
-                    {HIDE_PUBLIC_PRICING ? `${TRIAL_DAYS}-day free trial` : "Plans from $24/mo"}
-                  </span>
-                </li>
-                <li className="mt-2 flex items-center gap-2">
-                  <Check className="h-4 w-4 shrink-0 text-white/90" strokeWidth={1.33} />
-                  <span className="font-manrope text-xs font-bold leading-4 text-white/90">
-                    Cancel anytime
-                  </span>
-                </li>
-              </ul>
-            </div>
+
+          <h2 className="font-display relative mx-auto max-w-[600px] text-[38px] font-bold leading-[1.04] tracking-[-0.01em] text-sidebar">
+            Bring every job into focus.
+          </h2>
+          <p className="font-manrope relative mx-auto mt-4 max-w-[480px] text-[15.5px] leading-[1.6] text-sidebar/80">
+            {`${TRIAL_DAYS}-day free trial. Set up in minutes. Cancel anytime.`}
+          </p>
+          <div className="relative mt-8 flex flex-wrap items-center justify-center gap-4">
+            <Link
+              to="/signup"
+              className="font-manrope inline-flex items-center justify-center rounded-full bg-sidebar px-6 py-[13px] text-[14.5px] font-bold text-white transition-colors hover:bg-sidebar/90"
+            >
+              Start free trial <ArrowRight className="ml-1.5 h-4 w-4" />
+            </Link>
+            <Link
+              to="/demo"
+              className="font-manrope inline-flex items-center justify-center rounded-full border-2 border-black/25 bg-transparent px-6 py-[12px] text-[14.5px] font-semibold text-sidebar transition-colors hover:bg-black/5"
+            >
+              See the interactive demo
+            </Link>
           </div>
         </div>
       </div>

@@ -40,8 +40,7 @@ export const REFERENCE_CHIP =
   "inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground";
 
 /** Eyebrow / section label: 12px / 600 faint uppercase (mockup section headers). */
-export const REFERENCE_EYEBROW =
-  "text-xs font-semibold uppercase tracking-[0.05em] text-faint";
+export const REFERENCE_EYEBROW = "text-xs font-semibold uppercase tracking-[0.05em] text-faint";
 
 /** Primary action button: amber pill, 9px radius (mockup "New blueprint"). */
 export const REFERENCE_BUTTON_PRIMARY =
@@ -72,7 +71,7 @@ export function ReferencePill({
     hold: "bg-status-hold-soft text-status-hold",
     complete: "bg-status-complete-soft text-status-complete",
     archived: "bg-status-archived-soft text-status-archived",
-    review: "bg-status-complete-soft text-status-complete",
+    review: "bg-accent text-accent-foreground",
   }[tone];
   return (
     <span

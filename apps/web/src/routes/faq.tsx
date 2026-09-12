@@ -1,10 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { usePwaGuard } from "@/lib/pwa-guard";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
-import { Plus } from "lucide-react";
+import { Plus, ArrowRight } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
-import { MarketingCta } from "@/components/MarketingCta";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { HIDE_PUBLIC_PRICING } from "@/lib/pricing";
 
 export const Route = createFileRoute("/faq")({
@@ -74,6 +75,47 @@ const FAQS: { q: string; a: string }[] = [
     q: "Can I add or remove users as my crew changes?",
     a: "Absolutely. Invite or remove crew members any time, assign roles and permissions, and your plan adjusts automatically as your team changes size.",
   },
+  {
+    q: "Who owns the photos and data - can I export everything if I leave?",
+    a: "You own everything you capture. Full project exports - photos, reports, and walkthroughs - are available any time from account settings, and stay available for a period after cancellation.",
+  },
+  {
+    q: "Is a timestamped photo actually reliable enough to settle a dispute?",
+    a: "Every photo carries its original capture time and GPS location, set automatically and not editable after the fact - that's what makes it a record your team can point to with confidence, not just a photo.",
+  },
+  {
+    q: "What happens if I need to cancel?",
+    a: "Cancel any time from account settings - no phone call or contract required. Your data stays exportable for a period afterward so you're never locked out of your own job record.",
+  },
+  {
+    q: "Is there a free trial, and does it need a credit card?",
+    a: "Every plan starts with a 14-day free trial, no credit card required. You'll only be asked for billing details if you decide to continue.",
+  },
+];
+
+const FAQ_GROUPS = [
+  {
+    name: "Getting started",
+    items: [
+      "How is Everlumen different from just using my phone?",
+      "Does it work offline on job sites?",
+      "Do I need a credit card to start?",
+      "Is there a free trial, and does it need a credit card?",
+    ],
+  },
+  {
+    name: "Using Everlumen",
+    items: [
+      "What can the built-in AI do?",
+      "Can I share photos with clients securely?",
+      "Is a timestamped photo actually reliable enough to settle a dispute?",
+    ],
+  },
+  {
+    name: "Security & data",
+    items: ["Who owns the photos and data - can I export everything if I leave?"],
+  },
+  { name: "Billing & plans", items: ["What happens if I need to cancel?"] },
 ];
 
 function FAQPage() {
@@ -81,56 +123,91 @@ function FAQPage() {
     <div className="min-h-screen bg-background landing">
       <SiteHeader />
 
-      {/* Header */}
-      <section className="pt-32 pb-4 sm:pt-40">
-        <div className="mx-auto max-w-[768px] px-5 text-center">
-          <p className="font-manrope text-sm font-semibold uppercase tracking-[2.8px] text-primary">
+      {/* Header - the mockup navy hero band */}
+      <section className="relative overflow-hidden bg-sidebar">
+        <div className="relative mx-auto max-w-[820px] px-4 pt-[70px] pb-14 text-center sm:px-8">
+          <p className="font-manrope text-xs font-bold uppercase tracking-[0.14em] text-brand-gold">
             FAQ
           </p>
-          <h1 className="font-display mt-4 text-4xl font-semibold leading-none tracking-[-0.01em] text-foreground sm:text-5xl sm:tracking-[-0.01em] lg:text-[60px] lg:tracking-[-0.01em]">
-            The details, <span className="italic text-primary">up front.</span>
+          <h1 className="font-display mx-auto mt-4 text-[40px] font-bold leading-[1.04] tracking-[-0.01em] text-sidebar-foreground">
+            Questions, answered.
           </h1>
-          <p className="font-manrope mx-auto mt-6 max-w-xl text-lg leading-[29px] text-muted-foreground">
-            Everything you might want to know before you bring Everlumen to your crew.
-          </p>
         </div>
       </section>
 
-      {/* FAQ accordion */}
+      {/* FAQ accordion - the mockup category cards */}
       <section className="py-16 sm:py-24">
-        <div className="mx-auto flex max-w-[1280px] flex-col items-center px-5">
-          <AccordionPrimitive.Root
-            type="single"
-            collapsible
-            defaultValue="item-0"
-            className="w-full max-w-[768px] divide-y divide-border border-y-[0.8px] border-border"
-          >
-            {FAQS.map((item, idx) => (
-              <AccordionPrimitive.Item key={item.q} value={`item-${idx}`}>
-                <AccordionPrimitive.Header>
-                  <AccordionPrimitive.Trigger className="group flex w-full items-center justify-between gap-6 py-6 text-left">
-                    <span className="font-display text-xl font-semibold leading-7 tracking-[-0.01em] text-foreground">
-                      {item.q}
-                    </span>
-                    <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[0.8px] border-border transition-colors duration-200 group-data-[state=open]:border-primary group-data-[state=open]:bg-primary">
-                      <Plus className="h-4 w-4 text-foreground transition-transform duration-200 group-data-[state=open]:rotate-45 group-data-[state=open]:text-primary-foreground" />
-                    </span>
-                  </AccordionPrimitive.Trigger>
-                </AccordionPrimitive.Header>
-                <AccordionPrimitive.Content className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
-                  <p className="font-manrope max-w-[672px] pb-6 text-base leading-[26px] text-muted-foreground">
-                    {item.a}
-                  </p>
-                </AccordionPrimitive.Content>
-              </AccordionPrimitive.Item>
-            ))}
-          </AccordionPrimitive.Root>
+        <div className="mx-auto flex max-w-[820px] flex-col items-center px-5">
+          {FAQ_GROUPS.map((group, gi) => (
+            <div key={group.name} className="w-full">
+              <p
+                className={cn(
+                  "mb-[14px] text-[13px] font-bold uppercase tracking-[0.04em] text-accent-foreground",
+                  gi > 0 && "mt-[44px]",
+                )}
+              >
+                {group.name}
+              </p>
+              <AccordionPrimitive.Root
+                type="single"
+                collapsible
+                defaultValue={`g${gi}-0`}
+                className="overflow-hidden rounded-[18px] border border-border bg-card"
+              >
+                {group.items.map((q, qi) => {
+                  const idx = FAQS.findIndex((f) => f.q === q);
+                  const item = idx >= 0 ? FAQS[idx] : null;
+                  if (!item) return null;
+                  return (
+                    <AccordionPrimitive.Item key={q} value={`g${gi}-${qi}`}>
+                      <AccordionPrimitive.Header>
+                        <AccordionPrimitive.Trigger className="group flex w-full items-center justify-between gap-6 px-6 py-[19px] text-left">
+                          <span className="font-manrope text-[15px] font-semibold leading-snug text-foreground">
+                            {item.q}
+                          </span>
+                          <span
+                            aria-hidden
+                            className="relative flex h-5 w-5 shrink-0 items-center justify-center"
+                          >
+                            <span className="text-[20px] font-medium leading-none text-faint group-data-[state=open]:opacity-0">
+                              +
+                            </span>
+                            <span className="absolute inset-0 text-[20px] font-medium leading-none text-faint opacity-0 group-data-[state=open]:opacity-100">
+                              {"\u2212"}
+                            </span>
+                          </span>
+                        </AccordionPrimitive.Trigger>
+                      </AccordionPrimitive.Header>
+                      <AccordionPrimitive.Content className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
+                        <p className="font-manrope px-6 pb-[19px] pt-3 text-[14px] leading-[1.6] text-muted-foreground">
+                          {item.a}
+                        </p>
+                      </AccordionPrimitive.Content>
+                    </AccordionPrimitive.Item>
+                  );
+                })}
+              </AccordionPrimitive.Root>
+            </div>
+          ))}
         </div>
       </section>
 
-      <MarketingCta />
+      {/* Still have a question? - the mockup gold CTA */}
+      <div className="py-16">
+        <div className="mx-auto flex max-w-[820px] flex-col items-center px-5 text-center">
+          <p className="font-manrope text-[15px] text-muted-foreground">Still have a question?</p>
+          <Button
+            asChild
+            size="lg"
+            className="font-manrope mt-6 rounded-full bg-primary px-7 py-3.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Link to="/signup">
+              Start free trial <ArrowRight className="ml-1 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      </div>
       <SiteFooter />
     </div>
   );
 }
-

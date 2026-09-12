@@ -4,10 +4,6 @@ import { Link } from "@tanstack/react-router";
 import {
   Plus,
   Settings2,
-  MapPin,
-  Clock,
-  FileText,
-  Image as ImageIcon,
   Search,
   MoreVertical,
   Inbox,
@@ -36,7 +32,6 @@ import {
   type DragStartEvent,
   type DropAnimation,
 } from "@dnd-kit/core";
-import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -335,6 +330,15 @@ export function PipelineBoardView({
   return (
     <div>
       {/*
+        The mockup's board intro line - what the board is for, and the one
+        affordance (the advance arrow) that moves a card without dragging.
+      */}
+      <p className="mb-4 max-w-[760px] text-[12.5px] leading-relaxed text-muted-foreground">
+        One board from first contact through project close. Click the arrow on a card to move it to
+        the next stage.
+      </p>
+
+      {/*
         The board's own toolbar. Search lives here rather than in the page
         header because it narrows the cards in these columns, and the page
         header's search narrows the project list, which is a different list.
@@ -431,7 +435,7 @@ export function PipelineBoardView({
             arrows ask for smooth scrolling themselves instead. */}
           <div
             ref={strip}
-            className="flex snap-x gap-4 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex snap-x gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {showUnassigned && unassignedAll.length > 0 && (
               <BoardColumn
@@ -442,9 +446,6 @@ export function PipelineBoardView({
                 filtered={!!q}
                 active={active}
                 suppressClick={suppressClick}
-                coverUrls={coverUrls}
-                photoCounts={photoCounts}
-                reportCounts={reportCounts}
                 stages={stages}
                 onMove={move}
                 crewByProject={crewByProject}
@@ -466,9 +467,6 @@ export function PipelineBoardView({
                 onAdd={() => setAddingToStage(stage)}
                 active={active}
                 suppressClick={suppressClick}
-                coverUrls={coverUrls}
-                photoCounts={photoCounts}
-                reportCounts={reportCounts}
                 stages={stages}
                 onMove={move}
                 crewByProject={crewByProject}
@@ -566,9 +564,6 @@ function BoardColumn({
   onAdd,
   active,
   suppressClick,
-  coverUrls,
-  photoCounts,
-  reportCounts,
   stages,
   onMove,
   crewByProject,
@@ -586,9 +581,6 @@ function BoardColumn({
   onAdd?: () => void;
   active: { project: ProjectRow; fromStageId: string } | null;
   suppressClick: React.MutableRefObject<boolean>;
-  coverUrls: Record<string, string>;
-  photoCounts: Record<string, number>;
-  reportCounts: Record<string, number>;
   stages: PipelineStage[];
   onMove: (projectId: string, from: string | null, to: string | null) => void;
   /** Crew for every project on the board, resolved once by the view. */
@@ -606,43 +598,43 @@ function BoardColumn({
   return (
     // data-pipeline-column is what the toolbar arrows measure, so a click moves
     // by whole columns rather than a guessed number of pixels.
-    <div data-pipeline-column className="flex w-[280px] shrink-0 snap-start flex-col">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          {isRail ? (
-            <span
-              className="inline-flex max-w-[190px] items-center gap-1.5 truncate rounded-full border border-dashed border-border px-3 py-1.5 text-sm font-extrabold tracking-tight text-muted-foreground"
-              title={title}
-            >
-              <Inbox className="h-3.5 w-3.5 shrink-0" />
-              {title}
-            </span>
-          ) : (
-            <span
-              className="inline-flex max-w-[190px] items-center truncate rounded-full px-3.5 py-1.5 text-sm font-extrabold tracking-tight shadow-sm"
-              style={{ background: color, color: chipTextColor(color ?? "#64748b") }}
-              title={title}
-            >
-              {title}
-            </span>
+    <div data-pipeline-column className="flex w-[196px] shrink-0 snap-start flex-col">
+      {/*
+        The whole stage is one tray - the mockup's .pipe-col: a 10px-radius
+        muted surface holding the uppercase head and the cards together.
+      */}
+      <div className="flex min-w-0 flex-1 flex-col rounded-[10px] bg-muted">
+        <div
+          className={cn(
+            "flex min-w-0 items-center justify-between gap-1.5 border-b border-border/70 px-3 py-2.5",
+            isOver && willAccept ? "bg-primary/10" : "",
           )}
-          <span className="shrink-0 text-sm font-extrabold text-muted-foreground">
-            {filtered && projects.length !== total ? `${projects.length}/${total}` : total}
+        >
+          <h3
+            className="inline-flex min-w-0 flex-1 items-center gap-1 truncate text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground"
+            title={title}
+          >
+            {isRail && <Inbox className="h-3 w-3 shrink-0" />}
+            {title}
+          </h3>
+          <span className="flex shrink-0 items-center gap-1.5">
+            <span className="font-mono text-[11px] text-faint">
+              {filtered && projects.length !== total ? `${projects.length}/${total}` : total}
+            </span>
+            {onAdd && (
+              <button
+                type="button"
+                onClick={onAdd}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-faint transition hover:bg-accent hover:text-foreground"
+                aria-label={`Add project to ${title}`}
+              >
+                <Plus className="h-3 w-3" />
+              </button>
+            )}
           </span>
         </div>
-        {onAdd && (
-          <button
-            type="button"
-            onClick={onAdd}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label={`Add project to ${title}`}
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        )}
-      </div>
 
-      {/*
+        {/*
         The column body scrolls; the header does not.
 
         Without the cap, one stage holding forty jobs made the whole page that
@@ -650,56 +642,54 @@ function BoardColumn({
         stopped reading as a board at exactly the point it had enough work on it
         to be worth looking at.
       */}
-      <div
-        ref={setNodeRef}
-        className={cn(
-          "mt-3 max-h-[min(70vh,640px)] min-h-[220px] flex-1 space-y-2 overflow-y-auto rounded-xl border-2 border-dashed p-2 transition-colors duration-150",
-          isOver && willAccept
-            ? "border-primary bg-primary/10"
-            : willAccept
-              ? "border-border bg-muted/60"
-              : "border-transparent bg-muted/40",
-        )}
-      >
-        {projects.length === 0 && !(isOver && willAccept) ? (
-          <p className="p-4 text-center text-xs text-muted-foreground">
-            {willAccept
-              ? isRail
-                ? "Drop here to take it out of the pipeline"
-                : "Drop here to move"
-              : filtered && total > 0
-                ? "Nothing here matches your search."
-                : emptyLabel}
-          </p>
-        ) : (
-          projects.map((p) => (
-            <BoardCard
-              key={p.id}
-              project={p}
-              columnId={columnId}
-              color={color}
-              suppressClick={suppressClick}
-              coverUrl={coverUrls[p.id]}
-              photoCount={photoCounts[p.id] ?? 0}
-              reportCount={reportCounts[p.id] ?? 0}
-              stages={stages}
-              onMove={onMove}
-              crew={crewByProject[p.id] ?? []}
-              canAssign={canAssign}
-              onAssign={onAssign}
-            />
-          ))
-        )}
-
-        {/* Shows exactly where the card will land. */}
-        {isOver && willAccept && (
-          <div className="rounded-lg border-2 border-dashed border-primary/70 bg-primary/5 p-3">
-            <p className="truncate text-sm font-bold text-primary">{active!.project.name}</p>
-            <p className="mt-0.5 text-[11px] font-semibold text-primary/70">
-              {isRail ? "Release to take it out of the pipeline" : "Release to move here"}
+        <div
+          ref={setNodeRef}
+          className={cn(
+            "mt-0.5 max-h-[min(70vh,640px)] min-h-[200px] flex-1 space-y-2.5 overflow-y-auto rounded-[10px] p-3 transition-colors duration-150",
+            isOver && willAccept
+              ? "bg-primary/10 ring-2 ring-primary"
+              : willAccept
+                ? "ring-1 ring-primary/40"
+                : "bg-transparent",
+          )}
+        >
+          {projects.length === 0 && !(isOver && willAccept) ? (
+            <p className="p-4 text-center text-xs text-muted-foreground">
+              {willAccept
+                ? isRail
+                  ? "Drop here to take it out of the pipeline"
+                  : "Drop here to move"
+                : filtered && total > 0
+                  ? "Nothing here matches your search."
+                  : emptyLabel}
             </p>
-          </div>
-        )}
+          ) : (
+            projects.map((p) => (
+              <BoardCard
+                key={p.id}
+                project={p}
+                columnId={columnId}
+                color={color}
+                suppressClick={suppressClick}
+                stages={stages}
+                onMove={onMove}
+                crew={crewByProject[p.id] ?? []}
+                canAssign={canAssign}
+                onAssign={onAssign}
+              />
+            ))
+          )}
+
+          {/* Shows exactly where the card will land. */}
+          {isOver && willAccept && (
+            <div className="rounded-lg border-2 border-dashed border-primary/70 bg-primary/5 p-3">
+              <p className="truncate text-sm font-bold text-primary">{active!.project.name}</p>
+              <p className="mt-0.5 text-[11px] font-semibold text-primary/70">
+                {isRail ? "Release to take it out of the pipeline" : "Release to move here"}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -710,9 +700,6 @@ function BoardCard({
   columnId,
   color,
   suppressClick,
-  coverUrl,
-  photoCount,
-  reportCount,
   stages,
   onMove,
   crew,
@@ -723,9 +710,6 @@ function BoardCard({
   columnId: string;
   color?: string;
   suppressClick: React.MutableRefObject<boolean>;
-  coverUrl?: string;
-  photoCount: number;
-  reportCount: number;
   stages: PipelineStage[];
   onMove: (projectId: string, from: string | null, to: string | null) => void;
   /** User ids staffed on this job. */
@@ -742,6 +726,10 @@ function BoardCard({
   // gone quiet without the reader having to parse every timestamp.
   const daysStale = Math.floor((Date.now() - new Date(project.updated_at).getTime()) / 86_400_000);
   const from = columnId === UNASSIGNED ? null : columnId;
+  // The mockup's advance arrow: one tap moves the card on to the next stage,
+  // in the same direction a drag would take it. Null at the last stage.
+  const stageIndex = stages.findIndex((s) => s.id === columnId);
+  const next = stageIndex >= 0 && stageIndex < stages.length - 1 ? stages[stageIndex + 1] : null;
 
   return (
     // The whole card is the drag target - no hunting for a small handle, and it
@@ -754,7 +742,7 @@ function BoardCard({
       className={cn(
         // No `touch-action: none` here - TouchSensor's press-and-hold delay does
         // the disambiguation, so a plain swipe over a card still scrolls.
-        "group relative rounded-lg border border-border bg-card shadow-sm transition-shadow",
+        "group relative rounded-[9px] border border-border bg-card pl-3 shadow-[0_1px_2px_rgba(20,20,20,0.05)] transition-shadow",
         "cursor-grab hover:border-primary/40 hover:shadow-md active:cursor-grabbing",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
         isDragging && "opacity-35",
@@ -835,6 +823,32 @@ function BoardCard({
         </DropdownMenu>
       </div>
 
+      {/* The advance arrow - the mockup's .pipe-advance, so a card moves on
+          without a drag. Wrapped in stop-propagation like the move menu so
+          opening it never reads as the start of a drag. */}
+      <div
+        className="absolute bottom-2 right-2 z-[1]"
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          disabled={!next}
+          onClick={() => {
+            if (next) onMove(project.id, from, next.id);
+          }}
+          aria-label={
+            next ? `Move ${project.name} to ${next.name}` : `${project.name} is at the last stage`
+          }
+          title={next ? `Move to ${next.name}` : "Last stage"}
+          className="flex h-[23px] w-[23px] items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ChevronRight className="h-3 w-3" />
+        </button>
+      </div>
+
       <Link
         to="/projects/$projectId"
         params={{ projectId: project.id }}
@@ -848,55 +862,23 @@ function BoardCard({
         }}
         className="block"
       >
-        {coverUrl && (
-          <img
-            src={coverUrl}
-            alt=""
-            loading="lazy"
-            draggable={false}
-            className="h-24 w-full rounded-t-lg object-cover"
-          />
-        )}
-        <div className="p-3">
-          <p className="truncate pr-7 text-sm font-bold text-foreground">{project.name}</p>
-          {addr && (
-            <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
-              <MapPin className="h-3 w-3 shrink-0" />
-              <span className="truncate">{addr}</span>
-            </p>
-          )}
-
-          <div className="mt-2 flex items-center gap-3 text-[11px] font-semibold text-muted-foreground">
-            {photoCount > 0 && (
-              <span className="inline-flex items-center gap-1">
-                <ImageIcon className="h-3 w-3" /> {photoCount}
-              </span>
+        <div className="p-2.5">
+          <p className="truncate text-[12.5px] font-semibold leading-snug text-foreground">
+            {project.name}
+          </p>
+          {addr && <p className="mt-0.5 truncate text-[11px] text-faint">{addr}</p>}
+          <div className="mt-2 flex items-center gap-2 text-[10.5px] font-semibold">
+            {crew.length === 0 ? (
+              <span className="text-faint">Unassigned</span>
+            ) : (
+              <ProjectCrew userIds={crew} canAssign={false} onAssign={() => {}} max={3} />
             )}
-            {reportCount > 0 && (
-              <span className="inline-flex items-center gap-1">
-                <FileText className="h-3 w-3" /> {reportCount}
-              </span>
-            )}
-            {/*
-              Display only, and deliberately so: the card is a drag handle, and an
-              interactive chip inside it competes with the gesture that moves the
-              job between stages. Changing the crew is one tap away in the card
-              menu, where every other action on this card already lives.
-            */}
-            <ProjectCrew userIds={crew} canAssign={false} onAssign={() => {}} max={3} />
-            <span
-              className={cn(
-                "ml-auto inline-flex items-center gap-1",
-                daysStale >= 30
-                  ? "text-destructive"
-                  : daysStale >= 14
-                    ? "text-amber-600 dark:text-amber-500"
-                    : "text-muted-foreground",
-              )}
-              title={`Last updated ${formatDistanceToNow(new Date(project.updated_at), { addSuffix: true })}`}
-            >
-              <Clock className="h-3 w-3" />
-              {formatDistanceToNow(new Date(project.updated_at))}
+            <span className="ml-auto text-faint">
+              {daysStale === 0
+                ? "moved today"
+                : daysStale === 1
+                  ? "1 day in stage"
+                  : `${daysStale} days in stage`}
             </span>
           </div>
         </div>

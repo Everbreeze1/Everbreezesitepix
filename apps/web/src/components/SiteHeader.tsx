@@ -37,7 +37,7 @@ export function SiteHeader(_props: SiteHeaderProps) {
 
   const navLinkClass = (active: boolean) =>
     cn(
-      "font-manrope relative rounded-lg px-3 py-2 text-sm font-bold transition-colors",
+      "font-manrope relative py-2 text-sm font-semibold transition-colors",
       active
         ? "text-sidebar-foreground"
         : "text-sidebar-foreground/70 hover:text-sidebar-foreground",
@@ -51,20 +51,19 @@ export function SiteHeader(_props: SiteHeaderProps) {
     <header className="sticky top-0 z-40 w-full border-b border-sidebar-border bg-sidebar">
       <div className="mx-auto flex h-[70px] max-w-[1280px] items-center justify-between px-4 sm:px-6">
         <Link to="/" className="flex shrink-0 items-center gap-2.5">
-          <BrandLogo size={40} />
-          <span className="font-manrope text-lg font-extrabold tracking-[-0.01em] text-sidebar-foreground">
+          <BrandLogo size={32} />
+          <span className="font-manrope text-[17px] font-bold tracking-[-0.01em] text-sidebar-foreground">
             Ever
             <span className="text-brand-gold">lumen</span>
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-[30px] md:flex">
           {navLinks.map((link) => {
             const active = pathname === link.url;
             return (
               <Link key={link.label} to={link.url} className={navLinkClass(active)}>
                 {link.label}
-                {active && underline}
               </Link>
             );
           })}
