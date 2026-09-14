@@ -192,16 +192,18 @@ const paintMarker = (marker: any, p: ProjectPin, state: PinState) => {
 };
 
 /*
- * Clusters as quiet white pucks with a count, per the same design reference.
- * The stock renderer paints blue blobs that fight both the light tiles and
- * the status dots; a white puck with a mono count reads as part of the panel
- * beside it. Size grows a step with the count so a big knot reads as heavier.
+ * Clusters as soft amber pucks with a count. The first pass was white, and on
+ * a light map the dense Active group clustered into a field of blank white
+ * circles - "everything went white". A warm tint keeps a cluster legible on
+ * the lightest tile and still reads as part of the panel beside it; size
+ * grows a step with the count so a big knot reads as heavier.
  */
 const clusterIcon = (count: number) => {
   const size = count < 10 ? 40 : count < 100 ? 44 : 50;
   const r = size / 2 - 2;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="#ffffff" fill-opacity="0.95" stroke="rgba(58,55,51,0.18)" stroke-width="1.5"/>
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="#fbeedd" stroke="#cf8439" stroke-width="2"/>
+    <circle cx="${size / 2}" cy="${size / 2}" r="${Math.max(2, r - 7)}" fill="none" stroke="rgba(120,75,25,0.18)" stroke-width="1"/>
   </svg>`;
   return {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
@@ -653,45 +655,45 @@ export function MapPage() {
           zoomControl: true,
           gestureHandling: "greedy",
           clickableIcons: false,
-          backgroundColor: "#deeaef",
+          backgroundColor: "#eef5f8",
           styles: [
-            { elementType: "geometry", stylers: [{ color: "#e7eef2" }] },
-            { elementType: "labels.text.fill", stylers: [{ color: "#5f7280" }] },
-            { elementType: "labels.text.stroke", stylers: [{ color: "#e7eef2" }] },
+            { elementType: "geometry", stylers: [{ color: "#f2f7fa" }] },
+            { elementType: "labels.text.fill", stylers: [{ color: "#8ba0ad" }] },
+            { elementType: "labels.text.stroke", stylers: [{ color: "#f2f7fa" }] },
             {
               featureType: "administrative",
               elementType: "geometry.stroke",
-              stylers: [{ color: "#c3ced6" }],
+              stylers: [{ color: "#d8e2e8" }],
             },
             { featureType: "administrative.land_parcel", stylers: [{ visibility: "off" }] },
             { featureType: "poi", stylers: [{ visibility: "off" }] },
-            { featureType: "road", elementType: "geometry", stylers: [{ color: "#cfd9dd" }] },
+            { featureType: "road", elementType: "geometry", stylers: [{ color: "#e6edf1" }] },
             {
               featureType: "road",
               elementType: "geometry.stroke",
-              stylers: [{ color: "#e7eef2" }],
+              stylers: [{ color: "#f8fbfd" }],
             },
             {
               featureType: "road",
               elementType: "labels.text.fill",
-              stylers: [{ color: "#7d8f9b" }],
+              stylers: [{ color: "#a3b3bd" }],
             },
             {
               featureType: "road.highway",
               elementType: "geometry",
-              stylers: [{ color: "#c2ced6" }],
+              stylers: [{ color: "#d9e2e8" }],
             },
             { featureType: "transit", stylers: [{ visibility: "off" }] },
-            { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9dbe6" }] },
+            { featureType: "water", elementType: "geometry", stylers: [{ color: "#ddebf3" }] },
             {
               featureType: "water",
               elementType: "labels.text.fill",
-              stylers: [{ color: "#7d8f9b" }],
+              stylers: [{ color: "#a3b3bd" }],
             },
             {
               featureType: "landscape.natural",
               elementType: "geometry",
-              stylers: [{ color: "#e7eef2" }],
+              stylers: [{ color: "#f2f7fa" }],
             },
           ],
         });
@@ -769,10 +771,14 @@ export function MapPage() {
         render: ({ count, position }) =>
           new window.google.maps.Marker({
             position,
+            // Marker labels only render when the marker is not optimized. The
+            // library's default renderer omits this, which is what left the
+            // Active cluster a blank white circle with no count on it.
+            optimized: false,
             icon: clusterIcon(count),
             label: {
               text: String(count),
-              color: "#3a3733",
+              color: "#7a4a16",
               fontSize: "11px",
               fontWeight: "700",
               fontFamily: "'Space Mono', monospace",
