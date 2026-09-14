@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MapPin, Layers, Maximize2 } from "lucide-react";
+import { MapPin, Maximize2 } from "lucide-react";
 import { MarkerClusterer, SuperClusterAlgorithm } from "@googlemaps/markerclusterer";
 import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -53,19 +53,20 @@ interface ProjectPin {
  * filter. The map had no entry for it, so an archived pin fell through to the
  * same slate as Completed and the legend documented neither.
  *
- * The two greys are the pair STATUS_DOT already uses in features/projects/
- * constants, deliberately: a finished job and a filed one both read as "not
- * live work", so they share a family and differ by one step, and the map now
- * says it the same way the project page does. Going darker than slate-500 for
- * Archived was the first attempt and it failed in the dark theme - the legend
- * swatch came out at 1.75:1 against its own card, documenting a colour nobody
- * could see. Anything added here has to survive both themes.
+ * These four are the dot colours, and the dots are data-URI SVGs handed to
+ * Google Maps, so they cannot read the app's CSS custom properties. They are
+ * the hex equivalents of --status-active/-hold/-complete/-archived in
+ * styles.css - the Main-html design reference this whole app is built from -
+ * so the dot on the map, the swatch in the legend and the pill on a project
+ * page all name the same four colours: active green, on-hold warm amber,
+ * completed blue, archived warm grey. The old pairing (yellow hold, grey
+ * completed) read as two different vocabularies side by side.
  */
 const statusColor: Record<string, string> = {
-  active: "#16a34a",
-  on_hold: "#eab308",
-  completed: "#94a3b8",
-  archived: "#64748b",
+  active: "#348f4f",
+  on_hold: "#c56c21",
+  completed: "#3c7ebe",
+  archived: "#77746f",
 };
 
 // Anything outside the four above is an unknown status; it borrows Completed's
@@ -79,11 +80,16 @@ const statusLabel: Record<string, string> = {
   archived: "Archived",
 };
 
+/*
+ * The preview card is plain HTML in this same document, so unlike the pin
+ * SVGs it can read the design tokens directly - the same soft-tint + strong
+ * hue pair the status pills use everywhere else in the app.
+ */
 const statusBadgeStyle: Record<string, { bg: string; text: string }> = {
-  active: { bg: "#ECFDF5", text: "#047857" },
-  on_hold: { bg: "#FEFCE8", text: "#A16207" },
-  completed: { bg: "#F1F5F9", text: "#475569" },
-  archived: { bg: "#E2E8F0", text: "#334155" },
+  active: { bg: "var(--status-active-soft)", text: "var(--status-active)" },
+  on_hold: { bg: "var(--status-hold-soft)", text: "var(--status-hold)" },
+  completed: { bg: "var(--status-complete-soft)", text: "var(--status-complete)" },
+  archived: { bg: "var(--status-archived-soft)", text: "var(--status-archived)" },
 };
 
 /*
@@ -112,56 +118,60 @@ const escapeXml = (s: string) =>
       )[c] ?? c,
   );
 
-const PIN_W = 48;
-const PIN_H = 60;
-const PILL_H = 30;
+/*
+ * Pins are round dots, per the MapsContent design reference - not teardrops.
+ * Idle dots sit at the reference's 16px and the selected one grows to its
+ * 22px. The canvas is a fixed square around the dot so the drop shadow has
+ * room and the icon anchor is always the dot's centre, whatever the size.
+ */
+const DOT_IDLE = 16;
+const DOT_SELECTED = 22;
+const DOT_CANVAS = 30;
+/** Clearance between the dot and the preview card that opens above it. */
+const DOT_ANCHOR = 12;
+const PILL_H = 28;
 const PILL_GAP = 6;
 
 /*
  * How much of a pin gets drawn. Every pin used to bake its project name into
  * the icon, which reads fine right up until a cluster opens into a dozen
  * neighbouring jobs and the name pills overlap into mush. The name is now
- * painted only for the pin under the cursor and the pin whose preview card is
- * open; the rest stay bare teardrops.
+ * painted only for the pin under the cursor - the selected pin answers "which
+ * job is this" with the preview card instead - and the rest stay bare dots.
  */
 type PinState = "idle" | "hover" | "selected";
 
 const truncateLabel = (label: string) => (label.length > 24 ? label.slice(0, 23) + "…" : label);
 
-// rough character-width estimate at font-size 14, weight 600, plus padding
+// rough character-width estimate at font-size 13, weight 600, plus padding
 const labelPillWidth = (label: string) =>
-  Math.max(48, Math.min(240, Math.round(truncateLabel(label).length * 8.4))) + 24;
+  Math.max(44, Math.min(240, Math.round(truncateLabel(label).length * 7.8))) + 22;
 
-const pinIconWidth = (label: string | null) =>
-  label ? PIN_W + PILL_GAP + labelPillWidth(label) : PIN_W;
+const pinIconWidth = (label: string | null, dot: number) =>
+  label ? dot + PILL_GAP + labelPillWidth(label) : dot;
 
-const pinSvg = (color: string, label: string | null, selected: boolean) => {
-  const totalW = pinIconWidth(label);
-  const totalH = PIN_H + 4;
-  const ring = selected
-    ? `<circle cx="24" cy="22" r="15.5" fill="none" stroke="#0ea5e9" stroke-width="3"/>`
-    : "";
+const pinSvg = (color: string, label: string | null, dot: number) => {
+  const totalW = pinIconWidth(label, dot);
+  const cy = DOT_CANVAS / 2;
   let pill = "";
   if (label) {
     const text = escapeXml(truncateLabel(label));
     const pillW = labelPillWidth(label);
-    const pillX = PIN_W + PILL_GAP;
-    const pillY = (PIN_H - PILL_H) / 2;
-    pill = `<rect x="${pillX}" y="${pillY}" rx="15" ry="15" width="${pillW}" height="${PILL_H}" fill="#ffffff" stroke="${selected ? "#0ea5e9" : color}" stroke-width="2"/>
-        <text x="${pillX + pillW / 2}" y="${pillY + 20}" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif" font-size="14" font-weight="600" fill="#0f172a">${text}</text>`;
+    const pillX = dot + PILL_GAP;
+    const pillY = cy - PILL_H / 2;
+    pill = `<rect x="${pillX}" y="${pillY}" rx="${PILL_H / 2}" ry="${PILL_H / 2}" width="${pillW}" height="${PILL_H}" fill="#ffffff" stroke="${color}" stroke-width="1.8"/>
+        <text x="${pillX + pillW / 2}" y="${pillY + 18}" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif" font-size="13" font-weight="600" fill="#3a3733">${text}</text>`;
   }
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}">
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${DOT_CANVAS}" viewBox="0 0 ${totalW} ${DOT_CANVAS}">
       <defs>
-        <filter id="s" x="-30%" y="-20%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-opacity="0.4"/>
+        <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.3"/>
         </filter>
       </defs>
       <g filter="url(#s)">
         ${pill}
-        <path d="M24 2 C13 2 4 11 4 22 c0 14 20 36 20 36 s20 -22 20 -36 C44 11 35 2 24 2 z" fill="${color}" stroke="#ffffff" stroke-width="2.5"/>
-        <circle cx="24" cy="22" r="7" fill="#ffffff"/>
-        ${ring}
+        <circle cx="${dot / 2}" cy="${cy}" r="${dot / 2}" fill="${color}" stroke="#ffffff" stroke-width="2.5"/>
       </g>
     </svg>`,
   )}`;
@@ -171,13 +181,32 @@ const pinSvg = (color: string, label: string | null, selected: boolean) => {
 // that builds the marker layer and the one that follows the selection can call
 // it without threading a callback between them.
 const paintMarker = (marker: any, p: ProjectPin, state: PinState) => {
-  const label = state === "idle" ? null : p.name;
+  const dot = state === "selected" ? DOT_SELECTED : DOT_IDLE;
+  const label = state === "hover" ? p.name : null;
   marker.setIcon({
-    url: pinSvg(statusColor[p.status] ?? FALLBACK_PIN_COLOR, label, state === "selected"),
-    scaledSize: new window.google.maps.Size(pinIconWidth(label), PIN_H + 4),
-    anchor: new window.google.maps.Point(PIN_W / 2, PIN_H),
+    url: pinSvg(statusColor[p.status] ?? FALLBACK_PIN_COLOR, label, dot),
+    scaledSize: new window.google.maps.Size(pinIconWidth(label, dot), DOT_CANVAS),
+    anchor: new window.google.maps.Point(dot / 2, DOT_CANVAS / 2),
   });
   marker.setZIndex(state === "idle" ? 10 : state === "hover" ? 40 : 60);
+};
+
+/*
+ * Clusters as quiet white pucks with a count, per the same design reference.
+ * The stock renderer paints blue blobs that fight both the light tiles and
+ * the status dots; a white puck with a mono count reads as part of the panel
+ * beside it. Size grows a step with the count so a big knot reads as heavier.
+ */
+const clusterIcon = (count: number) => {
+  const size = count < 10 ? 40 : count < 100 ? 44 : 50;
+  const r = size / 2 - 2;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="#ffffff" fill-opacity="0.95" stroke="rgba(58,55,51,0.18)" stroke-width="1.5"/>
+  </svg>`;
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    scaledSize: new window.google.maps.Size(size, size),
+  };
 };
 
 /*
@@ -360,8 +389,20 @@ export function MapPage() {
           : null) ?? null;
       const name = escapeXml(p.name);
       const addr = escapeXml(formatAddress(p) || "No address on file");
-      const badgeText = escapeXml(stage?.name ?? statusLabel[p.status] ?? p.status);
-      const badgeColor = escapeXml(stage?.color ?? statusColor[p.status] ?? FALLBACK_PIN_COLOR);
+      /*
+       * The card names a pin the way the project page does: the stage's own
+       * word for where the job is, falling back to the bucket it rolls up
+       * into - never the raw `on_hold`-style identifier.
+       */
+      const badgeText = escapeXml(stage ? stage.name : (statusLabel[p.status] ?? p.status));
+      // A stage keeps its own colour with white text; a bare status falls back
+      // to the soft-tint pill every other screen uses for the same word.
+      const badgeBg = escapeXml(
+        stage ? stage.color : (statusBadgeStyle[p.status]?.bg ?? statusBadgeStyle.completed.bg),
+      );
+      const badgeFg = escapeXml(
+        stage ? "#ffffff" : (statusBadgeStyle[p.status]?.text ?? statusBadgeStyle.completed.text),
+      );
       const photoCount = st?.photoCount ?? 0;
       const activity = st?.lastActivity
         ? `Last activity ${new Date(st.lastActivity).toLocaleDateString(undefined, {
@@ -384,11 +425,11 @@ export function MapPage() {
         ${thumb}
         <div style="font-size:15px;font-weight:700;line-height:1.25;">${name}</div>
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0 8px;">
-          <span style="padding:2px 9px;border-radius:999px;background:${badgeColor};color:#ffffff;font-size:10px;font-weight:700;">${badgeText}</span>
+          <span style="padding:2px 9px;border-radius:999px;background:${badgeBg};color:${badgeFg};font-size:10px;font-weight:700;">${badgeText}</span>
           <span style="font-size:11px;color:#475569;">${photoCount} photo${photoCount === 1 ? "" : "s"}</span>
         </div>
         <div style="display:flex;gap:6px;font-size:12px;line-height:1.35;color:#475569;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;margin-top:1px;"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;margin-top:1px;stroke:var(--primary);"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
           <span>${addr}</span>
         </div>
         <div style="font-size:11px;color:#64748b;margin-top:6px;">${activity}</div>
@@ -420,7 +461,7 @@ export function MapPage() {
       } else if (p.latitude != null && p.longitude != null) {
         // Still folded into a cluster: open on the coordinates instead, so the
         // card appears on the first click rather than after the cluster opens.
-        infoWindow.current.setOptions({ pixelOffset: new window.google.maps.Size(0, -PIN_H) });
+        infoWindow.current.setOptions({ pixelOffset: new window.google.maps.Size(0, -DOT_ANCHOR) });
         infoWindow.current.setPosition({ lat: Number(p.latitude), lng: Number(p.longitude) });
         infoWindow.current.open({ map });
       }
@@ -596,6 +637,13 @@ export function MapPage() {
       .then(() => {
         if (!mapRef.current || mapInstance.current) return;
         const restored = readMapView();
+        /*
+         * Tile styling per the MapsContent design reference: pale blue-grey
+         * land, roads a step darker, water a step bluer, no POI or transit
+         * furniture. The reference states its values as oklch custom
+         * properties (--map-bg, --map-road), which Google's style array
+         * cannot read, so they travel here as their hex equivalents.
+         */
         mapInstance.current = new window.google.maps.Map(mapRef.current, {
           center: restored?.center ?? { lat: 39.5, lng: -98.35 },
           zoom: restored?.zoom ?? 4,
@@ -605,45 +653,45 @@ export function MapPage() {
           zoomControl: true,
           gestureHandling: "greedy",
           clickableIcons: false,
-          backgroundColor: "#0b1220",
+          backgroundColor: "#deeaef",
           styles: [
-            { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
-            { elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
-            { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
+            { elementType: "geometry", stylers: [{ color: "#e7eef2" }] },
+            { elementType: "labels.text.fill", stylers: [{ color: "#5f7280" }] },
+            { elementType: "labels.text.stroke", stylers: [{ color: "#e7eef2" }] },
             {
               featureType: "administrative",
               elementType: "geometry.stroke",
-              stylers: [{ color: "#334155" }],
+              stylers: [{ color: "#c3ced6" }],
             },
             { featureType: "administrative.land_parcel", stylers: [{ visibility: "off" }] },
             { featureType: "poi", stylers: [{ visibility: "off" }] },
-            { featureType: "road", elementType: "geometry", stylers: [{ color: "#1e293b" }] },
+            { featureType: "road", elementType: "geometry", stylers: [{ color: "#cfd9dd" }] },
             {
               featureType: "road",
               elementType: "geometry.stroke",
-              stylers: [{ color: "#0f172a" }],
+              stylers: [{ color: "#e7eef2" }],
             },
             {
               featureType: "road",
               elementType: "labels.text.fill",
-              stylers: [{ color: "#cbd5e1" }],
+              stylers: [{ color: "#7d8f9b" }],
             },
             {
               featureType: "road.highway",
               elementType: "geometry",
-              stylers: [{ color: "#334155" }],
+              stylers: [{ color: "#c2ced6" }],
             },
             { featureType: "transit", stylers: [{ visibility: "off" }] },
-            { featureType: "water", elementType: "geometry", stylers: [{ color: "#0c1a2e" }] },
+            { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9dbe6" }] },
             {
               featureType: "water",
               elementType: "labels.text.fill",
-              stylers: [{ color: "#475569" }],
+              stylers: [{ color: "#7d8f9b" }],
             },
             {
               featureType: "landscape.natural",
               elementType: "geometry",
-              stylers: [{ color: "#0f1b2d" }],
+              stylers: [{ color: "#e7eef2" }],
             },
           ],
         });
@@ -695,8 +743,8 @@ export function MapPage() {
       const marker = new window.google.maps.Marker({
         position: pos,
         title: p.name,
-        // Lifts the preview card to the top of the pin instead of over its tip.
-        anchorPoint: new window.google.maps.Point(0, -PIN_H),
+        // Lifts the preview card above the dot instead of over it.
+        anchorPoint: new window.google.maps.Point(0, -DOT_ANCHOR),
         optimized: false,
         zIndex: 10,
       });
@@ -717,6 +765,21 @@ export function MapPage() {
       map: mapInstance.current,
       markers: markers.current,
       algorithm: new SuperClusterAlgorithm({ maxZoom: CLUSTER_MAX_ZOOM, radius: 70 }),
+      renderer: {
+        render: ({ count, position }) =>
+          new window.google.maps.Marker({
+            position,
+            icon: clusterIcon(count),
+            label: {
+              text: String(count),
+              color: "#3a3733",
+              fontSize: "11px",
+              fontWeight: "700",
+              fontFamily: "'Space Mono', monospace",
+            },
+            zIndex: 1000 + count,
+          }),
+      },
       /*
        * The stock handler is `fitBounds(cluster.bounds)`, which for a tight
        * knot of neighbouring jobs barely moves the zoom - hence clusters that
@@ -820,50 +883,30 @@ export function MapPage() {
     }
   };
 
-  return (
-    <div className="min-h-full bg-background px-6 pb-24 pt-8 sm:px-10">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0 max-w-[560px]">
-          <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
-            Maps
-          </h1>
-          <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
-            Every project with an address, plotted at a glance.
-            {geocoding > 0 ? ` Locating ${geocoding}…` : ""}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          {/* One pill per status, then All - the same vocabulary as the map's
-              legend, in the same order, so filtering and reading never drift. */}
-          <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-card p-1 shadow-sm">
-            {[...STATUSES, "all" as const].map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setFilter(key)}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                  filter === key
-                    ? "bg-secondary text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {key !== "all" && (
-                  <span
-                    aria-hidden
-                    className="h-2 w-2 rounded-full ring-1 ring-card"
-                    style={{ background: statusColor[key] }}
-                  />
-                )}
-                {key === "all" ? "All" : statusLabel[key]}{" "}
-                <span className="text-xs tabular-nums">{counts[key]}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+  /*
+   * Subtitle in the design reference's voice - "42 active across California" -
+   * said with whatever the crew is currently looking at: the filtered status
+   * and the states the visible jobs sit in.
+   */
+  const regionStates = [
+    ...new Set(visible.map((p) => p.state?.trim()).filter((s): s is string => Boolean(s))),
+  ];
+  const region =
+    regionStates.length === 1
+      ? regionStates[0]
+      : regionStates.length > 1
+        ? `${regionStates.length} states`
+        : "your area";
+  const subject =
+    filter === "all"
+      ? `${projects.length} project${projects.length === 1 ? "" : "s"}`
+      : `${visible.length} ${statusLabel[filter].toLowerCase()}`;
+  const subtitle = `${subject} across ${region}${geocoding > 0 ? ` · locating ${geocoding}…` : ""}`;
 
-      {projects.length === 0 ? (
-        <div className="mt-8 rounded-3xl border-[0.8px] border-border bg-card/80 p-8">
+  if (projects.length === 0) {
+    return (
+      <div className="flex min-h-full items-center justify-center bg-background px-6 py-10 sm:px-10">
+        <div className="w-full max-w-lg rounded-3xl border-[0.8px] border-border bg-card/80 p-8">
           <EmptyState
             icon={MapPin}
             title="No projects with addresses"
@@ -875,153 +918,162 @@ export function MapPage() {
             }
           />
         </div>
-      ) : (
-        <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_360px]">
-          <div className="relative overflow-hidden rounded-[14px] border-[0.8px] border-border bg-card shadow-[0_25px_50px_-12px_rgba(0,89,156,0.05)]">
-            {mapError ? (
-              <div className="flex h-[420px] items-center justify-center p-6 text-sm text-muted-foreground">
-                {mapError}
-              </div>
-            ) : (
-              <>
-                <div ref={mapRef} className="h-[70vh] min-h-[480px] w-full" />
-                {/* Legend overlay */}
-                <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-1 rounded-2xl border-[0.8px] border-border bg-card/85 px-3 py-2 text-xs shadow-lg backdrop-blur-md">
-                  <div className="font-manrope mb-0.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    <Layers className="h-3 w-3" /> Legend
-                  </div>
-                  {/*
-                    The same four, in the same order, as the chips above: every
-                    colour the map can paint has a word here and a way to filter
-                    by it up there. Archived kept its row conditionally for a
-                    while, which put the legend back out of step with a filter
-                    row that always shows its chip.
-                  */}
-                  {STATUSES.map((s) => (
-                    <div key={s} className="flex items-center gap-2">
-                      <span
-                        className="h-2.5 w-2.5 rounded-full ring-2 ring-card"
-                        style={{ background: statusColor[s] }}
-                      />
-                      <span className="text-foreground/80">{statusLabel[s]}</span>
-                    </div>
-                  ))}
-                  {/*
-                    Said out loud, because a pin labelled "Invoiced" sitting on
-                    a Completed colour is only confusing while you think they
-                    are two competing statuses. They are one: the stage is the
-                    detail, the bucket is what it counts as. Archived is outside
-                    that sentence on purpose - a filed job keeps its own status
-                    whatever stage it was filed from.
-                  */}
-                  {Object.keys(stageLookup).length > 0 && (
-                    <p className="mt-1 max-w-[190px] border-t border-border pt-1.5 text-[10px] leading-snug text-muted-foreground">
-                      Pipeline stages roll up into Active, On hold and Completed.
-                    </p>
-                  )}
-                </div>
-                {/* Count chip */}
-                <div className="font-manrope pointer-events-none absolute right-4 top-4 rounded-full border-[0.8px] border-border bg-card/85 px-3 py-1.5 text-xs font-medium text-foreground shadow-lg backdrop-blur-md">
-                  {mappable.length} on map
-                  {pendingGeocodes.length > 0 && (
-                    <span className="ml-1.5 text-muted-foreground">
-                      · {pendingGeocodes.length} locating
+      </div>
+    );
+  }
+
+  return (
+    /*
+     * Full-bleed two-pane layout, per the MapsContent design reference: a
+     * 340px rail with the legend and the compact Nearby list, and the map
+     * taking every pixel to its right, edge to edge under the app header.
+     */
+    <div className="flex min-h-0 flex-1 flex-col bg-background lg:flex-row">
+      <aside className="w-full shrink-0 overflow-y-auto border-b border-border px-6 pb-8 pt-7 lg:w-[340px] lg:border-b-0 lg:border-r">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="font-manrope text-[22px] font-bold tracking-[-0.01em] text-foreground">
+            Maps
+          </h1>
+          {filter !== "all" && (
+            <button
+              type="button"
+              onClick={() => setFilter("all")}
+              className="shrink-0 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Show all
+            </button>
+          )}
+        </div>
+        <p className="font-manrope mt-1 text-[13px] leading-snug text-muted-foreground">
+          {subtitle}
+        </p>
+
+        {/*
+         * The legend IS the filter: one row per status, rendered straight off
+         * STATUSES - click a row to see only that status, click it again to
+         * return to All. One list, so the words, the colours and the counts
+         * can never drift apart the way two hand-written rows used to.
+         */}
+        <div className="mt-5 rounded-[11px] border border-border bg-card px-4 py-1">
+          {STATUSES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setFilter(filter === s ? "all" : s)}
+              title={
+                filter === s
+                  ? "Showing this status - click to show all"
+                  : `Show only ${statusLabel[s].toLowerCase()}`
+              }
+              className={`flex w-full items-center gap-2.5 border-b border-border py-2 text-left font-manrope text-[13px] transition-colors last:border-b-0 ${
+                filter === s
+                  ? "font-semibold text-foreground"
+                  : "text-foreground/80 hover:text-foreground"
+              }`}
+            >
+              <span
+                aria-hidden
+                className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-card"
+                style={{ background: statusColor[s] }}
+              />
+              <span className="flex-1">{statusLabel[s]}</span>
+              <span className="font-mono text-[12px] text-faint">{counts[s]}</span>
+            </button>
+          ))}
+        </div>
+        {/*
+         * Said out loud, because a dot labelled "Invoiced" sitting on an
+         * Active colour is only confusing while you think they are two
+         * competing statuses. They are one: the stage is the detail, the
+         * bucket is what it counts as. Archived is outside that sentence on
+         * purpose - a filed job keeps its own status whatever stage it was
+         * filed from.
+         */}
+        {Object.keys(stageLookup).length > 0 && (
+          <p className="mt-2 px-1 font-manrope text-[10.5px] leading-snug text-faint">
+            Pipeline stages roll up into Active, On hold and Completed.
+          </p>
+        )}
+
+        <div className="mb-1.5 mt-6 font-manrope text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
+          Nearby
+        </div>
+        <div>
+          {visible.map((p) => {
+            const hasCoords = p.latitude != null && p.longitude != null;
+            const isSelected = selected?.id === p.id;
+            // The team's word for where the job is, where they have one;
+            // the row's dot follows it exactly the way the pin on the map
+            // does, so the list and the tiles name a job the same colour.
+            const stage = stageOf(p);
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => focusProject(p)}
+                className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors ${
+                  isSelected ? "bg-secondary" : "hover:bg-secondary/60"
+                } ${!hasCoords ? "opacity-70" : ""}`}
+              >
+                <span
+                  aria-hidden
+                  className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-card"
+                  style={{
+                    background: stage?.color ?? statusColor[p.status] ?? FALLBACK_PIN_COLOR,
+                  }}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="font-manrope block truncate text-[12.5px] font-semibold text-foreground">
+                    {p.name}
+                  </span>
+                  <span className="font-manrope block truncate text-[11px] text-faint">
+                    {[p.city, p.state].filter(Boolean).join(", ") ||
+                      formatAddress(p) ||
+                      "No address on file"}
+                  </span>
+                  {!hasCoords && (
+                    <span className="font-manrope text-[11px] font-bold text-amber-600">
+                      Locating…
                     </span>
                   )}
-                </div>
-                {/* Fit to all button */}
-                {mappable.length > 1 && (
-                  <Button
-                    size="sm"
-                    onClick={fitToAll}
-                    className="font-manrope absolute bottom-4 right-4 h-8 gap-1.5 rounded-lg border-[0.8px] border-border bg-card/90 text-foreground shadow-lg hover:bg-card"
-                  >
-                    <Maximize2 className="h-3.5 w-3.5" /> Fit to all
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="font-manrope text-xs font-extrabold uppercase tracking-[1.8px] text-primary">
-                {visible.length} project{visible.length === 1 ? "" : "s"}
-              </p>
-              {pendingGeocodes.length > 0 && (
-                <p className="text-[11px] font-bold text-amber-600">
-                  {pendingGeocodes.length} locating…
-                </p>
-              )}
-            </div>
-            <div className="max-h-[70vh] space-y-2.5 overflow-y-auto pr-1">
-              {visible.map((p) => {
-                const hasCoords = p.latitude != null && p.longitude != null;
-                const isSelected = selected?.id === p.id;
-                const badge = statusBadgeStyle[p.status] ?? statusBadgeStyle.completed;
-                // The team's word for where the job is, where they have one.
-                const stage = stageOf(p);
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => focusProject(p)}
-                    className={`w-full rounded-2xl border-[0.8px] bg-card/82 p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 ${
-                      isSelected ? "border-primary/60 ring-2 ring-ring/20" : "border-border"
-                    } ${!hasCoords ? "opacity-70" : ""}`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="font-manrope truncate text-base font-extrabold text-foreground">
-                        {p.name}
-                      </p>
-                      <span
-                        className="font-manrope shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold"
-                        style={
-                          stage
-                            ? { background: stage.color, color: "#ffffff" }
-                            : { background: badge.bg, color: badge.text }
-                        }
-                        title={
-                          stage
-                            ? `${stage.name}, which counts as ${statusLabel[p.status] ?? p.status}`
-                            : undefined
-                        }
-                      >
-                        {stage ? stage.name : (statusLabel[p.status] ?? p.status.replace("_", " "))}
-                      </span>
-                    </div>
-                    <div className="font-manrope mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">
-                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                      <span className="truncate">{formatAddress(p) || "-"}</span>
-                    </div>
-                    {!hasCoords && (
-                      <p className="mt-1.5 text-[11px] font-bold text-amber-600">Locating…</p>
-                    )}
-                    {isSelected && (
-                      <div className="mt-3" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          asChild
-                          size="sm"
-                          className="font-manrope w-full rounded-lg bg-foreground text-background hover:bg-foreground/90"
-                        >
-                          <Link
-                            to="/projects/$projectId"
-                            params={{ projectId: p.id }}
-                            search={{} as any}
-                            onClick={saveCurrentView}
-                          >
-                            Open project
-                          </Link>
-                        </Button>
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+                </span>
+              </button>
+            );
+          })}
         </div>
-      )}
+
+        {visible.length === 0 && (
+          <p className="font-manrope px-2 py-3 text-[12.5px] text-faint">
+            No projects with this status have an address yet.
+          </p>
+        )}
+      </aside>
+
+      {/*
+       * The map, edge to edge. The rail owns the words; this owns the whole
+       * rest of the viewport, exactly as the design reference draws it.
+       */}
+      <div className="relative h-[45vh] shrink-0 overflow-hidden lg:h-auto lg:flex-1">
+        {mapError ? (
+          <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
+            {mapError}
+          </div>
+        ) : (
+          <>
+            <div ref={mapRef} className="absolute inset-0" />
+            {/* Fit to all button */}
+            {mappable.length > 1 && (
+              <Button
+                size="sm"
+                onClick={fitToAll}
+                className="font-manrope absolute bottom-4 right-4 h-8 gap-1.5 rounded-lg border-[0.8px] border-border bg-card/90 text-foreground shadow-lg hover:bg-card"
+              >
+                <Maximize2 className="h-3.5 w-3.5" /> Fit to all
+              </Button>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

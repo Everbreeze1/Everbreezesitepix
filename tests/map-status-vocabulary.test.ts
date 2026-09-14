@@ -3,14 +3,16 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 /*
- * The Project map shows status in two places: the filter row at the top right
- * and the legend over the map. They were two hand-written lists, and they drifted
- * - the legend learned about Archived while the filter row kept offering only
- * three, so the map painted a colour there was no way to filter by.
+ * The Project map shows status in exactly one place: the legend card in the
+ * left rail, whose rows ARE the filter (click to see one status, click again
+ * for all). There used to be a second hand-written list - a chip row in the
+ * header plus a legend floating over the map - and they drifted: the legend
+ * learned about Archived while the chip row kept offering only three, so the
+ * map painted a colour there was no way to filter by.
  *
- * Both now read one STATUSES array. These tests are what keeps that true: they
- * fail if a second list appears, or if a status joins the vocabulary without a
- * colour, a word and a badge to render it with.
+ * One STATUSES array drives the rows now. These tests are what keeps that
+ * true: they fail if a second list appears, or if a status joins the
+ * vocabulary without a colour, a word and a badge to render it with.
  *
  * Source text, like the rest of tests/invariants.test.ts, because the repo has
  * no React + Google Maps harness to assert against a rendered page.
@@ -74,10 +76,11 @@ describe("Project map status vocabulary", () => {
     },
   );
 
-  it("builds the filter row and the legend from that one list", () => {
-    // The chips: `[...STATUSES, "all" as const].map(`. The legend: `STATUSES.map(`.
-    expect(src).toContain('[...STATUSES, "all" as const].map(');
+  it("builds the legend rows and their filter behaviour off that one list", () => {
+    // The legend is the filter: rows rendered straight off STATUSES, clicked
+    // to filter, clicked again to return to All. No second list to drift.
     expect(src).toContain("{STATUSES.map((s) => (");
+    expect(src).toContain('setFilter(filter === s ? "all" : s)');
   });
 
   it("keeps no second list of statuses to drift from the first", () => {

@@ -479,25 +479,13 @@ function Landing() {
           <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-2">
             {whatsNew.map((f) => (
               <div key={f.title} className="rounded-[18px] border border-border bg-card p-7">
-                <div className="flex items-center gap-3">
-                  <span
-                    className="flex h-[42px] w-[42px] items-center justify-center rounded-[11px]"
-                    style={{ backgroundColor: f.iconBg }}
-                  >
-                    <f.icon className="h-5 w-5 text-white" />
-                  </span>
-                  {f.badge && (
-                    <span
-                      className="font-manrope rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider"
-                      style={{ backgroundColor: f.ring, color: f.iconBg }}
-                    >
-                      {f.badge}
-                    </span>
-                  )}
-                </div>
-                <h3 className="font-display mt-5 text-[17px] font-bold tracking-[-0.01em] text-foreground">
-                  {f.title}
-                </h3>
+                <span
+                  className="mb-4 flex h-[42px] w-[42px] items-center justify-center rounded-[11px]"
+                  style={{ backgroundColor: f.ring }}
+                >
+                  <f.icon className="h-5 w-5" style={{ color: f.iconBg }} strokeWidth={1.8} />
+                </span>
+                <h3 className="font-manrope text-[17px] font-bold text-foreground">{f.title}</h3>
                 <p className="font-manrope mt-2 text-[14.5px] leading-[1.55] text-muted-foreground">
                   {f.desc}
                 </p>
