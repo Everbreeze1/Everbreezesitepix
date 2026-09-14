@@ -73,6 +73,11 @@ import { PageTabStrip } from "@/components/PageTabStrip";
 import { SURFACE_CARD } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import { LabelChip, LabelPicker } from "@/features/photos/components/LabelPicker";
+import {
+  REFERENCE_CARD_INTERACTIVE,
+  REFERENCE_CARD_META,
+  REFERENCE_CHIP,
+} from "@/components/ui/reference";
 import { ApplyBlueprintDialog } from "@/features/settings/components/ApplyBlueprintDialog";
 import { BlueprintOutcomePreview } from "@/features/settings/components/BlueprintOutcomePreview";
 import {
@@ -155,6 +160,51 @@ export type TemplatesSearch = {
   tab?: TemplateTabKey;
   /** Opens straight to one blueprint - used by links from projects. */
   blueprint?: string;
+};
+
+/**
+ * Per-tab hero copy, in the voice of the mockup set: each library page names
+ * itself and says what it is for. Walkthroughs and label sets are parked
+ * (unreachable through the strip) but stay typed so the record is total.
+ */
+const TAB_HERO: Record<TemplateTabKey, { title: string; subtitle: string }> = {
+  blueprints: {
+    title: "Blueprints",
+    subtitle:
+      "Reusable bundles of checklists, workflows, documents and report templates for a job type. Every project shows the blueprint it was built from.",
+  },
+  checklists: {
+    title: "Checklists",
+    subtitle:
+      "Reusable checklist templates used across your blueprints. Edit one here and every blueprint using it stays in sync.",
+  },
+  workflows: {
+    title: "Workflows",
+    subtitle:
+      "The steps a project walks through in order, saved once and reused on every job of the kind.",
+  },
+  walkthroughs: {
+    title: "Walkthroughs",
+    subtitle: "Shot-list templates for recording a walkthrough on site.",
+  },
+  documents: {
+    title: "Documents",
+    subtitle:
+      "Word-style templates with dynamic placeholders that auto-fill from project data - reports, invoices, site logs, and anything else you send a client.",
+  },
+  reports: {
+    title: "Report templates",
+    subtitle:
+      "Structured, multi-section reports assembled from the project's own photos, checklists and workflow.",
+  },
+  "label-sets": {
+    title: "Label sets",
+    subtitle: "Bundles of labels applied together with a blueprint.",
+  },
+  labels: {
+    title: "Labels",
+    subtitle: "Labels now live in Settings.",
+  },
 };
 
 interface ProjectTemplate {
@@ -614,11 +664,14 @@ export function TemplatesPage() {
         category: x.category ?? null,
       })),
     );
-    setSelectedId((cur) => {
-      if (cur && list.find((t) => t.id === cur)) return cur;
-      if (!list.length) return null;
-      return (list.find((t) => !t.archived) ?? list[0])?.id ?? null;
-    });
+    /*
+     * No auto-select. The landing view is the card grid, per the design
+     * reference - the old rail pinned a selection so the detail pane always
+     * had something to show, but a grid has nothing to select until you click
+     * a card. A `?blueprint=` deep link and "duplicate" still select
+     * explicitly, and the grid only needs `selected` for the editor swap.
+     */
+    setSelectedId((cur) => (cur && list.find((t) => t.id === cur) ? cur : null));
     setLoading(false);
   }, []);
 
@@ -667,6 +720,23 @@ export function TemplatesPage() {
     for (const a of applications ?? []) m.set(a.blueprint_id, (m.get(a.blueprint_id) ?? 0) + 1);
     return m;
   }, [applications]);
+
+  /**
+   * Sections per kind per blueprint - the mockup card's chip row: "2
+   * checklists", "1 workflow", "2 report templates". Same two storage tables
+   * `sectionCountByTemplate` walks; this one keeps the kinds apart.
+   */
+  const kindCountsByTemplate = useMemo(() => {
+    const m = new Map<string, Partial<Record<TemplateItemKind, number>>>();
+    const bump = (id: string, kind: TemplateItemKind) => {
+      const cur = m.get(id) ?? {};
+      cur[kind] = (cur[kind] ?? 0) + 1;
+      m.set(id, cur);
+    };
+    for (const a of attached) bump(a.project_template_id, "checklist");
+    for (const i of tplItems) bump(i.project_template_id, i.kind);
+    return m;
+  }, [attached, tplItems]);
 
   /*
    * The label usage counts, and the LabelsManager they fed, moved to Settings
@@ -1254,34 +1324,35 @@ export function TemplatesPage() {
           grow past the viewport, both for the tabs that are long lists and for
           a short screen where the workspace hits its floor. */}
       <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pb-10 md:pt-10 workspace:flex workspace:min-h-0 workspace:flex-1 workspace:flex-col [@media(max-height:950px)]:md:pb-4 [@media(max-height:950px)]:md:pt-5">
-        {/* Hero - a light reference header: the mockup's "Blueprints" page has
-            no dark band, just the title, subtitle, and primary action. */}
+        {/* Hero - a light reference header: no dark band, just the title,
+            subtitle, and primary action. The title follows the tab, the way the
+            mockup set gives each library page its own name - "Blueprints",
+            "Checklists", "Documents" - instead of the hub's generic one. */}
         <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0 max-w-[560px]">
-              <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
-                Templates
-              </h1>
-              <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
-                Build a job setup once as a blueprint, then apply it to any project - its
-                checklists, workflows, documents, reports and labels all land in place.
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              {canManage && (
-                <Button
-                  onClick={() => {
-                    setTab("blueprints");
-                    setCreateOpen(true);
-                  }}
-                  className="font-sans h-10 rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90"
-                >
-                  <Plus className="h-4 w-4" /> New blueprint
-                </Button>
-              )}
-            </div>
+          <div className="min-w-0 max-w-[560px]">
+            <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
+              {TAB_HERO[tab].title}
+            </h1>
+            <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
+              {TAB_HERO[tab].subtitle}
+            </p>
           </div>
+          {tab === "blueprints" && canManage && (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Button
+                onClick={() => {
+                  setTab("blueprints");
+                  setCreateOpen(true);
+                }}
+                className="font-sans h-10 rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90"
+              >
+                <Plus className="h-4 w-4" /> New blueprint
+              </Button>
+            </div>
+          )}
+        </div>
 
-          {/* The same strip Projects and the project home page use, so the three
+        {/* The same strip Projects and the project home page use, so the three
             hub screens can no longer drift apart. */}
         <PageTabStrip
           className="mt-3.5"
@@ -1351,12 +1422,14 @@ export function TemplatesPage() {
               templates={templates}
               visibleTemplates={visibleTemplates}
               sectionCountByTemplate={sectionCountByTemplate}
+              kindCountsByTemplate={kindCountsByTemplate}
               applyCountByTemplate={applyCountByTemplate}
               applicationsAvailable={applications !== null}
               selectedApplications={selectedApplications}
               selected={selected}
               selectedId={selectedId}
               onSelect={setSelectedId}
+              onDeselect={() => setSelectedId(null)}
               search={searchText}
               onSearch={setSearchText}
               showArchived={showArchived}
@@ -1764,6 +1837,19 @@ export function TemplatesPage() {
 /*  Blueprints tab                                                            */
 /* -------------------------------------------------------------------------- */
 
+/** The mockup card's chips: "2 checklists", "1 workflow", "2 report templates". */
+function kindChip(kind: TemplateItemKind, n: number): string {
+  const nouns: Record<TemplateItemKind, string> = {
+    checklist: "checklist",
+    workflow: "workflow",
+    document: "document",
+    report: "report template",
+    walkthrough: "walkthrough",
+    label_set: "label set",
+  };
+  return `${n} ${nouns[kind]}${n === 1 ? "" : "s"}`;
+}
+
 function BlueprintsTab(props: {
   loading: boolean;
   canManage: boolean;
@@ -1771,12 +1857,16 @@ function BlueprintsTab(props: {
   templates: ProjectTemplate[];
   visibleTemplates: ProjectTemplate[];
   sectionCountByTemplate: Map<string, number>;
+  /** Sections per kind per blueprint - the card chip row ("2 checklists"). */
+  kindCountsByTemplate: Map<string, Partial<Record<TemplateItemKind, number>>>;
   applyCountByTemplate: Map<string, number>;
   applicationsAvailable: boolean;
   selectedApplications: BlueprintApplication[];
   selected: ProjectTemplate | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** Back to the card grid, from the editor's breadcrumb. */
+  onDeselect: () => void;
   search: string;
   onSearch: (v: string) => void;
   showArchived: boolean;
@@ -1811,13 +1901,13 @@ function BlueprintsTab(props: {
     isTeam,
     templates,
     visibleTemplates,
-    sectionCountByTemplate,
+    kindCountsByTemplate,
     applyCountByTemplate,
     applicationsAvailable,
     selectedApplications,
     selected,
-    selectedId,
     onSelect,
+    onDeselect,
     search,
     onSearch,
     showArchived,
@@ -1928,589 +2018,525 @@ function BlueprintsTab(props: {
    * scrollbar under the whole app. The inner pane grid already spells its
    * tracks this way; this one was the last bare `1fr` left.
    */
-  return (
-    <div className={cn("grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]", WORKSPACE_HEIGHT)}>
-      {/* Library rail */}
-      <div className="flex min-h-0 flex-col gap-3">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => onSearch(e.target.value)}
-            placeholder="Search blueprints…"
-            className="h-10 rounded-xl pl-9"
-          />
+  /*
+   * Two views, exactly as the design reference draws them: the library is a
+   * grid of cards, and one open blueprint is a full-width editor page under a
+   * "Blueprints / name" breadcrumb. The old layout pinned a 320px rail beside
+   * the detail for good, which spent a fifth of the page on the list even
+   * while you worked inside one blueprint.
+   */
+  if (!selected) {
+    return (
+      <div className="flex flex-col gap-5">
+        {/* Controls: trade filter, archived toggle and the match count on the
+            left, search on the right - the arrangement the Projects list uses. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* The count only while a search is narrowing the list, which is
+                the one case the tab strip's count cannot speak to. */}
+            {search.trim() !== "" && (
+              <span className="text-xs font-bold text-muted-foreground">
+                {visibleTemplates.length} match{visibleTemplates.length === 1 ? "" : "es"}
+              </span>
+            )}
+            {/* The trade filter the spec's "optional, for filtering later" asks
+                for. Hidden below two trades, where it is a control with one
+                meaningful position and nothing to narrow. */}
+            {trades.length > 1 && (
+              <Select value={tradeFilter} onValueChange={onTradeFilter}>
+                <SelectTrigger className="h-9 w-[150px] rounded-lg text-[12.5px] font-semibold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_TRADES}>All trades</SelectItem>
+                  {trades.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <button
+              type="button"
+              onClick={onToggleArchived}
+              className="rounded-lg border border-border bg-card px-3 py-1.5 text-[12.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {showArchived ? "Hide archived" : "Show archived"}
+            </button>
+          </div>
+          <div className="relative w-full sm:w-[230px]">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => onSearch(e.target.value)}
+              placeholder="Search blueprints…"
+              className="h-9 rounded-lg pl-9"
+            />
+          </div>
         </div>
 
-        {/* The trade filter the spec's "optional, for filtering later" asks for.
-            Hidden below two trades, where it is a control with one meaningful
-            position and nothing to narrow. */}
-        {trades.length > 1 && (
-          <Select value={tradeFilter} onValueChange={onTradeFilter}>
-            <SelectTrigger className="h-9 rounded-xl text-xs font-semibold">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_TRADES}>All trades</SelectItem>
-              {trades.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {t}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
-        {/* Create lives in the list header, not in a full-width button of its
-            own above it. The hero already carries a primary "New blueprint" a
-            couple of hundred pixels up, so this was the same action twice on
-            one screen, the second time in a block as heavy as the list. */}
-        <div className={cn(SURFACE_CARD, "flex min-h-0 flex-1 flex-col overflow-hidden")}>
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 py-1.5 pl-3 pr-1.5">
-            <div className="flex min-w-0 items-center gap-2.5">
-              {/* The count only while a search is narrowing the list, which is
-                  the one case the tab strip's "Project blueprints 2" cannot
-                  speak to. Unfiltered it was a third copy of that number. */}
-              {search.trim() !== "" && (
-                <span className="text-xs font-bold text-muted-foreground">
-                  {visibleTemplates.length} match{visibleTemplates.length === 1 ? "" : "es"}
-                </span>
-              )}
-              <button
-                className="truncate text-xs font-bold text-muted-foreground hover:text-foreground"
-                onClick={onToggleArchived}
-              >
-                {showArchived ? "Hide archived" : "Show archived"}
-              </button>
-            </div>
+        {visibleTemplates.length === 0 ? (
+          <div className="rounded-[13px] border border-dashed border-border bg-card px-6 py-12 text-center text-[13px] text-faint">
+            {/* Naming the filter that emptied the list, because a trade filter
+                set two visits ago is invisible otherwise and reads as "my
+                blueprints are gone". */}
+            {tradeFilter === ALL_TRADES
+              ? "No blueprints match your search."
+              : `No ${tradeFilter} blueprints${search.trim() ? " match your search" : ""}.`}
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {visibleTemplates.map((t) => {
+              const counts = kindCountsByTemplate.get(t.id) ?? {};
+              const applyCount = applyCountByTemplate.get(t.id) ?? 0;
+              const total = Object.values(counts).reduce((x, y) => x + (y ?? 0), 0);
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => onSelect(t.id)}
+                  className={cn(
+                    REFERENCE_CARD_INTERACTIVE,
+                    "flex flex-col gap-3.5 p-5 text-left",
+                    t.archived && "opacity-70",
+                  )}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <LayoutTemplate className="h-5 w-5 shrink-0 text-primary" strokeWidth={1.8} />
+                    <span className="min-w-0 flex-1 truncate text-[14.5px] font-semibold text-foreground">
+                      {t.name}
+                    </span>
+                    {t.default_for_category && t.category && (
+                      <span
+                        className="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-bold text-primary"
+                        title={`New ${t.category} projects start from this blueprint`}
+                      >
+                        <Star className="h-2.5 w-2.5" />
+                        Default
+                      </span>
+                    )}
+                    {t.archived && <Badge variant="outline">Archived</Badge>}
+                  </span>
+                  {total > 0 && (
+                    <span className="flex flex-wrap gap-1.5">
+                      {KIND_ORDER.filter((k) => (counts[k] ?? 0) > 0).map((k) => (
+                        <span key={k} className={REFERENCE_CHIP}>
+                          {kindChip(k, counts[k] ?? 0)}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                  {/* The mockup card's footer line. Hidden, not zeroed, when
+                      the ledger is unreadable - "used on 0 projects" would be
+                      claiming to know. */}
+                  {applicationsAvailable && (
+                    <span className={REFERENCE_CARD_META}>
+                      Used on <span className="font-mono">{applyCount}</span> project
+                      {applyCount === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
             {canManage && (
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 rounded-lg px-2 text-xs font-bold"
-                  onClick={onStarters}
-                >
-                  Starters
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 rounded-lg px-2 text-xs font-bold"
-                  onClick={onCreate}
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" />
-                  New
-                </Button>
-              </div>
+              <button
+                type="button"
+                onClick={onCreate}
+                className="flex min-h-[150px] flex-col items-center justify-center gap-2 rounded-[13px] border border-dashed border-border text-faint transition-colors hover:border-primary/70 hover:text-muted-foreground"
+              >
+                <Plus className="h-[22px] w-[22px]" strokeWidth={1.8} />
+                <span className="text-[13px] font-medium">Build a new blueprint</span>
+              </button>
             )}
           </div>
-          {visibleTemplates.length === 0 ? (
-            <p className="px-3 py-8 text-center text-xs text-muted-foreground">
-              {/* Naming the filter that emptied the list, because a trade
-                  filter set two visits ago is invisible otherwise and reads as
-                  "my blueprints are gone". */}
-              {tradeFilter === ALL_TRADES
-                ? "No blueprints match your search."
-                : `No ${tradeFilter} blueprints${search.trim() ? " match your search" : ""}.`}
-            </p>
-          ) : (
-            /* Two caps, because the rail is two different things. Beside the
-               detail it is a column and can take 62vh; stacked on top of it,
-               below `lg`, every one of those pixels is pushed between you and
-               the blueprint you just picked, so it scrolls inside 17rem
-               instead. Pinned in the workspace it takes the height the flex
-               chain measured and neither cap applies. */
-            <ul className="max-h-[17rem] flex-1 divide-y divide-border/60 overflow-y-auto lg:max-h-[62vh] workspace:max-h-none">
-              {visibleTemplates.map((t) => {
-                const isSelected = selectedId === t.id;
-                const sectionCount = sectionCountByTemplate.get(t.id) ?? 0;
-                const applyCount = applyCountByTemplate.get(t.id) ?? 0;
-                return (
-                  <li key={t.id} className="relative">
-                    {isSelected && (
-                      <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-primary" />
-                    )}
-                    <button
-                      onClick={() => onSelect(t.id)}
-                      className={cn(
-                        "flex w-full flex-col items-start gap-1.5 px-3.5 py-3 text-left transition-colors",
-                        isSelected ? "bg-primary/[0.06]" : "hover:bg-muted/50",
-                      )}
-                    >
-                      <div className="flex w-full items-start justify-between gap-2">
-                        <span className="line-clamp-1 text-sm font-bold">{t.name}</span>
-                        {t.archived && (
-                          <Badge variant="outline" className="shrink-0 text-[10px]">
-                            Archived
-                          </Badge>
-                        )}
-                      </div>
-                      {t.description && (
-                        <p className="line-clamp-1 text-xs text-muted-foreground">
-                          {t.description}
-                        </p>
-                      )}
-                      {/* Labels as quiet text, not as chips. The chip is a
-                          skewed, saturated block built for sitting over a
-                          photo; three of them per card turned a 320px rail
-                          into the loudest thing on the page, and none of that
-                          colour helps you pick a blueprint out of a list. The
-                          detail panel still shows the real chips, where they
-                          are the value being edited. */}
-                      {(t.labels?.length ?? 0) > 0 && (
-                        <span className="flex w-full min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-                          <Tag className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{t.labels!.join(", ")}</span>
-                        </span>
-                      )}
-                      <div className="flex w-full items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <span>
-                          {sectionCount} section{sectionCount === 1 ? "" : "s"}
-                        </span>
-                        {applicationsAvailable && applyCount > 0 && (
-                          <>
-                            <span aria-hidden>·</span>
-                            <span>used {applyCount}×</span>
-                          </>
-                        )}
-                      </div>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
+        )}
+        {/* The starters dialog keeps an entry point on a populated grid, where
+            the empty state's own button is out of reach. A quiet accent link,
+            not a second button - the mockup's card grid carries exactly one
+            action block and this is not it. */}
+        {canManage && visibleTemplates.length > 0 && (
+          <button
+            type="button"
+            onClick={onStarters}
+            className="self-start text-[12.5px] font-semibold text-primary hover:underline"
+          >
+            or start from a pre-built blueprint
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  const selectedApplyCount = applyCountByTemplate.get(selected.id) ?? 0;
+
+  return (
+    <div className={cn("flex min-h-0 flex-col gap-4", WORKSPACE_HEIGHT)}>
+      {/* Breadcrumb, per the mockup editor: "Blueprints / <name>". The first
+          half is the way back to the grid. */}
+      <div className="shrink-0 text-[12.5px] text-faint">
+        <button
+          type="button"
+          onClick={onDeselect}
+          className="font-semibold text-primary hover:underline"
+        >
+          Blueprints
+        </button>
+        <span aria-hidden className="mx-1.5">
+          /
+        </span>
+        <span>{selected.name}</span>
       </div>
 
-      {/* Detail */}
-      {!selected ? (
-        <Card className="flex flex-col items-center justify-center gap-2 p-16 text-center">
-          <Sparkles className="h-6 w-6 text-muted-foreground/70" />
-          <p className="text-sm font-semibold">Select a blueprint</p>
-          <p className="text-xs text-muted-foreground">
-            Pick one from the list to see what it creates and apply it.
-          </p>
-        </Card>
-      ) : (
-        <div className="flex min-h-0 min-w-0 flex-col gap-3">
-          {/* Header. `shrink-0`, so the identity of the thing you are looking
-              at is the one part of the workspace that never gets squeezed.
-              Deliberately short: it sits directly on top of the two working
-              panes, and on an 800px-tall laptop those panes get only what this
-              card leaves them, so every row of chrome here is a row of section
-              list somewhere else. It used to run four stacked rows (title,
-              description, meta, labels) at 194px tall; it is now two, and the
-              panes below gained the difference. */}
-          <div className={cn(SURFACE_CARD, "shrink-0 px-4 py-3 sm:px-5 sm:py-3.5")}>
-            {/* Stacked below `sm`. Side by side, the action group is ~230px of
+      {/* Header, uncarded like the mockup editor: title, the used-on line,
+              then the trade/version/labels row. `shrink-0`, so the identity of
+              the thing you are looking at is the one part of the workspace that
+              never gets squeezed. */}
+      <div className="shrink-0">
+        {/* Stacked below `sm`. Side by side, the action group is ~230px of
                 shrink-0 buttons and the title is the only thing left that can
                 give, so a phone truncated the blueprint's name to three
                 characters to hold a row of buttons intact. */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
-              {/* `min-w-[10rem]`, not `min-w-0`. The action group beside this is
-                  ~290px of shrink-0 buttons, so on a 416px detail column a
-                  plain `min-w-0` let the name shrink all the way to "Z..."
-                  while the buttons kept every pixel. The floor makes the row
-                  wrap the buttons to a second line instead, which costs 40px
-                  once and keeps the name of the thing you are looking at
-                  readable. Above 1152px there is room for both and nothing
-                  wraps. */}
-              <div className="min-w-[10rem] flex-1">
-                <div className="flex items-center gap-2.5">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                    <LayoutTemplate className="h-4 w-4" />
-                  </span>
-                  <h2 className="font-display truncate text-lg font-bold tracking-tight">
-                    {selected.name}
-                  </h2>
-                  {selected.archived && <Badge variant="outline">Archived</Badge>}
-                </div>
-                {/* One line, then an ellipsis with the rest on hover, and no
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-[10rem] flex-1">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <h2 className="truncate text-[22px] font-bold tracking-[-0.01em] text-foreground">
+                {selected.name}
+              </h2>
+              {selected.archived && <Badge variant="outline">Archived</Badge>}
+            </div>
+            {/* The mockup editor's line under the title: what this
+                    blueprint has done, and the one promise editing makes. The
+                    count hides when the ledger is unreadable rather than
+                    claiming zero. */}
+            <p className="mt-1 text-[12.5px] leading-snug text-faint">
+              {applicationsAvailable && (
+                <>
+                  Used on <span className="font-mono">{selectedApplyCount}</span> project
+                  {selectedApplyCount === 1 ? "" : "s"} ·{" "}
+                </>
+              )}
+              changes apply the next time this blueprint is assigned to a new project.
+            </p>
+            {/* One line, then an ellipsis with the rest on hover, and no
                     line at all on a short window. A long description is the one
                     field on this card that can grow without limit, and every
                     line it grows by comes off the panes below it. Nothing is
                     lost when it goes: the rail row you picked this blueprint
                     from prints the same description, and the full text is on
                     the title attribute either way. */}
-                {selected.description && (
-                  <p
-                    className="mt-1 line-clamp-1 max-w-2xl text-[13px] text-muted-foreground [@media(max-height:950px)]:hidden"
-                    title={selected.description}
-                  >
-                    {selected.description}
-                  </p>
-                )}
-              </div>
+            {selected.description && (
+              <p
+                className="mt-1 line-clamp-1 max-w-2xl text-[13px] text-muted-foreground [@media(max-height:950px)]:hidden"
+                title={selected.description}
+              >
+                {selected.description}
+              </p>
+            )}
+          </div>
 
-              {/* One primary, one secondary, one overflow. Four buttons of
+          {/* One primary, one secondary, one overflow. Four buttons of
                   equal weight made the row a menu bar and left nothing
                   obviously the thing to press. */}
-              <div className="flex shrink-0 items-center gap-2">
-                {isTeam ? (
+          <div className="flex shrink-0 items-center gap-2">
+            {isTeam ? (
+              <Button
+                size="sm"
+                className="rounded-lg"
+                onClick={onApply}
+                disabled={!hasContent}
+                title={hasContent ? undefined : "Add at least one section or label first"}
+              >
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                Apply to projects
+              </Button>
+            ) : (
+              // Applying is enforced as a Team feature server-side. Saying
+              // so here beats letting someone build a blueprint and meet
+              // the restriction only at the moment they try to use it.
+              <Button size="sm" className="rounded-lg" onClick={onUpgrade}>
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                Applying is on Team
+              </Button>
+            )}
+            {canManage && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onEdit(selected)}
+                className="rounded-lg"
+              >
+                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                Edit
+              </Button>
+            )}
+            {(isTeam || canManage) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                   <Button
-                    size="sm"
-                    className="rounded-lg"
-                    onClick={onApply}
-                    disabled={!hasContent}
-                    title={hasContent ? undefined : "Add at least one section or label first"}
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 rounded-lg"
+                    aria-label="More actions"
                   >
-                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                    Apply to projects
+                    <MoreHorizontal className="h-4 w-4" />
                   </Button>
-                ) : (
-                  // Applying is enforced as a Team feature server-side. Saying
-                  // so here beats letting someone build a blueprint and meet
-                  // the restriction only at the moment they try to use it.
-                  <Button size="sm" className="rounded-lg" onClick={onUpgrade}>
-                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                    Applying is on Team
-                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  {isTeam && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/projects/new" search={{ blueprint: selected.id }}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        New project from this
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {canManage && (
+                    <>
+                      {isTeam && <DropdownMenuSeparator />}
+                      <DropdownMenuItem onClick={() => onDuplicate(selected)}>
+                        <Copy className="mr-2 h-4 w-4" />
+                        Duplicate
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onArchiveToggle(selected)}>
+                        {selected.archived ? (
+                          <>
+                            <ArchiveRestore className="mr-2 h-4 w-4" />
+                            Unarchive
+                          </>
+                        ) : (
+                          <>
+                            <Archive className="mr-2 h-4 w-4" />
+                            Archive
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => onDelete(selected)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </div>
+
+        {/* Trade, version, created date, the default flag and the labels,
+         * all on one line, spanning the whole card.
+         *
+         * Spanning is the point. Inside the title column this row shares
+         * its width with the action buttons, and at 1280px that is narrow
+         * enough that two labels and the Add trigger wrap to a third line -
+         * which is exactly the height this card was rewritten to give back.
+         * Below the buttons it has the full measure and stays one line.
+         *
+         * The labels used to own a row of their own with a rule above it,
+         * and they are the same class of fact as the trade: what this
+         * blueprint is filed under, not something you work on here. The
+         * section count and the apply count are deliberately absent - both
+         * are stated in full a few pixels below, at the head of the card
+         * that acts on them. The version is the spec's audit half: the
+         * bundle is copied on apply, so this number is what lets a project
+         * say which shape of the blueprint made it.
+         *
+         * A div rather than the p this used to be, because LabelPicker is a
+         * flex container and cannot live inside a paragraph. */}
+        <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+          <span>{selected.category ?? GENERAL_CATEGORY}</span>
+          <span aria-hidden>·</span>
+          <span>v{selected.version}</span>
+          <span aria-hidden>·</span>
+          <span>Created {timeAgo(selected.created_at)}</span>
+          {selected.default_for_category && selected.category && (
+            <span
+              className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-bold text-primary"
+              title={`New ${selected.category} projects start from this blueprint`}
+            >
+              <Star className="h-2.5 w-2.5" />
+              Default for {selected.category}
+            </span>
+          )}
+          <span aria-hidden className="mx-1 h-3 w-px shrink-0 bg-border/70" />
+          {canManage ? (
+            <LabelPicker
+              value={selected.labels ?? []}
+              onChange={(next) => onUpdateLabels(selected, next)}
+              suggestions={allLabels}
+              triggerLabel="Add label"
+              teamId={teamId}
+              userId={userId}
+              size="sm"
+            />
+          ) : (selected.labels?.length ?? 0) === 0 ? (
+            <span>No labels</span>
+          ) : (
+            (selected.labels ?? []).map((l) => <LabelChip key={l} label={l} size="sm" />)
+          )}
+        </div>
+      </div>
+
+      {/*
+       * The same two questions, one at a time, below the width where they
+       * can be columns.
+       *
+       * Under 1024px the grid collapses to one column and the panes stack,
+       * which is what put "Applied to" a full section list below the fold:
+       * on a blueprint with a dozen sections, answering "which project is
+       * this on" meant scrolling down past every section and then back up
+       * to carry on editing. Both panes now share one slot and this switch
+       * chooses between them, so the trip is a click rather than a scroll.
+       *
+       * Hidden from `lg` up, where both are on screen at once and there
+       * is nothing to choose.
+       */}
+      {/* A pressed-state group rather than a tablist, deliberately. Above
+              `lg` both cards are on screen and this control is not, so there is
+              no width at which one of them is "the unselected tab" - calling
+              them tabs would announce a state that only half the layout has. */}
+      <div
+        role="group"
+        aria-label="Show contents or applied projects"
+        className="flex shrink-0 items-center gap-1 rounded-xl border border-border/60 bg-muted/40 p-1 lg:hidden"
+      >
+        {(
+          [
+            { key: "contents", label: "Contents", count: sections.length },
+            {
+              key: "applied",
+              label: "Applied to",
+              count: applicationsAvailable ? selectedApplications.length : null,
+            },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            aria-pressed={pane === t.key}
+            onClick={() => setPane(t.key)}
+            className={cn(
+              "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
+              pane === t.key
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t.label}
+            {t.count !== null && (
+              <span
+                className={cn(
+                  "tabular-nums",
+                  pane === t.key ? "text-muted-foreground" : "text-muted-foreground/70",
                 )}
-                {canManage && (
+              >
+                {t.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/*
+       * The two working panes, side by side above `xl`.
+       *
+       * What is in the blueprint and where it has been applied are the two
+       * questions this screen exists to answer, and they used to be answered
+       * one under the other, so reading the second scrolled the first off
+       * the top. They are now columns of one fixed-height row: each scrolls
+       * inside itself, neither pushes the other off screen, and the header
+       * above them stays put while you read either one.
+       */}
+      {/* Three widths for the usage column. The editor is now full-width
+              (the rail is gone, its list having become the card grid), so the
+              contents pane has far more measure than before and the usage
+              column can be a touch wider at every breakpoint than the old
+              three-range ladder needed to be.
+
+              `max-lg:min-h` is for the switched layout below it: without a
+              floor, flipping to an 'Applied to' that says "not applied to any
+              project yet" collapsed the row to two lines and took the switch
+              itself out from under the pointer. 13rem and not more: the floor
+              has to be tall enough to hold a card with one line of text in it
+              and short enough that a 720px-tall window still fits the whole
+              tab without scrolling, which is the thing all of this is for. */}
+      <div className="grid min-h-0 max-lg:min-h-[13rem] flex-1 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_20rem]">
+        {/* Contents, and where they land.
+         *
+         * These were two cards. The upper one grouped every item by its
+         * destination and named it; the lower one listed the same items
+         * again in apply order, to be edited. Same facts, twice, one above
+         * the other. The destination summary is now a single row of counts
+         * and the naming happens once, in the list you can actually
+         * reorder. The full grouped picture still runs in the apply dialog,
+         * at the moment it decides something. */}
+        <div
+          className={cn(
+            "flex min-h-0 min-w-0 flex-col",
+            // Only below `lg`, where the switch above is what is choosing.
+            pane !== "contents" && "max-lg:hidden",
+          )}
+        >
+          {/* Eyebrow + preview, the mockup's section-label pattern: the
+                  label sits outside the card it names, and the one control that
+                  belongs to the whole bundle (the outcome preview) rides on the
+                  label row rather than inside the list. */}
+          <div className="flex shrink-0 items-center justify-between gap-3 pb-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.05em] text-faint">
+              Contents
+            </span>
+            <div className="flex shrink-0 items-center gap-2">
+              {/*
+               * The full "here is the project you get" picture, in a
+               * popover rather than an inline panel.
+               *
+               * Expanded in place it was 200-400px of card shoved between
+               * the section list and everything under it, which pushed the
+               * usage list off the screen the moment you asked the one
+               * question it answers. Floating over the layout, it costs
+               * nothing below it and closes on `Esc` or a click away.
+               */}
+              <Popover open={previewOpen} onOpenChange={setPreviewOpen}>
+                <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => onEdit(selected)}
                     className="rounded-lg"
+                    disabled={!hasContent}
+                    title={hasContent ? undefined : "Add at least one section or label first"}
                   >
-                    <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                    Edit
+                    <Eye className="mr-1.5 h-4 w-4" />
+                    Preview
                   </Button>
-                )}
-                {(isTeam || canManage) && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 rounded-lg"
-                        aria-label="More actions"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-52">
-                      {isTeam && (
-                        <DropdownMenuItem asChild>
-                          <Link to="/projects/new" search={{ blueprint: selected.id }}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            New project from this
-                          </Link>
-                        </DropdownMenuItem>
-                      )}
-                      {canManage && (
-                        <>
-                          {isTeam && <DropdownMenuSeparator />}
-                          <DropdownMenuItem onClick={() => onDuplicate(selected)}>
-                            <Copy className="mr-2 h-4 w-4" />
-                            Duplicate
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => onArchiveToggle(selected)}>
-                            {selected.archived ? (
-                              <>
-                                <ArchiveRestore className="mr-2 h-4 w-4" />
-                                Unarchive
-                              </>
-                            ) : (
-                              <>
-                                <Archive className="mr-2 h-4 w-4" />
-                                Archive
-                              </>
-                            )}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => onDelete(selected)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </div>
-            </div>
-
-            {/* Trade, version, created date, the default flag and the labels,
-             * all on one line, spanning the whole card.
-             *
-             * Spanning is the point. Inside the title column this row shares
-             * its width with the action buttons, and at 1280px that is narrow
-             * enough that two labels and the Add trigger wrap to a third line -
-             * which is exactly the height this card was rewritten to give back.
-             * Below the buttons it has the full measure and stays one line.
-             *
-             * The labels used to own a row of their own with a rule above it,
-             * and they are the same class of fact as the trade: what this
-             * blueprint is filed under, not something you work on here. The
-             * section count and the apply count are deliberately absent - both
-             * are stated in full a few pixels below, at the head of the card
-             * that acts on them. The version is the spec's audit half: the
-             * bundle is copied on apply, so this number is what lets a project
-             * say which shape of the blueprint made it.
-             *
-             * A div rather than the p this used to be, because LabelPicker is a
-             * flex container and cannot live inside a paragraph. */}
-            <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-              <span>{selected.category ?? GENERAL_CATEGORY}</span>
-              <span aria-hidden>·</span>
-              <span>v{selected.version}</span>
-              <span aria-hidden>·</span>
-              <span>Created {timeAgo(selected.created_at)}</span>
-              {selected.default_for_category && selected.category && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-bold text-primary"
-                  title={`New ${selected.category} projects start from this blueprint`}
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  className="max-h-[70vh] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto p-3"
                 >
-                  <Star className="h-2.5 w-2.5" />
-                  Default for {selected.category}
-                </span>
-              )}
-              <span aria-hidden className="mx-1 h-3 w-px shrink-0 bg-border/70" />
-              {canManage ? (
-                <LabelPicker
-                  value={selected.labels ?? []}
-                  onChange={(next) => onUpdateLabels(selected, next)}
-                  suggestions={allLabels}
-                  triggerLabel="Add label"
-                  teamId={teamId}
-                  userId={userId}
-                  size="sm"
-                />
-              ) : (selected.labels?.length ?? 0) === 0 ? (
-                <span>No labels</span>
-              ) : (
-                (selected.labels ?? []).map((l) => <LabelChip key={l} label={l} size="sm" />)
-              )}
+                  <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+                    A project with this blueprint applied
+                  </p>
+                  <BlueprintOutcomePreview
+                    className="mt-2"
+                    items={previewItems}
+                    labels={selected.labels ?? []}
+                    projectName={null}
+                    dense
+                  />
+                  <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                    Everything here is copied onto the project at the moment you apply it. Editing
+                    this blueprint afterwards leaves those projects exactly as they are.
+                  </p>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
-
-          {/*
-           * The same two questions, one at a time, below the width where they
-           * can be columns.
-           *
-           * Under 1280px the grid collapses to one column and the panes stack,
-           * which is what put "Applied to" a full section list below the fold:
-           * on a blueprint with a dozen sections, answering "which project is
-           * this on" meant scrolling down past every section and then back up
-           * to carry on editing. Both panes now share one slot and this switch
-           * chooses between them, so the trip is a click rather than a scroll.
-           *
-           * Hidden from 1280px up, where both are on screen at once and there
-           * is nothing to choose.
-           */}
-          {/* A pressed-state group rather than a tablist, deliberately. Above
-              `xl` both cards are on screen and this control is not, so there is
-              no width at which one of them is "the unselected tab" - calling
-              them tabs would announce a state that only half the layout has. */}
-          <div
-            role="group"
-            aria-label="Show contents or applied projects"
-            className="flex shrink-0 items-center gap-1 rounded-xl border border-border/60 bg-muted/40 p-1 xl:hidden"
-          >
-            {(
-              [
-                { key: "contents", label: "Contents", count: sections.length },
-                {
-                  key: "applied",
-                  label: "Applied to",
-                  count: applicationsAvailable ? selectedApplications.length : null,
-                },
-              ] as const
-            ).map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                aria-pressed={pane === t.key}
-                onClick={() => setPane(t.key)}
-                className={cn(
-                  "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
-                  pane === t.key
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {t.label}
-                {t.count !== null && (
-                  <span
-                    className={cn(
-                      "tabular-nums",
-                      pane === t.key ? "text-muted-foreground" : "text-muted-foreground/70",
-                    )}
-                  >
-                    {t.count}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-
-          {/*
-           * The two working panes, side by side above `xl`.
-           *
-           * What is in the blueprint and where it has been applied are the two
-           * questions this screen exists to answer, and they used to be answered
-           * one under the other, so reading the second scrolled the first off
-           * the top. They are now columns of one fixed-height row: each scrolls
-           * inside itself, neither pushes the other off screen, and the header
-           * above them stays put while you read either one.
-           */}
-          {/* Three widths for the usage column, as non-overlapping ranges.
-              16rem is all a 1280px window can spare once the sidebar and the
-              blueprint rail have taken theirs, and at that width a project
-              name is mostly ellipsis - so every pixel past 1400px goes here
-              first, because "which project did this land on" is unanswerable
-              from "20 Charlcote Cr...". Written as explicit ranges rather than
-              a base plus overrides so none of them has to outrank another in
-              the stylesheet.
-
-              `max-xl:min-h` is for the switched layout below them: without a
-              floor, flipping to an 'Applied to' that says "not applied to any
-              project yet" collapsed the row to two lines and took the rail and
-              everything under it up with it, so the switch itself jumped out
-              from under the pointer. 13rem and not more: the floor has to be
-              tall enough to hold a card with one line of text in it and short
-              enough that a 720px-tall window still fits the whole tab without
-              scrolling, which is the thing all of this is for. */}
-          <div className="grid min-h-0 max-xl:min-h-[13rem] flex-1 grid-cols-[minmax(0,1fr)] gap-4 [@media(min-width:1280px)_and_(max-width:1399px)]:grid-cols-[minmax(0,1fr)_16rem] [@media(min-width:1400px)_and_(max-width:1535px)]:grid-cols-[minmax(0,1fr)_20rem] [@media(min-width:1536px)]:grid-cols-[minmax(0,1fr)_22rem]">
-            {/* Contents, and where they land.
-             *
-             * These were two cards. The upper one grouped every item by its
-             * destination and named it; the lower one listed the same items
-             * again in apply order, to be edited. Same facts, twice, one above
-             * the other. The destination summary is now a single row of counts
-             * and the naming happens once, in the list you can actually
-             * reorder. The full grouped picture still runs in the apply dialog,
-             * at the moment it decides something. */}
-            <div
-              className={cn(
-                SURFACE_CARD,
-                "flex min-h-0 min-w-0 flex-col p-4 sm:p-5",
-                // Only below `xl`, where the switch above is what is choosing.
-                pane !== "contents" && "max-xl:hidden",
-              )}
-            >
-              {/* The count sits under the row rather than beside the heading.
-                  Beside it, the heading block and the two buttons together
-                  wanted more than this column has at 1280px, so the buttons
-                  wrapped to a second line and the head grew by 44px - which
-                  comes straight off the list, the one thing in the card worth
-                  the space. */}
-              <div className="flex shrink-0 items-center justify-between gap-3">
-                <h3 className="truncate text-sm font-bold tracking-tight">Contents</h3>
-                <div className="flex shrink-0 items-center gap-2">
-                  {/*
-                   * The full "here is the project you get" picture, in a
-                   * popover rather than an inline panel.
-                   *
-                   * Expanded in place it was 200-400px of card shoved between
-                   * the section list and everything under it, which pushed the
-                   * usage list off the screen the moment you asked the one
-                   * question it answers. Floating over the layout, it costs
-                   * nothing below it and closes on `Esc` or a click away.
-                   */}
-                  <Popover open={previewOpen} onOpenChange={setPreviewOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-lg"
-                        disabled={!hasContent}
-                        title={hasContent ? undefined : "Add at least one section or label first"}
-                      >
-                        <Eye className="mr-1.5 h-4 w-4" />
-                        Preview
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      align="end"
-                      className="max-h-[70vh] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto p-3"
-                    >
-                      <p className="font-manrope text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
-                        A project with this blueprint applied
-                      </p>
-                      <BlueprintOutcomePreview
-                        className="mt-2"
-                        items={previewItems}
-                        labels={selected.labels ?? []}
-                        projectName={null}
-                        dense
-                      />
-                      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                        Everything here is copied onto the project at the moment you apply it.
-                        Editing this blueprint afterwards leaves those projects exactly as they are.
-                      </p>
-                    </PopoverContent>
-                  </Popover>
-                  {canManage && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="sm" className="rounded-lg">
-                          <Plus className="mr-1.5 h-4 w-4" />
-                          Add section
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-64">
-                        {KIND_ORDER.filter((k) => {
-                          // A blueprint must not be a second door to the kinds
-                          // the hub is parking. Existing sections of these kinds
-                          // still render; this only stops adding new ones.
-                          if (!SHOW_WALKTHROUGH_TEMPLATES && k === "walkthrough") return false;
-                          if (!SHOW_LABEL_SETS && k === "label_set") return false;
-                          return true;
-                        }).map((k) => {
-                          const Icon = KIND_META[k].icon;
-                          /*
-                           * "zero-to-one workflow", from the spec. A workflow
-                           * becomes the project's status tracker and a project has
-                           * one status, so a second one has no meaning. Disabled
-                           * with the reason on the row rather than hidden: a kind
-                           * that vanishes from the menu reads as a bug, and the
-                           * author would go looking for it.
-                           */
-                          const taken =
-                            SINGLETON_KINDS.has(k) &&
-                            sections.some((s) => s.kind === k && !s.missing);
-                          return (
-                            <DropdownMenuItem
-                              key={k}
-                              className="items-start gap-2"
-                              disabled={taken}
-                              onClick={() => onPickKind(k)}
-                            >
-                              <span
-                                className={cn(
-                                  "mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded",
-                                  KIND_META[k].tint,
-                                )}
-                              >
-                                <Icon className="h-3.5 w-3.5" />
-                              </span>
-                              <span className="min-w-0">
-                                <span className="block text-sm font-semibold">
-                                  {KIND_META[k].label}
-                                </span>
-                                <span className="block text-[11px] leading-snug text-muted-foreground">
-                                  {taken
-                                    ? `Already in this blueprint. A blueprint carries at most one ${KIND_META[k].label.toLowerCase()}.`
-                                    : KIND_OUTCOME[k].becomes}
-                                </span>
-                              </span>
-                            </DropdownMenuItem>
-                          );
-                        })}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
-              </div>
-
-              {/* "What happens when I apply this", in one row instead of a
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-border bg-card">
+            {/* "What happens when I apply this", in one row instead of a
                 panel: the project tabs that gain something, and how much. Each
                 chip opens on hover or focus to name what lands there, so the
                 detail is a pointer-move away rather than a scroll away.
@@ -2520,152 +2546,152 @@ function BlueprintsTab(props: {
                 type over a list that only has room for three rows is the wrong
                 trade, and the two facts were always one sentence: this many
                 sections, applied in this order, landing here. */}
-              {lands.length > 0 && (
-                <div className="mt-2.5 flex shrink-0 flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] text-muted-foreground">
-                    {sections.length > 0
-                      ? `${sections.length} section${sections.length === 1 ? "" : "s"}, applied in order, landing in`
-                      : "Landing in"}
-                  </span>
-                  {lands.map(({ destination, count }) => {
-                    const dest = DESTINATION[destination];
-                    const DestIcon = dest.icon;
-                    const names = landedNames.get(destination) ?? [];
-                    return (
-                      <HoverCard key={destination} openDelay={120} closeDelay={80}>
-                        <HoverCardTrigger asChild>
-                          {/* A button, not a span: hover alone would leave this
+            {lands.length > 0 && (
+              <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border/60 px-4 py-2.5">
+                <span className="text-[11px] text-muted-foreground">
+                  {sections.length > 0
+                    ? `${sections.length} section${sections.length === 1 ? "" : "s"}, applied in order, landing in`
+                    : "Landing in"}
+                </span>
+                {lands.map(({ destination, count }) => {
+                  const dest = DESTINATION[destination];
+                  const DestIcon = dest.icon;
+                  const names = landedNames.get(destination) ?? [];
+                  return (
+                    <HoverCard key={destination} openDelay={120} closeDelay={80}>
+                      <HoverCardTrigger asChild>
+                        {/* A button, not a span: hover alone would leave this
                             row unreachable by keyboard, and Radix opens the
                             card on focus for anything focusable. */}
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-border hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            <DestIcon className="h-3 w-3" />
-                            {dest.tab}
-                            <span className="text-foreground">+{count}</span>
-                          </button>
-                        </HoverCardTrigger>
-                        <HoverCardContent
-                          align="start"
-                          className="max-h-[50vh] w-72 overflow-y-auto p-3"
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-border hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                          <p className="text-xs font-bold text-foreground">
-                            {dest.scope === "workspace" ? "Your workspace" : "The project"} →{" "}
-                            {dest.tab}
-                          </p>
-                          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                            {dest.blurb}
-                          </p>
-                          <ul className="mt-2 space-y-1">
-                            {names.map((n, i) => (
-                              <li
-                                key={`${destination}-${i}-${n.name}`}
-                                className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-1"
-                              >
-                                <span className="min-w-0 flex-1 truncate text-[11.5px] font-semibold text-foreground">
-                                  {n.name}
-                                </span>
-                                <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                                  {n.label}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        </HoverCardContent>
-                      </HoverCard>
-                    );
-                  })}
-                </div>
-              )}
+                          <DestIcon className="h-3 w-3" />
+                          {dest.tab}
+                          <span className="text-foreground">+{count}</span>
+                        </button>
+                      </HoverCardTrigger>
+                      <HoverCardContent
+                        align="start"
+                        className="max-h-[50vh] w-72 overflow-y-auto p-3"
+                      >
+                        <p className="text-xs font-bold text-foreground">
+                          {dest.scope === "workspace" ? "Your workspace" : "The project"} →{" "}
+                          {dest.tab}
+                        </p>
+                        <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                          {dest.blurb}
+                        </p>
+                        <ul className="mt-2 space-y-1">
+                          {names.map((n, i) => (
+                            <li
+                              key={`${destination}-${i}-${n.name}`}
+                              className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-1"
+                            >
+                              <span className="min-w-0 flex-1 truncate text-[11.5px] font-semibold text-foreground">
+                                {n.name}
+                              </span>
+                              <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                                {n.label}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </HoverCardContent>
+                    </HoverCard>
+                  );
+                })}
+              </div>
+            )}
 
-              {sections.length === 0 ? (
-                <div className="mt-4 flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-10 text-center">
-                  <LayoutTemplate className="h-6 w-6 text-muted-foreground/70" />
-                  <p className="mt-2 text-sm font-semibold">Nothing attached yet</p>
-                  <p className="mt-0.5 max-w-sm text-xs leading-relaxed text-muted-foreground">
-                    A blueprint is a bundle of things you have already built. Add checklists,
-                    workflows, documents, reports or label sets and they all land on the project in
-                    one click.
-                  </p>
-                  {/* The "build the piece first" pointer lives here and only
+            {sections.length === 0 ? (
+              <div className="m-4 flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto rounded-[12px] border border-dashed border-border/70 bg-muted/20 px-4 py-10 text-center">
+                <LayoutTemplate className="h-6 w-6 text-muted-foreground/70" />
+                <p className="mt-2 text-sm font-semibold">Nothing attached yet</p>
+                <p className="mt-0.5 max-w-sm text-xs leading-relaxed text-muted-foreground">
+                  A blueprint is a bundle of things you have already built. Add checklists,
+                  workflows, documents, reports or label sets and they all land on the project in
+                  one click.
+                </p>
+                {/* The "build the piece first" pointer lives here and only
                     here. It used to sit under every populated list too, five
                     inline links deep, where the answer was already known. */}
-                  {canManage && (
-                    <p className="mt-3 max-w-sm text-[11px] leading-relaxed text-muted-foreground">
-                      Need a new piece first? Build it under{" "}
-                      {(
-                        ["checklists", "workflows", "documents", "reports", "label-sets"] as const
-                      ).map((key, i, arr) => (
-                        <span key={key}>
-                          <button
-                            className="font-semibold text-primary hover:underline"
-                            onClick={() => onGoToTab(key)}
-                          >
-                            {key === "label-sets"
-                              ? "Label sets"
-                              : key[0].toUpperCase() + key.slice(1)}
-                          </button>
-                          {i < arr.length - 2 ? ", " : i === arr.length - 2 ? " or " : ""}
-                        </span>
-                      ))}
-                      , then come back here and add it.
-                    </p>
-                  )}
-                </div>
-              ) : (
-                // The pane's scroller. A twenty-section blueprint scrolls here,
-                // inside its own column, instead of scrolling the page and
-                // taking the header and the usage list with it.
-                /* `max-h` for every layout except the pinned one, where the
+                {canManage && (
+                  <p className="mt-3 max-w-sm text-[11px] leading-relaxed text-muted-foreground">
+                    Need a new piece first? Build it under{" "}
+                    {(
+                      ["checklists", "workflows", "documents", "reports", "label-sets"] as const
+                    ).map((key, i, arr) => (
+                      <span key={key}>
+                        <button
+                          className="font-semibold text-primary hover:underline"
+                          onClick={() => onGoToTab(key)}
+                        >
+                          {key === "label-sets"
+                            ? "Label sets"
+                            : key[0].toUpperCase() + key.slice(1)}
+                        </button>
+                        {i < arr.length - 2 ? ", " : i === arr.length - 2 ? " or " : ""}
+                      </span>
+                    ))}
+                    , then come back here and add it.
+                  </p>
+                )}
+              </div>
+            ) : (
+              // The pane's scroller. A twenty-section blueprint scrolls here,
+              // inside its own column, instead of scrolling the page and
+              // taking the header and the usage list with it.
+              /* `max-h` for every layout except the pinned one, where the
                    flex chain has already measured the height and a cap would
                    only fight it. Without it a thirty-section blueprint on a
                    narrow window is thirty rows of page scroll again, which is
                    the thing the switch above exists to stop. */
-                <ul className="@container mt-4 max-h-[46vh] min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 workspace:max-h-none">
-                  {sections.map((r, idx) => {
-                    const meta = KIND_META[r.kind];
-                    const Icon = meta.icon;
-                    return (
-                      <li
-                        key={`${r.legacy ? "chk" : "it"}-${r.id}`}
-                        className="group flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2 transition-colors hover:border-border"
-                      >
-                        {/* Position as a number, not a chip. A filled badge next
+              <ul className="@container min-h-0 flex-1 overflow-y-auto workspace:max-h-none">
+                {sections.map((r, idx) => {
+                  const meta = KIND_META[r.kind];
+                  const Icon = meta.icon;
+                  return (
+                    <li
+                      key={`${r.legacy ? "chk" : "it"}-${r.id}`}
+                      className="group flex w-full items-center gap-3 border-b border-border/60 px-3.5 py-2.5 transition-colors last:border-b-0 hover:bg-secondary/40"
+                    >
+                      {/* Position as a number, not a chip. A filled badge next
                           to a tinted icon read as two icons. */}
-                        <span className="w-3.5 shrink-0 text-right text-[11px] font-bold tabular-nums text-muted-foreground/70">
-                          {idx + 1}
-                        </span>
-                        <span
-                          className={cn(
-                            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
-                            meta.tint,
-                          )}
-                        >
-                          <Icon className="h-3.5 w-3.5" />
-                        </span>
-                        {/* One line. The kind used to be stated three times per
+                      <span className="w-3.5 shrink-0 text-right text-[11px] font-bold tabular-nums text-muted-foreground/70">
+                        {idx + 1}
+                      </span>
+                      <span
+                        className={cn(
+                          "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+                          meta.tint,
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                      {/* One line. The kind used to be stated three times per
                           row - tinted icon, outlined badge, and a sentence
                           spelling out what it becomes - which is what made a
                           five-section blueprint a wall. The icon carries the
                           kind, the word beside it names it, and the "Lands in"
                           row above says where it all goes. */}
-                        <span className="min-w-0 flex-1">
-                          <span
-                            className={cn(
-                              "block truncate text-sm font-semibold",
-                              r.missing && "text-destructive",
-                            )}
-                          >
-                            {r.name}
-                          </span>
-                          {r.missing && (
-                            <span className="block truncate text-[11px] text-destructive/80">
-                              The source template was deleted - remove this section
-                            </span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={cn(
+                            "block truncate text-sm font-semibold",
+                            r.missing && "text-destructive",
                           )}
+                        >
+                          {r.name}
                         </span>
-                        {/* The kind in words, but only where the column is
+                        {r.missing && (
+                          <span className="block truncate text-[11px] text-destructive/80">
+                            The source template was deleted - remove this section
+                          </span>
+                        )}
+                      </span>
+                      {/* The kind in words, but only where the column is
                             wide enough to spend 65px on it. A container query
                             and not a media query: this list is a narrow second
                             column at 1280px and a full-width pane at 1024px,
@@ -2673,150 +2699,209 @@ function BlueprintsTab(props: {
                             hidden the tinted icon still carries the kind, and
                             the 65px goes to the name, which was truncating to
                             "Pre-Install Saf...". */}
-                        <span className="hidden shrink-0 text-[11px] text-muted-foreground @min-[26rem]:block">
-                          {meta.label}
-                        </span>
-                        {/* Revealed on hover or keyboard focus on a pointer
+                      <span
+                        className={cn(REFERENCE_CHIP, "hidden shrink-0 @min-[26rem]:inline-flex")}
+                      >
+                        {meta.label}
+                      </span>
+                      {/* Revealed on hover or keyboard focus on a pointer
                           device, always present on touch, where there is no
                           hover to reveal them with. Space is reserved either
                           way, so nothing shifts. */}
-                        {canManage && (
-                          <div className="flex shrink-0 items-center transition-opacity focus-within:opacity-100 group-hover:opacity-100 sm:opacity-0">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-muted-foreground disabled:opacity-30"
-                              disabled={idx === 0 || reordering}
-                              onClick={() => onMove(idx, -1)}
-                              aria-label={`Move ${r.name} up`}
-                            >
-                              <ArrowUp className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-muted-foreground disabled:opacity-30"
-                              disabled={idx === sections.length - 1 || reordering}
-                              onClick={() => onMove(idx, 1)}
-                              aria-label={`Move ${r.name} down`}
-                            >
-                              <ArrowDown className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                              onClick={() => onRemove(r)}
-                              aria-label={`Remove ${r.name}`}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        )}
-                      </li>
+                      {canManage && (
+                        <div className="flex shrink-0 items-center transition-opacity focus-within:opacity-100 group-hover:opacity-100 sm:opacity-0">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground disabled:opacity-30"
+                            disabled={idx === 0 || reordering}
+                            onClick={() => onMove(idx, -1)}
+                            aria-label={`Move ${r.name} up`}
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground disabled:opacity-30"
+                            disabled={idx === sections.length - 1 || reordering}
+                            onClick={() => onMove(idx, 1)}
+                            aria-label={`Move ${r.name} down`}
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => onRemove(r)}
+                            aria-label={`Remove ${r.name}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {canManage && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  {/* The mockup's accent add-row: the picker lives at the foot
+                        of the list it adds to, not up in a header. */}
+                  <button
+                    type="button"
+                    className="flex shrink-0 items-center gap-1.5 border-t border-border/60 px-4 py-2.5 text-left text-[12.5px] font-semibold text-primary transition-colors hover:bg-secondary/50"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add section
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-64">
+                  {KIND_ORDER.filter((k) => {
+                    // A blueprint must not be a second door to the kinds the
+                    // hub is parking. Existing sections of these kinds still
+                    // render; this only stops adding new ones.
+                    if (!SHOW_WALKTHROUGH_TEMPLATES && k === "walkthrough") return false;
+                    if (!SHOW_LABEL_SETS && k === "label_set") return false;
+                    return true;
+                  }).map((k) => {
+                    const Icon = KIND_META[k].icon;
+                    /*
+                     * "zero-to-one workflow", from the spec. A workflow
+                     * becomes the project's status tracker and a project has
+                     * one status, so a second one has no meaning. Disabled
+                     * with the reason on the row rather than hidden: a kind
+                     * that vanishes from the menu reads as a bug, and the
+                     * author would go looking for it.
+                     */
+                    const taken =
+                      SINGLETON_KINDS.has(k) && sections.some((s) => s.kind === k && !s.missing);
+                    return (
+                      <DropdownMenuItem
+                        key={k}
+                        className="items-start gap-2"
+                        disabled={taken}
+                        onClick={() => onPickKind(k)}
+                      >
+                        <span
+                          className={cn(
+                            "mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded",
+                            KIND_META[k].tint,
+                          )}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold">{KIND_META[k].label}</span>
+                          <span className="block text-[11px] leading-snug text-muted-foreground">
+                            {taken
+                              ? `Already in this blueprint. A blueprint carries at most one ${KIND_META[k].label.toLowerCase()}.`
+                              : KIND_OUTCOME[k].becomes}
+                          </span>
+                        </span>
+                      </DropdownMenuItem>
                     );
                   })}
-                </ul>
-              )}
-            </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </div>
 
-            {/*
-             * Applied to.
-             *
-             * The card stays mounted when the ledger is unreadable and says so,
-             * rather than deleting itself. Hiding it meant the one screen that
-             * answers "where has this blueprint been used" silently ceased to
-             * exist, and nothing distinguished that from a blueprint that had
-             * genuinely never been applied.
-             *
-             * Titled "Applied to" rather than "Where it has been used" since it
-             * became a 20rem column: the short title is the one that survives
-             * the narrower measure, and it names the same thing.
-             */}
-            <div
-              className={cn(
-                SURFACE_CARD,
-                "flex min-h-0 min-w-0 flex-col p-4 sm:p-5",
-                pane !== "applied" && "max-xl:hidden",
-              )}
-            >
-              <div className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <h3 className="text-sm font-bold tracking-tight">Applied to</h3>
-                {/* The count lives with the list it counts. The blueprint's own
+        {/*
+         * Applied to.
+         *
+         * The card stays mounted when the ledger is unreadable and says so,
+         * rather than deleting itself. Hiding it meant the one screen that
+         * answers "where has this blueprint been used" silently ceased to
+         * exist, and nothing distinguished that from a blueprint that had
+         * genuinely never been applied.
+         *
+         * Titled "Applied to" rather than "Where it has been used" since it
+         * became a 20rem column: the short title is the one that survives
+         * the narrower measure, and it names the same thing.
+         */}
+        <div className={cn("flex min-h-0 min-w-0 flex-col", pane !== "applied" && "max-lg:hidden")}>
+          <div className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-3 pb-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.05em] text-faint">
+              Applied to
+            </span>
+            {/* The count lives with the list it counts. The blueprint's own
                   header used to carry it as well, one card up. */}
-                {applicationsAvailable && selectedApplications.length > 0 && (
-                  <span className="text-[11.5px] text-muted-foreground">
-                    {selectedApplications.length} project
-                    {selectedApplications.length === 1 ? "" : "s"}
-                  </span>
-                )}
-              </div>
-              {/* Nothing to show is one quiet line, not a 90px dashed box drawn
+            {applicationsAvailable && selectedApplications.length > 0 && (
+              <span className="font-mono text-[11px] text-faint">
+                {selectedApplications.length}
+              </span>
+            )}
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-border bg-card p-4">
+            {/* Nothing to show is one quiet line, not a 90px dashed box drawn
                 around a sentence saying there is nothing to show. */}
-              {!applicationsAvailable ? (
-                <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
-                  Usage history isn’t available on this environment yet, so we can’t show where this
-                  blueprint has been applied.
-                </p>
-              ) : selectedApplications.length === 0 ? (
-                <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
-                  Not applied to any project yet. Every apply is recorded here, with what it
-                  created.
-                </p>
-              ) : (
-                /* The whole ledger, scrolled inside the column. It used to stop
+            {!applicationsAvailable ? (
+              <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
+                Usage history isn’t available on this environment yet, so we can’t show where this
+                blueprint has been applied.
+              </p>
+            ) : selectedApplications.length === 0 ? (
+              <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
+                Not applied to any project yet. Every apply is recorded here, with what it created.
+              </p>
+            ) : (
+              /* The whole ledger, scrolled inside the column. It used to stop
                  at twelve and say "and N more", because past twelve the page
                  itself was the scrollbar; the column has its own now, so the
                  truncation has nothing left to protect. */
-                /* `workspace:pb-12` clears the floating camera button, which is
+              /* `workspace:pb-12` clears the floating camera button, which is
                    fixed to the bottom right of the window and so lands on this
                    column and no other. Before the panes reached the bottom of
                    the screen it sat over page padding and hit nothing; now the
                    last row of the ledger ends where it begins, instead of
                    under it where it cannot be clicked. */
-                <ul className="mt-3 max-h-[46vh] min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 workspace:max-h-none workspace:pb-12">
-                  {selectedApplications.map((a) => {
-                    const total = Object.values(a.counts ?? {}).reduce((x, y) => x + y, 0);
-                    return (
-                      <li key={a.id}>
-                        <Link
-                          to="/projects/$projectId"
-                          params={{ projectId: a.project_id }}
-                          // Even at its widest this column truncates the longer
-                          // job names, so the full one is on hover.
-                          title={a.project_name ?? "Project"}
-                          className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2 transition-colors hover:border-primary/30"
-                        >
-                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-                            <FolderOpen className="h-3.5 w-3.5" />
-                          </span>
-                          {/* No chevron. It cost 24px of a column whose whole
+              <ul className="mt-3 max-h-[46vh] min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 workspace:max-h-none workspace:pb-12">
+                {selectedApplications.map((a) => {
+                  const total = Object.values(a.counts ?? {}).reduce((x, y) => x + y, 0);
+                  return (
+                    <li key={a.id}>
+                      <Link
+                        to="/projects/$projectId"
+                        params={{ projectId: a.project_id }}
+                        // Even at its widest this column truncates the longer
+                        // job names, so the full one is on hover.
+                        title={a.project_name ?? "Project"}
+                        className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2 transition-colors hover:border-primary/30"
+                      >
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                          <FolderOpen className="h-3.5 w-3.5" />
+                        </span>
+                        {/* No chevron. It cost 24px of a column whose whole
                               job is fitting a project name, and the row is a
                               link that already lifts its border on hover. */}
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold">
-                              {a.project_name ?? "Project"}
-                            </span>
-                            {/* "3 items · 2d ago", not "3 items created · 2d
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold">
+                            {a.project_name ?? "Project"}
+                          </span>
+                          {/* "3 items · 2d ago", not "3 items created · 2d
                                 ago". The verb was the first thing to be cut
                                 off, and the card it sits under is titled
                                 "Applied to", which supplies it. */}
-                            <span className="block truncate text-[11px] text-muted-foreground">
-                              {total} item{total === 1 ? "" : "s"}
-                              {a.failed_count > 0 ? ` · ${a.failed_count} failed` : ""} ·{" "}
-                              {timeAgo(a.created_at)}
-                            </span>
+                          <span className="block truncate text-[11px] text-muted-foreground">
+                            {total} item{total === 1 ? "" : "s"}
+                            {a.failed_count > 0 ? ` · ${a.failed_count} failed` : ""} ·{" "}
+                            {timeAgo(a.created_at)}
                           </span>
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
