@@ -229,12 +229,22 @@ describe("the Templates page files the library by trade", () => {
   });
 
   it("lets an author pick a trade for their own template", () => {
-    // Otherwise every template a team writes lands in General for good, and
-    // the trade sections only ever describe the built-ins.
-    expect(MANAGER).toMatch(/setNewCategory/);
+    /*
+     * Otherwise every template a team writes lands in General for good, and
+     * the trade sections only ever describe the built-ins.
+     *
+     * The picker moved with the create flow: Documents now opens the mockup's
+     * three-step wizard, so the trade is chosen on its first step and written
+     * through `wizardSave` on the manager.
+     */
     expect(MANAGER).toMatch(
-      /category: newCategory === GENERAL_CATEGORY \? undefined : newCategory/,
+      "category: payload.category === GENERAL_CATEGORY ? undefined : payload.category",
     );
+    const WIZARD = readFileSync(
+      join(ROOT, "apps/web/src/features/settings/components/DocumentTemplateWizard.tsx"),
+      "utf8",
+    );
+    expect(WIZARD, "the wizard has no trade picker").toMatch(/setCategory/);
   });
 
   it("lets a card be refiled without opening the editor", () => {
@@ -1137,10 +1147,12 @@ describe("unsaved work survives a stray click", () => {
   });
 
   it("every way into the editor records what it opened with", () => {
-    // Without a baseline on all three, one of them would ask on every close.
+    // Edit and Duplicate are the two ways into the editor now. New template
+    // goes through the wizard and saves straight to the library, so there is
+    // no editor to open and no baseline to record.
     const src = stripComments(MANAGER);
     const opens = [...src.matchAll(/setEditor\(\{[\s\S]*?\}\);/g)].map((m) => m[0]);
-    expect(opens.length).toBeGreaterThanOrEqual(3);
+    expect(opens.length).toBeGreaterThanOrEqual(2);
     for (const open of opens) {
       expect(open, `an editor is opened without an original: ${open.slice(0, 80)}`).toContain(
         "original:",
@@ -1151,7 +1163,14 @@ describe("unsaved work survives a stray click", () => {
   it("the editor and the New template dialog ignore clicks outside", () => {
     const src = stripComments(MANAGER);
     const guards = [...src.matchAll(/onInteractOutside=\{\(e\) => e\.preventDefault\(\)\}/g)];
-    expect(guards.length).toBe(2);
+    expect(guards.length).toBe(1);
+    // The editor is the one guarded dialog left in this file; New template
+    // moved to the wizard, which carries its own guard.
+    const WIZARD = readFileSync(
+      join(ROOT, "apps/web/src/features/settings/components/DocumentTemplateWizard.tsx"),
+      "utf8",
+    );
+    expect(WIZARD).toMatch(/onInteractOutside/);
   });
 });
 

@@ -8,13 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,8 +26,9 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
 import { HelpTip } from "@/components/HelpTip";
-import { SectionHeading, SURFACE_BUTTON, SURFACE_CARD_INTERACTIVE } from "@/components/ui/surface";
+import { SURFACE_BUTTON, SURFACE_CARD_INTERACTIVE } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
+import { REFERENCE_MONO } from "@/components/ui/reference";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -85,6 +80,11 @@ import {
 import { toast } from "sonner";
 import { getDocumentTemplate } from "@/lib/project-pages.functions";
 import { UseTemplateDialog } from "@/features/projects/components/UseTemplateDialog";
+import { ReportTemplatesManager } from "@/features/settings/components/ReportTemplatesManager";
+import {
+  DocumentTemplateWizard,
+  type DocumentWizardPayload,
+} from "@/features/settings/components/DocumentTemplateWizard";
 import {
   CATEGORY_ORDER,
   GENERAL_CATEGORY,
@@ -115,6 +115,16 @@ const FILING_META: Record<FilingBucket, { label: string; hint: string }> = {
   report: { label: "Reports", hint: "Lands in the project's Reports tab" },
   invoice: { label: "Invoices", hint: "Lands in Documents, filed as an invoice" },
   document: { label: "Documents", hint: "Lands in the project's Documents tab" },
+};
+
+/** Tinted badge per document style - the mockup's `.type-badge`. */
+const TYPE_BADGE_TINT: Record<DocStyle, string> = {
+  report: "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300",
+  letter: "bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-300",
+  checklist: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+  memo: "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+  walkthrough: "bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300",
+  sitelog: "bg-stone-100 text-stone-700 dark:bg-stone-900/40 dark:text-stone-300",
 };
 
 interface DocumentTemplate {
@@ -195,6 +205,8 @@ interface EditorState {
 interface Props {
   teamId: string | null;
   canManage: boolean;
+  /** Which half of the merged Documents tab (the mockup's two sub-tabs). */
+  initialTab?: "documents" | "reports";
 }
 
 // ---------------------------------------------------------------------------
@@ -468,16 +480,6 @@ function parseBody(raw: any): DocBody {
   return { style: "report", html: "", description: "", filesUnder: "report" };
 }
 
-/**
- * The trade dropdown's "no filter" value.
- *
- * A sentinel rather than "", because a Radix SelectItem cannot carry an empty
- * value: it uses one to mean "nothing selected" and clears the field instead.
- * Same spelling as the blueprint rail's filter on the Templates page, so the
- * two controls read the same in the DOM.
- */
-const ALL_TRADES = "__all";
-
 /** The section heading a template files under. Same key the picker groups by. */
 function templateCategory(t: DocumentTemplate): string {
   return parseBody(t.body).category ?? GENERAL_CATEGORY;
@@ -722,7 +724,7 @@ const PlaceholderChips = Extension.create<{ getValue: (token: string) => string 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export function DocumentTemplatesManager({ teamId, canManage }: Props) {
+export function DocumentTemplatesManager({ teamId, canManage, initialTab = "documents" }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -756,6 +758,12 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   const [items, setItems] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
+  /** The mockup's two sub-tabs inside Documents: document or report templates. */
+  const [subTab, setSubTab] = useState<"documents" | "reports">(initialTab);
+  const [reportCount, setReportCount] = useState(0);
+  useEffect(() => {
+    setSubTab(initialTab);
+  }, [initialTab]);
   /** Which trade section is on screen. `null` = every one of them. */
   const [trade, setTrade] = useState<string | null>(null);
   /*
@@ -771,9 +779,6 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [saving, setSaving] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newStyle, setNewStyle] = useState<DocStyle>("report");
-  const [newCategory, setNewCategory] = useState<string>(GENERAL_CATEGORY);
   /** Template awaiting a project to be applied to. */
   const [useFor, setUseFor] = useState<DocumentTemplate | null>(null);
   const [projects, setProjects] = useState<
@@ -837,6 +842,13 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
     const { data, error } = await q;
     if (error) toast.error(error.message);
     else setItems((data ?? []) as unknown as DocumentTemplate[]);
+    // The reports sub-tab's count for the mockup's strip. Absent becomes zero
+    // rather than an error banner - a pre-migration database still lists 0.
+    const { count } = await supabase
+      .from("report_templates" as any)
+      .select("id", { count: "exact", head: true })
+      .eq("archived", false);
+    setReportCount(count ?? 0);
     setLoading(false);
   }
 
@@ -971,50 +983,41 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
 
   const shownSections = trade ? sections.filter(([heading]) => heading === trade) : sections;
 
-  async function createTemplate() {
-    if (!newName.trim()) {
+  /** The mockup wizard's Save: write the finished template, back to the list.
+   *  The rich editor still opens from a card's Edit button. */
+  const wizardSave = async (payload: DocumentWizardPayload): Promise<boolean> => {
+    if (!payload.name.trim()) {
       toast.error("Give your template a name");
-      return;
+      return false;
     }
-    const preset = STYLE_PRESETS.find((p) => p.key === newStyle)!;
     const body: DocBody = {
-      style: preset.key,
-      html: preset.html,
-      description: "",
+      style: "report",
+      html: payload.html,
+      description: payload.description.trim() || "",
       // General is the absence of a trade, not a trade of its own - storing it
       // would file the template under a category the picker does not rank.
-      category: newCategory === GENERAL_CATEGORY ? undefined : newCategory,
+      category: payload.category === GENERAL_CATEGORY ? undefined : payload.category,
     };
     const { data, error } = await supabase
       .from("document_templates" as any)
       .insert({
-        name: newName.trim(),
+        name: payload.name.trim(),
         team_id: teamId,
         created_by: user?.id,
         body: body as any,
-        fields: extractFields(preset.html),
+        fields: payload.fields,
       })
       .select()
       .single();
     if (error) {
       toast.error(error.message);
-      return;
+      return false;
     }
     toast.success("Template created");
-    setCreateOpen(false);
-    setNewName("");
-    setNewStyle("report");
-    setNewCategory(GENERAL_CATEGORY);
     setItems((prev) => [data as unknown as DocumentTemplate, ...prev]);
-    const created = data as unknown as DocumentTemplate;
-    const createdBody = parseBody(created.body);
-    setEditor({
-      template: created,
-      name: created.name,
-      body: createdBody,
-      original: { name: created.name, html: createdBody.html },
-    });
-  }
+    setCreateOpen(false);
+    return true;
+  };
 
   /*
    * Open an EXISTING template through the API rather than from the row we
@@ -1315,21 +1318,40 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
   return (
     <div className="space-y-4">
       <ChipStyles />
-      <SectionHeading
-        eyebrow="Reusable documents"
-        title={
-          <span className="inline-flex items-center gap-2">
-            Document templates
-            <HelpTip label="a document template" side="bottom" align="start" className="w-80">
-              A document you write once and reuse on every job: an invoice, a site log, a scope of
-              work. The placeholders in it fill themselves in from the project you use it on, so the
-              client name, address and dates are never typed twice.
-            </HelpTip>
-          </span>
-        }
-        description="Word-style templates with dynamic placeholders that auto-fill from project data."
-        actions={
-          <>
+      {/* The mockup's two tabs inside Documents. Reports no longer has its own
+          top-level strip entry - it lives here, and an old ?tab=reports link
+          lands on the right sub-tab. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-7 overflow-x-auto border-b border-border">
+          <button
+            type="button"
+            onClick={() => setSubTab("documents")}
+            aria-current={subTab === "documents" ? "page" : undefined}
+            className={cn(
+              "shrink-0 whitespace-nowrap border-b-[2.5px] pb-2.5 pt-2.5 text-sm font-semibold transition-colors",
+              subTab === "documents"
+                ? "border-primary text-foreground"
+                : "border-transparent text-faint hover:text-muted-foreground",
+            )}
+          >
+            Document templates <span className={REFERENCE_MONO}>{visible.length}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubTab("reports")}
+            aria-current={subTab === "reports" ? "page" : undefined}
+            className={cn(
+              "shrink-0 whitespace-nowrap border-b-[2.5px] pb-2.5 pt-2.5 text-sm font-semibold transition-colors",
+              subTab === "reports"
+                ? "border-primary text-foreground"
+                : "border-transparent text-faint hover:text-muted-foreground",
+            )}
+          >
+            Report templates <span className={REFERENCE_MONO}>{reportCount}</span>
+          </button>
+        </div>
+        {subTab === "documents" && (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Button
               variant="outline"
               className={SURFACE_BUTTON}
@@ -1356,11 +1378,13 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                 {isMobile && <Monitor className="h-3.5 w-3.5 opacity-70" />}
               </Button>
             )}
-          </>
-        }
-      />
+          </div>
+        )}
+      </div>
 
-      {/*
+      {subTab === "documents" ? (
+        <>
+          {/*
         The model in one line, with the whole of it one hover away.
 
         The paragraphs that used to print here were right, and nobody read them:
@@ -1379,51 +1403,53 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
         should be allowed to be applied to projects ... creating duplicates is
         a big mess."
       */}
-      <div className="flex items-center gap-2.5 rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
-        <Sparkles className="h-4 w-4 shrink-0" />
-        <p className="font-semibold">
-          Templates stay clean. Choose a document template, assign it to a project and modify it
-          there.
-        </p>
-        <HelpTip
-          label="using a template on a job"
-          side="bottom"
-          align="start"
-          className="w-[24rem] space-y-2"
-          triggerClassName="opacity-70"
-        >
-          <p>
-            Hit <strong>Use in a project</strong> on any template below and pick the job. You get a
-            preview with that project&rsquo;s details already merged in, plus a box for each thing
-            it can&rsquo;t know, so the document arrives finished. It&rsquo;s filed under that
-            project&rsquo;s <strong>Documents</strong>, where you can rewrite as much of it as the
-            job needs: the template itself never changes, and no copy of it is created. The same
-            templates are in a project under <strong>Documents → Create → More Templates</strong>.
-          </p>
-          <p>
-            To change a template for good, hit <strong>Edit</strong>. On an example that gives you
-            your company&rsquo;s own version, which takes the example&rsquo;s place here and in the
-            project picker, so the list stays the same length. Delete it and the example is back.
-          </p>
-        </HelpTip>
-      </div>
+          <div className="flex items-center gap-2.5 rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
+            <Sparkles className="h-4 w-4 shrink-0" />
+            <p className="font-semibold">
+              Templates stay clean. Choose a document template, assign it to a project and modify it
+              there.
+            </p>
+            <HelpTip
+              label="using a template on a job"
+              side="bottom"
+              align="start"
+              className="w-[24rem] space-y-2"
+              triggerClassName="opacity-70"
+            >
+              <p>
+                Hit <strong>Use in a project</strong> on any template below and pick the job. You
+                get a preview with that project&rsquo;s details already merged in, plus a box for
+                each thing it can&rsquo;t know, so the document arrives finished. It&rsquo;s filed
+                under that project&rsquo;s <strong>Documents</strong>, where you can rewrite as much
+                of it as the job needs: the template itself never changes, and no copy of it is
+                created. The same templates are in a project under{" "}
+                <strong>Documents → Create → More Templates</strong>.
+              </p>
+              <p>
+                To change a template for good, hit <strong>Edit</strong>. On an example that gives
+                you your company&rsquo;s own version, which takes the example&rsquo;s place here and
+                in the project picker, so the list stays the same length. Delete it and the example
+                is back.
+              </p>
+            </HelpTip>
+          </div>
 
-      {/* What a phone can do here, said once at the top rather than only when
+          {/* What a phone can do here, said once at the top rather than only when
           somebody taps Edit and gets a toast back. Same breakpoint as the
           editor's own `md` split. */}
-      {isMobile && canManage && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/50 px-4 py-3 text-sm">
-          <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-          <p className="text-muted-foreground">
-            <span className="font-semibold text-foreground">
-              Writing and editing templates is a desktop job.
-            </span>{" "}
-            On a phone you can use any template on a project and finish the document there.
-          </p>
-        </div>
-      )}
+          {isMobile && canManage && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/50 px-4 py-3 text-sm">
+              <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <p className="text-muted-foreground">
+                <span className="font-semibold text-foreground">
+                  Writing and editing templates is a desktop job.
+                </span>{" "}
+                On a phone you can use any template on a project and finish the document there.
+              </p>
+            </div>
+          )}
 
-      {/* Trade filter. Eleven sections is a long page to scroll, so a sparky can
+          {/* Trade filter. Eleven sections is a long page to scroll, so a sparky can
           cut it to the one that is theirs. Hidden when everything on the page
           is one trade already, where it would only ever be a no-op.
 
@@ -1437,199 +1463,178 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
           Options follow `sections`, which the business profile reorders, so the
           company's own trade is the first one after "All trades" rather than
           wherever the fixed order happens to put it. */}
-      {sections.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[1.4px] text-muted-foreground">
-            Trade
-            <HelpTip label="the trade filter" side="bottom" align="start" className="w-72">
-              Cuts the page down to the templates filed under one trade. It only changes what you
-              are looking at, nothing is hidden from anyone else, and the star marks your own trade
-              from your business profile.
-            </HelpTip>
-          </span>
-          <Select
-            value={trade ?? ALL_TRADES}
-            onValueChange={(v) => setTrade(v === ALL_TRADES ? null : v)}
-          >
-            <SelectTrigger
-              className="h-9 w-[248px] rounded-xl text-xs font-bold"
-              title="Which trade's templates to show"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_TRADES}>
-                <span className="inline-flex items-center gap-2">
+          {sections.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[1.4px] text-muted-foreground">
+                Trade
+                <HelpTip label="the trade filter" side="bottom" align="start" className="w-72">
+                  Cuts the page down to the templates filed under one trade. It only changes what
+                  you are looking at, nothing is hidden from anyone else, and the star marks your
+                  own trade from your business profile.
+                </HelpTip>
+              </span>
+              {/* The mockup's pill row. Clicking the trade you are already on clears the filter. */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setTrade(null)}
+                  aria-current={trade === null ? "true" : undefined}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors",
+                    trade === null && "border-foreground bg-foreground text-background",
+                  )}
+                >
                   All trades
-                  <span className="text-muted-foreground">{visible.length}</span>
-                </span>
-              </SelectItem>
-              {sections.map(([heading, list]) => {
-                const Icon = categoryIcon(heading);
-                return (
-                  <SelectItem key={heading} value={heading}>
-                    <span className="inline-flex items-center gap-2">
-                      <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
-                      {heading}
-                      <span className="text-muted-foreground">{list.length}</span>
-                      {heading === ownTrade && <span aria-label="Your trade">★</span>}
-                    </span>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-          {/* The way back, once a trade is on. A dropdown has no "click the
-              active chip again to clear it", and hunting "All trades" back out
-              of a list of twelve is a worse way to undo a filter than a button
-              that says so. */}
-          {trade && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-9 rounded-xl text-xs font-bold"
-              onClick={() => setTrade(null)}
-            >
-              Show all {visible.length}
-            </Button>
-          )}
-        </div>
-      )}
-
-      {visible.length === 0 ? (
-        <EmptyState
-          icon={FileText}
-          title="No document templates yet"
-          description="Create reusable Word-style documents with dynamic project placeholders."
-          action={
-            canManage ? (
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus className="mr-1 h-4 w-4" /> Create template
-              </Button>
-            ) : null
-          }
-        />
-      ) : (
-        shownSections.map(([heading, list]) => {
-          const TradeIcon = categoryIcon(heading);
-          return (
-            <section key={heading} className="space-y-3">
-              <div className="flex items-center gap-2.5">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                  <TradeIcon className="h-4 w-4" />
-                </span>
-                <h3 className="text-sm font-bold tracking-tight text-foreground">{heading}</h3>
-                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
-                  {list.length}
-                </span>
-                {heading === ownTrade && (
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.6px] text-primary">
-                    Your trade
-                  </span>
-                )}
-                <span className="h-px flex-1 bg-border/60" />
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {list.map((t) => {
-                  const body = parseBody(t.body);
-                  const preset =
-                    STYLE_PRESETS.find((p) => p.key === body.style) ?? STYLE_PRESETS[0];
-                  const Icon = preset.icon;
-                  // Built-in examples (no team, no owner) are read-only for everyone -
-                  // RLS rejects writes to them, so only Duplicate is offered.
-                  const isExample = t.team_id === null;
-                  /** The older card holding this exact document, if there is one. */
-                  const twinOf = duplicateOf.get(t.id);
+                  <span className="font-mono text-[11px]">{visible.length}</span>
+                </button>
+                {sections.map(([heading, list]) => {
+                  const TradeIcon = categoryIcon(heading);
+                  const on = trade === heading;
                   return (
-                    <Card
-                      key={t.id}
-                      className={cn(SURFACE_CARD_INTERACTIVE, "flex flex-col gap-3.5 p-5")}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex min-w-0 items-start gap-2.5">
-                          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-                            <Icon className="h-[18px] w-[18px]" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="truncate text-[15px] font-bold tracking-tight text-foreground">
-                              {t.name}
-                            </div>
-                            <div className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
-                              {preset.label} · {t.fields.length} placeholder
-                              {t.fields.length === 1 ? "" : "s"}
-                            </div>
-                            {/* The trade, changeable in place. Read-only on the
-                                built-ins, which RLS will not let anyone
-                                rewrite anyway. */}
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <TradeChip
-                                category={body.category ?? GENERAL_CATEGORY}
-                                editable={canManage && !isExample}
-                                onChange={(next) => void assignTrade(t, next)}
-                              />
-                              {/* Where its pages land. Read-only on built-ins
-                                  for the same reason the trade is: RLS will not
-                                  let anyone rewrite them. */}
-                              <FilingChip
-                                filesUnder={body.filesUnder ?? "report"}
-                                editable={canManage && !isExample}
-                                onChange={(next) => void assignFiling(t, next)}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                        {isExample ? (
-                          <Badge variant="outline" className="shrink-0 text-[10px]">
-                            Example
-                          </Badge>
-                        ) : body.copiedFrom ? (
-                          /*
-                            This row is standing in for a built-in that is no
-                            longer on the page. Said on the card, because a
-                            template that silently replaced another one is the
-                            sort of thing someone should be able to find out
-                            about without being told.
-                          */
-                          <Badge
-                            variant="outline"
-                            title="Your company's version of an example template. It replaces the example here and in the project picker. Delete it and the example comes back."
-                            className="shrink-0 text-[10px]"
-                          >
-                            Your version
-                          </Badge>
-                        ) : t.archived ? (
-                          <Badge variant="secondary" className="text-[10px]">
-                            Archived
-                          </Badge>
-                        ) : twinOf ? (
-                          /*
-                            Amber rather than destructive: this card is redundant,
-                            not broken, and the copy is a statement of fact with
-                            the remedy attached. The full name of the card it
-                            duplicates goes in the tooltip because it is often
-                            the same string as this one bar a "(copy)", and two
-                            near-identical names side by side read as noise.
-                          */
-                          <Badge
-                            variant="outline"
-                            title={`Byte-for-byte the same document as "${twinOf}". Deleting this one changes nothing except the length of this page.`}
-                            className="shrink-0 gap-1 border-amber-300 bg-amber-50 text-[10px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
-                          >
-                            <Copy className="h-2.5 w-2.5" />
-                            Duplicate
-                          </Badge>
-                        ) : null}
-                      </div>
-                      {twinOf && !t.archived && (
-                        <p className="-mt-2 text-[11px] leading-snug text-amber-800 dark:text-amber-300">
-                          Same document as <span className="font-semibold">{twinOf}</span>. Nothing
-                          here is lost by deleting it.
-                        </p>
+                    <button
+                      key={heading}
+                      type="button"
+                      onClick={() => setTrade(on ? null : heading)}
+                      aria-current={on ? "true" : undefined}
+                      title={on ? "Click again to show every trade" : undefined}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors",
+                        on && "border-foreground bg-foreground text-background",
                       )}
-                      <div className="rounded-lg border border-border/60 bg-muted/40 p-3 text-[11px] leading-relaxed text-muted-foreground line-clamp-3">
-                        {templateSnippet(body.html)}
-                      </div>
-                      {/*
+                    >
+                      <TradeIcon className="h-3.5 w-3.5 shrink-0" />
+                      {heading}
+                      {heading === ownTrade && <span aria-label="Your trade">★</span>}
+                      <span className="font-mono text-[11px]">{list.length}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {visible.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="No document templates yet"
+              description="Create reusable Word-style documents with dynamic project placeholders."
+              action={
+                canManage ? (
+                  <Button onClick={() => setCreateOpen(true)}>
+                    <Plus className="mr-1 h-4 w-4" /> Create template
+                  </Button>
+                ) : null
+              }
+            />
+          ) : (
+            shownSections.map(([heading, list]) => {
+              const TradeIcon = categoryIcon(heading);
+              return (
+                <section key={heading} className="space-y-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                      <TradeIcon className="h-4 w-4" />
+                    </span>
+                    <h3 className="text-sm font-bold tracking-tight text-foreground">{heading}</h3>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+                      {list.length}
+                    </span>
+                    {heading === ownTrade && (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.6px] text-primary">
+                        Your trade
+                      </span>
+                    )}
+                    <span className="h-px flex-1 bg-border/60" />
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {list.map((t) => {
+                      const body = parseBody(t.body);
+                      const preset =
+                        STYLE_PRESETS.find((p) => p.key === body.style) ?? STYLE_PRESETS[0];
+                      // Built-in examples (no team, no owner) are read-only for everyone -
+                      // RLS rejects writes to them, so only Duplicate is offered.
+                      const isExample = t.team_id === null;
+                      /** The older card holding this exact document, if there is one. */
+                      const twinOf = duplicateOf.get(t.id);
+                      return (
+                        <Card
+                          key={t.id}
+                          className={cn(SURFACE_CARD_INTERACTIVE, "flex flex-col gap-3.5 p-5")}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span
+                              className={cn(
+                                "rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em]",
+                                TYPE_BADGE_TINT[preset.key],
+                              )}
+                            >
+                              {preset.label}
+                            </span>
+                            <span
+                              className={cn(REFERENCE_MONO, "text-[11px] text-muted-foreground")}
+                            >
+                              {t.fields.length} token{t.fields.length === 1 ? "" : "s"}
+                            </span>
+                          </div>
+                          <div className="min-w-0 truncate text-[15px] font-bold tracking-tight text-foreground">
+                            {t.name}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {/* The trade, changeable in place. Read-only on the built-ins, which RLS will not let anyone rewrite anyway. */}
+                            <TradeChip
+                              category={body.category ?? GENERAL_CATEGORY}
+                              editable={canManage && !isExample}
+                              onChange={(next) => void assignTrade(t, next)}
+                            />
+                            {/* Where its pages land. Read-only on built-ins for the same reason. */}
+                            <FilingChip
+                              filesUnder={body.filesUnder ?? "report"}
+                              editable={canManage && !isExample}
+                              onChange={(next) => void assignFiling(t, next)}
+                            />
+                            {isExample ? (
+                              <Badge variant="outline" className="shrink-0 text-[10px]">
+                                Example
+                              </Badge>
+                            ) : body.copiedFrom ? (
+                              <Badge
+                                variant="outline"
+                                title={
+                                  "Your company's version of an example template. It replaces the example here and in the project picker. Delete it and the example comes back."
+                                }
+                                className="shrink-0 text-[10px]"
+                              >
+                                Your version
+                              </Badge>
+                            ) : t.archived ? (
+                              <Badge variant="secondary" className="text-[10px]">
+                                Archived
+                              </Badge>
+                            ) : twinOf ? (
+                              <Badge
+                                variant="outline"
+                                title={
+                                  'Byte-for-byte the same document as "' +
+                                  twinOf +
+                                  '". Deleting this one changes nothing except the length of this page.'
+                                }
+                                className="shrink-0 gap-1 border-amber-300 bg-amber-50 text-[10px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+                              >
+                                <Copy className="h-2.5 w-2.5" />
+                                Duplicate
+                              </Badge>
+                            ) : null}
+                          </div>
+                          {twinOf && !t.archived && (
+                            <p className="-mt-2 text-[11px] leading-snug text-amber-800 dark:text-amber-300">
+                              Same document as <span className="font-semibold">{twinOf}</span>.
+                              Nothing here is lost by deleting it.
+                            </p>
+                          )}
+                          <div className="rounded-lg border border-border/60 bg-muted/40 p-3 text-[11px] leading-relaxed text-muted-foreground line-clamp-3">
+                            {templateSnippet(body.html)}
+                          </div>
+                          {/*
                         Two verbs on the card, everything else behind the "···".
 
                         This row used to carry up to five buttons of equal
@@ -1647,248 +1652,193 @@ export function DocumentTemplatesManager({ teamId, canManage }: Props) {
                         own. On a built-in there is nothing left for it to do,
                         so it is not offered.
                       */}
-                      <div className="mt-auto flex flex-wrap items-center gap-1 border-t border-border/60 pt-3">
-                        {/* The primary verb. Without it the Templates page could only
+                          <div className="mt-auto flex flex-wrap items-center gap-1 border-t border-border/60 pt-3">
+                            {/* The primary verb. Without it the Templates page could only
                       author templates, never apply one - which is exactly why
                       "not sure how to use that template again" came back as
                       feedback. Available on examples too: using one doesn't
                       write to it, so the read-only rule doesn't apply. */}
-                        <Button size="sm" onClick={() => openUse(t)}>
-                          <FilePlus2 className="mr-1 h-3.5 w-3.5" /> Use in a project
-                        </Button>
-                        {canManage && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className={cn(isMobile && "text-muted-foreground")}
-                            title={
-                              isMobile ? "Editing a template needs a desktop or tablet" : undefined
-                            }
-                            onClick={() => {
-                              if (editorNeedsDesktop()) return;
-                              void edit(t);
-                            }}
-                          >
-                            <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
-                            {isMobile && <Monitor className="ml-1 h-3.5 w-3.5" />}
-                          </Button>
-                        )}
-                        {canManage && !isExample && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+                            <Button size="sm" onClick={() => openUse(t)}>
+                              <FilePlus2 className="mr-1 h-3.5 w-3.5" /> Use in a project
+                            </Button>
+                            {canManage && (
                               <Button
-                                size="icon"
-                                variant="ghost"
-                                className="ml-auto h-8 w-8"
-                                aria-label={`More actions for ${t.name}`}
-                              >
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-72">
-                              <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                Changes the library, not this job
-                              </DropdownMenuLabel>
-                              <DropdownMenuItem
-                                onSelect={(e) => {
-                                  // Duplicating opens the editor on the new row,
-                                  // and closing it unedited deletes that row
-                                  // again - so on a phone this would write and
-                                  // then abandon a template for nothing.
-                                  if (editorNeedsDesktop()) {
-                                    e.preventDefault();
-                                    return;
-                                  }
-                                  void copyForEditing(t);
+                                size="sm"
+                                variant="outline"
+                                className={cn(isMobile && "text-muted-foreground")}
+                                title={
+                                  isMobile
+                                    ? "Editing a template needs a desktop or tablet"
+                                    : undefined
+                                }
+                                onClick={() => {
+                                  if (editorNeedsDesktop()) return;
+                                  void edit(t);
                                 }}
                               >
-                                <Copy className="mr-2 h-4 w-4" />
-                                <span>
-                                  <span className="block font-bold">Duplicate</span>
-                                  <span className="block text-xs text-muted-foreground">
-                                    A second template you can change without touching this one.
-                                  </span>
-                                </span>
-                                {isMobile && <Monitor className="ml-auto h-3.5 w-3.5 opacity-70" />}
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => void toggleArchive(t)}>
-                                {t.archived ? (
-                                  <>
-                                    <ArchiveRestore className="mr-2 h-4 w-4" /> Restore
-                                  </>
-                                ) : (
-                                  <>
-                                    <Archive className="mr-2 h-4 w-4" /> Archive
-                                  </>
-                                )}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => void remove(t)}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                <span>
-                                  <span className="block">Delete</span>
-                                  {body.copiedFrom && (
-                                    <span className="block text-xs text-muted-foreground">
-                                      Brings the example back.
+                                <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                                {isMobile && <Monitor className="ml-1 h-3.5 w-3.5" />}
+                              </Button>
+                            )}
+                            {canManage && !isExample && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="ml-auto h-8 w-8"
+                                    aria-label={`More actions for ${t.name}`}
+                                  >
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-72">
+                                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                    Changes the library, not this job
+                                  </DropdownMenuLabel>
+                                  <DropdownMenuItem
+                                    onSelect={(e) => {
+                                      // Duplicating opens the editor on the new row,
+                                      // and closing it unedited deletes that row
+                                      // again - so on a phone this would write and
+                                      // then abandon a template for nothing.
+                                      if (editorNeedsDesktop()) {
+                                        e.preventDefault();
+                                        return;
+                                      }
+                                      void copyForEditing(t);
+                                    }}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    <span>
+                                      <span className="block font-bold">Duplicate</span>
+                                      <span className="block text-xs text-muted-foreground">
+                                        A second template you can change without touching this one.
+                                      </span>
                                     </span>
-                                  )}
-                                </span>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                                    {isMobile && (
+                                      <Monitor className="ml-auto h-3.5 w-3.5 opacity-70" />
+                                    )}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={() => void toggleArchive(t)}>
+                                    {t.archived ? (
+                                      <>
+                                        <ArchiveRestore className="mr-2 h-4 w-4" /> Restore
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Archive className="mr-2 h-4 w-4" /> Archive
+                                      </>
+                                    )}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => void remove(t)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    <span>
+                                      <span className="block">Delete</span>
+                                      {body.copiedFrom && (
+                                        <span className="block text-xs text-muted-foreground">
+                                          Brings the example back.
+                                        </span>
+                                      )}
+                                    </span>
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </div>
+                        </Card>
+                      );
+                    })}
+                    {canManage && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editorNeedsDesktop()) return;
+                          setCreateOpen(true);
+                        }}
+                        className="flex min-h-[150px] flex-col items-center justify-center gap-2 rounded-[13px] border border-dashed border-border text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+                      >
+                        <Plus className="h-[22px] w-[22px]" />
+                        <span className="text-[13px] font-medium">Build a new template</span>
+                      </button>
+                    )}{" "}
+                  </div>
+                </section>
+              );
+            })
+          )}
+
+          {/* Use-in-a-project picker */}
+          <Dialog open={!!useFor} onOpenChange={(o) => !o && setUseFor(null)}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="truncate">Use “{useFor?.name}”</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                Pick a project. The next step fills in everything that project knows and asks you
+                for the rest, before the document is created.
+              </p>
+              {projectsLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : projects.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  You don&rsquo;t have any projects yet.
+                </p>
+              ) : (
+                <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                  {projects.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => chooseProject({ id: p.id, name: p.name })}
+                      className="flex w-full items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition hover:border-primary/50 hover:bg-accent"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-foreground">{p.name}</p>
+                        {p.location && (
+                          <p className="truncate text-xs text-muted-foreground">{p.location}</p>
                         )}
                       </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })
+                      <FilePlus2 className="h-4 w-4 shrink-0 text-primary" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Step two: fill the blanks against a preview, then create. */}
+          <UseTemplateDialog
+            templateId={useIn?.template.id ?? null}
+            project={useIn?.project ?? null}
+            onOpenChange={(o) => !o && setUseIn(null)}
+            onCreated={(projectId, pageId) => {
+              setUseIn(null);
+              // Straight into the new page: the point of "use" is to end up with the
+              // document open, not back on a settings screen wondering if it worked.
+              navigate({
+                to: "/projects/$projectId/pages/$pageId",
+                params: { projectId, pageId },
+              });
+            }}
+          />
+        </>
+      ) : (
+        <div className="pt-1">
+          <ReportTemplatesManager teamId={teamId} canManage={canManage} />
+        </div>
       )}
 
-      {/* Use-in-a-project picker */}
-      <Dialog open={!!useFor} onOpenChange={(o) => !o && setUseFor(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="truncate">Use “{useFor?.name}”</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Pick a project. The next step fills in everything that project knows and asks you for
-            the rest, before the document is created.
-          </p>
-          {projectsLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : projects.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              You don&rsquo;t have any projects yet.
-            </p>
-          ) : (
-            <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-              {projects.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => chooseProject({ id: p.id, name: p.name })}
-                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition hover:border-primary/50 hover:bg-accent"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-foreground">{p.name}</p>
-                    {p.location && (
-                      <p className="truncate text-xs text-muted-foreground">{p.location}</p>
-                    )}
-                  </div>
-                  <FilePlus2 className="h-4 w-4 shrink-0 text-primary" />
-                </button>
-              ))}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Step two: fill the blanks against a preview, then create. */}
-      <UseTemplateDialog
-        templateId={useIn?.template.id ?? null}
-        project={useIn?.project ?? null}
-        onOpenChange={(o) => !o && setUseIn(null)}
-        onCreated={(projectId, pageId) => {
-          setUseIn(null);
-          // Straight into the new page: the point of "use" is to end up with the
-          // document open, not back on a settings screen wondering if it worked.
-          navigate({
-            to: "/projects/$projectId/pages/$pageId",
-            params: { projectId, pageId },
-          });
-        }}
-      />
-
-      {/* Create dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        {/* Closes on the X, Cancel or Escape - not on a click past the edge,
-            which would take the name and the layout chosen with it. */}
-        <DialogContent onInteractOutside={(e) => e.preventDefault()} className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>New document template</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Name
-              </label>
-              <Input
-                autoFocus
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="e.g. Site visit summary letter"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Trade
-              </label>
-              <Select value={newCategory} onValueChange={setNewCategory}>
-                <SelectTrigger className="mt-1 h-10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={GENERAL_CATEGORY}>{GENERAL_CATEGORY}</SelectItem>
-                  {CATEGORY_ORDER.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Which section it files under, here and in the project template picker.
-              </p>
-            </div>
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Start from a style
-              </label>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                {STYLE_PRESETS.map((p) => {
-                  const Icon = p.icon;
-                  const active = newStyle === p.key;
-                  return (
-                    <button
-                      key={p.key}
-                      type="button"
-                      onClick={() => setNewStyle(p.key)}
-                      className={`flex items-start gap-3 rounded-lg border p-3 text-left transition ${
-                        active
-                          ? "border-primary bg-primary/5 ring-1 ring-primary"
-                          : "border-border hover:bg-muted/50"
-                      }`}
-                    >
-                      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                      <div>
-                        <div className="text-sm font-medium">{p.label}</div>
-                        <div className="text-xs text-muted-foreground">{p.description}</div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={createTemplate}>
-              <Plus className="mr-1 h-4 w-4" /> Create & open editor
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* New template - the mockup's three-step wizard (Basics, Sections,
+          Placeholders), with Save writing the finished template straight to
+          the library. The rich editor still opens from a card's Edit button. */}
+      <DocumentTemplateWizard open={createOpen} onOpenChange={setCreateOpen} onSave={wizardSave} />
 
       {/* Editor - full-screen Word-like surface */}
       <Dialog

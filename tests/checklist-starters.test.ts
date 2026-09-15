@@ -178,7 +178,9 @@ describe("the Checklists tab reads the company's trade", () => {
   it("selects the column it groups by", () => {
     // Grouping by a field the query never asked for puts every template in
     // General, silently.
-    expect(PAGE).toMatch(/select\("id, name, description, archived, created_at, category"\)/);
+    expect(PAGE).toMatch(
+      /select\("id, name, description, archived, created_at, updated_at, category"\)/,
+    );
   });
 
   it("ships the migration the column lives in", () => {

@@ -96,7 +96,6 @@ import {
 } from "@/features/settings/components/blueprint-starters";
 import { installBlueprintStarter } from "@/features/settings/components/install-blueprint-starter";
 import { LabelSetsManager } from "@/features/settings/components/LabelSetsManager";
-import { ReportTemplatesManager } from "@/features/settings/components/ReportTemplatesManager";
 import { DocumentTemplatesManager } from "@/features/settings/components/DocumentTemplatesManager";
 import {
   CATEGORY_ORDER,
@@ -158,6 +157,8 @@ export type TemplateTabKey = (typeof TEMPLATE_TAB_KEYS)[number];
 
 export type TemplatesSearch = {
   tab?: TemplateTabKey;
+  /** Which half of the merged Documents tab (the mockup's two sub-tabs). */
+  docTab?: "documents" | "reports";
   /** Opens straight to one blueprint - used by links from projects. */
   blueprint?: string;
 };
@@ -453,12 +454,32 @@ export function TemplatesPage() {
     (!SHOW_WALKTHROUGH_TEMPLATES && requestedTab === "walkthroughs") ||
     (!SHOW_LABEL_SETS && requestedTab === "label-sets") ||
     requestedTab === "labels";
-  const tab: TemplateTabKey = tabRelocated ? "blueprints" : requestedTab;
+  /*
+   * Reports moved INTO Documents (the mockup draws Report templates as a second
+   * sub-tab there), so an old ?tab=reports link now lands on Documents with the
+   * reports sub-view open. The key stays legal so those links do not 404.
+   */
+  const fromReportsAlias = requestedTab === "reports";
+  const tab: TemplateTabKey = tabRelocated
+    ? "blueprints"
+    : fromReportsAlias
+      ? "documents"
+      : requestedTab;
+  /** Which half of Documents, for the manager's sub-tab strip. */
+  const docTab: "documents" | "reports" =
+    search.docTab === "reports" || fromReportsAlias ? "reports" : "documents";
   const setTab = useCallback(
     (next: TemplateTabKey) => {
       void navigate({
         to: "/templates",
-        search: (prev) => ({ ...(prev as TemplatesSearch), tab: next }),
+        search: (prev) =>
+          ({
+            ...(prev as TemplatesSearch),
+            tab: next,
+            // The Documents sub-tab is state that belongs to Documents: leaving
+            // the tab drops it, so a deep link or a manual visit starts fresh.
+            ...(next === "documents" ? {} : { docTab: undefined }),
+          }) as TemplatesSearch,
         replace: true,
       });
     },
@@ -484,6 +505,8 @@ export function TemplatesPage() {
   const [reportTpls, setReportTpls] = useState<Array<{ id: string; name: string }>>([]);
   const [labelSetTpls, setLabelSetTpls] = useState<Array<{ id: string; name: string }>>([]);
   const [workflowTpls, setWorkflowTpls] = useState<Array<{ id: string; name: string }>>([]);
+  /** Phase count per workflow template, for the mockup card chip's "· N phases". */
+  const [workflowPhaseCounts, setWorkflowPhaseCounts] = useState<Record<string, number>>({});
   const [walkthroughTpls, setWalkthroughTpls] = useState<LibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
@@ -553,7 +576,7 @@ export function TemplatesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [tplRes, chkRes, attRes, itemsRes, docRes, repRes, lsRes, wfRes, wtRes] =
+    const [tplRes, chkRes, attRes, itemsRes, docRes, repRes, lsRes, wfRes, wtRes, phRes] =
       await Promise.all([
         supabase
           .from("project_templates" as any)
@@ -599,6 +622,10 @@ export function TemplatesPage() {
           .select("id, name, archived")
           .eq("archived", false)
           .order("name"),
+        // One workflow template can have any number of phases; the blueprint
+        // card chip ends with the phase count ("1 workflow · 5 phases") exactly
+        // as the mockup draws it.
+        supabase.from("workflow_template_phases" as any).select("template_id"),
         supabase
           .from("walkthrough_templates" as any)
           .select("id, name, archived, category")
@@ -654,6 +681,12 @@ export function TemplatesPage() {
     setReportTpls(((repRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
     setLabelSetTpls(((lsRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
     setWorkflowTpls(((wfRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
+    const phaseCounts: Record<string, number> = {};
+    for (const p of (phRes.data as any[]) ?? []) {
+      if (!p.template_id) continue;
+      phaseCounts[p.template_id] = (phaseCounts[p.template_id] ?? 0) + 1;
+    }
+    setWorkflowPhaseCounts(phaseCounts);
     // Absent rather than empty on a database still waiting for 20260908000000:
     // the read errors, `data` is null, and the picker simply offers no
     // walkthroughs. The library tab says so in full.
@@ -737,6 +770,21 @@ export function TemplatesPage() {
     for (const i of tplItems) bump(i.project_template_id, i.kind);
     return m;
   }, [attached, tplItems]);
+
+  /**
+   * Total workflow phases a blueprint's workflow sections add up to - the
+   * "· 5 phases" tail on the mockup card's workflow chip. Zero, not absent,
+   * when a referenced workflow template was deleted.
+   */
+  const workflowPhasesByTemplate = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const i of tplItems) {
+      if (i.kind !== "workflow") continue;
+      const n = workflowPhaseCounts[i.ref_id] ?? 0;
+      m.set(i.project_template_id, (m.get(i.project_template_id) ?? 0) + n);
+    }
+    return m;
+  }, [tplItems, workflowPhaseCounts]);
 
   /*
    * The label usage counts, and the LabelsManager they fed, moved to Settings
@@ -1389,7 +1437,6 @@ export function TemplatesPage() {
                 ]
               : []),
             { key: "documents", label: "Documents", count: tabCounts.documents, icon: FileText },
-            { key: "reports", label: "Reports", count: tabCounts.reports, icon: Newspaper },
             // Label Sets parked (SHOW_LABEL_SETS); Labels moved to Settings.
             ...(SHOW_LABEL_SETS
               ? [
@@ -1423,6 +1470,7 @@ export function TemplatesPage() {
               visibleTemplates={visibleTemplates}
               sectionCountByTemplate={sectionCountByTemplate}
               kindCountsByTemplate={kindCountsByTemplate}
+              workflowPhasesByTemplate={workflowPhasesByTemplate}
               applyCountByTemplate={applyCountByTemplate}
               applicationsAvailable={applications !== null}
               selectedApplications={selectedApplications}
@@ -1466,10 +1514,11 @@ export function TemplatesPage() {
           {tab === "workflows" && <WorkflowTemplatesPage embedded />}
           {tab === "walkthroughs" && <WalkthroughTemplatesManager canManage={canManage} />}
           {tab === "documents" && (
-            <DocumentTemplatesManager teamId={teamData?.team?.id ?? null} canManage={canManage} />
-          )}
-          {tab === "reports" && (
-            <ReportTemplatesManager teamId={teamData?.team?.id ?? null} canManage={canManage} />
+            <DocumentTemplatesManager
+              teamId={teamData?.team?.id ?? null}
+              canManage={canManage}
+              initialTab={docTab}
+            />
           )}
           {tab === "label-sets" && (
             <LabelSetsManager teamId={teamData?.team?.id ?? null} canManage={canManage} />
@@ -1859,6 +1908,8 @@ function BlueprintsTab(props: {
   sectionCountByTemplate: Map<string, number>;
   /** Sections per kind per blueprint - the card chip row ("2 checklists"). */
   kindCountsByTemplate: Map<string, Partial<Record<TemplateItemKind, number>>>;
+  /** Workflow phases per blueprint, for the "· 5 phases" tail on the chip. */
+  workflowPhasesByTemplate: Map<string, number>;
   applyCountByTemplate: Map<string, number>;
   applicationsAvailable: boolean;
   selectedApplications: BlueprintApplication[];
@@ -1902,6 +1953,7 @@ function BlueprintsTab(props: {
     templates,
     visibleTemplates,
     kindCountsByTemplate,
+    workflowPhasesByTemplate,
     applyCountByTemplate,
     applicationsAvailable,
     selectedApplications,
@@ -2123,6 +2175,11 @@ function BlueprintsTab(props: {
                       {KIND_ORDER.filter((k) => (counts[k] ?? 0) > 0).map((k) => (
                         <span key={k} className={REFERENCE_CHIP}>
                           {kindChip(k, counts[k] ?? 0)}
+                          {k === "workflow" && workflowPhasesByTemplate.get(t.id)
+                            ? ` · ${workflowPhasesByTemplate.get(t.id)} phase${
+                                workflowPhasesByTemplate.get(t.id) === 1 ? "" : "s"
+                              }`
+                            : null}
                         </span>
                       ))}
                     </span>

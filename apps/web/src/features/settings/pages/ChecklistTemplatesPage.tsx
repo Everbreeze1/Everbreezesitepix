@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   Plus,
@@ -17,6 +17,7 @@ import {
   ListChecks,
   ListPlus,
   Lock,
+  Search,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -65,19 +66,19 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { BulkAddItemsDialog } from "@/components/BulkAddItemsDialog";
 import { SURFACE_CARD } from "@/components/ui/surface";
+import {
+  REFERENCE_CARD_INTERACTIVE,
+  REFERENCE_CARD_META,
+  REFERENCE_CHIP,
+  REFERENCE_EYEBROW,
+} from "@/components/ui/reference";
 import { cn } from "@/lib/utils";
 import {
-  AddTarget,
-  BuilderBackToList,
-  BuilderCanvas,
-  BuilderLayout,
-  BuilderRail,
-  BuilderRailItem,
-  BuilderTitleBar,
   DragHandle,
   QuietInput,
   QuietTextarea,
   RequiredToggle,
+  SaveStatus,
   StatChip,
 } from "@/components/builder/builder-ui";
 import { restrictToVerticalAxis } from "@/components/builder/builder-tokens";
@@ -96,6 +97,7 @@ interface Template {
   description: string | null;
   archived: boolean;
   created_at: string;
+  updated_at: string;
   /**
    * The trade this checklist belongs to, or null for one filed under nothing.
    *
@@ -119,6 +121,20 @@ const TABLES = {
   templates: "checklist_templates",
   items: "checklist_template_items",
 } as const;
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.floor(mo / 12)}y ago`;
+}
 
 export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const access = useTemplateAuthoringAccess();
@@ -171,6 +187,9 @@ function ChecklistTemplatesBuilder({ embedded = false }: { embedded?: boolean } 
   const [creating, setCreating] = useState(false);
   const [focusItemId, setFocusItemId] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  /** Which blueprints reference each checklist template, keyed by ref_id. */
+  const [blueprintRefs, setBlueprintRefs] = useState<Map<string, Set<string>>>(new Map());
+  const [blueprintNames, setBlueprintNames] = useState<Map<string, string>>(new Map());
 
   /*
    * The company's trade, from the account setup wizard. It orders the rail and
@@ -207,7 +226,7 @@ function ChecklistTemplatesBuilder({ embedded = false }: { embedded?: boolean } 
     setLoading(true);
     const { data: tpls } = await supabase
       .from(TABLES.templates as any)
-      .select("id, name, description, archived, created_at, category")
+      .select("id, name, description, archived, created_at, updated_at, category")
       .order("created_at", { ascending: true });
     const list = ((tpls as any[]) ?? []) as Template[];
     setTemplates(list);
@@ -219,6 +238,24 @@ function ChecklistTemplatesBuilder({ embedded = false }: { embedded?: boolean } 
         .in("template_id", ids)
         .order("position", { ascending: true });
       setItems(((its as any[]) ?? []) as TemplateItem[]);
+      /*
+       * "Used in N blueprints" needs to know which blueprints reference each
+       * checklist, and the editor's meta line wants those blueprints' names -
+       * one read for both, so the card grid and the editor never disagree.
+       */
+      const { data: refRows } = await supabase
+        .from("project_template_items" as any)
+        .select("project_template_id, ref_id")
+        .eq("kind", "checklist");
+      const byRef = new Map<string, Set<string>>();
+      for (const r of (refRows as any[]) ?? []) {
+        const set = byRef.get(r.ref_id) ?? new Set<string>();
+        set.add(r.project_template_id);
+        byRef.set(r.ref_id, set);
+      }
+      setBlueprintRefs(byRef);
+      const { data: bpRows } = await supabase.from("project_templates" as any).select("id, name");
+      setBlueprintNames(new Map(((bpRows as any[]) ?? []).map((b) => [b.id, b.name])));
       setSelectedId((cur) =>
         cur && list.some((t) => t.id === cur)
           ? cur
@@ -226,6 +263,8 @@ function ChecklistTemplatesBuilder({ embedded = false }: { embedded?: boolean } 
       );
     } else {
       setItems([]);
+      setBlueprintRefs(new Map());
+      setBlueprintNames(new Map());
       setSelectedId(null);
     }
     setLoading(false);
@@ -297,12 +336,37 @@ function ChecklistTemplatesBuilder({ embedded = false }: { embedded?: boolean } 
   const requiredCount = selectedItems.filter((i) => i.required).length;
   const typeCount = new Set(selectedItems.map((i) => i.item_type)).size;
 
+  /** The blueprints referencing `templateId`, for the card chips and the editor meta line. */
+  const refsOf = (templateId: string) => blueprintRefs.get(templateId) ?? new Set<string>();
+  const usedInNames = useMemo(
+    () =>
+      selected
+        ? ([...refsOf(selected.id)]
+            .map((bpId) => blueprintNames.get(bpId))
+            .filter((n): n is string => !!n) as string[])
+        : ([] as string[]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected, blueprintRefs, blueprintNames],
+  );
+
   /* ---------------------------------------------------------- templates */
 
   const selectTemplate = async (id: string) => {
     await save.flush();
     setSelectedId(id);
     setPane("editor");
+  };
+
+  const backToList = () => {
+    void save.flush();
+    setPane("list");
+  };
+
+  /* The mockup's explicit Save, over an autosave base: flush whatever is
+   * debounced and report through the same status line as every other save. */
+  const saveChecklist = async () => {
+    await save.flush();
+    toast.success("Checklist saved");
   };
 
   const createTemplate = async (
@@ -686,8 +750,8 @@ function ChecklistTemplatesBuilder({ embedded = false }: { embedded?: boolean } 
 
   return (
     <div className={embedded ? "" : "container mx-auto max-w-6xl px-4 pb-24 pt-4 md:pt-6"}>
-      {embedded ? (
-        <div className="flex justify-end">{headerActions}</div>
+      {pane === "editor" && selected ? null : embedded ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">{headerActions}</div>
       ) : (
         <PageHeader
           backTo="/settings"
@@ -722,301 +786,348 @@ function ChecklistTemplatesBuilder({ embedded = false }: { embedded?: boolean } 
           }
           className="mt-6"
         />
-      ) : (
-        <BuilderLayout
-          pane={pane}
-          rail={
-            <BuilderRail
-              label="Templates"
-              search={search}
-              onSearchChange={setSearch}
-              searchPlaceholder="Search templates…"
-              showArchived={showArchived}
-              onToggleArchived={() => setShowArchived((s) => !s)}
-              footer={
-                <AddTarget onClick={() => setCreateOpen(true)}>
-                  <Plus className="h-3.5 w-3.5" />
-                  New template
-                </AddTarget>
-              }
+      ) : selected && pane === "editor" ? (
+        /* ============ EDITOR: the mockup's full-page checklist editor ============ */
+        <div className="mx-auto mt-6 w-full max-w-[900px] pb-10">
+          <div className="flex items-center gap-1.5 text-[12.5px] text-faint">
+            <button
+              type="button"
+              onClick={backToList}
+              className="cursor-pointer font-semibold text-primary transition-colors hover:underline"
             >
-              {visibleTemplates.length === 0 ? (
-                <li className="px-3 py-6 text-center text-xs text-muted-foreground">
-                  No templates match “{search}”.
-                </li>
-              ) : (
-                railSections.map(([heading, list]) => (
-                  <Fragment key={heading}>
-                    {railSections.length > 1 && (
-                      <li className="flex items-center gap-1.5 px-3 pb-1 pt-3 text-[10px] font-extrabold uppercase tracking-[1.2px] text-muted-foreground">
-                        {heading}
-                        {heading === ownTrade && (
-                          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary">
-                            Yours
-                          </span>
-                        )}
-                      </li>
+              Checklists
+            </button>
+            <span>/</span>
+            <span className="truncate">{selected.name}</span>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+            <div className="min-w-0 max-w-[560px] flex-1">
+              <QuietInput
+                value={selected.name}
+                onChange={(e) => updateTemplate(selected.id, { name: e.target.value })}
+                placeholder="Checklist name"
+                aria-label="Checklist name"
+                className="text-2xl font-bold leading-tight tracking-[-0.01em] text-foreground"
+              />
+              <QuietTextarea
+                value={selected.description ?? ""}
+                onChange={(e) =>
+                  updateTemplate(selected.id, { description: e.target.value || null })
+                }
+                placeholder="When should the crew fill this out?"
+                aria-label="Description"
+                className="mt-0.5 text-[13.5px] leading-snug text-muted-foreground"
+              />
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={backToList}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={() => void saveChecklist()}>
+                Save checklist
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="Template actions">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem onClick={() => setPreviewOpen(true)}>
+                    <Eye className="mr-2 h-4 w-4" />
+                    Preview
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void duplicateTemplate(selected)}>
+                    <Copy className="mr-2 h-4 w-4" />
+                    Duplicate
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void toggleArchived(selected)}>
+                    {selected.archived ? (
+                      <>
+                        <ArchiveRestore className="mr-2 h-4 w-4" />
+                        Restore
+                      </>
+                    ) : (
+                      <>
+                        <Archive className="mr-2 h-4 w-4" />
+                        Archive
+                      </>
                     )}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => void deleteTemplate(selected)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete template
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+          <div className="mt-2 text-[12.5px] leading-snug text-faint">
+            {usedInNames.length > 0
+              ? "Used in " +
+                usedInNames.length +
+                " blueprint" +
+                (usedInNames.length === 1 ? "" : "s") +
+                " · " +
+                usedInNames.slice(0, 3).join(", ") +
+                (usedInNames.length > 3 ? ", …" : "")
+              : "Not used in any blueprints yet"}{" "}
+            · Edited {timeAgo(selected.updated_at)}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            <StatChip icon={ListChecks}>
+              {selectedItems.length} item{selectedItems.length === 1 ? "" : "s"}
+            </StatChip>
+            {requiredCount > 0 && (
+              <StatChip>
+                <span className="text-amber-600 dark:text-amber-400">{requiredCount} required</span>
+              </StatChip>
+            )}
+            {typeCount > 1 && <StatChip>{typeCount} answer types</StatChip>}
+            <TradeSelect
+              value={selected.category ?? null}
+              onChange={(v) => {
+                setTemplates((prev) =>
+                  prev.map((t) => (t.id === selected.id ? { ...t, category: v } : t)),
+                );
+                void supabase
+                  .from(TABLES.templates as any)
+                  .update({ category: v })
+                  .eq("id", selected.id)
+                  .then((r: any) => {
+                    if (r.error) {
+                      toast.error(r.error.message);
+                      void load();
+                    }
+                  });
+              }}
+            />
+            <span className="ml-auto">
+              <SaveStatus state={save.state} />
+            </span>
+          </div>
+
+          {selected.archived && (
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-[11.5px] font-semibold text-muted-foreground">
+              <Archive className="h-3.5 w-3.5" />
+              Archived - it won't show up when adding a checklist to a project.
+            </div>
+          )}
+
+          <div className="mt-8">
+            <div className={REFERENCE_EYEBROW}>Items</div>
+            <div className="mt-2.5 overflow-hidden rounded-[12px] border border-border bg-card">
+              {selectedItems.length === 0 ? (
+                <div className="px-4 py-10 text-center">
+                  <p className="text-sm font-semibold text-foreground">No items yet</p>
+                  <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+                    Most checklists already exist somewhere - a spec, an email, a punch list. Paste
+                    it in and every line becomes an item.
+                  </p>
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    <Button size="sm" onClick={() => setBulkOpen(true)}>
+                      <ListPlus className="mr-1.5 h-4 w-4" />
+                      Paste a list
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => void addItem()}>
+                      <Plus className="mr-1.5 h-4 w-4" />
+                      Add one item
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  modifiers={[restrictToVerticalAxis]}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={selectedItems.map((i) => i.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <ul className="divide-y divide-border">
+                      {selectedItems.map((it, idx) => (
+                        <ItemRow
+                          key={it.id}
+                          index={idx}
+                          item={it}
+                          autoFocus={focusItemId === it.id}
+                          onFocused={() => setFocusItemId(null)}
+                          onChange={(patch) => updateItem(it.id, patch)}
+                          onDelete={() => void deleteItem(it.id)}
+                          onDuplicate={() => void duplicateItem(it)}
+                          onAddAfter={() => void addItem(it.item_type, { after: it })}
+                        />
+                      ))}
+                    </ul>
+                  </SortableContext>
+                </DndContext>
+              )}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void addItem()}
+                className="flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 text-[13px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+              >
+                <Plus className="h-4 w-4 shrink-0" />
+                Add item…
+              </button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-10"
+                onClick={() => setBulkOpen(true)}
+              >
+                <ListPlus className="mr-1.5 h-4 w-4" />
+                Paste a list
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-10 w-10 shrink-0 text-muted-foreground"
+                    aria-label="Add an item with a specific answer type"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  <DropdownMenuLabel className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                    Add with answer type
+                  </DropdownMenuLabel>
+                  {TYPE_ORDER.map((t) => {
+                    const m = TYPE_META[t];
+                    const I = m.icon;
+                    return (
+                      <DropdownMenuItem key={t} onClick={() => void addItem(t)}>
+                        <I className="mr-2 h-4 w-4" />
+                        <span className="flex-1">
+                          {m.label}
+                          <span className="block text-[11px] text-muted-foreground">{m.hint}</span>
+                        </span>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ============ LIST: the mockup's card grid ============ */
+        <div className="mt-6 flex flex-col gap-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-card px-3 sm:max-w-[300px]">
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search checklists…"
+                aria-label="Search checklists"
+                className="h-full w-full bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/70"
+              />
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-9 text-xs font-semibold", showArchived && "text-foreground")}
+              onClick={() => setShowArchived((s) => !s)}
+            >
+              <Archive className="mr-1.5 h-3.5 w-3.5" />
+              Show archived
+            </Button>
+          </div>
+
+          {visibleTemplates.length === 0 ? (
+            <Card className={cn(SURFACE_CARD, "p-12 text-center")}>
+              <ClipboardList className="mx-auto h-6 w-6 text-muted-foreground/60" />
+              <p className="mt-3 text-sm font-semibold text-foreground">
+                No checklists match “{search}”.
+              </p>
+            </Card>
+          ) : (
+            railSections.map(([heading, list]) => {
+              const TradeIcon = categoryIcon(heading);
+              return (
+                <section key={heading} className="space-y-3">
+                  {railSections.length > 1 && (
+                    <div className="flex items-center gap-2.5">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                        <TradeIcon className="h-4 w-4" />
+                      </span>
+                      <h3 className="text-sm font-bold tracking-tight text-foreground">
+                        {heading}
+                      </h3>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+                        {list.length}
+                      </span>
+                      {heading === ownTrade && (
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.6px] text-primary">
+                          Yours
+                        </span>
+                      )}
+                      <span className="h-px flex-1 bg-border/60" />
+                    </div>
+                  )}
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {list.map((t) => {
                       const count = items.filter((i) => i.template_id === t.id).length;
+                      const used = refsOf(t.id).size;
                       return (
-                        <BuilderRailItem
+                        <button
                           key={t.id}
-                          active={selectedId === t.id}
-                          name={t.name}
-                          archived={t.archived}
-                          meta={`${count} item${count === 1 ? "" : "s"}`}
-                          onSelect={() => void selectTemplate(t.id)}
-                        />
+                          type="button"
+                          onClick={() => void selectTemplate(t.id)}
+                          className={cn(
+                            REFERENCE_CARD_INTERACTIVE,
+                            "flex cursor-pointer flex-col items-start gap-3 p-5 text-left",
+                            t.archived && "opacity-70",
+                          )}
+                        >
+                          <span className="flex items-center gap-2.5">
+                            <ClipboardList className="h-5 w-5 shrink-0 text-primary" />
+                            <span className="text-[14.5px] font-semibold leading-snug">
+                              {t.name}
+                            </span>
+                          </span>
+                          <span className="flex flex-wrap gap-1.5">
+                            <span className={REFERENCE_CHIP}>
+                              {count} item{count === 1 ? "" : "s"}
+                            </span>
+                            <span className={REFERENCE_CHIP}>
+                              Used in {used} blueprint{used === 1 ? "" : "s"}
+                            </span>
+                          </span>
+                          <span className={REFERENCE_CARD_META}>
+                            Edited {timeAgo(t.updated_at)}
+                          </span>
+                        </button>
                       );
                     })}
-                  </Fragment>
-                ))
-              )}
-            </BuilderRail>
-          }
-          canvas={
-            selected ? (
-              <>
-                <BuilderBackToList label="All templates" onClick={() => setPane("list")} />
-                <BuilderCanvas>
-                  <BuilderTitleBar
-                    icon={<ClipboardList className="h-4.5 w-4.5" />}
-                    title={selected.name}
-                    description={selected.description ?? ""}
-                    titlePlaceholder="Template name"
-                    descriptionPlaceholder="When should the crew fill this out?"
-                    onTitleChange={(v) => updateTemplate(selected.id, { name: v })}
-                    onDescriptionChange={(v) =>
-                      updateTemplate(selected.id, { description: v || null })
-                    }
-                    saveState={save.state}
-                    stats={
-                      <>
-                        <StatChip icon={ListChecks}>
-                          {selectedItems.length} item{selectedItems.length === 1 ? "" : "s"}
-                        </StatChip>
-                        {requiredCount > 0 && (
-                          <StatChip>
-                            <span className="text-amber-600 dark:text-amber-400">
-                              {requiredCount} required
-                            </span>
-                          </StatChip>
-                        )}
-                        {typeCount > 1 && <StatChip>{typeCount} answer types</StatChip>}
-                        {/* Refiled in place, next to the other facts about the
-                            template. Opening a settings panel to change which
-                            heading a checklist appears under would be more
-                            ceremony than the change deserves. */}
-                        <TradeSelect
-                          value={selected.category ?? null}
-                          onChange={(v) => {
-                            // Written straight through rather than debounced:
-                            // it is a menu pick, not typing, and the rail has
-                            // to re-group the moment it changes or the
-                            // template appears to have moved nowhere.
-                            setTemplates((prev) =>
-                              prev.map((t) => (t.id === selected.id ? { ...t, category: v } : t)),
-                            );
-                            void supabase
-                              .from(TABLES.templates as any)
-                              .update({ category: v })
-                              .eq("id", selected.id)
-                              .then((r: any) => {
-                                if (r.error) {
-                                  toast.error(r.error.message);
-                                  void load();
-                                }
-                              });
-                          }}
-                        />
-                      </>
-                    }
-                    banner={
-                      selected.archived ? (
-                        <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-[11.5px] font-semibold text-muted-foreground">
-                          <Archive className="h-3.5 w-3.5" />
-                          Archived - it won't show up when adding a checklist to a project.
-                        </div>
-                      ) : null
-                    }
-                    actions={
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="hidden sm:inline-flex"
-                          onClick={() => setPreviewOpen(true)}
-                        >
-                          <Eye className="mr-1.5 h-4 w-4" />
-                          Preview
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" aria-label="Template actions">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem
-                              className="sm:hidden"
-                              onClick={() => setPreviewOpen(true)}
-                            >
-                              <Eye className="mr-2 h-4 w-4" />
-                              Preview
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => void duplicateTemplate(selected)}>
-                              <Copy className="mr-2 h-4 w-4" />
-                              Duplicate
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => void toggleArchived(selected)}>
-                              {selected.archived ? (
-                                <>
-                                  <ArchiveRestore className="mr-2 h-4 w-4" />
-                                  Restore
-                                </>
-                              ) : (
-                                <>
-                                  <Archive className="mr-2 h-4 w-4" />
-                                  Archive
-                                </>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={() => void deleteTemplate(selected)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete template
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </>
-                    }
-                  />
-
-                  <div className="px-4 pb-5 pt-4 sm:px-6">
-                    {selectedItems.length === 0 ? (
-                      // Dead prose replaced by the two ways in, paste first.
-                      <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center">
-                        <p className="text-sm font-semibold text-foreground">No items yet</p>
-                        <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-                          Most checklists already exist somewhere - a spec, an email, a punch list.
-                          Paste it in and every line becomes an item.
-                        </p>
-                        <div className="mt-4 flex flex-wrap justify-center gap-2">
-                          <Button size="sm" onClick={() => setBulkOpen(true)}>
-                            <ListPlus className="mr-1.5 h-4 w-4" />
-                            Paste a list
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => void addItem()}>
-                            <Plus className="mr-1.5 h-4 w-4" />
-                            Add one item
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        modifiers={[restrictToVerticalAxis]}
-                        onDragEnd={handleDragEnd}
-                      >
-                        <SortableContext
-                          items={selectedItems.map((i) => i.id)}
-                          strategy={verticalListSortingStrategy}
-                        >
-                          <ul className="space-y-1.5">
-                            {selectedItems.map((it, idx) => (
-                              <ItemRow
-                                key={it.id}
-                                index={idx}
-                                item={it}
-                                autoFocus={focusItemId === it.id}
-                                onFocused={() => setFocusItemId(null)}
-                                onChange={(patch) => updateItem(it.id, patch)}
-                                onDelete={() => void deleteItem(it.id)}
-                                onDuplicate={() => void duplicateItem(it)}
-                                onAddAfter={() => void addItem(it.item_type, { after: it })}
-                              />
-                            ))}
-                          </ul>
-                        </SortableContext>
-                      </DndContext>
-                    )}
-
-                    {/* Two visible controls and an overflow, the same shape as
-                        the in-project composer - the crew filling a checklist
-                        in and the manager who authored it should not be
-                        learning two different bars. "Add typed item" used to be
-                        a third full-width button spelling out what the ⋯ menu
-                        now holds. */}
-                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                      <AddTarget className="h-10 w-auto flex-1" onClick={() => void addItem()}>
-                        <Plus className="h-4 w-4" />
-                        Add item
-                      </AddTarget>
-                      {/* The escape hatch from one-at-a-time entry: most
-                          checklists already exist as a list somewhere. */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-10"
-                        onClick={() => setBulkOpen(true)}
-                      >
-                        <ListPlus className="mr-1.5 h-4 w-4" />
-                        Paste a list
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-10 w-10 shrink-0 text-muted-foreground"
-                            aria-label="Add an item with a specific answer type"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-60">
-                          <DropdownMenuLabel className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                            Add with answer type
-                          </DropdownMenuLabel>
-                          {TYPE_ORDER.map((t) => {
-                            const m = TYPE_META[t];
-                            const I = m.icon;
-                            return (
-                              <DropdownMenuItem key={t} onClick={() => void addItem(t)}>
-                                <I className="mr-2 h-4 w-4" />
-                                <span className="flex-1">
-                                  {m.label}
-                                  <span className="block text-[11px] text-muted-foreground">
-                                    {m.hint}
-                                  </span>
-                                </span>
-                              </DropdownMenuItem>
-                            );
-                          })}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
                   </div>
-                </BuilderCanvas>
-              </>
-            ) : (
-              <Card
-                className={cn(
-                  SURFACE_CARD,
-                  "flex flex-col items-center justify-center gap-2 p-16 text-center",
-                )}
-              >
-                <ClipboardList className="h-6 w-6 text-muted-foreground/70" />
-                <p className="text-sm font-semibold">Select a template to edit</p>
-              </Card>
-            )
-          }
-        />
+                </section>
+              );
+            })
+          )}
+
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="flex min-h-[150px] cursor-pointer flex-col items-center justify-center gap-2 rounded-[13px] border border-dashed border-border text-faint transition-colors hover:border-primary/50 hover:text-muted-foreground"
+          >
+            <Plus className="h-[22px] w-[22px]" />
+            <span className="text-[13px] font-medium">Build a new checklist</span>
+          </button>
+        </div>
       )}
 
       {/* ---------------------------------------------------------- dialogs */}
@@ -1092,7 +1203,9 @@ function ChecklistTemplatesBuilder({ embedded = false }: { embedded?: boolean } 
               return (
                 <Card key={s.name} className={cn(SURFACE_CARD, "flex flex-col p-4")}>
                   <div className="flex items-start justify-between gap-2">
-                    <div className="font-display text-lg font-bold tracking-[-0.01em]">{s.name}</div>
+                    <div className="font-display text-lg font-bold tracking-[-0.01em]">
+                      {s.name}
+                    </div>
                     {s.category === ownTrade && (
                       <span className="mt-1 shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.6px] text-primary">
                         Your trade
@@ -1243,7 +1356,7 @@ function ItemRow({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "group rounded-xl border border-border bg-card px-1.5 py-1.5 transition-colors hover:border-primary/30",
+        "group px-1.5 py-2.5 transition-colors hover:bg-muted/40 sm:px-2",
         // `relative`, because z-index is inert on a static box: this read
         // `z-30` and did nothing at all, so the row being dragged was painted
         // in plain DOM order and the rows below it clipped its lift shadow.

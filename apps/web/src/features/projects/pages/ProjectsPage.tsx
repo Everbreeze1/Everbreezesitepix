@@ -655,6 +655,7 @@ export function ProjectsPage() {
       photoCounts: {},
       reportCounts: {},
       checklistCounts: {},
+      blueprintNames: {},
       recentMembers: {},
     };
   };

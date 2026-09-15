@@ -19,6 +19,12 @@ export const Route = createFileRoute("/_app/templates")({
         : TEMPLATE_TAB_KEYS.includes(search.tab as any)
           ? (search.tab as TemplatesSearch["tab"])
           : undefined,
+    // The Documents manager's sub-tab strip ("Document templates" / "Report
+    // templates"). `reports` is handled by the page itself as an older alias.
+    docTab:
+      search.docTab === "reports" || search.docTab === "documents"
+        ? (search.docTab as "documents" | "reports")
+        : undefined,
     blueprint: typeof search.blueprint === "string" ? search.blueprint : undefined,
   }),
   component: TemplatesPage,
