@@ -14,7 +14,7 @@ import {
   type MyPortfolio,
   type PortfolioDetail,
 } from "@/lib/portfolio.functions";
-import { PortfolioSitePanel } from "@/features/showcases/components/PortfolioSitePanel";
+import { PortfolioLibraryContent } from "@/features/showcases/pages/PortfolioLibraryContent";
 import { PortfolioSetupWizard } from "@/features/showcases/components/PortfolioSetupWizard";
 import { PortfolioEmbedsPanel } from "@/features/showcases/components/PortfolioEmbedsPanel";
 import { ShowcasesPanel } from "@/features/showcases/components/ShowcasesPanel";
@@ -234,16 +234,17 @@ export function PortfolioPage() {
         </TabsList>
 
         <TabsContent value="site" className="mt-6">
-          {canEdit ? (
-            <PortfolioSitePanel
-              portfolio={p}
-              serviceTypes={data.serviceTypes}
-              projectCount={data.showcases.length}
-              onSaved={patchPortfolio}
-            />
-          ) : (
-            <ReadOnlyNotice what="the site's branding and copy" />
-          )}
+          <PortfolioLibraryContent
+            portfolio={p}
+            serviceTypes={data.serviceTypes}
+            showcases={data.showcases}
+            projectCount={data.showcases.length}
+            canEdit={canEdit}
+            published={p.published}
+            publishing={publishing}
+            onPublish={togglePublished}
+            onSaved={patchPortfolio}
+          />
         </TabsContent>
 
         <TabsContent value="projects" className="mt-6">
