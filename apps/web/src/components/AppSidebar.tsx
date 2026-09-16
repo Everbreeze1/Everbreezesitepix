@@ -74,7 +74,6 @@ const documentsItem: NavItem = {
   tab: "documents",
 };
 const teamItem: NavItem = { title: "Teams", url: "/teams", icon: Users };
-const collabItem: NavItem = { title: "Collaborators", url: "/collaborators", icon: Users };
 // The page behind /showcases is the whole portfolio mini-site (site + project
 // pages + website embeds), so "Portfolio" is what it actually is.
 const portfolioItem: NavItem = { title: "Portfolio", url: "/showcases", icon: Layers };
@@ -181,7 +180,9 @@ export function AppSidebar() {
     ...(showTemplates ? [blueprintsItem, checklistsItem, documentsItem] : []),
   ];
   const clientFacingItems: NavItem[] = [{ ...portfolioItem, locked: portfolioLocked }];
-  const teamsRow: NavItem = showOwnerNav ? teamItem : collabItem;
+  /* The Teams page is the same reference design for owners and invited members
+     alike, so there is no separate Collaborators row any more. */
+  const teamsRow: NavItem = teamItem;
 
   /*
    * "Upgrade" is only a row while there is something left to upgrade to: Team

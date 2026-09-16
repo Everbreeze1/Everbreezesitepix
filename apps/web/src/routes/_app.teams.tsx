@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { TeamsPage } from "@/features/teams/pages/TeamsPage";
+import { TeamsLibraryContent } from "@/features/teams/pages/TeamsLibraryContent";
 
 export const Route = createFileRoute("/_app/teams")({
-  head: () => ({ meta: [{ title: "Team - Everlumen" }] }),
-  component: TeamsPage,
+  head: () => ({ meta: [{ title: "Teams - Everlumen" }] }),
+  component: TeamsLibraryContent,
 });
