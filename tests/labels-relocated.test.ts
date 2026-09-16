@@ -56,10 +56,12 @@ describe("Label Sets parked", () => {
     expect(read(TEMPLATES)).toContain("export const SHOW_LABEL_SETS = false;");
   });
 
-  it("gates the tab strip and the blueprint Add-section menu", () => {
+  it("stays parked: no secondary tab strip, and the Add-section menu still gates it", () => {
     const s = read(TEMPLATES);
-    expect(s).toMatch(/SHOW_LABEL_SETS[\s\S]{0,120}key: "label-sets"/);
-    expect(s).toContain('!SHOW_LABEL_SETS && k === "label_set"');
+    // The hub's own tab strip is gone (the sidebar navigates), so there is no
+    // strip entry to gate; what remains is the add-menu guard.
+    expect(s).not.toContain("<PageTabStrip");
+    expect(s).toMatch(/kind === "label_set" && !SHOW_LABEL_SETS/);
   });
 
   it("redirects a deep link to the parked or moved tabs", () => {

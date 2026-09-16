@@ -29,7 +29,6 @@ import {
   Star,
   Workflow as WorkflowIcon,
 } from "lucide-react";
-import { ChecklistTemplatesPage } from "@/features/settings/pages/ChecklistTemplatesPage";
 import { WorkflowTemplatesPage } from "@/features/settings/pages/WorkflowTemplatesPage";
 import { useConfirm } from "@/hooks/use-confirm";
 import { Card } from "@/components/ui/card";
@@ -69,7 +68,6 @@ import { useQuery } from "@tanstack/react-query";
 import { getMyTeam } from "@/features/settings/api";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
-import { PageTabStrip } from "@/components/PageTabStrip";
 import { SURFACE_CARD } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import { LabelChip, LabelPicker } from "@/features/photos/components/LabelPicker";
@@ -97,13 +95,12 @@ import {
 } from "@/features/settings/components/blueprint-starters";
 import { installBlueprintStarter } from "@/features/settings/components/install-blueprint-starter";
 import { LabelSetsManager } from "@/features/settings/components/LabelSetsManager";
-import { DocumentTemplatesManager } from "@/features/settings/components/DocumentTemplatesManager";
 /*
- * The Main-html reference screens (public/Main-html/*Content.dc.html) shipped
- * as static pages: a card-grid list that opens an in-page editor / wizard,
- * with the exact sample content of the mockup. The three tabs below render
- * those reference screens verbatim; the rich, data-backed managers above stay
- * in the codebase for the direct /settings routes and the test suite.
+ * The Main-html reference screens (public/Main-html/*Content.dc.html) render
+ * on this hub: a card-grid list that opens an in-page editor / wizard. The
+ * three tabs below show each page's real data through that reference UI; the
+ * legacy full-feature managers stay in the codebase for the direct /settings
+ * routes and the test suite, but are not imported here.
  */
 import { BlueprintLibraryContent } from "@/features/settings/components/BlueprintLibraryContent";
 import { ChecklistLibraryContent } from "@/features/settings/components/ChecklistLibraryContent";
@@ -1530,56 +1527,10 @@ export function TemplatesPage() {
           )}
         </div>
 
-        {/* The same strip Projects and the project home page use, so the three
-            hub screens can no longer drift apart. */}
-        <PageTabStrip
-          className="mt-3.5"
-          value={tab}
-          onChange={(key) => setTab(key as TemplateTabKey)}
-          items={[
-            {
-              key: "blueprints",
-              label: "Project blueprints",
-              count: tabCounts.blueprints,
-              icon: FolderOpen,
-            },
-            {
-              key: "checklists",
-              label: "Checklists",
-              count: tabCounts.checklists,
-              icon: ClipboardList,
-            },
-            {
-              key: "workflows",
-              label: "Workflows",
-              count: tabCounts.workflows,
-              icon: WorkflowIcon,
-            },
-            // Walkthroughs is parked - see SHOW_WALKTHROUGH_TEMPLATES.
-            ...(SHOW_WALKTHROUGH_TEMPLATES
-              ? [
-                  {
-                    key: "walkthroughs" as const,
-                    label: "Walkthroughs",
-                    count: tabCounts.walkthroughs,
-                    icon: Camera,
-                  },
-                ]
-              : []),
-            { key: "documents", label: "Documents", count: tabCounts.documents, icon: FileText },
-            // Label Sets parked (SHOW_LABEL_SETS); Labels moved to Settings.
-            ...(SHOW_LABEL_SETS
-              ? [
-                  {
-                    key: "label-sets" as const,
-                    label: "Label sets",
-                    count: tabCounts["label-sets"],
-                    icon: Tags,
-                  },
-                ]
-              : []),
-          ]}
-        />
+        {/* No secondary tab strip here - the sidebar owns navigation between
+            Blueprints / Checklists / Workflows / Documents, and each of those
+            pages IS the tab's hero + content, exactly as the Main-html
+            reference pages stand on their own. */}
 
         {/* Link three, and only for the blueprints tab. The other tabs are
             ordinary lists that should flow down the page as they always have,

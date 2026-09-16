@@ -539,24 +539,24 @@ const DOC_TYPOGRAPHY = `
 `;
 
 const SAMPLE: Record<string, string> = {
-  project_name: "Maple Ridge Renovation",
-  project_address: "1234 Elm Street, Springfield",
-  project_number: "PRJ-00421",
-  client_name: "Sarah Whitfield",
-  client_contact: "sarah@example.com",
+  project_name: "Sample project",
+  project_address: "123 Sample Street",
+  project_number: "PRJ-00001",
+  client_name: "Sample client",
+  client_contact: "client@example.com",
   date: new Date().toLocaleDateString(undefined, {
     year: "numeric",
     month: "long",
     day: "numeric",
   }),
-  prepared_by: "Alex Morgan",
+  prepared_by: "Sample author",
   job_title: "Project Manager",
   prepared_by_title: "Project Manager",
-  weather: "Sunny, 72°F",
-  company: "Northwind Construction",
-  company_name: "Northwind Construction",
-  company_address: "800 Harbor Blvd, Suite 210",
-  company_phone: "(555) 123-4567",
+  weather: "Clear, mild",
+  company: "Your Company",
+  company_name: "Your Company",
+  company_address: "Company address",
+  company_phone: "(555) 000-0000",
 };
 
 function fillPreview(
@@ -2695,10 +2695,9 @@ function DocumentEditorSurface({
         {sidePanel && mode === "edit" && (
           /*
              Wider from lg up. At a flat 320px the value inputs below are about
-             270px of usable width, which truncates "1234 Elm Street,
-             Springfield" and every company address - in the one panel whose
-             whole job is showing you what you typed. "The fields should be
-             larger to view what we type."
+             270px of usable width, which truncates a full company address - in
+             the one panel whose whole job is showing you what you typed. "The
+             fields should be larger to view what we type."
           */
           <aside className="hidden w-80 shrink-0 overflow-y-auto border-l bg-card text-card-foreground md:block lg:w-96 xl:w-[26rem]">
             <div className="p-4">

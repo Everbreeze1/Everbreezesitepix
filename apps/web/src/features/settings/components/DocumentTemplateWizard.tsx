@@ -43,11 +43,11 @@ import { restrictToVerticalAxis } from "@/components/builder/builder-tokens";
 
 /** The click-to-insert tokens the mockup's Sections step offers. */
 const TOKENS = [
-  { token: "project_name", label: "Project name", sample: "Meridian Build" },
-  { token: "project_address", label: "Project address", sample: "2229 Zittel Drive" },
-  { token: "author_name", label: "Author name", sample: "Mike" },
-  { token: "report_date", label: "Report date", sample: "Sept 8, 2026" },
-  { token: "photo_count", label: "Photo count", sample: "14" },
+  { token: "project_name", label: "Project name" },
+  { token: "project_address", label: "Project address" },
+  { token: "author_name", label: "Author name" },
+  { token: "report_date", label: "Report date" },
+  { token: "photo_count", label: "Photo count" },
 ] as const;
 
 const COVERS = [
@@ -118,11 +118,11 @@ function detectFields(bodies: string[]): string[] {
   return Array.from(set).sort();
 }
 
-/** Substitute sample values so the preview reads like a finished document. */
+/** Substitute token labels so the preview reads like a finished document. */
 function samplePreview(body: string): string {
   let out = body;
   for (const t of TOKENS) {
-    out = out.replace(new RegExp("\\{\\{\\s*" + t.token + "\\s*\\}\\}", "gi"), t.sample);
+    out = out.replace(new RegExp("\\{\\{\\s*" + t.token + "\\s*\\}\\}", "gi"), t.label);
   }
   out = out.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, "…");
   return out.trim();

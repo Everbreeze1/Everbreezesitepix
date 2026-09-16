@@ -24,15 +24,17 @@ describe("SHOW_WALKTHROUGH_TEMPLATES", () => {
     expect(src()).toContain("export const SHOW_WALKTHROUGH_TEMPLATES = false;");
   });
 
-  it("gates the Templates tab strip", () => {
-    // The tab is added only when the flag is on, rather than always-present.
-    expect(src()).toMatch(/SHOW_WALKTHROUGH_TEMPLATES[\s\S]{0,120}key: "walkthroughs"/);
+  it("no longer draws a secondary tab strip on the hub", () => {
+    // The sidebar owns navigation now, so a parked feature can no longer be
+    // reached (or mistaken) for one of the visible tabs.
+    expect(src()).not.toContain("<PageTabStrip");
+    expect(src()).not.toMatch(/label: "Walkthroughs"/);
   });
 
   it("gates the blueprint Add-section menu", () => {
     // A blueprint must not become a second door to the parked templates.
     // The filter guards several parked kinds now; this is the walkthrough line.
-    expect(src()).toMatch(/!SHOW_WALKTHROUGH_TEMPLATES && k === "walkthrough"/);
+    expect(src()).toMatch(/kind === "walkthrough" && !SHOW_WALKTHROUGH_TEMPLATES/);
   });
 
   it("redirects a deep link to the hidden tab instead of rendering a stranded panel", () => {
