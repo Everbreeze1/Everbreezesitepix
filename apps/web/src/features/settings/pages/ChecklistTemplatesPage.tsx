@@ -136,7 +136,27 @@ function timeAgo(iso: string): string {
   return `${Math.floor(mo / 12)}y ago`;
 }
 
-export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolean } = {}) {
+export function ChecklistTemplatesPage({
+  embedded = false,
+  createOpen: createOpenProp,
+  onCreateOpenChange,
+  showActions = true,
+}: {
+  embedded?: boolean;
+  /**
+   * The create dialog, controlled from outside.
+   *
+   * The Templates hub renders this library's one primary action in the page
+   * hero, where the mockup puts it - level with the title, not in a row below
+   * it - so the hub owns the button and has to be able to open this dialog.
+   * Left uncontrolled (the standalone `/settings/checklists` route) it behaves
+   * exactly as it did.
+   */
+  createOpen?: boolean;
+  onCreateOpenChange?: (open: boolean) => void;
+  /** False when the caller renders the create button in its own chrome. */
+  showActions?: boolean;
+} = {}) {
   const access = useTemplateAuthoringAccess();
 
   if (access.loading) {
@@ -166,10 +186,21 @@ export function ChecklistTemplatesPage({ embedded = false }: { embedded?: boolea
     );
   }
 
-  return <ChecklistTemplatesBuilder embedded={embedded} />;
+  return <ChecklistTemplatesBuilder embedded={embedded} showActions={showActions} />;
 }
 
-function ChecklistTemplatesBuilder({ embedded = false }: { embedded?: boolean } = {}) {
+function ChecklistTemplatesBuilder({
+  embedded = false,
+  showActions = true,
+  createOpenProp,
+  onCreateOpenChange,
+}: {
+  embedded?: boolean;
+  showActions?: boolean;
+  /** Controlled by the hub when it owns the hero button, local otherwise. */
+  createOpenProp?: boolean;
+  onCreateOpenChange?: (open: boolean) => void;
+} = {}) {
   const { user } = useAuth();
   const confirm = useConfirm();
   const [loading, setLoading] = useState(true);
@@ -179,7 +210,10 @@ function ChecklistTemplatesBuilder({ embedded = false }: { embedded?: boolean } 
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [pane, setPane] = useState<"list" | "editor">("list");
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpenState, setCreateOpenState] = useState(false);
+  /** Controlled by the hub when it owns the hero button, local otherwise. */
+  const createOpen = createOpenProp ?? createOpenState;
+  const setCreateOpen = onCreateOpenChange ?? setCreateOpenState;
   const [startersOpen, setStartersOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -735,7 +769,7 @@ function ChecklistTemplatesBuilder({ embedded = false }: { embedded?: boolean } 
 
   /* --------------------------------------------------------------- view */
 
-  const headerActions = (
+  const headerActions = showActions ? (
     <div className="flex flex-wrap items-center gap-2">
       <Button size="sm" variant="outline" onClick={() => setStartersOpen(true)}>
         <Sparkles className="mr-1.5 h-4 w-4" />
@@ -743,15 +777,28 @@ function ChecklistTemplatesBuilder({ embedded = false }: { embedded?: boolean } 
       </Button>
       <Button size="sm" onClick={() => setCreateOpen(true)}>
         <Plus className="mr-1.5 h-4 w-4" />
-        New template
+        New checklist
       </Button>
     </div>
-  );
+  ) : null;
+
+  const embeddedPage = showActions ? (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className="text-[12.5px] font-semibold text-primary hover:underline cursor-pointer"
+          onClick={() => setStartersOpen(true)}
+        >
+          or start from a pre-built checklist
+        </span>
+      </div>
+    </div>
+  ) : undefined;
 
   return (
     <div className={embedded ? "" : "container mx-auto max-w-6xl px-4 pb-24 pt-4 md:pt-6"}>
       {pane === "editor" && selected ? null : embedded ? (
-        <div className="flex flex-wrap items-center justify-end gap-2">{headerActions}</div>
+        embeddedPage
       ) : (
         <PageHeader
           backTo="/settings"

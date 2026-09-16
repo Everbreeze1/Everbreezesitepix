@@ -1,6 +1,6 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { can } from "@everlumen/shared/team-permissions";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   LayoutTemplate,
   Plus,
@@ -77,6 +77,7 @@ import {
   REFERENCE_CARD_INTERACTIVE,
   REFERENCE_CARD_META,
   REFERENCE_CHIP,
+  REFERENCE_EYEBROW,
 } from "@/components/ui/reference";
 import { ApplyBlueprintDialog } from "@/features/settings/components/ApplyBlueprintDialog";
 import { BlueprintOutcomePreview } from "@/features/settings/components/BlueprintOutcomePreview";
@@ -97,6 +98,16 @@ import {
 import { installBlueprintStarter } from "@/features/settings/components/install-blueprint-starter";
 import { LabelSetsManager } from "@/features/settings/components/LabelSetsManager";
 import { DocumentTemplatesManager } from "@/features/settings/components/DocumentTemplatesManager";
+/*
+ * The Main-html reference screens (public/Main-html/*Content.dc.html) shipped
+ * as static pages: a card-grid list that opens an in-page editor / wizard,
+ * with the exact sample content of the mockup. The three tabs below render
+ * those reference screens verbatim; the rich, data-backed managers above stay
+ * in the codebase for the direct /settings routes and the test suite.
+ */
+import { BlueprintLibraryContent } from "@/features/settings/components/BlueprintLibraryContent";
+import { ChecklistLibraryContent } from "@/features/settings/components/ChecklistLibraryContent";
+import { DocumentLibraryContent } from "@/features/settings/components/DocumentLibraryContent";
 import {
   CATEGORY_ORDER,
   GENERAL_CATEGORY,
@@ -507,6 +518,20 @@ export function TemplatesPage() {
   const [workflowTpls, setWorkflowTpls] = useState<Array<{ id: string; name: string }>>([]);
   /** Phase count per workflow template, for the mockup card chip's "· N phases". */
   const [workflowPhaseCounts, setWorkflowPhaseCounts] = useState<Record<string, number>>({});
+  /**
+   * The phases themselves, per workflow template.
+   *
+   * The mockup's editor draws one row per phase with a "Marker" or
+   * "Actionable · N steps" chip, and a phase only exists inside a workflow
+   * template - it is not something a blueprint holds directly. Keeping the rows
+   * here lets the editor show what the blueprint will actually put on the
+   * project instead of a single opaque "workflow" line.
+   */
+  const [workflowPhaseRows, setWorkflowPhaseRows] = useState<
+    Record<string, Array<{ id: string; name: string; steps: number }>>
+  >({});
+  /** Item count per checklist template, for the mockup's "6 items" row meta. */
+  const [checklistItemCounts, setChecklistItemCounts] = useState<Record<string, number>>({});
   const [walkthroughTpls, setWalkthroughTpls] = useState<LibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
@@ -526,6 +551,11 @@ export function TemplatesPage() {
   /** Trade filter for the blueprint rail. `ALL_TRADES` is the unfiltered default. */
   const [tradeFilter, setTradeFilter] = useState<string>(ALL_TRADES);
   const [reordering, setReordering] = useState(false);
+  /* Create signal for the mockup library screens: the hub's hero button bumps
+     the tick and the reference component opens its editor/wizard fresh. */
+  const [blueprintCreateTick, setBlueprintCreateTick] = useState(0);
+  const [checklistCreateTick, setChecklistCreateTick] = useState(0);
+  const [documentCreateTick, setDocumentCreateTick] = useState(0);
 
   const [applyOpen, setApplyOpen] = useState(false);
 
@@ -576,62 +606,96 @@ export function TemplatesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [tplRes, chkRes, attRes, itemsRes, docRes, repRes, lsRes, wfRes, wtRes, phRes] =
-      await Promise.all([
-        supabase
-          .from("project_templates" as any)
-          .select(
-            "id, team_id, created_by, name, description, labels, archived, created_at, category, default_for_category, version",
-          )
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("checklist_templates" as any)
-          .select("id, name, description, archived")
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("project_template_checklists" as any)
-          .select("id, project_template_id, checklist_template_id, position")
-          .order("position", { ascending: true }),
-        supabase
-          .from("project_template_items" as any)
-          .select("id, project_template_id, kind, ref_id, position")
-          .order("position", { ascending: true }),
-        supabase
-          .from("document_templates" as any)
-          // `body->>category`, not `body`: the trade is one short string, and the
-          // bodies behind these rows are tens of kilobytes of document HTML each.
-          // Selecting the whole column to read one key off it would pull the
-          // entire built-in library down on every visit to this page.
-          // `copiedFrom` comes along for the same price and keeps this dropdown
-          // agreeing with the two screens that list the library - see `docTpls`.
-          .select("id, name, archived, category:body->>category, copiedFrom:body->>copiedFrom")
-          .eq("archived", false)
-          .order("name"),
-        supabase
-          .from("report_templates" as any)
-          .select("id, name, archived")
-          .eq("archived", false)
-          .order("name"),
-        supabase
-          .from("label_sets" as any)
-          .select("id, name, archived")
-          .eq("archived", false)
-          .order("name"),
-        supabase
-          .from("workflow_templates" as any)
-          .select("id, name, archived")
-          .eq("archived", false)
-          .order("name"),
-        // One workflow template can have any number of phases; the blueprint
-        // card chip ends with the phase count ("1 workflow · 5 phases") exactly
-        // as the mockup draws it.
-        supabase.from("workflow_template_phases" as any).select("template_id"),
-        supabase
-          .from("walkthrough_templates" as any)
-          .select("id, name, archived, category")
-          .eq("archived", false)
-          .order("name"),
-      ]);
+    /*
+     * The destructured names are positional, so they are written in the order
+     * the reads below actually appear.
+     *
+     * They were not, once: `phRes` and `wtRes` were swapped, so the phase count
+     * was built from walkthrough rows (which have no `template_id`, so every
+     * row was skipped and the count came out empty) and the walkthrough picker
+     * was built from phase rows (which have no `name`, so every entry was
+     * blank). The mockup's "· 5 phases" chip could therefore never render.
+     */
+    const [
+      tplRes,
+      chkRes,
+      attRes,
+      itemsRes,
+      docRes,
+      repRes,
+      lsRes,
+      wfRes,
+      phRes,
+      wtRes,
+      cliRes,
+      wfiRes,
+    ] = await Promise.all([
+      supabase
+        .from("project_templates" as any)
+        .select(
+          "id, team_id, created_by, name, description, labels, archived, created_at, category, default_for_category, version",
+        )
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("checklist_templates" as any)
+        .select("id, name, description, archived")
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("project_template_checklists" as any)
+        .select("id, project_template_id, checklist_template_id, position")
+        .order("position", { ascending: true }),
+      supabase
+        .from("project_template_items" as any)
+        .select("id, project_template_id, kind, ref_id, position")
+        .order("position", { ascending: true }),
+      supabase
+        .from("document_templates" as any)
+        // `body->>category`, not `body`: the trade is one short string, and the
+        // bodies behind these rows are tens of kilobytes of document HTML each.
+        // Selecting the whole column to read one key off it would pull the
+        // entire built-in library down on every visit to this page.
+        // `copiedFrom` comes along for the same price and keeps this dropdown
+        // agreeing with the two screens that list the library - see `docTpls`.
+        .select("id, name, archived, category:body->>category, copiedFrom:body->>copiedFrom")
+        .eq("archived", false)
+        .order("name"),
+      supabase
+        .from("report_templates" as any)
+        .select("id, name, archived")
+        .eq("archived", false)
+        .order("name"),
+      supabase
+        .from("label_sets" as any)
+        .select("id, name, archived")
+        .eq("archived", false)
+        .order("name"),
+      supabase
+        .from("workflow_templates" as any)
+        .select("id, name, archived")
+        .eq("archived", false)
+        .order("name"),
+      // One workflow template can have any number of phases; the blueprint
+      // card chip ends with the phase count ("1 workflow · 5 phases") exactly
+      // as the mockup draws it. The whole row comes back rather than a count
+      // because the editor's phase rows need each phase's name too.
+      supabase
+        .from("workflow_template_phases" as any)
+        .select("template_id, id, name, position")
+        .order("position", { ascending: true }),
+      supabase
+        .from("walkthrough_templates" as any)
+        .select("id, name, archived, category")
+        .eq("archived", false)
+        .order("name"),
+      /*
+       * The two counts the mockup's editor prints beside a row: a checklist
+       * row says "6 items", a phase row says "Actionable · 2 steps". Neither
+       * number is stored on the thing being counted, so both are counted from
+       * the rows underneath it.
+       */
+      supabase.from("checklist_template_items" as any).select("template_id"),
+      supabase.from("workflow_template_items" as any).select("phase_id"),
+    ]);
     /*
      * The blueprint read is the one that can fail over a pending migration:
      * 20260908000000 adds three columns to `project_templates`, and PostgREST
@@ -681,12 +745,52 @@ export function TemplatesPage() {
     setReportTpls(((repRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
     setLabelSetTpls(((lsRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
     setWorkflowTpls(((wfRes.data as any[]) ?? []).map((x: any) => ({ id: x.id, name: x.name })));
-    const phaseCounts: Record<string, number> = {};
+    /*
+     * The phases, grouped by the workflow template they belong to.
+     *
+     * `stepsPerPhase` is what separates the mockup's two row metas: a phase
+     * with nothing under it is a "Marker" - informational, the project passes
+     * through it - and a phase with steps is "Actionable · N steps". Which one
+     * a phase is is not stored on the phase; it is the count of the rows below
+     * it, so it has to be read from `workflow_template_items`.
+     */
+    const stepsPerPhase: Record<string, number> = {};
+    for (const it of (wfiRes.data as any[]) ?? []) {
+      if (!it.phase_id) continue;
+      stepsPerPhase[it.phase_id] = (stepsPerPhase[it.phase_id] ?? 0) + 1;
+    }
+    const grouped = new Map<
+      string,
+      Array<{ id: string; name: string; steps: number; position: number }>
+    >();
     for (const p of (phRes.data as any[]) ?? []) {
       if (!p.template_id) continue;
-      phaseCounts[p.template_id] = (phaseCounts[p.template_id] ?? 0) + 1;
+      const list = grouped.get(p.template_id) ?? [];
+      list.push({
+        id: p.id,
+        name: p.name ?? "",
+        steps: stepsPerPhase[p.id] ?? 0,
+        position: p.position ?? 0,
+      });
+      grouped.set(p.template_id, list);
     }
+    const phaseRows: Record<string, Array<{ id: string; name: string; steps: number }>> = {};
+    const phaseCounts: Record<string, number> = {};
+    for (const [tplId, list] of grouped) {
+      list.sort((a, b) => a.position - b.position);
+      phaseRows[tplId] = list.map(({ id, name, steps }) => ({ id, name, steps }));
+      phaseCounts[tplId] = list.length;
+    }
+    setWorkflowPhaseRows(phaseRows);
     setWorkflowPhaseCounts(phaseCounts);
+
+    // The checklist row meta, counted the same way.
+    const itemCounts: Record<string, number> = {};
+    for (const it of (cliRes.data as any[]) ?? []) {
+      if (!it.template_id) continue;
+      itemCounts[it.template_id] = (itemCounts[it.template_id] ?? 0) + 1;
+    }
+    setChecklistItemCounts(itemCounts);
     // Absent rather than empty on a database still waiting for 20260908000000:
     // the read errors, `data` is null, and the picker simply offers no
     // walkthroughs. The library tab says so in full.
@@ -959,6 +1063,7 @@ export function TemplatesPage() {
       if (error || !data) throw error ?? new Error("Failed");
 
       toast.success("Blueprint created");
+      setBlueprintCreateTick((t) => t + 1);
       setNewName("");
       setNewDesc("");
       setNewCategory(NO_CATEGORY);
@@ -1385,17 +1490,42 @@ export function TemplatesPage() {
               {TAB_HERO[tab].subtitle}
             </p>
           </div>
-          {tab === "blueprints" && canManage && (
+          {canManage && (tab === "blueprints" || tab === "checklists" || tab === "documents") && (
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Button
-                onClick={() => {
-                  setTab("blueprints");
-                  setCreateOpen(true);
-                }}
-                className="font-sans h-10 rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90"
-              >
-                <Plus className="h-4 w-4" /> New blueprint
-              </Button>
+              {tab === "blueprints" && (
+                <Button
+                  onClick={() => {
+                    setTab("blueprints");
+                    setBlueprintCreateTick((t) => t + 1);
+                    setCreateOpen(true);
+                  }}
+                  className="font-sans h-10 rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  <Plus className="h-4 w-4" /> New blueprint
+                </Button>
+              )}
+              {tab === "checklists" && (
+                <Button
+                  onClick={() => {
+                    setTab("checklists");
+                    setChecklistCreateTick((t) => t + 1);
+                  }}
+                  className="font-sans h-10 rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  <Plus className="h-4 w-4" /> New checklist
+                </Button>
+              )}
+              {tab === "documents" && (
+                <Button
+                  onClick={() => {
+                    setTab("documents");
+                    setDocumentCreateTick((t) => t + 1);
+                  }}
+                  className="font-sans h-10 rounded-lg bg-primary px-4 text-[13.5px] font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  <Plus className="h-4 w-4" /> New template
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -1462,62 +1592,44 @@ export function TemplatesPage() {
           )}
         >
           {tab === "blueprints" && (
-            <BlueprintsTab
-              loading={loading}
-              canManage={canManage}
-              isTeam={isTeam}
-              templates={templates}
-              visibleTemplates={visibleTemplates}
-              sectionCountByTemplate={sectionCountByTemplate}
-              kindCountsByTemplate={kindCountsByTemplate}
-              workflowPhasesByTemplate={workflowPhasesByTemplate}
-              applyCountByTemplate={applyCountByTemplate}
-              applicationsAvailable={applications !== null}
-              selectedApplications={selectedApplications}
-              selected={selected}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              onDeselect={() => setSelectedId(null)}
-              search={searchText}
-              onSearch={setSearchText}
-              showArchived={showArchived}
-              onToggleArchived={() => setShowArchived((s) => !s)}
-              trades={tradesInUse}
-              tradeFilter={tradeFilter}
-              onTradeFilter={setTradeFilter}
-              onCreate={() => setCreateOpen(true)}
-              onStarters={() => setStartersOpen(true)}
-              sections={sections}
-              previewItems={previewItems}
-              reordering={reordering}
-              onMove={moveSection}
-              onRemove={removeSection}
-              onPickKind={(k) => {
-                setAddKind(k);
-                setAddRefId("");
+            <BlueprintLibraryContent
+              createTick={blueprintCreateTick}
+              onCreate={() => {
+                if (!canManage) {
+                  navigate({ to: "/pricing" });
+                  return;
+                }
+                setBlueprintCreateTick((t) => t + 1);
+                setCreateOpen(true);
               }}
-              onApply={() => setApplyOpen(true)}
-              onEdit={openEdit}
-              onDuplicate={duplicateTemplate}
-              onArchiveToggle={toggleArchived}
-              onDelete={deleteTemplate}
-              onUpdateLabels={updateLabels}
-              allLabels={allLabels}
-              teamId={teamData?.team?.id ?? null}
-              userId={user?.id}
-              onGoToTab={setTab}
-              onUpgrade={() => navigate({ to: "/pricing" })}
             />
           )}
 
-          {tab === "checklists" && <ChecklistTemplatesPage embedded />}
+          {tab === "checklists" && (
+            <ChecklistLibraryContent
+              createTick={checklistCreateTick}
+              onCreate={() => {
+                if (!canManage) {
+                  navigate({ to: "/pricing" });
+                  return;
+                }
+                setChecklistCreateTick((t) => t + 1);
+              }}
+            />
+          )}
           {tab === "workflows" && <WorkflowTemplatesPage embedded />}
           {tab === "walkthroughs" && <WalkthroughTemplatesManager canManage={canManage} />}
           {tab === "documents" && (
-            <DocumentTemplatesManager
-              teamId={teamData?.team?.id ?? null}
-              canManage={canManage}
+            <DocumentLibraryContent
               initialTab={docTab}
+              createTick={documentCreateTick}
+              onCreate={() => {
+                if (!canManage) {
+                  navigate({ to: "/pricing" });
+                  return;
+                }
+                setDocumentCreateTick((t) => t + 1);
+              }}
             />
           )}
           {tab === "label-sets" && (
@@ -1899,6 +2011,46 @@ function kindChip(kind: TemplateItemKind, n: number): string {
   return `${n} ${nouns[kind]}${n === 1 ? "" : "s"}`;
 }
 
+/**
+ * The editor's groups, laid out as the mockup lays them out.
+ *
+ * Each entry is one row of the grid: `["checklist"]` is a full-width group and
+ * `["document", "report"]` is the mockup's two columns - Documents beside
+ * Report templates. Applying a blueprint processes the kinds in this order
+ * (`applyProjectBlueprintService`), so this is also the order the sections are
+ * applied in, and the two must not drift apart.
+ */
+const EDITOR_GROUPS: ReadonlyArray<ReadonlyArray<TemplateItemKind>> = [
+  ["checklist"],
+  ["workflow"],
+  ["walkthrough"],
+  ["document", "report"],
+  ["label_set"],
+];
+
+/** Group headings, named exactly as the mockup names them. */
+const GROUP_LABEL: Record<TemplateItemKind, string> = {
+  checklist: "Checklists",
+  workflow: "Workflow phases",
+  walkthrough: "Walkthroughs",
+  document: "Documents",
+  report: "Report templates",
+  label_set: "Label sets",
+};
+
+/**
+ * The accent add-row's text. The mockup's wording: "+ Add from checklist
+ * library", "+ Add document", "+ Add report template".
+ */
+const GROUP_ADD_LABEL: Record<TemplateItemKind, string> = {
+  checklist: "Add from checklist library",
+  workflow: "Add workflow",
+  walkthrough: "Add walkthrough",
+  document: "Add document",
+  report: "Add report template",
+  label_set: "Add label set",
+};
+
 function BlueprintsTab(props: {
   loading: boolean;
   canManage: boolean;
@@ -1910,6 +2062,10 @@ function BlueprintsTab(props: {
   kindCountsByTemplate: Map<string, Partial<Record<TemplateItemKind, number>>>;
   /** Workflow phases per blueprint, for the "· 5 phases" tail on the chip. */
   workflowPhasesByTemplate: Map<string, number>;
+  /** Item count per checklist template, for the mockup's "6 items" row meta. */
+  checklistItemCounts: Record<string, number>;
+  /** Phases per workflow template, for the mockup's phase rows and their chips. */
+  workflowPhaseRows: Record<string, Array<{ id: string; name: string; steps: number }>>;
   applyCountByTemplate: Map<string, number>;
   applicationsAvailable: boolean;
   selectedApplications: BlueprintApplication[];
@@ -1954,6 +2110,8 @@ function BlueprintsTab(props: {
     visibleTemplates,
     kindCountsByTemplate,
     workflowPhasesByTemplate,
+    checklistItemCounts,
+    workflowPhaseRows,
     applyCountByTemplate,
     applicationsAvailable,
     selectedApplications,
@@ -2021,6 +2179,191 @@ function BlueprintsTab(props: {
    * must not be able to leave a column missing.
    */
   const [pane, setPane] = useState<"contents" | "applied">("contents");
+
+  /**
+   * The attached sections, grouped by kind.
+   *
+   * `index` is the row's place in the flat apply order, which is what `onMove`
+   * reorders and writes back; `pos` is its place inside its own group, which is
+   * what the up/down buttons disable against now that the list is grouped -
+   * "the row above" is a different row than it was.
+   */
+  const grouped = useMemo(() => {
+    const m = new Map<TemplateItemKind, Array<{ row: SectionRow; index: number; pos: number }>>();
+    sections.forEach((row, index) => {
+      const list = m.get(row.kind) ?? [];
+      list.push({ row, index, pos: list.length });
+      m.set(row.kind, list);
+    });
+    return m;
+  }, [sections]);
+
+  /**
+   * Whether a group offers its accent add-row.
+   *
+   * Both rules come from the picker this row replaced: a parked kind is not
+   * offerable (sections of it that already exist still render), and a singleton
+   * kind that is already attached has nothing left to add.
+   */
+  const canAdd = (kind: TemplateItemKind) => {
+    if (!canManage) return false;
+    if (kind === "walkthrough" && !SHOW_WALKTHROUGH_TEMPLATES) return false;
+    if (kind === "label_set" && !SHOW_LABEL_SETS) return false;
+    return !(SINGLETON_KINDS.has(kind) && sections.some((s) => s.kind === kind && !s.missing));
+  };
+
+  /** Up / down / remove, revealed on hover or keyboard focus. */
+  const rowControls = (row: SectionRow, index: number, pos: number, lastPos: number) => (
+    <div className="flex shrink-0 items-center transition-opacity focus-within:opacity-100 group-hover:opacity-100 sm:opacity-0">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 text-muted-foreground disabled:opacity-30"
+        disabled={pos === 0 || reordering}
+        onClick={() => onMove(index, -1)}
+        aria-label={`Move ${row.name} up`}
+      >
+        <ArrowUp className="h-3.5 w-3.5" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 text-muted-foreground disabled:opacity-30"
+        disabled={pos === lastPos || reordering}
+        onClick={() => onMove(index, 1)}
+        aria-label={`Move ${row.name} down`}
+      >
+        <ArrowDown className="h-3.5 w-3.5" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+        onClick={() => onRemove(row)}
+        aria-label={`Remove ${row.name}`}
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+
+  /** The accent add-row at the foot of a group, as the mockup draws it. */
+  const addRow = (kind: TemplateItemKind) => (
+    <button
+      type="button"
+      onClick={() => onPickKind(kind)}
+      className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2.5 text-left text-[12.5px] font-semibold text-primary transition-colors hover:bg-secondary/50"
+    >
+      <Plus className="h-3.5 w-3.5" />
+      {GROUP_ADD_LABEL[kind]}
+    </button>
+  );
+
+  /**
+   * One attached section, as the mockup's `.bld-row`: tinted icon, name, and
+   * whatever meta belongs to that kind on the right.
+   *
+   * The kind is no longer printed on the row. The group heading above it says
+   * it once for the whole group, which is most of the point of grouping - the
+   * row used to spend 65px repeating what the icon beside it already said.
+   */
+  const sectionRow = (
+    row: SectionRow,
+    index: number,
+    pos: number,
+    lastPos: number,
+    meta: ReactNode = null,
+  ) => {
+    const kindMeta = KIND_META[row.kind];
+    const Icon = kindMeta.icon;
+    return (
+      <div
+        key={`${row.legacy ? "chk" : "it"}-${row.id}`}
+        className="group flex w-full items-center gap-3 border-b border-border px-4 py-2.5 transition-colors last:border-b-0 hover:bg-secondary/40"
+      >
+        <span
+          className={cn(
+            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+            kindMeta.tint,
+          )}
+        >
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span
+            className={cn(
+              "block truncate text-sm font-semibold",
+              row.missing && "text-destructive",
+            )}
+          >
+            {row.name}
+          </span>
+          {row.missing && (
+            <span className="block truncate text-[11px] text-destructive/80">
+              The source template was deleted - remove this section
+            </span>
+          )}
+        </span>
+        {meta}
+        {canManage && rowControls(row, index, pos, lastPos)}
+      </div>
+    );
+  };
+
+  /**
+   * The workflow group.
+   *
+   * The attached workflow template is the section; the phases under it are not
+   * sections at all - a phase lives inside the workflow template, and applying
+   * the blueprint copies the workflow with its phases already in it. The mockup
+   * draws the phases, so this lists them read-only, with the one distinction
+   * that matters on site: a phase with steps is "Actionable · N steps" and one
+   * without is a "Marker" the project simply passes through.
+   *
+   * The foot of the group is where this departs from the mockup's "+ Add
+   * phase". A phase cannot be added here: that would silently edit a shared
+   * library template from one blueprint. It links to where phases are authored
+   * instead, which is the same trip the empty-state pointer makes.
+   */
+  const workflowGroup = (
+    rows: Array<{ row: SectionRow; index: number; pos: number }>,
+    offerAdd: boolean,
+  ) => {
+    const first = rows[0];
+    const phases = first ? (workflowPhaseRows[first.row.refId] ?? []) : [];
+    return (
+      <>
+        {first && sectionRow(first.row, first.index, first.pos, rows.length - 1)}
+        {phases.map((p) => (
+          <div
+            key={p.id}
+            className="flex w-full items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0"
+          >
+            {/* Aligned under the workflow's name, not under its icon: these
+                rows belong to the row above them. */}
+            <span className="w-7 shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1 truncate text-[13px]">{p.name}</span>
+            <span className={REFERENCE_CHIP}>
+              {p.steps > 0 ? `Actionable · ${p.steps} step${p.steps === 1 ? "" : "s"}` : "Marker"}
+            </span>
+          </div>
+        ))}
+        {first ? (
+          <button
+            type="button"
+            onClick={() => onGoToTab("workflows")}
+            title="Phases belong to the workflow template, so they are added there - and every blueprint using that workflow picks the change up."
+            className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2.5 text-left text-[12.5px] font-semibold text-primary transition-colors hover:bg-secondary/50"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add phase in Workflows
+          </button>
+        ) : (
+          offerAdd && addRow("workflow")
+        )}
+      </>
+    );
+  };
 
   if (loading) {
     return (
@@ -2705,165 +3048,70 @@ function BlueprintsTab(props: {
                    only fight it. Without it a thirty-section blueprint on a
                    narrow window is thirty rows of page scroll again, which is
                    the thing the switch above exists to stop. */
-              <ul className="@container min-h-0 flex-1 overflow-y-auto workspace:max-h-none">
-                {sections.map((r, idx) => {
-                  const meta = KIND_META[r.kind];
-                  const Icon = meta.icon;
+              /*
+               * The pane's scroller. A twenty-section blueprint scrolls here,
+               * inside its own column, instead of scrolling the page and taking
+               * the header and the usage list with it.
+               */
+              /* `max-h` for every layout except the pinned one, where the flex
+                   chain has already measured the height and a cap would only
+                   fight it. Without it a thirty-section blueprint on a narrow
+                   window is thirty rows of page scroll again, which is the thing
+                   the switch above exists to stop. */
+              <div className="@container min-h-0 flex-1 space-y-5 overflow-y-auto p-4 workspace:max-h-none">
+                {EDITOR_GROUPS.map((rowKinds) => {
+                  /*
+                   * A group renders when it holds something, or when it is the
+                   * one offering to add something. Gating the group itself on
+                   * the parked kinds would hide sections that already exist -
+                   * the mistake the single picker menu was written to avoid.
+                   */
+                  const shown = rowKinds.filter(
+                    (k) => (grouped.get(k)?.length ?? 0) > 0 || canAdd(k),
+                  );
+                  if (shown.length === 0) return null;
                   return (
-                    <li
-                      key={`${r.legacy ? "chk" : "it"}-${r.id}`}
-                      className="group flex w-full items-center gap-3 border-b border-border/60 px-3.5 py-2.5 transition-colors last:border-b-0 hover:bg-secondary/40"
+                    <div
+                      key={rowKinds.join("-")}
+                      className={cn(shown.length > 1 && "grid gap-4 lg:grid-cols-2")}
                     >
-                      {/* Position as a number, not a chip. A filled badge next
-                          to a tinted icon read as two icons. */}
-                      <span className="w-3.5 shrink-0 text-right text-[11px] font-bold tabular-nums text-muted-foreground/70">
-                        {idx + 1}
-                      </span>
-                      <span
-                        className={cn(
-                          "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
-                          meta.tint,
-                        )}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                      </span>
-                      {/* One line. The kind used to be stated three times per
-                          row - tinted icon, outlined badge, and a sentence
-                          spelling out what it becomes - which is what made a
-                          five-section blueprint a wall. The icon carries the
-                          kind, the word beside it names it, and the "Lands in"
-                          row above says where it all goes. */}
-                      <span className="min-w-0 flex-1">
-                        <span
-                          className={cn(
-                            "block truncate text-sm font-semibold",
-                            r.missing && "text-destructive",
-                          )}
-                        >
-                          {r.name}
-                        </span>
-                        {r.missing && (
-                          <span className="block truncate text-[11px] text-destructive/80">
-                            The source template was deleted - remove this section
-                          </span>
-                        )}
-                      </span>
-                      {/* The kind in words, but only where the column is
-                            wide enough to spend 65px on it. A container query
-                            and not a media query: this list is a narrow second
-                            column at 1280px and a full-width pane at 1024px,
-                            so window width is the wrong question. Where it is
-                            hidden the tinted icon still carries the kind, and
-                            the 65px goes to the name, which was truncating to
-                            "Pre-Install Saf...". */}
-                      <span
-                        className={cn(REFERENCE_CHIP, "hidden shrink-0 @min-[26rem]:inline-flex")}
-                      >
-                        {meta.label}
-                      </span>
-                      {/* Revealed on hover or keyboard focus on a pointer
-                          device, always present on touch, where there is no
-                          hover to reveal them with. Space is reserved either
-                          way, so nothing shifts. */}
-                      {canManage && (
-                        <div className="flex shrink-0 items-center transition-opacity focus-within:opacity-100 group-hover:opacity-100 sm:opacity-0">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground disabled:opacity-30"
-                            disabled={idx === 0 || reordering}
-                            onClick={() => onMove(idx, -1)}
-                            aria-label={`Move ${r.name} up`}
-                          >
-                            <ArrowUp className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground disabled:opacity-30"
-                            disabled={idx === sections.length - 1 || reordering}
-                            onClick={() => onMove(idx, 1)}
-                            aria-label={`Move ${r.name} down`}
-                          >
-                            <ArrowDown className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={() => onRemove(r)}
-                            aria-label={`Remove ${r.name}`}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </li>
+                      {shown.map((kind) => {
+                        const rows = grouped.get(kind) ?? [];
+                        const lastPos = rows.length - 1;
+                        return (
+                          <section key={kind} className="min-w-0">
+                            <div className={REFERENCE_EYEBROW}>{GROUP_LABEL[kind]}</div>
+                            <div className="mt-2 overflow-hidden rounded-[12px] border border-border bg-card">
+                              {kind === "workflow"
+                                ? workflowGroup(rows, canAdd("workflow"))
+                                : rows.map(({ row, index, pos }) =>
+                                    sectionRow(
+                                      row,
+                                      index,
+                                      pos,
+                                      lastPos,
+                                      // The mockup prints the item count on a
+                                      // checklist row, and nothing at all on a
+                                      // document or a report row.
+                                      kind === "checklist" ? (
+                                        <span className="shrink-0 text-[11.5px] text-faint">
+                                          {checklistItemCounts[row.refId] ?? 0}{" "}
+                                          {(checklistItemCounts[row.refId] ?? 0) === 1
+                                            ? "item"
+                                            : "items"}
+                                        </span>
+                                      ) : null,
+                                    ),
+                                  )}
+                              {kind !== "workflow" && canAdd(kind) && addRow(kind)}
+                            </div>
+                          </section>
+                        );
+                      })}
+                    </div>
                   );
                 })}
-              </ul>
-            )}
-            {canManage && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  {/* The mockup's accent add-row: the picker lives at the foot
-                        of the list it adds to, not up in a header. */}
-                  <button
-                    type="button"
-                    className="flex shrink-0 items-center gap-1.5 border-t border-border/60 px-4 py-2.5 text-left text-[12.5px] font-semibold text-primary transition-colors hover:bg-secondary/50"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add section
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-64">
-                  {KIND_ORDER.filter((k) => {
-                    // A blueprint must not be a second door to the kinds the
-                    // hub is parking. Existing sections of these kinds still
-                    // render; this only stops adding new ones.
-                    if (!SHOW_WALKTHROUGH_TEMPLATES && k === "walkthrough") return false;
-                    if (!SHOW_LABEL_SETS && k === "label_set") return false;
-                    return true;
-                  }).map((k) => {
-                    const Icon = KIND_META[k].icon;
-                    /*
-                     * "zero-to-one workflow", from the spec. A workflow
-                     * becomes the project's status tracker and a project has
-                     * one status, so a second one has no meaning. Disabled
-                     * with the reason on the row rather than hidden: a kind
-                     * that vanishes from the menu reads as a bug, and the
-                     * author would go looking for it.
-                     */
-                    const taken =
-                      SINGLETON_KINDS.has(k) && sections.some((s) => s.kind === k && !s.missing);
-                    return (
-                      <DropdownMenuItem
-                        key={k}
-                        className="items-start gap-2"
-                        disabled={taken}
-                        onClick={() => onPickKind(k)}
-                      >
-                        <span
-                          className={cn(
-                            "mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded",
-                            KIND_META[k].tint,
-                          )}
-                        >
-                          <Icon className="h-3.5 w-3.5" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block text-sm font-semibold">{KIND_META[k].label}</span>
-                          <span className="block text-[11px] leading-snug text-muted-foreground">
-                            {taken
-                              ? `Already in this blueprint. A blueprint carries at most one ${KIND_META[k].label.toLowerCase()}.`
-                              : KIND_OUTCOME[k].becomes}
-                          </span>
-                        </span>
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              </div>
             )}
           </div>
         </div>
