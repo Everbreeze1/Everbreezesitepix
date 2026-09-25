@@ -255,6 +255,8 @@ interface MapView {
 }
 
 const VIEW_STORAGE_KEY = "everlumen:map-view";
+/** At or below this zoom a restored view is the whole world, never a framing worth keeping. */
+const WORLD_SCALE_ZOOM = 3;
 let lastMapView: MapView | null = null;
 
 const readMapView = (): MapView | null => {
@@ -352,6 +354,7 @@ export function MapPage() {
   const filterRef = useRef<StatusFilter>(filter);
   // Which filter the map has already framed. Null until the first fit.
   const fittedFilter = useRef<StatusFilter | null>(null);
+  const restoredChecked = useRef(false);
   useEffect(() => {
     statsRef.current = stats;
   }, [stats]);
@@ -827,16 +830,48 @@ export function MapPage() {
   useEffect(() => {
     if (!mapReady || !mapInstance.current || !window.google?.maps) return;
     if (mappable.length === 0) return;
-    if (fittedFilter.current === filter) return;
-    fittedFilter.current = filter;
+    const map = mapInstance.current;
     const bounds = new window.google.maps.LatLngBounds();
     mappable.forEach((p) => bounds.extend({ lat: Number(p.latitude), lng: Number(p.longitude) }));
-    if (mappable.length === 1) {
-      mapInstance.current.setCenter(bounds.getCenter());
-      mapInstance.current.setZoom(14);
-    } else {
-      mapInstance.current.fitBounds(bounds, { top: 100, right: 100, bottom: 100, left: 100 });
+    const frame = () => {
+      if (mappable.length === 1) {
+        map.setCenter(bounds.getCenter());
+        map.setZoom(14);
+      } else {
+        map.fitBounds(bounds, { top: 100, right: 100, bottom: 100, left: 100 });
+      }
+    };
+    if (fittedFilter.current === filter) {
+      /*
+       * A restored view is trusted only if it shows at least one pin. A saved
+       * view can outlive the layout it was taken in (a map sized wrong at the
+       * time saved a centre and zoom that frame nothing but empty ocean or
+       * the Arctic), and since it is never re-fitted, the page would open
+       * blank on every reload. A world-scale view is treated the same way: it
+       * technically contains the pins, but shows them as one speck, and it is
+       * what the old over-tall layout saved. Checked once, on the first idle
+       * after the pins are known.
+       */
+      if (restoredChecked.current) return;
+      restoredChecked.current = true;
+      window.google.maps.event.addListenerOnce(map, "idle", () => {
+        const seen = map.getBounds();
+        const worldScale = (map.getZoom() ?? 0) <= WORLD_SCALE_ZOOM;
+        if (
+          worldScale ||
+          (seen &&
+            !mappable.some((p) =>
+              seen.contains({ lat: Number(p.latitude), lng: Number(p.longitude) }),
+            ))
+        ) {
+          frame();
+        }
+      });
+      return;
     }
+    fittedFilter.current = filter;
+    restoredChecked.current = true;
+    frame();
   }, [mappable, mapReady, filter]);
 
   // Keep the labelled pin in step with the selection, wherever it came from:
@@ -933,9 +968,13 @@ export function MapPage() {
      * Full-bleed two-pane layout, per the MapsContent design reference: a
      * 340px rail with the legend and the compact Nearby list, and the map
      * taking every pixel to its right, edge to edge under the app header.
+     * On desktop the row is pinned to the viewport height (100svh minus the
+     * 3.5rem app header) so the rail scrolls on its own; left to size to the
+     * Nearby list, the row grew thousands of px tall and the map centred
+     * itself far below the fold. Below lg the map goes first, above the rail.
      */
-    <div className="flex min-h-0 flex-1 flex-col bg-background lg:flex-row">
-      <aside className="w-full shrink-0 overflow-y-auto border-b border-border px-6 pb-8 pt-7 lg:w-[340px] lg:border-b-0 lg:border-r">
+    <div className="flex min-h-0 flex-1 flex-col bg-background lg:h-[calc(100svh-3.5rem)] lg:flex-none lg:flex-row lg:overflow-hidden">
+      <aside className="w-full shrink-0 overflow-y-auto border-b border-border px-6 pb-8 pt-7 lg:min-h-0 lg:w-[340px] lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between gap-3">
           <h1 className="font-manrope text-[22px] font-bold tracking-[-0.01em] text-foreground">
             Maps
@@ -971,7 +1010,7 @@ export function MapPage() {
                   ? "Showing this status - click to show all"
                   : `Show only ${statusLabel[s].toLowerCase()}`
               }
-              className={`flex w-full items-center gap-2.5 border-b border-border py-2 text-left font-manrope text-[13px] transition-colors last:border-b-0 ${
+              className={`flex w-full items-center gap-[9px] border-b border-border py-2 text-left font-manrope text-[13px] transition-colors last:border-b-0 ${
                 filter === s
                   ? "font-semibold text-foreground"
                   : "text-foreground/80 hover:text-foreground"
@@ -979,7 +1018,7 @@ export function MapPage() {
             >
               <span
                 aria-hidden
-                className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-card"
+                className="h-[9px] w-[9px] shrink-0 rounded-full"
                 style={{ background: statusColor[s] }}
               />
               <span className="flex-1">{statusLabel[s]}</span>
@@ -1001,7 +1040,7 @@ export function MapPage() {
           </p>
         )}
 
-        <div className="mb-1.5 mt-6 font-manrope text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
+        <div className="mb-1.5 mt-[22px] font-manrope text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
           Nearby
         </div>
         <div>
@@ -1017,13 +1056,13 @@ export function MapPage() {
                 key={p.id}
                 type="button"
                 onClick={() => focusProject(p)}
-                className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors ${
+                className={`flex w-full items-center gap-2.5 rounded-lg border-b border-border px-2 py-2.5 text-left transition-colors last:border-b-0 ${
                   isSelected ? "bg-secondary" : "hover:bg-secondary/60"
                 } ${!hasCoords ? "opacity-70" : ""}`}
               >
                 <span
                   aria-hidden
-                  className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-card"
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
                   style={{
                     background: stage?.color ?? statusColor[p.status] ?? FALLBACK_PIN_COLOR,
                   }}
@@ -1059,10 +1098,12 @@ export function MapPage() {
        * The map, edge to edge. The rail owns the words; this owns the whole
        * rest of the viewport, exactly as the design reference draws it.
        */}
-      <div className="relative h-[45vh] shrink-0 overflow-hidden lg:h-auto lg:flex-1">
+      <div className="relative order-first h-[45vh] shrink-0 overflow-hidden bg-[oklch(93%_0.015_220)] dark:bg-[oklch(26%_0.015_220)] lg:order-none lg:h-auto lg:min-h-0 lg:flex-1">
         {mapError ? (
-          <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
-            {mapError}
+          <div className="flex h-full items-center justify-center p-6">
+            <span className="rounded-md bg-background/70 px-3 py-1.5 text-[12.5px] text-muted-foreground">
+              {mapError}
+            </span>
           </div>
         ) : (
           <>
