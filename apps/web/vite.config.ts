@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig, loadEnv, type PluginOption } from "vite";
+import { defineConfig, loadEnv, type PluginOption, type ProxyOptions } from "vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -88,6 +88,32 @@ export default defineConfig(async ({ command, mode }) => {
        * Failing here costs one clear error message and saves that hunt.
        */
       strictPort: true,
+      /**
+       * Opt-in: forward `/v1/*` to a deployed API for local dev.
+       *
+       * The browser client calls `/v1/rpc` on its own origin when
+       * VITE_API_BASE_URL is unset, and nothing on the dev server answers it,
+       * so every page that needs the API - starting with the subscription gate
+       * in `_app.tsx` - fails on "Couldn't verify your subscription". Pointing
+       * VITE_API_BASE_URL at the deployed API does not work either: it only
+       * allows its own origins, so the browser blocks the reply. Proxying from
+       * here is server to server, so there is no CORS to satisfy.
+       *
+       * Set VITE_DEV_API_PROXY=https://api.everlumen.co in apps/web/.env.local
+       * to enable it. It talks to whatever that API talks to, so it is live data.
+       */
+      proxy: env.VITE_DEV_API_PROXY
+        ? ({
+            "/v1": {
+              target: env.VITE_DEV_API_PROXY,
+              changeOrigin: true,
+              secure: true,
+              configure: (proxy) => {
+                proxy.on("proxyReq", (proxyReq) => proxyReq.removeHeader("origin"));
+              },
+            },
+          } satisfies Record<string, ProxyOptions>)
+        : undefined,
       watch: {
         /**
          * Never watch build output.

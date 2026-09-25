@@ -13,7 +13,7 @@ import { supabase } from "@/integrations/everlumen/client";
  * projects each blueprint has been applied to.
  */
 
-type RowKind = "checklist" | "workflow" | "document" | "report";
+export type RowKind = "checklist" | "workflow" | "document" | "report";
 
 interface SectionRow {
   kind: RowKind;
@@ -95,6 +95,7 @@ function BlueprintEditor({
   appliedAvailable,
   onBack,
   onSave,
+  onAddSection,
 }: {
   blueprint: Blueprint;
   rows: SectionRow[];
@@ -102,6 +103,8 @@ function BlueprintEditor({
   appliedAvailable: boolean;
   onBack: () => void;
   onSave: () => void;
+  /** Opens the hub's picker for this kind, against this blueprint. */
+  onAddSection: (kind: RowKind) => void;
 }) {
   const checklistRows = rows.filter((r) => r.kind === "checklist");
   const workflowRows = rows.filter((r) => r.kind === "workflow");
@@ -174,7 +177,7 @@ function BlueprintEditor({
             No checklists attached yet.
           </div>
         )}
-        <AddRow onPick={() => toast.info("This opens the checklist library picker")}>
+        <AddRow onPick={() => onAddSection("checklist")}>
           + Add from checklist library
         </AddRow>
       </div>
@@ -208,7 +211,7 @@ function BlueprintEditor({
             No workflow attached.
           </div>
         )}
-        <AddRow onPick={() => toast.info("This opens the workflow phase picker")}>
+        <AddRow onPick={() => onAddSection("workflow")}>
           + Add phase
         </AddRow>
       </div>
@@ -227,7 +230,7 @@ function BlueprintEditor({
             ) : (
               <div className="py-[9px] text-[13px] text-faint">No document templates.</div>
             )}
-            <AddRow onPick={() => toast.info("This opens the document picker")}>
+            <AddRow onPick={() => onAddSection("document")}>
               + Add document
             </AddRow>
           </div>
@@ -244,7 +247,7 @@ function BlueprintEditor({
             ) : (
               <div className="py-[9px] text-[13px] text-faint">No report templates.</div>
             )}
-            <AddRow onPick={() => toast.info("This opens the report template picker")}>
+            <AddRow onPick={() => onAddSection("report")}>
               + Add report template
             </AddRow>
           </div>
@@ -259,10 +262,17 @@ function BlueprintEditor({
 export function BlueprintLibraryContent({
   onCreate,
   createTick,
+  onAddSection,
 }: {
   onCreate: () => void;
-  /** Bumped by the hub after a blueprint is saved, so the grid re-reads. */
+  /** Bumped by the hub after a blueprint is saved or changed, so the grid re-reads. */
   createTick: number;
+  /**
+   * "+ Add ..." on an open blueprint. The hub owns the pickers and the writes
+   * (it already had them for the older editor); this only says which blueprint
+   * and which kind of section.
+   */
+  onAddSection: (blueprintId: string, kind: RowKind) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<Blueprint[]>([]);
@@ -405,6 +415,7 @@ export function BlueprintLibraryContent({
           usedOn={usedOnByTemplate[selected.id] ?? null}
           appliedAvailable={appliedAvailable}
           onBack={() => setSelectedId(null)}
+          onAddSection={(kind) => onAddSection(selected.id, kind)}
           onSave={() => {
             toast.success("Blueprint saved");
             setSelectedId(null);

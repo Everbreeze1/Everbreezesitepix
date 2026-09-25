@@ -102,7 +102,10 @@ import { LabelSetsManager } from "@/features/settings/components/LabelSetsManage
  * legacy full-feature managers stay in the codebase for the direct /settings
  * routes and the test suite, but are not imported here.
  */
-import { BlueprintLibraryContent } from "@/features/settings/components/BlueprintLibraryContent";
+import {
+  BlueprintLibraryContent,
+  type RowKind,
+} from "@/features/settings/components/BlueprintLibraryContent";
 import { ChecklistLibraryContent } from "@/features/settings/components/ChecklistLibraryContent";
 import { DocumentLibraryContent } from "@/features/settings/components/DocumentLibraryContent";
 import {
@@ -1553,6 +1556,31 @@ export function TemplatesPage() {
                 setBlueprintCreateTick((t) => t + 1);
                 setCreateOpen(true);
               }}
+              onAddSection={(blueprintId, kind: RowKind) => {
+                if (!canManage) {
+                  navigate({ to: "/pricing" });
+                  return;
+                }
+                setSelectedId(blueprintId);
+                /*
+                 * A phase belongs to a workflow template, not to the blueprint, and a
+                 * blueprint holds one workflow. With none attached, "+ Add phase" attaches
+                 * one (its phases come with it); with one attached, adding a phase means
+                 * editing that workflow, which lives in the Workflows tab.
+                 */
+                if (
+                  kind === "workflow" &&
+                  tplItems.some(
+                    (i) => i.project_template_id === blueprintId && i.kind === "workflow",
+                  )
+                ) {
+                  toast.info("This blueprint's phases come from its workflow. Add a phase there.");
+                  setTab("workflows");
+                  return;
+                }
+                setAddRefId("");
+                setAddKind(kind);
+              }}
             />
           )}
 
@@ -1680,6 +1708,8 @@ export function TemplatesPage() {
                   setAddKind("");
                   setAddRefId("");
                   await addOfKind(k, ref);
+                  // The library page keeps its own copy of each blueprint's rows.
+                  setBlueprintCreateTick((t) => t + 1);
                 }}
               >
                 <Plus className="mr-1 h-4 w-4" />
