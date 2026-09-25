@@ -30,6 +30,7 @@ export function ProjectCrew({
   labeled = false,
   max = 4,
   caption,
+  reference = false,
   className,
 }: {
   userIds: string[];
@@ -51,6 +52,12 @@ export function ProjectCrew({
    * Only the header passes one; the grid and the board keep the bare row.
    */
   caption?: string;
+  /**
+   * The project header reference's crew block: a "Crew · who's staffed" eyebrow,
+   * 28px overlapping avatars, the names in one muted line and a plain "Assign"
+   * link, with the caption beneath. Replaces the pill-shaped assign control.
+   */
+  reference?: boolean;
   className?: string;
 }) {
   const { members } = useTeamMembers();
@@ -71,6 +78,78 @@ export function ProjectCrew({
   // Nothing assigned and nothing the viewer could do about it: render nothing
   // rather than an empty row that says "0 crew" on every card in the grid.
   if (crew.length === 0 && !canAssign) return null;
+
+  if (reference) {
+    const names = crew.map((m) => m.full_name || m.email || "Teammate").join(", ");
+    return (
+      <TooltipProvider delayDuration={150}>
+        <div className={className}>
+          <div className="mb-[9px] text-xs font-semibold uppercase tracking-[0.05em] text-faint">
+            Crew · who's staffed
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            {crew.length > 0 && (
+              <div className="flex">
+                {shown.map((m, i) => {
+                  const name = m.full_name || m.email || "Teammate";
+                  return (
+                    <Tooltip key={m.user_id}>
+                      <TooltipTrigger asChild>
+                        <Avatar className={cn("h-7 w-7 border-2 border-card", i > 0 && "-ml-2")}>
+                          {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={name} /> : null}
+                          <AvatarFallback
+                            className="text-[10px] font-bold text-white"
+                            style={{
+                              backgroundColor: CREW_AVATAR_COLORS[i % CREW_AVATAR_COLORS.length],
+                            }}
+                          >
+                            {initials(m.full_name, m.email)}
+                          </AvatarFallback>
+                        </Avatar>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="text-xs">
+                        <div className="font-medium">{name}</div>
+                        <div className="text-muted-foreground">
+                          {roleLabelForTier(m.role, tier)}
+                          {normaliseRole(m.role) === "restricted"
+                            ? " - this job is one of the few they can see"
+                            : " - assigned to this job"}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+                {extra > 0 && (
+                  <span className="-ml-2 flex h-7 w-7 items-center justify-center rounded-full border-2 border-card bg-muted text-[10px] font-bold text-muted-foreground">
+                    +{extra}
+                  </span>
+                )}
+              </div>
+            )}
+            {crew.length > 0 && <span className="text-[13px] text-muted-foreground">{names}</span>}
+            {crew.length === 0 && (
+              <span className="text-[13px] text-muted-foreground">Nobody assigned yet</span>
+            )}
+            {canAssign && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onAssign();
+                }}
+                aria-label={crew.length === 0 ? "Assign teammates to this job" : "Change the crew"}
+                className="ml-1 text-[12.5px] font-semibold text-primary transition hover:underline"
+              >
+                Assign
+              </button>
+            )}
+          </div>
+          {caption && <div className="mt-1.5 text-[11.5px] text-faint">{caption}</div>}
+        </div>
+      </TooltipProvider>
+    );
+  }
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -199,6 +278,9 @@ export function ProjectCrew({
     </TooltipProvider>
   );
 }
+
+/** Avatar fills for the crew block, cycled by position - slate, green, ink, as in the reference. */
+const CREW_AVATAR_COLORS = ["#4a5568", "#2f6f4f", "#3a4152"];
 
 function initials(name?: string | null, email?: string | null) {
   const src = (name || email || "?").trim();

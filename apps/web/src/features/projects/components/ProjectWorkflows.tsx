@@ -104,7 +104,7 @@ interface Template {
   /** Optional as well as nullable - see WorkflowTemplatesPage. */
   category?: string | null;
 }
-interface Workflow {
+export interface Workflow {
   id: string;
   project_id: string;
   template_id: string | null;
@@ -142,7 +142,7 @@ interface Workflow {
    */
   walkthrough_template_id?: string | null;
 }
-interface Phase {
+export interface Phase {
   id: string;
   workflow_id: string;
   position: number;
@@ -154,7 +154,7 @@ interface Phase {
   signed_off_at: string | null;
   signoff_name: string | null;
 }
-interface Item {
+export interface Item {
   id: string;
   phase_id: string;
   position: number;
@@ -174,7 +174,7 @@ interface PhotoRef {
   image_url: string | null;
 }
 
-const TABLES = {
+export const TABLES = {
   workflows: "project_workflows",
   phases: "project_workflow_phases",
   items: "project_workflow_items",
@@ -253,7 +253,7 @@ interface WorkflowState {
   upNext: { item: Item; phaseName: string }[];
 }
 
-function workflowState(wf: Workflow, allPhases: Phase[], allItems: Item[]): WorkflowState {
+export function workflowState(wf: Workflow, allPhases: Phase[], allItems: Item[]): WorkflowState {
   const phases = allPhases
     .filter((p) => p.workflow_id === wf.id)
     .sort((a, b) => a.position - b.position);

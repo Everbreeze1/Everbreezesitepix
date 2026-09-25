@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, CircleSlash, GitBranch, Loader2 } from "lucide-react";
+import { Check, ChevronDown, CircleSlash, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   PROJECT_STATUSES,
@@ -22,25 +22,13 @@ import { qk } from "@/lib/query-keys";
 import { listProjectBoards, setProjectPipelineStage } from "@/lib/project-boards.functions";
 import { STATUS_DOT } from "../constants";
 
-/**
- * Black or white on a stage chip, whichever wins on WCAG contrast. Stage
- * colours are chosen per board, so a fixed foreground is unreadable on half of
- * them.
- */
-function chipTextColor(hex: string): string {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return "#ffffff";
-  const n = parseInt(m[1], 16);
-  const channel = (c: number) => {
-    const s = c / 255;
-    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
-  };
-  const luminance =
-    0.2126 * channel((n >> 16) & 255) +
-    0.7152 * channel((n >> 8) & 255) +
-    0.0722 * channel(n & 255);
-  return (luminance + 0.05) / 0.05 > 1.05 / (luminance + 0.05) ? "#111827" : "#ffffff";
-}
+/** Theme soft/solid pair per status bucket, so the pill reads on the light page. */
+const STATUS_PILL: Record<string, string> = {
+  active: "bg-status-active-soft text-status-active",
+  on_hold: "bg-status-hold-soft text-status-hold",
+  completed: "bg-status-complete-soft text-status-complete",
+  archived: "bg-status-archived-soft text-status-archived",
+};
 
 /**
  * Where the project is, as ONE control.
@@ -192,27 +180,28 @@ export function ProjectStatusChip({
               : `Status: ${bucket.label}. Click to change it.`
           }
           aria-label={`Project status: ${label}. Change status`}
-          className={
-            current
-              ? "inline-flex max-w-[240px] items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-[1.4px] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:opacity-70"
-              : "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold transition hover:bg-sidebar-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:opacity-70"
-          }
+          className={`inline-flex max-w-[240px] items-center gap-1.5 rounded-full px-2.5 py-[3px] text-[11px] font-semibold transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-70 ${
+            current ? "" : (STATUS_PILL[status] ?? STATUS_PILL.active)
+          }`}
+          // Reference pill: a soft tint of the colour with the colour as the text. A
+          // pipeline stage carries its own colour, so its tint is mixed on the spot -
+          // 16% of it over the page for the fill, and the text is the same colour
+          // pulled toward the foreground so a pale stage colour stays readable in
+          // both themes. A plain status uses the theme's soft/solid pair (STATUS_PILL).
           style={
             current
-              ? { background: current.stage.color, color: chipTextColor(current.stage.color) }
-              : { color: bucket.text }
+              ? {
+                  background: `color-mix(in oklab, ${current.stage.color} 16%, transparent)`,
+                  color: `color-mix(in oklab, ${current.stage.color} 68%, var(--foreground))`,
+                }
+              : undefined
           }
           disabled={saving}
         >
           {saving ? (
             <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
-          ) : current ? (
-            <GitBranch className="h-3 w-3 shrink-0" />
-          ) : (
-            <span
-              className="h-1.5 w-1.5 shrink-0 rounded-full"
-              style={{ background: bucket.dot }}
-            />
+          ) : current ? null : (
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
           )}
           <span className="truncate">{label}</span>
           <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />

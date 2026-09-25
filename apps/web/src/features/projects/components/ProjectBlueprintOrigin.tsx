@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { LayoutTemplate } from "lucide-react";
+import { Layers } from "lucide-react";
 import { relativeTime } from "@everlumen/shared";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { BlueprintOriginApplication, BlueprintOriginItem } from "@/lib/blueprint.functions";
@@ -42,10 +42,10 @@ export function ProjectBlueprintOrigin({
     // on this environment" look identical to "no blueprint was applied".
     return (
       <span
-        className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-sidebar-foreground/20 px-3 py-1 text-[11px] font-bold text-sidebar-foreground/45"
+        className="inline-flex items-center gap-2 rounded-[9px] border border-dashed border-border bg-card px-3.5 py-2 text-[12.5px] font-semibold text-faint"
         title="This project's blueprint history could not be read, so its origin can't be shown. It may not be set up on this environment yet."
       >
-        <LayoutTemplate className="h-3.5 w-3.5" />
+        <Layers className="h-4 w-4" />
         Blueprint origin unavailable
       </span>
     );
@@ -62,10 +62,10 @@ export function ProjectBlueprintOrigin({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-sidebar-foreground/20 bg-sidebar-foreground/10 px-3 py-1 text-[11px] font-bold text-sidebar-foreground transition hover:bg-sidebar-foreground/20"
+          className="inline-flex max-w-full items-center gap-2 rounded-[9px] border border-border bg-card px-3.5 py-2 text-[12.5px] font-semibold text-muted-foreground transition hover:border-primary/70 hover:text-foreground"
           title="See what this blueprint created"
         >
-          <LayoutTemplate className="h-3.5 w-3.5 shrink-0 text-sidebar-ring" />
+          <Layers className="h-4 w-4 shrink-0" />
           <span className="truncate">Blueprint · {first.blueprintName ?? "a blueprint"}</span>
           {extra > 0 && <span className="shrink-0 opacity-70">+{extra}</span>}
         </button>

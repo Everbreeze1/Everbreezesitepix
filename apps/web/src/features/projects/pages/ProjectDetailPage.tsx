@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query-keys";
 import {
   ArrowLeft,
-  MapPin,
   Camera,
   Sparkles,
   Calendar,
@@ -59,7 +58,9 @@ import { useProjectBlueprintOrigin } from "@/hooks/use-project-blueprint-origin"
 import { startOfMonth } from "date-fns";
 import { PhotoCalendar, type CalendarPhoto } from "@/features/gallery/components/PhotoCalendar";
 import { PhotoThumb } from "@/components/PhotoThumb";
-import { ReferenceTabStrip } from "@/components/ui/reference";
+import { ReferencePill, ReferenceTabStrip } from "@/components/ui/reference";
+import { ProjectWorkflowStrip } from "@/features/projects/components/ProjectWorkflowStrip";
+import { attributionText } from "@/features/projects/utils/contributor-attribution";
 import { ProjectWorkflows } from "@/features/projects/components/ProjectWorkflows";
 import { ProjectTasks, type ProjectTasksHandle } from "@/features/projects/components/ProjectTasks";
 import { ProjectDocuments } from "@/features/projects/components/ProjectDocuments";
@@ -74,7 +75,6 @@ import {
 } from "@/lib/summaries.functions";
 import { listProjectDocumentTree, type DocumentTreePage } from "@/lib/project-pages.functions";
 import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
-import { ProjectActivityLine } from "@/features/projects/components/ProjectActivityLine";
 import { ProjectCrew } from "@/features/projects/components/ProjectCrew";
 import { AssignTeammatesDialog } from "@/features/projects/components/AssignTeammatesDialog";
 import { useProjectAssignees } from "@/hooks/use-project-assignees";
@@ -220,6 +220,9 @@ export type ProjectDetailSearch = {
 import type { Project, Photo, Report } from "../types";
 import { STATUS_DOT } from "../constants";
 import { PhotoCarousel } from "../components/PhotoCarousel";
+
+/** Tiles shown before the grid folds into a "+N more" tile - two rows of four. */
+const PHOTO_PREVIEW_TILES = 8;
 
 export function ProjectDetailPage() {
   const { projectId } = useParams({ from: "/_app/projects/$projectId" });
@@ -431,6 +434,7 @@ export function ProjectDetailPage() {
   const { byProject: assigneesByProject, canAssign } = useProjectAssignees([projectId]);
   const assignees = assigneesByProject[projectId] ?? [];
   const [assignOpen, setAssignOpen] = useState(false);
+  const [photosExpanded, setPhotosExpanded] = useState(false);
   const [phaseFilter, setPhaseFilter] = useState<"all" | "before" | "after" | "untagged">("all");
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [showTags, setShowTags] = useState(false);
@@ -628,7 +632,7 @@ export function ProjectDetailPage() {
   const projectAddress = (p: Project | null) => {
     if (!p) return null;
     const parts = [p.street, [p.city, p.state].filter(Boolean).join(", "), p.zip].filter(Boolean);
-    return parts.length ? parts.join(" Â· ") : (p.location ?? null);
+    return parts.length ? parts.join(" · ") : (p.location ?? null);
   };
 
   const load = async (options?: { silent?: boolean }) => {
@@ -1401,7 +1405,7 @@ export function ProjectDetailPage() {
       toast.success("Photo saved");
       cameraSessionIds.current.push(photoId);
       if (opts.analyze && isActive) {
-        toast.message("Analyzing photoâ€¦", { description: "This takes 10â€“25 seconds." });
+        toast.message("Analyzing photo…", { description: "This takes 10–25 seconds." });
         try {
           await analyze({ data: { photoId } });
           bumpAiAnalysesUsed();
@@ -1932,7 +1936,7 @@ export function ProjectDetailPage() {
       const cleaned = raw.replace(/\s+/g, " ").trim();
       if (!cleaned) return "";
       const sentences = cleaned
-        .split(/(?<=[.!?])\s+(?=[A-Z0-9"'â€œâ€˜(])/)
+        .split(/(?<=[.!?])\s+(?=[A-Z0-9"'“‘(])/)
         .map((s) => s.trim())
         .filter(Boolean);
       if (sentences.length <= 1) return cleaned;
@@ -1954,7 +1958,7 @@ export function ProjectDetailPage() {
           const s = Math.max(0, p.offsetSeconds) % 60;
           lines.push(
             "",
-            `### Photo ${i + 1} Â· ${m}:${s.toString().padStart(2, "0")}`,
+            `### Photo ${i + 1} · ${m}:${s.toString().padStart(2, "0")}`,
             "",
             `![Photo ${i + 1}](photo:${p.photoId})`,
           );
@@ -2431,7 +2435,7 @@ export function ProjectDetailPage() {
       url: null,
       title,
       mime: w.video_mime_type,
-      emptyMessage: "Loading walkthrough videoâ€¦",
+      emptyMessage: "Loading walkthrough video…",
     });
 
     // Always re-check the DB row: the finish flow may have written the
@@ -2718,10 +2722,11 @@ export function ProjectDetailPage() {
   }
 
   return (
-    <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pt-10">
+    /* Left-aligned under a 1200px cap, exactly as the reference draws it: no auto margin. */
+    <div className="w-full max-w-[1200px] px-6 pb-32 pt-7 sm:px-10">
       <BusyOverlay
         open={uploading}
-        title="Uploading photoâ€¦"
+        title="Uploading photo…"
         description="Compressing and saving to this project"
       />
 
@@ -2774,17 +2779,18 @@ export function ProjectDetailPage() {
         </div>
       </div>
 
-      <Link
-        to="/projects"
-        className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-muted-foreground transition hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Projects
-      </Link>
+      {/* Breadcrumb, per the project reference: "Projects / <name>". */}
+      <nav aria-label="Breadcrumb" className="mb-3.5 text-[12.5px] text-faint">
+        <Link to="/projects" className="text-primary hover:underline">
+          Projects
+        </Link>
+        <span className="mx-2">/</span>
+        <span>{project.name}</span>
+      </nav>
 
-      {/* Hero - the reference's light project header: title + status pill on
-          the left, actions on the right, crew / labels / counters beneath. */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      {/* Title + status pill and address on the left; the blueprint chip and
+          the page actions on the right. */}
+      <div className="mb-[22px] flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-[640px]">
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="font-sans text-[22px] font-bold leading-tight tracking-[-0.01em] text-foreground">
@@ -2812,49 +2818,22 @@ export function ProjectDetailPage() {
               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(projectAddress(project) ?? project.location ?? "")}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-1.5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground transition hover:text-foreground"
+              className="mt-1 block truncate text-[13px] text-muted-foreground transition hover:text-foreground"
             >
-              <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
-              <span className="truncate">{projectAddress(project) ?? project.location}</span>
+              {[project.city, project.state].filter(Boolean).join(", ") ||
+                (projectAddress(project) ?? project.location)}
             </a>
           )}
-
-          {/* Origin is identity - it reads beside the title in the reference too. */}
-          <ProjectBlueprintOrigin state={blueprintOrigin.state} onOpenPanel={setPanel} />
-
-          {/* Crew + description */}
-          <div className="mt-4">
-            <ProjectCrew
-              userIds={assignees}
-              canAssign={canAssign}
-              onAssign={() => setAssignOpen(true)}
-              labeled
-              caption="Who this job is assigned to."
-            />
-          </div>
           {project.description && (
             <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-muted-foreground">
               {project.description}
             </p>
           )}
-
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-              Labels
-            </span>
-            <LabelPicker
-              value={projectLabels}
-              onChange={(next) => void setProjectLabels(next)}
-              suggestions={labelCatalog.rows.map((r) => r.name)}
-              triggerLabel="Add label"
-              placeholder="Search or create a label"
-              userId={user?.id}
-            />
-          </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/* Origin is identity - the reference puts it top right, on its own chip. */}
+          <ProjectBlueprintOrigin state={blueprintOrigin.state} onOpenPanel={setPanel} />
           <GenerateDocumentMenu
             projectId={projectId}
             trigger={
@@ -2886,94 +2865,62 @@ export function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Footer stats row - kept the counts the hero rail carried. */}
-      <div className="mt-5 flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-            Counters
-          </span>
-          <span className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-            <Camera className="h-4 w-4 text-primary" />
-            {(totalPhotos || photos.length).toLocaleString()}{" "}
-            {(totalPhotos || photos.length) === 1 ? "field capture" : "field captures"}
-          </span>
-          <span className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-            <Calendar className="h-4 w-4 text-primary" />
-            Updated {relativeTime(project.updated_at)}
-          </span>
+      {/* Crew and labels: one card, two columns split by a hairline. */}
+      <div className="mb-[26px] flex flex-col gap-5 rounded-xl border border-border bg-card px-5 py-[18px] sm:flex-row sm:gap-10">
+        <div className="min-w-0 flex-1">
+          <ProjectCrew
+            reference
+            userIds={assignees}
+            canAssign={canAssign}
+            onAssign={() => setAssignOpen(true)}
+            caption="Scheduling only — doesn't change who can see this project."
+          />
+        </div>
+        <div className="hidden w-px shrink-0 bg-border sm:block" />
+        <div className="sm:max-w-[42%]">
+          <div className="mb-[9px] text-xs font-semibold uppercase tracking-[0.05em] text-faint">
+            Labels
+          </div>
+          <LabelPicker
+            shape="pill"
+            value={projectLabels}
+            onChange={(next) => void setProjectLabels(next)}
+            suggestions={labelCatalog.rows.map((r) => r.name)}
+            triggerLabel="Add label"
+            placeholder="Search or create a label"
+            userId={user?.id}
+          />
         </div>
       </div>
+
+      {/* Where the job stands in its workflow. Renders nothing without one. */}
+      <ProjectWorkflowStrip
+        className="mb-7"
+        projectId={projectId}
+        showEmpty={isTeam}
+        refreshKey={`${counts.workflows}-${panel ?? "photos"}`}
+        onOpen={() => {
+          if (!isTeam) {
+            setWorkflowsUpgradeOpen(true);
+            return;
+          }
+          setPanel("workflows");
+        }}
+      />
+
       <ReferenceTabStrip
-        className="mt-6"
+        className="mb-[22px]"
         value={panel ?? "photos"}
         items={[
-          {
-            key: "photos",
-            label: (
-              <>
-                Photos <span className="font-mono text-[11px] text-faint">{photos.length}</span>
-              </>
-            ),
-          },
-          {
-            key: "documents",
-            label: (
-              <>
-                Documents{" "}
-                <span className="font-mono text-[11px] text-faint">{counts.documents}</span>
-              </>
-            ),
-          },
-          {
-            key: "reports",
-            label: (
-              <>
-                Reports <span className="font-mono text-[11px] text-faint">{counts.reports}</span>
-              </>
-            ),
-          },
-          {
-            key: "checklists",
-            label: (
-              <>
-                Checklists{" "}
-                <span className="font-mono text-[11px] text-faint">{counts.checklists}</span>
-              </>
-            ),
-          },
-          {
-            key: "walkthroughs",
-            // Both sub-sections, because both live behind this tab: the
-            // recordings and the summaries written from them.
-            label: (
-              <>
-                Walkthroughs{" "}
-                <span className="font-mono text-[11px] text-faint">
-                  {walkthroughs.length + summaries.length}
-                </span>
-              </>
-            ),
-          },
-          {
-            key: "workflows",
-            label: (
-              <>
-                Workflows{" "}
-                <span className="font-mono text-[11px] text-faint">{counts.workflows}</span>
-              </>
-            ),
-          },
-          {
-            key: "tasks",
-            label: (
-              <>
-                Tasks <span className="font-mono text-[11px] text-faint">{counts.tasksOpen}</span>
-              </>
-            ),
-          },
-          // No count: the calendar is a view of the photos already counted on
-          // the Photos tab, so a number here would double-count the same work.
-          { key: "calendar", label: <span>Calendar</span> },
+          { key: "photos", label: "Photos" },
+          { key: "documents", label: "Documents" },
+          { key: "reports", label: "Reports" },
+          { key: "checklists", label: "Checklists" },
+          // Recordings and the summaries written from them both live behind this tab.
+          { key: "walkthroughs", label: "Walkthroughs" },
+          { key: "workflows", label: "Workflows" },
+          { key: "tasks", label: "Tasks" },
+          { key: "calendar", label: "Calendar" },
         ]}
         onChange={(key) => {
           if (key === "photos") {
@@ -3110,7 +3057,7 @@ export function ProjectDetailPage() {
                   {retryingVideo
                     ? videoUploadProgress != null
                       ? `Uploading ${videoUploadProgress}%`
-                      : "Uploadingâ€¦"
+                      : "Uploading…"
                     : "Retry upload"}
                 </Button>
                 <Button
@@ -3225,10 +3172,10 @@ export function ProjectDetailPage() {
                             month: "short",
                             day: "numeric",
                           })}
-                          {" Â· "}
+                          {" · "}
                           {isSummary
-                            ? `AI Summary Â· ${w.photo_count} ${w.photo_count === 1 ? "photo" : "photos"}`
-                            : `${mins}:${secs.toString().padStart(2, "0")} Â· ${w.photo_count} ${
+                            ? `AI Summary · ${w.photo_count} ${w.photo_count === 1 ? "photo" : "photos"}`
+                            : `${mins}:${secs.toString().padStart(2, "0")} · ${w.photo_count} ${
                                 w.photo_count === 1 ? "photo" : "photos"
                               }`}
                         </p>
@@ -3406,25 +3353,58 @@ export function ProjectDetailPage() {
 
       {panel === null && (
         <>
-          {/* Visual documentation */}
-          <div className="mt-8 flex flex-wrap items-end justify-between gap-5">
-            <div>
-              <p className="text-[10.88px] font-extrabold uppercase tracking-[1.5232px] text-muted-foreground">
-                Visual documentation
-              </p>
-              <h2 className="font-display mt-3 text-xl font-bold leading-tight tracking-tight text-foreground sm:text-2xl">
-                The field, on record
-              </h2>
-              {/* Who actually worked the job, next to the work it produced. This
-                used to live in the header beside the crew, where it read as a
-                staffing count; it describes the photos below it, so it sits
-                directly under this heading now. */}
-              <ProjectActivityLine contributors={contributorRows} />
-              <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-                {(totalPhotos || photos.length).toLocaleString()} photos organized by date, label,
-                and job activity.
-              </p>
-            </div>
+          {/* The field, on record: a quiet title with the attribution line
+              on the right, then the filters and capture controls, then the
+              grid - per the project reference. */}
+          <div className="mb-3.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h2 className="text-[15px] font-semibold text-foreground">The field, on record</h2>
+            {(() => {
+              const log = attributionText(contributorRows);
+              const n = totalPhotos || photos.length;
+              const text =
+                log ??
+                (n > 0
+                  ? `${n.toLocaleString()} ${n === 1 ? "photo" : "photos"} · updated ${relativeTime(project.updated_at)}`
+                  : null);
+              return text ? (
+                <p
+                  className="text-xs text-faint"
+                  title="Who has been adding photos here - a log of the work, not who is assigned to it."
+                >
+                  {text}
+                </p>
+              ) : null;
+            })()}
+          </div>
+
+          <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
+            {photos.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {(
+                  [
+                    { v: "all", label: "All captures" },
+                    { v: "before", label: "Before work" },
+                    { v: "after", label: "After work" },
+                    { v: "untagged", label: "Needs review" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setPhaseFilter(opt.v)}
+                    className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                      phaseFilter === opt.v
+                        ? "bg-primary text-primary-foreground"
+                        : "border-[0.8px] border-border bg-card/60 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div />
+            )}
             <div className="flex items-center gap-2">
               {/*
                 The way in to bulk actions that does not depend on hovering the
@@ -3566,37 +3546,11 @@ export function ProjectDetailPage() {
             </div>
           </div>
 
-          {photos.length > 0 && (
-            <div className="mt-5 flex flex-wrap items-center gap-2">
-              {(
-                [
-                  { v: "all", label: "All captures" },
-                  { v: "before", label: "Before work" },
-                  { v: "after", label: "After work" },
-                  { v: "untagged", label: "Needs review" },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.v}
-                  type="button"
-                  onClick={() => setPhaseFilter(opt.v)}
-                  className={`shrink-0 rounded-full px-4 py-2 text-xs font-extrabold transition ${
-                    phaseFilter === opt.v
-                      ? "bg-primary text-primary-foreground"
-                      : "border-[0.8px] border-border bg-card/60 text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          )}
-
           {showTags && photos.length > 0 && allPhotoTags.length > 0 && (
             <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Photo tags Â· filter photos ({tagLogic.toUpperCase()})
+                  Photo tags · filter photos ({tagLogic.toUpperCase()})
                 </div>
                 {tagFilter.length > 0 && (
                   <button
@@ -3674,18 +3628,6 @@ export function ProjectDetailPage() {
             />
           )}
 
-          {/*
-            The Daily Log, on the tab the technician captures from.
-            "surfaced as a lightweight, always-available result right there in
-            the Capture flow rather than something requiring a trip to Reports
-            to manually generate." It renders nothing until the project has one,
-            so a job that has never had photos added does not carry a permanent
-            empty placeholder under its grid.
-          */}
-          {mediaType === "videos" ? null : (
-            <ProjectDailyLog projectId={projectId} logs={dailyLogs} generating={dailyLogBusy} />
-          )}
-
           {mediaType === "videos" ? null : photos.length === 0 ? (
             <Card className="mt-3 flex flex-col items-center p-10 text-center border-dashed">
               <ImageOff className="h-9 w-9 text-muted-foreground" />
@@ -3721,9 +3663,15 @@ export function ProjectDetailPage() {
               </p>
             </Card>
           ) : photoView === "grid" ? (
-            <div className="mt-6 space-y-3">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {filteredPhotos.map((p, idx) => {
+            <div className="space-y-3">
+              {/* 4 across, 4:3 tiles, 12px gap - the reference grid. Past
+                  PHOTO_PREVIEW_TILES the last tile becomes "+N more" and opens
+                  the rest, as the reference draws it. */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {(photosExpanded || filteredPhotos.length <= PHOTO_PREVIEW_TILES
+                  ? filteredPhotos
+                  : filteredPhotos.slice(0, PHOTO_PREVIEW_TILES - 1)
+                ).map((p, idx) => {
                   const url = photoSrc(p);
                   const selected = selectedPhotoIds.includes(p.id);
                   const inSelectionMode = photoSelectMode || selectedPhotoIds.length > 0;
@@ -3732,108 +3680,123 @@ export function ProjectDetailPage() {
                   return (
                     <div
                       key={p.id}
-                      className={`group flex flex-col overflow-hidden rounded-2xl border border-border bg-card/[0.82] shadow-[0px_20px_50px_-36px_rgba(16,25,41,0.5)] transition hover:-translate-y-0.5 ${
+                      title={`${cleanCaption(p.caption) || formatPhotoDateGroup(when)} · ${formatPhotoDateGroup(when)} · ${relativeTime(when)}`}
+                      className={`group relative aspect-[4/3] overflow-hidden rounded-[9px] bg-secondary ${
                         selected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
                       }`}
                     >
-                      <div className="relative h-52 w-full shrink-0 bg-muted">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (inSelectionMode) toggleSelect(p.id);
-                            else setLightboxIndex(idx);
-                          }}
-                          className="absolute inset-0"
-                          aria-label={
-                            inSelectionMode
-                              ? selected
-                                ? "Deselect photo"
-                                : "Select photo"
-                              : "Open photo"
-                          }
-                        >
-                          {url || p.storage_path ? (
-                            <PhotoThumb
-                              storagePath={p.storage_path}
-                              thumbPath={p.thumb_path}
-                              fallbackUrl={url}
-                              width={480}
-                              alt={p.caption ?? ""}
-                              className="transition group-hover:scale-105"
-                            />
-                          ) : (
-                            <div className="flex h-full items-center justify-center text-muted-foreground">
-                              <ImageOff className="h-6 w-6" />
-                            </div>
-                          )}
-                        </button>
-                        {phase !== "untagged" ? (
-                          <span
-                            className={`pointer-events-none absolute right-3 top-3 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase text-white ${
-                              phase === "after" ? "bg-[#10B981]" : "bg-[#2584F4]"
-                            }`}
-                          >
-                            {phase === "after" ? "After" : "Before"}
-                          </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (inSelectionMode) toggleSelect(p.id);
+                          else setLightboxIndex(idx);
+                        }}
+                        className="absolute inset-0"
+                        aria-label={
+                          inSelectionMode
+                            ? selected
+                              ? "Deselect photo"
+                              : "Select photo"
+                            : "Open photo"
+                        }
+                      >
+                        {url || p.storage_path ? (
+                          <PhotoThumb
+                            storagePath={p.storage_path}
+                            thumbPath={p.thumb_path}
+                            fallbackUrl={url}
+                            width={480}
+                            alt={p.caption ?? ""}
+                            className="transition group-hover:scale-105"
+                          />
                         ) : (
-                          p.phase === "walkthrough" && (
-                            /*
-                             * Walkthrough captures used to be filtered out of
-                             * this grid entirely. Now that they belong here,
-                             * they need to be tellable apart - a walk can add
-                             * dozens of frames at once, and "where did all
-                             * these come from" is the next question after
-                             * "where did my photos go".
-                             *
-                             * Deliberately neutral rather than a third colour:
-                             * Before/After is a judgement the user made about
-                             * the work, this is only where the frame came from.
-                             * `normalizedPhase` maps anything that is not
-                             * before/after to "untagged", so these two branches
-                             * can never both render.
-                             */
-                            <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-sidebar/70 px-2.5 py-1 text-[10px] font-extrabold uppercase text-sidebar-foreground backdrop-blur-sm">
-                              Walkthrough
-                            </span>
-                          )
+                          <div className="flex h-full items-center justify-center text-muted-foreground">
+                            <ImageOff className="h-6 w-6" />
+                          </div>
                         )}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleSelect(p.id);
-                          }}
-                          aria-label={selected ? "Deselect" : "Select"}
-                          className={`absolute left-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-md border-2 shadow transition ${
-                            selected
-                              ? "border-primary bg-primary text-primary-foreground opacity-100"
-                              : `border-sidebar-foreground/90 bg-sidebar/30 text-transparent backdrop-blur-sm group-hover:opacity-100 ${
-                                  // Select mode pins every box open: on touch the
-                                  // hover state it otherwise waits for never arrives.
-                                  inSelectionMode ? "opacity-100" : "opacity-0"
-                                }`
-                          }`}
+                      </button>
+                      {/* Status pill, top left, like the reference's "Needs review". */}
+                      {phase !== "untagged" ? (
+                        <ReferencePill
+                          tone={phase === "after" ? "active" : "complete"}
+                          className="pointer-events-none absolute left-2 top-2"
                         >
-                          <Check className="h-3.5 w-3.5" />
-                        </button>
-                        {p.hidden && (
-                          <span className="pointer-events-none absolute bottom-3 left-3 z-10 rounded bg-sidebar/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-sidebar-foreground">
-                            Hidden
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-col gap-1 p-3">
-                        <p className="truncate text-xs font-bold text-foreground">
-                          {cleanCaption(p.caption) || formatPhotoDateGroup(when)}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {formatPhotoDateGroup(when)} Â· {relativeTime(when)}
-                        </p>
-                      </div>
+                          {phase === "after" ? "After" : "Before"}
+                        </ReferencePill>
+                      ) : p.phase === "walkthrough" ? (
+                        /*
+                         * Walkthrough captures used to be filtered out of this
+                         * grid entirely. Now that they belong here they need to
+                         * be tellable apart - a walk can add dozens of frames at
+                         * once. Deliberately neutral rather than a third colour:
+                         * Before/After is a judgement the user made about the
+                         * work, this is only where the frame came from.
+                         * `normalizedPhase` maps anything that is not
+                         * before/after to "untagged", so these branches can
+                         * never both render.
+                         */
+                        <ReferencePill
+                          tone="archived"
+                          className="pointer-events-none absolute left-2 top-2"
+                        >
+                          Walkthrough
+                        </ReferencePill>
+                      ) : (
+                        <ReferencePill
+                          tone="review"
+                          className="pointer-events-none absolute left-2 top-2"
+                        >
+                          Needs review
+                        </ReferencePill>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelect(p.id);
+                        }}
+                        aria-label={selected ? "Deselect" : "Select"}
+                        className={`absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-md border-2 shadow transition ${
+                          selected
+                            ? "border-primary bg-primary text-primary-foreground opacity-100"
+                            : `border-white/90 bg-black/30 text-transparent backdrop-blur-sm group-hover:opacity-100 ${
+                                // Select mode pins every box open: on touch the
+                                // hover state it otherwise waits for never arrives.
+                                inSelectionMode ? "opacity-100" : "opacity-0"
+                              }`
+                        }`}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                      </button>
+                      {p.hidden && (
+                        <span className="pointer-events-none absolute bottom-2 left-2 z-10 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white">
+                          Hidden
+                        </span>
+                      )}
                     </div>
                   );
                 })}
+                {!photosExpanded && filteredPhotos.length > PHOTO_PREVIEW_TILES && (
+                  <button
+                    type="button"
+                    onClick={() => setPhotosExpanded(true)}
+                    className="flex aspect-[4/3] items-center justify-center rounded-[9px] bg-secondary text-[12.5px] font-semibold text-muted-foreground transition hover:text-foreground"
+                  >
+                    +{(filteredPhotos.length - (PHOTO_PREVIEW_TILES - 1)).toLocaleString()} more
+                  </button>
+                )}
               </div>
+              {photosExpanded && filteredPhotos.length > PHOTO_PREVIEW_TILES && (
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setPhotosExpanded(false)}
+                    className="text-[12.5px] font-semibold text-muted-foreground transition hover:text-foreground"
+                  >
+                    Show fewer
+                  </button>
+                </div>
+              )}
               {totalPhotos > photos.length && (
                 <div className="flex justify-center pt-2">
                   <Button
@@ -3859,6 +3822,19 @@ export function ProjectDetailPage() {
               onToggleSelect={toggleSelect}
               selectMode={photoSelectMode}
             />
+          )}
+
+          {/*
+            The Daily Log, on the tab the technician captures from. It sits below the
+            photo grid so the grid follows the header row, as the reference draws it.
+            "surfaced as a lightweight, always-available result right there in
+            the Capture flow rather than something requiring a trip to Reports
+            to manually generate." It renders nothing until the project has one,
+            so a job that has never had photos added does not carry a permanent
+            empty placeholder under its grid.
+          */}
+          {mediaType === "videos" ? null : (
+            <ProjectDailyLog projectId={projectId} logs={dailyLogs} generating={dailyLogBusy} />
           )}
 
           {/* Walkthrough Notes - rendered inside the three-dot menu modal below */}
@@ -3915,7 +3891,7 @@ export function ProjectDetailPage() {
                             day: "numeric",
                             year: "numeric",
                           })}
-                          {" Â· "}
+                          {" · "}
                           {Math.max(1, Math.round((v.size_bytes ?? 0) / 1024 / 1024))} MB
                         </div>
                       </div>
@@ -4205,7 +4181,7 @@ export function ProjectDetailPage() {
           {ocrLoading ? (
             <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Reading text from photoâ€¦</span>
+              <span className="text-sm">Reading text from photo…</span>
             </div>
           ) : (
             <>

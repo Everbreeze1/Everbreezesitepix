@@ -37,13 +37,40 @@ export function LabelChip({
   onRemove,
   size = "md",
   variant = "light",
+  shape = "chip",
 }: {
   label: string;
   onRemove?: () => void;
   size?: ChipSize;
   variant?: "light" | "dark";
+  /**
+   * `pill` is the quiet rounded chip of the project header reference: neutral
+   * fill, 11px muted text, no colour. `chip` is the skewed colour-coded label
+   * built for sitting over photos.
+   */
+  shape?: "chip" | "pill";
 }) {
   const color = useLabelColor(label);
+  if (shape === "pill") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-[3px] text-[11px] font-semibold leading-none text-muted-foreground">
+        <span className="whitespace-nowrap">{label}</span>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            className="-mr-0.5 rounded-full p-0.5 opacity-70 transition hover:bg-foreground/10 hover:opacity-100"
+            aria-label={`Remove ${label}`}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </span>
+    );
+  }
   return (
     <span
       className={`inline-flex items-center gap-1.5 border font-bold leading-none ${variant === "light" ? "shadow-sm" : ""} ${CHIP_SIZE_CLASSES[size]}`}
@@ -84,6 +111,7 @@ export function LabelPicker({
   userId,
   variant = "light",
   size = "md",
+  shape = "chip",
 }: {
   value: string[];
   onChange: (next: string[]) => void;
@@ -99,6 +127,8 @@ export function LabelPicker({
    * pass `sm` so a colour cloud does not outweigh the thing it describes.
    */
   size?: ChipSize;
+  /** See LabelChip: `pill` renders the header reference's neutral pills. */
+  shape?: "chip" | "pill";
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -164,16 +194,25 @@ export function LabelPicker({
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {value.map((l) => (
-        <LabelChip key={l} label={l} size={size} onRemove={() => remove(l)} variant={variant} />
+        <LabelChip
+          key={l}
+          label={l}
+          size={size}
+          onRemove={() => remove(l)}
+          variant={variant}
+          shape={shape}
+        />
       ))}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
             className={
-              variant === "dark"
-                ? "inline-flex items-center gap-1.5 rounded-full border border-dashed border-white/25 bg-transparent px-3 py-1 text-xs font-medium text-white/65 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
-                : "inline-flex items-center gap-1.5 rounded-full border border-dashed border-border/80 bg-background px-3 py-1 text-xs font-medium text-muted-foreground transition hover:border-foreground/40 hover:bg-muted hover:text-foreground"
+              shape === "pill"
+                ? "inline-flex items-center gap-1 rounded-full border border-dashed border-border bg-transparent px-2.5 py-[3px] text-[11px] font-semibold leading-none text-muted-foreground transition hover:border-primary hover:text-primary"
+                : variant === "dark"
+                  ? "inline-flex items-center gap-1.5 rounded-full border border-dashed border-white/25 bg-transparent px-3 py-1 text-xs font-medium text-white/65 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
+                  : "inline-flex items-center gap-1.5 rounded-full border border-dashed border-border/80 bg-background px-3 py-1 text-xs font-medium text-muted-foreground transition hover:border-foreground/40 hover:bg-muted hover:text-foreground"
             }
           >
             <Plus className="h-3.5 w-3.5" />
