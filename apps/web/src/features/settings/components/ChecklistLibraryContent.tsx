@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/everlumen/client";
+import { useAuth } from "@/hooks/use-auth";
 
 /*
  * The Checklist Library page, laid out exactly as the Main-html reference
@@ -9,9 +10,8 @@ import { supabase } from "@/integrations/everlumen/client";
  *
  * Unlike the reference (a static mockup), the cards come from the account's
  * real checklist_templates - name, item counts, how many blueprints use each,
- * and when each was last edited - and the editor lists the template's real
- * items. "Add item…" is a local editor affordance; saving from this reference
- * screen is a confirmation, not a database write.
+ * and when each was last edited - and the editor edits the template's real
+ * items. Save writes the name and the item list back; Cancel discards.
  */
 
 interface ChecklistTemplateRow {
@@ -21,9 +21,11 @@ interface ChecklistTemplateRow {
   updated_at: string;
   itemCount: number;
   usedInBlueprints: number;
+  blueprintNames: string[];
 }
 
 interface ChecklistItem {
+  /** Empty for an item that has not been saved yet. */
   id: string;
   label: string;
 }
@@ -54,7 +56,16 @@ function relativeEditTime(iso: string): string {
 
 function ChecklistCardIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="m4 6 1.6 1.6L8.5 4.8" />
       <path d="M11 6h9.5" />
       <path d="m4 12.5 1.6 1.6 2.9-2.8" />
@@ -67,7 +78,15 @@ function ChecklistCardIcon() {
 
 function RowsIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
       <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
     </svg>
   );
@@ -75,7 +94,15 @@ function RowsIcon() {
 
 function XIcon({ size = 15 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+    >
       <path d="M6 6l12 12M18 6 6 18" />
     </svg>
   );
@@ -83,7 +110,15 @@ function XIcon({ size = 15 }: { size?: number }) {
 
 function PlusIcon({ size = 15 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
       <path d="M12 5v14M5 12h14" />
     </svg>
   );
@@ -92,20 +127,39 @@ function PlusIcon({ size = 15 }: { size?: number }) {
 /* ---- Editor view (the mockup's <sc-if isEditor> block), real items ---- */
 
 function ChecklistEditor({
-  title,
+  name,
+  savedName,
+  blueprintNames,
   items,
+  saving,
+  onName,
   onAdd,
+  onRename,
   onRemove,
   onBack,
   onSave,
 }: {
-  title: string;
+  name: string;
+  /** The name as stored, empty for a checklist that has not been created yet. */
+  savedName: string;
+  blueprintNames: string[];
   items: ChecklistItem[];
-  onAdd: () => void;
+  saving: boolean;
+  onName: (name: string) => void;
+  onAdd: (label: string) => void;
+  onRename: (index: number, label: string) => void;
   onRemove: (index: number) => void;
   onBack: () => void;
   onSave: () => void;
 }) {
+  const [draft, setDraft] = useState("");
+  const commitDraft = () => {
+    const label = draft.trim();
+    if (!label) return;
+    onAdd(label);
+    setDraft("");
+  };
+
   return (
     <div className="mx-auto w-full max-w-[900px]">
       {/* Breadcrumb */}
@@ -113,12 +167,18 @@ function ChecklistEditor({
         <a className="cursor-pointer text-primary hover:underline" onClick={onBack}>
           Checklists
         </a>{" "}
-        &nbsp;/&nbsp; {title}
+        &nbsp;/&nbsp; {savedName || "New checklist"}
       </div>
 
       {/* Title + actions */}
       <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-        <div className="text-[22px] font-bold tracking-[-0.01em] text-foreground">{title}</div>
+        <input
+          value={name}
+          onChange={(e) => onName(e.target.value)}
+          placeholder="Checklist name"
+          aria-label="Checklist name"
+          className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-1 text-[22px] font-bold tracking-[-0.01em] text-foreground outline-none transition-colors placeholder:text-faint hover:border-border focus:border-primary/50"
+        />
         <div className="flex gap-2.5">
           <button
             onClick={onBack}
@@ -128,11 +188,17 @@ function ChecklistEditor({
           </button>
           <button
             onClick={onSave}
-            className="cursor-pointer rounded-[9px] bg-primary px-4 py-2.5 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            disabled={saving || !name.trim()}
+            className="cursor-pointer rounded-[9px] bg-primary px-4 py-2.5 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Save checklist
+            {saving ? "Saving\u2026" : "Save checklist"}
           </button>
         </div>
+      </div>
+      <div className="mb-[22px] text-[12.5px] text-faint">
+        {blueprintNames.length === 0
+          ? "Not used in any blueprint yet"
+          : `Used in ${blueprintNames.length} ${blueprintNames.length === 1 ? "blueprint" : "blueprints"} \u00b7 ${blueprintNames.join(", ")}`}
       </div>
 
       {/* Items */}
@@ -154,7 +220,12 @@ function ChecklistEditor({
               {/* Template items are definitions, not completed work, so the box
                   is drawn open rather than claiming a done state. */}
               <span className="h-[17px] w-[17px] shrink-0 rounded-[5px] border-[1.6px] border-border" />
-              <div className="min-w-0 flex-grow text-[13px] text-foreground">{item.label}</div>
+              <input
+                value={item.label}
+                onChange={(e) => onRename(index, e.target.value)}
+                aria-label={`Item ${index + 1}`}
+                className="min-w-0 flex-grow bg-transparent text-[13px] text-foreground outline-none"
+              />
               <button
                 onClick={() => onRemove(index)}
                 className="shrink-0 cursor-pointer text-faint transition-colors hover:text-foreground"
@@ -168,13 +239,22 @@ function ChecklistEditor({
       </div>
 
       {/* Add item field */}
-      <button
-        onClick={onAdd}
-        className="mt-4 flex w-full cursor-pointer items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 py-2.5 text-left text-[13px] text-faint transition-colors hover:border-primary/50"
-      >
+      <label className="mt-4 flex w-full items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px] text-faint transition-colors focus-within:border-primary/50 hover:border-primary/50">
         <PlusIcon />
-        <span>Add item&hellip;</span>
-      </button>
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitDraft();
+            }
+          }}
+          onBlur={commitDraft}
+          placeholder="Add item\u2026"
+          className="min-w-0 flex-grow bg-transparent text-foreground outline-none placeholder:text-faint"
+        />
+      </label>
     </div>
   );
 }
@@ -192,15 +272,19 @@ export function ChecklistLibraryContent({
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<ChecklistTemplateRow[]>([]);
   const [itemsByTemplate, setItemsByTemplate] = useState<Record<string, ChecklistItem[]>>({});
+  const { user } = useAuth();
   const [view, setView] = useState<"list" | "editor">("list");
-  const [editingTitle, setEditingTitle] = useState("");
+  const [editing, setEditing] = useState<ChecklistTemplateRow | null>(null);
+  const [name, setName] = useState("");
   const [localItems, setLocalItems] = useState<ChecklistItem[]>([]);
+  const [saving, setSaving] = useState(false);
 
   const prevCreateTick = useRef(createTick);
   useEffect(() => {
     if (createTick > prevCreateTick.current) {
       void load();
-      setEditingTitle("");
+      setEditing(null);
+      setName("");
       setLocalItems([]);
       setView("editor");
     }
@@ -214,7 +298,7 @@ export function ChecklistLibraryContent({
 
   async function load() {
     setLoading(true);
-    const [tplRes, itemsRes, usageRes] = await Promise.all([
+    const [tplRes, itemsRes, usageRes, bpRes] = await Promise.all([
       supabase
         .from("checklist_templates" as any)
         .select("id, name, description, archived, created_at, updated_at, category")
@@ -225,8 +309,14 @@ export function ChecklistLibraryContent({
         .order("position", { ascending: true }),
       supabase
         .from("project_template_checklists" as any)
-        .select("id, checklist_template_id"),
+        .select("id, project_template_id, checklist_template_id"),
+      supabase.from("project_templates" as any).select("id, name, archived"),
     ]);
+
+    const blueprintName: Record<string, string> = {};
+    for (const b of (bpRes.data as any[]) ?? []) {
+      if (!b.archived) blueprintName[b.id] = b.name ?? "";
+    }
 
     const itemCount: Record<string, number> = {};
     const items: Record<string, ChecklistItem[]> = {};
@@ -235,10 +325,12 @@ export function ChecklistLibraryContent({
       itemCount[it.template_id] = (itemCount[it.template_id] ?? 0) + 1;
       (items[it.template_id] ??= []).push({ id: it.id, label: it.label ?? "" });
     }
-    const usage: Record<string, number> = {};
+    const usage: Record<string, string[]> = {};
     for (const u of (usageRes.data as any[]) ?? []) {
-      if (u.checklist_template_id)
-        usage[u.checklist_template_id] = (usage[u.checklist_template_id] ?? 0) + 1;
+      const bp = blueprintName[u.project_template_id];
+      if (!u.checklist_template_id || !bp) continue;
+      const names = (usage[u.checklist_template_id] ??= []);
+      if (!names.includes(bp)) names.push(bp);
     }
 
     setTemplates(
@@ -250,7 +342,8 @@ export function ChecklistLibraryContent({
           archived: !!t.archived,
           updated_at: t.updated_at ?? t.created_at ?? "",
           itemCount: itemCount[t.id] ?? 0,
-          usedInBlueprints: usage[t.id] ?? 0,
+          usedInBlueprints: usage[t.id]?.length ?? 0,
+          blueprintNames: usage[t.id] ?? [],
         })),
     );
     setItemsByTemplate(items);
@@ -258,18 +351,102 @@ export function ChecklistLibraryContent({
   }
 
   const openEditor = (t: ChecklistTemplateRow) => {
-    setEditingTitle(t.name);
+    setEditing(t);
+    setName(t.name);
     setLocalItems(itemsByTemplate[t.id] ?? []);
     setView("editor");
   };
 
-  const addItem = () => {
-    setLocalItems((xs) => [...xs, { id: "", label: "New item" }]);
+  const addItem = (label: string) => {
+    setLocalItems((xs) => [...xs, { id: "", label }]);
+  };
+
+  const renameItem = (index: number, label: string) => {
+    setLocalItems((xs) => xs.map((x, i) => (i === index ? { ...x, label } : x)));
   };
 
   const removeItem = (index: number) => {
     setLocalItems((xs) => xs.filter((_, i) => i !== index));
   };
+
+  async function save() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    // Blank rows are dropped rather than saved as nameless checklist items.
+    const items = localItems.filter((i) => i.label.trim());
+    setSaving(true);
+    try {
+      let templateId = editing?.id ?? "";
+      if (editing) {
+        if (trimmed !== editing.name) {
+          const { error } = await supabase
+            .from("checklist_templates" as any)
+            .update({ name: trimmed })
+            .eq("id", editing.id);
+          if (error) throw error;
+        }
+      } else {
+        if (!user) throw new Error("You need to be signed in to create a checklist");
+        const { data, error } = await supabase
+          .from("checklist_templates" as any)
+          .insert({ created_by: user.id, name: trimmed })
+          .select("id")
+          .single();
+        if (error || !data) throw error ?? new Error("Failed to create checklist");
+        templateId = (data as any).id as string;
+      }
+
+      const original = editing ? (itemsByTemplate[editing.id] ?? []) : [];
+      const keptIds = new Set(items.map((i) => i.id).filter(Boolean));
+      const removedIds = original.map((i) => i.id).filter((id) => !keptIds.has(id));
+      if (removedIds.length > 0) {
+        const { error } = await supabase
+          .from("checklist_template_items" as any)
+          .delete()
+          .in("id", removedIds);
+        if (error) throw error;
+      }
+
+      const originalIndex = new Map(original.map((i, index) => [i.id, index]));
+      for (const [position, item] of items.entries()) {
+        const label = item.label.trim();
+        if (!item.id) {
+          const { error } = await supabase.from("checklist_template_items" as any).insert({
+            template_id: templateId,
+            position,
+            label,
+            required: false,
+            item_type: "checkbox",
+          });
+          if (error) throw error;
+        } else if (
+          original[originalIndex.get(item.id) ?? -1]?.label !== label ||
+          originalIndex.get(item.id) !== position
+        ) {
+          const { error } = await supabase
+            .from("checklist_template_items" as any)
+            .update({ label, position })
+            .eq("id", item.id);
+          if (error) throw error;
+        }
+      }
+
+      if (editing) {
+        // Item edits do not touch the template row, and the card's "Edited ..." reads it.
+        await supabase
+          .from("checklist_templates" as any)
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", templateId);
+      }
+      toast.success(editing ? "Checklist saved" : "Checklist created");
+      setView("list");
+      await load();
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Couldn't save the checklist");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1200px] px-4 pb-10 sm:px-10">
@@ -277,15 +454,17 @@ export function ChecklistLibraryContent({
         <div className="py-16 text-center text-[13px] text-faint">Loading checklists&hellip;</div>
       ) : view === "editor" ? (
         <ChecklistEditor
-          title={editingTitle || "New checklist"}
+          name={name}
+          savedName={editing?.name ?? ""}
+          blueprintNames={editing?.blueprintNames ?? []}
           items={localItems}
+          saving={saving}
+          onName={setName}
           onAdd={addItem}
+          onRename={renameItem}
           onRemove={removeItem}
           onBack={() => setView("list")}
-          onSave={() => {
-            toast.success(editingTitle ? "Checklist saved" : "Checklist created");
-            setView("list");
-          }}
+          onSave={() => void save()}
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
