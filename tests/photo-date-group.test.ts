@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { formatPhotoDateGroup } from "@everlumen/shared";
 
@@ -67,8 +69,6 @@ describe("formatPhotoDateGroup", () => {
      * and dead defences are how the next person concludes the shared function
      * still goes blank.
      */
-    const { readFileSync } = require("node:fs") as typeof import("node:fs");
-    const { join } = require("node:path") as typeof import("node:path");
     const grid = readFileSync(
       join(process.cwd(), "apps/mobile/app/(app)/project/[id]/index.tsx"),
       "utf8",

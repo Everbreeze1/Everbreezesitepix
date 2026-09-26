@@ -371,7 +371,7 @@ describe("a nested route's parent must render an Outlet", () => {
       const parentSrc = readFileSync(join(ROUTES, parent), "utf8");
       const comp = (parentSrc.match(/component:\s*(\w+)/) ?? [])[1];
       const imp = comp
-        ? parentSrc.match(new RegExp(`import \{[^}]*\b${comp}\b[^}]*\} from "([^"]+)"`))
+        ? parentSrc.match(new RegExp(`import {[^}]*\b${comp}\b[^}]*} from "([^"]+)"`))
         : null;
 
       let componentSrc = "";
