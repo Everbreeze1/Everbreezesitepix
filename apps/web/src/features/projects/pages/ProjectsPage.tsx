@@ -1083,12 +1083,21 @@ export function ProjectsPage() {
   // Four destinations, one per kind of thing. Labels match the reference
   // mockup exactly (All Projects / Project Groups / Pipeline / Schedule).
   const tabs = [
-    { key: "projects", label: "All Projects" },
-    { key: "groups", label: "Project Groups" },
+    { key: "projects", label: "All Projects", count: totalCount - archivedCount },
+    { key: "groups", label: "Project Groups", count: groups.length },
     // Key stays "boards" (route/state/table naming); only the label is
     // user-facing, and "Pipeline" describes what the columns actually are.
-    { key: "boards", label: "Pipeline" },
-    { key: "schedule", label: "Schedule" },
+    { key: "boards", label: "Pipeline", count: boards.length },
+    /*
+     * The one count on this strip that is not "how many of these exist".
+     *
+     * The other three are inventory. This one is a workload: open work that is
+     * due today or already late. "Schedule 214" because a task is due next
+     * spring says nothing; "Schedule 3" when three things are waiting on you
+     * today is the entire feature in one number, and it is legible without
+     * opening the tab. See attentionCount().
+     */
+    { key: "schedule", label: "Schedule", count: attentionCount(schedule) },
   ];
 
   /**
@@ -1771,7 +1780,7 @@ export function ProjectsPage() {
           {/* Underline tabs, the same control every reference screen shares. */}
           <ReferenceTabStrip
             className="mt-6"
-            items={tabs.map((t) => ({ key: t.key, label: t.label }))}
+            items={tabs.map((t) => ({ key: t.key, label: t.label, count: t.count }))}
             value={tab}
             onChange={(key) => {
               const next = key as TabKey;

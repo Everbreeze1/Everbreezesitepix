@@ -380,12 +380,12 @@ export function PhotoBulkActionBar(props: Props) {
         grid's own toolbar next to Filters and the phase chips, and it stays on
         screen while you scroll the photos it acts on.
 
-        `top-[82px]` is AppHeader's height, which is a fixed `h-[82px]` sticky
+        `top-14` is AppHeader's height, which is a fixed `h-14` sticky
         `top-0` row - so the bar parks flush under it however far the page has
         scrolled. `z-10` keeps it over the tiles and under the header (`z-20`),
         which is the whole point of the change.
       */}
-      <div className="sticky top-[82px] z-10 mt-5 rounded-2xl border border-border bg-card/95 shadow-lg ring-1 ring-primary/10 backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200">
+      <div className="sticky top-14 z-10 mt-5 rounded-2xl border border-border bg-card/95 shadow-lg ring-1 ring-primary/10 backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200">
         <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 sm:px-3 sm:py-3">
           {/* Count pill */}
           <div className="flex items-center gap-2">

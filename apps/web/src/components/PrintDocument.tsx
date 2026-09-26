@@ -9,7 +9,7 @@ const BODY_CLASS = "has-print-document";
  * on the page when the sheet goes to the printer.
  *
  * Screen-printing an app page directly does not work here. The record lives
- * inside the app shell - sidebar, sticky 82px header, mobile tab bar, toasts,
+ * inside the app shell - sidebar, sticky 56px header, mobile tab bar, toasts,
  * Radix portals - and every one of those is a direct child of `<body>` or a
  * `position: fixed` layer, so they land on the paper too. Reaching for
  * `print:hidden` on each of them means every future piece of chrome has to

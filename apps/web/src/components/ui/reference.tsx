@@ -112,8 +112,12 @@ export function ReferenceHero({
 /**
  * Underline tab strip, the mockup's `.tab` / `.tab.active`. Tabs are 14px / 600
  * with a 2.5px amber underline and the same 26px gap the mockup uses.
+ *
+ * `count` is the small muted pill after the label. `null`/omitted means the tab
+ * has no count at all (not "zero"); a real 0 still shows, as it did on the
+ * pre-redesign strip, so an empty tab reads as empty rather than uncounted.
  */
-export type ReferenceTabItem = { key: string; label: ReactNode };
+export type ReferenceTabItem = { key: string; label: ReactNode; count?: number | null };
 
 export function ReferenceTabStrip({
   items,
@@ -144,6 +148,16 @@ export function ReferenceTabStrip({
             )}
           >
             {item.label}
+            {item.count !== null && item.count !== undefined && (
+              <span
+                className={cn(
+                  "ml-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 py-px align-[1px] text-[10.5px] font-semibold tabular-nums",
+                  active ? "bg-primary/15 text-foreground" : "bg-muted text-muted-foreground",
+                )}
+              >
+                {item.count}
+              </span>
+            )}
           </button>
         );
       })}

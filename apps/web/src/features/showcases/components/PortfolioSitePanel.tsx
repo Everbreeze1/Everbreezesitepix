@@ -63,7 +63,7 @@ export function PortfolioSitePanel({
     <div className="space-y-6">
       {/* Sticky save bar - same affordance as the showcase builder, so "did
           that save?" is never a question on either screen. */}
-      <div className="sticky top-[82px] z-20 -mx-6 flex flex-wrap items-center gap-3 border-b border-border bg-background/95 px-6 py-3 backdrop-blur sm:-mx-10 sm:px-10">
+      <div className="sticky top-14 z-10 -mx-6 flex flex-wrap items-center gap-3 border-b border-border bg-background/95 px-6 py-3 backdrop-blur sm:-mx-10 sm:px-10">
         <span
           className={cn(
             "inline-flex items-center gap-1.5 text-xs font-bold",
