@@ -17,8 +17,6 @@ import { getMyTeam, createTeam, createCheckoutSession } from "@/features/teams/a
 import type { BillingPlan } from "@/features/teams/api";
 import {
   ANNUAL_DISCOUNT,
-  ENTERPRISE,
-  HIDE_PUBLIC_PRICING,
   MAX_SEATS,
   PLANS,
   TRIAL_DAYS,
@@ -233,136 +231,240 @@ function PricingPage() {
 }
 
 /**
- * Stands in for `PriceBlock` while `HIDE_PUBLIC_PRICING` is set.
+ * The public shelf, laid out as the marketing redesign draws it: three plans
+ * that say who they are for and how many people they seat, a feature
+ * comparison, and the three billing questions people ask before they sign up.
  *
- * Withholds the figures and nothing else. Seat counts are plan structure
- * rather than price, and they are what makes the three cards comparable at
- * all, so they stay: a shelf of three tiers distinguished only by their
- * feature lists asks a visitor to guess which one their crew even fits in.
+ * No prices here - a visitor is told what each tier is for, and the number is
+ * settled on the signed-in page, where the CTA actually opens checkout. That
+ * is also why the crew-size stepper and the monthly/annual toggle are gone from
+ * this page: they existed only to recompute a price.
  *
- * Mirrors PriceBlock's type scale so the cards keep a shared baseline instead
- * of the row going ragged where the tall price used to be.
- */
-function ContactForPricing({ plan }: { plan: PlanPricing }) {
-  return (
-    <div>
-      <p className="font-display text-4xl font-bold tracking-tight text-foreground">Contact us</p>
-      <p className="mt-2 font-manrope text-xs font-bold text-foreground">
-        {plan.includedSeats} User{plan.includedSeats === 1 ? "" : "s"} Included
-      </p>
-      {sellsExtraSeats(plan) ? (
-        <p className="font-manrope text-xs text-muted-foreground">
-          Additional users available
-          {plan.advertiseSeatCap ? `, up to ${plan.maxSeats}` : ""}
-        </p>
-      ) : (
-        <p className="font-manrope text-xs text-muted-foreground">
-          Fixed at {plan.includedSeats} user{plan.includedSeats === 1 ? "" : "s"}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/** Reached by anonymous visitors from the homepage/nav/footer - must render
+ * Reached by anonymous visitors from the homepage/nav/footer - must render
  * without any authenticated-app assumptions (no AppSidebar/AppHeader, no
  * authed RPC calls). CTAs route to signup; checkout only happens once the
- * visitor has an account and a team. */
-function PublicPricingPage() {
-  const [interval, setInterval] = useState<BillingInterval>("monthly");
-  const [seats, setSeats] = useState(1);
+ * visitor has an account and a team.
+ */
+const PUBLIC_PLANS = [
+  {
+    id: "starter",
+    name: "Starter",
+    blurb: "For solo operators and small crews just getting off camera rolls.",
+    users: "1 user included",
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    blurb: "For crews running multiple active jobs who need AI reporting and walkthroughs.",
+    users: "5 users included",
+    popular: true,
+  },
+  {
+    id: "team",
+    name: "Team",
+    blurb: "For general contractors managing subs, clients, and templates across every job.",
+    users: "Unlimited users",
+  },
+] as const;
 
+/** A cell is included (true), not included (false), or a short label such as "Basic". */
+type Cell = boolean | string;
+
+const COMPARISON: { group: string; rows: { feature: string; cells: [Cell, Cell, Cell] }[] }[] = [
+  {
+    group: "Capture & storage",
+    rows: [
+      { feature: "Photo & video capture", cells: [true, true, true] },
+      { feature: "Unlimited photo storage", cells: [true, true, true] },
+      { feature: "Offline mode", cells: [true, true, true] },
+      { feature: "Live site map", cells: [true, true, true] },
+    ],
+  },
+  {
+    group: "Reporting & AI",
+    rows: [
+      { feature: "Manual reports", cells: [true, true, true] },
+      { feature: "AI-drafted reports", cells: [false, true, true] },
+      { feature: "Recorded walkthroughs", cells: [false, true, true] },
+      { feature: "AI assistant", cells: [false, true, true] },
+      { feature: "Company watermark on exports", cells: [false, true, true] },
+    ],
+  },
+  {
+    group: "Organization",
+    rows: [
+      { feature: "Tags & labels", cells: [true, true, true] },
+      { feature: "Checklists & templates", cells: ["Basic", "Full", "Full"] },
+      { feature: "Tasks on photos", cells: [false, true, true] },
+      { feature: "Project blueprints", cells: [false, false, true] },
+    ],
+  },
+  {
+    group: "Team & client access",
+    rows: [
+      { feature: "Share links with clients", cells: [true, true, true] },
+      { feature: "Portfolio site & website embeds", cells: [false, false, true] },
+      { feature: "Advanced roles & permissions", cells: [false, false, true] },
+      { feature: "Subcontractor access", cells: [false, false, true] },
+    ],
+  },
+];
+
+const BILLING_FAQ = [
+  {
+    q: "Can I switch plans later?",
+    a: "Yes - upgrade or downgrade any time from account settings; changes apply on your next billing cycle.",
+  },
+  {
+    q: 'What counts as a "user"?',
+    a: "Anyone with a login - office staff and field crew both count. Subcontractors given scoped project access do not count against your seat total on Team.",
+  },
+  {
+    q: "Is there a contract?",
+    a: "No. Month-to-month, cancel any time - annual billing is available if you'd rather lock in a rate.",
+  },
+];
+
+function ComparisonCell({ value }: { value: Cell }) {
+  if (value === false) return <span className="text-muted-foreground">—</span>;
+  if (value === true) return <Check className="mx-auto h-4 w-4 text-[oklch(0.55_0.14_150)]" />;
+  return <span className="font-semibold text-[oklch(0.55_0.14_150)]">{value}</span>;
+}
+
+function PublicPricingPage() {
   return (
     <div className="min-h-screen bg-background landing">
       <SiteHeader />
-      <main className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
-        <div className="text-center">
+      <main>
+        <section className="mx-auto max-w-[1100px] px-8 pb-14 pt-20 text-center">
           <p className="font-manrope text-xs font-bold uppercase tracking-[0.14em] text-accent-foreground">
             Pricing
           </p>
-          <h1 className="font-display mx-auto mt-5 max-w-2xl text-[40px] font-bold leading-[1.04] tracking-[-0.01em] text-foreground sm:text-[42px]">
+          <h1 className="font-display mx-auto mt-3.5 max-w-[640px] text-[42px] font-bold leading-[1.04] tracking-[-0.01em] text-foreground">
             Built to fit your crew size.
           </h1>
-          <p className="font-manrope mx-auto mt-6 max-w-xl text-[15.5px] leading-[1.6] text-muted-foreground">
-            Every plan includes AI reports, live site maps, and unlimited photo storage - no
-            per-feature upgrades. Start your {TRIAL_DAYS}-day free trial and cancel anytime.
+          <p className="font-manrope mx-auto mt-4 max-w-[520px] text-[15.5px] leading-[1.6] text-muted-foreground">
+            Every plan includes AI reports, live site maps, and unlimited photo storage — no
+            per-feature upgrades. Tell us your crew size and we&apos;ll get you set up with the
+            right one.
           </p>
-        </div>
+        </section>
 
-        {/* Both controls exist only to recompute a price, so with the figures
-            withheld they would be two pickers that visibly change nothing. */}
-        {!HIDE_PUBLIC_PRICING && (
-          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row sm:gap-8">
-            <CrewSizePicker seats={seats} onChange={setSeats} />
-            <IntervalToggle interval={interval} onChange={setInterval} />
-          </div>
-        )}
-
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
-          {PLANS.map((plan) => {
-            const capped = exceedsSeatCap(plan, seats);
-            return (
-              <div
-                key={plan.id}
-                className={`relative flex flex-col rounded-[18px] border p-[30px] transition-opacity ${
-                  capped ? "opacity-60" : ""
-                } ${plan.popular ? "border-primary shadow-sm" : "border-border"} bg-card`}
-              >
-                {/* Only meaningful while the plan is actually on offer - a
-                    "Most popular" flag on a card reading "Not available for a
-                    crew of 8" is pointing at something you cannot buy. */}
-                {plan.popular && !capped && (
-                  <span className="absolute -top-3 left-7 inline-flex rounded-full bg-primary px-3 py-1 font-manrope text-[11px] font-extrabold uppercase tracking-wider text-primary-foreground">
-                    Most popular
-                  </span>
-                )}
-                <p className="font-display text-[20px] font-bold text-foreground">{plan.name}</p>
-                <p className="mt-2 font-manrope text-[13.5px] text-muted-foreground">
-                  {plan.audience}
-                </p>
-
-                <div className="mt-5">
-                  {HIDE_PUBLIC_PRICING ? (
-                    <ContactForPricing plan={plan} />
-                  ) : (
-                    <PriceBlock plan={plan} seats={seats} interval={interval} />
-                  )}
-                </div>
-
-                <Button
-                  asChild={!capped}
-                  disabled={capped}
-                  variant={plan.popular ? "default" : "outline"}
-                  className="mt-6 h-11 w-full rounded-full font-manrope text-[14.5px] font-bold"
+        <section className="mx-auto max-w-[1100px] px-8 pb-[60px]">
+          <div className="grid gap-5 md:grid-cols-3">
+            {PUBLIC_PLANS.map((plan) => {
+              const popular = "popular" in plan && plan.popular;
+              return (
+                <div
+                  key={plan.id}
+                  className={`relative flex flex-col rounded-[18px] border bg-card p-[30px] ${
+                    popular
+                      ? "border-primary shadow-[0_12px_32px_rgba(0,0,0,0.06)]"
+                      : "border-border"
+                  }`}
                 >
-                  {capped ? <span>Not available</span> : <Link to="/signup">Start free trial</Link>}
-                </Button>
-
-                <p className="mt-4 font-manrope text-xs text-muted-foreground">{plan.tagline}</p>
-                <FeatureList features={displayFeatures(plan)} />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Pro and Team sell any number of seats, so this is not a seat
-            ceiling anyone has hit - it is the band of asks (API access, a
-            named contact) that no self-serve tier answers, and which otherwise
-            leave with no next step on this page. SSO is no longer on this
-            list: it is a Team feature now, on the card above. */}
-        <div className="mt-8 flex flex-col items-start justify-between gap-4 rounded-[28px] border border-border bg-card p-6 sm:flex-row sm:items-center sm:p-7">
-          <p className="font-manrope text-sm text-muted-foreground">
-            <span className="font-extrabold text-foreground">{ENTERPRISE.headline}</span>{" "}
-            {ENTERPRISE.summary}
+                  {popular && (
+                    <span className="absolute -top-3 left-6 inline-flex rounded-full bg-primary px-3 py-1 font-manrope text-[11px] font-bold text-primary-foreground">
+                      Most popular
+                    </span>
+                  )}
+                  <p className="font-manrope text-[20px] font-bold text-foreground">{plan.name}</p>
+                  <p className="mt-1.5 font-manrope text-[13.5px] text-muted-foreground">
+                    {plan.blurb}
+                  </p>
+                  <p className="mt-[22px] font-manrope text-[13px] text-faint">{plan.users}</p>
+                  <Button
+                    asChild
+                    variant={popular ? "default" : "outline"}
+                    className="mt-[22px] h-12 w-full rounded-full font-manrope text-[14.5px] font-bold"
+                  >
+                    <Link to="/signup">Start free trial</Link>
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-5 text-center font-manrope text-[13px] text-faint">
+            Annual billing available.{" "}
+            <Link to="/contact" className="font-semibold text-accent-foreground hover:underline">
+              Talk to us
+            </Link>{" "}
+            for a plan tailored to your team.
           </p>
-          <Button
-            asChild
-            variant="outline"
-            className="h-11 shrink-0 rounded-lg font-manrope text-sm font-bold"
-          >
-            <Link to="/contact">{ENTERPRISE.cta}</Link>
-          </Button>
-        </div>
+        </section>
+
+        <section className="border-t border-border bg-secondary pb-24 pt-16">
+          <div className="mx-auto max-w-[1100px] px-8">
+            <h2 className="font-display mb-9 text-center text-[26px] font-bold leading-[1.04] tracking-[-0.01em] text-foreground">
+              Compare plans in detail
+            </h2>
+            <div className="overflow-x-auto rounded-[18px] border border-border bg-card px-7 py-2">
+              <table className="w-full min-w-[560px] border-collapse font-manrope text-[13.5px]">
+                <thead>
+                  <tr className="border-b-2 border-border font-bold">
+                    <th scope="col" className="w-[40%] py-[13px] text-left">
+                      Feature
+                    </th>
+                    <th scope="col" className="py-[13px] text-center">
+                      Starter
+                    </th>
+                    <th scope="col" className="py-[13px] text-center text-accent-foreground">
+                      Pro
+                    </th>
+                    <th scope="col" className="py-[13px] text-center">
+                      Team
+                    </th>
+                  </tr>
+                </thead>
+                {COMPARISON.map((section) => (
+                  <tbody key={section.group}>
+                    <tr>
+                      <th
+                        colSpan={4}
+                        scope="colgroup"
+                        className="pb-1.5 pt-[22px] text-left text-[11.5px] font-bold uppercase tracking-[0.06em] text-faint"
+                      >
+                        {section.group}
+                      </th>
+                    </tr>
+                    {section.rows.map((row) => (
+                      <tr key={row.feature} className="border-b border-border last:border-b-0">
+                        <td className="py-[13px]">{row.feature}</td>
+                        {row.cells.map((cell, i) => (
+                          <td key={i} className="py-[13px] text-center">
+                            <ComparisonCell value={cell} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                ))}
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-[760px] px-8 py-20">
+          <h2 className="font-display mb-7 text-center text-[26px] font-bold leading-[1.04] tracking-[-0.01em] text-foreground">
+            Billing questions
+          </h2>
+          <div className="rounded-[18px] border border-border bg-card px-7 py-[22px]">
+            {BILLING_FAQ.map((item) => (
+              <div key={item.q} className="border-b border-border py-3.5 last:border-b-0">
+                <p className="font-manrope text-[14.5px] font-semibold text-foreground">{item.q}</p>
+                <p className="mt-1.5 font-manrope text-[13.5px] text-muted-foreground">{item.a}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-[22px] text-center">
+            <Link
+              to="/faq"
+              className="font-manrope text-[13.5px] font-semibold text-accent-foreground hover:underline"
+            >
+              See the full FAQ →
+            </Link>
+          </p>
+        </section>
       </main>
       <SiteFooter />
     </div>
