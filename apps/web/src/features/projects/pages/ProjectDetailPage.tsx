@@ -2873,7 +2873,7 @@ export function ProjectDetailPage() {
             userIds={assignees}
             canAssign={canAssign}
             onAssign={() => setAssignOpen(true)}
-            caption="Scheduling only — doesn't change who can see this project."
+            caption="Scheduling only - doesn't change who can see this project."
           />
         </div>
         <div className="hidden w-px shrink-0 bg-border sm:block" />

@@ -450,7 +450,7 @@ export function DashboardPage() {
           <div className="rounded-[12px] border border-border bg-card p-[18px_20px]">
             <div className="text-xs text-muted-foreground">Documentation health</div>
             <div className="font-mono mt-1.5 text-[26px] font-bold leading-none text-foreground">
-              {docHealthPct === null ? "—" : `${docHealthPct}%`}
+              {docHealthPct === null ? "-" : `${docHealthPct}%`}
             </div>
           </div>
           <div className="rounded-[12px] border border-status-hold bg-status-hold-soft p-[18px_20px]">

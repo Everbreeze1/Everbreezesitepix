@@ -1948,6 +1948,7 @@ export function ProjectsPage() {
                   hasQueryOrFilter={hasActiveFilters}
                   onClearFilters={clearAllFilters}
                   blueprintNames={blueprintNames}
+                  stageLookup={stageLookup}
                   coverUrls={coverUrls}
                   coverPaths={coverPaths}
                   coverThumbPaths={coverThumbPaths}
@@ -2213,12 +2214,14 @@ function CrewCell({
  */
 function RowActions({
   project,
+  crewCount,
   canAssign,
   onAssign,
   onStar,
   onArchive,
 }: {
   project: ProjectRow;
+  crewCount: number;
   canAssign: boolean;
   onAssign: () => void;
   onStar: (id: string, next: boolean) => void;
@@ -2247,6 +2250,17 @@ function RowActions({
             />
             {project.starred ? "Unstar project" : "Star project"}
           </DropdownMenuItem>
+          {/*
+            Staffing a job from the list it is on. The empty crew cell's "+"
+            only covers a job with nobody on it; this reaches the rest. Hidden
+            when the viewer cannot assign, since the server would refuse.
+          */}
+          {canAssign && (
+            <DropdownMenuItem onClick={onAssign}>
+              <UsersIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+              {crewCount === 0 ? "Assign teammates" : `Change crew (${crewCount})`}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => onArchive(project.id, !project.archived)}>
             <Archive
@@ -2273,6 +2287,7 @@ function ProjectTableRow({
   coverUrl,
   coverPath,
   coverThumbPath,
+  stage,
   assigned,
   canAssign,
   onAssign,
@@ -2280,6 +2295,8 @@ function ProjectTableRow({
   onArchive,
 }: {
   project: ProjectRow;
+  /** The pipeline stage the job stands in, if any. It owns the bucket. */
+  stage?: { name: string; boardName: string };
   blueprintName?: string;
   coverUrl?: string;
   coverPath?: string;
@@ -2300,6 +2317,7 @@ function ProjectTableRow({
   }, [members, assigned]);
   const extra = assigned.length - crew.length;
   const loc = projectLocation(project);
+  const badge = { label: statusLabel(project.status, project.archived) };
 
   return (
     <div className="group relative">
@@ -2331,19 +2349,31 @@ function ProjectTableRow({
             )}
           </span>
         </span>
-        <span>
+        {/*
+          One badge, not two. Where a job stands in a pipeline the stage is the
+          more precise status and decides the bucket, so the pill names the
+          stage and keeps the bucket's colour.
+        */}
+        <span
+          title={
+            stage
+              ? `${stage.boardName}: ${stage.name}, which counts as ${badge.label.toLowerCase()}`
+              : undefined
+          }
+        >
           <ReferencePill tone={statusTone(project.status, project.archived)}>
-            {statusLabel(project.status, project.archived)}
+            {stage ? stage.name : badge.label}
           </ReferencePill>
         </span>
         <span className="truncate text-[12.5px] text-muted-foreground">
-          {blueprintName || <span className="text-faint">—</span>}
+          {blueprintName || <span className="text-faint">-</span>}
         </span>
         <CrewCell crew={crew} extra={extra} canAssign={canAssign} onAssign={onAssign} />
         <span className="flex items-center justify-end gap-1 text-[12px] text-muted-foreground">
           {timeAgo(project.updated_at)}
           <RowActions
             project={project}
+            crewCount={assigned.length}
             canAssign={canAssign}
             onAssign={onAssign}
             onStar={onStar}
@@ -2364,6 +2394,7 @@ function ProjectsList({
   coverPaths,
   coverThumbPaths,
   blueprintNames,
+  stageLookup,
   onStar,
   onArchive,
 }: {
@@ -2375,6 +2406,7 @@ function ProjectsList({
   coverPaths: Record<string, string>;
   coverThumbPaths: Record<string, string>;
   blueprintNames: Record<string, string>;
+  stageLookup: Record<string, { name: string; boardName: string }>;
   onStar: (id: string, next: boolean) => void;
   onArchive: (id: string, next: boolean) => void;
 }) {
@@ -2446,6 +2478,9 @@ function ProjectsList({
               key={p.id}
               project={p}
               blueprintName={blueprintNames[p.id]}
+              stage={
+                !p.archived && p.pipeline_stage_id ? stageLookup[p.pipeline_stage_id] : undefined
+              }
               coverUrl={coverUrls[p.id]}
               coverPath={coverPaths[p.id]}
               coverThumbPath={coverThumbPaths[p.id]}

@@ -75,6 +75,13 @@ jobs:
         run: npx tsc --noEmit
         working-directory: apps/web
 
+      # The mobile tests under tests/mobile-* import apps/mobile source, whose
+      # tsconfig extends `expo/tsconfig.base`. apps/mobile is outside the root
+      # workspaces, so without its own install ~50 test files fail to load.
+      - name: Install (apps/mobile, for its tests)
+        run: npm ci
+        working-directory: apps/mobile
+
       - name: Test
         run: npm test
 
