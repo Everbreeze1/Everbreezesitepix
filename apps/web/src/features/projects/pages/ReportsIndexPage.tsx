@@ -32,6 +32,13 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { BlueprintItemBadge } from "@/features/projects/components/BlueprintItemBadge";
 import { listBlueprintItemSources, type BlueprintSourceMap } from "@/lib/blueprint.functions";
+import {
+  generatePagePdf,
+  listReportPages,
+  setProjectPageShare,
+  type ReportPageSummary,
+} from "@/lib/project-pages.functions";
+import { downloadBase64File } from "@/lib/download-file";
 
 interface ReportRow {
   id: string;
@@ -48,6 +55,17 @@ interface ReportRow {
    */
   source_template?: string | null;
 }
+/**
+ * One row on screen. Reports live in two places: the older report builder
+ * (`project_reports`) and report pages (`project_pages` filed under Reports,
+ * which is what a project's Create menu makes today). Both are listed, newest
+ * first, and each row knows which kind it is so its links and actions go to
+ * the right editor, share page and PDF.
+ */
+type ListRow =
+  | { kind: "legacy"; key: string; report: ReportRow; date: string }
+  | { kind: "page"; key: string; page: ReportPageSummary; date: string };
+
 interface ProjRow {
   id: string;
   name: string;
@@ -56,6 +74,8 @@ interface ProjRow {
 export function ReportsIndexPage() {
   const { user } = useAuth();
   const [reports, setReports] = useState<ReportRow[]>([]);
+  const [pageReports, setPageReports] = useState<ReportPageSummary[]>([]);
+  const [exportingId, setExportingId] = useState<string | null>(null);
   const [projects, setProjects] = useState<Map<string, ProjRow>>(new Map());
   const [thumbs, setThumbs] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -94,11 +114,23 @@ export function ReportsIndexPage() {
           .order("created_at", { ascending: false });
       };
 
-      const [{ data: rs }, { data: ps }] = await Promise.all([
+      const loadPageReports = async () => {
+        try {
+          const res = await listReportPages({ data: {} });
+          return res.reports ?? [];
+        } catch (e: any) {
+          console.warn("[reports] report pages unavailable", { message: e?.message });
+          return [] as ReportPageSummary[];
+        }
+      };
+
+      const [{ data: rs }, { data: ps }, pageRows] = await Promise.all([
         loadReports(),
         (supabase as any).from("projects").select("id, name"),
+        loadPageReports(),
       ]);
       if (cancelled) return;
+      setPageReports(pageRows);
       const rows = (rs as ReportRow[]) ?? [];
       setReports(rows);
       const map = new Map<string, ProjRow>();
@@ -191,25 +223,69 @@ export function ReportsIndexPage() {
     setReports((rs) => rs.map((x) => (x.id === r.id ? { ...x, revoked_at } : x)));
     toast.success(revoked_at ? "Share link disabled" : "Share link re-enabled");
   }
-  function shareUrl(t: string) {
-    return typeof window === "undefined" ? "" : `${window.location.origin}/share/reports/${t}`;
-  }
-  async function copyLink(t: string) {
+  async function togglePageShare(p: ReportPageSummary) {
+    const enable = !!p.revokedAt;
     try {
-      await navigator.clipboard.writeText(shareUrl(t));
+      const res = await setProjectPageShare({ data: { pageId: p.id, enable } });
+      setPageReports((rs) =>
+        rs.map((x) =>
+          x.id === p.id
+            ? {
+                ...x,
+                shareToken: res.shareToken,
+                revokedAt: enable ? null : new Date().toISOString(),
+              }
+            : x,
+        ),
+      );
+      toast.success(enable ? "Share link re-enabled" : "Share link disabled");
+    } catch (e: any) {
+      toast.error("Couldn't update", { description: e?.message });
+    }
+  }
+  async function downloadPagePdf(p: ReportPageSummary) {
+    setExportingId(p.id);
+    try {
+      const res = await generatePagePdf({ data: { pageId: p.id } });
+      downloadBase64File(res.pdfBase64, res.filename);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not export PDF");
+    } finally {
+      setExportingId(null);
+    }
+  }
+  function shareUrl(row: ListRow) {
+    if (typeof window === "undefined") return "";
+    return row.kind === "page"
+      ? `${window.location.origin}/share/pages/${row.page.shareToken}`
+      : `${window.location.origin}/share/reports/${row.report.share_token}`;
+  }
+  async function copyLink(row: ListRow) {
+    try {
+      await navigator.clipboard.writeText(shareUrl(row));
       toast.success("Link copied");
     } catch {
       toast.error("Couldn't copy");
     }
   }
 
-  const filtered = reports.filter((r) => {
+  const rows: ListRow[] = [
+    ...reports.map(
+      (r): ListRow => ({ kind: "legacy", key: `r:${r.id}`, report: r, date: r.created_at }),
+    ),
+    ...pageReports.map(
+      (p): ListRow => ({ kind: "page", key: `p:${p.id}`, page: p, date: p.createdAt }),
+    ),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+
+  const filtered = rows.filter((row) => {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
-    return (
-      r.title.toLowerCase().includes(q) ||
-      (projects.get(r.project_id)?.name.toLowerCase().includes(q) ?? false)
-    );
+    const title = row.kind === "page" ? row.page.title : row.report.title;
+    const projectId = row.kind === "page" ? row.page.projectId : row.report.project_id;
+    const projectName =
+      (row.kind === "page" ? row.page.projectName : null) ?? projects.get(projectId)?.name ?? "";
+    return title.toLowerCase().includes(q) || projectName.toLowerCase().includes(q);
   });
 
   return (
@@ -243,9 +319,9 @@ export function ReportsIndexPage() {
         <Card className="p-6">
           <EmptyState
             icon={FileText}
-            title={reports.length === 0 ? "No reports yet" : "No matches"}
+            title={rows.length === 0 ? "No reports yet" : "No matches"}
             description={
-              reports.length === 0
+              rows.length === 0
                 ? "Open any project and create your first client-ready report."
                 : "Try a different search term."
             }
@@ -253,19 +329,33 @@ export function ReportsIndexPage() {
         </Card>
       ) : (
         <ul className="grid grid-cols-1 gap-3">
-          {filtered.map((r) => {
-            const proj = projects.get(r.project_id);
-            const thumb = thumbs.get(r.id);
-            const disabled = !!r.revoked_at;
+          {filtered.map((row) => {
+            const isPage = row.kind === "page";
+            const r = row.kind === "legacy" ? row.report : null;
+            const pg = row.kind === "page" ? row.page : null;
+            const id = isPage ? pg!.id : r!.id;
+            const projectId = isPage ? pg!.projectId : r!.project_id;
+            const title = isPage ? pg!.title : r!.title;
+            const projectName = (isPage ? pg!.projectName : null) ?? projects.get(projectId)?.name;
+            const thumb = r ? thumbs.get(r.id) : undefined;
+            const disabled = isPage ? !!pg!.revokedAt : !!r!.revoked_at;
+            const openLink = isPage
+              ? ({
+                  to: "/projects/$projectId/pages/$pageId",
+                  params: { projectId, pageId: id },
+                } as const)
+              : ({
+                  to: "/projects/$projectId/reports/$reportId",
+                  params: { projectId, reportId: id },
+                } as const);
             return (
-              <li key={r.id}>
+              <li key={row.key}>
                 <Card className="overflow-hidden p-0 transition-shadow hover:shadow-md">
                   <div className="flex items-stretch gap-0">
                     <Link
-                      to="/projects/$projectId/reports/$reportId"
-                      params={{ projectId: r.project_id, reportId: r.id }}
+                      {...(openLink as any)}
                       className="relative block h-28 w-28 shrink-0 overflow-hidden bg-muted sm:h-32 sm:w-44"
-                      aria-label={`Open ${r.title}`}
+                      aria-label={`Open ${title}`}
                     >
                       {thumb ? (
                         <img
@@ -276,7 +366,11 @@ export function ReportsIndexPage() {
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                          <ImageIcon className="h-7 w-7" />
+                          {isPage ? (
+                            <FileText className="h-7 w-7" />
+                          ) : (
+                            <ImageIcon className="h-7 w-7" />
+                          )}
                         </div>
                       )}
                     </Link>
@@ -285,41 +379,42 @@ export function ReportsIndexPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <Link
-                            to="/projects/$projectId/reports/$reportId"
-                            params={{ projectId: r.project_id, reportId: r.id }}
+                            {...(openLink as any)}
                             className="truncate font-semibold leading-tight hover:underline"
                           >
-                            {r.title}
+                            {title}
                           </Link>
                           {disabled && (
                             <Badge variant="outline" className="text-xs text-muted-foreground">
-                              Disabled
+                              Link off
                             </Badge>
                           )}
-                          <BlueprintItemBadge
-                            source={
-                              r.source_template
-                                ? blueprintSources[r.project_id]?.[r.source_template]
-                                : null
-                            }
-                          />
+                          {r && (
+                            <BlueprintItemBadge
+                              source={
+                                r.source_template
+                                  ? blueprintSources[r.project_id]?.[r.source_template]
+                                  : null
+                              }
+                            />
+                          )}
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                          {proj ? (
+                          {projectName ? (
                             <Link
                               to="/projects/$projectId"
-                              params={{ projectId: r.project_id }}
+                              params={{ projectId }}
                               className="hover:underline"
                             >
-                              {proj.name}
+                              {projectName}
                             </Link>
                           ) : (
                             <span>Unknown project</span>
                           )}
                           <span aria-hidden>·</span>
-                          <span>{new Date(r.created_at).toLocaleDateString()}</span>
+                          <span>{new Date(row.date).toLocaleDateString()}</span>
                         </div>
-                        {r.summary && (
+                        {r?.summary && (
                           <p className="mt-1.5 line-clamp-2 text-sm text-muted-foreground">
                             {r.summary}
                           </p>
@@ -339,36 +434,41 @@ export function ReportsIndexPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
                           <DropdownMenuItem asChild>
-                            <Link
-                              to="/projects/$projectId/reports/$reportId"
-                              params={{ projectId: r.project_id, reportId: r.id }}
-                            >
-                              <Pencil className="mr-2 h-4 w-4" /> Open builder
+                            <Link {...(openLink as any)}>
+                              <Pencil className="mr-2 h-4 w-4" /> Open report
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            disabled={disabled}
-                            onSelect={() => copyLink(r.share_token)}
-                          >
+                          <DropdownMenuItem disabled={disabled} onSelect={() => copyLink(row)}>
                             <Copy className="mr-2 h-4 w-4" /> Copy link
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild disabled={disabled}>
-                            <a href={shareUrl(r.share_token)} target="_blank" rel="noreferrer">
+                            <a href={shareUrl(row)} target="_blank" rel="noreferrer">
                               <ExternalLink className="mr-2 h-4 w-4" /> Open share
                             </a>
                           </DropdownMenuItem>
-                          <DropdownMenuItem asChild disabled={disabled}>
-                            <a
-                              href={everlumenApi.urls.reportPdf(r.share_token)}
-                              target="_blank"
-                              rel="noreferrer"
+                          {pg ? (
+                            <DropdownMenuItem
+                              disabled={exportingId === pg.id}
+                              onSelect={() => void downloadPagePdf(pg)}
                             >
                               <Download className="mr-2 h-4 w-4" /> Download PDF
-                            </a>
-                          </DropdownMenuItem>
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem asChild disabled={disabled}>
+                              <a
+                                href={everlumenApi.urls.reportPdf(r!.share_token)}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <Download className="mr-2 h-4 w-4" /> Download PDF
+                              </a>
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onSelect={() => toggleRevoke(r)}>
+                          <DropdownMenuItem
+                            onSelect={() => (pg ? void togglePageShare(pg) : void toggleRevoke(r!))}
+                          >
                             {disabled ? (
                               <>
                                 <Eye className="mr-2 h-4 w-4" /> Re-enable link

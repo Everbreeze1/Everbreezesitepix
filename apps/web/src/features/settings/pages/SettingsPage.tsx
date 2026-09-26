@@ -1669,11 +1669,11 @@ function TeamSection({
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-manrope text-xs font-extrabold text-white"
                 style={{ background: memberAvatarColor(m.role, idx) }}
               >
-                {(m.full_name || m.email || "?")[0]?.toUpperCase()}
+                {(m.profile?.full_name || m.profile?.email || "?")[0]?.toUpperCase()}
               </span>
               <div className="min-w-0">
                 <div className="truncate font-manrope text-sm font-extrabold text-foreground">
-                  {m.full_name || m.email}
+                  {m.profile?.full_name || m.profile?.email}
                 </div>
                 <div className="mt-0.5">
                   <RoleBadge role={m.role} tier={tier} size="xs" />
