@@ -21,9 +21,7 @@ describe("family: workflow completion produces a client-ready report", () => {
 
   it("enqueues a report when a workflow completes, not when it is created", () => {
     expect(QUEUE_MIGRATION).toMatch(/enqueue_workflow_report/);
-    expect(QUEUE_MIGRATION).toMatch(
-      /NEW\.completed_at IS NOT NULL AND OLD\.completed_at IS NULL/,
-    );
+    expect(QUEUE_MIGRATION).toMatch(/NEW\.completed_at IS NOT NULL AND OLD\.completed_at IS NULL/);
     expect(QUEUE_MIGRATION).toMatch(/'workflow_report'/);
   });
 

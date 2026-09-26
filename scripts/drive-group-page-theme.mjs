@@ -71,10 +71,16 @@ async function cleanup() {
     }
     await actions.click();
     await page.waitForTimeout(800);
-    await page.getByRole("menuitem", { name: /Delete Group/i }).first().click();
+    await page
+      .getByRole("menuitem", { name: /Delete Group/i })
+      .first()
+      .click();
     await page.waitForTimeout(1000);
     // The confirm is an AlertDialog; its action button is the plain "Delete".
-    await page.getByRole("button", { name: /^Delete$/ }).first().click();
+    await page
+      .getByRole("button", { name: /^Delete$/ })
+      .first()
+      .click();
     await page.waitForTimeout(3000);
 
     // Confirm it is really gone rather than trusting the click.
@@ -141,10 +147,16 @@ const run = async () => {
   current = "create group";
   await page.goto(`${BASE}/projects`, { waitUntil: "networkidle" });
   await page.waitForTimeout(3000);
-  await page.getByRole("button", { name: /Groups/i }).first().click();
+  await page
+    .getByRole("button", { name: /Groups/i })
+    .first()
+    .click();
   await page.waitForTimeout(2000);
 
-  await page.getByRole("button", { name: /New Group/i }).first().click();
+  await page
+    .getByRole("button", { name: /New Group/i })
+    .first()
+    .click();
   await page.waitForTimeout(1200);
   await page.locator("#group-name").fill(ZZ_NAME);
   await page.locator("#group-desc").fill("Temporary group for a theme check. Safe to delete.");
@@ -154,7 +166,10 @@ const run = async () => {
     await firstProject.click();
     await page.waitForTimeout(400);
   }
-  await page.getByRole("button", { name: /Create Group/i }).first().click();
+  await page
+    .getByRole("button", { name: /Create Group/i })
+    .first()
+    .click();
   await page.waitForTimeout(4000);
 
   const gate = page.getByText(/Subscribe to create project groups/i);

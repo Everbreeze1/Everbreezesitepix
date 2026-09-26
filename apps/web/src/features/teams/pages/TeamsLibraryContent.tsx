@@ -6,11 +6,7 @@ import { getMyTeam, getTeamActivity, inviteMember } from "@/features/teams/api";
 import { listSubcontractors } from "@/lib/subcontractors.functions";
 import { useProfile } from "@/hooks/use-profile";
 import { relativeTime } from "@everlumen/shared";
-import {
-  assignableRoles,
-  can,
-  roleLabelForTier,
-} from "@everlumen/shared/team-permissions";
+import { assignableRoles, can, roleLabelForTier } from "@everlumen/shared/team-permissions";
 
 /*
  * The Teams page, laid out exactly as the Main-html reference
@@ -226,10 +222,7 @@ export function TeamsLibraryContent() {
     return map;
   }, [activity]);
 
-  const roleOptions = useMemo(
-    () => assignableRoles(plan, { assignmentsEnforced: true }),
-    [plan],
-  );
+  const roleOptions = useMemo(() => assignableRoles(plan, { assignmentsEnforced: true }), [plan]);
 
   const teamName = team?.name ?? "Your team";
   const crewCount = members.length;
@@ -321,10 +314,18 @@ export function TeamsLibraryContent() {
       {tab === "crew" && (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="grid grid-cols-[2.4fr_1fr_1fr_1fr] items-center gap-4 border-b border-border bg-muted px-[18px] py-3">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">Name</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">Role</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">Active projects</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">Last active</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
+              Name
+            </span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
+              Role
+            </span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
+              Active projects
+            </span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
+              Last active
+            </span>
           </div>
           {members.length === 0 && (
             <div className="px-[18px] py-8 text-center text-[13px] text-faint">
@@ -364,8 +365,8 @@ export function TeamsLibraryContent() {
       {tab === "subs" && (
         <div>
           <p className="mb-3.5 max-w-[640px] text-[12.5px] text-muted-foreground">
-            Outside trades and one-off crews you bring onto a project {"\u2014"} kept separate
-            from your own W-2 employees.
+            Outside trades and one-off crews you bring onto a project {"\u2014"} kept separate from
+            your own W-2 employees.
           </p>
           {!canManageSubs ? (
             <div className="rounded-xl border border-border bg-card px-[18px] py-8 text-center text-[13px] text-faint">
@@ -436,8 +437,8 @@ export function TeamsLibraryContent() {
       {tab === "permissions" && (
         <div>
           <p className="mb-3.5 max-w-[640px] text-[12.5px] text-muted-foreground">
-            What each role can do. Standard crew only see projects they&rsquo;re assigned to;
-            Owner and Manager see everything.
+            What each role can do. Standard crew only see projects they&rsquo;re assigned to; Owner
+            and Manager see everything.
           </p>
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <div className="grid grid-cols-[2.2fr_1fr_1fr_1fr] items-center gap-4 border-b border-border bg-muted px-[18px] py-3">

@@ -55,7 +55,8 @@ function parseDocBody(body: unknown): {
   description: string;
   category: string | null;
 } {
-  if (!body || typeof body !== "object") return { style: "report", html: "", description: "", category: null };
+  if (!body || typeof body !== "object")
+    return { style: "report", html: "", description: "", category: null };
   const b = body as Record<string, unknown>;
   return {
     style: typeof b.style === "string" ? b.style : "report",
@@ -112,7 +113,15 @@ const COVER_OPTIONS: Array<{ kind: CoverKind; label: string; desc: string }> = [
 
 function PlusIcon({ size = 15 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
       <path d="M12 5v14M5 12h14" />
     </svg>
   );
@@ -120,7 +129,15 @@ function PlusIcon({ size = 15 }: { size?: number }) {
 
 function XIcon({ size = 10 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
       <path d="M18 6 6 18M6 6l12 12" />
     </svg>
   );
@@ -246,25 +263,30 @@ function DocumentsGrid({
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {docs.filter((d) => trade === "all" || d.category === trade || (!d.category && trade === GENERAL_CATEGORY)).map((doc) => (
-          <div
-            key={doc.id}
-            onClick={onEdit}
-            className="flex cursor-pointer flex-col gap-[11px] rounded-[13px] border border-border bg-card p-[18px] transition-colors hover:border-primary"
-          >
-            <div className="flex items-center justify-between">
-              <TypeBadge type={badgeForStyle(doc.style)} />
-              <span className="font-mono text-[11px] text-faint">{doc.tokens} tokens</span>
+        {docs
+          .filter(
+            (d) =>
+              trade === "all" ||
+              d.category === trade ||
+              (!d.category && trade === GENERAL_CATEGORY),
+          )
+          .map((doc) => (
+            <div
+              key={doc.id}
+              onClick={onEdit}
+              className="flex cursor-pointer flex-col gap-[11px] rounded-[13px] border border-border bg-card p-[18px] transition-colors hover:border-primary"
+            >
+              <div className="flex items-center justify-between">
+                <TypeBadge type={badgeForStyle(doc.style)} />
+                <span className="font-mono text-[11px] text-faint">{doc.tokens} tokens</span>
+              </div>
+              <div className="text-[14.5px] font-semibold text-foreground">{doc.name}</div>
+              {doc.excerpt && <div className="text-xs leading-[1.5] text-faint">{doc.excerpt}</div>}
+              <div className="flex flex-wrap items-center gap-[6px] border-t border-border pt-[11px]">
+                <Chip>{doc.category || GENERAL_CATEGORY}</Chip>
+              </div>
             </div>
-            <div className="text-[14.5px] font-semibold text-foreground">{doc.name}</div>
-            {doc.excerpt && (
-              <div className="text-xs leading-[1.5] text-faint">{doc.excerpt}</div>
-            )}
-            <div className="flex flex-wrap items-center gap-[6px] border-t border-border pt-[11px]">
-              <Chip>{doc.category || GENERAL_CATEGORY}</Chip>
-            </div>
-          </div>
-        ))}
+          ))}
 
         {/* Dashed "Build a new template" card */}
         <div
@@ -413,7 +435,15 @@ function CoverSwatch({ kind }: { kind: CoverKind }) {
   );
 }
 
-function PreviewCover({ cover, title, subtitle }: { cover: CoverKind; title: string; subtitle: string }) {
+function PreviewCover({
+  cover,
+  title,
+  subtitle,
+}: {
+  cover: CoverKind;
+  title: string;
+  subtitle: string;
+}) {
   if (cover === "minimal") {
     return (
       <div className="px-[26px] py-[34px]">
@@ -487,7 +517,9 @@ function BasicsStep({
               key={opt.kind}
               onClick={() => setCover(opt.kind)}
               className={`cursor-pointer rounded-[10px] border-[1.5px] p-3 transition-colors ${
-                active ? "border-primary bg-[oklch(93%_0.03_55)]" : "border-border hover:border-primary/50"
+                active
+                  ? "border-primary bg-[oklch(93%_0.03_55)]"
+                  : "border-border hover:border-primary/50"
               }`}
             >
               <CoverSwatch kind={opt.kind} />
@@ -547,18 +579,12 @@ function SectionsStep() {
 }
 
 function PlaceholdersStep() {
-  const tokens = [
-    "project_name",
-    "project_address",
-    "author_name",
-    "report_date",
-    "photo_count",
-  ];
+  const tokens = ["project_name", "project_address", "author_name", "report_date", "photo_count"];
   return (
     <div className="rounded-[13px] border border-border bg-card p-[26px]">
       <p className="mb-4 text-[12.5px] text-muted-foreground">
-        Placeholders are tokens like <Tok>{"{{project_name}}"}</Tok> that get replaced with
-        real project data when the template is used.
+        Placeholders are tokens like <Tok>{"{{project_name}}"}</Tok> that get replaced with real
+        project data when the template is used.
       </p>
       <div className="mb-[18px] flex flex-wrap gap-2">
         {tokens.map((t) => (
@@ -717,8 +743,8 @@ function WizardView({
             </div>
           </div>
           <p className="mt-2.5 text-[11.5px] leading-[1.5] text-faint">
-            This updates as you edit. What your client sees is exactly what you&rsquo;re
-            building here.
+            This updates as you edit. What your client sees is exactly what you&rsquo;re building
+            here.
           </p>
         </div>
       </div>

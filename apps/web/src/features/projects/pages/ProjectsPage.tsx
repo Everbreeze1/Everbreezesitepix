@@ -48,12 +48,7 @@ import {
 } from "@/components/ui/reference";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TagPillRow, TagPill } from "@/features/photos/components/TagPill";
@@ -79,11 +74,7 @@ import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
 import { listProjectGroups } from "@/features/projects/api";
-import {
-  listProjectBoards,
-  type PipelineStage,
-  type ProjectBoard,
-} from "@/features/projects/api";
+import { listProjectBoards, type PipelineStage, type ProjectBoard } from "@/features/projects/api";
 import { GroupCard } from "@/features/projects/components/GroupCard";
 import {
   CreateGroupDialog,
@@ -501,8 +492,14 @@ export function ProjectsPage() {
           .select("project_id, storage_path, thumb_path, image_url, uploaded_by, created_at")
           .in("project_id", ids)
           .order("created_at", { ascending: false }),
-        (supabase as any).from("project_reports").select("project_id, name, created_at").in("project_id", ids),
-        (supabase as any).from("project_checklists").select("project_id, name, created_at").in("project_id", ids),
+        (supabase as any)
+          .from("project_reports")
+          .select("project_id, name, created_at")
+          .in("project_id", ids),
+        (supabase as any)
+          .from("project_checklists")
+          .select("project_id, name, created_at")
+          .in("project_id", ids),
       ]);
       const samplesByProject: Record<
         string,
@@ -569,13 +566,17 @@ export function ProjectsPage() {
         }
       };
       const rc: Record<string, number> = {};
-      ((rep as Array<{ project_id: string; name?: string | null; created_at?: string }>) ?? []).forEach((r) => {
+      (
+        (rep as Array<{ project_id: string; name?: string | null; created_at?: string }>) ?? []
+      ).forEach((r) => {
         rc[r.project_id] = (rc[r.project_id] ?? 0) + 1;
         noteBlueprint(r.project_id, r.name, r.created_at);
       });
 
       const cc: Record<string, number> = {};
-      ((cl as Array<{ project_id: string; name?: string | null; created_at?: string }>) ?? []).forEach((r) => {
+      (
+        (cl as Array<{ project_id: string; name?: string | null; created_at?: string }>) ?? []
+      ).forEach((r) => {
         cc[r.project_id] = (cc[r.project_id] ?? 0) + 1;
         noteBlueprint(r.project_id, r.name, r.created_at);
       });
@@ -1119,7 +1120,12 @@ export function ProjectsPage() {
       setStatusFilter(pill);
     }
   };
-  const filterPills: Array<{ key: FilterPillKey; label: string; count: number; toneClass: string }> = [
+  const filterPills: Array<{
+    key: FilterPillKey;
+    label: string;
+    count: number;
+    toneClass: string;
+  }> = [
     { key: "all", label: "All", count: totalCount, toneClass: "text-foreground" },
     { key: "active", label: "Active", count: activeCount, toneClass: "text-status-active" },
     { key: "on_hold", label: "On hold", count: onHoldCount, toneClass: "text-status-hold" },
@@ -1200,7 +1206,9 @@ export function ProjectsPage() {
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder={tab === "groups" ? "Search groupsÃ¢â‚¬Â¦" : "Search projects by name or addressÃ¢â‚¬Â¦"}
+        placeholder={
+          tab === "groups" ? "Search groupsÃ¢â‚¬Â¦" : "Search projects by name or addressÃ¢â‚¬Â¦"
+        }
         className="h-8 rounded-lg border-border bg-card/80 pl-8 pr-8 text-xs shadow-none placeholder:text-muted-foreground"
       />
       {query && (
@@ -1808,11 +1816,16 @@ export function ProjectsPage() {
                       "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-[7px] text-[12.5px] font-semibold transition",
                       selected
                         ? "border-foreground bg-foreground text-background"
-                        : "border-border bg-card text-muted-foreground hover:text-foreground"
+                        : "border-border bg-card text-muted-foreground hover:text-foreground",
                     )}
                   >
                     {pill.label}
-                    <span className={cn("font-mono text-[11px]", selected ? "text-background/70" : pill.toneClass)}>
+                    <span
+                      className={cn(
+                        "font-mono text-[11px]",
+                        selected ? "text-background/70" : pill.toneClass,
+                      )}
+                    >
                       {pill.count}
                     </span>
                   </button>
@@ -1837,7 +1850,7 @@ export function ProjectsPage() {
             </div>
           )}
 
-{/* Projects / Groups / Pipelines / Calendar */}
+          {/* Projects / Groups / Pipelines / Calendar */}
           <div>
             {/*
               No header on the Pipelines tab: the pipeline strip below already
@@ -2101,7 +2114,10 @@ function GroupsGrid({
   );
 }
 
-function statusTone(s: string, archived?: boolean | null): "active" | "hold" | "complete" | "archived" {
+function statusTone(
+  s: string,
+  archived?: boolean | null,
+): "active" | "hold" | "complete" | "archived" {
   if (archived) return "archived";
   if (s === "on_hold") return "hold";
   if (s === "completed") return "complete";
@@ -2223,12 +2239,22 @@ function RowActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
           <DropdownMenuItem onClick={() => onStar(project.id, !project.starred)}>
-            <Star className={cn("mr-2 h-4 w-4", project.starred ? "fill-current text-foreground" : "text-muted-foreground")} />
+            <Star
+              className={cn(
+                "mr-2 h-4 w-4",
+                project.starred ? "fill-current text-foreground" : "text-muted-foreground",
+              )}
+            />
             {project.starred ? "Unstar project" : "Star project"}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => onArchive(project.id, !project.archived)}>
-            <Archive className={cn("mr-2 h-4 w-4", project.archived ? "text-status-complete" : "text-muted-foreground")} />
+            <Archive
+              className={cn(
+                "mr-2 h-4 w-4",
+                project.archived ? "text-status-complete" : "text-muted-foreground",
+              )}
+            />
             {project.archived ? "Restore project" : "Archive project"}
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -2396,32 +2422,42 @@ function ProjectsList({
   return (
     <>
       <div className={cn(REFERENCE_CARD, "overflow-hidden")}>
-          {/* Column heads - uppercase eyebrow labels on a surface-2 wash. */}
-          <div className="hidden grid-cols-[2.6fr_1fr_1.4fr_1fr_0.9fr] items-center gap-3 border-b border-border bg-secondary/60 px-[18px] py-3 md:grid">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Project</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Status</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Blueprint</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Crew</span>
-            <span className="text-right text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Last activity</span>
-          </div>
-          <div className="divide-y divide-border">
-            {projects.map((p) => (
-              <ProjectTableRow
-                key={p.id}
-                project={p}
-                blueprintName={blueprintNames[p.id]}
-                coverUrl={coverUrls[p.id]}
-                coverPath={coverPaths[p.id]}
-                coverThumbPath={coverThumbPaths[p.id]}
-                assigned={byProject[p.id] ?? []}
-                canAssign={canAssign}
-                onAssign={() => setAssignFor(p)}
-                onStar={onStar}
-                onArchive={onArchive}
-              />
-            ))}
-          </div>
+        {/* Column heads - uppercase eyebrow labels on a surface-2 wash. */}
+        <div className="hidden grid-cols-[2.6fr_1fr_1.4fr_1fr_0.9fr] items-center gap-3 border-b border-border bg-secondary/60 px-[18px] py-3 md:grid">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+            Project
+          </span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+            Status
+          </span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+            Blueprint
+          </span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+            Crew
+          </span>
+          <span className="text-right text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+            Last activity
+          </span>
         </div>
+        <div className="divide-y divide-border">
+          {projects.map((p) => (
+            <ProjectTableRow
+              key={p.id}
+              project={p}
+              blueprintName={blueprintNames[p.id]}
+              coverUrl={coverUrls[p.id]}
+              coverPath={coverPaths[p.id]}
+              coverThumbPath={coverThumbPaths[p.id]}
+              assigned={byProject[p.id] ?? []}
+              canAssign={canAssign}
+              onAssign={() => setAssignFor(p)}
+              onStar={onStar}
+              onArchive={onArchive}
+            />
+          ))}
+        </div>
+      </div>
 
       {/*
       One dialog for the whole grid, opened with whichever card was clicked.

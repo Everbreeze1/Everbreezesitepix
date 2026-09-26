@@ -345,7 +345,7 @@ describe("the project on a report reaches triage", () => {
     expect(api).toContain("projectName: r.project_id");
     // The lookup is scoped to the page's ids, mirroring the reporter lookup.
     expect(api).toContain('from("projects")');
-    expect(api).toContain(".in(\"id\", projectIds)");
+    expect(api).toContain('.in("id", projectIds)');
   });
 
   it("renders the project on the web queue card", () => {

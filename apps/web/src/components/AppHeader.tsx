@@ -69,7 +69,8 @@ export function AppHeader() {
           title="Toggle light / dark"
           className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary text-muted-foreground transition-colors hover:text-foreground"
         >
-          {themeReady && (theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />)}
+          {themeReady &&
+            (theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />)}
         </button>
 
         <Popover open={notifOpen} onOpenChange={setNotifOpen}>
@@ -108,7 +109,7 @@ export function AppHeader() {
             ) : (
               <ScrollArea className="max-h-[400px]">
                 <div className="divide-y divide-border">
-{recent.map((n) => (
+                  {recent.map((n) => (
                     <button
                       key={n.id}
                       type="button"
