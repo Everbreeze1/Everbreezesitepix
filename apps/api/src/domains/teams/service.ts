@@ -340,19 +340,7 @@ export async function getMyTeamService(ctx: AuthedContext) {
   const teamId = (membership as any).team_id as string;
 
   const [teamRes, membersRes, invitesRes] = await Promise.all([
-    /*
-     * The team row through the service client, now that membership above has
-     * proved the caller belongs to it.
-     *
-     * The "Members view their team" policy (20260612191404) compares
-     * `tm.team_id = id` inside a subquery on team_members, where the bare `id`
-     * resolves to `tm.id`, not `teams.id`. So only the owner could read the row:
-     * every invited Admin, Manager or Standard got `team: null`, which the app
-     * reads as "no active plan" - creating and uploading paused, the company
-     * setup wizard shown to them, and invite roles offered for the Starter tier.
-     * Reading it here fixes that without waiting on a database change.
-     */
-    getSupabaseAdmin()
+    supabase
       .from("teams" as any)
       .select("*")
       .eq("id", teamId)
