@@ -199,12 +199,17 @@ export function PortfolioPage() {
             Portfolio
           </h1>
           <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
-            A shareable mini-site of your best work - one page per project, plus embeds for your
-            own website.
+            A shareable mini-site of your best work - one page per project, plus embeds for your own
+            website.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Button variant="outline" asChild disabled={!p.published} className="font-sans h-10 rounded-lg border-border bg-card px-4 text-[13.5px] font-medium text-foreground hover:bg-secondary">
+          <Button
+            variant="outline"
+            asChild
+            disabled={!p.published}
+            className="font-sans h-10 rounded-lg border-border bg-card px-4 text-[13.5px] font-medium text-foreground hover:bg-secondary"
+          >
             <a href={siteUrl} target="_blank" rel="noreferrer">
               <ExternalLink className="mr-1.5 h-4 w-4" /> View site
             </a>

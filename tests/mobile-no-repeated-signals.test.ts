@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -153,7 +153,6 @@ describe("every display name goes through one helper", () => {
      * Matched with whitespace normalised, because prettier reflows it and a
      * multi-line regex would quietly stop matching.
      */
-    const { readdirSync } = require("node:fs") as typeof import("node:fs");
     const dir = "apps/mobile/src/api";
     const offenders: string[] = [];
     for (const name of readdirSync(join(ROOT, dir))) {
@@ -213,7 +212,6 @@ describe("a screen offers each action once", () => {
      * Only two screens have a FAB. If a third appears, it has to answer the
      * same question, so this fails rather than quietly letting it through.
      */
-    const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
     const walk = (dir: string, out: string[] = []): string[] => {
       for (const name of readdirSync(dir)) {
         const full = join(dir, name);
@@ -289,7 +287,6 @@ describe("rows with their own controls drop the chevron", () => {
      * reported the fix as missing on rows that already had it - a sweep that
      * cries wolf gets ignored, which is worse than no sweep.
      */
-    const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
     const walk = (dir: string, out: string[] = []): string[] => {
       for (const name of readdirSync(dir)) {
         const full = join(dir, name);

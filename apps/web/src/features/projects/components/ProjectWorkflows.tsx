@@ -446,7 +446,7 @@ export function ProjectWorkflows({
             .eq("project_id", projectId)
             .order("started_at", { ascending: true });
 
-        let [wfRes, tplRes] = await Promise.all([
+        const [firstWfRes, tplRes] = await Promise.all([
           readWorkflows(`${WF_COLUMNS}, source_kind, walkthrough_template_id`),
           supabase
             .from("workflow_templates" as any)
@@ -454,6 +454,7 @@ export function ProjectWorkflows({
             .eq("archived", false)
             .order("name", { ascending: true }),
         ]);
+        let wfRes = firstWfRes;
         /*
          * The two walkthrough columns arrive with 20260908000000, and PostgREST
          * rejects the whole select over one unknown column. Without this retry

@@ -39,7 +39,7 @@ describe("the selection bar docks in the content, not over the global header", (
   const CODE = stripComments(read(BAR));
 
   it("is a sticky element in the flow rather than fixed to the viewport", () => {
-    expect(CODE).toMatch(/className="sticky top-\[82px\] z-10/);
+    expect(CODE).toMatch(/className="sticky top-14 z-10/);
     // The old shape. `fixed ... top-3` is exactly what put it over the header.
     expect(CODE).not.toMatch(/\bfixed right-0 top-3\b/);
   });
@@ -53,8 +53,8 @@ describe("the selection bar docks in the content, not over the global header", (
   it("sits under the header's stacking order instead of over it", () => {
     const header = read("apps/web/src/components/AppHeader.tsx");
     // If either number moves, the bar starts overlapping global nav again.
-    expect(header).toMatch(/sticky top-0 z-20 flex h-\[82px\]/);
-    expect(CODE).toMatch(/top-\[82px\] z-10/);
+    expect(header).toMatch(/sticky top-0 z-20 flex h-14\b/);
+    expect(CODE).toMatch(/top-14 z-10/);
   });
 
   it("is mounted above the grid in both callers, which a sticky bar requires", () => {

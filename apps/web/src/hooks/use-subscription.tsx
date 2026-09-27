@@ -177,5 +177,3 @@ export function useSubscription() {
     refresh: () => fetchUsage(),
   };
 }
-
-

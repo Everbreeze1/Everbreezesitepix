@@ -432,4 +432,3 @@ function PrivacyPolicyPage() {
     </div>
   );
 }
-

@@ -105,8 +105,6 @@ describe("portfolioSummary", () => {
      * from the summary is only right while the badge is there; without this
      * assertion the two edits could drift and the state would vanish.
      */
-    const { readFileSync } = require("node:fs") as typeof import("node:fs");
-    const { join } = require("node:path") as typeof import("node:path");
     const card = readFileSync(join(process.cwd(), "apps/mobile/app/(app)/portfolio.tsx"), "utf8");
     expect(card).toContain('label={isPublished(project) ? "Live" : "Draft"}');
   });

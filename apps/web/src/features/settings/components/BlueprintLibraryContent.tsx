@@ -36,7 +36,16 @@ interface Blueprint {
 
 function BoxIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="m12 3.5 8.5 4.8L12 13 3.5 8.3 12 3.5Z" />
       <path d="m3.5 13 8.5 4.8 8.5-4.8" />
     </svg>
@@ -45,7 +54,16 @@ function BoxIcon() {
 
 function ChecklistIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="m4 6 1.6 1.6L8.5 4.8" />
       <path d="M11 6h9.5" />
       <path d="m4 12.5 1.6 1.6 2.9-2.8" />
@@ -56,7 +74,15 @@ function ChecklistIcon() {
 
 function PhasesIcon() {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
       <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
     </svg>
   );
@@ -64,7 +90,15 @@ function PhasesIcon() {
 
 function PlusIcon({ size = 15 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
       <path d="M12 5v14M5 12h14" />
     </svg>
   );
@@ -80,7 +114,10 @@ function SectionLabel({ children }: { children: ReactNode }) {
 
 function AddRow({ children, onPick }: { children: ReactNode; onPick: () => void }) {
   return (
-    <div className="cursor-pointer py-[9px] text-[12.5px] font-semibold text-primary" onClick={onPick}>
+    <div
+      className="cursor-pointer py-[9px] text-[12.5px] font-semibold text-primary"
+      onClick={onPick}
+    >
       {children}
     </div>
   );
@@ -144,8 +181,8 @@ function BlueprintEditor({
       <div className="mb-6 text-[12.5px] text-faint">
         {appliedAvailable && usedOn !== null ? (
           <>
-            Used on {usedOn} {usedOn === 1 ? "project" : "projects"} &middot; changes apply
-            the next time this blueprint is assigned to a new project.
+            Used on {usedOn} {usedOn === 1 ? "project" : "projects"} &middot; changes apply the next
+            time this blueprint is assigned to a new project.
           </>
         ) : (
           <>Changes apply the next time this blueprint is assigned to a new project.</>
@@ -177,9 +214,7 @@ function BlueprintEditor({
             No checklists attached yet.
           </div>
         )}
-        <AddRow onPick={() => onAddSection("checklist")}>
-          + Add from checklist library
-        </AddRow>
+        <AddRow onPick={() => onAddSection("checklist")}>+ Add from checklist library</AddRow>
       </div>
 
       {/* Workflow phases */}
@@ -211,9 +246,7 @@ function BlueprintEditor({
             No workflow attached.
           </div>
         )}
-        <AddRow onPick={() => onAddSection("workflow")}>
-          + Add phase
-        </AddRow>
+        <AddRow onPick={() => onAddSection("workflow")}>+ Add phase</AddRow>
       </div>
 
       {/* Documents + Report templates */}
@@ -230,9 +263,7 @@ function BlueprintEditor({
             ) : (
               <div className="py-[9px] text-[13px] text-faint">No document templates.</div>
             )}
-            <AddRow onPick={() => onAddSection("document")}>
-              + Add document
-            </AddRow>
+            <AddRow onPick={() => onAddSection("document")}>+ Add document</AddRow>
           </div>
         </div>
         <div>
@@ -247,9 +278,7 @@ function BlueprintEditor({
             ) : (
               <div className="py-[9px] text-[13px] text-faint">No report templates.</div>
             )}
-            <AddRow onPick={() => onAddSection("report")}>
-              + Add report template
-            </AddRow>
+            <AddRow onPick={() => onAddSection("report")}>+ Add report template</AddRow>
           </div>
         </div>
       </div>
@@ -294,48 +323,37 @@ export function BlueprintLibraryContent({
 
   async function load() {
     setLoading(true);
-    const [
-      tplRes,
-      chkRes,
-      attRes,
-      itemsRes,
-      wfRes,
-      phRes,
-      docRes,
-      repRes,
-      cliRes,
-      wfiRes,
-      appRes,
-    ] = await Promise.all([
-      supabase
-        .from("project_templates" as any)
-        .select(
-          "id, team_id, created_by, name, description, labels, archived, created_at, category, default_for_category, version",
-        )
-        .order("created_at", { ascending: true }),
-      supabase.from("checklist_templates" as any).select("id, name, description, archived"),
-      supabase
-        .from("project_template_checklists" as any)
-        .select("id, project_template_id, checklist_template_id, position")
-        .order("position", { ascending: true }),
-      supabase
-        .from("project_template_items" as any)
-        .select("id, project_template_id, kind, ref_id, position")
-        .order("position", { ascending: true }),
-      supabase.from("workflow_templates" as any).select("id, name, archived"),
-      supabase
-        .from("workflow_template_phases" as any)
-        .select("id, template_id, name, position")
-        .order("position", { ascending: true }),
-      supabase.from("document_templates" as any).select("id, name, archived"),
-      supabase.from("report_templates" as any).select("id, name, archived"),
-      supabase.from("checklist_template_items" as any).select("id, template_id"),
-      supabase.from("workflow_template_items" as any).select("id, phase_id"),
-      supabase
-        .from("project_blueprint_applications" as any)
-        .select("id, blueprint_id, project_id")
-        .limit(2000),
-    ]);
+    const [tplRes, chkRes, attRes, itemsRes, wfRes, phRes, docRes, repRes, cliRes, wfiRes, appRes] =
+      await Promise.all([
+        supabase
+          .from("project_templates" as any)
+          .select(
+            "id, team_id, created_by, name, description, labels, archived, created_at, category, default_for_category, version",
+          )
+          .order("created_at", { ascending: true }),
+        supabase.from("checklist_templates" as any).select("id, name, description, archived"),
+        supabase
+          .from("project_template_checklists" as any)
+          .select("id, project_template_id, checklist_template_id, position")
+          .order("position", { ascending: true }),
+        supabase
+          .from("project_template_items" as any)
+          .select("id, project_template_id, kind, ref_id, position")
+          .order("position", { ascending: true }),
+        supabase.from("workflow_templates" as any).select("id, name, archived"),
+        supabase
+          .from("workflow_template_phases" as any)
+          .select("id, template_id, name, position")
+          .order("position", { ascending: true }),
+        supabase.from("document_templates" as any).select("id, name, archived"),
+        supabase.from("report_templates" as any).select("id, name, archived"),
+        supabase.from("checklist_template_items" as any).select("id, template_id"),
+        supabase.from("workflow_template_items" as any).select("id, phase_id"),
+        supabase
+          .from("project_blueprint_applications" as any)
+          .select("id, blueprint_id, project_id")
+          .limit(2000),
+      ]);
 
     // Item / step counts for the row metas ("6 items", "Actionable · 2 steps").
     const itemCount: Record<string, number> = {};
@@ -346,8 +364,7 @@ export function BlueprintLibraryContent({
     for (const it of (wfiRes.data as any[]) ?? []) {
       if (it.phase_id) stepsPerPhase[it.phase_id] = (stepsPerPhase[it.phase_id] ?? 0) + 1;
     }
-    const phasesByWorkflow: Record<string, Array<{ id: string; name: string; steps: number }>> =
-      {};
+    const phasesByWorkflow: Record<string, Array<{ id: string; name: string; steps: number }>> = {};
     for (const p of (phRes.data as any[]) ?? []) {
       if (!p.template_id) continue;
       (phasesByWorkflow[p.template_id] ??= []).push({
@@ -441,9 +458,7 @@ export function BlueprintLibraryContent({
                 }`,
               );
             if (reports > 0)
-              chips.push(
-                `${reports} ${reports === 1 ? "report template" : "report templates"}`,
-              );
+              chips.push(`${reports} ${reports === 1 ? "report template" : "report templates"}`);
             return (
               <div
                 key={b.id}

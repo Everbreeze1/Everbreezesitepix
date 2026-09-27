@@ -48,7 +48,9 @@ describe("bug report subject", () => {
     expect(migration).toContain("ADD COLUMN IF NOT EXISTS subject text");
     expect(migration).toContain("char_length(subject) <= 160");
     expect(page.indexOf('id="feedback-subject"')).toBeGreaterThan(-1);
-    expect(page.indexOf('id="feedback-subject"')).toBeLessThan(page.indexOf('id="feedback-project"'));
+    expect(page.indexOf('id="feedback-subject"')).toBeLessThan(
+      page.indexOf('id="feedback-project"'),
+    );
     expect(page).toContain('kind === "bug" && !subject.trim()');
   });
 
