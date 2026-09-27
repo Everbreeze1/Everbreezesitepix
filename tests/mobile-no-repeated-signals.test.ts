@@ -203,9 +203,15 @@ describe("a screen offers each action once", () => {
     expect(s).toContain('label: "Record one"');
   });
 
-  it("and so does the project photo FAB, which set the precedent", () => {
+  it("and the project photo FAB is the only capture control, even on an empty job", () => {
+    /*
+     * Jon (2026-09-27) wants the first photo of a new job taken from the same
+     * right-hand spot as every other, so the rail stays up on an empty grid
+     * and the "No photos yet" empty state no longer carries its own button.
+     */
     const s = read("apps/mobile/app/(app)/project/[id]/index.tsx").replace(/\s+/g, " ");
-    expect(s).toContain("filtered.length === 0 ? null : (");
+    expect(s).toContain(") : selecting ? null : ( <ActionRail");
+    expect(s).not.toContain('label: "Take photos"');
   });
 
   it("no other screen floats an unguarded action", () => {
@@ -220,7 +226,11 @@ describe("a screen offers each action once", () => {
      * button in the hero row, which is not drawn there, so nothing on the
      * screen offers the action twice.
      */
-    const EXEMPT = new Set([join(ROOT, "apps/mobile/app/(app)/(tabs)/index.tsx")]);
+    const EXEMPT = new Set([
+      join(ROOT, "apps/mobile/app/(app)/(tabs)/index.tsx"),
+      // Its empty state has no capture button; see the test above.
+      join(ROOT, "apps/mobile/app/(app)/project/[id]/index.tsx"),
+    ]);
     const walk = (dir: string, out: string[] = []): string[] => {
       for (const name of readdirSync(dir)) {
         const full = join(dir, name);

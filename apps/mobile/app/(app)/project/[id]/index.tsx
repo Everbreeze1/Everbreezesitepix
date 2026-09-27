@@ -1194,12 +1194,7 @@ export default function ProjectDetailScreen() {
                 <EmptyState
                   icon={Camera}
                   title="No photos yet"
-                  body="Photos taken here upload on their own, and keep queueing when there is no signal."
-                  action={{
-                    label: "Take photos",
-                    icon: Camera,
-                    onPress: () => router.push(`/project/${id}/capture`),
-                  }}
+                  body="Tap the camera button to take the first photos. They upload on their own, and keep queueing when there is no signal."
                 />
               ) : (
                 <EmptyState
@@ -1310,12 +1305,10 @@ export default function ProjectDetailScreen() {
           each other.
         */}
         {/*
-          No floating Capture button while the grid is empty.
-          The empty state already offers the action ("Take photos", or "Show
-          all" when a filter hid everything), and on device the button sat over
-          the empty state body: "tag some photos as you shoot them" ran
-          underneath it. Two controls for one intent, one of them obscuring the
-          other.
+          The Capture button stays on the right even while the grid is empty,
+          so a new job's first photo is taken from the same thumb-reach spot as
+          every other (Jon, 2026-09-27). The empty state carries no button of
+          its own, so there is still one control for the intent.
         */}
         {selecting && bulkError ? (
           <View
@@ -1339,7 +1332,7 @@ export default function ProjectDetailScreen() {
             onCancel={endSelection}
             onAction={(action) => void applyBulk(action)}
           />
-        ) : selecting ? null : filtered.length === 0 ? null : (
+        ) : selecting ? null : (
           <ActionRail
             actions={[
               {
