@@ -1,9 +1,9 @@
 import { Camera } from "@/ui/icons";
 import { Platform, Pressable, View } from "react-native";
-import { router } from "expo-router";
 import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { radius, spacing, useRightRail, useTheme } from "@/theme";
 import { Icon, Text } from "@/ui";
+import { useQuickCapture } from "@/lib/use-quick-capture";
 
 /**
  * The bottom tab bar.
@@ -21,9 +21,11 @@ import { Icon, Text } from "@/ui";
  * looks like the other four does not get used on a job site with gloves on.
  *
  * The camera is not a route in this navigator. It cannot be: capture needs a
- * project and a tab has no argument, so pressing it pushes `/capture-start`
- * onto the parent stack, which asks which job this is and then opens the
- * viewfinder. Modelling it as a tab would leave a tab you can never be "on".
+ * project and a tab has no argument. Pressing it opens the viewfinder straight
+ * away on the job the phone is standing at, or the one last worked on (see
+ * `useQuickCapture`), and the job's name on the viewfinder switches it. A list
+ * of jobs in between read as the camera button opening Projects. Modelling it
+ * as a tab would leave a tab you can never be "on".
  *
  * **On a tablet, or any screen in landscape, the bar becomes a rail down the
  * right edge**, with the camera at its foot. A bottom bar is right for a phone
@@ -40,6 +42,7 @@ import { Icon, Text } from "@/ui";
 export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
   const theme = useTheme();
   const rail = useRightRail();
+  const openCamera = useQuickCapture();
 
   /*
    * The bar is always-dark chrome, in both schemes, so the inactive tint is the
@@ -125,8 +128,8 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Take photos"
-      accessibilityHint="Choose a project, then open the camera"
-      onPress={() => router.push("/capture-start")}
+      accessibilityHint="Opens the camera on the nearest or most recent job"
+      onPress={openCamera}
       style={({ pressed }) => [
         {
           width: 64,

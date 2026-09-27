@@ -16,6 +16,7 @@ import * as WebBrowser from "expo-web-browser";
 import { fileGeneratedPdf } from "@/api/pdf-export";
 import { ShotAnnotator, type ShotAnnotatorTool } from "@/components/ShotAnnotator";
 import { ShotCropper } from "@/components/ShotCropper";
+import { ScanCropper } from "@/components/ScanCropper";
 import { TagPickerSheet } from "@/components/TagPickerSheet";
 import { jpegFileToPdfBase64 } from "@/components/scan-pdf";
 import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
@@ -36,8 +37,8 @@ export type ShotPatch = Partial<
 /**
  * One shot, before it is saved: web's post-capture preview.
  *
- * Retake, Annotate, Measure (Pro/Team), Crop, Tags and a description, and for
- * a scan, Save as PDF. Every edit goes back to the batch through `onChange`,
+ * Retake, Annotate, Measure (Pro/Team, on a supported iPhone), Crop, Tags and
+ * a description, and for a scan, Save as PDF. Every edit goes back to the batch through `onChange`,
  * so the shot still queues offline with the rest when the batch is saved.
  *
  * A full-screen view rather than a Modal, so the annotator, cropper and tag
@@ -219,8 +220,25 @@ export function ShotEditor({
         }}
       />
 
+      {/*
+        A scan crops the way web's Scan mode does, by its four corners with the
+        page straightened; a photo keeps the rectangular crop. The scan already
+        has its document look, so it is not applied twice.
+      */}
+      <ScanCropper
+        visible={cropping && Boolean(shot.scan)}
+        uri={shot.uri}
+        enhance={false}
+        onCancel={() => setCropping(false)}
+        onApply={({ note, ...result }) => {
+          setCropping(false);
+          onChange(result);
+          setMessage({ text: note ?? "Page straightened", error: false });
+        }}
+      />
+
       <ShotCropper
-        visible={cropping}
+        visible={cropping && !shot.scan}
         uri={shot.uri}
         width={shot.width}
         height={shot.height}

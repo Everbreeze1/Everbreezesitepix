@@ -24,6 +24,9 @@ import { tagForPhase, type WatermarkTag } from "@/api/watermark";
 import { renderWatermarked } from "@/api/watermark-render";
 import { WatermarkCanvas } from "@/components/WatermarkCanvas";
 import { ScanCanvas } from "@/components/ScanCanvas";
+import { ScanCropper } from "@/components/ScanCropper";
+import { prepareScanSource } from "@/components/ScanSurface";
+import { guideToImageQuad, type Quad } from "@/components/scan-warp";
 import { CameraModeRow, cameraModes, type CameraMode } from "@/components/CameraModeRow";
 import { LevelIndicator } from "@/components/LevelIndicator";
 import { ShotAnnotator } from "@/components/ShotAnnotator";
@@ -33,6 +36,7 @@ import { useTagLibrary } from "@/components/photo-viewer/TagPill";
 import { formatAddress, getProject, projectCoords } from "@/api/projects";
 import { projectDisplayName } from "@everlumen/shared";
 import { useAuth } from "@/lib/auth";
+import { deviceSupportsMeasure } from "@/lib/measure-support";
 import { persistCapture } from "@/offline/media";
 import { enqueue, newOutboxId } from "@/offline/outbox";
 import { recordSessionPhoto } from "@/offline/capture-session";
@@ -40,7 +44,7 @@ import { refreshQueue, requestSync } from "@/offline/sync";
 import type { PhotoUploadPayload } from "@/offline/handlers";
 import { HIT_TARGET, radius, spacing, typography, useRightRail, useTheme } from "@/theme";
 import { Icon } from "@/ui";
-import { Images, MapPin, RefreshCw, X } from "@/ui/icons";
+import { ChevronDown, Images, MapPin, RefreshCw, X } from "@/ui/icons";
 
 /**
  * `scan` marks a shot taken in Scan mode. Its file already has the document
@@ -116,6 +120,17 @@ export default function CaptureScreen() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   /** The shot Measure mode has just taken, open in the annotator's Measure tool. */
   const [measuringKey, setMeasuringKey] = useState<string | null>(null);
+  /**
+   * The page Scan mode has just taken, open on its corner step, with the
+   * corners starting where the viewfinder's paper guide framed it.
+   */
+  const [scanPending, setScanPending] = useState<{
+    asset: CapturedAsset;
+    quad: Quad | null;
+  } | null>(null);
+  /** The paper guide and the viewfinder it sits in, as laid out, for that start. */
+  const scanGuide = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const scanView = useRef<{ width: number; height: number } | null>(null);
 
   /*
    * Tablet and landscape layout: the shutter, modes, library and flip stand in
@@ -192,7 +207,14 @@ export default function CaptureScreen() {
     queryFn: getMyTeam,
     staleTime: 10 * 60_000,
   });
-  const canMeasure = Boolean(team?.isActive && (team.plan === "pro" || team.plan === "team"));
+  /*
+   * And only on a phone that can measure: iPhone 15 Pro and later Pro models
+   * (Jon, 2026-09-27). Android never offers it, so the mode chip and the
+   * preview's Measure button are both gone there.
+   */
+  const canMeasure =
+    deviceSupportsMeasure() &&
+    Boolean(team?.isActive && (team.plan === "pro" || team.plan === "team"));
 
   /*
    * Ask for location once, in the background, and never block capture on it.
@@ -236,6 +258,27 @@ export default function CaptureScreen() {
 
   function patchShot(key: string, patch: ShotPatch) {
     setShots((prev) => prev.map((shot) => (shot.key === key ? { ...shot, ...patch } : shot)));
+  }
+
+  /*
+   * The job switch on the viewfinder. Only for a plain capture: one opened
+   * for a checklist or workflow item files its evidence against this job.
+   */
+  const canSwitchJob = !checklistItemId && !workflowItemId;
+
+  /**
+   * Pick another job. `replace`, so the picker takes this camera's place and
+   * opens the new job's camera in its own place in turn: backing out lands
+   * where the person started, not on a second camera. An unsaved batch has to
+   * be saved first, because its photos belong to the job they were shot for.
+   */
+  function switchJob() {
+    if (busy) return;
+    if (shots.length > 0) {
+      setError("Save this batch first, then change job.");
+      return;
+    }
+    router.replace("/capture-start");
   }
 
   /**
@@ -288,6 +331,22 @@ export default function CaptureScreen() {
     addShot(asset, scan);
   }
 
+  /**
+   * The paper guide mapped onto the photo, or null to use the default inset.
+   * The camera's reported size can be the sensor's rather than the upright
+   * picture's, so it is turned to match the viewfinder's orientation first.
+   */
+  function guideQuad(asset: CapturedAsset): Quad | null {
+    const guide = scanGuide.current;
+    const view = scanView.current;
+    if (!guide || !view || !asset.width || !asset.height) return null;
+    const turned = asset.width > asset.height !== view.width > view.height;
+    const image = turned
+      ? { width: asset.height, height: asset.width }
+      : { width: asset.width, height: asset.height };
+    return guideToImageQuad(guide, view, image);
+  }
+
   async function takeShot() {
     if (!cameraRef.current || busy) return;
     setError(null);
@@ -306,14 +365,13 @@ export default function CaptureScreen() {
           exif: picture.exif ?? null,
         };
         if (mode === "scan") {
-          // Applied now rather than on Save, so the strip shows the page the
-          // way it will be filed, as web's preview does.
-          setBusy(true);
-          try {
-            afterCapture({ ...asset, uri: await scanLook(asset) }, true);
-          } finally {
-            setBusy(false);
-          }
+          /*
+           * Straight to the corner step, as a document scanner does, rather
+           * than into the batch as a photo of a desk with a page on it. The
+           * page is straightened and given its look there, before the strip
+           * shows it, so it looks the way it will be filed.
+           */
+          setScanPending({ asset, quad: guideQuad(asset) });
         } else {
           afterCapture(asset, false);
         }
@@ -352,7 +410,7 @@ export default function CaptureScreen() {
         if (scan) {
           // The document look is a new JPEG, so the picker's mime no longer applies.
           afterCapture(
-            { ...picked, uri: await scanLook(picked), mimeType: "image/jpeg" },
+            { ...picked, ...(await scanLook(picked)), mimeType: "image/jpeg" },
             true,
             false,
           );
@@ -428,20 +486,22 @@ export default function CaptureScreen() {
   );
 
   /**
-   * Give one Scan mode capture the document look: greyscale with the contrast
-   * pushed, the same treatment web's Scan mode applies to its canvas.
+   * Give one imported page the document look, without the corner step (a run
+   * of library imports should not open one after another; each can be
+   * straightened from its preview's Crop).
    *
-   * Fails open like `stamp`: a scan that keeps its colour is still a scan.
+   * Upright and resized first, so the look is drawn at the picture's real
+   * orientation and size. Fails open like `stamp`: a scan that keeps its
+   * colour is still a scan.
    */
   const scanLook = useCallback(
-    async (asset: CapturedAsset): Promise<string> => {
-      if (!asset.width || !asset.height) return asset.uri;
-      return renderOffscreen({
-        kind: "scan",
-        uri: asset.uri,
-        width: asset.width,
-        height: asset.height,
-      });
+    async (
+      asset: CapturedAsset,
+    ): Promise<{ uri: string; width?: number | null; height?: number | null }> => {
+      const source = await prepareScanSource(asset.uri).catch(() => null);
+      if (!source) return { uri: asset.uri, width: asset.width, height: asset.height };
+      const uri = await renderOffscreen({ kind: "scan", ...source });
+      return { uri, width: source.width, height: source.height };
     },
     [renderOffscreen],
   );
@@ -1047,6 +1107,43 @@ export default function CaptureScreen() {
     </Pressable>
   );
 
+  /*
+   * Before / None / After, beside the shutter, as web draws it directly above
+   * its shutter. It used to sit at the top left of the viewfinder, out of
+   * reach of the thumb that is about to press the shutter; the phase is picked
+   * in the same movement as the shot, so it lives where that thumb is. The
+   * same `phase` state is what the review step shows and what `stamp` burns
+   * in on Save, and it applies to the whole batch.
+   *
+   * Shown only in Before/After mode, as on web. Photo and Scan clear the
+   * phase when picked (see `changeMode`), so a hidden pill never tags a shot
+   * nobody meant to tag.
+   */
+  const phaseSelector =
+    mode === "before-after" ? (
+      <View style={[styles.phaseRow, side && styles.phaseColumn]} accessibilityRole="radiogroup">
+        {PHASES.map((option) => {
+          const active = phase === option.id;
+          const label = option.id === "untagged" ? "None" : option.label;
+          return (
+            <Pressable
+              key={option.id}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={
+                option.id === "untagged" ? "No before or after tag" : `${option.label} photos`
+              }
+              onPress={() => setPhase(option.id)}
+              hitSlop={4}
+              style={[styles.phasePill, active && styles.phasePillActive]}
+            >
+              <Text style={[styles.phaseText, active && styles.phaseTextActive]}>{label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    ) : null;
+
   return (
     <View style={styles.cameraRoot}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -1092,13 +1189,35 @@ export default function CaptureScreen() {
             Which job these photos land on, so nobody shoots a whole run into
             the wrong project. The street address when there is one, because
             that is what a crew calls a job; the project name otherwise.
+
+            Tapping it switches job. The camera button opens straight onto the
+            nearest or last worked on job, so this is the one tap that corrects
+            it. Not offered when the camera was opened for a checklist or
+            workflow item, whose evidence has to land on this job.
           */}
-          <View style={styles.locationPill} accessibilityRole="text">
-            <Icon icon={MapPin} size="sm" color={CHROME_FG} />
-            <Text style={styles.locationText} numberOfLines={1}>
-              {projectLabel}
-            </Text>
-          </View>
+          {canSwitchJob ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Job: ${projectLabel}. Change job`}
+              accessibilityHint="Pick a different project for these photos"
+              onPress={switchJob}
+              hitSlop={4}
+              style={styles.locationPill}
+            >
+              <Icon icon={MapPin} size="sm" color={CHROME_FG} />
+              <Text style={styles.locationText} numberOfLines={1}>
+                {projectLabel}
+              </Text>
+              <Icon icon={ChevronDown} size="sm" color={CHROME_FG} />
+            </Pressable>
+          ) : (
+            <View style={styles.locationPill} accessibilityRole="text">
+              <Icon icon={MapPin} size="sm" color={CHROME_FG} />
+              <Text style={styles.locationText} numberOfLines={1}>
+                {projectLabel}
+              </Text>
+            </View>
+          )}
 
           <Pressable
             accessibilityRole="button"
@@ -1167,45 +1286,6 @@ export default function CaptureScreen() {
           <View style={{ flex: 1 }} />
           <LevelIndicator size={44} />
         </View>
-
-        {/*
-          Before / Untagged / After, on the viewfinder.
-
-          This used to live only on the review step, after the shutter, and on
-          the live camera it looked as though before/after had gone from the
-          app. The phase is a decision made before the shot ("I am about to
-          document the before"), so it is picked here, and the same `phase`
-          state is what the review step shows and what `stamp` burns in on
-          Save. It still applies to the whole batch, not per photo: a run of
-          befores is shot as one batch and saved, then the pill is flipped.
-        */}
-        {/*
-          Shown only in Before/After mode, as on web. Photo and Scan clear the
-          phase when picked (see `changeMode`), so a hidden pill never tags a
-          shot nobody meant to tag.
-        */}
-        {mode === "before-after" ? (
-          <View style={styles.phaseRow} accessibilityRole="radiogroup">
-            {PHASES.map((option) => {
-              const active = phase === option.id;
-              return (
-                <Pressable
-                  key={option.id}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: active }}
-                  accessibilityLabel={`${option.label} photos`}
-                  onPress={() => setPhase(option.id)}
-                  hitSlop={4}
-                  style={[styles.phasePill, active && styles.phasePillActive]}
-                >
-                  <Text style={[styles.phaseText, active && styles.phaseTextActive]}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : null}
       </View>
 
       {/*
@@ -1213,9 +1293,31 @@ export default function CaptureScreen() {
         will happen to the shot so the greyscale strip is not a surprise.
       */}
       {mode === "scan" ? (
-        <View style={[styles.scanOverlay, { right: viewRight }]} pointerEvents="none">
-          <View style={styles.scanFrame} />
-          <Text style={styles.scanHint}>Scan: high-contrast document capture</Text>
+        <View
+          style={[styles.scanOverlay, { right: viewRight }]}
+          pointerEvents="none"
+          onLayout={(event) => {
+            const { width, height } = event.nativeEvent.layout;
+            scanView.current = { width, height };
+          }}
+        >
+          {/*
+            Paper shaped (US Letter), and measured: after the shot the corner
+            step starts its four handles where this frame was, which is where
+            the page was lined up.
+          */}
+          <View
+            style={styles.scanFrame}
+            onLayout={(event) => {
+              scanGuide.current = event.nativeEvent.layout;
+            }}
+          >
+            <View style={[styles.scanCorner, styles.scanCornerTL]} />
+            <View style={[styles.scanCorner, styles.scanCornerTR]} />
+            <View style={[styles.scanCorner, styles.scanCornerBR]} />
+            <View style={[styles.scanCorner, styles.scanCornerBL]} />
+          </View>
+          <Text style={styles.scanHint}>Fit the page inside the frame, then scan</Text>
         </View>
       ) : null}
 
@@ -1241,7 +1343,14 @@ export default function CaptureScreen() {
       {offscreenSurface}
 
       {error ? (
-        <Text style={[styles.cameraError, { bottom: insets.bottom + (side ? 120 : 268) }]}>
+        <Text
+          style={[
+            styles.cameraError,
+            {
+              bottom: insets.bottom + (side ? 120 : mode === "before-after" ? 320 : 268),
+            },
+          ]}
+        >
           {error}
         </Text>
       ) : null}
@@ -1287,7 +1396,10 @@ export default function CaptureScreen() {
             />
             <View style={styles.sideControls}>
               {flipButton}
-              {shutterButton}
+              <View style={{ alignItems: "center", gap: spacing.md }}>
+                {phaseSelector}
+                {shutterButton}
+              </View>
               {lastShotButton}
             </View>
           </View>
@@ -1300,6 +1412,8 @@ export default function CaptureScreen() {
             slot it had on an empty camera is now the last shot.
           */}
           {recentStrips}
+
+          {phaseSelector}
 
           <View style={styles.bottomBar}>
             {lastShotButton}
@@ -1330,6 +1444,23 @@ export default function CaptureScreen() {
         onChange={(next) => setTagText(next.join(", "))}
         onClose={() => setBatchTagsOpen(false)}
       />
+
+      {scanPending ? (
+        <ScanCropper
+          visible
+          uri={scanPending.asset.uri}
+          initialQuad={scanPending.quad}
+          enhance
+          cancelLabel="Retake"
+          onCancel={() => setScanPending(null)}
+          onApply={({ uri, width, height, note }) => {
+            const { asset } = scanPending;
+            setScanPending(null);
+            afterCapture({ ...asset, uri, width, height, mimeType: "image/jpeg" }, true);
+            if (note) setError(note);
+          }}
+        />
+      ) : null}
 
       {measuringShot ? (
         <ShotAnnotator
@@ -1509,12 +1640,16 @@ const styles = StyleSheet.create({
   scanFrame: {
     width: "78%",
     aspectRatio: 8.5 / 11,
-    maxHeight: "52%",
-    borderWidth: 2,
-    borderStyle: "dashed",
-    borderColor: "rgba(255,255,255,0.8)",
-    borderRadius: radius.md,
+    maxHeight: "58%",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.45)",
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
+  scanCorner: { position: "absolute", width: 28, height: 28, borderColor: "#fff" },
+  scanCornerTL: { left: -2, top: -2, borderLeftWidth: 4, borderTopWidth: 4 },
+  scanCornerTR: { right: -2, top: -2, borderRightWidth: 4, borderTopWidth: 4 },
+  scanCornerBR: { right: -2, bottom: -2, borderRightWidth: 4, borderBottomWidth: 4 },
+  scanCornerBL: { left: -2, bottom: -2, borderLeftWidth: 4, borderBottomWidth: 4 },
   scanHint: {
     color: CHROME_FG,
     fontSize: 13,
@@ -1525,12 +1660,20 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     overflow: "hidden",
   },
-  phaseRow: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.lg },
+  phaseRow: {
+    flexDirection: "row",
+    alignSelf: "center",
+    gap: spacing.xs,
+    padding: 4,
+    backgroundColor: CHROME_DEEP,
+    borderRadius: radius.pill,
+  },
+  phaseColumn: { flexDirection: "column", alignSelf: "stretch", borderRadius: radius.lg },
   phasePill: {
-    backgroundColor: CHROME_FILL,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.lg,
-    minHeight: 36,
+    minHeight: 40,
+    alignItems: "center",
     justifyContent: "center",
   },
   phasePillActive: { backgroundColor: SELECTED_FILL },

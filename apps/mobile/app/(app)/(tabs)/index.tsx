@@ -35,6 +35,7 @@ import { ActionRail } from "@/components/ActionRail";
 import { BrandMark } from "@/components/BrandMark";
 import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
+import { useQuickCapture } from "@/lib/use-quick-capture";
 import { useQueue } from "@/offline/use-queue";
 import { contentWidth, gridColumns, radius, spacing, useRightRail, useTheme } from "@/theme";
 import {
@@ -187,6 +188,7 @@ function initialsOf(name: string | null, email: string | null | undefined): stri
 
 export default function HomeScreen() {
   const theme = useTheme();
+  const openCamera = useQuickCapture();
   const rail = useRightRail();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -582,8 +584,8 @@ export default function HomeScreen() {
               text="Capture photo"
               fill={theme.colors.accent}
               ink={theme.colors.primary}
-              accessibilityHint="Choose a project, then open the camera"
-              onPress={() => router.push("/capture-start")}
+              accessibilityHint="Opens the camera on the nearest or most recent job"
+              onPress={openCamera}
             />
           </View>
         )}

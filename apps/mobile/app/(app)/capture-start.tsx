@@ -29,12 +29,13 @@ import {
 /**
  * Which job are these photos for?
  *
- * The camera button in the tab bar cannot open the viewfinder directly, because
- * a photo has to be filed against a project and a tab carries no argument. This
- * is that one question, asked once, with the job someone is standing on as
+ * The camera button opens the viewfinder straight onto the job the phone is
+ * standing at, or the one last worked on (`useQuickCapture`). This is where the
+ * job name on the viewfinder leads to change it, and where the camera button
+ * falls back to when there is no job it can assume (none yet, or no list
+ * because the first load failed offline). The job someone is standing on is
  * the first row: nearest first when the phone has a fix, and by `updated_at`
- * (last worked on) when it does not. A crew member on site should be able to
- * tap the top row without searching.
+ * (last worked on) when it does not.
  *
  * `router.replace` rather than `push` on the way out. This screen has done its
  * job by then, and leaving it on the stack means backing out of the camera
