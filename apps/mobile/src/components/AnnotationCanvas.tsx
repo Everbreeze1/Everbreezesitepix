@@ -1,6 +1,26 @@
 import { forwardRef } from "react";
 import Svg, { Ellipse, G, Image as SvgImage, Path, Rect, Text as SvgText } from "react-native-svg";
-import { arrowHead, boxOf, penPath, type Shape } from "@/api/annotation";
+import { arrowHead, boxOf, penPath, type Point, type Shape } from "@/api/annotation";
+
+/**
+ * A measurement: a dimension line between two points with its length written
+ * on it, like the web annotator's Measure tool.
+ *
+ * Kept beside `Shape` rather than inside it so every existing caller (the
+ * lightbox annotator) is untouched. Points are normalised 0..1 like every
+ * shape, so the line lands in the same place on the full-size saved copy.
+ *
+ * The length is what the person typed ("36 in", "1.2 m"). The phone has no
+ * depth sensor to calibrate against, and a guessed number filed on a job photo
+ * is worse than an honest blank.
+ */
+export type MeasureLine = {
+  id: string;
+  color: string;
+  from: Point;
+  to: Point;
+  label: string;
+};
 
 /**
  * The photo with its markup on top, as one SVG.
@@ -23,7 +43,66 @@ export type AnnotationCanvasProps = {
   shapes: Shape[];
   /** The stroke in progress, drawn but not yet committed. */
   draft?: Shape | null;
+  /** Dimension lines, drawn above the shapes. Optional; most callers have none. */
+  measures?: MeasureLine[];
+  /** The measurement being dragged out, not yet committed. */
+  draftMeasure?: MeasureLine | null;
 };
+
+function renderMeasure(line: MeasureLine, width: number, height: number) {
+  const x1 = line.from.x * width;
+  const y1 = line.from.y * height;
+  const x2 = line.to.x * width;
+  const y2 = line.to.y * height;
+  const short = Math.min(width, height);
+  const strokeWidth = Math.max(1.5, 0.006 * short);
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+  // Unit normal, for the end ticks that make a dimension line read as one.
+  const nx = -(y2 - y1) / len;
+  const ny = (x2 - x1) / len;
+  const tick = Math.max(6, 0.02 * short);
+  const ticks =
+    `M${x1 + nx * tick} ${y1 + ny * tick} L${x1 - nx * tick} ${y1 - ny * tick} ` +
+    `M${x2 + nx * tick} ${y2 + ny * tick} L${x2 - nx * tick} ${y2 - ny * tick}`;
+  const fontSize = Math.max(11, 0.04 * short);
+  const mx = (x1 + x2) / 2 + nx * fontSize * 0.9;
+  const my = (y1 + y2) / 2 + ny * fontSize * 0.9;
+  const text = {
+    x: mx,
+    y: my,
+    fontSize,
+    fontWeight: "800" as const,
+    textAnchor: "middle" as const,
+    alignmentBaseline: "middle" as const,
+  };
+  return (
+    <G key={line.id}>
+      <Path
+        d={`M${x1} ${y1} L${x2} ${y2} ${ticks}`}
+        stroke={line.color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        fill="none"
+      />
+      {line.label ? (
+        <G>
+          <SvgText
+            {...text}
+            fill="none"
+            stroke="rgba(0,0,0,0.6)"
+            strokeWidth={Math.max(1, fontSize * 0.18)}
+            strokeLinejoin="round"
+          >
+            {line.label}
+          </SvgText>
+          <SvgText {...text} fill={line.color}>
+            {line.label}
+          </SvgText>
+        </G>
+      ) : null}
+    </G>
+  );
+}
 
 function renderShape(shape: Shape, width: number, height: number) {
   const stroke = shape.color;
@@ -142,7 +221,7 @@ function renderShape(shape: Shape, width: number, height: number) {
 }
 
 export const AnnotationCanvas = forwardRef<Svg, AnnotationCanvasProps>(function AnnotationCanvas(
-  { uri, width, height, shapes, draft },
+  { uri, width, height, shapes, draft, measures, draftMeasure },
   ref,
 ) {
   return (
@@ -167,6 +246,8 @@ export const AnnotationCanvas = forwardRef<Svg, AnnotationCanvasProps>(function 
       />
       {shapes.map((shape) => renderShape(shape, width, height))}
       {draft ? renderShape(draft, width, height) : null}
+      {measures?.map((line) => renderMeasure(line, width, height))}
+      {draftMeasure ? renderMeasure(draftMeasure, width, height) : null}
     </Svg>
   );
 });
