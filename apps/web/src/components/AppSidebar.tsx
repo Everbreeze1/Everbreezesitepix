@@ -14,6 +14,7 @@ import {
   Layers,
   Lock,
   ShieldCheck,
+  FileBarChart,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -55,6 +56,9 @@ const workspaceItems: NavItem[] = [
   { title: "Overview", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projects", url: "/projects", icon: FolderKanban },
   { title: "Photo Library", url: "/gallery", icon: Images },
+  // Every report across every job - before this the /reports page existed but
+  // no menu reached it, so the only way to find a report was project by project.
+  { title: "Reports", url: "/reports", icon: FileBarChart },
   { title: "Maps", url: "/map", icon: Map },
 ];
 

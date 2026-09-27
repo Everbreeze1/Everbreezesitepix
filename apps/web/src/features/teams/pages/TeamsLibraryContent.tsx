@@ -1,12 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/everlumen/client";
-import { getMyTeam, getTeamActivity, inviteMember } from "@/features/teams/api";
-import { listSubcontractors } from "@/lib/subcontractors.functions";
+import {
+  getMyTeam,
+  getTeamActivity,
+  inviteMember,
+  removeMember,
+  resendInvite,
+  revokeInvite,
+  updateMemberRole,
+} from "@/features/teams/api";
+import { SubcontractorsPanel } from "@/features/teams/components/SubcontractorsPanel";
 import { useProfile } from "@/hooks/use-profile";
+import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { relativeTime } from "@everlumen/shared";
-import { assignableRoles, can, roleLabelForTier } from "@everlumen/shared/team-permissions";
+import {
+  assignableRoles,
+  can,
+  canManageMember,
+  normaliseRole,
+  roleLabelForTier,
+} from "@everlumen/shared/team-permissions";
 
 /*
  * The Teams page, laid out exactly as the Main-html reference
@@ -72,19 +89,6 @@ const PERMISSION_ROWS: Array<[string, string, string, string]> = [
   ["Manage billing & account settings", "\u2713", "\u2014", "\u2014"],
 ];
 
-function StatusPill({ label, active }: { label: string; active: boolean }) {
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-        active ? "bg-status-active-soft text-status-active" : "bg-muted text-faint"
-      }`}
-      style={{ width: "fit-content" }}
-    >
-      {label}
-    </span>
-  );
-}
-
 function InviteDialog({
   open,
   onClose,
@@ -99,28 +103,57 @@ function InviteDialog({
   onSend: (email: string, role: string) => Promise<void>;
 }) {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<string>(roleOptions[0] ?? "standard");
+  // Standard, not the first option (Admin): most invites are field crew, and a
+  // default that hands out billing and team control is the wrong mistake to make.
+  const defaultRole = roleOptions.includes("standard")
+    ? "standard"
+    : (roleOptions[0] ?? "standard");
+  const [role, setRole] = useState<string>(defaultRole);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setEmail("");
+      setRole(defaultRole);
+    }
+  }, [open, defaultRole]);
 
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/30" onClick={busy ? undefined : onClose} />
-      <div className="relative w-full max-w-[420px] rounded-xl border border-border bg-card p-6 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.3)]">
-        <div className="mb-1 text-[17px] font-bold text-foreground">Invite crew member</div>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="invite-dialog-title"
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && !busy) onClose();
+        }}
+        className="relative w-full max-w-[420px] rounded-xl border border-border bg-card p-6 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.3)]"
+      >
+        <div id="invite-dialog-title" className="mb-1 text-[17px] font-bold text-foreground">
+          Invite crew member
+        </div>
         <p className="mb-4 text-[12.5px] text-muted-foreground">
           They&rsquo;ll join your workspace as soon as they accept the email invite.
         </p>
-        <div className="mb-2 text-[11.5px] font-semibold text-faint">Email</div>
+        <label htmlFor="invite-email" className="mb-2 block text-[11.5px] font-semibold text-faint">
+          Email
+        </label>
         <input
+          id="invite-email"
+          autoFocus
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="teammate@company.com"
           className="mb-4 w-full rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px] text-foreground outline-none transition-colors placeholder:text-faint focus:border-primary"
         />
-        <div className="mb-2 text-[11.5px] font-semibold text-faint">Role</div>
+        <label htmlFor="invite-role" className="mb-2 block text-[11.5px] font-semibold text-faint">
+          Role
+        </label>
         <select
+          id="invite-role"
           value={role}
           onChange={(e) => setRole(e.target.value)}
           className="mb-5 w-full cursor-pointer rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px] text-foreground outline-none transition-colors focus:border-primary"
@@ -159,9 +192,11 @@ function InviteDialog({
 export function TeamsLibraryContent() {
   const qc = useQueryClient();
   const { profile } = useProfile();
+  const { user } = useAuth();
+  const confirm = useConfirm();
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [tab, setTab] = useState<TeamTab>("crew");
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [notifyEmail, setNotifyEmail] = useState(true);
 
   // Per-member assigned-project counts (the roster's "Active projects").
   const [assignedCounts, setAssignedCounts] = useState<Record<string, number> | null>(null);
@@ -208,11 +243,7 @@ export function TeamsLibraryContent() {
   const canManagePeople = can(myRole, "manage_users") || can(myRole, "manage_own_crew");
   const canManageSubs = can(myRole, "manage_users");
 
-  const { data: subsData } = useQuery({
-    queryKey: ["subcontractors"],
-    queryFn: () => listSubcontractors() as any,
-    enabled: !!teamData && canManageSubs,
-  });
+  const invites: any[] = teamData?.invites ?? [];
 
   const lastAtByUser = useMemo(() => {
     const map = new Map<string, string | null>();
@@ -222,42 +253,119 @@ export function TeamsLibraryContent() {
     return map;
   }, [activity]);
 
-  const roleOptions = useMemo(() => assignableRoles(plan, { assignmentsEnforced: true }), [plan]);
+  // Only the roles this plan holds AND this person may hand out: a Manager
+  // invites Standard and Restricted crew, never another Manager or an Admin.
+  const roleOptions = useMemo(
+    () =>
+      assignableRoles(plan, { assignmentsEnforced: true }).filter((r) =>
+        canManageMember(myRole, r),
+      ),
+    [plan, myRole],
+  );
 
   const teamName = team?.name ?? "Your team";
   const crewCount = members.length;
-  const subCount = (subsData?.subcontractors ?? []).length;
 
   const subtitleByTab: Record<TeamTab, string> = {
-    crew: `${teamName}'s crew \u00b7 ${crewCount} ${crewCount === 1 ? "person" : "people"}`,
-    subs: `${subCount} ${subCount === 1 ? "subcontractor" : "subcontractors"} on file`,
+    crew: `${teamName}'s crew \u00b7 ${crewCount} ${crewCount === 1 ? "person" : "people"}${
+      invites.length ? ` \u00b7 ${invites.length} invited` : ""
+    }`,
+    subs: "Outside crews you share specific jobs with",
     permissions: "What each role can see and do",
     account: "Business and personal settings",
   };
-  const btnByTab: Record<TeamTab, string> = {
-    crew: "Invite crew member",
-    subs: "Add subcontractor",
-    permissions: "Invite crew member",
-    account: "Invite crew member",
-  };
-  const canOpenAction = tab === "subs" ? canManageSubs : canManagePeople;
-
-  const openAction = () => {
-    if (tab === "subs") {
-      toast.info("The subcontractor invite flow opens here");
-      return;
-    }
-    setInviteOpen(true);
+  // The Subcontractors tab carries its own "Invite subcontractor" button.
+  const canOpenAction = tab !== "subs" && canManagePeople;
+  const origin = typeof window !== "undefined" ? window.location.origin : undefined;
+  const refreshTeam = () => {
+    qc.invalidateQueries({ queryKey: ["my-team"] });
+    qc.invalidateQueries({ queryKey: ["team-activity"] });
   };
 
   const sendInvite = async (email: string, role: string) => {
     try {
-      await inviteMember({ data: { email, role } } as any);
-      toast.success("Invite sent");
+      const res: any = await inviteMember({ data: { email, role, origin } } as any);
+      if (res?.emailSent === false) {
+        toast.warning(`Invite created for ${email}, but the email did not send`, {
+          description: "Use Resend under Pending invites to try again.",
+        });
+      } else {
+        toast.success(res?.resent ? `Invite re-sent to ${email}` : `Invite sent to ${email}`);
+      }
       setInviteOpen(false);
-      qc.invalidateQueries({ queryKey: ["my-team"] });
+      refreshTeam();
     } catch (e: any) {
       toast.error(e?.message ?? "Could not send the invite");
+    }
+  };
+
+  const changeRole = async (m: any, role: string) => {
+    setBusyId(m.id);
+    try {
+      await updateMemberRole({ data: { memberId: m.id, role } } as any);
+      toast.success(`${displayName(m)} is now ${roleLabelForTier(role, plan)}`);
+      refreshTeam();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not change the role");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const removeFromTeam = async (m: any) => {
+    const ok = await confirm({
+      title: `Remove ${displayName(m)}?`,
+      description:
+        "They lose access to every project straight away. Their photos and reports stay on the jobs.",
+      confirmText: "Remove",
+      variant: "destructive",
+    });
+    if (!ok) return;
+    setBusyId(m.id);
+    try {
+      await removeMember({ data: { memberId: m.id } } as any);
+      toast.success(`${displayName(m)} removed`);
+      refreshTeam();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not remove them");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const resend = async (inv: any) => {
+    setBusyId(inv.id);
+    try {
+      const res: any = await resendInvite({ data: { inviteId: inv.id, origin } } as any);
+      if (res?.emailSent === false)
+        toast.warning("The invite email did not send. Try again shortly.");
+      else toast.success(`Invite re-sent to ${inv.email}`);
+      refreshTeam();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not resend the invite");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const cancelInvite = async (inv: any) => {
+    const ok = await confirm({
+      title: `Cancel the invite to ${inv.email}?`,
+      description: "The link in their email stops working. You can invite them again later.",
+      confirmText: "Cancel invite",
+      cancelText: "Keep it",
+      variant: "destructive",
+    });
+    if (!ok) return;
+    setBusyId(inv.id);
+    try {
+      await revokeInvite({ data: { inviteId: inv.id } } as any);
+      toast.success("Invite cancelled");
+      refreshTeam();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not cancel the invite");
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -284,13 +392,14 @@ export function TeamsLibraryContent() {
           <div className="mt-1 text-[13.5px] text-muted-foreground">{subtitleByTab[tab]}</div>
         </div>
         {canOpenAction && (
-          <div
-            onClick={openAction}
+          <button
+            type="button"
+            onClick={() => setInviteOpen(true)}
             className="flex shrink-0 cursor-pointer items-center gap-2 rounded-[9px] bg-primary px-4 py-2.5 text-[13.5px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
           >
             <PlusIcon />
-            {btnByTab[tab]}
-          </div>
+            Invite crew member
+          </button>
         )}
       </div>
 
@@ -312,126 +421,160 @@ export function TeamsLibraryContent() {
 
       {/* Crew */}
       {tab === "crew" && (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="grid grid-cols-[2.4fr_1fr_1fr_1fr] items-center gap-4 border-b border-border bg-muted px-[18px] py-3">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-              Name
-            </span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-              Role
-            </span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-              Active projects
-            </span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-              Last active
-            </span>
+        <div className="flex flex-col gap-6">
+          <div className="overflow-x-auto rounded-xl border border-border bg-card">
+            <div className="min-w-[640px]">
+              <div className="grid grid-cols-[2.4fr_1.2fr_1fr_1fr_0.8fr] items-center gap-4 border-b border-border bg-muted px-[18px] py-3">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
+                  Name
+                </span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
+                  Role
+                </span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
+                  Assigned jobs
+                </span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
+                  Last active
+                </span>
+                <span className="sr-only">Actions</span>
+              </div>
+              {members.length === 0 && (
+                <div className="px-[18px] py-8 text-center text-[13px] text-faint">
+                  No crew members yet. Invite your first teammate above.
+                </div>
+              )}
+              {members.map((m, index) => {
+                const isMe = m.user_id === user?.id;
+                // Same rule the server enforces, so no control is offered that
+                // the RPC would refuse. The owner row is never editable.
+                const editable = !isMe && canManageMember(myRole, m.role);
+                const current = normaliseRole(m.role);
+                const options = roleOptions.includes(current as any)
+                  ? roleOptions
+                  : [current, ...roleOptions];
+                return (
+                  <div
+                    key={m.user_id}
+                    className="grid grid-cols-[2.4fr_1.2fr_1fr_1fr_0.8fr] items-center gap-4 border-b border-border px-[18px] py-3 last:border-b-0"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div
+                        className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
+                        style={{ background: AVATAR_COLORS[index % AVATAR_COLORS.length] }}
+                      >
+                        {initials(displayName(m), displayEmail(m))}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-[13.5px] font-semibold text-foreground">
+                          {displayName(m)}
+                          {isMe && <span className="ml-1.5 font-normal text-faint">(you)</span>}
+                        </div>
+                        <div className="truncate text-[11.5px] text-faint">{displayEmail(m)}</div>
+                      </div>
+                    </div>
+                    <div className="text-[12.5px] text-muted-foreground">
+                      {editable ? (
+                        <select
+                          aria-label={`Role for ${displayName(m)}`}
+                          value={current}
+                          disabled={busyId === m.id}
+                          onChange={(e) => void changeRole(m, e.target.value)}
+                          className="w-full cursor-pointer rounded-md border border-border bg-card px-2 py-1.5 text-[12.5px] text-foreground outline-none focus:border-primary disabled:opacity-60"
+                        >
+                          {options.map((r) => (
+                            <option key={r} value={r} disabled={!roleOptions.includes(r as any)}>
+                              {roleLabelForTier(r, plan)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        roleLabelForTier(m.role, plan)
+                      )}
+                    </div>
+                    <div className="font-mono text-[12.5px] text-foreground">
+                      {activeProjects(m)}
+                    </div>
+                    <div className="text-xs text-faint">{lastActive(m)}</div>
+                    <div className="text-right">
+                      {editable && (
+                        <button
+                          type="button"
+                          disabled={busyId === m.id}
+                          onClick={() => void removeFromTeam(m)}
+                          className="cursor-pointer rounded-md px-2 py-1 text-[12px] font-semibold text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-60"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          {members.length === 0 && (
-            <div className="px-[18px] py-8 text-center text-[13px] text-faint">
-              No crew members yet. Invite your first teammate above.
+
+          {canManageSubs && invites.length > 0 && (
+            <div>
+              <SectionLabel>Pending invites</SectionLabel>
+              <div className="mt-2.5 overflow-x-auto rounded-xl border border-border bg-card">
+                <div className="min-w-[560px]">
+                  {invites.map((inv) => {
+                    const expired =
+                      inv.expires_at && new Date(inv.expires_at).getTime() < Date.now();
+                    return (
+                      <div
+                        key={inv.id}
+                        className="grid grid-cols-[2.4fr_1.2fr_1.4fr_auto] items-center gap-4 border-b border-border px-[18px] py-3 last:border-b-0"
+                      >
+                        <div className="min-w-0 truncate text-[13.5px] font-semibold text-foreground">
+                          {inv.email}
+                        </div>
+                        <div className="text-[12.5px] text-muted-foreground">
+                          {roleLabelForTier(inv.role, plan)}
+                        </div>
+                        <div className="text-xs text-faint">
+                          {expired
+                            ? "Expired, resend to renew"
+                            : `Invited ${relativeTime(inv.created_at)}`}
+                        </div>
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            disabled={busyId === inv.id}
+                            onClick={() => void resend(inv)}
+                            className="cursor-pointer rounded-md border border-border px-2.5 py-1 text-[12px] font-semibold text-foreground transition-colors hover:bg-muted/50 disabled:opacity-60"
+                          >
+                            Resend
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busyId === inv.id}
+                            onClick={() => void cancelInvite(inv)}
+                            className="cursor-pointer rounded-md px-2.5 py-1 text-[12px] font-semibold text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-60"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
-          {members.map((m, index) => (
-            <div
-              key={m.user_id}
-              className="grid grid-cols-[2.4fr_1fr_1fr_1fr] items-center gap-4 border-b border-border px-[18px] py-3 last:border-b-0"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <div
-                  className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
-                  style={{ background: AVATAR_COLORS[index % AVATAR_COLORS.length] }}
-                >
-                  {initials(displayName(m), displayEmail(m))}
-                </div>
-                <div className="min-w-0">
-                  <div className="truncate text-[13.5px] font-semibold text-foreground">
-                    {displayName(m)}
-                  </div>
-                  <div className="truncate text-[11.5px] text-faint">{displayEmail(m)}</div>
-                </div>
-              </div>
-              <div className="text-[12.5px] text-muted-foreground">
-                {roleLabelForTier(m.role, plan)}
-              </div>
-              <div className="font-mono text-[12.5px] text-foreground">{activeProjects(m)}</div>
-              <div className="text-xs text-faint">{lastActive(m)}</div>
-            </div>
-          ))}
         </div>
       )}
 
-      {/* Subcontractors */}
-      {tab === "subs" && (
-        <div>
-          <p className="mb-3.5 max-w-[640px] text-[12.5px] text-muted-foreground">
-            Outside trades and one-off crews you bring onto a project {"\u2014"} kept separate from
-            your own W-2 employees.
-          </p>
-          {!canManageSubs ? (
-            <div className="rounded-xl border border-border bg-card px-[18px] py-8 text-center text-[13px] text-faint">
-              Only owners and admins manage subcontractors.
-            </div>
-          ) : (
-            <>
-              <div className="mb-3.5 overflow-hidden rounded-xl border border-border bg-card">
-                <div className="grid grid-cols-[2fr_1.2fr_1.3fr_1fr] items-center gap-4 border-b border-border bg-muted px-[18px] py-3">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-                    Company
-                  </span>
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-                    Trade
-                  </span>
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-                    Insurance
-                  </span>
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
-                    Status
-                  </span>
-                </div>
-                {subCount === 0 ? (
-                  <div className="px-[18px] py-8 text-center text-[13px] text-faint">
-                    No subcontractors yet. Add your first outside crew to share specific jobs.
-                  </div>
-                ) : (
-                  (subsData?.subcontractors as any[]).map((s) => (
-                    <div
-                      key={s.id}
-                      className="grid grid-cols-[2fr_1.2fr_1.3fr_1fr] items-center gap-4 border-b border-border px-[18px] py-3.5 last:border-b-0"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-[13.5px] font-semibold text-foreground">
-                          {s.company_name || s.email}
-                        </div>
-                        <div className="truncate text-[11.5px] text-faint">
-                          {s.email}
-                          {s.projects?.length
-                            ? ` \u00b7 ${s.projects.length} ${
-                                s.projects.length === 1 ? "project" : "projects"
-                              }`
-                            : ""}
-                        </div>
-                      </div>
-                      <div className="text-[12.5px] text-muted-foreground">{"\u2014"}</div>
-                      <div className="text-xs text-muted-foreground">{"\u2014"}</div>
-                      <StatusPill
-                        label={s.accepted_at ? "Active" : "Inactive"}
-                        active={!!s.accepted_at}
-                      />
-                    </div>
-                  ))
-                )}
-              </div>
-              <div
-                onClick={() => toast.info("The subcontractor invite flow opens here")}
-                className="cursor-pointer rounded-xl border-[1.5px] border-dashed border-border px-5 py-3.5 text-center text-[12.5px] text-faint transition-colors hover:border-primary/50"
-              >
-                + Add subcontractor
-              </div>
-            </>
-          )}
-        </div>
-      )}
+      {/* Subcontractors - the working panel (invite, job sharing, revoke). */}
+      {tab === "subs" &&
+        (canManageSubs ? (
+          <SubcontractorsPanel isTeamPlan={plan === "team"} />
+        ) : (
+          <div className="rounded-xl border border-border bg-card px-[18px] py-8 text-center text-[13px] text-faint">
+            Only owners and admins manage subcontractors.
+          </div>
+        ))}
 
       {/* Roles & Permissions */}
       {tab === "permissions" && (
@@ -504,25 +647,15 @@ export function TeamsLibraryContent() {
             <div className={fieldBoxClass()}>{profile?.email ?? "\u2014"}</div>
             <div className="mb-1.5 text-[11.5px] text-faint">Role</div>
             <div className={fieldBoxClass()}>{roleLabelForTier(myRole, plan)}</div>
-            <div className="mt-1 flex items-center justify-between rounded-lg border border-border px-3.5 py-2.5">
-              <span className="text-[13px] text-muted-foreground">
-                Email me when a report is ready to send
-              </span>
-              <button
-                onClick={() => setNotifyEmail((v) => !v)}
-                aria-pressed={notifyEmail}
-                aria-label="Email me when a report is ready to send"
-                className="h-[19px] w-[34px] shrink-0 cursor-pointer rounded-full transition-colors"
-                style={{ background: notifyEmail ? "var(--primary)" : "var(--muted)" }}
-              >
-                <span
-                  className="block h-[15px] w-[15px] rounded-full bg-white transition-transform"
-                  style={{
-                    transform: notifyEmail ? "translateX(17px)" : "translateX(2px)",
-                  }}
-                />
-              </button>
-            </div>
+            {/* This used to be a switch that saved nothing. Email preferences
+                live in Settings, so point there instead. */}
+            <Link
+              to="/settings"
+              className="mt-1 flex items-center justify-between rounded-lg border border-border px-3.5 py-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted/40"
+            >
+              <span>Email and notification preferences</span>
+              <span className="font-semibold text-primary">Open settings</span>
+            </Link>
           </div>
         </div>
       )}

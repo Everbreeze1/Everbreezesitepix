@@ -68,6 +68,22 @@ export interface ProjectPage {
   sourceTemplateId: string | null;
 }
 
+/** A report page on the all-projects Reports screen. */
+export interface ReportPageSummary {
+  id: string;
+  projectId: string;
+  projectName: string | null;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  shareToken: string;
+  revokedAt: string | null;
+}
+
+export const listReportPages = rpcOp<Record<string, never>, { reports: ReportPageSummary[] }>(
+  "listReportPages",
+);
+
 export const listProjectDocumentTree = rpcOp<{ projectId: string }, DocumentTree>(
   "listProjectDocumentTree",
 );

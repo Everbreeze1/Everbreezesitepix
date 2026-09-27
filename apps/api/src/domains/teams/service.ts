@@ -607,7 +607,20 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
     .maybeSingle();
   if (!membership) throw new Error("Create a team first.");
   const role = (membership as any).role;
-  if (role !== "owner" && role !== "admin") throw new Error("Only owners/admins can invite.");
+  // Owners and Admins invite anyone; a Manager invites their own crew
+  // (Standard, Restricted) - the same reach `canManageMember` gives them for
+  // role changes, and what the Roles & Permissions table promises.
+  const invitedRole = normaliseRole(data.role ?? "standard");
+  if (!canManageMember(role, invitedRole)) {
+    throw Object.assign(
+      new Error(
+        role === "manager"
+          ? "Managers can invite Standard and Restricted crew. Ask an owner or admin for other roles."
+          : "Only owners, admins and managers can invite.",
+      ),
+      { status: 403 },
+    );
+  }
   const teamId = (membership as any).team_id;
 
   // Load team for plan + cap
@@ -655,6 +668,19 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
 
   const plan = ((team as any).plan as TeamPlan) ?? "starter";
   const cap = effectiveMemberLimit(team);
+
+  // The role must be one this plan can hold - the same check a later re-role
+  // gets in `updateMemberRoleService`, so an invite can't grant what a role
+  // change would refuse.
+  if (invitedRole === "owner") {
+    throw Object.assign(new Error("Ownership is transferred, not assigned."), { status: 400 });
+  }
+  if (!roleAllowedOnTier(invitedRole, plan)) {
+    throw Object.assign(
+      new Error(`The ${ROLE_LABEL[invitedRole]} role is not available on your current plan.`),
+      { status: 403 },
+    );
+  }
 
   // Count current members + pending invites against the cap
   const [{ count: memberCount }, { count: inviteCount }] = await Promise.all([
@@ -712,7 +738,7 @@ export async function inviteMemberService(ctx: AuthedContext, data: any) {
     .insert({
       team_id: teamId,
       email,
-      role: data.role,
+      role: invitedRole,
       token,
       invited_by: userId,
     })

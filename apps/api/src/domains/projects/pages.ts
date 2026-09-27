@@ -12,6 +12,7 @@ import {
 } from "./page-title";
 import {
   classifyPage,
+  isReportBucket,
   parseFilesUnder,
   DAILY_LOG_INTERNAL_NOTICE,
   type FilingBucket,
@@ -198,6 +199,83 @@ export interface DocumentTreeFile {
   mimeType: string | null;
   sizeBytes: number;
   createdAt: string;
+}
+
+/**
+ * Every report page the caller can see, across all their projects - the
+ * all-projects Reports screen.
+ *
+ * Reports are `project_pages` now (the Full Project Report, the report built
+ * from selected photos, and pages from templates that file under Reports), and
+ * the Reports screen only read the older `project_reports` table, so it showed
+ * "No reports yet" beside a project full of them. Same filing rule as a
+ * project's own Reports tab (`classifyPage`), so the two lists agree. RLS on the
+ * caller's client decides which projects are in scope; trashed projects are
+ * left out, as they are everywhere else.
+ */
+export interface ReportPageSummary {
+  id: string;
+  projectId: string;
+  projectName: string | null;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  shareToken: string;
+  revokedAt: string | null;
+}
+
+export const listReportPagesInputSchema = z.object({}).passthrough();
+export async function listReportPagesService(
+  ctx: AuthedContext,
+): Promise<{ reports: ReportPageSummary[] }> {
+  const { data: pageRows, error } = await (ctx.supabase as any)
+    .from("project_pages")
+    .select(
+      "id, project_id, title, created_at, updated_at, share_token, revoked_at, source_template, projects!inner(name, deleted_at)",
+    )
+    .is("projects.deleted_at", null)
+    .order("updated_at", { ascending: false })
+    .limit(500);
+  if (error) throw new Error(error.message);
+  const rows = (pageRows as any[]) ?? [];
+
+  const templateIds = [
+    ...new Set(
+      rows.map((p) => documentTemplateId(p.source_template)).filter((id): id is string => !!id),
+    ),
+  ];
+  const filesUnderById = new Map<string, TemplateFilingBucket>();
+  if (templateIds.length > 0) {
+    const { data: tplRows, error: tErr } = await (ctx.supabase as any)
+      .from("document_templates")
+      .select("id, body")
+      .in("id", templateIds);
+    if (tErr) {
+      console.warn("[report-pages] template filing lookup failed", { message: tErr.message });
+    } else {
+      for (const t of (tplRows as any[]) ?? []) {
+        filesUnderById.set(t.id as string, parseFilesUnder(t.body));
+      }
+    }
+  }
+
+  const reports = rows
+    .filter((p) => {
+      const id = documentTemplateId(p.source_template);
+      const bucket = classifyPage(p.source_template, id ? (filesUnderById.get(id) ?? null) : null);
+      return isReportBucket(bucket);
+    })
+    .map((p) => ({
+      id: p.id,
+      projectId: p.project_id,
+      projectName: p.projects?.name ?? null,
+      title: p.title,
+      createdAt: p.created_at,
+      updatedAt: p.updated_at,
+      shareToken: p.share_token,
+      revokedAt: p.revoked_at ?? null,
+    }));
+  return { reports };
 }
 
 export const listProjectDocumentTreeInputSchema = z.object({ projectId: z.string().uuid() });
