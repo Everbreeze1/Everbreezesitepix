@@ -52,6 +52,8 @@ import { PhotoTagPopoverBody } from "@/features/photos/components/PhotoTagPopove
 import { createPhotoShare } from "@/lib/photo-shares.functions";
 import { NewReportDialog } from "@/features/projects/components/NewReportDialog";
 import { GenerateDocumentMenu } from "@/features/projects/components/GenerateDocumentMenu";
+import { downloadBlobFile } from "@/lib/download-file";
+import { createNameAllocator, photoBaseName, photoExtension, zipFileName } from "@/lib/photo-zip";
 
 export interface BulkPhoto {
   id: string;
@@ -252,16 +254,54 @@ export function PhotoBulkActionBar(props: Props) {
     }
   };
 
+  /*
+   * One photo downloads as itself. Two or more go into a single zip: the old
+   * loop fired one browser download per photo, which most browsers stop after
+   * the first few ("this site is trying to download multiple files"), so a
+   * crew lead selecting forty photos got a handful and a permission prompt.
+   */
   const doDownload = () =>
     withBusy("dl", async () => {
-      for (const p of selectedPhotos) {
-        if (!p.url) continue;
-        const name =
-          // `-` is last in the class, so it is a literal and needs no escape.
-          (p.caption?.replace(/[^\w.-]+/g, "_") || `photo_${p.id.slice(0, 8)}`) + ".jpg";
-        await downloadOne(p.url, name);
+      const usable = selectedPhotos.filter((p) => p.url);
+      if (!usable.length) throw new Error("Those photos have no image to download");
+      if (usable.length === 1) {
+        const p = usable[0];
+        await downloadOne(p.url, `${photoBaseName(p)}.jpg`);
+        toast.success("1 photo downloaded");
+        return;
       }
-      toast.success(`${count} photo${count > 1 ? "s" : ""} downloaded`);
+
+      const toastId = toast.loading(`Preparing ${usable.length} photos…`);
+      try {
+        // Loaded on demand: most sessions never download a zip.
+        const { default: JSZip } = await import("jszip");
+        const zip = new JSZip();
+        const nameFor = createNameAllocator();
+        let done = 0;
+        let failed = 0;
+        for (const p of usable) {
+          try {
+            const res = await fetch(p.url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const blob = await res.blob();
+            zip.file(nameFor(photoBaseName(p), photoExtension(blob.type)), blob);
+            done++;
+          } catch {
+            failed++;
+          }
+          toast.loading(`Downloaded ${done + failed} of ${usable.length}…`, { id: toastId });
+        }
+        if (done === 0) throw new Error("Could not download any of those photos");
+        const archive = await zip.generateAsync({ type: "blob" });
+        downloadBlobFile(archive, zipFileName(projectId ? projectName : null));
+        toast.success(
+          `${done} photo${done === 1 ? "" : "s"} zipped${failed > 0 ? ` · ${failed} failed` : ""}`,
+          { id: toastId },
+        );
+      } catch (e) {
+        toast.dismiss(toastId);
+        throw e;
+      }
     });
 
   const doPrint = () =>
